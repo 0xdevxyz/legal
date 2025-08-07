@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complyo - Die KI-gestützte Compliance-Plattform für deutsche Websites</title>
+    <meta name="description" content="Complyo macht Ihre Website rechtssicher, barrierefrei und DSGVO-konform - mit KI-Automation und echtem Abmahnschutz.">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#e6f8ff',
+                            100: '#cceeff',
+                            200: '#99ddff',
+                            300: '#66ccff',
+                            400: '#33bbff',
+                            500: '#00aaff',
+                            600: '#0088cc',
+                            700: '#006699',
+                            800: '#004466',
+                            900: '#002233',
+                        },
+                        dark: {
+                            50: '#f7f7f8',
+                            100: '#eeeef1',
+                            200: '#d8d9df',
+                            300: '#b6b8c2',
+                            400: '#8c8fa0',
+                            500: '#6c6f83',
+                            600: '#4d5061',
+                            700: '#3a3c4a',
+                            800: '#1f2028',
+                            900: '#121319',
+                        },
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/css">
+        /* Fallback for Tailwind */
+        body {
+            background-color: #121319;
+            color: #f7f7f8;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        /* For glass effect */
+        .glass {
+            background: rgba(31, 32, 40, 0.6);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        /* Accessibility: Focus styles */
+        *:focus-visible {
+            outline: 2px solid #00aaff !important;
+            outline-offset: 2px !important;
+        }
+        
+        /* Skip to content link */
+        .skip-to-content {
+            position: absolute;
+            left: -9999px;
+            top: auto;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+        }
+        
+        .skip-to-content:focus {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: auto;
+            height: auto;
+            padding: 1rem;
+            background: #00aaff;
+            color: #121319;
+            font-weight: bold;
+            z-index: 9999;
+        }
+        
+        /* Cookie consent banner */
+        .cookie-banner {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            display: none; /* Will be shown with JS */
+        }
+    </style>
+</head>
+<body class="bg-dark-900 text-white min-h-screen">
+    <!-- Accessibility: Skip to content link -->
+    <a href="#main-content" class="skip-to-content">Zum Hauptinhalt springen</a>
+    
+    <!-- Header -->
+    <header class="relative z-10 py-6 px-4 sm:px-6 lg:px-8">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="/" class="flex items-center space-x-2" aria-label="Complyo Homepage">
+                <svg class="w-8 h-8 text-primary-500" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                </svg>
+                <span class="text-2xl font-bold tracking-tight">Complyo</span>
+            </a>
+            <nav>
+                <ul class="flex items-center space-x-8">
+                    <li><a href="#features" class="text-white hover:text-primary-300 transition">Features</a></li>
+                    <li><a href="#pricing" class="text-white hover:text-primary-300 transition">Preise</a></li>
+                    <li><a href="#contact" class="text-white hover:text-primary-300 transition">Kontakt</a></li>
+                    <li><a href="https://app.complyo.tech" class="bg-primary-600 hover:bg-primary-700 text-white font-medium px-4 py-2 rounded-lg transition">Login</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+    
+    <!-- Hero Section -->
+    <main id="main-content" class="relative">
+        <!-- Background gradient -->
+        <div class="absolute inset-0 overflow-hidden -z-10">
+            <div class="absolute -top-40 -left-40 w-80 h-80 bg-primary-500 rounded-full filter blur-3xl opacity-20 animate-pulse-slow"></div>
+            <div class="absolute top-40 -right-20 w-96 h-96 bg-purple-500 rounded-full filter blur-3xl opacity-10 animate-pulse-slow"></div>
+        </div>
+        
+        <section aria-labelledby="hero-heading" class="pt-16 pb-24 px-4 sm:px-6 lg:px-8">
+            <div class="container mx-auto max-w-5xl">
+                <div class="text-center mb-12">
+                    <h1 id="hero-heading" class="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
+                        Von <span class="text-primary-400">abmahngefährdet</span> zu <span class="text-primary-400">rechtssicher</span> in 24 Stunden
+                    </h1>
+                    <p class="text-xl md:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto">
+                        Complyo ist die erste All-in-One Compliance-Plattform, die deutsche Websites nicht nur analysiert, sondern vollständig rechtssicher macht - mit echtem Abmahnschutz und professioneller Umsetzung.
+                    </p>
+                    <div class="flex flex-col sm:flex-row justify-center gap-4 mt-8">
+                        <a href="#analyze" class="bg-primary-500 hover:bg-primary-600 text-white font-bold py-3 px-8 rounded-lg transition text-lg" aria-label="Website jetzt kostenlos analysieren">
+                            Website kostenlos analysieren
+                        </a>
+                        <a href="#services" class="bg-dark-800 hover:bg-dark-700 text-white font-bold py-3 px-8 rounded-lg border border-dark-700 transition text-lg">
+                            Mehr erfahren
+                        </a>
+                    </div>
+                </div>
+                
+                <!-- Website Analyzer Tool (Demo Version) -->
+                <div id="analyze" class="glass rounded-2xl p-8 max-w-3xl mx-auto mt-16" role="region" aria-labelledby="analyzer-heading">
+                    <h2 id="analyzer-heading" class="text-2xl font-bold mb-6 text-center">Website-Compliance prüfen</h2>
+                    <form id="website-analyzer" class="space-y-4" action="https://api.complyo.tech/api/analyze" method="POST">
+                        <div>
+                            <label for="website-url" class="block text-sm font-medium text-gray-300 mb-1">Ihre Website-URL</label>
+                            <input 
+                                type="url" 
+                                id="website-url" 
+                                name="url" 
+                                placeholder="https://example.com" 
+                                required
+                                aria-required="true"
+                                aria-describedby="url-hint"
+                                class="w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-lg focus:ring-2 focus:ring-primary-500 text-white placeholder-gray-500"
+                            >
+                            <p id="url-hint" class="mt-1 text-sm text-gray-400">Geben Sie die vollständige URL mit https:// ein</p>
+                        </div>
+                        
+                        <div>
+                            <fieldset class="mt-4">
+                                <legend class="text-sm font-medium text-gray-300">Was möchten Sie prüfen?</legend>
+                                <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <div class="flex items-start">
+                                        <div class="flex items-center h-5">
+                                            <input 
+                                                id="check-legal" 
+                                                name="legal" 
+                                                type="checkbox" 
+                                                checked
+                                                class="h-4 w-4 text-primary-500 border-gray-500 rounded focus:ring-primary-500 bg-dark-700"
+                                            >
+                                        </div>
+                                        <div class="ml-3 text-sm">
+                                            <label for="check-legal" class="font-medium text-gray-200">Rechtliche Texte</label>
+                                            <p class="text-gray-400">Impressum, Datenschutz, AGB</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-start">
+                                        <div class="flex items-center h-5">
+                                            <input 
+                                                id="check-cookies" 
+                                                name="cookies" 
+                                                type="checkbox" 
+                                                checked
+                                                class="h-4 w-4 text-primary-500 border-gray-500 rounded focus:ring-primary-500 bg-dark-700"
+                                            >
+                                        </div>
+                                        <div class="ml-3 text-sm">
+                                            <label for="check-cookies" class="font-medium text-gray-200">Cookie-Compliance</label>
+                                            <p class="text-gray-400">TTDSG & DSGVO konform</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-start">
+                                        <div class="flex items-center h-5">
+                                            <input 
+                                                id="check-accessibility" 
+                                                name="accessibility" 
+                                                type="checkbox" 
+                                                checked
+                                                class="h-4 w-4 text-primary-500 border-gray-500 rounded focus:ring-primary-500 bg-dark-700"
+                                            >
+                                        </div>
+                                        <div class="ml-3 text-sm">
+                                            <label for="check-accessibility" class="font-medium text-gray-200">Barrierefreiheit</label>
+                                            <p class="text-gray-400">WCAG 2.1 & BITV 2.0</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-start">
+                                        <div class="flex items-center h-5">
+                                            <input 
+                                                id="check-dsgvo" 
+                                                name="dsgvo" 
+                                                type="checkbox" 
+                                                checked
+                                                class="h-4 w-4 text-primary-500 border-gray-500 rounded focus:ring-primary-500 bg-dark-700"
+                                            >
+                                        </div>
+                                        <div class="ml-3 text-sm">
+                                            <label for="check-dsgvo" class="font-medium text-gray-200">DSGVO-Compliance</label>
+                                            <p class="text-gray-400">Datenschutz & Einwilligungen</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </fieldset>
+                        </div>
+                        
+                        <div class="pt-4">
+                            <button 
+                                type="submit" 
+                                class="w-full bg-primary-500 hover:bg-primary-600 text-white font-bold py-3 px-6 rounded-lg transition text-lg"
+                                aria-busy="false"
+                                id="analyze-button"
+                            >
+                                Kostenlose Analyse starten
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Features Section -->
+        <section id="features" class="py-16 px-4 sm:px-6 lg:px-8 bg-dark-800/50" aria-labelledby="features-heading">
+            <div class="container mx-auto max-w-6xl">
+                <div class="text-center mb-16">
+                    <h2 id="features-heading" class="text-3xl md:text-4xl font-bold mb-4">Die 4 Säulen der Compliance</h2>
+                    <p class="text-xl text-gray-300 max-w-3xl mx-auto">
+                        Unsere Plattform deckt alle relevanten Bereiche der Website-Compliance ab - von rechtlichen Texten über Cookie-Consent bis zur Barrierefreiheit.
+                    </p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                    <!-- Feature 1 -->
+                    <div class="glass rounded-xl p-6 hover:shadow-lg transition">
+                        <div class="rounded-full bg-primary-500/10 w-12 h-12 flex items-center justify-center mb-4">
+                            <svg class="w-6 h-6 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Rechtliche Texte</h3>
+                        <p class="text-gray-300 mb-4">
+                            Vollständiges Impressum, DSGVO-konforme Datenschutzerklärung, AGB und Widerrufsbelehrung - automatisch generiert und rechtssicher.
+                        </p>
+                        <ul class="space-y-2 text-gray-300">
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                TMG §5 Impressum
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                DSGVO-Datenschutz
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Shop-spezifische AGB
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Automatische Updates
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <!-- Feature 2 -->
+                    <div class="glass rounded-xl p-6 hover:shadow-lg transition">
+                        <div class="rounded-full bg-primary-500/10 w-12 h-12 flex items-center justify-center mb-4">
+                            <svg class="w-6 h-6 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Cookie-Compliance</h3>
+                        <p class="text-gray-300 mb-4">
+                            TTDSG- und DSGVO-konformes Cookie-Banner mit vollständiger Einwilligungsmanagement-Lösung und Dokumentation.
+                        </p>
+                        <ul class="space-y-2 text-gray-300">
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Opt-In-Banner
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Script-Blocking
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Consent-Protokollierung
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Cookie-Dokumentation
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <!-- Feature 3 -->
+                    <div class="glass rounded-xl p-6 hover:shadow-lg transition">
+                        <div class="rounded-full bg-primary-500/10 w-12 h-12 flex items-center justify-center mb-4">
+                            <svg class="w-6 h-6 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">DSGVO-Compliance</h3>
+                        <p class="text-gray-300 mb-4">
+                            Umfassende Datenschutz-Compliance mit Betroffenenrechte-Management und Verarbeitungsverzeichnis.
+                        </p>
+                        <ul class="space-y-2 text-gray-300">
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Datenverarbeitungs-Audit
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Betroffenenrechte
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Verarbeitungsverzeichnis
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Privacy by Design
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <!-- Feature 4 -->
+                    <div class="glass rounded-xl p-6 hover:shadow-lg transition">
+                        <div class="rounded-full bg-primary-500/10 w-12 h-12 flex items-center justify-center mb-4">
+                            <svg class="w-6 h-6 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Barrierefreiheit</h3>
+                        <p class="text-gray-300 mb-4">
+                            Optimierung Ihrer Website für maximale Zugänglichkeit nach WCAG 2.1 AA und BITV 2.0 Standards.
+                        </p>
+                        <ul class="space-y-2 text-gray-300">
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Screen-Reader-Optimierung
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Keyboard-Navigation
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Farbkontrast-Optimierung
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-5 h-5 text-primary-500 mr-2" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Alternative Medien
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Pricing Section -->
+        <section id="pricing" class="py-16 px-4 sm:px-6 lg:px-8" aria-labelledby="pricing-heading">
+            <div class="container mx-auto max-w-6xl">
+                <div class="text-center mb-16">
+                    <h2 id="pricing-heading" class="text-3xl md:text-4xl font-bold mb-4">Einfache und transparente Preise</h2>
+                    <p class="text-xl text-gray-300 max-w-3xl mx-auto">
+                        Wählen Sie zwischen automatisierter KI-Lösung oder persönlicher Expertenbetreuung.
+                    </p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+                    <!-- Free Tier -->
+                    <div class="glass rounded-xl p-8 flex flex-col">
+                        <div class="mb-4">
+                            <h3 class="text-2xl font-bold mb-2">Kostenlose Analyse</h3>
+                            <p class="text-gray-300 mb-4">
+                                Erhalten Sie einen vollständigen Compliance-Check Ihrer Website ohne Verpflichtung.
+                            </p>
+                            <div class="mt-4 mb-8">
+                                <span class="text-4xl font-bold">€0</span>
+                                <span class="text-gray-400 ml-2">einmalig</span>
+                            </div>
+                        </div>
+                        
+                        <ul class="space-y-4 mb-8 flex-grow">
+                            <li class="flex items-start">
+                                <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                <span>Vollständiger Compliance-Scan</span>
+                            </li>
+                            <li class="flex items-start">
+                                <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                <span>Abmahn-Risiko-Bewertung mit konkreten €-Beträgen</span>
+                            </li>
+                            <li class="flex items-start">
+                                <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                <span>Prioritäten-Liste nach Dringlichkeit</span>
+                            </li>
+                            <li class="flex items-start">
+                                <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                <span>PDF-Report mit Handlungsempfehlungen</span>
+                            </li>
+                        </ul>
+                        
+                        <a href="#analyze" class="bg-dark-700 hover:bg-dark-600 text-white font-bold py-3 px-6 rounded-lg transition text-center">
+                            Kostenlos starten
+                        </a>
+                    </div>
+                    
+                    <!-- Premium Tier -->
+                    <div class="glass rounded-xl p-8 border border-primary-500/50 relative flex flex-col">
+                        <div class="absolute -top-4 right-8 bg-primary-500 text-dark-900 px-4 py-1 rounded-full font-bold text-sm">
+                            Empfohlen
+                        </div>
+                        
+                        <div class="mb-4">
+                            <h3 class="text-2xl font-bold mb-2">KI-Automatisierung</h3>
+                            <p class="text-gray-300 mb-4">
+                                Vollautomatische Compliance-Fixes mit KI-Technologie und 24/7 Monitoring.
+                            </p>
+                            <div class="mt-4 mb-8">
+                                <span class="text-4xl font-bold">€39</span>
+                                <span class="text-gray-400 ml-2">/ Monat</span>
+                            </div>
+                        </div>
+                        
+                        <ul class="space-y-4 mb-8 flex-grow">
+                            <li class="flex items-start">
+                                <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                <span>KI-gestützte Website-Überarbeitung (GPT-4 + Claude)</span>
+                            </li>
+                            <li class="flex items-start">
+                                <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                <span>Automatische Rechtstext-Integration (eRecht24)</span>
+                            </li>
+                            <li class="flex items-start">
+                                <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                <span>Cookie-Banner-Implementation</span>
+                            </li>
+                            <li class="flex items-start">
+                                <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                <span>Monatliche Re-Scans mit automatischen Fixes</span>
+                            </li>
+                            <li class="flex items-start">
+                                <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                <span>Compliance-Dashboard mit Live-Monitoring</span>
+                            </li>
+                            <li class="flex items-start">
+                                <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                <span>24h-Umsetzung für Standard-Websites</span>
+                            </li>
+                        </ul>
+                        
+                        <a href="#contact" class="bg-primary-500 hover:bg-primary-600 text-white font-bold py-3 px-6 rounded-lg transition text-center">
+                            Jetzt starten
+                        </a>
+                    </div>
+                </div>
+                
+                <!-- Expert Tier -->
+                <div class="glass rounded-xl p-8 mt-8 max-w-5xl mx-auto">
+                    <div class="flex flex-col md:flex-row md:items-center">
+                        <div class="md:flex-1 mb-6 md:mb-0 md:pr-8">
+                            <h3 class="text-2xl font-bold mb-2">Experten-Service</h3>
+                            <p class="text-gray-300 mb-4">
+                                Persönliche Expertenbetreuung für komplexe Websites und höchste Anforderungen.
+                            </p>
+                            <div class="mb-4">
+                                <span class="text-3xl font-bold">€2.000</span>
+                                <span class="text-gray-400 ml-2">Einmalig</span>
+                                <span class="text-gray-400 mx-2">+</span>
+                                <span class="text-3xl font-bold">€39</span>
+                                <span class="text-gray-400 ml-2">/ Monat</span>
+                            </div>
+                            <p class="text-gray-400 italic">
+                                Ideal für komplexe Websites, regulierte Branchen und Enterprise-Kunden.
+                            </p>
+                        </div>
+                        <div class="md:flex-1">
+                            <ul class="space-y-3">
+                                <li class="flex items-start">
+                                    <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    <span>Persönliche Experten-Betreuung (Anwalt + Tech-Spezialist)</span>
+                                </li>
+                                <li class="flex items-start">
+                                    <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    <span>Branchenspezifische Compliance (Healthcare, Finance, E-Commerce)</span>
+                                </li>
+                                <li class="flex items-start">
+                                    <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    <span>Alle Features des KI-Plans inklusive</span>
+                                </li>
+                                <li class="flex items-start">
+                                    <svg class="w-5 h-5 text-primary-500 mt-1 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    <span>Quartalsweise Review-Calls mit Compliance-Officer</span>
+                                </li>
+                            </ul>
+                            <div class="mt-6">
+                                <a href="#contact" class="bg-dark-700 hover:bg-dark-600 text-white font-bold py-3 px-6 rounded-lg transition inline-block">
+                                    Kontakt aufnehmen
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Contact Section -->
+        <section id="contact" class="py-16 px-4 sm:px-6 lg:px-8 bg-dark-800/50" aria-labelledby="contact-heading">
+            <div class="container mx-auto max-w-5xl">
+                <div class="text-center mb-12">
+                    <h2 id="contact-heading" class="text-3xl md:text-4xl font-bold mb-4">Kontaktieren Sie uns</h2>
+                    <p class="text-xl text-gray-300 max-w-3xl mx-auto">
+                        Haben Sie Fragen zu unseren Services? Unser Team steht Ihnen gerne zur Verfügung.
+                    </p>
+                </div>
+                
+                <div class="glass rounded-xl p-8">
+                    <form id="contact-form" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-4 md:col-span-1">
+                            <div>
+                                <label for="name" class="block text-sm font-medium text-gray-300 mb-1">Name</label>
+                                <input 
+                                    type="text" 
+                                    id="name" 
+                                    name="name" 
+                                    required
+                                    aria-required="true"
+                                    class="w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-lg focus:ring-2 focus:ring-primary-500 text-white"
+                                >
+                            </div>
+                            <div>
+                                <label for="email" class="block text-sm font-medium text-gray-300 mb-1">E-Mail</label>
+                                <input 
+                                    type="email" 
+                                    id="email" 
+                                    name="email" 
+                                    required
+                                    aria-required="true"
+                                    class="w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-lg focus:ring-2 focus:ring-primary-500 text-white"
+                                >
+                            </div>
+                            <div>
+                                <label for="company" class="block text-sm font-medium text-gray-300 mb-1">Unternehmen</label>
+                                <input 
+                                    type="text" 
+                                    id="company" 
+                                    name="company" 
+                                    class="w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-lg focus:ring-2 focus:ring-primary-500 text-white"
+                                >
+                            </div>
+                            <div>
+                                <label for="phone" class="block text-sm font-medium text-gray-300 mb-1">Telefon</label>
+                                <input 
+                                    type="tel" 
+                                    id="phone" 
+                                    name="phone" 
+                                    class="w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-lg focus:ring-2 focus:ring-primary-500 text-white"
+                                >
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-4 md:col-span-1">
+                            <div>
+                                <label for="subject" class="block text-sm font-medium text-gray-300 mb-1">Betreff</label>
+                                <input 
+                                    type="text" 
+                                    id="subject" 
+                                    name="subject" 
+                                    required
+                                    aria-required="true"
+                                    class="w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-lg focus:ring-2 focus:ring-primary-500 text-white"
+                                >
+                            </div>
+                            <div>
+                                <label for="message" class="block text-sm font-medium text-gray-300 mb-1">Nachricht</label>
+                                <textarea 
+                                    id="message" 
+                                    name="message" 
+                                    rows="7" 
+                                    required
+                                    aria-required="true"
+                                    class="w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-lg focus:ring-2 focus:ring-primary-500 text-white resize-none"
+                                ></textarea>
+                            </div>
+                            <div class="flex items-start">
+                                <div class="flex items-center h-5">
+                                    <input 
+                                        id="privacy" 
+                                        name="privacy" 
+                                        type="checkbox" 
+                                        required
+                                        aria-required="true"
+                                        class="h-4 w-4 text-primary-500 border-gray-500 rounded focus:ring-primary-500 bg-dark-700"
+                                    >
+                                </div>
+                                <div class="ml-3 text-sm">
+                                    <label for="privacy" class="font-medium text-gray-300">Datenschutz</label>
+                                    <p class="text-gray-400">Ich stimme zu, dass meine Daten zur Bearbeitung meiner Anfrage gespeichert werden. Weitere Informationen finden Sie in unserer <a href="#datenschutz" class="text-primary-400 hover:text-primary-300">Datenschutzerklärung</a>.</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="md:col-span-2 mt-4">
+                            <button 
+                                type="submit" 
+                                class="w-full bg-primary-500 hover:bg-primary-600 text-white font-bold py-3 px-6 rounded-lg transition text-lg"
+                            >
+                                Nachricht senden
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+    </main>
+    
+    <!-- Footer -->
+    <footer class="bg-dark-800 py-12 px-4 sm:px-6 lg:px-8">
+        <div class="container mx-auto max-w-6xl">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
+                <div class="md:col-span-1">
+                    <a href="/" class="flex items-center space-x-2 mb-6" aria-label="Complyo Homepage">
+                        <svg class="w-8 h-8 text-primary-500" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                        </svg>
+                        <span class="text-2xl font-bold tracking-tight">Complyo</span>
+                    </a>
+                    <p class="text-gray-400 mb-4">
+                        Die All-in-One Compliance-Plattform für deutsche Websites.
+                    </p>
+                    <div class="flex space-x-4">
+                        <a href="#" class="text-gray-400 hover:text-primary-400" aria-label="LinkedIn">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                            </svg>
+                        </a>
+                        <a href="#" class="text-gray-400 hover:text-primary-400" aria-label="Twitter">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723 10.04 10.04 0 01-3.127 1.184 4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
+                            </svg>
+                        </a>
+                        <a href="#" class="text-gray-400 hover:text-primary-400" aria-label="GitHub">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"/>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="md:col-span-1">
+                    <h3 class="text-lg font-bold mb-4">Services</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#features" class="text-gray-400 hover:text-primary-400">Rechtliche Texte</a></li>
+                        <li><a href="#features" class="text-gray-400 hover:text-primary-400">Cookie-Compliance</a></li>
+                        <li><a href="#features" class="text-gray-400 hover:text-primary-400">DSGVO-Compliance</a></li>
+                        <li><a href="#features" class="text-gray-400 hover:text-primary-400">Barrierefreiheit</a></li>
+                        <li><a href="#pricing" class="text-gray-400 hover:text-primary-400">Preise</a></li>
+                    </ul>
+                </div>
+                
+                <div class="md:col-span-1">
+                    <h3 class="text-lg font-bold mb-4">Unternehmen</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="text-gray-400 hover:text-primary-400">Über uns</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-primary-400">Team</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-primary-400">Karriere</a></li>
+                        <li><a href="#contact" class="text-gray-400 hover:text-primary-400">Kontakt</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-primary-400">Blog</a></li>
+                    </ul>
+                </div>
+                
+                <div class="md:col-span-1">
+                    <h3 class="text-lg font-bold mb-4">Rechtliches</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#impressum" class="text-gray-400 hover:text-primary-400">Impressum</a></li>
+                        <li><a href="#datenschutz" class="text-gray-400 hover:text-primary-400">Datenschutzerklärung</a></li>
+                        <li><a href="#agb" class="text-gray-400 hover:text-primary-400">AGB</a></li>
+                        <li><a href="#widerruf" class="text-gray-400 hover:text-primary-400">Widerrufsrecht</a></li>
+                        <li><a href="#cookies" class="text-gray-400 hover:text-primary-400">Cookie-Einstellungen</a></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="border-t border-dark-700 pt-8">
+                <p class="text-center text-gray-400">
+                    &copy; 2025 Complyo. Alle Rechte vorbehalten.
+                </p>
+            </div>
+        </div>
+    </footer>
+    
+    <!-- Cookie Consent Banner -->
+    <div id="cookie-banner" class="cookie-banner glass p-6 md:p-8">
+        <div class="container mx-auto max-w-6xl">
+            <div class="flex flex-col">
+                <div class="mb-4">
+                    <h2 class="text-xl font-bold mb-2">Cookie-Einstellungen</h2>
+                    <p class="text-gray-300">
+                        Wir verwenden Cookies, um Ihnen die bestmögliche Erfahrung auf unserer Website zu bieten und unsere Services zu verbessern. Einige sind notwendig für den Betrieb der Seite, während andere uns helfen, Ihre Nutzererfahrung zu optimieren.
+                    </p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div class="glass rounded-lg p-4">
+                        <div class="flex items-start">
+                            <div class="flex items-center h-5 mt-1">
+                                <input 
+                                    id="cookie-essential" 
+                                    name="cookie-essential" 
+                                    type="checkbox" 
+                                    checked 
+                                    disabled
+                                    aria-describedby="cookie-essential-desc"
+                                    class="h-4 w-4 text-primary-500 border-gray-500 rounded bg-dark-700"
+                                >
+                            </div>
+                            <div class="ml-3">
+                                <label for="cookie-essential" class="font-medium text-white">Essentielle Cookies</label>
+                                <p id="cookie-essential-desc" class="text-sm text-gray-400">Diese Cookies sind für die Funktion der Website erforderlich und können nicht deaktiviert werden.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="glass rounded-lg p-4">
+                        <div class="flex items-start">
+                            <div class="flex items-center h-5 mt-1">
+                                <input 
+                                    id="cookie-functional" 
+                                    name="cookie-functional" 
+                                    type="checkbox"
+                                    aria-describedby="cookie-functional-desc"
+                                    class="h-4 w-4 text-primary-500 border-gray-500 rounded focus:ring-primary-500 bg-dark-700"
+                                >
+                            </div>
+                            <div class="ml-3">
+                                <label for="cookie-functional" class="font-medium text-white">Funktionale Cookies</label>
+                                <p id="cookie-functional-desc" class="text-sm text-gray-400">Diese Cookies ermöglichen erweiterte Funktionen und Personalisierung.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="glass rounded-lg p-4">
+                        <div class="flex items-start">
+                            <div class="flex items-center h-5 mt-1">
+                                <input 
+                                    id="cookie-analytics" 
+                                    name="cookie-analytics" 
+                                    type="checkbox"
+                                    aria-describedby="cookie-analytics-desc"
+                                    class="h-4 w-4 text-primary-500 border-gray-500 rounded focus:ring-primary-500 bg-dark-700"
+                                >
+                            </div>
+                            <div class="ml-3">
+                                <label for="cookie-analytics" class="font-medium text-white">Analyse Cookies</label>
+                                <p id="cookie-analytics-desc" class="text-sm text-gray-400">Diese Cookies helfen uns zu verstehen, wie Besucher mit unserer Website interagieren.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="glass rounded-lg p-4">
+                        <div class="flex items-start">
+                            <div class="flex items-center h-5 mt-1">
+                                <input 
+                                    id="cookie-marketing" 
+                                    name="cookie-marketing" 
+                                    type="checkbox"
+                                    aria-describedby="cookie-marketing-desc"
+                                    class="h-4 w-4 text-primary-500 border-gray-500 rounded focus:ring-primary-500 bg-dark-700"
+                                >
+                            </div>
+                            <div class="ml-3">
+                                <label for="cookie-marketing" class="font-medium text-white">Marketing Cookies</label>
+                                <p id="cookie-marketing-desc" class="text-sm text-gray-400">Diese Cookies werden verwendet, um Ihnen relevante Werbung anzuzeigen.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex flex-col sm:flex-row gap-3 justify-center">
+                    <button id="cookie-reject-all" class="bg-dark-700 hover:bg-dark-600 text-white font-medium py-2 px-6 rounded-lg transition">
+                        Alle ablehnen
+                    </button>
+                    <button id="cookie-save" class="bg-dark-700 hover:bg-dark-600 text-white font-medium py-2 px-6 rounded-lg transition">
+                        Auswahl speichern
+                    </button>
+                    <button id="cookie-accept-all" class="bg-primary-500 hover:bg-primary-600 text-white font-medium py-2 px-6 rounded-lg transition">
+                        Alle akzeptieren
+                    </button>
+                </div>
+                
+                <div class="mt-4 text-center">
+                    <a href="#datenschutz" class="text-sm text-primary-400 hover:text-primary-300">Datenschutzerklärung</a>
+                    <span class="text-gray-500 mx-2">|</span>
+                    <a href="#impressum" class="text-sm text-primary-400 hover:text-primary-300">Impressum</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Impressum Modal (Hidden by default) -->
+    <div id="impressum" class="fixed inset-0 bg-black/50 z-50 hidden overflow-y-auto" aria-labelledby="impressum-title" role="dialog" aria-modal="true">
+        <div class="min-h-screen px-4 text-center flex items-center justify-center">
+            <div class="glass rounded-xl max-w-3xl w-full p-8 text-left">
+                <div class="flex justify-between items-start mb-4">
+                    <h2 id="impressum-title" class="text-2xl font-bold">Impressum</h2>
+                    <button type="button" class="modal-close text-gray-400 hover:text-white" aria-label="Schließen">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="space-y-4 text-gray-300">
+                    <div>
+                        <h3 class="text-lg font-bold mb-1">Angaben gemäß § 5 TMG</h3>
+                        <p>Complyo GmbH<br>
+                        Musterstraße 123<br>
+                        10115 Berlin<br>
+                        Deutschland</p>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-lg font-bold mb-1">Kontakt</h3>
+                        <p>Telefon: +49 (0) 30 123456789<br>
+                        E-Mail: info@complyo.tech</p>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-lg font-bold mb-1">Vertretungsberechtigte Geschäftsführer</h3>
+                        <p>Max Mustermann, Maria Musterfrau</p>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-lg font-bold mb-1">Registereintrag</h3>
+                        <p>Eintragung im Handelsregister.<br>
+                        Registergericht: Amtsgericht Berlin-Charlottenburg<br>
+                        Registernummer: HRB 123456</p>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-lg font-bold mb-1">Umsatzsteuer-ID</h3>
+                        <p>Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz:<br>
+                        DE123456789</p>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-lg font-bold mb-1">Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV</h3>
+                        <p>Max Mustermann<br>
+                        Musterstraße 123<br>
+                        10115 Berlin<br>
+                        Deutschland</p>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-lg font-bold mb-1">Streitschlichtung</h3>
+                        <p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: <a href="https://ec.europa.eu/consumers/odr/" class="text-primary-400 hover:text-primary-300" target="_blank" rel="noopener">https://ec.europa.eu/consumers/odr/</a><br>
+                        Unsere E-Mail-Adresse finden Sie oben im Impressum.</p>
+                        
+                        <p>Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Datenschutz Modal (Hidden by default) -->
+    <div id="datenschutz" class="fixed inset-0 bg-black/50 z-50 hidden overflow-y-auto" aria-labelledby="datenschutz-title" role="dialog" aria-modal="true">
+        <div class="min-h-screen px-4 text-center flex items-center justify-center">
+            <div class="glass rounded-xl max-w-3xl w-full p-8 text-left max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-start mb-4 sticky top-0 bg-dark-800 py-2">
+                    <h2 id="datenschutz-title" class="text-2xl font-bold">Datenschutzerklärung</h2>
+                    <button type="button" class="modal-close text-gray-400 hover:text-white" aria-label="Schließen">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="space-y-6 text-gray-300">
+                    <div>
+                        <h3 class="text-xl font-bold mb-2">1. Datenschutz auf einen Blick</h3>
+                        <div class="space-y-3">
+                            <h4 class="text-lg font-bold">Allgemeine Hinweise</h4>
+                            <p>Die folgenden Hinweise geben einen einfachen Überblick darüber, was mit Ihren personenbezogenen Daten passiert, wenn Sie diese Website besuchen. Personenbezogene Daten sind alle Daten, mit denen Sie persönlich identifiziert werden können. Ausführliche Informationen zum Thema Datenschutz entnehmen Sie unserer unter diesem Text aufgeführten Datenschutzerklärung.</p>
+                            
+                            <h4 class="text-lg font-bold">Datenerfassung auf dieser Website</h4>
+                            <h5 class="text-base font-bold">Wer ist verantwortlich für die Datenerfassung auf dieser Website?</h5>
+                            <p>Die Datenverarbeitung auf dieser Website erfolgt durch den Websitebetreiber. Dessen Kontaktdaten können Sie dem Impressum dieser Website entnehmen.</p>
+                            
+                            <h5 class="text-base font-bold">Wie erfassen wir Ihre Daten?</h5>
+                            <p>Ihre Daten werden zum einen dadurch erhoben, dass Sie uns diese mitteilen. Hierbei kann es sich z. B. um Daten handeln, die Sie in ein Kontaktformular eingeben.</p>
+                            <p>Andere Daten werden automatisch oder nach Ihrer Einwilligung beim Besuch der Website durch unsere IT-Systeme erfasst. Das sind vor allem technische Daten (z. B. Internetbrowser, Betriebssystem oder Uhrzeit des Seitenaufrufs). Die Erfassung dieser Daten erfolgt automatisch, sobald Sie diese Website betreten.</p>
+                            
+                            <h5 class="text-base font-bold">Wofür nutzen wir Ihre Daten?</h5>
+                            <p>Ein Teil der Daten wird erhoben, um eine fehlerfreie Bereitstellung der Website zu gewährleisten. Andere Daten können zur Analyse Ihres Nutzerverhaltens verwendet werden.</p>
+                            
+                            <h5 class="text-base font-bold">Welche Rechte haben Sie bezüglich Ihrer Daten?</h5>
+                            <p>Sie haben jederzeit das Recht, unentgeltlich Auskunft über Herkunft, Empfänger und Zweck Ihrer gespeicherten personenbezogenen Daten zu erhalten. Sie haben außerdem ein Recht, die Berichtigung oder Löschung dieser Daten zu verlangen. Wenn Sie eine Einwilligung zur Datenverarbeitung erteilt haben, können Sie diese Einwilligung jederzeit für die Zukunft widerrufen. Außerdem haben Sie das Recht, unter bestimmten Umständen die Einschränkung der Verarbeitung Ihrer personenbezogenen Daten zu verlangen. Des Weiteren steht Ihnen ein Beschwerderecht bei der zuständigen Aufsichtsbehörde zu.</p>
+                            <p>Hierzu sowie zu weiteren Fragen zum Thema Datenschutz können Sie sich jederzeit unter der im Impressum angegebenen Adresse an uns wenden.</p>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-2">2. Hosting und Content Delivery Networks (CDN)</h3>
+                        <div class="space-y-3">
+                            <h4 class="text-lg font-bold">Externes Hosting</h4>
+                            <p>Diese Website wird bei einem externen Dienstleister gehostet (Hoster). Die personenbezogenen Daten, die auf dieser Website erfasst werden, werden auf den Servern des Hosters gespeichert. Hierbei kann es sich v. a. um IP-Adressen, Kontaktanfragen, Meta- und Kommunikationsdaten, Vertragsdaten, Kontaktdaten, Namen, Websitezugriffe und sonstige Daten, die über eine Website generiert werden, handeln.</p>
+                            <p>Der Einsatz des Hosters erfolgt zum Zwecke der Vertragserfüllung gegenüber unseren potenziellen und bestehenden Kunden (Art. 6 Abs. 1 lit. b DSGVO) und im Interesse einer sicheren, schnellen und effizienten Bereitstellung unseres Online-Angebots durch einen professionellen Anbieter (Art. 6 Abs. 1 lit. f DSGVO).</p>
+                            <p>Unser Hoster wird Ihre Daten nur insoweit verarbeiten, wie dies zur Erfüllung seiner Leistungspflichten erforderlich ist und unsere Weisungen in Bezug auf diese Daten befolgen.</p>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-2">3. Allgemeine Hinweise und Pflichtinformationen</h3>
+                        <div class="space-y-3">
+                            <h4 class="text-lg font-bold">Datenschutz</h4>
+                            <p>Die Betreiber dieser Seiten nehmen den Schutz Ihrer persönlichen Daten sehr ernst. Wir behandeln Ihre personenbezogenen Daten vertraulich und entsprechend der gesetzlichen Datenschutzvorschriften sowie dieser Datenschutzerklärung.</p>
+                            <p>Wenn Sie diese Website benutzen, werden verschiedene personenbezogene Daten erhoben. Personenbezogene Daten sind Daten, mit denen Sie persönlich identifiziert werden können. Die vorliegende Datenschutzerklärung erläutert, welche Daten wir erheben und wofür wir sie nutzen. Sie erläutert auch, wie und zu welchem Zweck das geschieht.</p>
+                            <p>Wir weisen darauf hin, dass die Datenübertragung im Internet (z. B. bei der Kommunikation per E-Mail) Sicherheitslücken aufweisen kann. Ein lückenloser Schutz der Daten vor dem Zugriff durch Dritte ist nicht möglich.</p>
+                            
+                            <h4 class="text-lg font-bold">Hinweis zur verantwortlichen Stelle</h4>
+                            <p>Die verantwortliche Stelle für die Datenverarbeitung auf dieser Website ist:</p>
+                            <p>Complyo GmbH<br>
+                            Musterstraße 123<br>
+                            10115 Berlin</p>
+                            <p>Telefon: +49 (0) 30 123456789<br>
+                            E-Mail: info@complyo.tech</p>
+                            <p>Verantwortliche Stelle ist die natürliche oder juristische Person, die allein oder gemeinsam mit anderen über die Zwecke und Mittel der Verarbeitung von personenbezogenen Daten (z. B. Namen, E-Mail-Adressen o. Ä.) entscheidet.</p>
+                            
+                            <!-- Weitere Abschnitte der Datenschutzerklärung -->
+                        </div>
+                    </div>
+                    
+                    <!-- Weitere Abschnitte der Datenschutzerklärung (gekürzt für dieses Beispiel) -->
+                    <div>
+                        <h3 class="text-xl font-bold mb-2">4. Datenerfassung auf dieser Website</h3>
+                        <div class="space-y-3">
+                            <h4 class="text-lg font-bold">Cookies</h4>
+                            <p>Unsere Internetseiten verwenden so genannte „Cookies". Cookies sind kleine Textdateien und richten auf Ihrem Endgerät keinen Schaden an. Sie werden entweder vorübergehend für die Dauer einer Sitzung (Session-Cookies) oder dauerhaft (permanente Cookies) auf Ihrem Endgerät gespeichert. Session-Cookies werden nach Ende Ihres Besuchs automatisch gelöscht. Permanente Cookies bleiben auf Ihrem Endgerät gespeichert, bis Sie diese selbst löschen oder eine automatische Löschung durch Ihren Webbrowser erfolgt.</p>
+                            
+                            <p>Cookies können von uns (First-Party-Cookies) oder von Drittunternehmen stammen (sog. Third-Party-Cookies). Third-Party-Cookies ermöglichen die Einbindung bestimmter Dienstleistungen von Drittunternehmen innerhalb von Webseiten (z. B. Cookies zur Abwicklung von Zahlungsdienstleistungen).</p>
+                            
+                            <p>Cookies haben verschiedene Funktionen. Zahlreiche Cookies sind technisch notwendig, da bestimmte Webseitenfunktionen ohne diese nicht funktionieren würden (z. B. die Warenkorbfunktion oder die Anzeige von Videos). Andere Cookies können zur Auswertung des Nutzerverhaltens oder zu Werbezwecken verwendet werden.</p>
+                            
+                            <p>Cookies, die zur Durchführung des elektronischen Kommunikationsvorgangs, zur Bereitstellung bestimmter, von Ihnen erwünschter Funktionen (z. B. für die Warenkorbfunktion) oder zur Optimierung der Website (z. B. Cookies zur Messung des Webpublikums) erforderlich sind (notwendige Cookies), werden auf Grundlage von Art. 6 Abs. 1 lit. f DSGVO gespeichert, sofern keine andere Rechtsgrundlage angegeben wird. Der Websitebetreiber hat ein berechtigtes Interesse an der Speicherung von notwendigen Cookies zur technisch fehlerfreien und optimierten Bereitstellung seiner Dienste. Sofern eine Einwilligung zur Speicherung von Cookies und vergleichbaren Wiedererkennungstechnologien abgefragt wurde, erfolgt die Verarbeitung ausschließlich auf Grundlage dieser Einwilligung (Art. 6 Abs. 1 lit. a DSGVO und § 25 Abs. 1 TTDSG); die Einwilligung ist jederzeit widerrufbar.</p>
+                            
+                            <p>Sie können Ihren Browser so einstellen, dass Sie über das Setzen von Cookies informiert werden und Cookies nur im Einzelfall erlauben, die Annahme von Cookies für bestimmte Fälle oder generell ausschließen sowie das automatische Löschen der Cookies beim Schließen des Browsers aktivieren. Bei der Deaktivierung von Cookies kann die Funktionalität dieser Website eingeschränkt sein.</p>
+                            
+                            <p>Welche Cookies und Dienste auf dieser Website eingesetzt werden, können Sie dieser Datenschutzerklärung entnehmen.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- JavaScript für Interaktivität -->
+    <script>
+        // DOM-Elemente
+        const cookieBanner = document.getElementById('cookie-banner');
+        const cookieAcceptAll = document.getElementById('cookie-accept-all');
+        const cookieRejectAll = document.getElementById('cookie-reject-all');
+        const cookieSave = document.getElementById('cookie-save');
+        const cookieFunctional = document.getElementById('cookie-functional');
+        const cookieAnalytics = document.getElementById('cookie-analytics');
+        const cookieMarketing = document.getElementById('cookie-marketing');
+        
+        // Modals
+        const impressumLinks = document.querySelectorAll('a[href="#impressum"]');
+        const datenschutzLinks = document.querySelectorAll('a[href="#datenschutz"]');
+        const cookiesLink = document.querySelector('a[href="#cookies"]');
+        const impressumModal = document.getElementById('impressum');
+        const datenschutzModal = document.getElementById('datenschutz');
+        const modalCloseButtons = document.querySelectorAll('.modal-close');
+        
+        // Contact Form
+        const contactForm = document.getElementById('contact-form');
+        const analyzeForm = document.getElementById('website-analyzer');
+        const analyzeButton = document.getElementById('analyze-button');
+        
+        // Cookie Banner anzeigen
+        function showCookieBanner() {
+            cookieBanner.style.display = 'block';
+        }
+        
+        // Cookie Banner verstecken
+        function hideCookieBanner() {
+            cookieBanner.style.display = 'none';
+        }
+        
+        // Cookie-Consent speichern
+        function saveConsent(acceptAll = false) {
+            const consent = {
+                essential: true, // Immer notwendig
+                functional: acceptAll ? true : cookieFunctional.checked,
+                analytics: acceptAll ? true : cookieAnalytics.checked,
+                marketing: acceptAll ? true : cookieMarketing.checked,
+                timestamp: new Date().toISOString()
+            };
+            
+            // Consent im localStorage speichern
+            localStorage.setItem('cookie-consent', JSON.stringify(consent));
+            
+            // Cookie-Banner verstecken
+            hideCookieBanner();
+            
+            // Hier könnten Tracking-Scripts basierend auf der Einwilligung aktiviert werden
+            applyConsentSettings(consent);
+            
+            // Optional: Consent an Backend senden
+            /*
+            fetch('https://api.complyo.tech/api/consent-log', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(consent)
+            });
+            */
+        }
+        
+        // Consent-Einstellungen anwenden
+        function applyConsentSettings(settings) {
+            console.log('Angewandte Cookie-Einstellungen:', settings);
+            
+            // Hier würden Tracking-Scripts basierend auf den Einstellungen aktiviert werden
+            
+            if (settings.marketing) {
+                // Marketing-Scripts aktivieren
+                console.log('Marketing aktiviert');
+            }
+        }
+        
+        // Cookie-Banner Event Listener
+        cookieAcceptAll.addEventListener('click', function() {
+            saveConsent(true);
+        });
+        
+        cookieRejectAll.addEventListener('click', function() {
+            // Alle Checkboxen zurücksetzen außer essentiell
+            cookieFunctional.checked = false;
+            cookieAnalytics.checked = false;
+            cookieMarketing.checked = false;
+            
+            // Speichern mit rejectAll = false, damit aktuelle Checkbox-Zustände verwendet werden
+            saveConsent(false);
+        });
+        
+        cookieSave.addEventListener('click', function() {
+            saveConsent(false);
+        });
+        
+        // Cookie-Einstellungen Link zeigt Banner erneut an
+        if (cookiesLink) {
+            cookiesLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                showCookieBanner();
+            });
+        }
+        
+        // Modal-Funktionalität
+        impressumLinks.forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                impressumModal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            });
+        });
+        
+        datenschutzLinks.forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                datenschutzModal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            });
+        });
+        
+        modalCloseButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                impressumModal.classList.add('hidden');
+                datenschutzModal.classList.add('hidden');
+                document.body.style.overflow = 'auto';
+            });
+        });
+        
+        // Außerhalb des Modals klicken schließt es
+        window.addEventListener('click', function(e) {
+            if (e.target === impressumModal) {
+                impressumModal.classList.add('hidden');
+                document.body.style.overflow = 'auto';
+            }
+            if (e.target === datenschutzModal) {
+                datenschutzModal.classList.add('hidden');
+                document.body.style.overflow = 'auto';
+            }
+        });
+        
+        // Escape-Taste schließt Modals
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                impressumModal.classList.add('hidden');
+                datenschutzModal.classList.add('hidden');
+                document.body.style.overflow = 'auto';
+            }
+        });
+        
+        // Kontaktformular Handler
+        if (contactForm) {
+            contactForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                alert('Vielen Dank für Ihre Nachricht! Wir werden uns in Kürze bei Ihnen melden.');
+                contactForm.reset();
+            });
+        }
+        
+        // Website-Analyse Handler
+        if (analyzeForm) {
+            analyzeForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Lade-Zustand
+                analyzeButton.setAttribute('aria-busy', 'true');
+                analyzeButton.textContent = 'Analyse läuft...';
+                
+                // Demo-Verzögerung
+                setTimeout(function() {
+                    analyzeButton.setAttribute('aria-busy', 'false');
+                    analyzeButton.textContent = 'Kostenlose Analyse starten';
+                    
+                    // Erfolgs-Nachricht anzeigen
+                    alert('Ihre Website wurde analysiert! Ein detaillierter Bericht wurde an Ihre E-Mail-Adresse gesendet.');
+                    
+                    // Formular zurücksetzen
+                    analyzeForm.reset();
+                    
+                    // Checkboxen wieder auf true setzen
+                    document.getElementById('check-legal').checked = true;
+                    document.getElementById('check-cookies').checked = true;
+                    document.getElementById('check-accessibility').checked = true;
+                    document.getElementById('check-dsgvo').checked = true;
+                }, 2000);
+            });
+        }
+        
+        // Beim Laden der Seite prüfen, ob bereits Consent gespeichert ist
+        document.addEventListener('DOMContentLoaded', function() {
+            const storedConsent = localStorage.getItem('cookie-consent');
+            
+            if (!storedConsent) {
+                // Wenn kein Consent gespeichert, Banner anzeigen
+                showCookieBanner();
+            } else {
+                // Sonst gespeicherte Einstellungen anwenden
+                const settings = JSON.parse(storedConsent);
+                
+                // Checkboxen im Banner entsprechend setzen
+                cookieFunctional.checked = settings.functional || false;
+                cookieAnalytics.checked = settings.analytics || false;
+                cookieMarketing.checked = settings.marketing || false;
+                
+                // Tracking-Scripts entsprechend aktivieren
+                applyConsentSettings(settings);
+            }
+            
+            // Barrierefreiheit: Fokus-Trap in Modals implementieren
+            // Würde in einer Produktionsumgebung mit einer vollständigen Accessibility-Lösung implementiert werden
+        });
+    </script>
+</body>
+</html>
