@@ -5,23 +5,36 @@ Vereintes Backend mit Compliance, Payments und Authentication
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from typing import Dict, List, Optional, Any
 import uuid
 import hashlib
+import logging
 from datetime import datetime, timedelta
 import os
 import json
 import jwt
 import bcrypt
+import io
 
-# Import website scanner and cookie system
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Import website scanner, cookie system and monitoring
 from website_scanner import WebsiteScanner
 from cookie_compliance_system import (
     ttdsg_cookie_manager, CookieBannerConfig, ConsentRecord
 )
+from monitoring_system import ComplianceMonitoringSystem
+from email_service import (
+    email_service, send_welcome_email, send_compliance_alert, 
+    send_monthly_report, EmailMessage, EmailAddress
+)
+from database_models import db_manager, init_database
+from report_generation import report_service, ReportConfig
+from expert_dashboard import expert_dashboard
 
 # FastAPI App Setup
 app = FastAPI(
@@ -113,6 +126,35 @@ class Token(BaseModel):
     expires_in: int
     user: UserProfile
 
+# Monitoring Models
+class MonitoringTargetCreate(BaseModel):
+    website_url: str
+    website_name: Optional[str] = None
+    monitoring_frequency: str = "daily"  # hourly, daily, weekly
+    alert_thresholds: Optional[Dict[str, Any]] = None
+    notification_preferences: Optional[Dict[str, Any]] = None
+
+class MonitoringTargetResponse(BaseModel):
+    target_id: str
+    website_url: str
+    website_name: str
+    monitoring_frequency: str
+    created_at: datetime
+    last_scan: Optional[datetime] = None
+    status: str
+    alert_thresholds: Dict[str, Any]
+    notification_preferences: Dict[str, Any]
+
+class MonitoringScanResult(BaseModel):
+    scan_id: str
+    target_id: str
+    timestamp: datetime
+    status: str
+    compliance_score: float
+    issues_detected: int
+    changes_detected: List[Dict[str, Any]]
+    alerts_triggered: List[Dict[str, Any]]
+
 # ========== IN-MEMORY STORAGE ==========
 
 # In-Memory Storage for Demo (in production: PostgreSQL/MongoDB)
@@ -120,6 +162,9 @@ mock_scans: Dict[str, Dict] = {}
 mock_users: Dict[str, Dict] = {}
 mock_subscriptions: Dict[str, Dict] = {}
 users_db: Dict[str, Dict] = {}
+
+# Initialize monitoring system
+monitoring_system = ComplianceMonitoringSystem()
 
 # ========== CONFIGURATION ==========
 
@@ -273,13 +318,17 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    # Check database health
+    db_health = await db_manager.health_check() if db_manager.is_connected else {"status": "disconnected"}
+    
     return {
         "status": "healthy",
-        "service": "complyo-backend",
+        "service": "complyo-backend", 
         "version": "3.0.0",
         "timestamp": datetime.now(),
         "environment": "production",
-        "features": ["compliance_scanning", "risk_assessment", "ai_fixes", "stripe_payments", "user_authentication"]
+        "features": ["compliance_scanning", "risk_assessment", "ai_fixes", "stripe_payments", "user_authentication", "24_7_monitoring", "cookie_compliance", "email_notifications", "postgresql_database", "pdf_excel_reports", "expert_dashboard"],
+        "database": db_health
     }
 
 @app.get("/")
@@ -302,6 +351,38 @@ async def root():
                 "login": "/api/auth/login",
                 "profile": "/api/auth/profile",
                 "refresh": "/api/auth/refresh"
+            },
+            "monitoring": {
+                "targets": "/api/monitoring/targets",
+                "scans": "/api/monitoring/scans",
+                "alerts": "/api/monitoring/alerts",
+                "reports": "/api/monitoring/reports"
+            },
+            "email": {
+                "send": "/api/email/send",
+                "templates": "/api/email/templates", 
+                "statistics": "/api/email/statistics"
+            },
+            "database": {
+                "health": "/api/database/health",
+                "statistics": "/api/database/statistics",
+                "backup": "/api/database/backup"
+            },
+            "reports": {
+                "pdf": "/api/reports/pdf/{scan_id}",
+                "excel": "/api/reports/excel/{scan_id}",
+                "both": "/api/reports/both/{scan_id}"
+            },
+            "expert": {
+                "dashboard": "/api/expert/dashboard",
+                "consultations": "/api/expert/consultations", 
+                "availability": "/api/expert/availability",
+                "schedule": "/api/expert/schedule"
+            },
+            "consultations": {
+                "request": "/api/consultations/request",
+                "details": "/api/consultations/{consultation_id}",
+                "experts": "/api/consultations/experts"
             }
         }
     }
@@ -1132,6 +1213,17 @@ async def register_user(user_data: UserRegistration) -> Token:
     
     users_db[user_id] = user_record
     
+    # Send welcome email asynchronously
+    try:
+        dashboard_url = "https://3010-iqtxqhmde36ooi6emqnp2.e2b.dev/"
+        asyncio.create_task(send_welcome_email(
+            user_email=user_data.email,
+            user_name=f"{user_data.first_name} {user_data.last_name}",
+            dashboard_url=dashboard_url
+        ))
+    except Exception as e:
+        print(f"Welcome email failed: {e}")
+    
     # Create tokens
     access_token = create_access_token(user_id, user_data.email)
     refresh_token = create_refresh_token(user_id)
@@ -1364,7 +1456,7 @@ async def get_cookie_banner(domain: str):
     
     try:
         banner_html = ttdsg_cookie_manager.generate_banner_html(domain)
-        from fastapi.responses import HTMLResponse
+        from fastapi.responses import HTMLResponse, JSONResponse
         return HTMLResponse(content=banner_html)
     except ValueError as e:
         # Create default configuration if none exists
@@ -1378,7 +1470,7 @@ async def get_cookie_banner(domain: str):
         
         ttdsg_cookie_manager.create_banner_config(default_config)
         banner_html = ttdsg_cookie_manager.generate_banner_html(domain)
-        from fastapi.responses import HTMLResponse
+        from fastapi.responses import HTMLResponse, JSONResponse
         return HTMLResponse(content=banner_html)
 
 @app.post("/api/cookie-consent")
@@ -1507,6 +1599,1208 @@ async def get_cookie_integration_code(domain: str):
             "4. Use the consent events to enable/disable tracking scripts"
         ]
     }
+
+# ========== 24/7 MONITORING ENDPOINTS ==========
+
+@app.post("/api/monitoring/targets")
+async def create_monitoring_target(
+    target_data: MonitoringTargetCreate,
+    current_user: UserProfile = Depends(get_current_user)
+) -> MonitoringTargetResponse:
+    """Create new monitoring target for 24/7 compliance tracking"""
+    
+    try:
+        # Add monitoring target with user association
+        target_config = {
+            "website_url": target_data.website_url,
+            "website_name": target_data.website_name or target_data.website_url,
+            "monitoring_frequency": target_data.monitoring_frequency,
+            "alert_thresholds": target_data.alert_thresholds or {
+                "compliance_score_threshold": 70,
+                "critical_issues_threshold": 2,
+                "response_time_threshold": 5000
+            },
+            "notification_preferences": target_data.notification_preferences or {
+                "email": current_user.email,
+                "notify_on_score_drop": True,
+                "notify_on_new_issues": True,
+                "notify_on_ssl_issues": True
+            },
+            "user_id": current_user.id,
+            "user_email": current_user.email
+        }
+        
+        target_id = await monitoring_system.add_monitoring_target(target_config)
+        
+        return MonitoringTargetResponse(
+            target_id=target_id,
+            website_url=target_data.website_url,
+            website_name=target_data.website_name or target_data.website_url,
+            monitoring_frequency=target_data.monitoring_frequency,
+            created_at=datetime.now(),
+            status="active",
+            alert_thresholds=target_config["alert_thresholds"],
+            notification_preferences=target_config["notification_preferences"]
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/monitoring/targets")
+async def get_monitoring_targets(
+    current_user: UserProfile = Depends(get_current_user)
+) -> List[MonitoringTargetResponse]:
+    """Get all monitoring targets for current user"""
+    
+    try:
+        # Get targets filtered by user
+        user_targets = await monitoring_system.get_user_targets(current_user.id)
+        
+        targets = []
+        for target in user_targets:
+            targets.append(MonitoringTargetResponse(
+                target_id=target["target_id"],
+                website_url=target["website_url"],
+                website_name=target["website_name"],
+                monitoring_frequency=target["monitoring_frequency"],
+                created_at=target["created_at"],
+                last_scan=target.get("last_scan"),
+                status=target["status"],
+                alert_thresholds=target["alert_thresholds"],
+                notification_preferences=target["notification_preferences"]
+            ))
+        
+        return targets
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/monitoring/targets/{target_id}")
+async def delete_monitoring_target(
+    target_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Remove monitoring target"""
+    
+    try:
+        success = await monitoring_system.remove_monitoring_target(target_id, current_user.id)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Monitoring target removed successfully",
+                "target_id": target_id
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Monitoring target not found or access denied")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/monitoring/scans/{target_id}")
+async def get_monitoring_scans(
+    target_id: str,
+    limit: int = 10,
+    current_user: UserProfile = Depends(get_current_user)
+) -> List[MonitoringScanResult]:
+    """Get monitoring scan history for a target"""
+    
+    try:
+        # Verify user owns this target
+        target = await monitoring_system.get_target_by_id(target_id)
+        if not target or target.get("user_id") != current_user.id:
+            raise HTTPException(status_code=404, detail="Target not found or access denied")
+        
+        scans = await monitoring_system.get_scan_history(target_id, limit)
+        
+        scan_results = []
+        for scan in scans:
+            scan_results.append(MonitoringScanResult(
+                scan_id=scan["scan_id"],
+                target_id=scan["target_id"],
+                timestamp=scan["timestamp"],
+                status=scan["status"],
+                compliance_score=scan["compliance_score"],
+                issues_detected=scan["issues_detected"],
+                changes_detected=scan.get("changes_detected", []),
+                alerts_triggered=scan.get("alerts_triggered", [])
+            ))
+        
+        return scan_results
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/monitoring/scan/{target_id}")
+async def trigger_monitoring_scan(
+    target_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Manually trigger a compliance scan for monitoring target"""
+    
+    try:
+        # Verify user owns this target
+        target = await monitoring_system.get_target_by_id(target_id)
+        if not target or target.get("user_id") != current_user.id:
+            raise HTTPException(status_code=404, detail="Target not found or access denied")
+        
+        # Trigger immediate scan
+        scan_result = await monitoring_system.perform_monitoring_scan(target_id)
+        
+        return {
+            "status": "success",
+            "message": "Scan triggered successfully",
+            "scan_id": scan_result["scan_id"],
+            "target_id": target_id,
+            "scan_status": scan_result["status"],
+            "compliance_score": scan_result.get("compliance_score"),
+            "timestamp": scan_result["timestamp"].isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/monitoring/alerts")
+async def get_monitoring_alerts(
+    current_user: UserProfile = Depends(get_current_user),
+    limit: int = 20
+):
+    """Get recent alerts for user's monitoring targets"""
+    
+    try:
+        alerts = await monitoring_system.get_user_alerts(current_user.id, limit)
+        
+        return {
+            "status": "success",
+            "total_alerts": len(alerts),
+            "alerts": alerts,
+            "user_id": current_user.id
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/monitoring/reports/{target_id}")
+async def generate_monitoring_report(
+    target_id: str,
+    days: int = 30,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Generate comprehensive monitoring report for a target"""
+    
+    try:
+        # Verify user owns this target
+        target = await monitoring_system.get_target_by_id(target_id)
+        if not target or target.get("user_id") != current_user.id:
+            raise HTTPException(status_code=404, detail="Target not found or access denied")
+        
+        # Generate report
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+        
+        report = await monitoring_system.generate_monitoring_report(target_id, start_date, end_date)
+        
+        return {
+            "status": "success",
+            "target_id": target_id,
+            "report_period": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "days": days
+            },
+            "report": report,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/monitoring/dashboard")
+async def get_monitoring_dashboard(
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get monitoring dashboard overview for user"""
+    
+    try:
+        dashboard_data = await monitoring_system.get_user_dashboard(current_user.id)
+        
+        return {
+            "status": "success",
+            "user_id": current_user.id,
+            "dashboard": dashboard_data,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/monitoring/targets/{target_id}")
+async def update_monitoring_target(
+    target_id: str,
+    updates: Dict[str, Any],
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Update monitoring target configuration"""
+    
+    try:
+        # Verify user owns this target
+        target = await monitoring_system.get_target_by_id(target_id)
+        if not target or target.get("user_id") != current_user.id:
+            raise HTTPException(status_code=404, detail="Target not found or access denied")
+        
+        # Update target
+        success = await monitoring_system.update_monitoring_target(target_id, updates)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Monitoring target updated successfully",
+                "target_id": target_id,
+                "updated_fields": list(updates.keys())
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to update target")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/monitoring/statistics")
+async def get_monitoring_statistics(
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get monitoring system statistics for user"""
+    
+    try:
+        stats = await monitoring_system.get_user_statistics(current_user.id)
+        
+        return {
+            "status": "success",
+            "user_id": current_user.id,
+            "statistics": stats,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========== EMAIL SERVICE ENDPOINTS ==========
+
+@app.get("/api/email/templates")
+async def get_email_templates(
+    category: Optional[str] = None,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get available email templates"""
+    
+    try:
+        templates = email_service.list_templates(category)
+        
+        return {
+            "status": "success",
+            "templates": [
+                {
+                    "template_id": t.template_id,
+                    "name": t.name,
+                    "category": t.category,
+                    "variables": t.variables,
+                    "created_at": t.created_at.isoformat()
+                }
+                for t in templates
+            ],
+            "total": len(templates)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/email/send")
+async def send_custom_email(
+    email_data: Dict[str, Any],
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Send custom email (admin/support only in production)"""
+    
+    try:
+        # Create email message
+        to_addresses = [EmailAddress(email_data["to_email"])]
+        
+        if email_data.get("template_id"):
+            # Send template email
+            result = await email_service.send_template_email(
+                template_id=email_data["template_id"],
+                to_email=email_data["to_email"],
+                variables=email_data.get("variables", {}),
+                priority=email_data.get("priority", "normal")
+            )
+        else:
+            # Send custom email
+            message = EmailMessage(
+                message_id=str(uuid.uuid4()),
+                to_addresses=to_addresses,
+                subject=email_data["subject"],
+                html_content=email_data.get("html_content", ""),
+                text_content=email_data.get("text_content"),
+                priority=email_data.get("priority", "normal")
+            )
+            
+            result = await email_service.send_email(message)
+        
+        return {
+            "status": "success",
+            "message_id": result.message_id,
+            "delivery_status": result.status,
+            "sent_at": result.sent_at.isoformat() if result.sent_at else None
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/email/statistics")
+async def get_email_statistics(
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get email service statistics"""
+    
+    try:
+        stats = email_service.get_statistics()
+        
+        return {
+            "status": "success",
+            "statistics": stats,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/email/delivery-status/{message_id}")
+async def get_email_delivery_status(
+    message_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get delivery status for specific email"""
+    
+    try:
+        result = email_service.get_delivery_status(message_id)
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Message not found")
+        
+        return {
+            "status": "success",
+            "message_id": message_id,
+            "delivery_status": result.status,
+            "sent_at": result.sent_at.isoformat() if result.sent_at else None,
+            "delivered_at": result.delivered_at.isoformat() if result.delivered_at else None,
+            "error_message": result.error_message
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/email/test")
+async def send_test_email(
+    test_data: Dict[str, str],
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Send test email for system verification"""
+    
+    try:
+        # Send test welcome email
+        result = await send_welcome_email(
+            user_email=test_data.get("email", current_user.email),
+            user_name=f"{current_user.first_name} {current_user.last_name}",
+            dashboard_url="https://3010-iqtxqhmde36ooi6emqnp2.e2b.dev/"
+        )
+        
+        return {
+            "status": "success",
+            "message": "Test email sent successfully",
+            "message_id": result.message_id,
+            "delivery_status": result.status,
+            "test_email": test_data.get("email", current_user.email)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========== DATABASE ENDPOINTS ==========
+
+@app.get("/api/database/health")
+async def get_database_health():
+    """Get database health status"""
+    
+    try:
+        health = await db_manager.health_check()
+        
+        status_code = 200 if health["status"] == "healthy" else 503
+        
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "status": "success",
+                "database_health": health,
+                "checked_at": datetime.now().isoformat()
+            }
+        )
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "error": str(e),
+                "database_health": {"status": "error"},
+                "checked_at": datetime.now().isoformat()
+            }
+        )
+
+@app.get("/api/database/statistics")
+async def get_database_statistics(
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get database statistics for current user"""
+    
+    try:
+        if not db_manager.is_connected:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        stats = await db_manager.get_user_statistics(current_user.id)
+        
+        return {
+            "status": "success",
+            "user_statistics": stats,
+            "user_id": current_user.id,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/database/migrate")
+async def migrate_database():
+    """Initialize or migrate database schema (admin only)"""
+    
+    try:
+        if not db_manager.is_connected:
+            await db_manager.connect()
+        
+        await db_manager.initialize_schema()
+        
+        return {
+            "status": "success",
+            "message": "Database migration completed",
+            "schema_version": db_manager.schema_version,
+            "migrated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    
+    # Initialize database
+    try:
+        await init_database()
+        logger.info("✅ Database initialized on startup")
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}")
+    
+    # Start monitoring system
+    try:
+        monitoring_system.start_monitoring()
+        logger.info("✅ Monitoring system started")
+    except Exception as e:
+        logger.error(f"❌ Monitoring system failed: {e}")
+
+@app.on_event("shutdown")  
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    
+    # Disconnect database
+    try:
+        await db_manager.disconnect()
+        logger.info("✅ Database disconnected")
+    except Exception as e:
+        logger.error(f"❌ Database disconnect failed: {e}")
+    
+    # Stop monitoring
+    try:
+        monitoring_system.stop_monitoring()
+        logger.info("✅ Monitoring system stopped")
+    except Exception as e:
+        logger.error(f"❌ Monitoring stop failed: {e}")
+
+# ========== REPORT GENERATION ENDPOINTS ==========
+
+@app.get("/api/reports/pdf/{scan_id}")
+async def generate_pdf_report(
+    scan_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Generate PDF compliance report for scan"""
+    
+    try:
+        # Get scan data
+        if scan_id not in mock_scans:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        scan_result = mock_scans[scan_id]
+        
+        # Create report data
+        user_info = {
+            "email": current_user.email,
+            "name": f"{current_user.first_name} {current_user.last_name}",
+            "company_name": current_user.company_name or "Unbekannt"
+        }
+        
+        report_data = report_service.create_report_data_from_scan(scan_result, user_info)
+        
+        # Configure report
+        config = ReportConfig(
+            title="Complyo Compliance Report",
+            subtitle="Professionelle Website-Compliance Analyse",
+            company_name=user_info["company_name"]
+        )
+        
+        # Generate PDF
+        pdf_bytes = await report_service.generate_pdf_report(report_data, config)
+        
+        # Return as downloadable file
+        filename = f"compliance_report_{scan_id[:8]}_{datetime.now().strftime('%Y%m%d')}.pdf"
+        
+        from fastapi.responses import StreamingResponse
+        
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Length": str(len(pdf_bytes))
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PDF report generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/reports/excel/{scan_id}")
+async def generate_excel_report(
+    scan_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Generate Excel compliance report for scan"""
+    
+    try:
+        # Get scan data
+        if scan_id not in mock_scans:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        scan_result = mock_scans[scan_id]
+        
+        # Create report data
+        user_info = {
+            "email": current_user.email,
+            "name": f"{current_user.first_name} {current_user.last_name}",
+            "company_name": current_user.company_name or "Unbekannt"
+        }
+        
+        report_data = report_service.create_report_data_from_scan(scan_result, user_info)
+        
+        # Configure report
+        config = ReportConfig(
+            title="Complyo Compliance Report",
+            subtitle="Detaillierte Compliance-Analyse",
+            company_name=user_info["company_name"]
+        )
+        
+        # Generate Excel
+        excel_bytes = await report_service.generate_excel_report(report_data, config)
+        
+        # Return as downloadable file
+        filename = f"compliance_report_{scan_id[:8]}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        
+        from fastapi.responses import StreamingResponse
+        
+        return StreamingResponse(
+            io.BytesIO(excel_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Length": str(len(excel_bytes))
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Excel report generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/reports/both/{scan_id}")
+async def generate_both_reports(
+    scan_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Generate both PDF and Excel reports as ZIP archive"""
+    
+    try:
+        # Get scan data
+        if scan_id not in mock_scans:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        scan_result = mock_scans[scan_id]
+        
+        # Create report data
+        user_info = {
+            "email": current_user.email,
+            "name": f"{current_user.first_name} {current_user.last_name}",
+            "company_name": current_user.company_name or "Unbekannt"
+        }
+        
+        report_data = report_service.create_report_data_from_scan(scan_result, user_info)
+        
+        # Configure report
+        config = ReportConfig(
+            title="Complyo Compliance Report",
+            subtitle="Umfassende Website-Compliance Analyse",
+            company_name=user_info["company_name"]
+        )
+        
+        # Generate both reports
+        reports = await report_service.generate_both_reports(report_data, config)
+        
+        # Create ZIP archive
+        import zipfile
+        
+        zip_buffer = io.BytesIO()
+        date_str = datetime.now().strftime('%Y%m%d')
+        scan_short = scan_id[:8]
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Add PDF
+            zip_file.writestr(
+                f"compliance_report_{scan_short}_{date_str}.pdf",
+                reports["pdf"]
+            )
+            
+            # Add Excel
+            zip_file.writestr(
+                f"compliance_report_{scan_short}_{date_str}.xlsx", 
+                reports["excel"]
+            )
+        
+        zip_bytes = zip_buffer.getvalue()
+        zip_buffer.close()
+        
+        # Return ZIP file
+        filename = f"compliance_reports_{scan_short}_{date_str}.zip"
+        
+        from fastapi.responses import StreamingResponse
+        
+        return StreamingResponse(
+            io.BytesIO(zip_bytes),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Length": str(len(zip_bytes))
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Report bundle generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/reports/preview/{scan_id}")
+async def preview_report_data(
+    scan_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Preview report data structure (for debugging/testing)"""
+    
+    try:
+        # Get scan data
+        if scan_id not in mock_scans:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        scan_result = mock_scans[scan_id]
+        
+        # Create report data
+        user_info = {
+            "email": current_user.email,
+            "name": f"{current_user.first_name} {current_user.last_name}",
+            "company_name": current_user.company_name or "Unbekannt"
+        }
+        
+        report_data = report_service.create_report_data_from_scan(scan_result, user_info)
+        
+        return {
+            "status": "success",
+            "scan_id": scan_id,
+            "report_data": {
+                "user_info": report_data.user_info,
+                "website_info": report_data.website_info,
+                "compliance_metrics": report_data.compliance_metrics,
+                "issues_count": len(report_data.issues),
+                "recommendations_count": len(report_data.recommendations),
+                "has_technical_analysis": report_data.technical_analysis is not None,
+                "generated_at": report_data.generated_at.isoformat()
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Report preview failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========== EXPERT DASHBOARD ENDPOINTS ==========
+
+@app.get("/api/expert/dashboard")
+async def get_expert_dashboard(
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get expert dashboard overview"""
+    
+    try:
+        # Check if user is an expert (in production: use role-based auth)
+        # For demo: assume users with "expert" in email are experts
+        if "expert" not in current_user.email.lower() and "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Expert role required")
+        
+        dashboard_data = await expert_dashboard.get_expert_dashboard(current_user.id)
+        
+        return {
+            "status": "success",
+            "dashboard": dashboard_data,
+            "expert_id": current_user.id,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/expert/consultations")
+async def get_expert_consultations(
+    status: Optional[str] = None,
+    limit: int = 20,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get consultations for current expert"""
+    
+    try:
+        # Check expert role
+        if "expert" not in current_user.email.lower() and "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Expert role required")
+        
+        consultations = await expert_dashboard.get_expert_consultations(
+            expert_id=current_user.id,
+            status=status,
+            limit=limit
+        )
+        
+        return {
+            "status": "success",
+            "consultations": consultations,
+            "total": len(consultations),
+            "expert_id": current_user.id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/expert/availability")
+async def get_expert_availability(
+    days: int = 14,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get expert availability slots"""
+    
+    try:
+        # Check expert role
+        if "expert" not in current_user.email.lower() and "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Expert role required")
+        
+        availability = await expert_dashboard.get_expert_availability(
+            expert_id=current_user.id,
+            days=days
+        )
+        
+        return {
+            "status": "success",
+            "availability": availability,
+            "expert_id": current_user.id,
+            "days_ahead": days
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/expert/schedule/{consultation_id}")
+async def schedule_consultation(
+    consultation_id: str,
+    schedule_data: Dict[str, Any],
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Schedule consultation appointment"""
+    
+    try:
+        # Check expert role
+        if "expert" not in current_user.email.lower() and "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Expert role required")
+        
+        # Parse datetime
+        datetime_str = schedule_data.get("datetime")
+        if datetime_str:
+            schedule_data["datetime"] = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
+        
+        success = await expert_dashboard.schedule_consultation(consultation_id, schedule_data)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Consultation scheduled successfully",
+                "consultation_id": consultation_id,
+                "scheduled_datetime": schedule_data.get("datetime").isoformat() if schedule_data.get("datetime") else None
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to schedule consultation")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/expert/consultations/{consultation_id}/start")
+async def start_consultation(
+    consultation_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Start consultation session"""
+    
+    try:
+        # Check expert role
+        if "expert" not in current_user.email.lower() and "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Expert role required")
+        
+        success = await expert_dashboard.start_consultation(consultation_id, current_user.id)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Consultation started",
+                "consultation_id": consultation_id,
+                "started_at": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to start consultation")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/expert/consultations/{consultation_id}/complete")
+async def complete_consultation(
+    consultation_id: str,
+    completion_data: Dict[str, Any],
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Complete consultation with summary"""
+    
+    try:
+        # Check expert role
+        if "expert" not in current_user.email.lower() and "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Expert role required")
+        
+        success = await expert_dashboard.complete_consultation(consultation_id, completion_data)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Consultation completed",
+                "consultation_id": consultation_id,
+                "completed_at": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to complete consultation")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/expert/consultations/{consultation_id}/notes")
+async def add_consultation_note(
+    consultation_id: str,
+    note_data: Dict[str, str],
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Add note to consultation case"""
+    
+    try:
+        # Check expert role
+        if "expert" not in current_user.email.lower() and "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Expert role required")
+        
+        # Add author information
+        note_data["author_id"] = current_user.id
+        note_data["author_type"] = "expert"
+        
+        note_id = await expert_dashboard.add_case_note(consultation_id, note_data)
+        
+        return {
+            "status": "success",
+            "message": "Note added successfully",
+            "note_id": note_id,
+            "consultation_id": consultation_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========== CLIENT CONSULTATION ENDPOINTS ==========
+
+@app.post("/api/consultations/request")
+async def request_consultation(
+    request_data: Dict[str, Any],
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Request expert consultation"""
+    
+    try:
+        # Add client ID
+        request_data["client_id"] = current_user.id
+        
+        request_id = await expert_dashboard.create_consultation_request(request_data)
+        
+        return {
+            "status": "success",
+            "message": "Consultation request created",
+            "request_id": request_id,
+            "client_id": current_user.id,
+            "created_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/consultations/experts")
+async def get_available_experts(
+    consultation_type: Optional[str] = None,
+    language: str = "de"
+):
+    """Get available experts for consultation"""
+    
+    try:
+        experts = await expert_dashboard.get_available_experts(
+            consultation_type=consultation_type,
+            language=language
+        )
+        
+        return {
+            "status": "success",
+            "experts": experts,
+            "total": len(experts),
+            "consultation_type": consultation_type,
+            "language": language
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/consultations/{consultation_id}")
+async def get_consultation_details(
+    consultation_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get consultation details"""
+    
+    try:
+        # Determine user type
+        user_type = "expert" if "expert" in current_user.email.lower() else "client"
+        
+        details = await expert_dashboard.get_consultation_details(
+            consultation_id=consultation_id,
+            user_id=current_user.id,
+            user_type=user_type
+        )
+        
+        if not details:
+            raise HTTPException(status_code=404, detail="Consultation not found or access denied")
+        
+        return {
+            "status": "success",
+            "consultation": details,
+            "user_type": user_type,
+            "user_id": current_user.id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/consultations/{consultation_id}/rate")
+async def rate_consultation(
+    consultation_id: str,
+    rating_data: Dict[str, Any],
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Rate completed consultation"""
+    
+    try:
+        success = await expert_dashboard.rate_consultation(
+            consultation_id=consultation_id,
+            client_id=current_user.id,
+            rating_data=rating_data
+        )
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Consultation rated successfully",
+                "consultation_id": consultation_id,
+                "rating": rating_data.get("rating")
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to rate consultation")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/consultations")
+async def get_user_consultations(
+    status: Optional[str] = None,
+    limit: int = 20,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get user's consultations (client view)"""
+    
+    try:
+        # Get consultations where user is the client
+        all_consultations = []
+        
+        # In production: query database properly
+        # For demo: filter from expert_dashboard.consultations
+        user_consultations = [
+            consultation for consultation in expert_dashboard.consultations.values()
+            if consultation.client_id == current_user.id
+        ]
+        
+        # Filter by status
+        if status:
+            user_consultations = [c for c in user_consultations if c.status.value == status]
+        
+        # Sort and limit
+        user_consultations.sort(key=lambda x: x.updated_at, reverse=True)
+        user_consultations = user_consultations[:limit]
+        
+        # Convert to response format
+        result = []
+        for consultation in user_consultations:
+            expert_name = "Expert"
+            if consultation.expert_id and consultation.expert_id in expert_dashboard.experts:
+                expert = expert_dashboard.experts[consultation.expert_id]
+                expert_name = f"{expert.first_name} {expert.last_name}"
+            
+            result.append({
+                "consultation_id": consultation.consultation_id,
+                "expert_name": expert_name,
+                "title": consultation.request.title,
+                "status": consultation.status.value,
+                "scheduled_datetime": consultation.scheduled_datetime.isoformat() if consultation.scheduled_datetime else None,
+                "total_cost": consultation.total_cost,
+                "client_rating": consultation.client_rating,
+                "created_at": consultation.created_at.isoformat(),
+                "updated_at": consultation.updated_at.isoformat()
+            })
+        
+        return {
+            "status": "success",
+            "consultations": result,
+            "total": len(result),
+            "client_id": current_user.id
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========== ADMIN ENDPOINTS ==========
+
+@app.get("/api/admin/expert-dashboard")
+async def get_admin_expert_dashboard(
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get admin overview of expert system"""
+    
+    try:
+        # Check admin role
+        if "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Admin role required")
+        
+        dashboard_data = await expert_dashboard.get_admin_dashboard()
+        
+        return {
+            "status": "success",
+            "admin_dashboard": dashboard_data,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/expert-statistics")
+async def get_expert_system_statistics(
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get comprehensive expert system statistics"""
+    
+    try:
+        # Check admin role
+        if "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Admin role required")
+        
+        statistics = await expert_dashboard.get_system_statistics()
+        
+        return {
+            "status": "success",
+            "statistics": statistics,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8003))
