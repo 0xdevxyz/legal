@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complyo - Website Compliance</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-500 to-purple-600 min-h-screen">
+    <div class="container mx-auto px-4 py-16">
+        <div class="text-center text-white">
+            <h1 class="text-6xl font-bold mb-6">Complyo</h1>
+            <p class="text-xl mb-8">Automatische Website-Compliance Prüfung</p>
+            <div class="bg-white/20 backdrop-blur rounded-lg p-8 max-w-md mx-auto">
+                <input type="url" placeholder="Website-URL eingeben" 
+                       class="w-full p-3 rounded-lg text-gray-900 mb-4">
+                <button onclick="scanWebsite()" 
+                        class="w-full bg-white text-blue-600 font-bold py-3 rounded-lg hover:bg-gray-100">
+                    Jetzt scannen
+                </button>
+            </div>
+            <div id="result" class="mt-8 p-4 bg-white/20 rounded-lg hidden">
+                <h3 class="text-xl font-bold mb-2">Scan-Ergebnis</h3>
+                <div id="result-content"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        async function scanWebsite() {
+            const url = document.querySelector('input').value;
+            if (!url) return;
+            
+            try {
+                const response = await fetch('http://localhost:8002/api/analyze', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({url})
+                });
+                const data = await response.json();
+                
+                document.getElementById('result-content').innerHTML = `
+                    <p><strong>URL:</strong> ${data.url}</p>
+                    <p><strong>Score:</strong> ${data.compliance_score}%</p>
+                    <p><strong>Status:</strong> Analyse abgeschlossen</p>
+                `;
+                document.getElementById('result').classList.remove('hidden');
+            } catch (error) {
+                console.error('Fehler:', error);
+                alert('Fehler beim Scannen. Backend erreichbar?');
+            }
+        }
+    </script>
+</body>
+</html>
