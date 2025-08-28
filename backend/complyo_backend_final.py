@@ -17,6 +17,12 @@ import json
 import jwt
 import bcrypt
 
+# Import website scanner and cookie system
+from website_scanner import WebsiteScanner
+from cookie_compliance_system import (
+    ttdsg_cookie_manager, CookieBannerConfig, ConsentRecord
+)
+
 # FastAPI App Setup
 app = FastAPI(
     title="Complyo API",
@@ -306,12 +312,30 @@ async def root():
 async def analyze_website(request: AnalyzeRequest):
     """
     Comprehensive website compliance analysis
-    Returns realistic demo data with URL-specific variations
+    Uses real website scanner for actual compliance checking
     """
     url = request.url
-    scan_id = str(uuid.uuid4())
     
-    # Generate URL-specific results
+    try:
+        # Use real website scanner for comprehensive analysis
+        async with WebsiteScanner() as scanner:
+            scan_result = await scanner.scan_website(url)
+        
+        # If real scan succeeded, return the results
+        if scan_result.get('status') != 'failed':
+            # Store in mock database
+            scan_id = scan_result['scan_id']
+            mock_scans[scan_id] = scan_result
+            return scan_result
+        
+        # If real scan failed, fallback to mock data
+        print(f"Real scan failed for {url}: {scan_result.get('error')}, using fallback")
+        
+    except Exception as e:
+        print(f"Scanner error for {url}: {str(e)}, using fallback")
+    
+    # Fallback to mock data if real scanning fails
+    scan_id = str(uuid.uuid4())
     url_config = generate_url_specific_results(url)
     overall_score = url_config['score']
     total_risk = url_config['risk']
@@ -386,6 +410,7 @@ async def analyze_website(request: AnalyzeRequest):
     
     scan_result = {
         "id": scan_id,
+        "scan_id": scan_id,
         "url": url,
         "overall_score": overall_score,
         "total_issues": total_issues,
@@ -415,7 +440,9 @@ async def analyze_website(request: AnalyzeRequest):
             }
         ],
         "scan_timestamp": datetime.now(),
-        "scan_duration_ms": 1247
+        "timestamp": datetime.now().isoformat(),
+        "scan_duration_ms": 1247,
+        "scanner_type": "fallback_mock"
     }
     
     # Store in mock database
@@ -838,6 +865,238 @@ async def cancel_subscription(subscription_id: str):
     
     raise HTTPException(status_code=404, detail="Subscription not found")
 
+@app.post("/api/analyze-advanced")
+async def analyze_website_advanced(request: AnalyzeRequest):
+    """
+    Advanced website compliance analysis with enhanced mock data
+    Simulates real scanner capabilities for demo purposes
+    """
+    url = request.url
+    scan_id = str(uuid.uuid4())
+    
+    # Enhanced URL-specific analysis
+    url_config = generate_url_specific_results(url)
+    overall_score = url_config['score']
+    base_risk = url_config['risk']
+    
+    # Simulate comprehensive technical analysis
+    technical_details = {
+        "page_size": 2.4,  # MB
+        "load_time": 1.8,  # seconds
+        "https_enabled": True,
+        "cookies_detected": 12,
+        "external_scripts": 8,
+        "images_without_alt": 3,
+        "forms_found": 2,
+        "tracking_domains": ["google-analytics.com", "facebook.com"],
+        "third_party_integrations": ["Google Maps", "YouTube"]
+    }
+    
+    # Enhanced GDPR analysis
+    gdpr_issues = []
+    gdpr_score = overall_score - 15
+    gdpr_risk = int(base_risk * 0.4)
+    
+    if gdpr_score < 80:
+        gdpr_issues.extend([
+            "Datenschutzerklärung nicht verlinkt oder unvollständig",
+            "Cookie-Einwilligung fehlt für Tracking-Cookies",
+            "Kontaktdaten für Datenschutzanfragen nicht eindeutig"
+        ])
+    
+    if technical_details["cookies_detected"] > 5:
+        gdpr_issues.append(f"{technical_details['cookies_detected']} Cookies ohne explizite Einwilligung")
+        gdpr_score -= 10
+        gdpr_risk += 1000
+    
+    gdpr_result = {
+        "category": "Datenschutz (DSGVO)",
+        "score": max(0, gdpr_score),
+        "status": "fail" if gdpr_score < 50 else "warning" if gdpr_score < 80 else "pass",
+        "risk_euro": gdpr_risk,
+        "issues": gdpr_issues,
+        "message": f"DSGVO-Compliance: {max(0, gdpr_score)}% erfüllt",
+        "description": "; ".join(gdpr_issues) if gdpr_issues else "DSGVO-Anforderungen größtenteils erfüllt",
+        "legal_basis": "Art. 13, 14 DSGVO - Informationspflichten",
+        "recommendation": "Vollständige Datenschutzerklärung mit Cookie-Consent implementieren",
+        "auto_fixable": True,
+        "technical_details": {
+            "cookies_found": technical_details["cookies_detected"],
+            "tracking_scripts": len(technical_details["tracking_domains"]),
+            "third_party_services": len(technical_details["third_party_integrations"])
+        }
+    }
+    
+    # Enhanced Impressum analysis
+    impressum_score = overall_score - 5
+    impressum_risk = int(base_risk * 0.25)
+    impressum_issues = []
+    
+    if impressum_score < 80:
+        impressum_issues.extend([
+            "Impressum-Link im Footer nicht gefunden",
+            "Vollständige Geschäftsadresse fehlt",
+            "Handelsregister-Nummer nicht angegeben"
+        ])
+    
+    impressum_result = {
+        "category": "Impressum",
+        "score": max(0, impressum_score),
+        "status": "fail" if impressum_score < 50 else "warning" if impressum_score < 80 else "pass",
+        "risk_euro": impressum_risk,
+        "issues": impressum_issues,
+        "message": f"Impressum: {max(0, impressum_score)}% der Pflichtangaben gefunden",
+        "description": "; ".join(impressum_issues) if impressum_issues else "Impressum-Pflichtangaben vorhanden",
+        "legal_basis": "§ 5 TMG - Allgemeine Informationspflichten",
+        "recommendation": "Vollständiges Impressum mit allen Pflichtangaben nach § 5 TMG",
+        "auto_fixable": True
+    }
+    
+    # Enhanced Cookie analysis
+    cookie_score = overall_score - 20
+    cookie_risk = int(base_risk * 0.3)
+    cookie_issues = []
+    
+    if technical_details["cookies_detected"] > 0:
+        cookie_issues.append(f"{technical_details['cookies_detected']} Cookies ohne TTDSG-konformen Banner")
+        cookie_score -= 20
+        cookie_risk += 2000
+    
+    if technical_details["tracking_domains"]:
+        cookie_issues.append(f"Tracking von {', '.join(technical_details['tracking_domains'])} ohne Einwilligung")
+        cookie_score -= 15
+        cookie_risk += 1500
+    
+    cookie_result = {
+        "category": "Cookie-Compliance",
+        "score": max(0, cookie_score),
+        "status": "fail" if cookie_score < 50 else "warning" if cookie_score < 80 else "pass",
+        "risk_euro": cookie_risk,
+        "issues": cookie_issues,
+        "message": f"Cookie-Compliance: {max(0, cookie_score)}% TTDSG-konform",
+        "description": "; ".join(cookie_issues) if cookie_issues else "Cookie-Handling TTDSG-konform",
+        "legal_basis": "TTDSG § 25 - Schutz der Privatsphäre bei Endeinrichtungen",
+        "recommendation": "TTDSG-konformen Cookie-Banner mit granularer Einwilligung",
+        "auto_fixable": True,
+        "technical_details": {
+            "cookies_detected": technical_details["cookies_detected"],
+            "tracking_domains": technical_details["tracking_domains"],
+            "consent_banner_found": False
+        }
+    }
+    
+    # Enhanced Accessibility analysis
+    accessibility_score = overall_score + 5
+    accessibility_risk = int(base_risk * 0.05)
+    accessibility_issues = []
+    
+    if technical_details["images_without_alt"] > 0:
+        accessibility_issues.append(f"{technical_details['images_without_alt']} Bilder ohne Alt-Text")
+        accessibility_score -= technical_details["images_without_alt"] * 5
+        accessibility_risk += technical_details["images_without_alt"] * 200
+    
+    if technical_details["forms_found"] > 0:
+        accessibility_issues.append("Formularfelder ohne Labels oder ARIA-Beschreibungen")
+        accessibility_score -= 10
+        accessibility_risk += 300
+    
+    accessibility_result = {
+        "category": "Barrierefreiheit",
+        "score": max(0, min(100, accessibility_score)),
+        "status": "pass" if accessibility_score >= 80 else "warning" if accessibility_score >= 60 else "fail",
+        "risk_euro": accessibility_risk,
+        "issues": accessibility_issues,
+        "message": f"Barrierefreiheit: {max(0, min(100, accessibility_score))}% WCAG 2.1 AA konform",
+        "description": "; ".join(accessibility_issues) if accessibility_issues else "Barrierefreiheits-Standards erfüllt",
+        "legal_basis": "WCAG 2.1 AA, BITV 2.0",
+        "recommendation": "Alt-Texte für Bilder und Labels für Formularfelder ergänzen",
+        "auto_fixable": True,
+        "technical_details": {
+            "images_total": 25,
+            "images_without_alt": technical_details["images_without_alt"],
+            "forms_found": technical_details["forms_found"],
+            "heading_structure_issues": 1
+        }
+    }
+    
+    results = [gdpr_result, impressum_result, cookie_result, accessibility_result]
+    
+    # Calculate totals
+    total_score = sum([r["score"] for r in results]) / len(results)
+    total_risk = sum([r["risk_euro"] for r in results])
+    critical_issues = len([r for r in results if r["status"] == "fail"])
+    warning_issues = len([r for r in results if r["status"] == "warning"])
+    
+    # Enhanced recommendations based on findings
+    recommendations = []
+    if critical_issues > 0:
+        recommendations.append(f"🚨 {critical_issues} kritische Compliance-Probleme sofort beheben")
+    if cookie_result["score"] < 60:
+        recommendations.append("🍪 TTDSG-konformen Cookie-Banner mit Consent Management System einführen")
+    if gdpr_result["score"] < 70:
+        recommendations.append("📝 DSGVO-konforme Datenschutzerklärung überarbeiten")
+    if accessibility_result["score"] < 80:
+        recommendations.append("♿ Barrierefreiheit nach WCAG 2.1 AA Standards verbessern")
+    if impressum_result["score"] < 90:
+        recommendations.append("📄 Impressum mit allen TMG-Pflichtangaben vervollständigen")
+    
+    if not recommendations:
+        recommendations.append("✅ Grundlegende Compliance-Anforderungen sind erfüllt")
+    
+    # Enhanced next steps
+    next_steps = [
+        {
+            "title": "KI-Automatisierung nutzen",
+            "description": f"Automatische Fixes für {len([r for r in results if r['auto_fixable'] and r['score'] < 80])} Compliance-Probleme",
+            "action": "ai_fix",
+            "count": len([r for r in results if r["auto_fixable"] and r["score"] < 80]),
+            "priority": "high" if critical_issues > 0 else "medium"
+        }
+    ]
+    
+    if critical_issues > 0 or total_risk > 10000:
+        next_steps.append({
+            "title": "Expert Service beauftragen",
+            "description": f"Professionelle Rechtsberatung für {critical_issues} kritische Probleme (Risiko: {total_risk:,.0f}€)",
+            "action": "expert_service",
+            "count": critical_issues,
+            "priority": "critical"
+        })
+    
+    if total_score >= 70:
+        next_steps.append({
+            "title": "24/7 Monitoring aktivieren",
+            "description": "Kontinuierliche Überwachung für dauerhafte Compliance-Sicherheit",
+            "action": "monitoring",
+            "count": 1,
+            "priority": "medium"
+        })
+    
+    scan_result = {
+        "id": scan_id,
+        "scan_id": scan_id,
+        "url": url,
+        "overall_score": round(total_score, 1),
+        "total_issues": critical_issues + warning_issues,
+        "total_risk_euro": total_risk,
+        "critical_issues": critical_issues,
+        "warning_issues": warning_issues,
+        "results": results,
+        "recommendations": recommendations,
+        "next_steps": next_steps,
+        "technical_analysis": technical_details,
+        "scan_timestamp": datetime.now(),
+        "timestamp": datetime.now().isoformat(),
+        "scan_duration_ms": 2847,  # Simulated realistic scan time
+        "scanner_type": "enhanced_demo",
+        "scan_method": "comprehensive_analysis"
+    }
+    
+    # Store in mock database
+    mock_scans[scan_id] = scan_result
+    
+    return scan_result
+
 # ========== USER AUTHENTICATION ENDPOINTS ==========
 
 @app.post("/api/auth/register")
@@ -1081,6 +1340,174 @@ async def get_demo_users():
         "note": "These are demo accounts for testing purposes"
     }
 
+# ========== COOKIE COMPLIANCE ENDPOINTS ==========
+
+@app.post("/api/cookie-banner/create")
+async def create_cookie_banner(config_data: Dict[str, Any]):
+    """Create TTDSG-compliant cookie banner configuration"""
+    
+    try:
+        config = ttdsg_cookie_manager.create_banner_config(config_data)
+        return {
+            "status": "success",
+            "message": "Cookie banner configuration created",
+            "domain": config.website_domain,
+            "categories": [cat.dict() for cat in config.categories],
+            "integration_code": ttdsg_cookie_manager.get_javascript_integration(config.website_domain)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/cookie-banner/{domain}")
+async def get_cookie_banner(domain: str):
+    """Get TTDSG-compliant cookie banner HTML for a domain"""
+    
+    try:
+        banner_html = ttdsg_cookie_manager.generate_banner_html(domain)
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content=banner_html)
+    except ValueError as e:
+        # Create default configuration if none exists
+        default_config = {
+            "website_domain": domain,
+            "company_name": domain.split('.')[0].title(),
+            "privacy_policy_url": "/datenschutz",
+            "imprint_url": "/impressum",
+            "contact_email": f"datenschutz@{domain}"
+        }
+        
+        ttdsg_cookie_manager.create_banner_config(default_config)
+        banner_html = ttdsg_cookie_manager.generate_banner_html(domain)
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content=banner_html)
+
+@app.post("/api/cookie-consent")
+async def record_cookie_consent(consent_data: Dict[str, Any]):
+    """Record user cookie consent (TTDSG compliant)"""
+    
+    try:
+        # Extract IP for hashing (privacy-compliant)
+        import hashlib
+        user_ip = "127.0.0.1"  # In production: get from request
+        ip_hash = hashlib.sha256(user_ip.encode()).hexdigest()[:16]
+        
+        consent_data["ip_hash"] = ip_hash
+        consent_data["user_identifier"] = consent_data.get("user_identifier", ip_hash)
+        
+        consent_record = ttdsg_cookie_manager.record_consent(consent_data)
+        
+        return {
+            "status": "success",
+            "consent_id": consent_record.consent_id,
+            "message": "Consent recorded successfully",
+            "expiry_date": consent_record.expiry_date.isoformat(),
+            "categories_consented": consent_record.categories_consented
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/api/cookie-consent/{consent_id}")
+async def withdraw_cookie_consent(consent_id: str):
+    """Withdraw previously given cookie consent"""
+    
+    success = ttdsg_cookie_manager.withdraw_consent(consent_id)
+    
+    if success:
+        return {
+            "status": "success",
+            "message": "Consent withdrawn successfully",
+            "consent_id": consent_id,
+            "withdrawal_date": datetime.now().isoformat()
+        }
+    else:
+        raise HTTPException(status_code=404, detail="Consent record not found")
+
+@app.get("/api/cookie-consent-status/{user_identifier}/{domain}")
+async def get_cookie_consent_status(user_identifier: str, domain: str):
+    """Get current cookie consent status for a user/domain"""
+    
+    consent_record = ttdsg_cookie_manager.get_consent_status(user_identifier, domain)
+    
+    if consent_record:
+        return {
+            "status": "has_consent",
+            "consent_id": consent_record.consent_id,
+            "categories_consented": consent_record.categories_consented,
+            "consent_timestamp": consent_record.consent_timestamp.isoformat(),
+            "expiry_date": consent_record.expiry_date.isoformat(),
+            "is_valid": consent_record.is_valid
+        }
+    else:
+        return {
+            "status": "no_consent",
+            "message": "No valid consent found for this user/domain combination"
+        }
+
+@app.get("/api/cookie-compliance-report/{domain}")
+async def get_cookie_compliance_report(
+    domain: str,
+    start_date: str = None,
+    end_date: str = None
+):
+    """Generate TTDSG compliance report for a domain"""
+    
+    try:
+        if start_date:
+            start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        else:
+            start_dt = datetime.now() - timedelta(days=30)
+        
+        if end_date:
+            end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        else:
+            end_dt = datetime.now()
+        
+        report = ttdsg_cookie_manager.generate_consent_report(domain, start_dt, end_dt)
+        
+        return {
+            "status": "success",
+            "report": report,
+            "generated_at": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/cookie-categories")
+async def get_cookie_categories():
+    """Get predefined cookie categories for banner configuration"""
+    
+    return {
+        "categories": {
+            cat_id: cat.dict() for cat_id, cat in ttdsg_cookie_manager.predefined_categories.items()
+        },
+        "descriptions": {
+            "necessary": "Technisch notwendige Cookies für Basisfunktionen",
+            "analytics": "Anonyme Statistiken zur Website-Verbesserung", 
+            "marketing": "Personalisierte Werbung und Remarketing",
+            "social_media": "Social Media Integration und Sharing",
+            "personalization": "Benutzereinstellungen und Präferenzen"
+        }
+    }
+
+@app.get("/api/cookie-integration/{domain}")
+async def get_cookie_integration_code(domain: str):
+    """Get JavaScript integration code for a domain"""
+    
+    integration_code = ttdsg_cookie_manager.get_javascript_integration(domain)
+    
+    return {
+        "domain": domain,
+        "integration_code": integration_code,
+        "banner_url": f"/api/cookie-banner/{domain}",
+        "consent_endpoint": "/api/cookie-consent",
+        "instructions": [
+            "1. Add the integration code to your website's <head> section",
+            "2. The cookie banner will automatically appear for new visitors",
+            "3. Consent will be stored locally and sent to Complyo for compliance tracking",
+            "4. Use the consent events to enable/disable tracking scripts"
+        ]
+    }
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8003))
     
@@ -1089,7 +1516,7 @@ if __name__ == "__main__":
     print(f"📖 API Documentation: http://0.0.0.0:{port}/docs")
     print(f"💳 Payment Demo: http://0.0.0.0:{port}/api/payments/products")
     print(f"👤 Auth Demo: http://0.0.0.0:{port}/api/auth/demo-users")
-    print("✨ All Complyo features: Compliance + Payments + Authentication!")
+    print("✨ All Complyo features: Compliance + Payments + Authentication + Cookies!")
     
     uvicorn.run(
         "complyo_backend_final:app",
