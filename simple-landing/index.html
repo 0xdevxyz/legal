@@ -434,9 +434,10 @@
 
     <script src="https://js.stripe.com/v3/"></script>
     <script>
-        // Stripe Configuration
-        const stripe = Stripe('pk_test_...'); // Test public key
+        // API Configuration
         const API_URL = 'https://8003-iqtxqhmde36ooi6emqnp2.e2b.dev';
+        
+        // Demo Mode - No real Stripe needed
 
         // Stripe Checkout Integration
         async function startStripeCheckout(productType) {
@@ -472,10 +473,15 @@
 
                 const session = await response.json();
                 
-                // Redirect to Stripe Checkout
-                const result = await stripe.redirectToCheckout({
-                    sessionId: session.session_id
-                });
+                // For demo: redirect directly to our demo checkout
+                if (session.demo_mode) {
+                    window.location.href = session.session_url;
+                } else {
+                    // In production: use real Stripe
+                    // const result = await stripe.redirectToCheckout({
+                    //     sessionId: session.session_id
+                    // });
+                }
 
                 if (result.error) {
                     alert('Fehler: ' + result.error.message);
