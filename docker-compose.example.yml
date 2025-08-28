@@ -1,0 +1,18 @@
+version: "3.9"
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:?set_in_env}
+      - DATABASE_URL=${DATABASE_URL:?set_in_env}
+    ports:
+      - "8000:8000"
+
+  dashboard:
+    build:
+      context: ./dashboard-react
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:?set_in_env}
+    ports:
+      - "3001:3000"

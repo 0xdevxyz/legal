@@ -105,3 +105,11 @@ venv.bak/
 .env
 .env.local
 .env.production
+
+.env
+.env.*
+
+# Local only
+.env
+.env.*
+docker-compose.production.yml
