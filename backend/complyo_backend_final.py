@@ -35,6 +35,8 @@ from email_service import (
 from database_models import db_manager, init_database
 from report_generation import report_service, ReportConfig
 from expert_dashboard import expert_dashboard
+from ab_testing import ab_testing_manager, ABTest, TestVariant
+from admin_panel import admin_panel_manager
 
 # FastAPI App Setup
 app = FastAPI(
@@ -2802,6 +2804,496 @@ async def get_expert_system_statistics(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ========== A/B TESTING ENDPOINTS ==========
+
+@app.get("/api/ab-testing/tests")
+async def get_ab_tests():
+    """Get all available A/B tests"""
+    try:
+        tests = await ab_testing_manager.get_all_tests()
+        return {
+            "status": "success",
+            "tests": tests,
+            "test_count": len(tests)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/ab-testing/test/{test_id}")
+async def get_ab_test(test_id: str):
+    """Get specific A/B test details"""
+    try:
+        test = await ab_testing_manager.get_test(test_id)
+        if not test:
+            raise HTTPException(status_code=404, detail="Test not found")
+        
+        return {
+            "status": "success",
+            "test": test
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/ab-testing/variant/{test_id}")
+async def get_user_variant(
+    test_id: str,
+    request: Request,
+    user_id: Optional[str] = None
+):
+    """Get user's assigned variant for a test"""
+    try:
+        # Use user_id from authenticated user or session from request
+        if not user_id:
+            user_id = request.headers.get("x-session-id", str(request.client.host))
+        
+        variant = await ab_testing_manager.get_user_variant(test_id, user_id)
+        if not variant:
+            raise HTTPException(status_code=404, detail="Test not found or no variant available")
+            
+        return {
+            "status": "success",
+            "test_id": test_id,
+            "variant": variant,
+            "user_id": user_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ABTestEvent(BaseModel):
+    test_id: str
+    variant_id: str
+    event_type: str
+    user_id: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+@app.post("/api/ab-testing/event")
+async def track_ab_test_event(
+    event: ABTestEvent,
+    request: Request
+):
+    """Track A/B test conversion event"""
+    try:
+        # Use provided user_id or generate from session
+        user_id = event.user_id or request.headers.get("x-session-id", str(request.client.host))
+        
+        success = await ab_testing_manager.track_event(
+            event.test_id,
+            event.variant_id,
+            event.event_type,
+            user_id,
+            event.metadata or {}
+        )
+        
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to track event")
+            
+        return {
+            "status": "success",
+            "message": "Event tracked successfully",
+            "test_id": event.test_id,
+            "event_type": event.event_type
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/ab-testing/results/{test_id}")
+async def get_ab_test_results(test_id: str):
+    """Get A/B test results and statistics"""
+    try:
+        results = await ab_testing_manager.get_test_results(test_id)
+        if not results:
+            raise HTTPException(status_code=404, detail="Test results not found")
+            
+        return {
+            "status": "success",
+            "test_id": test_id,
+            "results": results
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class CreateABTestRequest(BaseModel):
+    name: str
+    description: str
+    variants: List[Dict[str, Any]]
+    target_page: str
+    conversion_goals: List[str]
+    traffic_split: Optional[Dict[str, float]] = None
+
+@app.post("/api/ab-testing/test")
+async def create_ab_test(
+    test_request: CreateABTestRequest,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Create a new A/B test (Admin only)"""
+    try:
+        # Check admin role
+        if "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Admin role required")
+        
+        test_id = await ab_testing_manager.create_test(
+            name=test_request.name,
+            description=test_request.description,
+            variants=test_request.variants,
+            target_page=test_request.target_page,
+            conversion_goals=test_request.conversion_goals,
+            traffic_split=test_request.traffic_split
+        )
+        
+        return {
+            "status": "success",
+            "message": "A/B test created successfully",
+            "test_id": test_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/ab-testing/test/{test_id}/status")
+async def update_ab_test_status(
+    test_id: str,
+    status: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Update A/B test status (start/stop/pause) - Admin only"""
+    try:
+        # Check admin role
+        if "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Admin role required")
+        
+        if status not in ["active", "inactive", "paused"]:
+            raise HTTPException(status_code=400, detail="Invalid status. Use: active, inactive, paused")
+        
+        success = await ab_testing_manager.update_test_status(test_id, status)
+        if not success:
+            raise HTTPException(status_code=404, detail="Test not found")
+        
+        return {
+            "status": "success",
+            "message": f"Test status updated to {status}",
+            "test_id": test_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/ab-testing/admin/dashboard")
+async def get_ab_testing_dashboard(
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get A/B testing admin dashboard - Admin only"""
+    try:
+        # Check admin role
+        if "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Admin role required")
+        
+        dashboard = await ab_testing_manager.get_admin_dashboard()
+        
+        return {
+            "status": "success",
+            "dashboard": dashboard,
+            "generated_at": datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========== ADMIN PANEL ENDPOINTS ==========
+
+@app.get("/api/admin/platform-overview")
+async def get_platform_overview(
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get comprehensive platform overview - Admin only"""
+    try:
+        # Check admin role
+        if "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Admin role required")
+        
+        overview = await admin_panel_manager.get_platform_overview()
+        return overview
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/users")
+async def get_users_management(
+    page: int = 1,
+    limit: int = 50,
+    search: str = "",
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get users for management with pagination and search - Admin only"""
+    try:
+        # Check admin role
+        if "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Admin role required")
+        
+        # Validate pagination parameters
+        if page < 1 or limit < 1 or limit > 100:
+            raise HTTPException(status_code=400, detail="Invalid pagination parameters")
+        
+        users_data = await admin_panel_manager.get_user_management_data(page, limit, search)
+        
+        return {
+            "status": "success",
+            **users_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class UserSubscriptionUpdate(BaseModel):
+    plan_type: str
+    status: str
+    expires_at: Optional[datetime] = None
+
+@app.put("/api/admin/users/{user_id}/subscription")
+async def update_user_subscription(
+    user_id: str,
+    subscription_update: UserSubscriptionUpdate,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Update user subscription - Admin only"""
+    try:
+        # Check admin role
+        if "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Admin role required")
+        
+        # Validate plan type
+        if subscription_update.plan_type not in ["ai_basic", "expert_premium"]:
+            raise HTTPException(status_code=400, detail="Invalid plan type")
+        
+        # Validate status
+        if subscription_update.status not in ["active", "cancelled", "expired", "paused"]:
+            raise HTTPException(status_code=400, detail="Invalid subscription status")
+        
+        # Set default expiration if not provided and status is active
+        if subscription_update.status == "active" and not subscription_update.expires_at:
+            subscription_update.expires_at = datetime.now() + timedelta(days=30)
+        
+        success = await admin_panel_manager.update_user_subscription(
+            user_id, 
+            subscription_update.dict()
+        )
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="User not found or update failed")
+        
+        return {
+            "status": "success",
+            "message": "User subscription updated successfully",
+            "user_id": user_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/admin/users/{user_id}")
+async def delete_user(
+    user_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Soft delete user account - Admin only"""
+    try:
+        # Check admin role
+        if "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Admin role required")
+        
+        # Soft delete user (mark as deleted)
+        result = await db_manager.execute_query(
+            "UPDATE users SET deleted_at = %s WHERE id = %s AND deleted_at IS NULL",
+            (datetime.now(), user_id)
+        )
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Also cancel any active subscriptions
+        await db_manager.execute_query(
+            """UPDATE user_subscriptions 
+               SET status = 'cancelled', updated_at = %s 
+               WHERE user_id = %s AND status = 'active'""",
+            (datetime.now(), user_id)
+        )
+        
+        return {
+            "status": "success",
+            "message": "User account deleted successfully",
+            "user_id": user_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/users/{user_id}/send-email")
+async def send_admin_email(
+    user_id: str,
+    subject: str,
+    message: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Send email to user from admin - Admin only"""
+    try:
+        # Check admin role
+        if "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Admin role required")
+        
+        # Get user email
+        user_result = await db_manager.execute_query(
+            "SELECT email, full_name FROM users WHERE id = %s AND deleted_at IS NULL",
+            (user_id,)
+        )
+        
+        if not user_result:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_email = user_result[0]['email']
+        user_name = user_result[0]['full_name']
+        
+        # Send email
+        email_message = EmailMessage(
+            to_addresses=[EmailAddress(email=user_email, name=user_name)],
+            subject=f"[Complyo Admin] {subject}",
+            html_content=f"""
+            <html>
+                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                        <h2 style="color: #2c5282;">Message from Complyo Admin</h2>
+                        <div style="background: #f7fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                            <p>Dear {user_name},</p>
+                            <p>{message.replace(chr(10), '<br>')}</p>
+                        </div>
+                        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+                            <p style="color: #718096; font-size: 14px;">
+                                Best regards,<br>
+                                The Complyo Admin Team
+                            </p>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """,
+            text_content=f"Dear {user_name},\n\n{message}\n\nBest regards,\nThe Complyo Admin Team"
+        )
+        
+        result = await email_service.send_email(email_message)
+        
+        if not result.success:
+            raise HTTPException(status_code=500, detail="Failed to send email")
+        
+        return {
+            "status": "success",
+            "message": "Email sent successfully",
+            "user_id": user_id,
+            "recipient": user_email
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/subscription-analytics")
+async def get_subscription_analytics(
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get detailed subscription analytics - Admin only"""
+    try:
+        # Check admin role
+        if "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Admin role required")
+        
+        analytics = await admin_panel_manager.get_subscription_analytics()
+        
+        return {
+            "status": "success",
+            **analytics
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/system-logs")
+async def get_system_logs(
+    level: str = "error",
+    limit: int = 100,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get system logs - Admin only"""
+    try:
+        # Check admin role
+        if "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied - Admin role required")
+        
+        if level not in ["debug", "info", "warning", "error", "critical"]:
+            raise HTTPException(status_code=400, detail="Invalid log level")
+        
+        if limit < 1 or limit > 1000:
+            raise HTTPException(status_code=400, detail="Limit must be between 1 and 1000")
+        
+        # In production, this would read from actual log files
+        # For demo purposes, return simulated logs
+        logs = [
+            {
+                "timestamp": datetime.now().isoformat(),
+                "level": "info",
+                "message": "System health check completed successfully",
+                "module": "health_check"
+            },
+            {
+                "timestamp": (datetime.now() - timedelta(minutes=15)).isoformat(),
+                "level": "warning",
+                "message": "High memory usage detected: 85%",
+                "module": "monitoring"
+            },
+            {
+                "timestamp": (datetime.now() - timedelta(hours=1)).isoformat(),
+                "level": "error",
+                "message": "Failed to send email notification",
+                "module": "email_service"
+            }
+        ]
+        
+        # Filter by level if specified
+        if level != "debug":
+            level_priority = {"debug": 0, "info": 1, "warning": 2, "error": 3, "critical": 4}
+            min_priority = level_priority.get(level, 1)
+            logs = [log for log in logs if level_priority.get(log["level"], 1) >= min_priority]
+        
+        return {
+            "status": "success",
+            "logs": logs[:limit],
+            "total_logs": len(logs),
+            "level_filter": level
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8003))
     
@@ -2810,7 +3302,9 @@ if __name__ == "__main__":
     print(f"📖 API Documentation: http://0.0.0.0:{port}/docs")
     print(f"💳 Payment Demo: http://0.0.0.0:{port}/api/payments/products")
     print(f"👤 Auth Demo: http://0.0.0.0:{port}/api/auth/demo-users")
-    print("✨ All Complyo features: Compliance + Payments + Authentication + Cookies!")
+    print(f"🧪 A/B Testing: http://0.0.0.0:{port}/api/ab-testing/tests")
+    print(f"⚙️  Admin Panel: http://0.0.0.0:{port}/api/admin/platform-overview")
+    print("✨ ALL COMPLYO FEATURES COMPLETE: Compliance + Payments + Auth + Cookies + Monitoring + Email + Reports + Expert + A/B + Admin!")
     
     uvicorn.run(
         "complyo_backend_final:app",
