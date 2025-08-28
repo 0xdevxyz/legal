@@ -1,0 +1,18 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Package files kopieren
+COPY package*.json ./
+
+# Dependencies installieren
+RUN npm install
+
+# Source Code kopieren
+COPY . .
+
+# Port exponieren
+EXPOSE 3000
+
+# Development Server starten (ohne doppelte Port-Angabe)
+CMD ["npm", "run", "dev", "--", "--port", "3000", "--hostname", "0.0.0.0"]

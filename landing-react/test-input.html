@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Input Field Test</title>
+    <style>
+        body {
+            background: #1a1a1a;
+            color: white;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .test-input {
+            width: 100%;
+            max-width: 500px;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #444;
+            border-radius: 8px;
+            background: #333;
+            color: white;
+            margin: 10px 0;
+        }
+        .test-input:focus {
+            border-color: #3b82f6;
+            outline: none;
+        }
+        .log {
+            background: #222;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Input Field Behavior Test</h1>
+    
+    <h3>Test 1: Basic HTML Input</h3>
+    <input 
+        type="text" 
+        class="test-input" 
+        placeholder="Type here - this should work normally"
+        id="test1"
+    >
+    
+    <h3>Test 2: Input with Event Listeners</h3>
+    <input 
+        type="text" 
+        class="test-input" 
+        placeholder="Type here - with event handling"
+        id="test2"
+    >
+    
+    <h3>Test 3: Simulated React-style Input</h3>
+    <input 
+        type="text" 
+        class="test-input" 
+        placeholder="Type here - simulated React behavior"
+        id="test3"
+        value=""
+    >
+    
+    <h3>Event Log</h3>
+    <div id="log" class="log"></div>
+    
+    <script>
+        const log = document.getElementById('log');
+        
+        function logEvent(message) {
+            const time = new Date().toLocaleTimeString();
+            log.innerHTML += `[${time}] ${message}\n`;
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        // Test 2: Add event listeners
+        const test2 = document.getElementById('test2');
+        test2.addEventListener('input', (e) => {
+            logEvent(`Input event: "${e.target.value}" (cursor: ${e.target.selectionStart})`);
+        });
+        
+        test2.addEventListener('keydown', (e) => {
+            logEvent(`Keydown: ${e.key}`);
+        });
+        
+        test2.addEventListener('focus', (e) => {
+            logEvent('Focus gained');
+        });
+        
+        test2.addEventListener('blur', (e) => {
+            logEvent('Focus lost');
+        });
+        
+        // Test 3: Simulate React behavior
+        const test3 = document.getElementById('test3');
+        let test3Value = '';
+        
+        test3.addEventListener('input', (e) => {
+            const cursorPos = e.target.selectionStart;
+            test3Value = e.target.value;
+            
+            logEvent(`React-style: "${test3Value}" (cursor: ${cursorPos})`);
+            
+            // Simulate React state update
+            setTimeout(() => {
+                if (test3.value !== test3Value) {
+                    test3.value = test3Value;
+                    test3.setSelectionRange(cursorPos, cursorPos);
+                }
+            }, 0);
+        });
+        
+        // Test global event listeners (like accessibility framework)
+        document.addEventListener('keydown', (e) => {
+            if (e.target.matches('input')) {
+                logEvent(`Global keydown intercepted: ${e.key} (from ${e.target.id})`);
+            }
+        });
+        
+        logEvent('Test page loaded - start typing in the input fields');
+    </script>
+</body>
+</html>

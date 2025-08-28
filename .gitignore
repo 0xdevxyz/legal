@@ -113,3 +113,21 @@ venv.bak/
 .env
 .env.*
 docker-compose.production.yml
+
+# Local only
+.env
+.env.*
+docker-compose.production.yml
+
+# Local only
+.env
+.env.*
+docker-compose.production.yml
+
+# Ignore all docker-compose files
+docker-compose*.yml
+
+# Ignore all docker-compose files
+docker-compose*.yml
+.env
+.env.*

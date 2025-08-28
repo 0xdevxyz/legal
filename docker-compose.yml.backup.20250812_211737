@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./legal
+      dockerfile: Dockerfile
+    container_name: complyo-backend
+    environment:
+      - ENVIRONMENT=production
+      - PORT=8002
+      - DATABASE_URL=postgresql://complyo_user:WrsmZTXYcjt0c7lt%2FlOzEnX1N5rtjRklLYrY8zXmBGo%3D@shared-postgres:5432/complyo_db
+      - REDIS_HOST=shared-redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=04/jdoPGip+v2Yqoeo0+nNSIvxZsC/u+Q+E4qBrGA0E=
+      - REDIS_DB=4
+      - JWT_SECRET=9ECBjaQa7KwoyciJtLTQjc/fWRClrsMUXl5LSpIwi+I9y3wPnD1ZAZ6On+WGukAZ2bmkgInnjJjBEeU2xkluEQ==
+      # KEIN VIRTUAL_HOST = Backend nicht öffentlich zugänglich!
+    networks:
+      - internal-network
+      - shared-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: complyo-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://complyo-backend:8002
+      - NODE_ENV=production
+      - PORT=3002
+      - VIRTUAL_HOST=complyo.tech
+      - LETSENCRYPT_HOST=complyo.tech
+      - LETSENCRYPT_EMAIL=admin@panoart360.de
+      - VIRTUAL_PORT=3002
+    networks:
+      - proxy-network
+      - internal-network
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+networks:
+  proxy-network:
+    external: true
+  shared-network:
+    external: true
+  internal-network:
+    driver: bridge
+services:
+  complyo-api-gateway:
+    image: nginx:1.25-alpine
+    container_name: complyo-api-gateway
+    restart: unless-stopped
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    environment:
+      - VIRTUAL_HOST=api.complyo.tech
+      - VIRTUAL_PORT=80
+      - LETSENCRYPT_HOST=api.complyo.tech
+      - LETSENCRYPT_EMAIL=you@example.com   # <- anpassen
+    networks:
+      - proxy-network
+      - shared-network
+    depends_on:
+      - complyo-backend-direct
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 20s
+      timeout: 3s
+      retries: 5
+
+networks:
+  proxy-network:
+    external: true
+  shared-network:
+    external: true

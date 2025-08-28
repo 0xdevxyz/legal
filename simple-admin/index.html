@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complyo Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">Complyo Admin Dashboard</h1>
+        
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-bold mb-4">A/B Tests</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-blue-50 border border-blue-200 rounded p-4">
+                    <h3 class="font-bold">Landing CTA Test</h3>
+                    <p class="text-sm text-gray-600">Conversion: 4.2%</p>
+                    <span class="text-green-600 text-sm">Läuft</span>
+                </div>
+                <div class="bg-green-50 border border-green-200 rounded p-4">
+                    <h3 class="font-bold">Dashboard Layout</h3>
+                    <p class="text-sm text-gray-600">Conversion: 7.8%</p>
+                    <span class="text-blue-600 text-sm">Abgeschlossen</span>
+                </div>
+                <div class="bg-purple-50 border border-purple-200 rounded p-4">
+                    <h3 class="font-bold">Pricing Page</h3>
+                    <p class="text-sm text-gray-600">Conversion: 3.1%</p>
+                    <span class="text-orange-600 text-sm">Pausiert</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold mb-4">Admin Status</h2>
+            <div class="text-green-600 font-semibold">✅ Admin Dashboard läuft erfolgreich!</div>
+        </div>
+    </div>
+</body>
+</html>

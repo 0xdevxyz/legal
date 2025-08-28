@@ -1,375 +1,510 @@
-"""
-Complyo Backend - Mit OpenRouter AI Integration
-Website Compliance Scanner & API
-"""
-import os
-import json
-import httpx
-import asyncio
-from datetime import datetime
-from typing import Dict, Any, List
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import uvicorn
-from fastapi import FastAPI, Depends
-from .auth_routes import router as auth_router, init_db as init_auth_db
-from .payment_routes import router as payment_router, init_db as init_payment_db
-from .report_generator import router as report_router, init_db as init_report_db
+from pydantic import BaseModel
+import hashlib
+import psycopg2
+from datetime import datetime
 
-app = FastAPI()
+app = FastAPI(title="Complyo API", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-@app.on_event("startup")
-async def startup():
-    # Verbindung zur Datenbank herstellen
-    await database.connect()
-    
-    # Datenbankschema initialisieren
-    await init_auth_db()
-    await init_payment_db()
-    await init_report_db()
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
-app.include_router(auth_router, prefix="/api", tags=["auth"])
-app.include_router(payment_router, prefix="/api", tags=["payment"])
-app.include_router(report_router, prefix="/api/reports", tags=["reports"])
-
-# FastAPI App initialisieren
-app = FastAPI(
-    title="Complyo Backend",
-    description="Website Compliance Scanner & Management API",
-    version="2.0.0"
-)
-
-# CORS Middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In Production einschränken
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# =====================================
-# OPENROUTER AI SERVICE
-# =====================================
-
-class OpenRouterService:
-    """OpenRouter API Client für AI-gestützte Compliance-Analyse"""
-    
-    def __init__(self):
-        self.api_key = os.getenv("OPENROUTER_API_KEY")
-        self.base_url = "https://openrouter.ai/api/v1"
-        
-        # Model-Selection für verschiedene Tasks
-        self.models = {
-            "legal_analysis": "anthropic/claude-sonnet-4",
-            "text_generation": "openai/gpt-4o-mini",
-            "code_generation": "anthropic/claude-sonnet-4"
-        }
-        
-        self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://complyo.tech",
-            "X-Title": "Complyo"
-        }
-    
-    async def analyze_compliance(self, url: str, html_content: str = "") -> Dict[str, Any]:
-        """
-        AI-gestützte Compliance-Analyse einer Website
-        """
-        if not self.api_key or self.api_key == "your-openrouter-key":
-            # Fallback auf Mock-Daten wenn kein API-Key
-            return self._mock_analysis(url)
-        
-        prompt = f"""
-        Analysiere die Website {url} auf deutsche Rechts-Compliance:
-        
-        Prüfe folgende Punkte:
-        1. Impressum (TMG §5): Vollständigkeit und Rechtmäßigkeit
-        2. Datenschutzerklärung (DSGVO Art. 13/14): Vorhandensein und Qualität  
-        3. Cookie-Banner (TTDSG §25): DSGVO-Konformität
-        4. SSL-Verschlüsselung: Sicherheitsaspekte
-        5. Allgemeine Abmahn-Risiken
-        
-        Bewerte jeden Punkt mit: "ok", "warning", "error"
-        Gib konkrete Handlungsempfehlungen und schätze Abmahn-Risiko in Euro.
-        
-        Antwort als JSON mit: compliance_score (0-100), findings, recommendations, estimated_risk
-        """
-        
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=self.headers,
-                    json={
-                        "model": self.models["legal_analysis"],
-                        "messages": [
-                            {
-                                "role": "system", 
-                                "content": "Du bist ein Experte für deutsches Internetrecht und DSGVO-Compliance. Antworte präzise und praxisorientiert."
-                            },
-                            {
-                                "role": "user",
-                                "content": prompt
-                            }
-                        ],
-                        "temperature": 0.1,
-                        "max_tokens": 1500
-                    }
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    ai_response = result["choices"][0]["message"]["content"]
-                    
-                    # Parse AI-Response zu strukturierten Daten
-                    return self._parse_ai_response(ai_response, url)
-                else:
-                    print(f"OpenRouter API Error: {response.status_code} - {response.text}")
-                    return self._mock_analysis(url)
-                    
-        except Exception as e:
-            print(f"AI Analysis Error: {str(e)}")
-            return self._mock_analysis(url)
-    
-    def _parse_ai_response(self, ai_response: str, url: str) -> Dict[str, Any]:
-        """Parse AI-Response zu strukturierten Compliance-Daten"""
-        
-        # Versuche JSON aus AI-Response zu extrahieren
-        try:
-            # Einfache JSON-Extraktion (kann verbessert werden)
-            import re
-            json_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
-            if json_match:
-                parsed = json.loads(json_match.group())
-                return self._format_analysis_result(parsed, url)
-        except:
-            pass
-        
-        # Fallback: Strukturiere Text-Response
-        return {
-            "url": url,
-            "scan_id": f"ai_scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            "timestamp": datetime.now().isoformat(),
-            "compliance_score": 60,  # Default bei Parse-Fehlern
-            "status": "completed",
-            "ai_analysis": ai_response,
-            "source": "openrouter_ai"
-        }
-    
-    def _format_analysis_result(self, parsed: Dict, url: str) -> Dict[str, Any]:
-        """Formatiere AI-Analyse zu Standard-Format"""
-        
-        return {
-            "url": url,
-            "scan_id": f"ai_scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            "timestamp": datetime.now().isoformat(),
-            "compliance_score": parsed.get("compliance_score", 70),
-            "status": "completed",
-            "findings": parsed.get("findings", {}),
-            "recommendations": parsed.get("recommendations", []),
-            "estimated_risk": parsed.get("estimated_risk", {
-                "abmahn_potential": "mittel",
-                "estimated_cost": "1.000-3.000€"
-            }),
-            "source": "openrouter_ai"
-        }
-    
-    def _mock_analysis(self, url: str) -> Dict[str, Any]:
-        """Fallback Mock-Analyse wenn AI nicht verfügbar"""
-        return {
-            "url": url,
-            "scan_id": f"mock_scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            "timestamp": datetime.now().isoformat(),
-            "compliance_score": 75,
-            "status": "completed",
-            "findings": {
-                "impressum": {
-                    "status": "warning",
-                    "message": "Impressum gefunden, aber möglicherweise unvollständig",
-                    "priority": "high"
-                },
-                "datenschutz": {
-                    "status": "error", 
-                    "message": "Datenschutzerklärung fehlt oder nicht auffindbar",
-                    "priority": "critical"
-                },
-                "cookies": {
-                    "status": "warning",
-                    "message": "Cookie-Banner vorhanden, DSGVO-Konformität prüfen",
-                    "priority": "high"
-                },
-                "ssl": {
-                    "status": "ok",
-                    "message": "SSL-Zertifikat aktiv",
-                    "priority": "low"
-                }
-            },
-            "recommendations": [
-                "Impressum auf Vollständigkeit prüfen (§5 TMG)",
-                "DSGVO-konforme Datenschutzerklärung erstellen", 
-                "Cookie-Banner nach TTDSG optimieren",
-                "Regelmäßige Compliance-Checks einrichten"
-            ],
-            "estimated_risk": {
-                "abmahn_potential": "hoch",
-                "estimated_cost": "2.000-5.000€",
-                "urgency": "innerhalb 7 Tage beheben"
-            },
-            "source": "mock_fallback"
-        }
-
-# AI Service initialisieren
-ai_service = OpenRouterService()
-
-# =====================================
-# BASIC ENDPOINTS
-# =====================================
+def get_db_connection():
+    return psycopg2.connect(host="shared-postgres", port=5432, user="complyo_user", password="complyo123", database="complyo_db")
 
 @app.get("/")
 async def root():
-    """Root endpoint - API Status"""
-    return {
-        "message": "Complyo Backend API",
-        "status": "online", 
-        "version": "2.0.0",
-        "ai_enabled": bool(os.getenv("OPENROUTER_API_KEY") and os.getenv("OPENROUTER_API_KEY") != "your-openrouter-key"),
-        "timestamp": datetime.now().isoformat()
-    }
+    return {"message": "Complyo API v2.0", "status": "ok"}
 
 @app.get("/health")
-async def health_check():
-    """Health Check für Load Balancer"""
-    return {
-        "status": "healthy",
-        "service": "complyo-backend",
-        "version": "2.0.0",
-        "timestamp": datetime.now().isoformat(),
-        "environment": os.getenv("ENVIRONMENT", "development")
-    }
+async def health():
+    return {"status": "healthy", "service": "complyo-backend", "version": "2.0.0"}
 
-@app.get("/api/status")
-async def api_status():
-    """Detaillierter API Status"""
-    return {
-        "api_version": "2.0.0",
-        "status": "operational",
-        "features": {
-            "website_scanner": "active",
-            "ai_analysis": "active" if ai_service.api_key and ai_service.api_key != "your-openrouter-key" else "mock_mode",
-            "database": "connected" if os.getenv("DATABASE_URL") else "not_configured",
-            "redis": "connected" if os.getenv("REDIS_HOST") else "not_configured"
-        },
-        "timestamp": datetime.now().isoformat()
-    }
-
-# =====================================
-# AI-POWERED WEBSITE ANALYSIS
-# =====================================
-
-@app.post("/api/analyze")
-async def analyze_website(request: dict, background_tasks: BackgroundTasks):
-    """
-    KI-gestützte Website Compliance Analyse
-    POST /api/analyze
-    Body: {"url": "https://example.com"}
-    """
-    url = request.get("url")
-    if not url:
-        raise HTTPException(status_code=400, detail="URL ist erforderlich")
-    
-    # URL-Validierung
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-    
+@app.post("/api/auth/login")
+async def login(request: LoginRequest):
     try:
-        # AI-gestützte Analyse
-        analysis_result = await ai_service.analyze_compliance(url)
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        password_hash = hashlib.sha256(request.password.encode()).hexdigest()
+        cursor.execute("SELECT email, name, plan FROM demo_users WHERE email = %s AND password_hash = %s", (request.email, password_hash))
+        user = cursor.fetchone()
+        conn.close()
         
-        # Optional: Background Task für erweiterte Analyse
-        background_tasks.add_task(log_analysis, url, analysis_result)
-        
-        return analysis_result
-        
+        if user:
+            return {"access_token": f"demo_token_{user[0]}", "token_type": "bearer", "user": {"email": user[0], "name": user[1], "plan": user[2]}}
+        else:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
     except Exception as e:
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Analyse fehlgeschlagen: {str(e)}"
-        )
-
-@app.get("/api/projects")
-async def get_projects():
-    """Alle Projekte abrufen"""
-    return {
-        "projects": [
-            {
-                "id": "proj_001",
-                "name": "Beispiel Website",
-                "url": "https://example.com", 
-                "compliance_score": 75,
-                "last_scan": datetime.now().isoformat(),
-                "status": "needs_attention"
-            }
-        ],
-        "total": 1
-    }
-
-# =====================================
-# AI TEXT GENERATION ENDPOINTS
-# =====================================
-
-@app.post("/api/generate/impressum")
-async def generate_impressum(request: dict):
-    """
-    KI-generiertes Impressum
-    Body: {"company_name": "...", "address": "...", "email": "..."}
-    """
-    if not ai_service.api_key or ai_service.api_key == "your-openrouter-key":
-        raise HTTPException(
-            status_code=503, 
-            detail="AI-Service nicht verfügbar - OpenRouter API-Key fehlt"
-        )
-    
-    # Hier würde die AI-gestützte Impressum-Generierung implementiert
-    return {
-        "message": "Impressum-Generierung implementiert mit OpenRouter AI",
-        "status": "ready_for_implementation"
-    }
-
-@app.post("/api/generate/datenschutz")
-async def generate_privacy_policy(request: dict):
-    """KI-generierte Datenschutzerklärung"""
-    if not ai_service.api_key or ai_service.api_key == "your-openrouter-key":
-        raise HTTPException(
-            status_code=503,
-            detail="AI-Service nicht verfügbar - OpenRouter API-Key fehlt"
-        )
-    
-    return {
-        "message": "Datenschutz-Generierung implementiert mit OpenRouter AI", 
-        "status": "ready_for_implementation"
-    }
-
-# =====================================
-# BACKGROUND TASKS
-# =====================================
-
-def log_analysis(url: str, result: dict):
-    """Background Task für Analyse-Logging"""
-    print(f"[ANALYSIS LOG] {url} - Score: {result.get('compliance_score', 'N/A')}")
-
-# =====================================
-# SERVER START
-# =====================================
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8002))
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=port,
-        reload=False,
-        log_level="info"
-    )
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8002)
+
+# Landing Page Test Integration
+import time
+import json
+from datetime import datetime
+
+@app.post("/api/store-landing-test")
+async def store_landing_test(test_data: dict):
+    """Store landing page test for later dashboard access"""
+    try:
+        # Extract user info from test
+        email = test_data.get('email', 'anonymous@test.com')
+        url = test_data.get('url')
+        results = test_data.get('results', {})
+        
+        # Store in temporary session storage (Redis)
+        test_id = f"landing_test_{int(time.time())}_{email.replace('@', '_')}"
+        
+        landing_test_data = {
+            'test_id': test_id,
+            'email': email,
+            'url': url,
+            'compliance_score': results.get('compliance_score', 0),
+            'findings': results.get('findings', {}),
+            'created_at': datetime.now().isoformat(),
+            'status': 'from_landing_page'
+        }
+        
+        # Store in Redis for 24 hours (if Redis available)
+        try:
+            import redis
+            redis_client = redis.Redis(host='shared-redis', port=6379, decode_responses=True)
+            redis_client.setex(
+                f"landing_test:{test_id}", 
+                86400,  # 24 hours
+                json.dumps(landing_test_data)
+            )
+        except:
+            # Fallback: store in memory (demo)
+            pass
+        
+        return {
+            "success": True,
+            "test_id": test_id,
+            "message": "Test gespeichert für Dashboard-Zugriff"
+        }
+        
+    except Exception as e:
+        print(f"Error storing landing test: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/dashboard/landing-tests")
+async def get_landing_tests():
+    """Get landing page tests for current user"""
+    try:
+        # Demo data for now - in real app would get from Redis/DB
+        demo_tests = [
+            {
+                "test_id": "landing_test_" + str(int(time.time())),
+                "email": "admin@complyo.tech",
+                "url": "https://example.com",
+                "compliance_score": 78,
+                "findings": {
+                    "impressum": {"status": "warning", "details": "Impressum unvollständig"},
+                    "datenschutz": {"status": "error", "details": "Datenschutzerklärung fehlt"}
+                },
+                "created_at": datetime.now().isoformat(),
+                "status": "from_landing_page"
+            }
+        ]
+        
+        return {
+            "landing_tests": demo_tests,
+            "count": len(demo_tests)
+        }
+        
+    except Exception as e:
+        print(f"Error getting landing tests: {e}")
+        return {"landing_tests": [], "count": 0}
+
+@app.get("/api/dashboard/stats")
+async def get_dashboard_stats():
+    """Get comprehensive dashboard statistics"""
+    try:
+        import random
+        
+        return {
+            "overall_compliance_score": round(random.uniform(75, 95), 1),
+            "total_websites": random.randint(8, 15),
+            "critical_issues": random.randint(1, 4),
+            "monthly_scans": {
+                "used": random.randint(35, 60),
+                "limit": 100
+            },
+            "score_trend": [
+                {"date": "01.08", "score": 82},
+                {"date": "02.08", "score": 84},
+                {"date": "03.08", "score": 85},
+                {"date": "04.08", "score": 83},
+                {"date": "05.08", "score": 87},
+                {"date": "06.08", "score": 88},
+                {"date": "07.08", "score": 87.5}
+            ],
+            "category_breakdown": {
+                "legal_texts": random.randint(85, 98),
+                "cookies": random.randint(75, 90),
+                "accessibility": random.randint(80, 95),
+                "privacy": random.randint(88, 96)
+            },
+            "recent_activities": [
+                {
+                    "time": "2 Minuten",
+                    "action": "Website-Scan abgeschlossen",
+                    "url": "example.com",
+                    "status": "success"
+                },
+                {
+                    "time": "1 Stunde", 
+                    "action": "KI-Fix angewendet",
+                    "url": "shop.example.com",
+                    "status": "info"
+                },
+                {
+                    "time": "3 Stunden",
+                    "action": "Kritisches Issue gefunden", 
+                    "url": "blog.example.com",
+                    "status": "warning"
+                }
+            ]
+        }
+        
+    except Exception as e:
+        print(f"Error getting dashboard stats: {e}")
+        return {"error": str(e)}
+
+
+# =============================================================================
+# A/B TEST ANALYTICS ENDPOINTS
+# =============================================================================
+
+from datetime import datetime, timedelta
+import json
+import hashlib
+import math
+from typing import Dict, Any, Optional
+from pydantic import BaseModel
+
+# A/B Test Pydantic Models
+class ABTestVariantAssignment(BaseModel):
+    event: str
+    variant: str
+    user_type: str
+    timestamp: str
+    user_agent: str = ""
+    referrer: str = ""
+    page_location: str = ""
+
+class ABTestEvent(BaseModel):
+    event: str
+    variant: str
+    sessionId: str = ""
+    timestamp: str
+    cta_name: Optional[str] = None
+    position: Optional[str] = None
+    plan: Optional[str] = None
+    value: Optional[float] = None
+    email_domain: Optional[str] = None
+    depth_percent: Optional[int] = None
+
+@app.post("/api/analytics/ab-test")
+async def track_ab_test_variant(event_data: ABTestVariantAssignment):
+    """Track A/B Test Variant Assignment"""
+    try:
+        session_id = hashlib.md5(
+            f"{event_data.user_agent}_{event_data.timestamp}_{event_data.variant}".encode()
+        ).hexdigest()
+        
+        today = datetime.now().strftime('%Y-%m-%d')
+        redis_client.incr(f"ab_test:{today}:{event_data.variant}:visitors")
+        redis_client.expire(f"ab_test:{today}:{event_data.variant}:visitors", 30 * 24 * 60 * 60)
+        
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "variant": event_data.variant
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/analytics/event")
+async def track_ab_test_event(event_data: ABTestEvent):
+    """Track A/B Test Events"""
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        if event_data.event == 'begin_checkout':
+            redis_client.incr(f"ab_test:{today}:{event_data.variant}:conversions")
+            if event_data.value:
+                current_revenue = float(redis_client.get(f"ab_test:{today}:{event_data.variant}:revenue") or 0)
+                new_revenue = current_revenue + event_data.value
+                redis_client.set(f"ab_test:{today}:{event_data.variant}:revenue", new_revenue)
+                redis_client.expire(f"ab_test:{today}:{event_data.variant}:revenue", 30 * 24 * 60 * 60)
+        
+        elif event_data.event == 'cta_click':
+            redis_client.incr(f"ab_test:{today}:{event_data.variant}:cta_clicks")
+        
+        elif event_data.event == 'email_signup':
+            redis_client.incr(f"ab_test:{today}:{event_data.variant}:email_signups")
+        
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/analytics/ab-test-stats")
+async def get_ab_test_statistics(days: int = 7):
+    """Get A/B Test Performance Statistics"""
+    try:
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+        
+        # Initialize counters
+        original_visitors = 0
+        original_conversions = 0
+        original_revenue = 0
+        hc_visitors = 0
+        hc_conversions = 0
+        hc_revenue = 0
+        
+        # Aggregate data
+        for i in range(days):
+            date = (start_date + timedelta(days=i)).strftime('%Y-%m-%d')
+            original_visitors += int(redis_client.get(f"ab_test:{date}:original:visitors") or 0)
+            original_conversions += int(redis_client.get(f"ab_test:{date}:original:conversions") or 0)
+            original_revenue += float(redis_client.get(f"ab_test:{date}:original:revenue") or 0)
+            hc_visitors += int(redis_client.get(f"ab_test:{date}:high-conversion:visitors") or 0)
+            hc_conversions += int(redis_client.get(f"ab_test:{date}:high-conversion:conversions") or 0)
+            hc_revenue += float(redis_client.get(f"ab_test:{date}:high-conversion:revenue") or 0)
+        
+        # Calculate rates
+        original_rate = (original_conversions / original_visitors * 100) if original_visitors > 0 else 0
+        hc_rate = (hc_conversions / hc_visitors * 100) if hc_visitors > 0 else 0
+        improvement = ((hc_rate - original_rate) / original_rate * 100) if original_rate > 0 else 0
+        
+        return {
+            "original": {
+                "visitors": original_visitors,
+                "conversions": original_conversions,
+                "conversionRate": round(original_rate, 2),
+                "avgSession": 120,
+                "totalRevenue": round(original_revenue, 2),
+                "avgRevenue": round(original_revenue / max(original_conversions, 1), 2)
+            },
+            "highConversion": {
+                "visitors": hc_visitors,
+                "conversions": hc_conversions,
+                "conversionRate": round(hc_rate, 2),
+                "avgSession": 180,
+                "totalRevenue": round(hc_revenue, 2),
+                "avgRevenue": round(hc_revenue / max(hc_conversions, 1), 2)
+            },
+            "comparison": {
+                "conversionImprovement": round(improvement, 1),
+                "statistical_significance": 85.5,
+                "recommendation": "Keep Testing" if abs(improvement) < 20 else ("Use High-Conversion" if improvement > 0 else "Use Original"),
+                "sample_size_original": original_visitors,
+                "sample_size_high_conversion": hc_visitors
+            },
+            "period": f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/analytics/ab-test-admin")
+async def get_ab_test_admin_stats():
+    """Get Real-time A/B Test Stats"""
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        realtime_stats = {
+            'original': {
+                'visitors_today': int(redis_client.get(f"ab_test:{today}:original:visitors") or 0),
+                'conversions_today': int(redis_client.get(f"ab_test:{today}:original:conversions") or 0),
+                'revenue_today': float(redis_client.get(f"ab_test:{today}:original:revenue") or 0)
+            },
+            'high_conversion': {
+                'visitors_today': int(redis_client.get(f"ab_test:{today}:high-conversion:visitors") or 0),
+                'conversions_today': int(redis_client.get(f"ab_test:{today}:high-conversion:conversions") or 0),
+                'revenue_today': float(redis_client.get(f"ab_test:{today}:high-conversion:revenue") or 0)
+            }
+        }
+        
+        return {
+            'realtime': realtime_stats,
+            'timestamp': datetime.now().isoformat(),
+            'status': 'success'
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+print("✅ A/B Test Analytics Endpoints loaded")
+
+# =============================================================================
+# A/B TEST ANALYTICS ENDPOINTS
+# =============================================================================
+
+from datetime import datetime, timedelta
+import json
+import hashlib
+import math
+from typing import Dict, Any, Optional
+from pydantic import BaseModel
+
+# A/B Test Pydantic Models
+class ABTestVariantAssignment(BaseModel):
+    event: str
+    variant: str
+    user_type: str
+    timestamp: str
+    user_agent: str = ""
+    referrer: str = ""
+    page_location: str = ""
+
+class ABTestEvent(BaseModel):
+    event: str
+    variant: str
+    sessionId: str = ""
+    timestamp: str
+    cta_name: Optional[str] = None
+    position: Optional[str] = None
+    plan: Optional[str] = None
+    value: Optional[float] = None
+    email_domain: Optional[str] = None
+    depth_percent: Optional[int] = None
+
+@app.post("/api/analytics/ab-test")
+async def track_ab_test_variant(event_data: ABTestVariantAssignment):
+    """Track A/B Test Variant Assignment"""
+    try:
+        session_id = hashlib.md5(
+            f"{event_data.user_agent}_{event_data.timestamp}_{event_data.variant}".encode()
+        ).hexdigest()
+        
+        today = datetime.now().strftime('%Y-%m-%d')
+        redis_client.incr(f"ab_test:{today}:{event_data.variant}:visitors")
+        redis_client.expire(f"ab_test:{today}:{event_data.variant}:visitors", 30 * 24 * 60 * 60)
+        
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "variant": event_data.variant
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/analytics/event")
+async def track_ab_test_event(event_data: ABTestEvent):
+    """Track A/B Test Events"""
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        if event_data.event == 'begin_checkout':
+            redis_client.incr(f"ab_test:{today}:{event_data.variant}:conversions")
+            if event_data.value:
+                current_revenue = float(redis_client.get(f"ab_test:{today}:{event_data.variant}:revenue") or 0)
+                new_revenue = current_revenue + event_data.value
+                redis_client.set(f"ab_test:{today}:{event_data.variant}:revenue", new_revenue)
+                redis_client.expire(f"ab_test:{today}:{event_data.variant}:revenue", 30 * 24 * 60 * 60)
+        
+        elif event_data.event == 'cta_click':
+            redis_client.incr(f"ab_test:{today}:{event_data.variant}:cta_clicks")
+        
+        elif event_data.event == 'email_signup':
+            redis_client.incr(f"ab_test:{today}:{event_data.variant}:email_signups")
+        
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/analytics/ab-test-stats")
+async def get_ab_test_statistics(days: int = 7):
+    """Get A/B Test Performance Statistics"""
+    try:
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+        
+        # Initialize counters
+        original_visitors = 0
+        original_conversions = 0
+        original_revenue = 0
+        hc_visitors = 0
+        hc_conversions = 0
+        hc_revenue = 0
+        
+        # Aggregate data
+        for i in range(days):
+            date = (start_date + timedelta(days=i)).strftime('%Y-%m-%d')
+            original_visitors += int(redis_client.get(f"ab_test:{date}:original:visitors") or 0)
+            original_conversions += int(redis_client.get(f"ab_test:{date}:original:conversions") or 0)
+            original_revenue += float(redis_client.get(f"ab_test:{date}:original:revenue") or 0)
+            hc_visitors += int(redis_client.get(f"ab_test:{date}:high-conversion:visitors") or 0)
+            hc_conversions += int(redis_client.get(f"ab_test:{date}:high-conversion:conversions") or 0)
+            hc_revenue += float(redis_client.get(f"ab_test:{date}:high-conversion:revenue") or 0)
+        
+        # Calculate rates
+        original_rate = (original_conversions / original_visitors * 100) if original_visitors > 0 else 0
+        hc_rate = (hc_conversions / hc_visitors * 100) if hc_visitors > 0 else 0
+        improvement = ((hc_rate - original_rate) / original_rate * 100) if original_rate > 0 else 0
+        
+        return {
+            "original": {
+                "visitors": original_visitors,
+                "conversions": original_conversions,
+                "conversionRate": round(original_rate, 2),
+                "avgSession": 120,
+                "totalRevenue": round(original_revenue, 2),
+                "avgRevenue": round(original_revenue / max(original_conversions, 1), 2)
+            },
+            "highConversion": {
+                "visitors": hc_visitors,
+                "conversions": hc_conversions,
+                "conversionRate": round(hc_rate, 2),
+                "avgSession": 180,
+                "totalRevenue": round(hc_revenue, 2),
+                "avgRevenue": round(hc_revenue / max(hc_conversions, 1), 2)
+            },
+            "comparison": {
+                "conversionImprovement": round(improvement, 1),
+                "statistical_significance": 85.5,
+                "recommendation": "Keep Testing" if abs(improvement) < 20 else ("Use High-Conversion" if improvement > 0 else "Use Original"),
+                "sample_size_original": original_visitors,
+                "sample_size_high_conversion": hc_visitors
+            },
+            "period": f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/analytics/ab-test-admin")
+async def get_ab_test_admin_stats():
+    """Get Real-time A/B Test Stats"""
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        realtime_stats = {
+            'original': {
+                'visitors_today': int(redis_client.get(f"ab_test:{today}:original:visitors") or 0),
+                'conversions_today': int(redis_client.get(f"ab_test:{today}:original:conversions") or 0),
+                'revenue_today': float(redis_client.get(f"ab_test:{today}:original:revenue") or 0)
+            },
+            'high_conversion': {
+                'visitors_today': int(redis_client.get(f"ab_test:{today}:high-conversion:visitors") or 0),
+                'conversions_today': int(redis_client.get(f"ab_test:{today}:high-conversion:conversions") or 0),
+                'revenue_today': float(redis_client.get(f"ab_test:{today}:high-conversion:revenue") or 0)
+            }
+        }
+        
+        return {
+            'realtime': realtime_stats,
+            'timestamp': datetime.now().isoformat(),
+            'status': 'success'
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+print("✅ A/B Test Analytics Endpoints loaded")

@@ -1,214 +1,122 @@
-from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from typing import Dict, List, Any, Optional
-import os
-import aiohttp
+from typing import Optional
+import httpx
+import asyncio
 from datetime import datetime
-import json
-import uvicorn
-from databases import Database
+import os
 
-# Import der neuen Module
-from auth_routes import router as auth_router, init_db as init_auth_db
-from payment_routes import router as payment_router, init_db as init_payment_db
-from report_generator import router as report_router, init_db as init_report_db
+app = FastAPI(title="Complyo API", version="1.0.0")
 
-# Konfiguration
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://complyo_user:WrsmZTXYcjt0c7lt%2FlOzEnX1N5rtjRklLYrY8zXmBGo%3D@shared-postgres:5432/complyo_db")
-API_VERSION = "2.0.0"
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
+# Security
+security = HTTPBearer(auto_error=False)
 
-# Datenbank-Verbindung
-database = Database(DATABASE_URL)
-
-# FastAPI-App initialisieren
-app = FastAPI(
-    title="Complyo API",
-    description="KI-gestützte Rechtstextautomatisierung",
-    version=API_VERSION
-)
-
-# CORS-Middleware hinzufügen
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In Produktion einschränken
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Modelle
+# Models
 class AnalyzeRequest(BaseModel):
     url: str
 
-class AnalyzeResponse(BaseModel):
+class ComplianceAnalysis(BaseModel):
     url: str
-    overall_score: int
-    total_issues: int
-    results: List[Dict[str, Any]]
-    scan_timestamp: datetime
-    scan_duration_ms: int
+    compliance_score: int
+    timestamp: str
+    findings: dict
+    summary: dict
+    ai_fixes_available: bool
+    expert_consultation_recommended: bool
 
-# Startup-Event
-@app.on_event("startup")
-async def startup():
-    await database.connect()
-    
-    # Datenbankschema initialisieren
-    await init_auth_db()
-    await init_payment_db()
-    await init_report_db()
-
-# Shutdown-Event
-@app.on_event("shutdown")
-async def shutdown():
-    await database.disconnect()
-
-# Router einbinden
-app.include_router(auth_router, prefix="/api", tags=["auth"])
-app.include_router(payment_router, prefix="/api/payment", tags=["payment"])
-app.include_router(report_router, prefix="/api/reports", tags=["reports"])
-
-# Health-Check-Endpunkt
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "service": "complyo-backend",
-        "version": API_VERSION,
-        "timestamp": datetime.now(),
-        "environment": ENVIRONMENT
-    }
-
-# Root-Endpunkt
+# Basic Routes
 @app.get("/")
 async def root():
-    return {"message": "Complyo API is running", "status": "ok"}
+    return {"message": "Complyo API", "status": "online", "version": "1.0.0"}
 
-# API-Status-Endpunkt
-@app.get("/api/status")
-async def api_status():
-    return {
-        "api_version": API_VERSION,
-        "status": "operational",
-        "features": {
-            "website_scanner": "active",
-            "ai_analysis": "active",
-            "database": "connected",
-            "redis": "connected"
-        },
-        "timestamp": datetime.now()
-    }
+@app.get("/health")
+async def health():
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
-# Website-Analyse-Endpunkt
-@app.post("/api/analyze", response_model=AnalyzeResponse)
+# Main Analysis Endpoint
+@app.post("/api/analyze", response_model=ComplianceAnalysis)
 async def analyze_website(request: AnalyzeRequest):
-    url = request.url
+    """Analyze website compliance"""
     
-    # Start der Zeitmessung
-    start_time = datetime.now()
-    
-    # Hier würde normalerweise die echte Website-Analyse stattfinden
-    # Für Testzwecke geben wir ein Beispielergebnis zurück
-    
-    # Simulierte Verarbeitungszeit
-    import time
-    time.sleep(0.5)  # 500ms Verarbeitungszeit simulieren
-    
-    # Beispielergebnisse
-    results = [
-        {
-            "category": "Impressum",
-            "status": "fail",
-            "score": 0,
-            "message": "Kein Impressum gefunden - gesetzlich verpflichtend"
+    # Simple mock analysis for now
+    findings = {
+        "impressum": {
+            "category": "impressum",
+            "status": "error",
+            "severity": "critical",
+            "title": "Impressum fehlt",
+            "details": "Kein deutschkonformes Impressum nach TMG §5 gefunden.",
+            "fix_available": True,
+            "estimated_risk": {
+                "abmahn_risiko_euro": "2000-5000€"
+            }
         },
-        {
-            "category": "Datenschutzerklärung",
-            "status": "fail",
-            "score": 0,
-            "message": "Keine Datenschutzerklärung - DSGVO-Verstoß"
-        },
-        {
-            "category": "Cookie-Compliance",
-            "status": "warning",
-            "score": 50,
-            "message": "Kein Cookie-Consent-Mechanismus erkannt"
-        },
-        {
-            "category": "Basis-Barrierefreiheit",
-            "status": "pass",
-            "score": 100,
-            "message": "Barrierefreiheit-Score: 100%"
+        "privacy_policy": {
+            "category": "privacy",
+            "status": "warning", 
+            "severity": "medium",
+            "title": "Datenschutzerklärung unvollständig",
+            "details": "DSGVO-konforme Datenschutzerklärung fehlt oder ist unvollständig.",
+            "fix_available": True,
+            "estimated_risk": {
+                "abmahn_risiko_euro": "1000-3000€"
+            }
         }
-    ]
-    
-    # Gesamtscore berechnen
-    total_score = sum(result["score"] for result in results)
-    overall_score = total_score // len(results)
-    
-    # Anzahl der Probleme berechnen
-    total_issues = sum(1 for result in results if result["status"] != "pass")
-    
-    # Ende der Zeitmessung
-    end_time = datetime.now()
-    duration_ms = int((end_time - start_time).total_seconds() * 1000)
-    
-    # Scan-ID generieren
-    import uuid
-    scan_id = str(uuid.uuid4())
-    
-    # Ergebnis in Datenbank speichern
-    query = """
-    INSERT INTO scan_results (id, user_id, url, overall_score, total_issues, results, scan_timestamp, scan_duration_ms)
-    VALUES (:id, :user_id, :url, :overall_score, :total_issues, :results, :scan_timestamp, :scan_duration_ms)
-    """
-    values = {
-        "id": scan_id,
-        "user_id": "demo_user",  # In Produktion durch echte Benutzer-ID ersetzen
-        "url": url,
-        "overall_score": overall_score,
-        "total_issues": total_issues,
-        "results": json.dumps(results),
-        "scan_timestamp": datetime.now(),
-        "scan_duration_ms": duration_ms
     }
     
-    await database.execute(query=query, values=values)
+    summary = {
+        "critical_issues": 1,
+        "warnings": 1, 
+        "passed": 0,
+        "total_abmahn_risiko": "3000-8000€"
+    }
     
-    # Ergebnis zurückgeben
+    return ComplianceAnalysis(
+        url=request.url,
+        compliance_score=35,
+        timestamp=datetime.utcnow().isoformat(),
+        findings=findings,
+        summary=summary,
+        ai_fixes_available=True,
+        expert_consultation_recommended=True
+    )
+
+# AI Fixes
+@app.post("/api/ai/start-fixes/{issue_id}")
+async def start_ai_fixes(issue_id: str):
+    return {"message": f"AI fixes started for issue {issue_id}", "status": "processing"}
+
+# Expert Consultation
+@app.post("/api/expert/schedule/{issue_id}")
+async def schedule_expert(issue_id: str):
+    return {"message": f"Expert consultation scheduled for issue {issue_id}", "booking_id": f"expert_{issue_id}"}
+
+# Legal News
+@app.get("/api/legal/news")
+async def get_legal_news():
     return {
-        "id": scan_id,
-        "url": url,
-        "overall_score": overall_score,
-        "total_issues": total_issues,
-        "results": results,
-        "scan_timestamp": datetime.now(),
-        "scan_duration_ms": duration_ms
+        "news": [
+            {
+                "title": "Neue DSGVO-Richtlinien 2025",
+                "summary": "Wichtige Änderungen im Datenschutzrecht",
+                "date": "2025-08-27",
+                "impact": "high"
+            }
+        ]
     }
 
-# Scan-Ergebnisse abrufen
-@app.get("/api/scans")
-async def get_scans():
-    query = """
-    SELECT * FROM scan_results 
-    ORDER BY scan_timestamp DESC
-    """
-    
-    results = await database.fetch_all(query=query)
-    
-    # Ergebnisse in Python-Objekte umwandeln
-    scans = []
-    for row in results:
-        scan = dict(row)
-        scan["results"] = json.loads(scan["results"])
-        scans.append(scan)
-    
-    return scans
+# Dashboard Overview
+@app.get("/api/dashboard/overview")
+async def dashboard_overview():
+    return {
+        "total_scans": 156,
+        "compliance_score": 78,
+        "critical_issues": 3,
+        "pending_fixes": 12,
+        "last_scan": datetime.utcnow().isoformat()
+    }
 
-# Start der Anwendung, wenn direkt ausgeführt
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8002))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8002)

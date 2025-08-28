@@ -1,0 +1,88 @@
+import { create } from 'zustand';
+import { subscribeWithSelector } from 'zustand/middleware';
+import { DashboardState, Website } from '@/types/dashboard';
+import { ComplianceAnalysis, LegalNews, Finding } from '@/types/api';
+
+interface DashboardStore extends DashboardState {
+  // Actions
+  setCurrentWebsite: (website: Website) => void;
+  setAnalysisData: (data: ComplianceAnalysis) => void;
+  setLegalNews: (news: LegalNews[]) => void;
+  setLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
+  updateMetrics: (metrics: Partial<DashboardState['metrics']>) => void;
+  
+  // Computed
+  getCriticalIssues: () => number;
+  getComplianceScore: () => number;
+}
+
+export const useDashboardStore = create<DashboardStore>()(
+  subscribeWithSelector((set, get) => ({
+    // Initial state
+    currentWebsite: {
+      id: '1',
+      url: 'panoart360.de',
+      name: 'PanoArt360',
+      lastScan: new Date().toISOString(),
+      complianceScore: 78,
+      status: 'active'
+    },
+    metrics: {
+      totalScore: 78,
+      websites: 1,
+      criticalIssues: 1,
+      scansAvailable: 100,
+      scansUsed: 47
+    },
+    analysisData: null,
+    legalNews: [],
+    complianceTrends: [],
+    isLoading: false,
+    error: null,
+
+    // Actions
+    setCurrentWebsite: (website) => set({ currentWebsite: website }),
+    
+    setAnalysisData: (data) => set({ 
+      analysisData: data,
+      metrics: {
+        ...get().metrics,
+        totalScore: data.compliance_score,
+        criticalIssues: data.summary.critical_issues
+      }
+    }),
+    
+    setLegalNews: (news) => set({ legalNews: news }),
+    
+    setLoading: (loading) => set({ isLoading: loading }),
+    
+    setError: (error) => set({ error }),
+    
+    updateMetrics: (metrics) => set((state) => ({ 
+      metrics: { ...state.metrics, ...metrics }
+    })),
+
+    // Computed values - FIXED with proper type casting
+    getCriticalIssues: () => {
+      const { analysisData } = get();
+      if (!analysisData) return 0;
+      
+      return (Object.values(analysisData.findings) as Finding[]).filter(
+        finding => finding.severity === 'critical'
+      ).length;
+    },
+
+    getComplianceScore: () => {
+      const { analysisData, metrics } = get();
+      return analysisData?.compliance_score || metrics.totalScore;
+    }
+  }))
+);
+
+// Selectors for better performance
+export const selectCurrentWebsite = (state: DashboardStore) => state.currentWebsite;
+export const selectMetrics = (state: DashboardStore) => state.metrics;
+export const selectAnalysisData = (state: DashboardStore) => state.analysisData;
+export const selectLegalNews = (state: DashboardStore) => state.legalNews;
+export const selectIsLoading = (state: DashboardStore) => state.isLoading;
