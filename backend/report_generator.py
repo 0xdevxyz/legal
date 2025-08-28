@@ -10,7 +10,12 @@ import uuid
 import jinja2
 import pdfkit
 import json
-from .auth_routes import get_current_active_user, database
+from auth_routes import get_current_active_user
+from databases import Database
+
+# Database setup - this will be imported from main.py context
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://complyo_user:WrsmZTXYcjt0c7lt%2FlOzEnX1N5rtjRklLYrY8zXmBGo%3D@shared-postgres:5432/complyo_db")
+database = Database(DATABASE_URL)
 
 # Configure router
 router = APIRouter()
@@ -126,4 +131,63 @@ def generate_recommendations(results):
             elif category == "Datenschutzerklärung":
                 recommendations.append({
                     "priority": "Hoch",
-                    "title":
+                    "title": "Datenschutzerklärung erstellen",
+                    "description": "Eine DSGVO-konforme Datenschutzerklärung ist gesetzlich verpflichtend. "
+                                  "Informieren Sie über Datenverarbeitung, Rechtsgrundlagen und Betroffenenrechte.",
+                    "action": "Compliance-Fix aktivieren oder Experten-Service nutzen"
+                })
+            elif category == "Cookie-Compliance":
+                recommendations.append({
+                    "priority": "Hoch", 
+                    "title": "Cookie-Banner implementieren",
+                    "description": "Cookies erfordern explizite Nutzereinwilligung nach TTDSG §25. "
+                                  "Implementieren Sie einen rechtskonformen Cookie-Consent-Banner.",
+                    "action": "Compliance-Fix aktivieren"
+                })
+            elif category == "Barrierefreiheit":
+                recommendations.append({
+                    "priority": "Mittel",
+                    "title": "Barrierefreiheit verbessern", 
+                    "description": "Verbessern Sie die Zugänglichkeit nach WCAG 2.1 AA Standards. "
+                                  "Fügen Sie Alt-Texte hinzu und optimieren Sie die Keyboard-Navigation.",
+                    "action": "Compliance-Fix aktivieren"
+                })
+
+        return recommendations
+
+    def _generate_next_steps(self, scan_results: List[Dict], recommendations: List[Dict]) -> List[str]:
+        """Generate actionable next steps"""
+        next_steps = [
+            "1. Kritische Compliance-Verstöße sofort beheben",
+            "2. Rechtliche Texte (Impressum, Datenschutzerklärung) aktualisieren",
+            "3. Cookie-Consent-Banner implementieren",
+            "4. Barrierefreiheit schrittweise verbessern",
+            "5. Regelmäßige Compliance-Checks durchführen"
+        ]
+        
+        critical_issues = len([r for r in scan_results if r.get('status') == 'fail'])
+        if critical_issues > 3:
+            next_steps.insert(0, f"🚨 DRINGEND: {critical_issues} kritische Probleme sofort angehen!")
+            
+        return next_steps
+
+# Database initialization
+async def init_db():
+    """Initialize reports table"""
+    query = """
+    CREATE TABLE IF NOT EXISTS reports (
+        id VARCHAR(50) PRIMARY KEY,
+        scan_id VARCHAR(50),
+        user_id VARCHAR(50),
+        title VARCHAR(200) NOT NULL,
+        content TEXT NOT NULL,
+        report_type VARCHAR(50) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        file_path VARCHAR(500)
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_reports_scan_id ON reports(scan_id);
+    CREATE INDEX IF NOT EXISTS idx_reports_user_id ON reports(user_id);
+    """
+    
+    await database.execute(query=query)
