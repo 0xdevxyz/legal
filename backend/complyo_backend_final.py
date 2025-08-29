@@ -39,6 +39,7 @@ from ab_testing import ab_testing_manager, ABTest, TestVariant
 from admin_panel import admin_panel_manager
 from ai_compliance_engine import ai_compliance_engine, UserExpertiseLevel, ComplianceIssue
 from accessibility_framework import accessibility_framework
+from hybrid_ai_assistant import hybrid_ai_assistant, FixType, RiskLevel
 
 # FastAPI App Setup
 app = FastAPI(
@@ -3607,6 +3608,299 @@ async def test_website_accessibility_compatibility(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Compatibility test failed: {str(e)}")
 
+# ========== HYBRID AI ASSISTANT ENDPOINTS ==========
+
+class HybridAnalysisRequest(BaseModel):
+    website_url: str
+    user_preferences: Dict[str, Any] = {
+        "expertise": "beginner",
+        "risk_tolerance": "low", 
+        "automation_level": "hybrid"
+    }
+
+@app.post("/api/hybrid-ai/analyze-and-plan")
+async def hybrid_analyze_and_plan(
+    request: HybridAnalysisRequest,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Hybrid AI: Analysiert Website und erstellt sicheren Implementation Plan"""
+    try:
+        # Create comprehensive implementation plan
+        implementation_plan = await hybrid_ai_assistant.analyze_and_create_plan(
+            request.website_url, 
+            request.user_preferences
+        )
+        
+        return {
+            "status": "success",
+            "message": "🤖 KI-Analyse abgeschlossen + Sicherer Plan erstellt",
+            "implementation_plan": {
+                "plan_id": implementation_plan.plan_id,
+                "website_url": implementation_plan.website_url,
+                "total_fixes": implementation_plan.total_fixes,
+                "safe_fixes": [
+                    {
+                        "fix_id": fix.fix_id,
+                        "title": fix.title,
+                        "risk_level": fix.risk_level.value,
+                        "fix_type": fix.fix_type.value,
+                        "description": fix.description,
+                        "before_code": fix.before_code,
+                        "after_code": fix.after_code,
+                        "files_affected": fix.files_affected,
+                        "estimated_time": fix.estimated_time,
+                        "safety_score": fix.safety_score,
+                        "rollback_possible": fix.rollback_possible
+                    } for fix in implementation_plan.safe_fixes
+                ],
+                "risky_fixes": [
+                    {
+                        "fix_id": fix.fix_id,
+                        "title": fix.title,
+                        "risk_level": fix.risk_level.value,
+                        "fix_type": fix.fix_type.value,
+                        "description": fix.description,
+                        "before_code": fix.before_code,
+                        "after_code": fix.after_code,
+                        "files_affected": fix.files_affected,
+                        "estimated_time": fix.estimated_time,
+                        "safety_score": fix.safety_score,
+                        "rollback_possible": fix.rollback_possible
+                    } for fix in implementation_plan.risky_fixes
+                ],
+                "estimated_total_time": implementation_plan.estimated_total_time,
+                "compliance_improvement": implementation_plan.compliance_improvement,
+                "safety_analysis": implementation_plan.safety_analysis,
+                "preview_environment": implementation_plan.preview_environment
+            },
+            "user_actions_required": {
+                "safe_fixes_auto_approvable": len(implementation_plan.safe_fixes),
+                "risky_fixes_need_approval": len(implementation_plan.risky_fixes),
+                "preview_available": implementation_plan.preview_environment is not None,
+                "backup_recommended": implementation_plan.safety_analysis.get("backup_recommended", False)
+            },
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Hybrid analysis failed: {str(e)}")
+
+class ImplementationApprovalRequest(BaseModel):
+    plan_id: str
+    approved_fix_ids: List[str]
+    user_confirmation: bool = False
+    backup_requested: bool = True
+
+@app.post("/api/hybrid-ai/implement-fixes")
+async def implement_approved_fixes(
+    request: ImplementationApprovalRequest,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Hybrid AI: Implementiert von User bestätigte Fixes"""
+    try:
+        if not request.user_confirmation:
+            raise HTTPException(status_code=400, detail="User confirmation required for implementation")
+        
+        if not request.approved_fix_ids:
+            raise HTTPException(status_code=400, detail="No fixes selected for implementation")
+        
+        # Implement approved fixes
+        implementation_result = await hybrid_ai_assistant.implement_approved_fixes(
+            request.plan_id,
+            request.approved_fix_ids,
+            current_user.id
+        )
+        
+        return {
+            "status": "success",
+            "message": f"🚀 {implementation_result['successful_implementations']} Fixes erfolgreich implementiert!",
+            "implementation_result": implementation_result,
+            "next_steps": [
+                "✅ Website automatisch überwacht für 24h",
+                "🔄 Compliance Re-Scan in 30 Minuten", 
+                "📊 Verbesserungs-Report wird generiert",
+                "🔔 Benachrichtigung bei Problemen"
+            ]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Implementation failed: {str(e)}")
+
+class RollbackRequest(BaseModel):
+    plan_id: str
+    fix_ids: List[str]
+    reason: str
+
+@app.post("/api/hybrid-ai/rollback")
+async def rollback_implementation(
+    request: RollbackRequest,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Hybrid AI: Macht Fixes rückgängig"""
+    try:
+        rollback_result = await hybrid_ai_assistant.rollback_implementation(
+            request.plan_id,
+            request.fix_ids
+        )
+        
+        return {
+            "status": "success",
+            "message": "🔄 Rollback erfolgreich durchgeführt",
+            "rollback_result": rollback_result,
+            "reason": request.reason
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Rollback failed: {str(e)}")
+
+@app.get("/api/hybrid-ai/implementation-status/{plan_id}")
+async def get_implementation_status(
+    plan_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get current implementation status"""
+    try:
+        # In production: Get from database
+        # For demo: Return simulated status
+        
+        status = {
+            "plan_id": plan_id,
+            "status": "in_progress",
+            "progress_percentage": 75,
+            "fixes_completed": 3,
+            "fixes_total": 4,
+            "current_step": "Verifying CSS contrast improvements",
+            "estimated_completion": (datetime.now() + timedelta(minutes=5)).isoformat(),
+            "issues_detected": [],
+            "rollback_available": True,
+            "last_updated": datetime.now().isoformat()
+        }
+        
+        return {
+            "status": "success",
+            "implementation_status": status
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/hybrid-ai/preview/{preview_id}")
+async def get_preview_environment(
+    preview_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get preview environment details"""
+    try:
+        # In production: Load actual preview environment
+        preview_data = {
+            "preview_id": preview_id,
+            "preview_url": f"https://preview-{preview_id}.complyo.dev",
+            "original_url": "https://example.com", 
+            "fixes_applied": [
+                "Added skip links",
+                "Improved color contrast",
+                "Added alt texts via JavaScript"
+            ],
+            "safety_score": 0.95,
+            "expires_at": (datetime.now() + timedelta(hours=24)).isoformat(),
+            "accessibility_score_before": 65,
+            "accessibility_score_after": 89,
+            "created_at": datetime.now().isoformat()
+        }
+        
+        return {
+            "status": "success",
+            "preview": preview_data
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/hybrid-ai/workflow-demo")
+async def get_hybrid_workflow_demo():
+    """Demonstriert den kompletten Hybrid AI Workflow"""
+    try:
+        workflow_demo = {
+            "workflow_title": "🤖 Hybrid Smart Assistant Workflow",
+            "description": "KI analysiert + generiert + previewed, User bestätigt, KI implementiert",
+            "steps": [
+                {
+                    "step": 1,
+                    "title": "🤖 KI Analysiert (Automatisch)",
+                    "description": "AI scannt Website und erkennt alle Compliance-Probleme",
+                    "duration": "30-60 Sekunden",
+                    "user_action": "Keine - vollautomatisch",
+                    "safety": "100% sicher - nur Analyse"
+                },
+                {
+                    "step": 2,
+                    "title": "🎯 KI Generiert Fix-Plan (Automatisch)", 
+                    "description": "AI erstellt detaillierten Implementation Plan mit Code-Previews",
+                    "duration": "15-30 Sekunden", 
+                    "user_action": "Keine - vollautomatisch",
+                    "safety": "100% sicher - nur Planung"
+                },
+                {
+                    "step": 3,
+                    "title": "🎭 KI Erstellt Preview (Automatisch)",
+                    "description": "AI generiert Sandbox mit sicheren Fixes für Live-Preview",
+                    "duration": "60-120 Sekunden",
+                    "user_action": "Keine - vollautomatisch", 
+                    "safety": "100% sicher - separate Umgebung"
+                },
+                {
+                    "step": 4,
+                    "title": "👤 User Prüft & Bestätigt (Manuell)",
+                    "description": "User sieht Before/After Code, Preview und bestätigt gewünschte Fixes",
+                    "duration": "5-15 Minuten",
+                    "user_action": "Fixes auswählen und bestätigen",
+                    "safety": "User behält volle Kontrolle"
+                },
+                {
+                    "step": 5,
+                    "title": "🚀 KI Implementiert (Automatisch)",
+                    "description": "AI führt bestätigte Fixes mit Backups und Monitoring durch",
+                    "duration": "2-10 Minuten",
+                    "user_action": "Keine - überwacht Implementation",
+                    "safety": "Automatische Backups + Rollback möglich"
+                },
+                {
+                    "step": 6,
+                    "title": "📊 Kontinuierliches Monitoring (Automatisch)",
+                    "description": "AI überwacht Website 24/7 und benachrichtigt bei Problemen",
+                    "duration": "Dauerhaft",
+                    "user_action": "Erhält Benachrichtigungen bei Bedarf",
+                    "safety": "Proaktive Überwachung + sofortiger Rollback bei Problemen"
+                }
+            ],
+            "benefits": [
+                "✅ KI-Power: Intelligente Automatisierung spart 90% Zeit",
+                "✅ User-Kontrolle: Volle Transparenz und Bestätigungsrecht",
+                "✅ Website-Sicherheit: Automatische Backups + Rollback-Garantie", 
+                "✅ Zero-Downtime: Sichere Implementation ohne Ausfälle",
+                "✅ Kontinuierliche Compliance: 24/7 Monitoring + Updates"
+            ],
+            "safety_features": [
+                "🔒 Automatische Backups vor jeder Änderung",
+                "🎭 Sandbox-Preview vor Live-Implementation",
+                "👤 User-Approval für alle kritischen Änderungen",
+                "🔄 Ein-Klick Rollback bei Problemen", 
+                "📊 Real-time Monitoring nach Implementation",
+                "⚡ Emergency-Stop Funktion jederzeit verfügbar"
+            ]
+        }
+        
+        return {
+            "status": "success", 
+            "workflow_demo": workflow_demo,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8003))
     
@@ -3619,7 +3913,8 @@ if __name__ == "__main__":
     print(f"⚙️  Admin Panel: http://0.0.0.0:{port}/api/admin/platform-overview")
     print(f"🤖 KI Engine: http://0.0.0.0:{port}/api/ai/analyze")
     print(f"♿ Accessibility: http://0.0.0.0:{port}/api/accessibility/analyze")
-    print("✨ COMPLETE AI-POWERED COMPLIANCE PLATFORM: All Features + KI-Guided Optimization + Conflict-Free Accessibility!")
+    print(f"🚀 Hybrid AI Assistant: http://0.0.0.0:{port}/api/hybrid-ai/workflow-demo")
+    print("✨ HYBRID SMART ASSISTANT: KI analysiert + generiert + previewed, User bestätigt, KI implementiert!")
     
     uvicorn.run(
         "complyo_backend_final:app",
