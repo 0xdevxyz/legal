@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complyo Dashboard - Modernized UI/UX</title>
+    <link rel="stylesheet" href="modern-dashboard.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        /* Additional demo styles */
+        .demo-nav-active {
+            color: var(--complyo-accent-600) !important;
+            background: var(--complyo-accent-50) !important;
+        }
+        
+        .demo-score-ring {
+            transform: rotate(-90deg);
+        }
+        
+        .demo-progress-fill {
+            width: 60%;
+            background: var(--complyo-accent-600);
+            height: 8px;
+            border-radius: var(--radius-sm);
+            transition: width 0.3s ease;
+        }
+        
+        .demo-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .demo-notification {
+            position: relative;
+        }
+        
+        .demo-notification::after {
+            content: '';
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 8px;
+            height: 8px;
+            background: var(--complyo-error-500);
+            border-radius: 50%;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .demo-fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header Navigation -->
+    <nav style="background: var(--complyo-white); border-bottom: 1px solid var(--complyo-gray-200);">
+        <div style="max-width: var(--container-2xl); margin: 0 auto; padding: 0 var(--space-4);">
+            <div style="display: flex; align-items: center; justify-content: space-between; height: 64px;">
+                <!-- Logo -->
+                <div style="display: flex; align-items: center;">
+                    <div style="flex-shrink: 0;">
+                        <span style="font-size: var(--text-3xl); font-weight: var(--font-bold); background: linear-gradient(135deg, var(--complyo-accent-600), #8B5CF6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-family: var(--font-display);">
+                            Complyo
+                        </span>
+                    </div>
+                    
+                    <!-- Desktop Navigation -->
+                    <div style="display: none; margin-left: var(--space-10);" class="md-show">
+                        <div style="display: flex; align-items: baseline; gap: var(--space-4);">
+                            <button class="nav-link demo-nav-active" onclick="setActiveTab('dashboard')">
+                                <i data-lucide="home" style="width: 16px; height: 16px; margin-right: var(--space-2);"></i>
+                                Dashboard
+                            </button>
+                            <button class="nav-link" onclick="setActiveTab('scanner')">
+                                <i data-lucide="search" style="width: 16px; height: 16px; margin-right: var(--space-2);"></i>
+                                Website Scanner
+                            </button>
+                            <button class="nav-link" onclick="setActiveTab('journey')">
+                                <i data-lucide="activity" style="width: 16px; height: 16px; margin-right: var(--space-2);"></i>
+                                Journey Progress
+                            </button>
+                            <button class="nav-link" onclick="setActiveTab('reports')">
+                                <i data-lucide="file-text" style="width: 16px; height: 16px; margin-right: var(--space-2);"></i>
+                                Reports & Certificates
+                            </button>
+                            <button class="nav-link" onclick="setActiveTab('settings')">
+                                <i data-lucide="settings" style="width: 16px; height: 16px; margin-right: var(--space-2);"></i>
+                                Settings & Profile
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- User Menu -->
+                <div style="display: flex; align-items: center; gap: var(--space-4);">
+                    <button class="demo-notification" style="padding: var(--space-2); border-radius: var(--radius-lg); color: var(--complyo-gray-400); border: none; background: transparent; cursor: pointer; transition: var(--transition-base);" onmouseover="this.style.color=this.style.background='var(--complyo-gray-100)'" onmouseout="this.style.color='var(--complyo-gray-400)';this.style.background='transparent'">
+                        <i data-lucide="bell" style="width: 20px; height: 20px;"></i>
+                    </button>
+                    <div style="display: flex; align-items: center; gap: var(--space-2);">
+                        <div style="width: 32px; height: 32px; background: var(--complyo-accent-600); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                            <i data-lucide="user" style="width: 16px; height: 16px; color: var(--complyo-white);"></i>
+                        </div>
+                        <span style="font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--complyo-gray-700);">Max Mustermann</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main style="max-width: var(--container-2xl); margin: 0 auto; padding: var(--space-8) var(--space-4);">
+        <!-- Dashboard Content -->
+        <div id="dashboard-content">
+            <!-- Welcome Section -->
+            <div style="margin-bottom: var(--space-8);" class="demo-fade-in">
+                <h1 style="font-size: var(--text-4xl); font-weight: var(--font-bold); color: var(--complyo-gray-900); margin-bottom: var(--space-2);">
+                    Willkommen zurück, Max! 👋
+                </h1>
+                <p style="color: var(--complyo-gray-600);">
+                    Hier ist Ihr Compliance-Overview. Aktueller Plan: <span style="font-weight: var(--font-semibold); color: var(--complyo-accent-600);">Business</span>
+                </p>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-6); margin-bottom: var(--space-8);">
+                <div class="card demo-hover">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <p style="font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--complyo-gray-600);">Total Websites</p>
+                            <p style="font-size: var(--text-3xl); font-weight: var(--font-bold); color: var(--complyo-gray-900);">3</p>
+                        </div>
+                        <i data-lucide="globe" style="width: 32px; height: 32px; color: var(--complyo-accent-600);"></i>
+                    </div>
+                </div>
+
+                <div class="card demo-hover">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <p style="font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--complyo-gray-600);">Avg. Compliance Score</p>
+                            <p style="font-size: var(--text-3xl); font-weight: var(--font-bold); color: var(--complyo-gray-900);">85%</p>
+                        </div>
+                        <i data-lucide="trending-up" style="width: 32px; height: 32px; color: var(--complyo-success-600);"></i>
+                    </div>
+                </div>
+
+                <div class="card demo-hover">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <p style="font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--complyo-gray-600);">Issues Resolved</p>
+                            <p style="font-size: var(--text-3xl); font-weight: var(--font-bold); color: var(--complyo-gray-900);">27</p>
+                        </div>
+                        <i data-lucide="check-circle" style="width: 32px; height: 32px; color: var(--complyo-success-600);"></i>
+                    </div>
+                </div>
+
+                <div class="card demo-hover">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <p style="font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--complyo-gray-600);">Active Scans</p>
+                            <p style="font-size: var(--text-3xl); font-weight: var(--font-bold); color: var(--complyo-gray-900);">1</p>
+                        </div>
+                        <i data-lucide="activity" style="width: 32px; height: 32px; color: var(--complyo-accent-500);"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Dashboard Grid -->
+            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: var(--space-8);">
+                <!-- Compliance Score Widget -->
+                <div class="card demo-hover">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4);">
+                        <h3 style="font-size: var(--text-lg); font-weight: var(--font-semibold); color: var(--complyo-gray-900);">🛡️ Compliance Score</h3>
+                        <i data-lucide="shield" style="width: 20px; height: 20px; color: var(--complyo-accent-600);"></i>
+                    </div>
+                    
+                    <div style="display: flex; align-items: center; justify-content: center; margin-bottom: var(--space-6);">
+                        <div style="position: relative; width: 128px; height: 128px;">
+                            <svg style="width: 128px; height: 128px;" class="demo-score-ring">
+                                <circle cx="64" cy="64" r="45" stroke="var(--complyo-gray-200)" stroke-width="8" fill="transparent"/>
+                                <circle cx="64" cy="64" r="45" stroke="var(--complyo-success-500)" stroke-width="8" fill="transparent" 
+                                    style="stroke-dasharray: 240 283; transition: stroke-dasharray 0.5s ease;"/>
+                            </svg>
+                            <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
+                                <div style="text-align: center;">
+                                    <div style="font-size: var(--text-4xl); font-weight: var(--font-bold); color: var(--complyo-success-600);">85%</div>
+                                    <div style="font-size: var(--text-sm); color: var(--complyo-gray-500);">Score</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: var(--text-sm); color: var(--complyo-gray-600);">✅ DSGVO</span>
+                            <span class="badge badge-success">Compliant</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: var(--text-sm); color: var(--complyo-gray-600);">⚠️ TTDSG</span>
+                            <span class="badge badge-warning">3 Issues</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: var(--text-sm); color: var(--complyo-gray-600);">✅ Accessibility</span>
+                            <span class="badge badge-success">Good</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions Panel -->
+                <div class="card demo-hover">
+                    <h3 style="font-size: var(--text-lg); font-weight: var(--font-semibold); color: var(--complyo-gray-900); margin-bottom: var(--space-4);">Quick Actions</h3>
+                    <div class="space-y-3">
+                        <button onclick="setActiveTab('scanner')" style="width: 100%; display: flex; align-items: center; justify-content: space-between; padding: var(--space-3); background: var(--complyo-accent-50); border: none; border-radius: var(--radius-lg); transition: var(--transition-base); cursor: pointer; group;" onmouseover="this.style.background='var(--complyo-accent-100)'" onmouseout="this.style.background='var(--complyo-accent-50)'">
+                            <div style="display: flex; align-items: center; gap: var(--space-3);">
+                                <i data-lucide="search" style="width: 20px; height: 20px; color: var(--complyo-accent-600);"></i>
+                                <span style="font-weight: var(--font-medium); color: var(--complyo-accent-700);">Scan Website</span>
+                            </div>
+                            <i data-lucide="chevron-right" style="width: 16px; height: 16px; color: var(--complyo-accent-600); transition: var(--transition-base);"></i>
+                        </button>
+                        
+                        <button onclick="setActiveTab('reports')" style="width: 100%; display: flex; align-items: center; justify-content: space-between; padding: var(--space-3); background: var(--complyo-success-50); border: none; border-radius: var(--radius-lg); transition: var(--transition-base); cursor: pointer;" onmouseover="this.style.background='var(--complyo-success-100)'" onmouseout="this.style.background='var(--complyo-success-50)'">
+                            <div style="display: flex; align-items: center; gap: var(--space-3);">
+                                <i data-lucide="file-text" style="width: 20px; height: 20px; color: var(--complyo-success-600);"></i>
+                                <span style="font-weight: var(--font-medium); color: var(--complyo-success-700);">View Report</span>
+                            </div>
+                            <i data-lucide="chevron-right" style="width: 16px; height: 16px; color: var(--complyo-success-600);"></i>
+                        </button>
+                        
+                        <button onclick="setActiveTab('journey')" style="width: 100%; display: flex; align-items: center; justify-content: space-between; padding: var(--space-3); background: #F3E8FF; border: none; border-radius: var(--radius-lg); transition: var(--transition-base); cursor: pointer;" onmouseover="this.style.background='#E9D5FF'" onmouseout="this.style.background='#F3E8FF'">
+                            <div style="display: flex; align-items: center; gap: var(--space-3);">
+                                <i data-lucide="activity" style="width: 20px; height: 20px; color: #9333EA;"></i>
+                                <span style="font-weight: var(--font-medium); color: #7C3AED;">Start Journey</span>
+                            </div>
+                            <i data-lucide="chevron-right" style="width: 16px; height: 16px; color: #9333EA;"></i>
+                        </button>
+                        
+                        <button style="width: 100%; display: flex; align-items: center; justify-content: space-between; padding: var(--space-3); background: var(--complyo-warning-50); border: none; border-radius: var(--radius-lg); transition: var(--transition-base); cursor: pointer;" onmouseover="this.style.background='var(--complyo-warning-100)'" onmouseout="this.style.background='var(--complyo-warning-50)'">
+                            <div style="display: flex; align-items: center; gap: var(--space-3);">
+                                <i data-lucide="credit-card" style="width: 20px; height: 20px; color: var(--complyo-warning-600);"></i>
+                                <span style="font-weight: var(--font-medium); color: var(--complyo-warning-700);">Upgrade Plan</span>
+                            </div>
+                            <i data-lucide="chevron-right" style="width: 16px; height: 16px; color: var(--complyo-warning-600);"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Journey Progress -->
+                <div class="card demo-hover">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4);">
+                        <h3 style="font-size: var(--text-lg); font-weight: var(--font-semibold); color: var(--complyo-gray-900);">📋 Current Journey</h3>
+                        <i data-lucide="activity" style="width: 20px; height: 20px; color: var(--complyo-accent-600);"></i>
+                    </div>
+                    
+                    <div style="margin-bottom: var(--space-4);">
+                        <div style="display: flex; justify-content: space-between; font-size: var(--text-sm); color: var(--complyo-gray-600); margin-bottom: var(--space-2);">
+                            <span>Step 3 of 13: Website Setup</span>
+                            <span>60%</span>
+                        </div>
+                        
+                        <div class="progress-bar">
+                            <div class="demo-progress-fill"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info" style="margin-bottom: var(--space-4);">
+                        <p style="font-size: var(--text-sm); margin: 0;">Next: Configure Cookie Banner</p>
+                    </div>
+                    
+                    <button class="btn-primary" style="width: 100%;" onclick="setActiveTab('journey')">
+                        Continue Journey →
+                    </button>
+                </div>
+
+                <!-- Recent Scans -->
+                <div class="card demo-hover">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4);">
+                        <h3 style="font-size: var(--text-lg); font-weight: var(--font-semibold); color: var(--complyo-gray-900);">Recent Scans</h3>
+                        <button style="color: var(--complyo-accent-600); font-size: var(--text-sm); font-weight: var(--font-medium); background: none; border: none; cursor: pointer;" onmouseover="this.style.color='var(--complyo-accent-800)'" onmouseout="this.style.color='var(--complyo-accent-600)'">
+                            View All →
+                        </button>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-3); background: var(--complyo-gray-50); border-radius: var(--radius-lg);">
+                            <div style="display: flex; align-items: center; gap: var(--space-3);">
+                                <i data-lucide="globe" style="width: 20px; height: 20px; color: var(--complyo-gray-400);"></i>
+                                <div>
+                                    <p style="font-weight: var(--font-medium); color: var(--complyo-gray-900); margin: 0;">example.com</p>
+                                    <p style="font-size: var(--text-sm); color: var(--complyo-gray-500); margin: 0;">Today</p>
+                                </div>
+                            </div>
+                            
+                            <div style="display: flex; align-items: center; gap: var(--space-2);">
+                                <span class="badge badge-success">85%</span>
+                                <button style="padding: var(--space-1); color: var(--complyo-gray-400); background: none; border: none; cursor: pointer;" onmouseover="this.style.color='var(--complyo-accent-600)'" onmouseout="this.style.color='var(--complyo-gray-400)'">
+                                    <i data-lucide="download" style="width: 16px; height: 16px;"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-3); background: var(--complyo-gray-50); border-radius: var(--radius-lg);">
+                            <div style="display: flex; align-items: center; gap: var(--space-3);">
+                                <i data-lucide="globe" style="width: 20px; height: 20px; color: var(--complyo-gray-400);"></i>
+                                <div>
+                                    <p style="font-weight: var(--font-medium); color: var(--complyo-gray-900); margin: 0;">shop.example.com</p>
+                                    <p style="font-size: var(--text-sm); color: var(--complyo-gray-500); margin: 0;">Yesterday</p>
+                                </div>
+                            </div>
+                            
+                            <div style="display: flex; align-items: center; gap: var(--space-2);">
+                                <span class="badge badge-warning">72%</span>
+                                <button style="padding: var(--space-1); color: var(--complyo-gray-400); background: none; border: none; cursor: pointer;" onmouseover="this.style.color='var(--complyo-accent-600)'" onmouseout="this.style.color='var(--complyo-gray-400)'">
+                                    <i data-lucide="download" style="width: 16px; height: 16px;"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-3); background: var(--complyo-gray-50); border-radius: var(--radius-lg);">
+                            <div style="display: flex; align-items: center; gap: var(--space-3);">
+                                <i data-lucide="globe" style="width: 20px; height: 20px; color: var(--complyo-gray-400);"></i>
+                                <div>
+                                    <p style="font-weight: var(--font-medium); color: var(--complyo-gray-900); margin: 0;">blog.example.com</p>
+                                    <p style="font-size: var(--text-sm); color: var(--complyo-gray-500); margin: 0;">3 days ago</p>
+                                </div>
+                            </div>
+                            
+                            <div style="display: flex; align-items: center; gap: var(--space-2);">
+                                <span class="badge badge-success">91%</span>
+                                <button style="padding: var(--space-1); color: var(--complyo-gray-400); background: none; border: none; cursor: pointer;" onmouseover="this.style.color='var(--complyo-accent-600)'" onmouseout="this.style.color='var(--complyo-gray-400)'">
+                                    <i data-lucide="download" style="width: 16px; height: 16px;"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button class="btn-secondary" style="width: 100%; margin-top: var(--space-4);" onclick="setActiveTab('scanner')">
+                        <i data-lucide="search" style="width: 16px; height: 16px; margin-right: var(--space-2);"></i>
+                        Start New Scan
+                    </button>
+                </div>
+
+                <!-- Activity Feed -->
+                <div class="card demo-hover">
+                    <h3 style="font-size: var(--text-lg); font-weight: var(--font-semibold); color: var(--complyo-gray-900); margin-bottom: var(--space-4);">Recent Activity</h3>
+                    <div class="space-y-3">
+                        <div style="display: flex; align-items: center; gap: var(--space-3);">
+                            <i data-lucide="check-circle" style="width: 20px; height: 20px; color: var(--complyo-success-600);"></i>
+                            <div>
+                                <p style="font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--complyo-gray-900); margin: 0;">DSGVO Scan completed</p>
+                                <p style="font-size: var(--text-xs); color: var(--complyo-gray-500); margin: 0;">2 hours ago</p>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: var(--space-3);">
+                            <i data-lucide="alert-triangle" style="width: 20px; height: 20px; color: var(--complyo-warning-600);"></i>
+                            <div>
+                                <p style="font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--complyo-gray-900); margin: 0;">3 issues found in TTDSG</p>
+                                <p style="font-size: var(--text-xs); color: var(--complyo-gray-500); margin: 0;">1 day ago</p>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: var(--space-3);">
+                            <i data-lucide="file-text" style="width: 20px; height: 20px; color: var(--complyo-accent-600);"></i>
+                            <div>
+                                <p style="font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--complyo-gray-900); margin: 0;">Compliance report generated</p>
+                                <p style="font-size: var(--text-xs); color: var(--complyo-gray-500); margin: 0;">3 days ago</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recommendations -->
+                <div class="card demo-hover">
+                    <h3 style="font-size: var(--text-lg); font-weight: var(--font-semibold); color: var(--complyo-gray-900); margin-bottom: var(--space-4);">Recommended Actions</h3>
+                    <div class="space-y-3">
+                        <div class="alert alert-warning">
+                            <p style="font-size: var(--text-sm); font-weight: var(--font-medium); margin: 0 0 var(--space-1) 0;">Fix Cookie Banner</p>
+                            <p style="font-size: var(--text-xs); margin: 0;">Update your cookie consent mechanism</p>
+                        </div>
+                        <div class="alert alert-info">
+                            <p style="font-size: var(--text-sm); font-weight: var(--font-medium); margin: 0 0 var(--space-1) 0;">Schedule Regular Scans</p>
+                            <p style="font-size: var(--text-xs); margin: 0;">Set up automated monthly compliance checks</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scanner Content (Hidden by default) -->
+        <div id="scanner-content" style="display: none;">
+            <h1 style="font-size: var(--text-4xl); font-weight: var(--font-bold); color: var(--complyo-gray-900); margin-bottom: var(--space-8);">Website Scanner</h1>
+            
+            <div class="card" style="margin-bottom: var(--space-8);">
+                <h2 style="font-size: var(--text-xl); font-weight: var(--font-semibold); color: var(--complyo-gray-900); margin-bottom: var(--space-4);">Neue Website scannen</h2>
+                <form style="display: flex; gap: var(--space-4);" onsubmit="return false;">
+                    <input type="url" placeholder="https://example.com" class="form-input" style="flex: 1;" />
+                    <button type="submit" class="btn-primary">
+                        <i data-lucide="search" style="width: 16px; height: 16px; margin-right: var(--space-2);"></i>
+                        Scannen
+                    </button>
+                </form>
+            </div>
+            
+            <div class="card">
+                <h3 style="font-size: var(--text-lg); font-weight: var(--font-semibold); color: var(--complyo-gray-900); margin-bottom: var(--space-4);">Scanner Features</h3>
+                <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-4);">
+                    <div style="text-align: center; padding: var(--space-4);">
+                        <i data-lucide="shield" style="width: 48px; height: 48px; color: var(--complyo-accent-600); margin: 0 auto var(--space-3) auto; display: block;"></i>
+                        <h4 style="font-weight: var(--font-semibold); margin-bottom: var(--space-2);">DSGVO Check</h4>
+                        <p style="font-size: var(--text-sm); color: var(--complyo-gray-600);">Comprehensive GDPR compliance analysis</p>
+                    </div>
+                    <div style="text-align: center; padding: var(--space-4);">
+                        <i data-lucide="cookie" style="width: 48px; height: 48px; color: var(--complyo-warning-600); margin: 0 auto var(--space-3) auto; display: block;"></i>
+                        <h4 style="font-weight: var(--font-semibold); margin-bottom: var(--space-2);">Cookie Analysis</h4>
+                        <p style="font-size: var(--text-sm); color: var(--complyo-gray-600);">TTDSG-compliant cookie management check</p>
+                    </div>
+                    <div style="text-align: center; padding: var(--space-4);">
+                        <i data-lucide="accessibility" style="width: 48px; height: 48px; color: var(--complyo-success-600); margin: 0 auto var(--space-3) auto; display: block;"></i>
+                        <h4 style="font-weight: var(--font-semibold); margin-bottom: var(--space-2);">Accessibility</h4>
+                        <p style="font-size: var(--text-sm); color: var(--complyo-gray-600);">BITV 2.0 accessibility compliance</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Other content sections (hidden by default) -->
+        <div id="other-content" style="display: none; text-align: center; padding: var(--space-12) 0;">
+            <h1 style="font-size: var(--text-3xl); font-weight: var(--font-bold); color: var(--complyo-gray-900); margin-bottom: var(--space-4);" id="section-title"></h1>
+            <p style="color: var(--complyo-gray-600);">Dieser Bereich wird bald verfügbar sein.</p>
+        </div>
+    </main>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+        
+        // Tab switching functionality
+        function setActiveTab(tab) {
+            // Hide all content
+            document.getElementById('dashboard-content').style.display = 'none';
+            document.getElementById('scanner-content').style.display = 'none';
+            document.getElementById('other-content').style.display = 'none';
+            
+            // Remove active class from all nav links
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('demo-nav-active');
+            });
+            
+            // Show relevant content
+            if (tab === 'dashboard') {
+                document.getElementById('dashboard-content').style.display = 'block';
+            } else if (tab === 'scanner') {
+                document.getElementById('scanner-content').style.display = 'block';
+            } else {
+                document.getElementById('other-content').style.display = 'block';
+                const titles = {
+                    'journey': 'Journey Progress',
+                    'reports': 'Reports & Certificates',
+                    'settings': 'Settings & Profile',
+                    'billing': 'Subscription & Billing'
+                };
+                document.getElementById('section-title').textContent = titles[tab] || 'Section';
+            }
+            
+            // Add active class to clicked nav link
+            event.target.classList.add('demo-nav-active');
+        }
+        
+        // Add some interactive behaviors
+        document.addEventListener('DOMContentLoaded', function() {
+            // Animate progress bar on load
+            setTimeout(() => {
+                const progressFill = document.querySelector('.demo-progress-fill');
+                if (progressFill) {
+                    progressFill.style.width = '60%';
+                }
+            }, 1000);
+            
+            // Add hover effects for mobile
+            if (window.innerWidth <= 768) {
+                document.querySelectorAll('.demo-hover').forEach(card => {
+                    card.addEventListener('touchstart', function() {
+                        this.style.transform = 'translateY(-2px)';
+                        this.style.boxShadow = 'var(--shadow-lg)';
+                    });
+                    card.addEventListener('touchend', function() {
+                        this.style.transform = '';
+                        this.style.boxShadow = 'var(--shadow-sm)';
+                    });
+                });
+            }
+        });
+        
+        // Responsive navigation for mobile
+        function toggleMobileNav() {
+            // Implementation for mobile navigation toggle
+            console.log('Mobile navigation toggle');
+        }
+        
+        // Show desktop navigation on larger screens
+        if (window.innerWidth >= 768) {
+            document.querySelector('.md-show').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
