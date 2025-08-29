@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Complyo Dashboard - Modern Travel/Fintech Inspired Design</title>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
-        /* Modern Travel/Fintech Inspired Design System */
+        /* Modern Travel/Fintech Inspired Design System with Animated Gradient */
         :root {
-            /* Soft Color Palette - Travel Inspired */
+            /* Light Mode Colors */
             --complyo-primary: #4A90E2;
             --complyo-primary-light: #6BA3F0;
             --complyo-primary-dark: #357ABD;
@@ -21,7 +21,7 @@
             --complyo-error: #E74C3C;
             --complyo-error-light: #EC7063;
             
-            /* Soft Neutrals */
+            /* Light Mode Neutrals */
             --complyo-gray-900: #2C3E50;
             --complyo-gray-800: #34495E;
             --complyo-gray-700: #5D6D7E;
@@ -32,6 +32,13 @@
             --complyo-gray-200: #F4F6F6;
             --complyo-gray-100: #F8F9FA;
             --complyo-white: #FFFFFF;
+            
+            /* Light Mode Background Colors */
+            --bg-primary: #FFFFFF;
+            --bg-secondary: #F8F9FA;
+            --text-primary: #2C3E50;
+            --text-secondary: #5D6D7E;
+            --border-color: #D5DBDB;
             
             /* Mint/Teal Accents */
             --complyo-mint: #1ABC9C;
@@ -72,7 +79,55 @@
             --gradient-primary: linear-gradient(135deg, #4A90E2 0%, #6BA3F0 100%);
             --gradient-success: linear-gradient(135deg, #2ECC71 0%, #58D68D 100%);
             --gradient-mint: linear-gradient(135deg, #1ABC9C 0%, #48C9B0 100%);
-            --gradient-background: linear-gradient(135deg, #F8F9FA 0%, #EAEDED 100%);
+            
+            /* Animated Background Gradient - Inspired by Screenshot */
+            --gradient-background: linear-gradient(
+                45deg,
+                #FF6B9D 0%,
+                #C44E98 15%,
+                #8E44AD 30%,
+                #3498DB 45%,
+                #1ABC9C 60%,
+                #F39C12 75%,
+                #E74C3C 90%,
+                #FF6B9D 100%
+            );
+        }
+        
+        /* Dark Mode Colors */
+        [data-theme="dark"] {
+            /* Dark Mode Backgrounds */
+            --bg-primary: #1A1D29;
+            --bg-secondary: #252A3A;
+            --complyo-gray-100: #2A2F42;
+            --complyo-gray-200: #374151;
+            --complyo-gray-300: #4B5563;
+            
+            /* Dark Mode Text */
+            --text-primary: #FFFFFF;
+            --text-secondary: #B8BCC8;
+            --complyo-gray-600: #9CA3AF;
+            --complyo-gray-700: #6B7280;
+            --complyo-gray-800: #4B5563;
+            --complyo-gray-900: #FFFFFF;
+            
+            /* Dark Mode Borders */
+            --border-color: #374151;
+            
+            /* Dark Mode Shadows */
+            --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.4);
+            --shadow-strong: 0 8px 32px rgba(0, 0, 0, 0.5);
+            
+            /* Dark Mode Animated Background */
+            --gradient-background: linear-gradient(
+                45deg,
+                #2D1B69 0%,
+                #11998E 25%,
+                #38EF7D 50%,
+                #C471ED 75%,
+                #2D1B69 100%
+            );
         }
 
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap');
@@ -86,19 +141,37 @@
         body {
             font-family: var(--font-primary);
             background: var(--gradient-background);
+            background-size: 400% 400%;
+            animation: gradientFlow 12s ease-in-out infinite;
             min-height: 100vh;
-            color: var(--complyo-gray-900);
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+        
+        /* Animated Gradient Keyframes */
+        @keyframes gradientFlow {
+            0% { background-position: 0% 50%; }
+            25% { background-position: 100% 50%; }
+            50% { background-position: 100% 100%; }
+            75% { background-position: 0% 100%; }
+            100% { background-position: 0% 50%; }
         }
 
         /* Modern Navigation */
         .modern-nav {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--complyo-gray-200);
+            border-bottom: 1px solid var(--border-color);
             padding: var(--space-4) var(--space-6);
             position: sticky;
             top: 0;
             z-index: 100;
+            transition: all 0.3s ease;
+        }
+        
+        [data-theme="dark"] .modern-nav {
+            background: rgba(26, 29, 41, 0.95);
+            border-bottom: 1px solid var(--border-color);
         }
 
         .nav-content {
@@ -148,7 +221,7 @@
             transition: all 0.3s ease;
             font-size: 0.875rem;
             font-weight: 500;
-            color: var(--complyo-gray-600);
+            color: var(--text-secondary);
         }
 
         .nav-tab.active {
@@ -158,13 +231,54 @@
 
         .nav-tab:hover:not(.active) {
             background: var(--complyo-gray-100);
-            color: var(--complyo-gray-800);
+            color: var(--text-primary);
+        }
+        
+        /* Theme Toggle Button */
+        .theme-toggle {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid var(--border-color);
+            padding: var(--space-2);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+        
+        .theme-toggle:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+        
+        [data-theme="dark"] .theme-toggle {
+            background: rgba(0, 0, 0, 0.2);
+            color: var(--text-primary);
+        }
+        
+        [data-theme="dark"] .theme-toggle:hover {
+            background: rgba(0, 0, 0, 0.3);
         }
 
         .nav-right {
             display: flex;
             align-items: center;
             gap: var(--space-4);
+        }
+        
+        .icon-button {
+            background: none;
+            border: none;
+            padding: var(--space-2);
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: all 0.3s ease;
+            border-radius: var(--radius-md);
+        }
+        
+        .icon-button:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
         }
 
         .user-info {
@@ -396,7 +510,7 @@
         .activity-section h3 {
             margin-bottom: var(--space-6);
             font-weight: 600;
-            color: var(--complyo-gray-900);
+            color: var(--text-primary);
         }
 
         .action-card {
@@ -663,7 +777,10 @@
             </div>
             
             <div class="nav-right">
-                <button style="background: none; border: none; padding: var(--space-2); border-radius: var(--radius-md); cursor: pointer; color: var(--complyo-gray-600);">
+                <button class="theme-toggle" id="theme-toggle">
+                    <i data-lucide="moon" style="width: 20px; height: 20px;"></i>
+                </button>
+                <button class="icon-button">
                     <i data-lucide="bell" style="width: 20px; height: 20px;"></i>
                 </button>
                 <div class="user-info">
@@ -932,8 +1049,36 @@
             });
         });
         
+        // Theme Management
+        let isDarkMode = false;
+        const htmlElement = document.documentElement;
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = themeToggle.querySelector('i');
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('complyo-complex-theme');
+        if (savedTheme === 'dark') {
+            isDarkMode = true;
+            htmlElement.setAttribute('data-theme', 'dark');
+            themeIcon.setAttribute('data-lucide', 'sun');
+        }
+
+        // Theme toggle functionality
+        themeToggle.addEventListener('click', () => {
+            isDarkMode = !isDarkMode;
+            htmlElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+            themeIcon.setAttribute('data-lucide', isDarkMode ? 'sun' : 'moon');
+            localStorage.setItem('complyo-complex-theme', isDarkMode ? 'dark' : 'light');
+            
+            // Reinitialize lucide icons after theme change
+            setTimeout(() => lucide.createIcons(), 100);
+        });
+
         // Animate progress steps on load
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize Lucide icons
+            lucide.createIcons();
+            
             const steps = document.querySelectorAll('.progress-step');
             steps.forEach((step, index) => {
                 setTimeout(() => {
@@ -943,6 +1088,21 @@
                 }, index * 100);
             });
         });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'd' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                themeToggle.click();
+            }
+        });
+
+        // Console log for debugging
+        console.log('🎨 Complyo Complex Dashboard with Animated Background');
+        console.log('✅ Travel/Fintech inspired design with gradient animation');
+        console.log('✅ Dark/Light mode toggle implemented');
+        console.log('💡 Press Ctrl+D (or Cmd+D) to toggle theme');
+        console.log('🌈 Beautiful animated gradient background from screenshot');
     </script>
 </body>
 </html>
