@@ -25,8 +25,10 @@ const server = http.createServer((req, res) => {
   
   console.log(`${new Date().toISOString()} - ${req.method} ${pathname}`);
   
-  // Default to index.html for root path
+  // Route handling
   if (pathname === '/') {
+    pathname = '/modern-complex-demo.html';
+  } else if (pathname === '/old') {
     pathname = '/modern-dashboard-demo.html';
   }
   
