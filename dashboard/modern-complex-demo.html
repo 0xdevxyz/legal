@@ -499,14 +499,13 @@
         }
 
         .stat-icon {
-            width: 48px;
-            height: 48px;
+            width: 24px;
+            height: 24px;
             margin: 0 auto var(--space-4);
-            border-radius: var(--radius-full);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.5rem;
+            color: var(--text-secondary);
         }
 
         .stat-number {
@@ -618,23 +617,25 @@
         }
 
         .timeline-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: var(--radius-full);
+            width: 20px;
+            height: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            margin-right: var(--space-1);
         }
 
         .timeline-icon.success {
-            background: var(--complyo-mint-bg);
             color: var(--complyo-success);
         }
 
         .timeline-icon.warning {
-            background: var(--complyo-warning-light);
             color: var(--complyo-warning);
+        }
+        
+        .timeline-icon.info {
+            color: var(--complyo-primary);
         }
 
         .timeline-content h4 {
@@ -675,12 +676,12 @@
         .journey-header h3 {
             margin: 0;
             font-weight: 600;
-            color: var(--complyo-gray-900);
+            color: var(--text-primary);
         }
 
         .journey-header span {
             font-size: 0.875rem;
-            color: var(--complyo-gray-600);
+            color: var(--text-secondary);
         }
 
         .progress-visual {
@@ -716,7 +717,8 @@
         }
 
         .next-step {
-            background: var(--complyo-mint-bg);
+            background: rgba(26, 188, 156, 0.1);
+            border: 1px solid rgba(26, 188, 156, 0.2);
             padding: var(--space-4);
             border-radius: var(--radius-md);
             margin-bottom: var(--space-6);
@@ -731,7 +733,7 @@
         .next-step p {
             margin: 0;
             font-size: 0.875rem;
-            color: var(--complyo-gray-700);
+            color: var(--text-secondary);
         }
 
         .journey-actions {
@@ -1058,32 +1060,32 @@
         <!-- Stats Grid -->
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-icon" style="background: var(--complyo-mint-bg); color: var(--complyo-mint);">
-                    <i data-lucide="globe"></i>
+                <div class="stat-icon">
+                    <i data-lucide="globe" style="width: 24px; height: 24px; color: var(--complyo-mint);"></i>
                 </div>
                 <div class="stat-number" style="color: var(--complyo-mint);">3</div>
                 <div class="stat-label">Active Websites</div>
             </div>
             
             <div class="stat-card">
-                <div class="stat-icon" style="background: var(--complyo-success-light); color: var(--complyo-success);">
-                    <i data-lucide="trending-up"></i>
+                <div class="stat-icon">
+                    <i data-lucide="trending-up" style="width: 24px; height: 24px; color: var(--complyo-success);"></i>
                 </div>
                 <div class="stat-number" style="color: var(--complyo-success);">85%</div>
                 <div class="stat-label">Avg. Compliance</div>
             </div>
             
             <div class="stat-card">
-                <div class="stat-icon" style="background: var(--complyo-warning-light); color: var(--complyo-warning);">
-                    <i data-lucide="alert-triangle"></i>
+                <div class="stat-icon">
+                    <i data-lucide="alert-triangle" style="width: 24px; height: 24px; color: var(--complyo-warning);"></i>
                 </div>
                 <div class="stat-number" style="color: var(--complyo-warning);">3</div>
                 <div class="stat-label">Issues to Fix</div>
             </div>
             
             <div class="stat-card">
-                <div class="stat-icon" style="background: var(--complyo-primary-light); color: var(--complyo-primary);">
-                    <i data-lucide="activity"></i>
+                <div class="stat-icon">
+                    <i data-lucide="activity" style="width: 24px; height: 24px; color: var(--complyo-primary);"></i>
                 </div>
                 <div class="stat-number" style="color: var(--complyo-primary);">1</div>
                 <div class="stat-label">Active Scans</div>
@@ -1102,7 +1104,7 @@
                 <div class="activity-timeline">
                     <div class="timeline-item">
                         <div class="timeline-icon success">
-                            <i data-lucide="check-circle" style="width: 20px; height: 20px;"></i>
+                            <i data-lucide="check-circle" style="width: 20px; height: 20px; color: var(--complyo-success);"></i>
                         </div>
                         <div class="timeline-content">
                             <h4>DSGVO Scan Completed</h4>
@@ -1112,7 +1114,7 @@
                     
                     <div class="timeline-item">
                         <div class="timeline-icon warning">
-                            <i data-lucide="alert-triangle" style="width: 20px; height: 20px;"></i>
+                            <i data-lucide="alert-triangle" style="width: 20px; height: 20px; color: var(--complyo-warning);"></i>
                         </div>
                         <div class="timeline-content">
                             <h4>Cookie Banner Issues Found</h4>
@@ -1122,7 +1124,7 @@
                     
                     <div class="timeline-item">
                         <div class="timeline-icon success">
-                            <i data-lucide="award" style="width: 20px; height: 20px;"></i>
+                            <i data-lucide="award" style="width: 20px; height: 20px; color: var(--complyo-success);"></i>
                         </div>
                         <div class="timeline-content">
                             <h4>Compliance Certificate Generated</h4>
@@ -1132,7 +1134,7 @@
                     
                     <div class="timeline-item">
                         <div class="timeline-icon info">
-                            <i data-lucide="info" style="width: 20px; height: 20px;"></i>
+                            <i data-lucide="info" style="width: 20px; height: 20px; color: var(--complyo-primary);"></i>
                         </div>
                         <div class="timeline-content">
                             <h4>Accessibility Scan Started</h4>
@@ -1142,7 +1144,7 @@
                     
                     <div class="timeline-item">
                         <div class="timeline-icon success">
-                            <i data-lucide="shield" style="width: 20px; height: 20px;"></i>
+                            <i data-lucide="shield" style="width: 20px; height: 20px; color: var(--complyo-success);"></i>
                         </div>
                         <div class="timeline-content">
                             <h4>Cookie Banner Updated</h4>
