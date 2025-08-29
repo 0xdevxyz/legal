@@ -367,11 +367,11 @@
             font-size: 0.875rem;
         }
 
-        /* Compliance Speedometer */
+        /* Compliance Speedometer - Corrected Ratio */
         .compliance-speedometer {
             position: relative;
-            width: 200px;
-            height: 120px;
+            width: 240px;
+            height: 140px;
             margin: 0 auto var(--space-6);
         }
 
@@ -382,14 +382,15 @@
 
         .score-display {
             position: absolute;
-            bottom: var(--space-4);
+            bottom: var(--space-2);
             left: 50%;
             transform: translateX(-50%);
             text-align: center;
+            z-index: 10;
         }
 
         .score-number {
-            font-size: 3rem;
+            font-size: 2.5rem;
             font-weight: 800;
             margin-bottom: var(--space-1);
             color: var(--complyo-success);
@@ -471,16 +472,30 @@
         }
 
         .stat-card {
-            background: var(--complyo-white);
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             padding: var(--space-6);
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-soft);
             text-align: center;
-            transition: transform 0.3s ease;
+            transition: all 0.3s ease;
         }
 
         .stat-card:hover {
             transform: scale(1.02);
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        [data-theme="dark"] .stat-card {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        [data-theme="dark"] .stat-card:hover {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .stat-icon {
@@ -577,10 +592,17 @@
 
         /* Activity Timeline */
         .activity-timeline {
-            background: var(--complyo-white);
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             padding: var(--space-6);
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-soft);
+        }
+        
+        [data-theme="dark"] .activity-timeline {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .timeline-item {
@@ -627,12 +649,20 @@
             color: var(--complyo-gray-600);
         }
 
-        /* Journey Progress */
+        /* Journey Progress - Transparent */
         .journey-progress {
-            background: var(--complyo-white);
-            padding: var(--space-8);
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: var(--space-6);
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-soft);
+            margin-top: var(--space-6);
+        }
+        
+        [data-theme="dark"] .journey-progress {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .journey-header {
@@ -904,15 +934,7 @@
             color: var(--complyo-white);
         }
         
-        /* Fix Score Display Overlap */
-        .score-display {
-            position: absolute;
-            bottom: var(--space-6);
-            left: 50%;
-            transform: translateX(-50%);
-            text-align: center;
-            z-index: 10;
-        }
+
     </style>
 </head>
 <body>
@@ -1128,6 +1150,37 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Journey Progress (Left - Below Activities) -->
+                <div class="journey-progress">
+                    <div class="journey-header">
+                        <h3>Compliance Journey Progress</h3>
+                        <span>Step 3 of 13 • 60% Complete</span>
+                    </div>
+                    
+                    <div class="progress-visual">
+                        <div class="progress-steps">
+                            <div class="progress-step completed"></div>
+                            <div class="progress-step completed"></div>
+                            <div class="progress-step completed"></div>
+                            <div class="progress-step current"></div>
+                            <div class="progress-step"></div>
+                            <div class="progress-step"></div>
+                            <div class="progress-step"></div>
+                            <div class="progress-step"></div>
+                            <div class="progress-step"></div>
+                            <div class="progress-step"></div>
+                            <div class="progress-step"></div>
+                            <div class="progress-step"></div>
+                            <div class="progress-step"></div>
+                        </div>
+                        
+                        <div class="progress-labels">
+                            <span>Start</span>
+                            <span>Complete</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Legal News Section (Right) -->
@@ -1200,47 +1253,7 @@
 
 
 
-        <!-- Journey Progress -->
-        <div class="journey-progress">
-            <div class="journey-header">
-                <h3>Compliance Journey Progress</h3>
-                <span>Step 3 of 13 • 60% Complete</span>
-            </div>
-            
-            <div class="progress-visual">
-                <div class="progress-steps">
-                    <div class="progress-step completed"></div>
-                    <div class="progress-step completed"></div>
-                    <div class="progress-step completed"></div>
-                    <div class="progress-step current"></div>
-                    <div class="progress-step"></div>
-                    <div class="progress-step"></div>
-                    <div class="progress-step"></div>
-                    <div class="progress-step"></div>
-                    <div class="progress-step"></div>
-                    <div class="progress-step"></div>
-                    <div class="progress-step"></div>
-                    <div class="progress-step"></div>
-                    <div class="progress-step"></div>
-                </div>
-            </div>
-            
-            <div class="next-step">
-                <h4>Next Step: Configure Cookie Banner</h4>
-                <p>Set up TTDSG-compliant cookie consent for your website visitors</p>
-            </div>
-            
-            <div class="journey-actions">
-                <button class="btn-modern mint">
-                    <i data-lucide="play" style="width: 16px; height: 16px;"></i>
-                    Continue Journey
-                </button>
-                <button class="btn-modern secondary">
-                    <i data-lucide="eye" style="width: 16px; height: 16px;"></i>
-                    View All Steps
-                </button>
-            </div>
-        </div>
+
     </div>
 
     <script>
