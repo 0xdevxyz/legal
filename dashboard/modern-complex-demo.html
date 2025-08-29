@@ -80,7 +80,7 @@
             --gradient-success: linear-gradient(135deg, #2ECC71 0%, #58D68D 100%);
             --gradient-mint: linear-gradient(135deg, #1ABC9C 0%, #48C9B0 100%);
             
-            /* Animated Background Gradient - Inspired by Screenshot */
+            /* Animated Background Gradient - Only for Header */
             --gradient-background: linear-gradient(
                 45deg,
                 #FF6B9D 0%,
@@ -92,6 +92,10 @@
                 #E74C3C 90%,
                 #FF6B9D 100%
             );
+            
+            /* Main Background Colors */
+            --bg-primary: #FFFFFF;
+            --bg-secondary: #F8F9FA;
         }
         
         /* Dark Mode Colors */
@@ -119,7 +123,7 @@
             --shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.4);
             --shadow-strong: 0 8px 32px rgba(0, 0, 0, 0.5);
             
-            /* Dark Mode Animated Background */
+            /* Dark Mode Animated Background - Only for Header */
             --gradient-background: linear-gradient(
                 45deg,
                 #2D1B69 0%,
@@ -128,6 +132,10 @@
                 #C471ED 75%,
                 #2D1B69 100%
             );
+            
+            /* Dark Mode Main Background Colors */
+            --bg-primary: #1A1D29;
+            --bg-secondary: #252A3A;
         }
 
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap');
@@ -140,9 +148,7 @@
 
         body {
             font-family: var(--font-primary);
-            background: var(--gradient-background);
-            background-size: 400% 400%;
-            animation: gradientFlow 12s ease-in-out infinite;
+            background: var(--bg-secondary);
             min-height: 100vh;
             color: var(--text-primary);
             transition: all 0.3s ease;
@@ -297,9 +303,11 @@
             justify-content: center;
         }
 
-        /* Hero Header */
+        /* Hero Header with Animated Gradient */
         .hero-header {
-            background: var(--gradient-primary);
+            background: var(--gradient-background);
+            background-size: 400% 400%;
+            animation: gradientFlow 12s ease-in-out infinite;
             color: var(--complyo-white);
             padding: var(--space-12) var(--space-6);
             border-radius: 0 0 var(--radius-xl) var(--radius-xl);
@@ -740,6 +748,143 @@
                 font-size: 2rem;
             }
         }
+        
+        /* News Section Styles */
+        .news-section {
+            background: var(--bg-primary);
+            padding: var(--space-8);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-soft);
+            transition: all 0.3s ease;
+        }
+        
+        [data-theme="dark"] .news-section {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+        }
+        
+        .news-card {
+            background: var(--bg-secondary);
+            padding: var(--space-6);
+            border-radius: var(--radius-lg);
+            border-left: 4px solid;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .news-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+        }
+        
+        .news-card.critical {
+            border-left-color: var(--complyo-error);
+        }
+        
+        .news-card.warning {
+            border-left-color: var(--complyo-warning);
+        }
+        
+        .news-card.info {
+            border-left-color: var(--complyo-primary);
+        }
+        
+        .news-card.success {
+            border-left-color: var(--complyo-success);
+        }
+        
+        .news-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-3);
+        }
+        
+        .news-badge {
+            display: flex;
+            align-items: center;
+            gap: var(--space-1);
+            padding: var(--space-1) var(--space-2);
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--complyo-white);
+        }
+        
+        .news-badge.critical {
+            background: var(--complyo-error);
+        }
+        
+        .news-badge.warning {
+            background: var(--complyo-warning);
+        }
+        
+        .news-badge.info {
+            background: var(--complyo-primary);
+        }
+        
+        .news-badge.success {
+            background: var(--complyo-success);
+        }
+        
+        .news-time {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        
+        .news-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: var(--space-3);
+            line-height: 1.4;
+        }
+        
+        .news-excerpt {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: var(--space-4);
+        }
+        
+        .news-tags {
+            display: flex;
+            gap: var(--space-2);
+            margin-bottom: var(--space-4);
+            flex-wrap: wrap;
+        }
+        
+        .news-tag {
+            background: var(--complyo-gray-200);
+            color: var(--text-secondary);
+            padding: var(--space-1) var(--space-2);
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        [data-theme="dark"] .news-tag {
+            background: var(--complyo-gray-300);
+            color: var(--text-primary);
+        }
+        
+        .news-cta {
+            background: none;
+            border: 1px solid var(--complyo-primary);
+            color: var(--complyo-primary);
+            padding: var(--space-2) var(--space-4);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+        
+        .news-cta:hover {
+            background: var(--complyo-primary);
+            color: var(--complyo-white);
+        }
     </style>
 </head>
 <body>
@@ -976,6 +1121,95 @@
                             <p>blog.example.com - Ready for download • 3 days ago</p>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Legal News Section -->
+        <div class="news-section" style="margin-bottom: var(--space-8);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-6);">
+                <h3 style="color: var(--text-primary); font-weight: 600;">📰 Rechtliche Neuigkeiten & Updates</h3>
+                <button style="background: var(--complyo-primary); color: var(--complyo-white); border: none; padding: var(--space-2) var(--space-4); border-radius: var(--radius-md); font-size: 0.875rem; cursor: pointer;">
+                    Alle anzeigen
+                </button>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: var(--space-6);">
+                
+                <!-- Critical DSGVO Update -->
+                <div class="news-card critical">
+                    <div class="news-header">
+                        <div class="news-badge critical">
+                            <i data-lucide="alert-triangle" style="width: 16px; height: 16px;"></i>
+                            Kritisch
+                        </div>
+                        <span class="news-time">vor 2 Stunden</span>
+                    </div>
+                    <h4 class="news-title">DSGVO: Neue Strafen für Cookie-Banner Verstöße</h4>
+                    <p class="news-excerpt">Bundesgerichtshof verschärft Regeln für Cookie-Banner. Unternehmen müssen bis 1. Oktober 2025 compliant sein oder drohen Strafen bis 20.000€.</p>
+                    <div class="news-tags">
+                        <span class="news-tag">DSGVO</span>
+                        <span class="news-tag">Cookie-Compliance</span>
+                        <span class="news-tag">BGH</span>
+                    </div>
+                    <button class="news-cta">Mehr Details</button>
+                </div>
+
+                <!-- TTDSG Update -->
+                <div class="news-card warning">
+                    <div class="news-header">
+                        <div class="news-badge warning">
+                            <i data-lucide="info" style="width: 16px; height: 16px;"></i>
+                            Wichtig
+                        </div>
+                        <span class="news-time">vor 1 Tag</span>
+                    </div>
+                    <h4 class="news-title">TTDSG Änderung: Tracking ohne Einwilligung</h4>
+                    <p class="news-excerpt">Neue Interpretation des Telekommunikation-Telemedien-Datenschutzgesetzes erlaubt bestimmte Analytics ohne explizite Cookie-Zustimmung.</p>
+                    <div class="news-tags">
+                        <span class="news-tag">TTDSG</span>
+                        <span class="news-tag">Analytics</span>
+                        <span class="news-tag">Tracking</span>
+                    </div>
+                    <button class="news-cta">Mehr Details</button>
+                </div>
+
+                <!-- Accessibility Update -->
+                <div class="news-card info">
+                    <div class="news-header">
+                        <div class="news-badge info">
+                            <i data-lucide="accessibility" style="width: 16px; height: 16px;"></i>
+                            Update
+                        </div>
+                        <span class="news-time">vor 3 Tagen</span>
+                    </div>
+                    <h4 class="news-title">Barrierefreiheit: WCAG 2.2 wird Pflicht</h4>
+                    <p class="news-excerpt">Ab Januar 2026 müssen alle öffentlichen und großen privaten Websites WCAG 2.2 Level AA erfüllen. Neue Erfolgskriterien für mobile Nutzung.</p>
+                    <div class="news-tags">
+                        <span class="news-tag">WCAG 2.2</span>
+                        <span class="news-tag">Barrierefreiheit</span>
+                        <span class="news-tag">Accessibility</span>
+                    </div>
+                    <button class="news-cta">Mehr Details</button>
+                </div>
+
+                <!-- EU Regulatory Update -->
+                <div class="news-card success">
+                    <div class="news-header">
+                        <div class="news-badge success">
+                            <i data-lucide="check-circle" style="width: 16px; height: 16px;"></i>
+                            Positiv
+                        </div>
+                        <span class="news-time">vor 1 Woche</span>
+                    </div>
+                    <h4 class="news-title">EU Digital Services Act: Klarstellung für KMUs</h4>
+                    <p class="news-excerpt">Europäische Kommission veröffentlicht Leitfaden: Unternehmen unter 50 Mitarbeitern sind von den meisten DSA-Pflichten ausgenommen.</p>
+                    <div class="news-tags">
+                        <span class="news-tag">DSA</span>
+                        <span class="news-tag">EU-Recht</span>
+                        <span class="news-tag">KMU</span>
+                    </div>
+                    <button class="news-cta">Mehr Details</button>
                 </div>
             </div>
         </div>

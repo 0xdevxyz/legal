@@ -25,15 +25,9 @@ const server = http.createServer((req, res) => {
   
   console.log(`${new Date().toISOString()} - ${req.method} ${pathname}`);
   
-  // Route handling
-  if (pathname === '/') {
-    pathname = '/accurate-dashboard-demo.html';
-  } else if (pathname === '/accurate') {
-    pathname = '/accurate-dashboard-demo.html';
-  } else if (pathname === '/complex') {
+  // Route handling - Only Complex Dashboard
+  if (pathname === '/' || pathname === '/complex' || pathname === '/dashboard') {
     pathname = '/modern-complex-demo.html';
-  } else if (pathname === '/old') {
-    pathname = '/modern-dashboard-demo.html';
   }
   
   // Construct file path
@@ -78,11 +72,9 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, hostname, () => {
-  console.log(`🚀 Complyo Dashboard Demo Server running at http://${hostname}:${port}/`);
-  console.log(`🎯 ACCURATE Dashboard (Main): http://${hostname}:${port}/`);
-  console.log(`🎯 Accurate Demo: http://${hostname}:${port}/accurate`);
-  console.log(`🎨 Complex Demo: http://${hostname}:${port}/complex`);
-  console.log(`📊 Old Dashboard: http://${hostname}:${port}/old`);
+  console.log(`🚀 Complyo Complex Dashboard Server running at http://${hostname}:${port}/`);
+  console.log(`🎨 Complex Dashboard (Only Version): http://${hostname}:${port}/`);
+  console.log(`📰 Features: Animated Header + Dark Mode + Legal News`);
   console.log(`⚡ Server ready for requests...`);
 });
 
