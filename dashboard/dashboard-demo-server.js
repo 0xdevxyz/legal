@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const url = require('url');
 
-const port = 8080;
+const port = 9000;
 const hostname = '0.0.0.0';
 
 // MIME type mapping
@@ -27,6 +27,10 @@ const server = http.createServer((req, res) => {
   
   // Route handling
   if (pathname === '/') {
+    pathname = '/accurate-dashboard-demo.html';
+  } else if (pathname === '/accurate') {
+    pathname = '/accurate-dashboard-demo.html';
+  } else if (pathname === '/complex') {
     pathname = '/modern-complex-demo.html';
   } else if (pathname === '/old') {
     pathname = '/modern-dashboard-demo.html';
@@ -75,8 +79,10 @@ const server = http.createServer((req, res) => {
 
 server.listen(port, hostname, () => {
   console.log(`🚀 Complyo Dashboard Demo Server running at http://${hostname}:${port}/`);
-  console.log(`📊 Dashboard Demo: http://${hostname}:${port}/modern-dashboard-demo.html`);
-  console.log(`🎨 CSS Styles: http://${hostname}:${port}/modern-dashboard.css`);
+  console.log(`🎯 ACCURATE Dashboard (Main): http://${hostname}:${port}/`);
+  console.log(`🎯 Accurate Demo: http://${hostname}:${port}/accurate`);
+  console.log(`🎨 Complex Demo: http://${hostname}:${port}/complex`);
+  console.log(`📊 Old Dashboard: http://${hostname}:${port}/old`);
   console.log(`⚡ Server ready for requests...`);
 });
 
