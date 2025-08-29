@@ -37,6 +37,8 @@ from report_generation import report_service, ReportConfig
 from expert_dashboard import expert_dashboard
 from ab_testing import ab_testing_manager, ABTest, TestVariant
 from admin_panel import admin_panel_manager
+from ai_compliance_engine import ai_compliance_engine, UserExpertiseLevel, ComplianceIssue
+from accessibility_framework import accessibility_framework
 
 # FastAPI App Setup
 app = FastAPI(
@@ -3294,6 +3296,317 @@ async def get_system_logs(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ========== AI COMPLIANCE ENGINE ENDPOINTS ==========
+
+class AIAnalysisRequest(BaseModel):
+    website_url: str
+    user_level: str = "beginner"  # beginner, intermediate, advanced
+
+@app.post("/api/ai/analyze")
+async def ai_analyze_website(
+    request: AIAnalysisRequest,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """AI-powered website analysis with personalized recommendations"""
+    try:
+        # Validate user level
+        if request.user_level not in ["beginner", "intermediate", "advanced"]:
+            raise HTTPException(status_code=400, detail="Invalid user level. Use: beginner, intermediate, advanced")
+        
+        user_level = UserExpertiseLevel(request.user_level)
+        
+        # Perform AI analysis
+        analysis_result = await ai_compliance_engine.analyze_website_with_ai(request.website_url, user_level)
+        
+        return {
+            "status": "success",
+            "message": "KI-Analyse erfolgreich abgeschlossen",
+            "analysis": analysis_result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI analysis failed: {str(e)}")
+
+@app.get("/api/ai/next-step/{user_id}")
+async def get_ai_next_step(
+    user_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get AI-recommended next step for user's optimization process"""
+    try:
+        # Check if user can access this data
+        if current_user.id != user_id and "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Get user's current progress
+        current_progress = await db_manager.execute_query(
+            "SELECT progress_data FROM user_optimization_progress WHERE user_id = %s",
+            (user_id,)
+        )
+        
+        progress_data = {}
+        if current_progress:
+            progress_data = json.loads(current_progress[0]['progress_data']) if current_progress[0]['progress_data'] else {}
+        
+        # Get AI recommendation
+        next_step = await ai_compliance_engine.get_next_step_recommendation(user_id, progress_data)
+        
+        if not next_step:
+            return {
+                "status": "success",
+                "message": "Keine weiteren Schritte erforderlich",
+                "next_step": None
+            }
+        
+        return {
+            "status": "success",
+            "next_step": next_step
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ProgressUpdateRequest(BaseModel):
+    step_id: str
+    status: str  # "started", "completed", "skipped"
+    notes: Optional[str] = None
+
+@app.post("/api/ai/update-progress/{user_id}")
+async def update_optimization_progress(
+    user_id: str,
+    update: ProgressUpdateRequest,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Update user's optimization progress"""
+    try:
+        # Check if user can update this data
+        if current_user.id != user_id and "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Get current progress
+        current_progress_result = await db_manager.execute_query(
+            "SELECT progress_data FROM user_optimization_progress WHERE user_id = %s",
+            (user_id,)
+        )
+        
+        if current_progress_result:
+            progress_data = json.loads(current_progress_result[0]['progress_data']) if current_progress_result[0]['progress_data'] else {}
+        else:
+            progress_data = {"completed_steps": [], "step_details": {}}
+        
+        # Update progress
+        if update.status == "completed" and update.step_id not in progress_data.get("completed_steps", []):
+            progress_data.setdefault("completed_steps", []).append(update.step_id)
+        
+        progress_data.setdefault("step_details", {})[update.step_id] = {
+            "status": update.status,
+            "updated_at": datetime.now().isoformat(),
+            "notes": update.notes
+        }
+        
+        # Save to database
+        await db_manager.execute_query(
+            """INSERT INTO user_optimization_progress (user_id, progress_data, updated_at)
+               VALUES (%s, %s, %s)
+               ON CONFLICT (user_id) 
+               DO UPDATE SET progress_data = %s, updated_at = %s""",
+            (user_id, json.dumps(progress_data), datetime.now(), json.dumps(progress_data), datetime.now())
+        )
+        
+        return {
+            "status": "success",
+            "message": "Progress updated successfully",
+            "updated_progress": progress_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/ai/compliance-risks/{user_id}")
+async def get_compliance_risk_prediction(
+    user_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get AI-predicted compliance risks for user's website"""
+    try:
+        # Check access
+        if current_user.id != user_id and "admin" not in current_user.email.lower():
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Get user's website data
+        website_data_result = await db_manager.execute_query(
+            """SELECT w.website_url, cs.scan_results, cs.overall_score
+               FROM websites w
+               LEFT JOIN compliance_scans cs ON w.id = cs.website_id
+               WHERE w.user_id = %s
+               ORDER BY cs.created_at DESC LIMIT 1""",
+            (user_id,)
+        )
+        
+        if not website_data_result:
+            raise HTTPException(status_code=404, detail="No website data found for user")
+        
+        website_data = {
+            "website_url": website_data_result[0]['website_url'],
+            "latest_scan": json.loads(website_data_result[0]['scan_results']) if website_data_result[0]['scan_results'] else {},
+            "overall_score": website_data_result[0]['overall_score']
+        }
+        
+        # Get AI risk prediction
+        risk_prediction = await ai_compliance_engine.predict_compliance_risks(website_data)
+        
+        return {
+            "status": "success",
+            "website_url": website_data["website_url"],
+            "risk_prediction": risk_prediction,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/ai/proactive-notifications")
+async def get_proactive_notifications(
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get personalized proactive notifications"""
+    try:
+        # Get user's notification preferences (simplified)
+        user_subscriptions = ["legal_updates", "compliance_tips"]  # Could be from database
+        
+        notifications = await ai_compliance_engine.generate_proactive_notifications(user_subscriptions)
+        
+        return {
+            "status": "success",
+            "notifications": notifications,
+            "subscription_types": user_subscriptions,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========== ACCESSIBILITY FRAMEWORK ENDPOINTS ==========
+
+class AccessibilityAnalysisRequest(BaseModel):
+    website_url: str
+    framework_detection: bool = True
+    generate_integration: bool = True
+
+@app.post("/api/accessibility/analyze")
+async def analyze_accessibility_compatibility(
+    request: AccessibilityAnalysisRequest,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Analyze website compatibility with Complyo Accessibility Framework"""
+    try:
+        # Perform compatibility analysis
+        compatibility_report = await accessibility_framework.analyze_website_compatibility(request.website_url)
+        
+        # Generate integration package if requested
+        integration_package = None
+        if request.generate_integration:
+            integration_package = await accessibility_framework.generate_integration_package(compatibility_report)
+        
+        return {
+            "status": "success",
+            "website_url": request.website_url,
+            "compatibility_report": compatibility_report,
+            "integration_package": integration_package,
+            "analyzed_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Accessibility analysis failed: {str(e)}")
+
+@app.get("/api/accessibility/framework-code/{website_type}")
+async def get_accessibility_framework_code(website_type: str):
+    """Get framework integration code for specific website type"""
+    try:
+        if website_type not in ["wordpress", "react", "vanilla", "vue", "angular"]:
+            raise HTTPException(status_code=400, detail="Invalid website type. Use: wordpress, react, vanilla, vue, angular")
+        
+        from accessibility_framework import AccessibilityFramework
+        integration_code = AccessibilityFramework.generateIntegrationCode(website_type)
+        
+        return {
+            "status": "success",
+            "website_type": website_type,
+            "integration": integration_code,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/accessibility/framework-css")
+async def get_accessibility_framework_css():
+    """Get the complete accessibility framework CSS"""
+    try:
+        css_content = accessibility_framework.core_css
+        
+        return {
+            "status": "success",
+            "css_content": css_content,
+            "version": "2.0.0",
+            "namespace": "complyo-a11y",
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/accessibility/framework-js")
+async def get_accessibility_framework_js():
+    """Get the complete accessibility framework JavaScript"""
+    try:
+        js_content = accessibility_framework.core_js
+        
+        return {
+            "status": "success",
+            "js_content": js_content,
+            "version": "2.0.0",
+            "namespace": "ComplyoA11y",
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class WebsiteTestRequest(BaseModel):
+    website_url: str
+    test_types: List[str] = ["css_conflicts", "js_conflicts", "framework_compatibility"]
+
+@app.post("/api/accessibility/test-compatibility")
+async def test_website_accessibility_compatibility(
+    request: WebsiteTestRequest,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Test website compatibility with accessibility framework"""
+    try:
+        from accessibility_framework import AccessibilityFramework
+        
+        # Run compatibility test
+        test_results = await AccessibilityFramework.testCompatibility(request.website_url)
+        
+        return {
+            "status": "success",
+            "website_url": request.website_url,
+            "test_results": test_results,
+            "tested_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Compatibility test failed: {str(e)}")
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8003))
     
@@ -3304,7 +3617,9 @@ if __name__ == "__main__":
     print(f"👤 Auth Demo: http://0.0.0.0:{port}/api/auth/demo-users")
     print(f"🧪 A/B Testing: http://0.0.0.0:{port}/api/ab-testing/tests")
     print(f"⚙️  Admin Panel: http://0.0.0.0:{port}/api/admin/platform-overview")
-    print("✨ ALL COMPLYO FEATURES COMPLETE: Compliance + Payments + Auth + Cookies + Monitoring + Email + Reports + Expert + A/B + Admin!")
+    print(f"🤖 KI Engine: http://0.0.0.0:{port}/api/ai/analyze")
+    print(f"♿ Accessibility: http://0.0.0.0:{port}/api/accessibility/analyze")
+    print("✨ COMPLETE AI-POWERED COMPLIANCE PLATFORM: All Features + KI-Guided Optimization + Conflict-Free Accessibility!")
     
     uvicorn.run(
         "complyo_backend_final:app",

@@ -385,6 +385,24 @@ class DatabaseManager:
             metadata JSONB DEFAULT '{}'
         );
         
+        -- User optimization progress table (AI-guided process)
+        CREATE TABLE IF NOT EXISTS user_optimization_progress (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            website_id UUID REFERENCES websites(id) ON DELETE CASCADE,
+            analysis_id VARCHAR(255),
+            progress_data JSONB DEFAULT '{}',
+            completion_percentage INTEGER DEFAULT 0,
+            current_step VARCHAR(255),
+            started_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMPTZ,
+            last_activity_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            metadata JSONB DEFAULT '{}',
+            CONSTRAINT unique_user_optimization_progress UNIQUE (user_id)
+        );
+        
         -- Create indexes for performance
         CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
         CREATE INDEX IF NOT EXISTS idx_users_subscription_status ON users(subscription_status);
@@ -416,6 +434,8 @@ class DatabaseManager:
         CREATE INDEX IF NOT EXISTS idx_cookie_consents_user_identifier ON cookie_consents(user_identifier);
         CREATE INDEX IF NOT EXISTS idx_cookie_consents_website_domain ON cookie_consents(website_domain);
         CREATE INDEX IF NOT EXISTS idx_api_integrations_user_id ON api_integrations(user_id);
+        CREATE INDEX IF NOT EXISTS idx_user_optimization_progress_user_id ON user_optimization_progress(user_id);
+        CREATE INDEX IF NOT EXISTS idx_user_optimization_progress_website_id ON user_optimization_progress(website_id);
         
         -- Update triggers for updated_at columns
         CREATE OR REPLACE FUNCTION update_updated_at_column()
