@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚨 DSGVO-Abmahnung droht? Schützen Sie sich JETZT! | Complyo</title>
+    <meta name="description" content="Jeden Tag erhalten 150 deutsche Websites DSGVO-Abmahnungen. Durchschnittliche Kosten: 1.200€ - 15.000€. Schützen Sie sich mit Complyo in 15 Minuten!">
+    <link rel="stylesheet" href="landing-styles.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        /* DSGVO-specific urgent styling */
+        .urgent-hero {
+            background: linear-gradient(135deg, #DC2626 0%, #EF4444 50%, #F87171 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .urgent-hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(255, 255, 255, 0.1) 10px,
+                rgba(255, 255, 255, 0.1) 20px
+            );
+            animation: slidePattern 20s linear infinite;
+        }
+        
+        @keyframes slidePattern {
+            0% { transform: translateX(-20px); }
+            100% { transform: translateX(0px); }
+        }
+        
+        .danger-alert {
+            background: #FEE2E2;
+            border: 2px solid #DC2626;
+            border-radius: 12px;
+            padding: var(--space-4);
+            margin: var(--space-6) 0;
+            color: #DC2626;
+            font-weight: 600;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+        
+        .cost-highlight {
+            background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+            border-left: 4px solid #F59E0B;
+            padding: var(--space-4);
+            border-radius: 8px;
+            margin: var(--space-4) 0;
+        }
+        
+        .trap-list {
+            background: var(--white);
+            border-radius: 12px;
+            padding: var(--space-6);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .trap-item {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-3);
+            padding: var(--space-3);
+            margin: var(--space-3) 0;
+            background: #FEE2E2;
+            border-radius: 8px;
+            border-left: 4px solid #DC2626;
+        }
+        
+        .solution-item {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-3);
+            padding: var(--space-3);
+            margin: var(--space-3) 0;
+            background: #D1FAE5;
+            border-radius: 8px;
+            border-left: 4px solid #10B981;
+        }
+        
+        .countdown-timer {
+            background: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: var(--space-4);
+            margin: var(--space-6) 0;
+            text-align: center;
+        }
+        
+        .timer-display {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #FFD700;
+            margin: var(--space-2) 0;
+        }
+        
+        .urgency-cta {
+            background: linear-gradient(135deg, #10B981, #059669);
+            color: white;
+            padding: var(--space-5) var(--space-8);
+            border-radius: 16px;
+            font-size: 1.25rem;
+            font-weight: 700;
+            text-decoration: none;
+            display: inline-block;
+            box-shadow: var(--shadow-xl);
+            transform: scale(1);
+            transition: all 0.3s ease;
+            animation: glow 2s infinite alternate;
+        }
+        
+        .urgency-cta:hover {
+            transform: scale(1.05);
+            box-shadow: 0 20px 40px rgba(16, 185, 129, 0.4);
+        }
+        
+        @keyframes glow {
+            0% { box-shadow: var(--shadow-xl); }
+            100% { box-shadow: 0 0 30px rgba(16, 185, 129, 0.6), var(--shadow-xl); }
+        }
+        
+        .statistics-bar {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: var(--space-3) var(--space-6);
+            border-radius: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: var(--space-4);
+            margin: var(--space-4) 0;
+            flex-wrap: wrap;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #FFD700;
+        }
+        
+        .stat-text {
+            font-size: 0.75rem;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <!-- Urgent Navigation -->
+    <nav class="nav">
+        <div class="container">
+            <div class="nav-content">
+                <div class="logo">
+                    <span class="logo-text">Complyo</span>
+                    <span style="color: var(--error); font-size: 0.75rem; font-weight: 600;">DSGVO-SCHUTZ</span>
+                </div>
+                <div class="nav-links">
+                    <a href="#features">DSGVO-Schutz</a>
+                    <a href="#pricing">Preise</a>
+                    <a href="/homepage.html">← Homepage</a>
+                    <a href="#cta" class="btn-primary">🛡️ JETZT SCHÜTZEN</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Urgent Hero Section -->
+    <section class="hero urgent-hero">
+        <div class="container">
+            <div class="hero-content" style="grid-template-columns: 1fr; text-align: center; max-width: 800px; margin: 0 auto;">
+                <div>
+                    <!-- Urgent Alert Banner -->
+                    <div class="danger-alert">
+                        🚨 <strong>WARNUNG:</strong> Jeden Tag erhalten 150 deutsche Websites DSGVO-Abmahnungen!
+                    </div>
+                    
+                    <h1 class="hero-title">
+                        DSGVO-Abmahnung droht?<br>
+                        <span class="highlight">Schützen Sie sich JETZT!</span>
+                    </h1>
+                    
+                    <!-- Statistics Bar -->
+                    <div class="statistics-bar">
+                        <div class="stat">
+                            <div class="stat-number">150</div>
+                            <div class="stat-text">Abmahnungen/Tag</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-number">1.200€</div>
+                            <div class="stat-text">Min. Kosten</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-number">15.000€</div>
+                            <div class="stat-text">Max. Schaden</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-number">15min</div>
+                            <div class="stat-text">Complyo-Schutz</div>
+                        </div>
+                    </div>
+                    
+                    <div class="cost-highlight">
+                        <h3 style="margin: 0 0 var(--space-2) 0; color: #D97706;">💰 Durchschnittliche DSGVO-Abmahnung kostet:</h3>
+                        <p style="font-size: 1.25rem; font-weight: 700; margin: 0; color: #DC2626;">1.200€ - 15.000€ pro Abmahnung + Anwaltskosten</p>
+                    </div>
+                    
+                    <!-- Countdown Timer -->
+                    <div class="countdown-timer">
+                        <p style="margin: 0; font-weight: 600;">⏰ Begrenzte Zeit: Erste 100 Nutzer zahlen nur</p>
+                        <div class="timer-display">19€/Monat statt 49€</div>
+                        <p style="margin: 0; font-size: 0.875rem; opacity: 0.8;">Angebot läuft ab in: <span id="countdown">23:45:12</span></p>
+                    </div>
+                    
+                    <div class="hero-cta">
+                        <a href="#scan" class="urgency-cta">
+                            🛡️ DSGVO-CHECK STARTEN - KOSTENLOS
+                        </a>
+                    </div>
+                    
+                    <p style="font-size: 0.875rem; opacity: 0.8; margin-top: var(--space-4);">
+                        ✅ Keine Anmeldung • ✅ Ergebnis in 60 Sekunden • ✅ 100% kostenlos
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- DSGVO Traps Section -->
+    <section class="problem-solution" style="background: var(--white);">
+        <div class="container">
+            <h2 class="section-title" style="color: var(--error);">❌ Häufigste DSGVO-Fallen (die Sie Geld kosten)</h2>
+            
+            <div class="trap-list">
+                <div class="trap-item">
+                    <div style="flex-shrink: 0; font-size: 1.5rem;">🍪</div>
+                    <div>
+                        <h4 style="margin: 0 0 var(--space-1) 0; color: var(--error);">Fehlendes Cookie-Banner</h4>
+                        <p style="margin: 0; color: var(--gray-700);">Ohne rechtskonforme Einwilligung für Cookies drohen bis zu <strong>20 Mio. € Bußgeld</strong></p>
+                    </div>
+                    <div style="flex-shrink: 0; font-weight: 700; color: var(--error);">€€€</div>
+                </div>
+                
+                <div class="trap-item">
+                    <div style="flex-shrink: 0; font-size: 1.5rem;">📄</div>
+                    <div>
+                        <h4 style="margin: 0 0 var(--space-1) 0; color: var(--error);">Unvollständige Datenschutzerklärung</h4>
+                        <p style="margin: 0; color: var(--gray-700);">Fehlende Angaben zu Datenverarbeitung = sofortige Abmahnfähigkeit</p>
+                    </div>
+                    <div style="flex-shrink: 0; font-weight: 700; color: var(--error);">€€€€</div>
+                </div>
+                
+                <div class="trap-item">
+                    <div style="flex-shrink: 0; font-size: 1.5rem;">📊</div>
+                    <div>
+                        <h4 style="margin: 0 0 var(--space-1) 0; color: var(--error);">Google Analytics ohne Einwilligung</h4>
+                        <p style="margin: 0; color: var(--gray-700);">Tracking ohne Consent = Datenschutzverstoß mit hohen Bußgeldern</p>
+                    </div>
+                    <div style="flex-shrink: 0; font-weight: 700; color: var(--error);">€€€€€</div>
+                </div>
+                
+                <div class="trap-item">
+                    <div style="flex-shrink: 0; font-size: 1.5rem;">📝</div>
+                    <div>
+                        <h4 style="margin: 0 0 var(--space-1) 0; color: var(--error);">Fehlende Auftragsverarbeitungsverträge</h4>
+                        <p style="margin: 0; color: var(--gray-700);">Ohne AVV mit Dienstleistern (Hosting, Newsletter, etc.) = DSGVO-Verstoß</p>
+                    </div>
+                    <div style="flex-shrink: 0; font-weight: 700; color: var(--error);">€€€</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Complyo Solution Section -->
+    <section style="padding: var(--space-20) 0; background: var(--gray-50);">
+        <div class="container">
+            <h2 class="section-title" style="color: var(--success);">✅ Complyo DSGVO-Schutz in 15 Minuten</h2>
+            
+            <div class="trap-list">
+                <div class="solution-item">
+                    <div style="flex-shrink: 0; font-size: 1.5rem;">🤖</div>
+                    <div>
+                        <h4 style="margin: 0 0 var(--space-1) 0; color: var(--success);">Vollautomatische DSGVO-Prüfung</h4>
+                        <p style="margin: 0; color: var(--gray-700);">KI analysiert Ihre Website auf alle DSGVO-Risiken in unter 2 Minuten</p>
+                    </div>
+                </div>
+                
+                <div class="solution-item">
+                    <div style="flex-shrink: 0; font-size: 1.5rem;">📋</div>
+                    <div>
+                        <h4 style="margin: 0 0 var(--space-1) 0; color: var(--success);">Rechtssichere Datenschutzerklärung</h4>
+                        <p style="margin: 0; color: var(--gray-700);">Automatisch generiert, anwaltlich geprüft, immer aktuell</p>
+                    </div>
+                </div>
+                
+                <div class="solution-item">
+                    <div style="flex-shrink: 0; font-size: 1.5rem;">🍪</div>
+                    <div>
+                        <h4 style="margin: 0 0 var(--space-1) 0; color: var(--success);">Cookie-Consent-Manager</h4>
+                        <p style="margin: 0; color: var(--gray-700);">TTDSG & DSGVO konformes Cookie-Banner mit granularer Kontrolle</p>
+                    </div>
+                </div>
+                
+                <div class="solution-item">
+                    <div style="flex-shrink: 0; font-size: 1.5rem;">📊</div>
+                    <div>
+                        <h4 style="margin: 0 0 var(--space-1) 0; color: var(--success);">Google Analytics DSGVO-konform</h4>
+                        <p style="margin: 0; color: var(--gray-700);">Automatische Konfiguration für rechtssicheres Tracking</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Risk Calculator -->
+    <section style="padding: var(--space-20) 0; background: var(--primary); color: var(--white);">
+        <div class="container">
+            <div style="text-align: center; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: var(--white); margin-bottom: var(--space-6);">⚖️ Ihr DSGVO-Risiko berechnen</h2>
+                
+                <div style="background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border-radius: 16px; padding: var(--space-8);">
+                    <h3 style="color: var(--white); margin-bottom: var(--space-6);">Risiko-Rechner</h3>
+                    
+                    <div style="display: grid; gap: var(--space-4); text-align: left;">
+                        <label style="display: flex; align-items: center; gap: var(--space-3);">
+                            <input type="checkbox" id="cookies" style="transform: scale(1.2);">
+                            <span>Verwenden Sie Cookies/Google Analytics? (+5.000€ Risiko)</span>
+                        </label>
+                        
+                        <label style="display: flex; align-items: center; gap: var(--space-3);">
+                            <input type="checkbox" id="newsletter" style="transform: scale(1.2);">
+                            <span>Haben Sie einen Newsletter? (+2.500€ Risiko)</span>
+                        </label>
+                        
+                        <label style="display: flex; align-items: center; gap: var(--space-3);">
+                            <input type="checkbox" id="contact" style="transform: scale(1.2);">
+                            <span>Haben Sie Kontaktformulare? (+1.500€ Risiko)</span>
+                        </label>
+                        
+                        <label style="display: flex; align-items: center; gap: var(--space-3);">
+                            <input type="checkbox" id="social" style="transform: scale(1.2);">
+                            <span>Nutzen Sie Social Media Plugins? (+3.000€ Risiko)</span>
+                        </label>
+                    </div>
+                    
+                    <div style="margin: var(--space-6) 0; padding: var(--space-4); background: rgba(255, 255, 255, 0.2); border-radius: 12px;">
+                        <p style="margin: 0; font-size: 0.875rem;">Ihr geschätztes Abmahnung-Risiko:</p>
+                        <div id="riskAmount" style="font-size: 2.5rem; font-weight: 800; color: #FFD700;">0€</div>
+                    </div>
+                    
+                    <a href="#scan" class="urgency-cta">
+                        🛡️ RISIKO JETZT ELIMINIEREN
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section style="padding: var(--space-20) 0; background: var(--white);">
+        <div class="container">
+            <h2 class="section-title">💬 Das sagen Kunden, die sich geschützt haben</h2>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-8); margin-top: var(--space-12);">
+                <div style="background: var(--gray-50); padding: var(--space-6); border-radius: 16px; border-left: 4px solid var(--success);">
+                    <blockquote style="font-size: 1.125rem; font-style: italic; margin-bottom: var(--space-4);">
+                        "Complyo hat uns vor einer 12.000€ Abmahnung bewahrt. Das Cookie-Banner war in 10 Minuten installiert!"
+                    </blockquote>
+                    <cite style="font-weight: 600; color: var(--primary);">- Sarah M., Online-Shop Besitzerin</cite>
+                </div>
+                
+                <div style="background: var(--gray-50); padding: var(--space-6); border-radius: 16px; border-left: 4px solid var(--success);">
+                    <blockquote style="font-size: 1.125rem; font-style: italic; margin-bottom: var(--space-4);">
+                        "Endlich verstehe ich DSGVO! Klare Anweisungen, keine Anwaltssprache. Bin jetzt compliance."
+                    </blockquote>
+                    <cite style="font-weight: 600; color: var(--primary);">- Thomas K., Blogger</cite>
+                </div>
+                
+                <div style="background: var(--gray-50); padding: var(--space-6); border-radius: 16px; border-left: 4px solid var(--success);">
+                    <blockquote style="font-size: 1.125rem; font-style: italic; margin-bottom: var(--space-4);">
+                        "2.500€ Anwaltskosten gespart. Complyo macht das alles automatisch für einen Bruchteil der Kosten."
+                    </blockquote>
+                    <cite style="font-weight: 600; color: var(--primary);">- Michael R., Agentur-Inhaber</cite>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section id="scan" class="cta" style="background: var(--gradient-primary); color: var(--white);">
+        <div class="container">
+            <div class="cta-content">
+                <h2 style="color: var(--white);">🛡️ Schützen Sie sich JETZT vor DSGVO-Abmahnungen</h2>
+                <p style="color: rgba(255, 255, 255, 0.9);">Kostenloser DSGVO-Check in 60 Sekunden - Finden Sie Ihre Risiken, bevor andere es tun</p>
+                
+                <form class="scan-form">
+                    <div class="form-group">
+                        <input type="url" placeholder="https://ihre-website.de" class="url-input" required style="border: none;">
+                        <button type="submit" class="urgency-cta" style="margin: 0; animation: none;">
+                            🔍 DSGVO-CHECK STARTEN
+                        </button>
+                    </div>
+                    <p class="form-note" style="color: rgba(255, 255, 255, 0.8);">100% kostenlos • Keine Anmeldung • Sofortige Ergebnisse</p>
+                </form>
+                
+                <div style="margin-top: var(--space-8); padding: var(--space-4); background: rgba(255, 255, 255, 0.1); border-radius: 12px;">
+                    <p style="margin: 0; font-size: 0.875rem; opacity: 0.9;">
+                        ⚡ <strong>Aktion:</strong> Erste 100 Nutzer zahlen nur 19€/Monat statt 49€<br>
+                        💰 <strong>Garantie:</strong> Sparen Sie mindestens 500€ Anwaltskosten oder Geld zurück
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer (simplified) -->
+    <footer style="background: var(--gray-900); color: var(--gray-300); padding: var(--space-8) 0; text-align: center;">
+        <div class="container">
+            <div class="logo" style="margin-bottom: var(--space-4);">
+                <span class="logo-text" style="color: var(--white);">Complyo</span>
+                <p style="margin: 0; color: var(--gray-400);">DSGVO-Schutz automatisiert</p>
+            </div>
+            <p style="margin: 0; color: var(--gray-400);">© 2024 Complyo. Schützen Sie sich vor teuren DSGVO-Abmahnungen.</p>
+        </div>
+    </footer>
+
+    <script>
+        lucide.createIcons();
+        
+        // Risk Calculator
+        function calculateRisk() {
+            const checkboxes = {
+                cookies: 5000,
+                newsletter: 2500,
+                contact: 1500,
+                social: 3000
+            };
+            
+            let total = 0;
+            for (let key in checkboxes) {
+                if (document.getElementById(key).checked) {
+                    total += checkboxes[key];
+                }
+            }
+            
+            document.getElementById('riskAmount').textContent = total.toLocaleString() + '€';
+        }
+        
+        // Add event listeners to checkboxes
+        ['cookies', 'newsletter', 'contact', 'social'].forEach(id => {
+            document.getElementById(id).addEventListener('change', calculateRisk);
+        });
+        
+        // Countdown Timer
+        function updateCountdown() {
+            const now = new Date().getTime();
+            const midnight = new Date();
+            midnight.setHours(24, 0, 0, 0);
+            const timeLeft = midnight - now;
+            
+            const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+            
+            document.getElementById('countdown').textContent = 
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        setInterval(updateCountdown, 1000);
+        updateCountdown();
+        
+        // Form submission
+        document.querySelector('.scan-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const url = this.querySelector('.url-input').value;
+            if (url) {
+                alert(`🔍 DSGVO-Scan startet für ${url}...\n\n✅ Cookies werden geprüft\n✅ Datenschutzerklärung wird analysiert\n✅ Tracking-Tools werden untersucht\n\n(Demo-Modus - In Production: Weiterleitung zum Dashboard)`);
+            }
+        });
+    </script>
+</body>
+</html>

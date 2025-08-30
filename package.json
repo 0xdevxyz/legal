@@ -1,5 +1,42 @@
 {
-  "dependencies": {
-    "axios": "^1.11.0"
+  "name": "complyo-enterprise-platform",
+  "version": "2.0.0",
+  "description": "Enterprise-grade AI-powered compliance management system",
+  "main": "backend/complyo_backend_final.py",
+  "scripts": {
+    "dev": "cd backend && python complyo_backend_final.py",
+    "start": "cd backend && uvicorn complyo_backend_final:app --host 0.0.0.0 --port 8000",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "test": "cd backend && python -m pytest tests/",
+    "lint": "cd backend && flake8 .",
+    "format": "cd backend && black .",
+    "setup": "python setup_complyo_enterprise.py"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/0xdevxyz/complyo.git"
+  },
+  "keywords": [
+    "compliance",
+    "gdpr",
+    "ttdsg", 
+    "accessibility",
+    "enterprise",
+    "ai",
+    "machine-learning",
+    "glassmorphism",
+    "fastapi",
+    "react"
+  ],
+  "author": "Complyo Enterprise Team",
+  "license": "MIT",
+  "devDependencies": {
+    "pm2": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "python": ">=3.9.0"
   }
 }

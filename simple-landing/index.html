@@ -1,54 +1,709 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" class="scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Complyo - Website Compliance</title>
+    <title>Complyo - Website Compliance & Abmahnschutz</title>
+    <meta name="description" content="Von abmahngefährdet zu rechtssicher in 24 Stunden. DSGVO, TTDSG, Barrierefreiheit - KI-gestützte Compliance-Lösung.">
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            33% { transform: translateY(-10px) rotate(1deg); }
+            66% { transform: translateY(5px) rotate(-1deg); }
+        }
+        .float-animation { animation: float 6s ease-in-out infinite; }
+        .gradient-text { 
+            background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+    </style>
 </head>
-<body class="bg-gradient-to-br from-blue-500 to-purple-600 min-h-screen">
-    <div class="container mx-auto px-4 py-16">
-        <div class="text-center text-white">
-            <h1 class="text-6xl font-bold mb-6">Complyo</h1>
-            <p class="text-xl mb-8">Automatische Website-Compliance Prüfung</p>
-            <div class="bg-white/20 backdrop-blur rounded-lg p-8 max-w-md mx-auto">
-                <input type="url" placeholder="Website-URL eingeben" 
-                       class="w-full p-3 rounded-lg text-gray-900 mb-4">
-                <button onclick="scanWebsite()" 
-                        class="w-full bg-white text-blue-600 font-bold py-3 rounded-lg hover:bg-gray-100">
-                    Jetzt scannen
-                </button>
-            </div>
-            <div id="result" class="mt-8 p-4 bg-white/20 rounded-lg hidden">
-                <h3 class="text-xl font-bold mb-2">Scan-Ergebnis</h3>
-                <div id="result-content"></div>
+<body class="bg-gray-900 text-white overflow-x-hidden">
+    <!-- Navigation -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-gray-900/80 backdrop-blur-md border-b border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-2">
+                    <div class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                        <span class="text-white font-bold text-lg">C</span>
+                    </div>
+                    <span class="text-xl font-bold text-white">Complyo</span>
+                </div>
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#features" class="text-gray-300 hover:text-white transition-colors">Features</a>
+                    <a href="#risk-calculator" class="text-gray-300 hover:text-white transition-colors">Risiko Rechner</a>
+                    <a href="#pricing" class="text-gray-300 hover:text-white transition-colors">Preise</a>
+                    <a href="#analyzer" class="text-gray-300 hover:text-white transition-colors">Demo</a>
+                    <button class="bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                        Kostenlos testen
+                    </button>
+                </div>
             </div>
         </div>
-    </div>
-    <script>
-        async function scanWebsite() {
-            const url = document.querySelector('input').value;
-            if (!url) return;
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="min-h-screen flex items-center justify-center relative overflow-hidden pt-16">
+        <!-- Animated Background -->
+        <div class="absolute inset-0">
+            <div class="absolute top-20 left-10 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 float-animation"></div>
+            <div class="absolute top-40 right-10 w-64 h-64 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 float-animation" style="animation-delay: -3s;"></div>
+            <div class="absolute bottom-20 left-1/2 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 float-animation" style="animation-delay: -1.5s;"></div>
+        </div>
+        
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+            <h1 class="text-4xl md:text-6xl lg:text-7xl font-bold mb-6">
+                Von <span class="gradient-text">abmahngefährdet</span><br>
+                zu <span class="gradient-text">rechtssicher</span><br>
+                in 24 Stunden
+            </h1>
+            <p class="text-xl md:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto">
+                KI-gestützte Website-Compliance für DSGVO, Cookies & Barrierefreiheit. Automatisch oder durch Experten - mit echtem Abmahnschutz.
+            </p>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
+                <button onclick="scrollToAnalyzer()" class="bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-lg text-lg font-semibold hover:scale-105 transition-transform shadow-2xl">
+                    🚀 Kostenlose Website-Analyse
+                </button>
+                <button onclick="scrollToRiskCalculator()" class="bg-white/10 backdrop-blur-md border border-white/20 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-white/20 transition-colors">
+                    🧮 Risiko-Rechner
+                </button>
+            </div>
+            <div class="bg-white/10 backdrop-blur-md border border-white/20 p-6 rounded-2xl max-w-2xl mx-auto">
+                <h3 class="text-xl font-semibold mb-4">💰 Ihr aktuelles Abmahnrisiko:</h3>
+                <div class="text-3xl font-bold text-red-400 mb-2">4.000€ - 20.000€+</div>
+                <p class="text-gray-300">Durchschnittliches Risiko für deutsche Websites ohne vollständige Compliance</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Risk Calculator Section - PROMINENT PLACEMENT -->
+    <section id="risk-calculator" class="py-20 bg-gray-800">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl md:text-5xl font-bold mb-6">
+                    🧮 Persönlicher <span class="gradient-text">Risiko-Rechner</span>
+                </h2>
+                <p class="text-xl text-gray-300">Berechnen Sie Ihr individuelles Abmahnrisiko basierend auf Ihrem Unternehmensprofil</p>
+            </div>
             
-            try {
-                const response = await fetch('http://localhost:8002/api/analyze', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({url})
-                });
-                const data = await response.json();
+            <div class="bg-white/10 backdrop-blur-md border border-white/20 p-8 rounded-2xl">
+                <div class="grid lg:grid-cols-2 gap-8">
+                    <!-- Company Profile Input -->
+                    <div>
+                        <h3 class="text-2xl font-bold mb-6 flex items-center">
+                            🏢 Unternehmensprofil
+                        </h3>
+                        <div class="space-y-6">
+                            <div>
+                                <label class="block text-sm font-medium mb-2">Unternehmensgröße</label>
+                                <select id="company-size" class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
+                                    <option value="startup">Startup (1-10 Mitarbeiter)</option>
+                                    <option value="small" selected>Klein (11-50 Mitarbeiter)</option>
+                                    <option value="medium">Mittel (51-250 Mitarbeiter)</option>
+                                    <option value="large">Groß (251-1000 Mitarbeiter)</option>
+                                    <option value="enterprise">Enterprise (>1000 Mitarbeiter)</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium mb-2">Branche</label>
+                                <select id="industry" class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
+                                    <option value="general">Allgemein</option>
+                                    <option value="ecommerce" selected>E-Commerce</option>
+                                    <option value="healthcare">Gesundheitswesen</option>
+                                    <option value="finance">Finanzwesen</option>
+                                    <option value="legal">Rechtsberatung</option>
+                                    <option value="technology">Technologie</option>
+                                    <option value="education">Bildung</option>
+                                    <option value="media">Medien/News</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium mb-2">Jahresumsatz</label>
+                                <select id="revenue" class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
+                                    <option value="micro">< 100.000€</option>
+                                    <option value="small">100.000€ - 1 Mio€</option>
+                                    <option value="medium" selected>1 - 10 Mio€</option>
+                                    <option value="large">10 - 50 Mio€</option>
+                                    <option value="enterprise">> 50 Mio€</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium mb-2">Website-Typ</label>
+                                <select id="website-type" class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
+                                    <option value="corporate">Unternehmenswebsite</option>
+                                    <option value="shop" selected>Online-Shop</option>
+                                    <option value="blog">Blog/News</option>
+                                    <option value="portal">Service-Portal</option>
+                                    <option value="saas">SaaS-Platform</option>
+                                </select>
+                            </div>
+                            
+                            <button onclick="calculatePersonalRisk()" class="w-full bg-gradient-to-r from-blue-500 to-purple-600 py-4 rounded-lg text-lg font-semibold hover:scale-105 transition-transform shadow-lg">
+                                🧮 Mein Risiko berechnen
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Risk Results Display -->
+                    <div>
+                        <h3 class="text-2xl font-bold mb-6 flex items-center">
+                            📊 Ihre Risiko-Bewertung
+                        </h3>
+                        <div id="risk-results" class="space-y-6">
+                            <!-- Default Risk Display -->
+                            <div class="p-6 bg-red-500/10 border border-red-500/20 rounded-2xl">
+                                <div class="flex items-center justify-between mb-4">
+                                    <span class="text-lg font-semibold">Geschätztes Gesamtrisiko</span>
+                                    <span id="total-risk" class="text-3xl font-bold text-red-400">12.500€</span>
+                                </div>
+                                <div id="risk-level" class="text-red-400 font-medium">🔴 Hoch - Sofortiges Handeln erforderlich</div>
+                            </div>
+                            
+                            <!-- Risk Breakdown -->
+                            <div class="space-y-4">
+                                <h4 class="font-semibold text-gray-300">Risiko-Aufschlüsselung:</h4>
+                                
+                                <div class="flex justify-between items-center p-3 bg-gray-800/50 rounded-lg">
+                                    <span class="text-sm flex items-center">
+                                        🔐 DSGVO Datenschutz
+                                    </span>
+                                    <span id="risk-gdpr" class="text-red-400 font-medium">5.000€</span>
+                                </div>
+                                
+                                <div class="flex justify-between items-center p-3 bg-gray-800/50 rounded-lg">
+                                    <span class="text-sm flex items-center">
+                                        🍪 Cookie Compliance
+                                    </span>
+                                    <span id="risk-cookies" class="text-orange-400 font-medium">4.000€</span>
+                                </div>
+                                
+                                <div class="flex justify-between items-center p-3 bg-gray-800/50 rounded-lg">
+                                    <span class="text-sm flex items-center">
+                                        📄 Impressum & Rechtliches
+                                    </span>
+                                    <span id="risk-legal" class="text-yellow-400 font-medium">2.500€</span>
+                                </div>
+                                
+                                <div class="flex justify-between items-center p-3 bg-gray-800/50 rounded-lg">
+                                    <span class="text-sm flex items-center">
+                                        ♿ Barrierefreiheit
+                                    </span>
+                                    <span id="risk-accessibility" class="text-blue-400 font-medium">1.000€</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Recommendation -->
+                            <div id="recommendation" class="p-6 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
+                                <div class="text-lg font-semibold text-blue-400 mb-3">💡 Unsere Empfehlung</div>
+                                <div class="text-gray-300 mb-4">
+                                    Für E-Commerce-Unternehmen Ihrer Größe empfehlen wir das <strong>Expert Service Paket</strong> 
+                                    zur vollständigen Absicherung gegen Abmahnungen.
+                                </div>
+                                <div class="grid grid-cols-2 gap-4 text-sm">
+                                    <div class="p-3 bg-gray-800/50 rounded-lg">
+                                        <div class="text-gray-400">Einmalig</div>
+                                        <div class="text-2xl font-bold text-white">2.000€</div>
+                                    </div>
+                                    <div class="p-3 bg-gray-800/50 rounded-lg">
+                                        <div class="text-gray-400">Monatlich</div>
+                                        <div class="text-2xl font-bold text-white">39€</div>
+                                    </div>
+                                </div>
+                                <button onclick="startStripeCheckout('expert_service')" class="w-full mt-4 bg-gradient-to-r from-green-500 to-green-600 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity">
+                                    🚀 Jetzt Expert Service buchen
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Website Analyzer Section -->
+    <section id="analyzer" class="py-20">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl md:text-5xl font-bold mb-6">
+                    🔍 Kostenlose <span class="gradient-text">Website-Analyse</span>
+                </h2>
+                <p class="text-xl text-gray-300">Erfahren Sie in 30 Sekunden, wo Ihre Website rechtliche Risiken hat</p>
+            </div>
+            <div class="bg-white/10 backdrop-blur-md border border-white/20 p-8 rounded-2xl">
+                <div class="mb-6">
+                    <label for="website-url" class="block text-sm font-medium mb-2">Website-URL eingeben:</label>
+                    <div class="flex gap-4">
+                        <input type="text" id="website-url" placeholder="https://ihre-website.de" 
+                               class="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400">
+                        <button onclick="scanWebsite()" id="scan-btn"
+                                class="bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">
+                            Analysieren
+                        </button>
+                    </div>
+                </div>
+                <div id="loading" class="hidden text-center py-8">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                    <p class="mt-2 text-gray-300">Analysiere Website...</p>
+                </div>
+                <div id="results" class="hidden">
+                    <div class="bg-gray-700/50 p-6 rounded-lg">
+                        <h3 class="text-xl font-semibold mb-4">📊 Analyse-Ergebnis</h3>
+                        <div id="result-content"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-20 bg-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl md:text-5xl font-bold mb-6">
+                    ⚡ Die 4 Säulen der <span class="gradient-text">Compliance</span>
+                </h2>
+                <p class="text-xl text-gray-300 max-w-3xl mx-auto">
+                    Unser KI-System macht Ihre Website in allen relevanten Bereichen rechtssicher
+                </p>
+            </div>
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <!-- Features cards here (same as before) -->
+                <div class="bg-white/10 backdrop-blur-md border border-white/20 p-8 rounded-2xl hover:scale-105 transition-transform">
+                    <div class="text-blue-400 mb-4">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-4">Rechtliche Texte</h3>
+                    <ul class="text-gray-300 space-y-2 text-sm">
+                        <li>✅ DSGVO-konformes Impressum</li>
+                        <li>✅ Datenschutzerklärung</li>
+                        <li>✅ AGB & Widerrufsbelehrung</li>
+                        <li>✅ Automatische Updates</li>
+                    </ul>
+                </div>
                 
-                document.getElementById('result-content').innerHTML = `
-                    <p><strong>URL:</strong> ${data.url}</p>
-                    <p><strong>Score:</strong> ${data.compliance_score}%</p>
-                    <p><strong>Status:</strong> Analyse abgeschlossen</p>
-                `;
-                document.getElementById('result').classList.remove('hidden');
+                <div class="bg-white/10 backdrop-blur-md border border-white/20 p-8 rounded-2xl hover:scale-105 transition-transform">
+                    <div class="text-blue-400 mb-4">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-4">Cookie-Compliance</h3>
+                    <ul class="text-gray-300 space-y-2 text-sm">
+                        <li>✅ TTDSG-konforme Banner</li>
+                        <li>✅ Consent Management</li>
+                        <li>✅ Script-Erfassung</li>
+                        <li>✅ Cookie-Kategorisierung</li>
+                    </ul>
+                </div>
+                
+                <div class="bg-white/10 backdrop-blur-md border border-white/20 p-8 rounded-2xl hover:scale-105 transition-transform">
+                    <div class="text-blue-400 mb-4">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-4">DSGVO-Compliance</h3>
+                    <ul class="text-gray-300 space-y-2 text-sm">
+                        <li>✅ Datenverarbeitungs-Audit</li>
+                        <li>✅ Privacy-by-Design</li>
+                        <li>✅ Betroffenenrechte</li>
+                        <li>✅ Dokumentation</li>
+                    </ul>
+                </div>
+                
+                <div class="bg-white/10 backdrop-blur-md border border-white/20 p-8 rounded-2xl hover:scale-105 transition-transform">
+                    <div class="text-blue-400 mb-4">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-4">Barrierefreiheit</h3>
+                    <ul class="text-gray-300 space-y-2 text-sm">
+                        <li>✅ WCAG 2.1 AA Standard</li>
+                        <li>✅ BITV 2.0 konform</li>
+                        <li>✅ Screen-Reader optimiert</li>
+                        <li>✅ Keyboard-Navigation</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="py-20">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl md:text-5xl font-bold mb-6">
+                    💰 Einfache <span class="gradient-text">Preisgestaltung</span>
+                </h2>
+                <p class="text-xl text-gray-300">Wählen Sie die passende Lösung für Ihr Unternehmen</p>
+            </div>
+            <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                <!-- AI Automation -->
+                <div class="bg-white/10 backdrop-blur-md border border-white/20 p-8 rounded-2xl">
+                    <div class="text-center mb-8">
+                        <h3 class="text-2xl font-bold mb-4">🤖 AI Automation</h3>
+                        <div class="text-4xl font-bold gradient-text mb-2">39€</div>
+                        <p class="text-gray-300">pro Monat</p>
+                    </div>
+                    <ul class="space-y-4 mb-8">
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            KI-gestützte Compliance-Checks
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Automatische Dokument-Generierung
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            24/7 Monitoring
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            E-Mail Support
+                        </li>
+                    </ul>
+                    <button onclick="startStripeCheckout('ai_automation')" class="w-full bg-gradient-to-r from-blue-500 to-purple-600 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity">
+                        🚀 Jetzt starten
+                    </button>
+                </div>
+
+                <!-- Expert Service -->
+                <div class="bg-white/10 backdrop-blur-md border border-purple-500 p-8 rounded-2xl relative">
+                    <div class="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                        <span class="bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-1 rounded-full text-sm font-semibold">
+                            ⭐ Empfohlen
+                        </span>
+                    </div>
+                    <div class="text-center mb-8">
+                        <h3 class="text-2xl font-bold mb-4">👥 Expert Service</h3>
+                        <div class="text-4xl font-bold gradient-text mb-2">2.000€</div>
+                        <p class="text-gray-300">einmalig + 39€/Monat</p>
+                    </div>
+                    <ul class="space-y-4 mb-8">
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Alles aus AI Automation
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Persönliche Rechtsberatung
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Manuelle Compliance-Prüfung
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Abmahn-Versicherung inklusive
+                        </li>
+                    </ul>
+                    <button onclick="startStripeCheckout('expert_service')" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity">
+                        💳 Expert Beratung buchen
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script src="https://js.stripe.com/v3/"></script>
+    <script>
+        // API Configuration
+        const API_URL = 'https://8003-iqtxqhmde36ooi6emqnp2.e2b.dev';
+        
+        // Demo Mode - No real Stripe needed
+
+        // Stripe Checkout Integration
+        async function startStripeCheckout(productType) {
+            // Collect customer information
+            const customerEmail = prompt('Ihre E-Mail-Adresse:');
+            if (!customerEmail) return;
+
+            const customerName = prompt('Ihr Name:');
+            if (!customerName) return;
+
+            const companyName = prompt('Firmenname (optional):') || '';
+
+            try {
+                // Create checkout session
+                const response = await fetch(`${API_URL}/api/payments/create-checkout-session`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        product_type: productType,
+                        customer_email: customerEmail,
+                        customer_name: customerName,
+                        company_name: companyName,
+                        success_url: window.location.origin + '/success.html',
+                        cancel_url: window.location.origin + '/cancel.html'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to create checkout session');
+                }
+
+                const session = await response.json();
+                
+                // For demo: redirect directly to our demo checkout
+                if (session.demo_mode) {
+                    window.location.href = session.session_url;
+                } else {
+                    // In production: use real Stripe
+                    // const result = await stripe.redirectToCheckout({
+                    //     sessionId: session.session_id
+                    // });
+                }
+
+                if (result.error) {
+                    alert('Fehler: ' + result.error.message);
+                }
+                
             } catch (error) {
-                console.error('Fehler:', error);
-                alert('Fehler beim Scannen. Backend erreichbar?');
+                console.error('Checkout error:', error);
+                alert('Fehler beim Starten des Checkout-Prozesses. Bitte versuchen Sie es später erneut.');
             }
         }
+
+        function scrollToAnalyzer() {
+            document.getElementById('analyzer').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function scrollToRiskCalculator() {
+            document.getElementById('risk-calculator').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function scrollToPricing() {
+            document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Risk Calculator Logic
+        function calculatePersonalRisk() {
+            const companySize = document.getElementById('company-size').value;
+            const industry = document.getElementById('industry').value;
+            const revenue = document.getElementById('revenue').value;
+            const websiteType = document.getElementById('website-type').value;
+
+            // Base risk calculation
+            const baseRisks = {
+                gdpr: 3000,
+                cookies: 2500,
+                legal: 2000,
+                accessibility: 800
+            };
+
+            // Size multipliers
+            const sizeMultipliers = {
+                startup: 0.6,
+                small: 0.8,
+                medium: 1.0,
+                large: 1.4,
+                enterprise: 1.8
+            };
+
+            // Industry multipliers
+            const industryMultipliers = {
+                general: 1.0,
+                ecommerce: 1.3,
+                healthcare: 1.6,
+                finance: 1.7,
+                legal: 1.4,
+                technology: 1.1,
+                education: 0.9,
+                media: 1.2
+            };
+
+            // Revenue multipliers
+            const revenueMultipliers = {
+                micro: 0.7,
+                small: 0.9,
+                medium: 1.0,
+                large: 1.3,
+                enterprise: 1.6
+            };
+
+            // Website type multipliers
+            const websiteMultipliers = {
+                corporate: 0.8,
+                shop: 1.4,
+                blog: 0.7,
+                portal: 1.1,
+                saas: 1.2
+            };
+
+            const sizeMultiplier = sizeMultipliers[companySize] || 1.0;
+            const industryMultiplier = industryMultipliers[industry] || 1.0;
+            const revenueMultiplier = revenueMultipliers[revenue] || 1.0;
+            const websiteMultiplier = websiteMultipliers[websiteType] || 1.0;
+
+            const totalMultiplier = sizeMultiplier * industryMultiplier * revenueMultiplier * websiteMultiplier;
+
+            // Calculate individual risks
+            const risks = {
+                gdpr: Math.round(baseRisks.gdpr * totalMultiplier),
+                cookies: Math.round(baseRisks.cookies * totalMultiplier),
+                legal: Math.round(baseRisks.legal * totalMultiplier),
+                accessibility: Math.round(baseRisks.accessibility * totalMultiplier)
+            };
+
+            const totalRisk = Object.values(risks).reduce((sum, risk) => sum + risk, 0);
+
+            // Update UI
+            document.getElementById('total-risk').textContent = totalRisk.toLocaleString('de-DE') + '€';
+            document.getElementById('risk-gdpr').textContent = risks.gdpr.toLocaleString('de-DE') + '€';
+            document.getElementById('risk-cookies').textContent = risks.cookies.toLocaleString('de-DE') + '€';
+            document.getElementById('risk-legal').textContent = risks.legal.toLocaleString('de-DE') + '€';
+            document.getElementById('risk-accessibility').textContent = risks.accessibility.toLocaleString('de-DE') + '€';
+
+            // Risk level assessment
+            let riskLevel, riskColor, recommendation;
+            if (totalRisk >= 15000) {
+                riskLevel = "🔴 Kritisch - Sofortiges Handeln erforderlich";
+                riskColor = "text-red-400";
+                recommendation = "Für Ihr Unternehmensprofil empfehlen wir dringend das <strong>Expert Service Paket</strong> zur vollständigen Absicherung.";
+            } else if (totalRisk >= 8000) {
+                riskLevel = "🟠 Hoch - Handeln Sie zeitnah";
+                riskColor = "text-orange-400";
+                recommendation = "Das <strong>Expert Service Paket</strong> bietet Ihnen die beste Absicherung für Ihr Risikoprofil.";
+            } else if (totalRisk >= 4000) {
+                riskLevel = "🟡 Mittel - Überwachung empfohlen";
+                riskColor = "text-yellow-400";
+                recommendation = "Unser <strong>AI Automation Service</strong> (39€/Monat) reicht für Ihr aktuelles Risikoprofil aus.";
+            } else {
+                riskLevel = "🟢 Niedrig - Grundschutz ausreichend";
+                riskColor = "text-green-400";
+                recommendation = "Der <strong>AI Automation Service</strong> bietet ausreichende Überwachung für Ihr niedriges Risikoprofil.";
+            }
+
+            document.getElementById('risk-level').textContent = riskLevel;
+            document.getElementById('risk-level').className = riskColor + " font-medium";
+
+            // Update recommendation
+            const recommendationElement = document.getElementById('recommendation').querySelector('.text-gray-300');
+            recommendationElement.innerHTML = recommendation;
+        }
+
+        // Website Scanner Logic  
+        async function scanWebsite() {
+            const urlInput = document.getElementById('website-url');
+            const url = urlInput.value.trim();
+            
+            if (!url) {
+                alert('Bitte geben Sie eine Website-URL ein.');
+                return;
+            }
+
+            const loadingEl = document.getElementById('loading');
+            const resultsEl = document.getElementById('results');
+            const scanBtn = document.getElementById('scan-btn');
+
+            loadingEl.classList.remove('hidden');
+            resultsEl.classList.add('hidden');
+            scanBtn.disabled = true;
+
+            try {
+                const response = await fetch('https://8003-iqtxqhmde36ooi6emqnp2.e2b.dev/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                loadingEl.classList.add('hidden');
+                resultsEl.classList.remove('hidden');
+
+                document.getElementById('result-content').innerHTML = `
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold">Website:</span>
+                            <span class="text-blue-400">${data.url}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold">Compliance Score:</span>
+                            <span class="text-2xl font-bold ${(data.overall_score || 0) >= 80 ? 'text-green-400' : (data.overall_score || 0) >= 60 ? 'text-yellow-400' : 'text-red-400'}">${data.overall_score || 0}%</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold">Geschätztes Risiko:</span>
+                            <span class="text-red-400 font-bold">${(data.total_risk_euro || 0).toLocaleString('de-DE')}€</span>
+                        </div>
+                        <div class="mt-4 p-4 bg-gray-800 rounded-lg">
+                            <h4 class="font-semibold mb-2">🚨 Gefundene Probleme:</h4>
+                            <ul class="space-y-1 text-sm">
+                                ${data.results?.map(v => `<li class="text-red-300">• ${v.description}</li>`).join('') || '<li class="text-green-400">• Keine kritischen Probleme gefunden</li>'}
+                            </ul>
+                        </div>
+                        <div class="mt-4">
+                            <button onclick="scrollToRiskCalculator()" class="w-full bg-gradient-to-r from-blue-500 to-purple-600 py-2 rounded-lg font-semibold hover:opacity-90 transition-opacity">
+                                🧮 Persönliches Risiko berechnen
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                console.error('Scan error:', error);
+                
+                loadingEl.classList.add('hidden');
+                resultsEl.classList.remove('hidden');
+                
+                document.getElementById('result-content').innerHTML = `
+                    <div class="text-center py-4">
+                        <div class="text-red-400 mb-2">❌ Fehler beim Scannen</div>
+                        <p class="text-gray-400 text-sm">${error.message}</p>
+                        <button onclick="scanWebsite()" class="mt-4 bg-blue-600 px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                            🔄 Erneut versuchen
+                        </button>
+                    </div>
+                `;
+            } finally {
+                scanBtn.disabled = false;
+            }
+        }
+
+        // Initialize risk calculator with default values
+        document.addEventListener('DOMContentLoaded', function() {
+            calculatePersonalRisk();
+        });
+
+        // Allow Enter key to trigger scan
+        document.getElementById('website-url').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                scanWebsite();
+            }
+        });
     </script>
 </body>
 </html>

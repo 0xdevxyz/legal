@@ -19,6 +19,8 @@ from report_generator import router as report_router, init_db as init_report_db
 from compliance_scanner import ComplianceScanner
 from risk_calculator import ComplianceRiskCalculator
 from ai_compliance_fixer import AIComplianceFixer
+from workflow_engine import workflow_engine, WorkflowStage, UserSkillLevel
+from workflow_integration import workflow_integration
 
 # Konfiguration
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://complyo_user:WrsmZTXYcjt0c7lt%2FlOzEnX1N5rtjRklLYrY8zXmBGo%3D@shared-postgres:5432/complyo_db")
@@ -143,6 +145,132 @@ async def shutdown():
 app.include_router(auth_router, prefix="/api", tags=["auth"])
 app.include_router(payment_router, prefix="/api/payment", tags=["payment"])
 app.include_router(report_router, prefix="/api/reports", tags=["reports"])
+
+# ========== WORKFLOW ENGINE ENDPOINTS ==========
+
+class StartJourneyRequest(BaseModel):
+    website_url: str
+    skill_level: str = "beginner"  # absolute_beginner, beginner, intermediate, advanced
+
+@app.post("/api/workflow/start-journey")
+async def start_user_journey(request: StartJourneyRequest):
+    """Start a new user journey for guided compliance optimization"""
+    try:
+        # Validate skill level
+        valid_levels = ["absolute_beginner", "beginner", "intermediate", "advanced"]
+        if request.skill_level not in valid_levels:
+            raise HTTPException(status_code=400, detail=f"Invalid skill level. Use: {', '.join(valid_levels)}")
+        
+        skill_level = UserSkillLevel(request.skill_level)
+        user_id = "demo_user"  # Replace with real user ID from auth
+        
+        # Start user journey
+        journey = await workflow_engine.start_user_journey(
+            user_id=user_id,
+            website_url=request.website_url,
+            skill_level=skill_level
+        )
+        
+        # Save journey to database
+        await workflow_integration.save_user_journey(journey)
+        
+        return {
+            "status": "success",
+            "message": "User journey started successfully",
+            "journey": {
+                "user_id": journey.user_id,
+                "website_url": journey.website_url,
+                "skill_level": journey.skill_level.value,
+                "current_stage": journey.current_stage.value,
+                "estimated_completion": journey.estimated_completion.isoformat(),
+                "next_step": journey.current_step
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start journey: {str(e)}")
+
+@app.get("/api/workflow/current-step")
+async def get_current_workflow_step():
+    """Get the current workflow step for the user"""
+    try:
+        user_id = "demo_user"  # Replace with real user ID from auth
+        current_step = await workflow_engine.get_current_step(user_id)
+        
+        if not current_step:
+            return {
+                "status": "success",
+                "current_step": None,
+                "message": "No active workflow or workflow completed"
+            }
+        
+        return {
+            "status": "success",
+            "current_step": {
+                "id": current_step.id,
+                "stage": current_step.stage.value,
+                "title": current_step.title,
+                "description": current_step.description,
+                "instructions": current_step.instructions,
+                "estimated_time_minutes": current_step.estimated_time_minutes,
+                "requires_technical_knowledge": current_step.requires_technical_knowledge,
+                "visual_aids": current_step.visual_aids,
+                "success_criteria": current_step.success_criteria
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/workflow/complete-step")
+async def complete_workflow_step(request: Dict[str, Any]):
+    """Complete current workflow step with validation"""
+    try:
+        step_id = request.get("step_id")
+        validation_data = request.get("validation_data", {})
+        user_id = "demo_user"  # Replace with real user ID from auth
+        
+        if not step_id:
+            raise HTTPException(status_code=400, detail="step_id is required")
+        
+        # Load current journey
+        journey = await workflow_integration.load_user_journey(user_id)
+        if not journey:
+            raise HTTPException(status_code=404, detail="No active journey found")
+        
+        # Complete step using workflow engine
+        result = await workflow_engine.complete_step(user_id, step_id, validation_data)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to complete step: {str(e)}")
+
+@app.get("/api/workflow/progress")
+async def get_workflow_progress():
+    """Get comprehensive workflow progress for the user"""
+    try:
+        user_id = "demo_user"  # Replace with real user ID from auth
+        progress = await workflow_engine.get_journey_progress(user_id)
+        
+        if "error" in progress:
+            return {
+                "status": "success",
+                "progress": None,
+                "message": "No active journey found"
+            }
+        
+        return {
+            "status": "success",
+            "progress": progress
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Health-Check-Endpunkt
 @app.get("/health")

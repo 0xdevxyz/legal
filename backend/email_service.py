@@ -1,588 +1,820 @@
 """
-GDPR-compliant email service for Complyo lead generation
-Supports verification emails and compliance report delivery
+Complyo Email Service - Comprehensive Email Management System
+Handles notifications, alerts, marketing emails, and report delivery
 """
 
+import asyncio
 import smtplib
 import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
+from email.utils import formataddr
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
 import os
-from typing import Optional, Dict, Any
-import logging
-from jinja2 import Template
 import json
-from pdf_report_generator import pdf_generator
-from i18n_service import i18n_service
+import uuid
+import hashlib
+from dataclasses import dataclass, asdict
+from jinja2 import Environment, FileSystemLoader, Template
+import aiosmtplib
+import logging
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class EmailService:
-    def __init__(self):
-        # Email configuration from environment variables
-        self.smtp_host = os.getenv('SMTP_HOST', 'smtp.gmail.com')
-        self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
-        self.smtp_username = os.getenv('SMTP_USERNAME', '')
-        self.smtp_password = os.getenv('SMTP_PASSWORD', '')
-        self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.tech')
-        self.sender_name = os.getenv('SENDER_NAME', 'Complyo Compliance')
-        
-        # For demo/testing purposes, we'll use console output if no SMTP is configured
-        self.demo_mode = not all([self.smtp_username, self.smtp_password])
-        
-        if self.demo_mode:
-            logger.info("Email service running in DEMO MODE - emails will be logged to console")
+@dataclass
+class EmailAddress:
+    """Email address with optional display name"""
+    email: str
+    name: Optional[str] = None
+    
+    def __str__(self):
+        if self.name:
+            return formataddr((self.name, self.email))
+        return self.email
 
-    def send_verification_email(self, email: str, name: str, verification_token: str, language: str = "de") -> bool:
-        """
-        Send GDPR-compliant verification email with double opt-in in specified language
-        """
+@dataclass
+class EmailAttachment:
+    """Email attachment"""
+    filename: str
+    content: bytes
+    content_type: str = "application/octet-stream"
+
+@dataclass
+class EmailTemplate:
+    """Email template configuration"""
+    template_id: str
+    name: str
+    subject_template: str
+    html_template: str
+    text_template: Optional[str] = None
+    category: str = "general"
+    variables: List[str] = None
+    created_at: datetime = None
+    
+    def __post_init__(self):
+        if self.created_at is None:
+            self.created_at = datetime.now()
+        if self.variables is None:
+            self.variables = []
+
+@dataclass
+class EmailMessage:
+    """Email message"""
+    message_id: str
+    to_addresses: List[EmailAddress]
+    subject: str
+    html_content: str
+    text_content: Optional[str] = None
+    from_address: Optional[EmailAddress] = None
+    reply_to: Optional[EmailAddress] = None
+    cc_addresses: Optional[List[EmailAddress]] = None
+    bcc_addresses: Optional[List[EmailAddress]] = None
+    attachments: Optional[List[EmailAttachment]] = None
+    template_id: Optional[str] = None
+    template_variables: Optional[Dict[str, Any]] = None
+    priority: str = "normal"  # low, normal, high, urgent
+    send_at: Optional[datetime] = None
+    created_at: datetime = None
+    
+    def __post_init__(self):
+        if self.created_at is None:
+            self.created_at = datetime.now()
+        if self.message_id is None:
+            self.message_id = str(uuid.uuid4())
+
+@dataclass
+class EmailDeliveryResult:
+    """Email delivery result"""
+    message_id: str
+    status: str  # pending, sent, delivered, failed, bounced
+    sent_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+    recipient_responses: Dict[str, str] = None
+    
+    def __post_init__(self):
+        if self.recipient_responses is None:
+            self.recipient_responses = {}
+
+class EmailService:
+    """Comprehensive email service for Complyo platform"""
+    
+    def __init__(self, config: Dict[str, Any] = None):
+        """Initialize email service with configuration"""
+        
+        self.config = config or self._get_default_config()
+        
+        # Email templates storage
+        self.templates: Dict[str, EmailTemplate] = {}
+        
+        # Message queue and delivery tracking
+        self.message_queue: List[EmailMessage] = []
+        self.delivery_results: Dict[str, EmailDeliveryResult] = {}
+        
+        # Initialize Jinja2 template environment
+        self.jinja_env = Environment(
+            loader=FileSystemLoader('templates/email') if os.path.exists('templates/email') else None,
+            autoescape=True
+        )
+        
+        # Load default templates
+        self._load_default_templates()
+        
+        # Rate limiting
+        self.rate_limit_window = timedelta(minutes=1)
+        self.rate_limit_max = 60  # Max emails per minute
+        self.sent_times: List[datetime] = []
+        
+        logger.info("✉️ Email Service initialized")
+    
+    def _get_default_config(self) -> Dict[str, Any]:
+        """Get default email configuration"""
+        
+        return {
+            "smtp": {
+                "host": os.environ.get("SMTP_HOST", "smtp.gmail.com"),
+                "port": int(os.environ.get("SMTP_PORT", "587")),
+                "use_tls": True,
+                "username": os.environ.get("SMTP_USERNAME", "noreply@complyo.tech"),
+                "password": os.environ.get("SMTP_PASSWORD", "demo_password"),
+                "timeout": 30
+            },
+            "sender": {
+                "default_from": EmailAddress("noreply@complyo.tech", "Complyo Platform"),
+                "support_email": EmailAddress("support@complyo.tech", "Complyo Support"),
+                "alerts_email": EmailAddress("alerts@complyo.tech", "Complyo Alerts"),
+                "reports_email": EmailAddress("reports@complyo.tech", "Complyo Reports")
+            },
+            "settings": {
+                "max_recipients": 50,
+                "max_attachment_size": 25 * 1024 * 1024,  # 25MB
+                "retry_attempts": 3,
+                "retry_delay": 300,  # 5 minutes
+                "enable_tracking": True,
+                "enable_analytics": True
+            }
+        }
+    
+    def _load_default_templates(self):
+        """Load default email templates"""
+        
+        # Welcome email template
+        self.templates["welcome"] = EmailTemplate(
+            template_id="welcome",
+            name="Welcome Email",
+            subject_template="Willkommen bei Complyo - Ihre Website-Compliance-Lösung! 🚀",
+            html_template="""
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                    .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }
+                    .button { display: inline-block; padding: 12px 24px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; }
+                    .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>🛡️ Willkommen bei Complyo!</h1>
+                        <p>Ihre professionelle Website-Compliance-Plattform</p>
+                    </div>
+                    <div class="content">
+                        <h2>Hallo {{ user_name }}! 👋</h2>
+                        <p>Vielen Dank für Ihre Registrierung bei Complyo. Wir freuen uns, Sie bei der Einhaltung aller deutschen Compliance-Anforderungen zu unterstützen.</p>
+                        
+                        <h3>Ihre nächsten Schritte:</h3>
+                        <ul>
+                            <li>✅ <strong>Erste Website scannen:</strong> Lassen Sie Ihre Website kostenlos prüfen</li>
+                            <li>🤖 <strong>AI-Automatisierung nutzen:</strong> Automatische Fixes für Compliance-Probleme</li>
+                            <li>📊 <strong>24/7 Monitoring:</strong> Kontinuierliche Überwachung Ihrer Compliance</li>
+                            <li>📞 <strong>Expert Service:</strong> Professionelle Rechtsberatung bei Bedarf</li>
+                        </ul>
+                        
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="{{ dashboard_url }}" class="button">🚀 Zum Dashboard</a>
+                        </div>
+                        
+                        <p><strong>Ihr 7-Tage kostenloses Trial ist bereits aktiv!</strong></p>
+                        
+                        <div style="background: #e3f2fd; padding: 20px; border-radius: 5px; margin: 20px 0;">
+                            <h4>💡 Wussten Sie schon?</h4>
+                            <p>DSGVO-Verstöße können bis zu 4% des Jahresumsatzes oder 20 Millionen Euro kosten. Mit Complyo sind Sie auf der sicheren Seite!</p>
+                        </div>
+                    </div>
+                    <div class="footer">
+                        <p>Bei Fragen stehen wir Ihnen gerne zur Verfügung: <a href="mailto:support@complyo.tech">support@complyo.tech</a></p>
+                        <p>© 2024 Complyo - Professionelle Website-Compliance</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """,
+            category="onboarding",
+            variables=["user_name", "dashboard_url", "trial_expires"]
+        )
+        
+        # Compliance alert template
+        self.templates["compliance_alert"] = EmailTemplate(
+            template_id="compliance_alert",
+            name="Compliance Alert",
+            subject_template="🚨 Compliance-Problem erkannt: {{ website_name }}",
+            html_template="""
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .alert-header { background: #dc3545; color: white; padding: 20px; text-align: center; border-radius: 5px; }
+                    .content { background: #fff; padding: 30px; border: 1px solid #ddd; }
+                    .critical { background: #f8d7da; padding: 15px; border: 1px solid #f5c6cb; border-radius: 5px; margin: 20px 0; }
+                    .button { display: inline-block; padding: 12px 24px; background: #dc3545; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="alert-header">
+                        <h1>⚠️ Compliance-Alert</h1>
+                        <p>Sofortige Aufmerksamkeit erforderlich</p>
+                    </div>
+                    <div class="content">
+                        <h2>Website: {{ website_name }}</h2>
+                        <p><strong>URL:</strong> {{ website_url }}</p>
+                        
+                        <div class="critical">
+                            <h3>🚨 Kritisches Problem erkannt:</h3>
+                            <p><strong>{{ alert_title }}</strong></p>
+                            <p>{{ alert_description }}</p>
+                            <p><strong>Compliance-Score:</strong> {{ compliance_score }}% (Schwelle: {{ threshold }}%)</p>
+                        </div>
+                        
+                        <h3>Sofortige Maßnahmen:</h3>
+                        <ul>
+                            {% for action in recommended_actions %}
+                            <li>{{ action }}</li>
+                            {% endfor %}
+                        </ul>
+                        
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="{{ fix_url }}" class="button">🔧 Problem beheben</a>
+                        </div>
+                        
+                        <p><strong>Erkannt am:</strong> {{ detected_at }}</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """,
+            category="alerts",
+            variables=["website_name", "website_url", "alert_title", "alert_description", "compliance_score", "threshold", "recommended_actions", "fix_url", "detected_at"]
+        )
+        
+        # Monthly report template
+        self.templates["monthly_report"] = EmailTemplate(
+            template_id="monthly_report",
+            name="Monthly Compliance Report",
+            subject_template="📊 Ihr Complyo Monatsbericht - {{ month_name }} {{ year }}",
+            html_template="""
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 700px; margin: 0 auto; padding: 20px; }
+                    .header { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                    .content { background: #f8f9fa; padding: 30px; }
+                    .metrics { display: flex; justify-content: space-around; margin: 20px 0; }
+                    .metric { text-align: center; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                    .metric-value { font-size: 2em; font-weight: bold; color: #28a745; }
+                    .target-list { background: white; padding: 20px; border-radius: 10px; margin: 20px 0; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>📊 Compliance Monatsbericht</h1>
+                        <p>{{ month_name }} {{ year }}</p>
+                    </div>
+                    <div class="content">
+                        <h2>Hallo {{ user_name }}! 👋</h2>
+                        
+                        <p>Hier ist Ihr monatlicher Compliance-Überblick:</p>
+                        
+                        <div class="metrics">
+                            <div class="metric">
+                                <div class="metric-value">{{ total_targets }}</div>
+                                <div>Überwachte Websites</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">{{ avg_score }}%</div>
+                                <div>Durchschn. Score</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">{{ total_scans }}</div>
+                                <div>Scans durchgeführt</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">{{ issues_fixed }}</div>
+                                <div>Probleme behoben</div>
+                            </div>
+                        </div>
+                        
+                        <div class="target-list">
+                            <h3>📈 Website-Performance:</h3>
+                            {% for target in targets %}
+                            <div style="padding: 10px; border-bottom: 1px solid #eee;">
+                                <strong>{{ target.name }}</strong> ({{ target.url }})
+                                <br>Score: {{ target.score }}% 
+                                <span style="color: {% if target.trend == 'improving' %}green{% elif target.trend == 'declining' %}red{% else %}orange{% endif %};">
+                                    {{ target.trend_icon }} {{ target.trend }}
+                                </span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <h3>🎯 Empfehlungen für {{ next_month }}:</h3>
+                        <ul>
+                            {% for recommendation in recommendations %}
+                            <li>{{ recommendation }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """,
+            category="reports",
+            variables=["user_name", "month_name", "year", "next_month", "total_targets", "avg_score", "total_scans", "issues_fixed", "targets", "recommendations"]
+        )
+        
+        # Expert consultation email template
+        self.templates["expert_consultation"] = EmailTemplate(
+            template_id="expert_consultation",
+            name="Expert Consultation Scheduled",
+            subject_template="👨‍💼 Ihr Expert Service Termin wurde bestätigt",
+            html_template="""
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: #6f42c1; color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                    .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }
+                    .appointment { background: white; padding: 20px; border-radius: 10px; border-left: 5px solid #6f42c1; margin: 20px 0; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>👨‍💼 Expert Service</h1>
+                        <p>Ihr Beratungstermin wurde bestätigt</p>
+                    </div>
+                    <div class="content">
+                        <h2>Hallo {{ client_name }}! 👋</h2>
+                        
+                        <p>Vielen Dank für Ihr Vertrauen in unseren Expert Service. Ihr Beratungstermin wurde bestätigt:</p>
+                        
+                        <div class="appointment">
+                            <h3>📅 Termindetails:</h3>
+                            <p><strong>Datum:</strong> {{ appointment_date }}</p>
+                            <p><strong>Uhrzeit:</strong> {{ appointment_time }}</p>
+                            <p><strong>Dauer:</strong> {{ duration }} Minuten</p>
+                            <p><strong>Expert:</strong> {{ expert_name }} ({{ expert_title }})</p>
+                            <p><strong>Thema:</strong> {{ consultation_topic }}</p>
+                        </div>
+                        
+                        <h3>🔗 Zugangslink:</h3>
+                        <p><a href="{{ meeting_link }}" style="color: #6f42c1; font-weight: bold;">{{ meeting_link }}</a></p>
+                        
+                        <h3>📋 Vorbereitung:</h3>
+                        <ul>
+                            <li>Halten Sie Ihre Website-URLs bereit</li>
+                            <li>Liste spezifischer Compliance-Fragen</li>
+                            <li>Aktuelle Scan-Berichte (falls vorhanden)</li>
+                        </ul>
+                        
+                        <p><strong>Kontakt bei Fragen:</strong> <a href="mailto:{{ expert_email }}">{{ expert_email }}</a></p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """,
+            category="expert_service",
+            variables=["client_name", "appointment_date", "appointment_time", "duration", "expert_name", "expert_title", "consultation_topic", "meeting_link", "expert_email"]
+        )
+        
+        logger.info(f"📧 Loaded {len(self.templates)} default email templates")
+    
+    async def send_email(self, message: EmailMessage) -> EmailDeliveryResult:
+        """Send individual email message"""
+        
         try:
-            verification_url = f"http://localhost:3000/verify-email?token={verification_token}"
+            # Rate limiting check
+            if not self._check_rate_limit():
+                return EmailDeliveryResult(
+                    message_id=message.message_id,
+                    status="failed",
+                    error_message="Rate limit exceeded"
+                )
             
-            subject = i18n_service.get_translation("email_verification_subject", language)
+            # Validate message
+            validation_result = self._validate_message(message)
+            if not validation_result["valid"]:
+                return EmailDeliveryResult(
+                    message_id=message.message_id,
+                    status="failed",
+                    error_message=validation_result["error"]
+                )
             
-            # GDPR-compliant email template
-            html_body = self._get_verification_email_template(name, verification_url, language)
-            text_body = self._get_verification_email_text(name, verification_url, language)
+            # Process template if specified
+            if message.template_id and message.template_variables:
+                processed_message = await self._process_template(message)
+                if processed_message:
+                    message = processed_message
             
-            return self._send_email(
-                to_email=email,
-                subject=subject,
-                html_body=html_body,
-                text_body=text_body
+            # Create MIME message
+            mime_message = self._create_mime_message(message)
+            
+            # Send email
+            if os.environ.get("DEMO_MODE", "true").lower() == "true":
+                # Demo mode - simulate sending
+                result = self._simulate_email_sending(message)
+            else:
+                # Real email sending
+                result = await self._send_smtp_email(mime_message, message)
+            
+            # Track delivery
+            self.delivery_results[message.message_id] = result
+            self.sent_times.append(datetime.now())
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Email sending failed: {str(e)}")
+            return EmailDeliveryResult(
+                message_id=message.message_id,
+                status="failed",
+                error_message=str(e)
+            )
+    
+    async def send_bulk_emails(self, messages: List[EmailMessage]) -> Dict[str, EmailDeliveryResult]:
+        """Send multiple emails in batch"""
+        
+        results = {}
+        
+        # Process emails in batches to respect rate limits
+        batch_size = min(10, self.rate_limit_max // 6)  # Conservative batching
+        
+        for i in range(0, len(messages), batch_size):
+            batch = messages[i:i + batch_size]
+            
+            # Send batch concurrently
+            tasks = [self.send_email(message) for message in batch]
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Collect results
+            for message, result in zip(batch, batch_results):
+                if isinstance(result, Exception):
+                    results[message.message_id] = EmailDeliveryResult(
+                        message_id=message.message_id,
+                        status="failed",
+                        error_message=str(result)
+                    )
+                else:
+                    results[message.message_id] = result
+            
+            # Rate limiting delay between batches
+            if i + batch_size < len(messages):
+                await asyncio.sleep(2)
+        
+        logger.info(f"📧 Bulk email completed: {len(results)} messages processed")
+        return results
+    
+    async def send_template_email(self, template_id: str, to_email: str, variables: Dict[str, Any], **kwargs) -> EmailDeliveryResult:
+        """Send email using template"""
+        
+        if template_id not in self.templates:
+            return EmailDeliveryResult(
+                message_id=str(uuid.uuid4()),
+                status="failed",
+                error_message=f"Template '{template_id}' not found"
+            )
+        
+        template = self.templates[template_id]
+        
+        # Create message from template
+        message = EmailMessage(
+            message_id=str(uuid.uuid4()),
+            to_addresses=[EmailAddress(to_email)],
+            subject="",  # Will be filled by template processing
+            html_content="",  # Will be filled by template processing
+            template_id=template_id,
+            template_variables=variables,
+            **kwargs
+        )
+        
+        return await self.send_email(message)
+    
+    def _check_rate_limit(self) -> bool:
+        """Check if rate limit allows sending email"""
+        
+        now = datetime.now()
+        cutoff = now - self.rate_limit_window
+        
+        # Remove old entries
+        self.sent_times = [t for t in self.sent_times if t > cutoff]
+        
+        return len(self.sent_times) < self.rate_limit_max
+    
+    def _validate_message(self, message: EmailMessage) -> Dict[str, Any]:
+        """Validate email message"""
+        
+        if not message.to_addresses:
+            return {"valid": False, "error": "No recipients specified"}
+        
+        if len(message.to_addresses) > self.config["settings"]["max_recipients"]:
+            return {"valid": False, "error": "Too many recipients"}
+        
+        if not message.subject and not message.template_id:
+            return {"valid": False, "error": "No subject specified"}
+        
+        if not message.html_content and not message.text_content and not message.template_id:
+            return {"valid": False, "error": "No content specified"}
+        
+        # Validate attachment sizes
+        if message.attachments:
+            total_size = sum(len(att.content) for att in message.attachments)
+            if total_size > self.config["settings"]["max_attachment_size"]:
+                return {"valid": False, "error": "Attachments too large"}
+        
+        return {"valid": True}
+    
+    async def _process_template(self, message: EmailMessage) -> Optional[EmailMessage]:
+        """Process email template with variables"""
+        
+        template = self.templates.get(message.template_id)
+        if not template:
+            return None
+        
+        try:
+            # Process subject
+            subject_template = Template(template.subject_template)
+            message.subject = subject_template.render(message.template_variables)
+            
+            # Process HTML content
+            html_template = Template(template.html_template)
+            message.html_content = html_template.render(message.template_variables)
+            
+            # Process text content if available
+            if template.text_template:
+                text_template = Template(template.text_template)
+                message.text_content = text_template.render(message.template_variables)
+            
+            return message
+            
+        except Exception as e:
+            logger.error(f"Template processing failed: {str(e)}")
+            return None
+    
+    def _create_mime_message(self, message: EmailMessage) -> MIMEMultipart:
+        """Create MIME message for SMTP sending"""
+        
+        mime_message = MIMEMultipart('alternative')
+        
+        # Set headers
+        mime_message['Subject'] = message.subject
+        mime_message['From'] = str(message.from_address or self.config["sender"]["default_from"])
+        mime_message['To'] = ', '.join(str(addr) for addr in message.to_addresses)
+        
+        if message.reply_to:
+            mime_message['Reply-To'] = str(message.reply_to)
+        
+        if message.cc_addresses:
+            mime_message['Cc'] = ', '.join(str(addr) for addr in message.cc_addresses)
+        
+        # Set priority
+        if message.priority == "high":
+            mime_message['X-Priority'] = '2'
+        elif message.priority == "urgent":
+            mime_message['X-Priority'] = '1'
+        
+        # Add content
+        if message.text_content:
+            text_part = MIMEText(message.text_content, 'plain', 'utf-8')
+            mime_message.attach(text_part)
+        
+        if message.html_content:
+            html_part = MIMEText(message.html_content, 'html', 'utf-8')
+            mime_message.attach(html_part)
+        
+        # Add attachments
+        if message.attachments:
+            for attachment in message.attachments:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(attachment.content)
+                encoders.encode_base64(part)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename= {attachment.filename}'
+                )
+                mime_message.attach(part)
+        
+        return mime_message
+    
+    async def _send_smtp_email(self, mime_message: MIMEMultipart, message: EmailMessage) -> EmailDeliveryResult:
+        """Send email via SMTP"""
+        
+        try:
+            smtp_config = self.config["smtp"]
+            
+            # Create SMTP connection
+            smtp = aiosmtplib.SMTP(
+                hostname=smtp_config["host"],
+                port=smtp_config["port"],
+                timeout=smtp_config["timeout"]
+            )
+            
+            await smtp.connect()
+            
+            if smtp_config["use_tls"]:
+                await smtp.starttls()
+            
+            if smtp_config["username"] and smtp_config["password"]:
+                await smtp.login(smtp_config["username"], smtp_config["password"])
+            
+            # Send message
+            from_addr = str(message.from_address or self.config["sender"]["default_from"])
+            to_addrs = [addr.email for addr in message.to_addresses]
+            
+            if message.cc_addresses:
+                to_addrs.extend([addr.email for addr in message.cc_addresses])
+            
+            if message.bcc_addresses:
+                to_addrs.extend([addr.email for addr in message.bcc_addresses])
+            
+            await smtp.send_message(mime_message, from_addr=from_addr, to_addrs=to_addrs)
+            await smtp.quit()
+            
+            return EmailDeliveryResult(
+                message_id=message.message_id,
+                status="sent",
+                sent_at=datetime.now()
             )
             
         except Exception as e:
-            logger.error(f"Failed to send verification email to {email}: {str(e)}")
-            return False
-
-    def send_compliance_report(self, email: str, name: str, analysis_data: Dict[str, Any], lead_data: Optional[Dict[str, Any]] = None) -> bool:
-        """
-        Send compliance report with PDF attachment after successful email verification
-        """
-        try:
-            # Ensure analysis_data is a dict
-            if isinstance(analysis_data, str):
-                try:
-                    import json
-                    analysis_data = json.loads(analysis_data)
-                except:
-                    # If it's not valid JSON, create a minimal structure
-                    analysis_data = {
-                        'compliance_score': 45,
-                        'estimated_risk_euro': '5000-15000',
-                        'findings': {},
-                        'url': 'N/A'
-                    }
-            
-            # Generate PDF report
-            if not lead_data:
-                lead_data = {'name': name, 'email': email, 'company': ''}
-            
-            pdf_bytes = pdf_generator.generate_compliance_report(analysis_data, lead_data)
-            
-            # Save PDF temporarily for attachment
-            import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                tmp_file.write(pdf_bytes)
-                pdf_path = tmp_file.name
-            
-            try:
-                subject = f"📊 Ihr Complyo Compliance-Report ist bereit"
-                
-                html_body = self._get_report_email_template(name, analysis_data)
-                text_body = self._get_report_email_text(name, analysis_data)
-                
-                success = self._send_email(
-                    to_email=email,
-                    subject=subject,
-                    html_body=html_body,
-                    text_body=text_body,
-                    attachment_path=pdf_path,
-                    attachment_name=f"Complyo_Compliance_Report_{name.replace(' ', '_')}.pdf"
-                )
-                
-                return success
-                
-            finally:
-                # Clean up temporary file
-                try:
-                    os.unlink(pdf_path)
-                except:
-                    pass
-            
-        except Exception as e:
-            logger.error(f"Failed to send compliance report to {email}: {str(e)}")
-            return False
-
-    def _send_email(self, to_email: str, subject: str, html_body: str, text_body: str, attachment_path: Optional[str] = None, attachment_name: Optional[str] = None) -> bool:
-        """
-        Core email sending function
-        """
-        if self.demo_mode:
-            # Demo mode - log email to console
-            print(f"\n" + "="*60)
-            print(f"📧 DEMO EMAIL (would be sent to: {to_email})")
-            print(f"="*60)
-            print(f"From: {self.sender_name} <{self.sender_email}>")
-            print(f"To: {to_email}")
-            print(f"Subject: {subject}")
-            print(f"\n--- EMAIL CONTENT ---")
-            print(text_body)
-            if attachment_path:
-                filename = attachment_name or os.path.basename(attachment_path)
-                file_size = os.path.getsize(attachment_path) if os.path.exists(attachment_path) else 0
-                print(f"\n📎 Attachment: {filename} ({file_size} bytes)")
-            print(f"="*60 + "\n")
-            return True
-        
-        try:
-            # Create message
-            msg = MIMEMultipart('alternative')
-            msg['From'] = f"{self.sender_name} <{self.sender_email}>"
-            msg['To'] = to_email
-            msg['Subject'] = subject
-            
-            # Add text and HTML parts
-            text_part = MIMEText(text_body, 'plain', 'utf-8')
-            html_part = MIMEText(html_body, 'html', 'utf-8')
-            
-            msg.attach(text_part)
-            msg.attach(html_part)
-            
-            # Add attachment if provided
-            if attachment_path and os.path.exists(attachment_path):
-                with open(attachment_path, "rb") as attachment:
-                    part = MIMEBase('application', 'octet-stream')
-                    part.set_payload(attachment.read())
-                
-                encoders.encode_base64(part)
-                filename = attachment_name or os.path.basename(attachment_path)
-                part.add_header(
-                    'Content-Disposition',
-                    f'attachment; filename= {filename}',
-                )
-                msg.attach(part)
-            
-            # Send email
-            context = ssl.create_default_context()
-            with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                server.starttls(context=context)
-                server.login(self.smtp_username, self.smtp_password)
-                server.sendmail(self.sender_email, to_email, msg.as_string())
-            
-            logger.info(f"Email sent successfully to {to_email}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"SMTP error sending email to {to_email}: {str(e)}")
-            return False
-
-    def _get_verification_email_template(self, name: str, verification_url: str, language: str = "de") -> str:
-        """
-        GDPR-compliant verification email template in specified language
-        """
-        greeting = i18n_service.get_translation("greeting", language, name=name)
-        title = i18n_service.get_translation("verify_email_title", language)
-        button_text = i18n_service.get_translation("verify_button", language)
-        gdpr_notice = i18n_service.get_translation("gdpr_notice", language)
-        template = Template("""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>E-Mail-Verifizierung - Complyo</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="margin: 0; font-size: 28px;">🛡️ Complyo</h1>
-        <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Compliance Made Simple</p>
-    </div>
+            logger.error(f"SMTP sending failed: {str(e)}")
+            return EmailDeliveryResult(
+                message_id=message.message_id,
+                status="failed",
+                error_message=str(e)
+            )
     
-    <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-        <h2 style="color: #333; margin-top: 0;">Hallo {{ name }},</h2>
+    def _simulate_email_sending(self, message: EmailMessage) -> EmailDeliveryResult:
+        """Simulate email sending for demo mode"""
         
-        <p>vielen Dank für Ihr Interesse an unserem Compliance-Report! </p>
+        logger.info(f"📧 [DEMO] Email simulated: {message.subject} -> {[str(addr) for addr in message.to_addresses]}")
         
-        <p><strong>🔐 Bitte bestätigen Sie Ihre E-Mail-Adresse:</strong></p>
+        # Simulate delivery time
+        import time
+        time.sleep(0.1)
         
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="{{ verification_url }}" 
-               style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                      color: white; 
-                      text-decoration: none; 
-                      padding: 15px 30px; 
-                      border-radius: 25px; 
-                      font-weight: bold; 
-                      display: inline-block;
-                      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
-                ✅ E-Mail-Adresse bestätigen
-            </a>
-        </div>
-        
-        <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; margin: 20px 0; border-radius: 4px;">
-            <h4 style="margin-top: 0; color: #1976d2;">🇩🇪 DSGVO-Hinweis</h4>
-            <p style="margin-bottom: 0; font-size: 14px;">
-                Mit der Bestätigung willigen Sie ein, dass wir Ihnen den angeforderten Compliance-Report 
-                sowie gelegentlich relevante Compliance-Informationen zusenden dürfen. 
-                <strong>Widerruf jederzeit möglich</strong> unter datenschutz@complyo.tech
-            </p>
-        </div>
-        
-        <p style="font-size: 14px; color: #666;">
-            <strong>⏰ Wichtig:</strong> Dieser Link ist 24 Stunden gültig.<br>
-            Falls Sie diese E-Mail nicht angefordert haben, können Sie sie einfach ignorieren.
-        </p>
-        
-        <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-        
-        <p style="font-size: 12px; color: #888; text-align: center;">
-            Complyo GmbH • Compliance Made Simple<br>
-            <a href="mailto:datenschutz@complyo.tech" style="color: #667eea;">datenschutz@complyo.tech</a> • 
-            <a href="https://complyo.tech/datenschutz" style="color: #667eea;">Datenschutzerklärung</a>
-        </p>
-    </div>
-</body>
-</html>
-        """)
-        
-        return template.render(name=name, verification_url=verification_url)
-
-    def _get_verification_email_text(self, name: str, verification_url: str, language: str = "de") -> str:
-        """
-        Plain text version of verification email
-        """
-        return f"""
-Hallo {name},
-
-vielen Dank für Ihr Interesse an unserem Compliance-Report!
-
-🔐 BITTE BESTÄTIGEN SIE IHRE E-MAIL-ADRESSE:
-
-{verification_url}
-
-🇩🇪 DSGVO-HINWEIS:
-Mit der Bestätigung willigen Sie ein, dass wir Ihnen den angeforderten 
-Compliance-Report sowie gelegentlich relevante Compliance-Informationen 
-zusenden dürfen. Widerruf jederzeit möglich unter datenschutz@complyo.tech
-
-⏰ WICHTIG: Dieser Link ist 24 Stunden gültig.
-Falls Sie diese E-Mail nicht angefordert haben, können Sie sie einfach ignorieren.
-
----
-Complyo GmbH • Compliance Made Simple
-datenschutz@complyo.tech • https://complyo.tech/datenschutz
-        """
-
-    def _get_report_email_template(self, name: str, analysis_data: Dict[str, Any]) -> str:
-        """
-        Compliance report delivery email template
-        """
-        compliance_score = analysis_data.get('compliance_score', 0)
-        risk_level = analysis_data.get('estimated_risk_euro', 'Unbekannt')
-        findings_count = len(analysis_data.get('findings', {}))
-        
-        template = Template("""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ihr Compliance-Report - Complyo</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="margin: 0; font-size: 28px;">📊 Ihr Compliance-Report</h1>
-        <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Complyo Analyse-Ergebnisse</p>
-    </div>
-    
-    <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-        <h2 style="color: #333; margin-top: 0;">Hallo {{ name }},</h2>
-        
-        <p>Ihre Website-Analyse ist abgeschlossen! Hier sind die wichtigsten Ergebnisse:</p>
-        
-        <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <h3 style="margin-top: 0; color: #667eea;">🎯 Analyse-Zusammenfassung</h3>
-            <ul style="list-style: none; padding: 0;">
-                <li style="padding: 8px 0; border-bottom: 1px solid #eee;">
-                    <strong>Compliance-Score:</strong> {{ compliance_score }}%
-                </li>
-                <li style="padding: 8px 0; border-bottom: 1px solid #eee;">
-                    <strong>Geschätztes Risiko:</strong> {{ risk_level }} EUR
-                </li>
-                <li style="padding: 8px 0;">
-                    <strong>Gefundene Probleme:</strong> {{ findings_count }} Bereiche
-                </li>
-            </ul>
-        </div>
-        
-        <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;">
-            <h4 style="margin-top: 0; color: #856404;">⚡ Nächste Schritte</h4>
-            <p style="margin-bottom: 0; font-size: 14px;">
-                Für eine detaillierte Lösungsstrategie und automatische Umsetzung 
-                empfehlen wir Ihnen unseren KI-Automatisierung Service (39€/Monat).
-            </p>
-        </div>
-        
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="http://localhost:3000/#pricing" 
-               style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                      color: white; 
-                      text-decoration: none; 
-                      padding: 15px 30px; 
-                      border-radius: 25px; 
-                      font-weight: bold; 
-                      display: inline-block;
-                      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
-                🚀 Jetzt Compliance optimieren
-            </a>
-        </div>
-        
-        <p style="font-size: 14px; color: #666;">
-            <strong>🔒 Datenschutz:</strong> Ihre Daten werden DSGVO-konform verarbeitet. 
-            Widerruf jederzeit unter datenschutz@complyo.tech möglich.
-        </p>
-        
-        <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-        
-        <p style="font-size: 12px; color: #888; text-align: center;">
-            Complyo GmbH • Compliance Made Simple<br>
-            <a href="mailto:support@complyo.tech" style="color: #667eea;">support@complyo.tech</a> • 
-            <a href="http://localhost:3000" style="color: #667eea;">complyo.tech</a>
-        </p>
-    </div>
-</body>
-</html>
-        """)
-        
-        return template.render(
-            name=name,
-            compliance_score=compliance_score,
-            risk_level=risk_level,
-            findings_count=findings_count
+        return EmailDeliveryResult(
+            message_id=message.message_id,
+            status="sent",
+            sent_at=datetime.now(),
+            delivered_at=datetime.now()
         )
-
-    def _get_report_email_text(self, name: str, analysis_data: Dict[str, Any]) -> str:
-        """
-        Plain text version of report email
-        """
-        compliance_score = analysis_data.get('compliance_score', 0)
-        risk_level = analysis_data.get('estimated_risk_euro', 'Unbekannt')
-        findings_count = len(analysis_data.get('findings', {}))
+    
+    def get_delivery_status(self, message_id: str) -> Optional[EmailDeliveryResult]:
+        """Get delivery status for message"""
+        return self.delivery_results.get(message_id)
+    
+    def get_template(self, template_id: str) -> Optional[EmailTemplate]:
+        """Get email template by ID"""
+        return self.templates.get(template_id)
+    
+    def list_templates(self, category: str = None) -> List[EmailTemplate]:
+        """List available email templates"""
         
-        return f"""
-Hallo {name},
-
-Ihre Website-Analyse ist abgeschlossen! Hier sind die wichtigsten Ergebnisse:
-
-📊 ANALYSE-ZUSAMMENFASSUNG:
-• Compliance-Score: {compliance_score}%
-• Geschätztes Risiko: {risk_level} EUR
-• Gefundene Probleme: {findings_count} Bereiche
-
-⚡ NÄCHSTE SCHRITTE:
-Für eine detaillierte Lösungsstrategie und automatische Umsetzung 
-empfehlen wir Ihnen unseren KI-Automatisierung Service (39€/Monat).
-
-🚀 Jetzt optimieren: http://localhost:3000/#pricing
-
-🔒 DATENSCHUTZ: 
-Ihre Daten werden DSGVO-konform verarbeitet. 
-Widerruf jederzeit unter datenschutz@complyo.tech möglich.
-
----
-Complyo GmbH • Compliance Made Simple
-support@complyo.tech • http://localhost:3000
-        """
-
-    def send_deletion_confirmation_email(self, email: str, reference_id: str) -> bool:
-        """
-        Send confirmation email after data deletion (GDPR compliance)
-        """
+        templates = list(self.templates.values())
+        
+        if category:
+            templates = [t for t in templates if t.category == category]
+        
+        return templates
+    
+    def add_template(self, template: EmailTemplate) -> bool:
+        """Add new email template"""
+        
         try:
-            subject = "Bestätigung der Datenlöschung - Complyo"
+            # Validate template
+            if not template.template_id or not template.subject_template or not template.html_template:
+                return False
             
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <title>Datenlöschung bestätigt</title>
-            </head>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <div style="text-align: center; margin-bottom: 30px;">
-                        <h1 style="color: #667eea;">🛡️ Complyo</h1>
-                        <h2 style="color: #333;">Datenlöschung bestätigt</h2>
-                    </div>
-                    
-                    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                        <p>Sehr geehrte Damen und Herren,</p>
-                        
-                        <p>hiermit bestätigen wir die <strong>vollständige Löschung</strong> Ihrer personenbezogenen Daten aus unserem System gemäß <strong>Artikel 17 DSGVO</strong> (Recht auf Vergessenwerden).</p>
-                        
-                        <div style="background-color: #e7f3ff; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                            <strong>Löschungsdetails:</strong><br>
-                            📅 Durchgeführt am: {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')}<br>
-                            🔗 Referenz-ID: {reference_id}<br>
-                            ⚖️ Rechtsgrundlage: DSGVO Artikel 17
-                        </div>
-                        
-                        <p>Ihre Daten wurden <strong>permanent und unwiderruflich</strong> aus allen unseren Systemen gelöscht, einschließlich:</p>
-                        <ul>
-                            <li>Persönliche Kontaktdaten</li>
-                            <li>Website-Analyse-Ergebnisse</li>
-                            <li>E-Mail-Kommunikation</li>
-                            <li>Einwilligungsnachweis</li>
-                            <li>Technische Logs</li>
-                        </ul>
-                        
-                        <p>Falls Sie in Zukunft unsere Dienste erneut nutzen möchten, müssen Sie eine neue Einwilligung erteilen.</p>
-                    </div>
-                    
-                    <div style="border-top: 1px solid #eee; padding-top: 20px; font-size: 12px; color: #666;">
-                        <p><strong>Complyo GmbH</strong><br>
-                        E-Mail: datenschutz@complyo.tech<br>
-                        Website: https://complyo.tech</p>
-                        
-                        <p>Bei Fragen wenden Sie sich gerne an unseren Datenschutzbeauftragten.</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-            
-            text_content = f"""
-            Datenlöschung bestätigt - Complyo
-            
-            Sehr geehrte Damen und Herren,
-            
-            hiermit bestätigen wir die vollständige Löschung Ihrer personenbezogenen Daten 
-            aus unserem System gemäß Artikel 17 DSGVO (Recht auf Vergessenwerden).
-            
-            Löschungsdetails:
-            - Durchgeführt am: {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')}
-            - Referenz-ID: {reference_id}
-            - Rechtsgrundlage: DSGVO Artikel 17
-            
-            Ihre Daten wurden permanent und unwiderruflich gelöscht.
-            
-            Bei Fragen: datenschutz@complyo.tech
-            
-            Mit freundlichen Grüßen,
-            Ihr Complyo Team
-            """
-            
-            return self._send_email(email, subject, html_content, text_content)
+            self.templates[template.template_id] = template
+            logger.info(f"📧 Email template added: {template.name}")
+            return True
             
         except Exception as e:
-            logger.error(f"Error sending deletion confirmation email: {e}")
+            logger.error(f"Failed to add template: {str(e)}")
             return False
     
-    def send_data_export_email(self, email: str, export_data: dict) -> bool:
-        """
-        Send data export email (GDPR data portability)
-        """
-        try:
-            subject = "Ihre Datenexport - Complyo DSGVO"
-            
-            # Convert export data to readable format
-            export_summary = {
-                "Persönliche Daten": len(export_data.get("personal_data", {})),
-                "Einwilligungsdaten": len(export_data.get("consent_data", {})),
-                "Analysedaten": "Ja" if export_data.get("analysis_data") else "Nein",
-                "Technische Daten": len(export_data.get("technical_data", {}))
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get email service statistics"""
+        
+        total_sent = len(self.delivery_results)
+        successful = len([r for r in self.delivery_results.values() if r.status in ["sent", "delivered"]])
+        failed = len([r for r in self.delivery_results.values() if r.status == "failed"])
+        
+        # Recent activity (last 24 hours)
+        recent_cutoff = datetime.now() - timedelta(hours=24)
+        recent_sent = len([r for r in self.delivery_results.values() if r.sent_at and r.sent_at > recent_cutoff])
+        
+        return {
+            "total_emails_sent": total_sent,
+            "successful_deliveries": successful,
+            "failed_deliveries": failed,
+            "success_rate": (successful / total_sent * 100) if total_sent > 0 else 0,
+            "recent_24h": recent_sent,
+            "templates_available": len(self.templates),
+            "rate_limit_status": {
+                "current_rate": len(self.sent_times),
+                "max_rate": self.rate_limit_max,
+                "window_minutes": self.rate_limit_window.total_seconds() / 60
             }
-            
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <title>Ihr Datenexport</title>
-            </head>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <div style="text-align: center; margin-bottom: 30px;">
-                        <h1 style="color: #667eea;">🛡️ Complyo</h1>
-                        <h2 style="color: #333;">Ihr Datenexport</h2>
-                    </div>
-                    
-                    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                        <p>Sehr geehrte Damen und Herren,</p>
-                        
-                        <p>gemäß <strong>Artikel 20 DSGVO</strong> (Recht auf Datenübertragbarkeit) erhalten Sie hiermit alle Ihre bei uns gespeicherten personenbezogenen Daten.</p>
-                        
-                        <div style="background-color: #e7f3ff; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                            <strong>Export-Details:</strong><br>
-                            📅 Erstellt am: {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')}<br>
-                            📊 Datenkategorien: {len(export_data)}<br>
-                            ⚖️ Rechtsgrundlage: DSGVO Artikel 20
-                        </div>
-                        
-                        <h3>Ihre Daten im Überblick:</h3>
-                        <ul>
-                            {''.join([f"<li><strong>{k}:</strong> {v}</li>" for k, v in export_summary.items()])}
-                        </ul>
-                        
-                        <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                            <strong>⚠️ Wichtiger Hinweis:</strong><br>
-                            Diese E-Mail enthält Ihre vollständigen personenbezogenen Daten. 
-                            Behandeln Sie diese Informationen vertraulich und löschen Sie sie 
-                            nach der Verwendung sicher.
-                        </div>
-                        
-                        <p>Die vollständigen Daten finden Sie im JSON-Format am Ende dieser E-Mail.</p>
-                    </div>
-                    
-                    <div style="border-top: 1px solid #eee; padding-top: 20px; font-size: 12px; color: #666;">
-                        <p><strong>Complyo GmbH</strong><br>
-                        E-Mail: datenschutz@complyo.tech<br>
-                        Website: https://complyo.tech</p>
-                    </div>
-                    
-                    <div style="margin-top: 30px; padding: 20px; background-color: #f8f9fa; border-radius: 8px;">
-                        <h3>Ihre vollständigen Daten (JSON-Format):</h3>
-                        <pre style="background-color: #fff; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 11px;">{json.dumps(export_data, indent=2, ensure_ascii=False)}</pre>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-            
-            text_content = f"""
-            Ihr Datenexport - Complyo DSGVO
-            
-            Sehr geehrte Damen und Herren,
-            
-            gemäß Artikel 20 DSGVO (Recht auf Datenübertragbarkeit) erhalten Sie hiermit 
-            alle Ihre bei uns gespeicherten personenbezogenen Daten.
-            
-            Export-Details:
-            - Erstellt am: {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')}
-            - Datenkategorien: {len(export_data)}
-            - Rechtsgrundlage: DSGVO Artikel 20
-            
-            Ihre Daten (JSON-Format):
-            {json.dumps(export_data, indent=2, ensure_ascii=False)}
-            
-            Behandeln Sie diese Daten vertraulich.
-            
-            Bei Fragen: datenschutz@complyo.tech
-            
-            Mit freundlichen Grüßen,
-            Ihr Complyo Team
-            """
-            
-            return self._send_email(email, subject, html_content, text_content)
-            
-        except Exception as e:
-            logger.error(f"Error sending data export email: {e}")
-            return False
+        }
 
 # Global email service instance
 email_service = EmailService()
+
+# Convenience functions for common email types
+async def send_welcome_email(user_email: str, user_name: str, dashboard_url: str) -> EmailDeliveryResult:
+    """Send welcome email to new user"""
+    
+    return await email_service.send_template_email(
+        template_id="welcome",
+        to_email=user_email,
+        variables={
+            "user_name": user_name,
+            "dashboard_url": dashboard_url,
+            "trial_expires": (datetime.now() + timedelta(days=7)).strftime("%d.%m.%Y")
+        }
+    )
+
+async def send_compliance_alert(user_email: str, website_name: str, website_url: str, alert_data: Dict[str, Any]) -> EmailDeliveryResult:
+    """Send compliance alert email"""
+    
+    return await email_service.send_template_email(
+        template_id="compliance_alert",
+        to_email=user_email,
+        variables={
+            "website_name": website_name,
+            "website_url": website_url,
+            "alert_title": alert_data.get("title", "Compliance-Problem erkannt"),
+            "alert_description": alert_data.get("description", ""),
+            "compliance_score": alert_data.get("score", 0),
+            "threshold": alert_data.get("threshold", 70),
+            "recommended_actions": alert_data.get("actions", []),
+            "fix_url": alert_data.get("fix_url", ""),
+            "detected_at": datetime.now().strftime("%d.%m.%Y %H:%M")
+        },
+        priority="high"
+    )
+
+async def send_monthly_report(user_email: str, user_name: str, report_data: Dict[str, Any]) -> EmailDeliveryResult:
+    """Send monthly compliance report"""
+    
+    now = datetime.now()
+    
+    return await email_service.send_template_email(
+        template_id="monthly_report",
+        to_email=user_email,
+        variables={
+            "user_name": user_name,
+            "month_name": now.strftime("%B"),
+            "year": now.year,
+            "next_month": (now.replace(day=1) + timedelta(days=32)).strftime("%B"),
+            **report_data
+        }
+    )
+
+async def send_expert_consultation_confirmation(client_email: str, appointment_data: Dict[str, Any]) -> EmailDeliveryResult:
+    """Send expert consultation confirmation email"""
+    
+    return await email_service.send_template_email(
+        template_id="expert_consultation",
+        to_email=client_email,
+        variables=appointment_data,
+        from_address=email_service.config["sender"]["support_email"],
+        priority="high"
+    )
