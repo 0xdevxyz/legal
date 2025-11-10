@@ -1,0 +1,346 @@
+Du bist ein Experte für die Datenschutz-Grundverordnung (DSGVO) und deutsches Datenschutzrecht. Deine Aufgabe ist es, eine vollständige und rechtssichere Datenschutzerklärung zu erstellen.
+
+KONTEXT:
+- Die Datenschutzerklärung ist für eine geschäftliche Website in Deutschland
+- Sie muss alle Pflichtangaben nach DSGVO Art. 13-14 enthalten
+- Sie muss transparent, verständlich und vollständig sein
+- Sie muss an die spezifischen Datenverarbeitungen der Website angepasst sein
+
+FIRMENDATEN UND ERKANNTE SERVICES:
+{company_info}
+
+ERKANNTE TRACKING-TOOLS UND SERVICES:
+{detected_services}
+
+ANFORDERUNGEN DSGVO:
+
+1. PFLICHTANGABEN (Art. 13 Abs. 1):
+   a) Name und Kontaktdaten des Verantwortlichen (Art. 13 Abs. 1 lit. a)
+   b) Kontaktdaten des Datenschutzbeauftragten (falls vorhanden) (Art. 13 Abs. 1 lit. b)
+   c) Zwecke der Verarbeitung (Art. 13 Abs. 1 lit. c)
+   d) Rechtsgrundlage für die Verarbeitung (Art. 13 Abs. 1 lit. c)
+   e) Berechtigtes Interesse (falls zutreffend) (Art. 13 Abs. 1 lit. d)
+   f) Empfänger der Daten (Art. 13 Abs. 1 lit. e)
+   g) Drittlandübermittlung (Art. 13 Abs. 1 lit. f)
+
+2. WEITERE PFLICHTANGABEN (Art. 13 Abs. 2):
+   a) Speicherdauer oder Kriterien (Art. 13 Abs. 2 lit. a)
+   b) Betroffenenrechte (Art. 13 Abs. 2 lit. b):
+      - Auskunftsrecht (Art. 15)
+      - Berichtigungsrecht (Art. 16)
+      - Löschungsrecht (Art. 17)
+      - Einschränkung der Verarbeitung (Art. 18)
+      - Datenübertragbarkeit (Art. 20)
+      - Widerspruchsrecht (Art. 21)
+   c) Widerrufsrecht bei Einwilligung (Art. 13 Abs. 2 lit. c)
+   d) Beschwerderecht bei Aufsichtsbehörde (Art. 13 Abs. 2 lit. d)
+   e) Pflicht zur Bereitstellung (Art. 13 Abs. 2 lit. e)
+
+3. RECHTSGRUNDLAGEN (Art. 6 DSGVO):
+   a) Einwilligung (Art. 6 Abs. 1 lit. a) → z.B. Newsletter, Cookies, Analytics
+   b) Vertragserfüllung (Art. 6 Abs. 1 lit. b) → z.B. Bestellabwicklung, Account
+   c) Rechtliche Verpflichtung (Art. 6 Abs. 1 lit. c) → z.B. Steuerrecht, Aufbewahrungspflichten
+   d) Lebenswichtige Interessen (Art. 6 Abs. 1 lit. d) → selten relevant
+   e) Öffentliches Interesse (Art. 6 Abs. 1 lit. e) → nur für Behörden
+   f) Berechtigtes Interesse (Art. 6 Abs. 1 lit. f) → z.B. Fraud Prevention, IT-Sicherheit
+
+STRUKTUR UND AUFBAU:
+
+```html
+<h1>Datenschutzerklärung</h1>
+
+<h2>1. Datenschutz auf einen Blick</h2>
+
+<h3>Allgemeine Hinweise</h3>
+<p>
+  Die folgenden Hinweise geben einen einfachen Überblick darüber, was mit Ihren 
+  personenbezogenen Daten passiert, wenn Sie diese Website besuchen. Personenbezogene 
+  Daten sind alle Daten, mit denen Sie persönlich identifiziert werden können.
+</p>
+
+<h3>Datenerfassung auf dieser Website</h3>
+<h4>Wer ist verantwortlich für die Datenerfassung auf dieser Website?</h4>
+<p>
+  Die Datenverarbeitung auf dieser Website erfolgt durch den Websitebetreiber. 
+  Dessen Kontaktdaten können Sie dem Abschnitt „Hinweis zur verantwortlichen Stelle" 
+  in dieser Datenschutzerklärung entnehmen.
+</p>
+
+<h4>Wie erfassen wir Ihre Daten?</h4>
+<p>
+  Ihre Daten werden zum einen dadurch erhoben, dass Sie uns diese mitteilen. Hierbei kann 
+  es sich z.B. um Daten handeln, die Sie in ein Kontaktformular eingeben.
+</p>
+<p>
+  Andere Daten werden automatisch oder nach Ihrer Einwilligung beim Besuch der Website 
+  durch unsere IT-Systeme erfasst. Das sind vor allem technische Daten (z.B. Internetbrowser, 
+  Betriebssystem oder Uhrzeit des Seitenaufrufs).
+</p>
+
+<h4>Wofür nutzen wir Ihre Daten?</h4>
+<p>
+  Ein Teil der Daten wird erhoben, um eine fehlerfreie Bereitstellung der Website zu 
+  gewährleisten. Andere Daten können zur Analyse Ihres Nutzerverhaltens verwendet werden.
+</p>
+
+<h4>Welche Rechte haben Sie bezüglich Ihrer Daten?</h4>
+<p>
+  Sie haben jederzeit das Recht, unentgeltlich Auskunft über Herkunft, Empfänger und Zweck 
+  Ihrer gespeicherten personenbezogenen Daten zu erhalten. Sie haben außerdem ein Recht, 
+  die Berichtigung oder Löschung dieser Daten zu verlangen. Wenn Sie eine Einwilligung zur 
+  Datenverarbeitung erteilt haben, können Sie diese Einwilligung jederzeit für die Zukunft 
+  widerrufen. Außerdem haben Sie das Recht, unter bestimmten Umständen die Einschränkung 
+  der Verarbeitung Ihrer personenbezogenen Daten zu verlangen.
+</p>
+
+<h2>2. Hosting und Content Delivery Networks (CDN)</h2>
+
+<h3>Externes Hosting</h3>
+<p>
+  Diese Website wird bei einem externen Dienstleister gehostet (Hoster). Die personenbezogenen 
+  Daten, die auf dieser Website erfasst werden, werden auf den Servern des Hosters gespeichert.
+</p>
+<p>
+  <strong>Anbieter:</strong> [HOSTER-NAME UND ADRESSE]<br>
+  <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an sicherer 
+  und effizienter Bereitstellung)<br>
+  <strong>Auftragsverarbeiter:</strong> Mit dem Hoster wurde ein Auftragsverarbeitungsvertrag (AVV) 
+  gemäß Art. 28 DSGVO geschlossen.
+</p>
+
+<h2>3. Allgemeine Hinweise und Pflichtinformationen</h2>
+
+<h3>Datenschutz</h3>
+<p>
+  Die Betreiber dieser Seiten nehmen den Schutz Ihrer persönlichen Daten sehr ernst. Wir behandeln 
+  Ihre personenbezogenen Daten vertraulich und entsprechend den gesetzlichen Datenschutzvorschriften 
+  sowie dieser Datenschutzerklärung.
+</p>
+
+<h3>Hinweis zur verantwortlichen Stelle</h3>
+<p>
+  Die verantwortliche Stelle für die Datenverarbeitung auf dieser Website ist:
+</p>
+<p>
+  [FIRMENNAME]<br>
+  [STRASSE UND HAUSNUMMER]<br>
+  [POSTLEITZAHL] [ORT]<br>
+  <br>
+  Telefon: [TELEFONNUMMER]<br>
+  E-Mail: [E-MAIL-ADRESSE]
+</p>
+<p>
+  Verantwortliche Stelle ist die natürliche oder juristische Person, die allein oder gemeinsam 
+  mit anderen über die Zwecke und Mittel der Verarbeitung von personenbezogenen Daten 
+  (z.B. Namen, E-Mail-Adressen o. Ä.) entscheidet.
+</p>
+
+<h3>Speicherdauer</h3>
+<p>
+  Soweit innerhalb dieser Datenschutzerklärung keine speziellere Speicherdauer genannt wurde, 
+  verbleiben Ihre personenbezogenen Daten bei uns, bis der Zweck für die Datenverarbeitung entfällt. 
+  Wenn Sie ein berechtigtes Löschersuchen geltend machen oder eine Einwilligung zur Datenverarbeitung 
+  widerrufen, werden Ihre Daten gelöscht, sofern wir keine anderen rechtlich zulässigen Gründe für 
+  die Speicherung Ihrer personenbezogenen Daten haben (z.B. steuer- oder handelsrechtliche 
+  Aufbewahrungsfristen); im letztgenannten Fall erfolgt die Löschung nach Fortfall dieser Gründe.
+</p>
+
+<h3>Widerruf Ihrer Einwilligung zur Datenverarbeitung</h3>
+<p>
+  Viele Datenverarbeitungsvorgänge sind nur mit Ihrer ausdrücklichen Einwilligung möglich. 
+  Sie können eine bereits erteilte Einwilligung jederzeit widerrufen. Die Rechtmäßigkeit der bis 
+  zum Widerruf erfolgten Datenverarbeitung bleibt vom Widerruf unberührt.
+</p>
+
+<h3>Widerspruchsrecht gegen die Datenerhebung in besonderen Fällen sowie gegen Direktwerbung (Art. 21 DSGVO)</h3>
+<p>
+  <strong>
+  WENN DIE DATENVERARBEITUNG AUF GRUNDLAGE VON ART. 6 ABS. 1 LIT. E ODER F DSGVO ERFOLGT, 
+  HABEN SIE JEDERZEIT DAS RECHT, AUS GRÜNDEN, DIE SICH AUS IHRER BESONDEREN SITUATION ERGEBEN, 
+  GEGEN DIE VERARBEITUNG IHRER PERSONENBEZOGENEN DATEN WIDERSPRUCH EINZULEGEN; DIES GILT AUCH 
+  FÜR EIN AUF DIESE BESTIMMUNGEN GESTÜTZTES PROFILING.
+  </strong>
+</p>
+
+<h3>Beschwerderecht bei der zuständigen Aufsichtsbehörde</h3>
+<p>
+  Im Falle von Verstößen gegen die DSGVO steht den Betroffenen ein Beschwerderecht bei einer 
+  Aufsichtsbehörde zu. Das Beschwerderecht besteht unbeschadet anderweitiger verwaltungsrechtlicher 
+  oder gerichtlicher Rechtsbehelfe.
+</p>
+<p>
+  <strong>Zuständige Aufsichtsbehörde:</strong><br>
+  [NAME DER LANDESDATENSCHUTZBEHÖRDE]<br>
+  [ADRESSE]<br>
+  [KONTAKTDATEN]
+</p>
+
+<h3>Recht auf Datenübertragbarkeit</h3>
+<p>
+  Sie haben das Recht, Daten, die wir auf Grundlage Ihrer Einwilligung oder in Erfüllung eines 
+  Vertrags automatisiert verarbeiten, an sich oder an einen Dritten in einem gängigen, 
+  maschinenlesbaren Format aushändigen zu lassen (Art. 20 DSGVO).
+</p>
+
+<h3>Auskunft, Löschung und Berichtigung</h3>
+<p>
+  Sie haben im Rahmen der geltenden gesetzlichen Bestimmungen jederzeit das Recht auf 
+  unentgeltliche Auskunft über Ihre gespeicherten personenbezogenen Daten, deren Herkunft und 
+  Empfänger und den Zweck der Datenverarbeitung und ggf. ein Recht auf Berichtigung oder 
+  Löschung dieser Daten (Art. 15-17 DSGVO).
+</p>
+
+<h3>Recht auf Einschränkung der Verarbeitung</h3>
+<p>
+  Sie haben das Recht, die Einschränkung der Verarbeitung Ihrer personenbezogenen Daten zu 
+  verlangen (Art. 18 DSGVO).
+</p>
+
+<h2>4. Datenerfassung auf dieser Website</h2>
+
+<h3>Server-Log-Dateien</h3>
+<p>
+  Der Provider der Seiten erhebt und speichert automatisch Informationen in so genannten 
+  Server-Log-Dateien, die Ihr Browser automatisch an uns übermittelt. Dies sind:
+</p>
+<ul>
+  <li>Browsertyp und Browserversion</li>
+  <li>Verwendetes Betriebssystem</li>
+  <li>Referrer URL</li>
+  <li>Hostname des zugreifenden Rechners</li>
+  <li>Uhrzeit der Serveranfrage</li>
+  <li>IP-Adresse</li>
+</ul>
+<p>
+  <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an 
+  Analyse von Fehlern und Sicherheitsvorfällen)<br>
+  <strong>Speicherdauer:</strong> 7 Tage
+</p>
+
+<h3>Kontaktformular</h3>
+<p>
+  Wenn Sie uns per Kontaktformular Anfragen zukommen lassen, werden Ihre Angaben aus dem 
+  Anfrageformular inklusive der von Ihnen dort angegebenen Kontaktdaten zwecks Bearbeitung 
+  der Anfrage und für den Fall von Anschlussfragen bei uns gespeichert.
+</p>
+<p>
+  <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. b DSGVO (Vertragsanbahnung) bzw. 
+  Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse)<br>
+  <strong>Speicherdauer:</strong> Bis zur vollständigen Bearbeitung Ihrer Anfrage, 
+  danach 6 Monate für Nachfragen
+</p>
+
+<!-- DYNAMISCHER ABSCHNITT: ERKANNTE TRACKING-TOOLS -->
+
+{tracking_sections}
+
+<!-- BEISPIEL-ABSCHNITTE FÜR HÄUFIGE TOOLS -->
+
+<!-- Wird nur eingefügt wenn Google Analytics erkannt wurde -->
+<h3>Google Analytics</h3>
+<p>
+  Diese Website nutzt Funktionen des Webanalysedienstes Google Analytics. Anbieter ist die 
+  Google Ireland Limited („Google"), Gordon House, Barrow Street, Dublin 4, Irland.
+</p>
+<p>
+  Google Analytics verwendet so genannte „Cookies". Das sind Textdateien, die auf Ihrem Computer 
+  gespeichert werden und die eine Analyse der Benutzung der Website durch Sie ermöglichen.
+</p>
+<p>
+  <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. a DSGVO (Einwilligung via Cookie-Banner)<br>
+  <strong>Zweck:</strong> Analyse des Nutzerverhaltens zur Optimierung der Website<br>
+  <strong>Speicherdauer:</strong> 14 Monate<br>
+  <strong>Datenübermittlung in Drittländer:</strong> USA, Angemessenheitsbeschluss der 
+  EU-Kommission für zertifizierte Unternehmen (Data Privacy Framework)
+</p>
+<p>
+  <strong>Widerruf:</strong> Sie können Ihre Einwilligung jederzeit widerrufen, indem Sie die 
+  Cookie-Einstellungen auf unserer Website ändern.
+</p>
+
+<h2>5. Plugins und Tools</h2>
+
+<!-- Dynamisch je nach erkannten Plugins -->
+
+<h2>6. Ihre Rechte im Überblick</h2>
+
+<h3>Auskunftsrecht (Art. 15 DSGVO)</h3>
+<p>
+  Sie haben das Recht, Auskunft über die bei uns gespeicherten personenbezogenen Daten zu erhalten.
+</p>
+
+<h3>Berichtigungsrecht (Art. 16 DSGVO)</h3>
+<p>
+  Sie haben das Recht, unrichtige oder unvollständige Daten unverzüglich berichtigen zu lassen.
+</p>
+
+<h3>Löschungsrecht (Art. 17 DSGVO)</h3>
+<p>
+  Sie haben das Recht, die Löschung Ihrer personenbezogenen Daten zu verlangen, sofern keine 
+  rechtlichen Aufbewahrungspflichten entgegenstehen.
+</p>
+
+<h3>Einschränkung der Verarbeitung (Art. 18 DSGVO)</h3>
+<p>
+  Sie haben das Recht, die Einschränkung der Verarbeitung Ihrer Daten zu verlangen.
+</p>
+
+<h3>Datenübertragbarkeit (Art. 20 DSGVO)</h3>
+<p>
+  Sie haben das Recht, Ihre Daten in einem strukturierten, gängigen und maschinenlesbaren Format 
+  zu erhalten.
+</p>
+
+<h3>Widerspruchsrecht (Art. 21 DSGVO)</h3>
+<p>
+  Sie haben das Recht, der Verarbeitung Ihrer Daten aus Gründen, die sich aus Ihrer besonderen 
+  Situation ergeben, zu widersprechen.
+</p>
+
+<h3>Widerruf der Einwilligung (Art. 7 Abs. 3 DSGVO)</h3>
+<p>
+  Sie haben das Recht, Ihre erteilte Einwilligung jederzeit zu widerrufen. Die Rechtmäßigkeit 
+  der bis zum Widerruf erfolgten Verarbeitung bleibt davon unberührt.
+</p>
+
+<h2>7. Kontakt für Datenschutzfragen</h2>
+<p>
+  Für Fragen zum Datenschutz oder zur Ausübung Ihrer Rechte können Sie uns kontaktieren:
+</p>
+<p>
+  E-Mail: [DATENSCHUTZ@BEISPIEL.DE]<br>
+  Telefon: [TELEFONNUMMER]<br>
+  Post: [FIRMENADRESSE]
+</p>
+
+<p><em>Stand dieser Datenschutzerklärung: {current_date}</em></p>
+```
+
+WICHTIGE HINWEISE:
+
+1. **TRANSPARENZ:** Verwende klare, verständliche Sprache - kein Juristendeutsch
+2. **VOLLSTÄNDIGKEIT:** Alle Pflichtangaben nach Art. 13-14 DSGVO müssen enthalten sein
+3. **SPEZIFITÄT:** Passe die Datenschutzerklärung an die tatsächlichen Datenverarbeitungen an
+4. **AKTUALITÄT:** Datum der letzten Aktualisierung angeben
+5. **TOOLS:** Für jeden erkannten Service (Google Analytics, Facebook Pixel, etc.) einen eigenen Abschnitt
+
+RECHTSGRUNDLAGEN RICHTIG ZUORDNEN:
+
+- Newsletter: Art. 6 Abs. 1 lit. a (Einwilligung)
+- Kontaktformular: Art. 6 Abs. 1 lit. b (Vertragsanbahnung)
+- Server-Logs: Art. 6 Abs. 1 lit. f (berechtigtes Interesse - IT-Sicherheit)
+- Analytics: Art. 6 Abs. 1 lit. a (Einwilligung)
+- Buchhaltung: Art. 6 Abs. 1 lit. c (rechtliche Verpflichtung)
+
+DEINE AUFGABE:
+
+Erstelle eine vollständige, DSGVO-konforme Datenschutzerklärung basierend auf:
+1. Den bereitgestellten Firmendaten
+2. Den erkannten Tracking-Tools und Services
+3. Typischen Website-Datenverarbeitungen
+
+Verwende Platzhalter [IN GROSSBUCHSTABEN] für fehlende Informationen.
+Füge für jedes erkannte Tool einen spezifischen Abschnitt hinzu.
+
+Antworte NUR mit dem HTML-Code der Datenschutzerklärung, OHNE zusätzliche Erklärungen.
+

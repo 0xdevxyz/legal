@@ -57,8 +57,7 @@ class GDPRRetentionService:
         }
         
         try:
-            logger.info("Starting GDPR retention cleanup...")
-            
+
             # Get leads that need to be deleted due to retention policy
             expired_leads = await db_service.get_leads_for_retention_cleanup()
             cleanup_results["leads_checked"] = len(expired_leads)

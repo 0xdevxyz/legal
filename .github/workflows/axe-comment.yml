@@ -1,0 +1,44 @@
+name: Accessibility Quick Check
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  axe-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Comment on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          recreate: true
+          message: |
+            ### ♿ Accessibility Reminder
+            
+            Bitte stellen Sie sicher, dass Ihre Änderungen folgende Kriterien erfüllen:
+            
+            #### Checkliste
+            - ✅ **Alt-Texte:** Alle neuen Bilder haben aussagekräftige Alt-Texte
+            - ✅ **Farbkontraste:** Text hat mindestens 4.5:1 Kontrast zum Hintergrund
+            - ✅ **Tastatur-Navigation:** Alle interaktiven Elemente sind per Tab erreichbar
+            - ✅ **ARIA-Labels:** Buttons, Links und Inputs haben beschreibende Labels
+            - ✅ **Semantisches HTML:** `<header>`, `<nav>`, `<main>`, `<footer>` korrekt verwendet
+            - ✅ **Heading-Struktur:** H1 → H2 → H3 (keine Sprünge)
+            - ✅ **Focus-Styles:** Sichtbare Focus-Indikatoren vorhanden
+            
+            #### Tools zum Testen
+            - 🔍 [WAVE Browser Extension](https://wave.webaim.org/extension/)
+            - 🎨 [WebAIM Contrast Checker](https://webaim.org/resources/contrastchecker/)
+            - ⌨️ Manuelle Tastatur-Navigation (nur Tab/Enter/Space)
+            - 📱 Screenreader-Test (NVDA/JAWS auf Windows, VoiceOver auf Mac)
+            
+            #### Rechtlicher Hinweis
+            Das **BFSG (Barrierefreiheitsstärkungsgesetz)** verpflichtet seit 28.06.2025 Unternehmen zur digitalen Barrierefreiheit. Verstöße können mit Bußgeldern bis zu **100.000€** geahndet werden.
+            
+            ---
+            _Automatisch gepostet von Complyo CI · [Mehr zu Barrierefreiheit](https://complyo.tech/barrierefreiheit)_
+

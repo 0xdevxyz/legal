@@ -4,10 +4,13 @@ import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ComplyoOriginalLanding from '../components/ComplyoOriginalLanding';
 import ComplyoHighConversionLanding from '../components/ComplyoHighConversionLanding';
+import ProfessionalLanding from '../components/ProfessionalLanding';
 import { useABTestTracking } from '../hooks/useABTestTracking';
 
+type Variant = 'professional' | 'original' | 'high-conversion';
+
 function ABTestContent() {
-  const [variant, setVariant] = useState<'original' | 'high-conversion' | null>(null);
+  const [variant, setVariant] = useState<Variant | null>(null);
   const [sessionId, setSessionId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const searchParams = useSearchParams();
@@ -18,7 +21,8 @@ function ABTestContent() {
       try {
         const forceVariant = searchParams.get('variant');
 
-        if (forceVariant === 'original' || forceVariant === 'high-conversion') {
+        // Force-Modus: Nutzer kann Variante per URL-Parameter wählen
+        if (forceVariant === 'professional' || forceVariant === 'original' || forceVariant === 'high-conversion') {
           console.log(`🔧 Force-Modus: ${forceVariant}`);
           setVariant(forceVariant);
           const sessionId = await trackVariantAssignment(forceVariant, 'forced');
@@ -27,14 +31,27 @@ function ABTestContent() {
           const storedVariant = localStorage.getItem('complyo_ab_variant');
           const storedSessionId = localStorage.getItem('complyo_session_id');
 
+          // Returning User: Zeige gespeicherte Variante
           if (storedVariant && storedSessionId &&
-              (storedVariant === 'original' || storedVariant === 'high-conversion')) {
+              (storedVariant === 'professional' || storedVariant === 'original' || storedVariant === 'high-conversion')) {
             console.log(`🔄 Returning User: ${storedVariant}`);
-            setVariant(storedVariant as 'original' | 'high-conversion');
+            setVariant(storedVariant as Variant);
             setSessionId(storedSessionId);
           } else {
-            const randomVariant = Math.random() < 0.5 ? 'original' : 'high-conversion';
-            console.log(`🎲 New User Assignment: ${randomVariant}`);
+            // New User: Gewichtete Zufallsauswahl
+            // 67% Professional, 17% Original, 16% High-Conversion
+            const random = Math.random();
+            let randomVariant: Variant;
+            
+            if (random < 0.67) {
+              randomVariant = 'professional'; // 67% (2/3)
+            } else if (random < 0.84) {
+              randomVariant = 'original'; // 17% (1/6)
+            } else {
+              randomVariant = 'high-conversion'; // 16% (1/6)
+            }
+            
+            console.log(`🎲 New User Assignment: ${randomVariant} (random: ${random.toFixed(3)})`);
             setVariant(randomVariant);
 
             const newSessionId = await trackVariantAssignment(randomVariant, 'new');
@@ -46,7 +63,7 @@ function ABTestContent() {
         }
       } catch (error) {
         console.error('A/B Test Initialization Error:', error);
-        setVariant('original');
+        setVariant('professional'); // Fallback zur besten Variante
         setSessionId('fallback-session');
       } finally {
         setIsLoading(false);
@@ -68,11 +85,16 @@ function ABTestContent() {
     );
   }
 
-  const commonProps = { variant, sessionId };
-
-  return variant === 'original'
-    ? <ComplyoOriginalLanding {...commonProps} />
-    : <ComplyoHighConversionLanding {...commonProps} />;
+  // Render entsprechende Variante
+  if (variant === 'professional') {
+    return <ProfessionalLanding />;
+  } else if (variant === 'original') {
+    const commonProps = { variant: 'original' as const, sessionId };
+    return <ComplyoOriginalLanding {...commonProps} />;
+  } else {
+    const commonProps = { variant: 'high-conversion' as const, sessionId };
+    return <ComplyoHighConversionLanding {...commonProps} />;
+  }
 }
 
 export default function ABTestRouter() {

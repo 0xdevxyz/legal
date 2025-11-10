@@ -68,4 +68,3 @@ async def health_check():
 
 with open('main_updated.py', 'w') as f:
     f.write(content)
-print("Updated main.py created")

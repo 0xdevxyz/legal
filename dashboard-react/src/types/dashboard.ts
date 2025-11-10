@@ -14,7 +14,7 @@ export interface Website {
   name: string;
   lastScan: string;
   complianceScore: number;
-  status: 'active' | 'scanning' | 'error';
+  status: 'active' | 'scanning' | 'error' | 'completed';
 }
 
 export interface User {

@@ -15,8 +15,8 @@ export const Card: React.FC<CardProps> = ({
   return (
     <div
       className={cn(
-        'bg-slate-800/30 backdrop-blur-lg border border-slate-700/50 rounded-xl p-6',
-        hover && 'transition-all duration-300 hover:transform hover:scale-[1.02] hover:shadow-2xl',
+        'glass-card rounded-2xl p-6 shadow-lg',
+        hover && 'transition-all duration-300 hover:glass-strong hover:scale-[1.01] hover:shadow-2xl',
         className
       )}
     >
@@ -29,7 +29,7 @@ export const CardHeader: React.FC<{ children: React.ReactNode; className?: strin
   children, 
   className 
 }) => (
-  <div className={cn('mb-4', className)}>
+  <div className={cn('mb-5', className)}>
     {children}
   </div>
 );
@@ -38,7 +38,7 @@ export const CardTitle: React.FC<{ children: React.ReactNode; className?: string
   children, 
   className 
 }) => (
-  <h3 className={cn('text-lg font-semibold text-white', className)}>
+  <h3 className={cn('text-xl font-bold text-white tracking-tight', className)}>
     {children}
   </h3>
 );
@@ -47,7 +47,7 @@ export const CardContent: React.FC<{ children: React.ReactNode; className?: stri
   children, 
   className 
 }) => (
-  <div className={cn('text-gray-300', className)}>
+  <div className={cn('text-zinc-300', className)}>
     {children}
   </div>
 );

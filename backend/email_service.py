@@ -28,6 +28,7 @@ class EmailService:
         self.smtp_password = os.getenv('SMTP_PASSWORD', '')
         self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.tech')
         self.sender_name = os.getenv('SENDER_NAME', 'Complyo Compliance')
+        self.frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
         
         # For demo/testing purposes, we'll use console output if no SMTP is configured
         self.demo_mode = not all([self.smtp_username, self.smtp_password])
@@ -40,7 +41,7 @@ class EmailService:
         Send GDPR-compliant verification email with double opt-in in specified language
         """
         try:
-            verification_url = f"http://localhost:3000/verify-email?token={verification_token}"
+            verification_url = f"{self.frontend_url}/verify-email?token={verification_token}"
             
             subject = i18n_service.get_translation("email_verification_subject", language)
             

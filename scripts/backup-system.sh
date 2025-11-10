@@ -19,8 +19,8 @@ S3_BUCKET=\"${S3_BACKUP_BUCKET:-}\"
 NOTIFY_EMAIL=\"${BACKUP_NOTIFY_EMAIL:-admin@complyo.tech}\"
 
 # Load environment variables
-if [ -f \"/opt/projects/saas-project-2/.env.production\" ]; then
-    source \"/opt/projects/saas-project-2/.env.production\"
+if [ -f \"/opt/projects/saas-project-2/.env\" ]; then
+    source \"/opt/projects/saas-project-2/.env\"
 fi
 
 # Colors for output

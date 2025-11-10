@@ -1,0 +1,67 @@
+name: Complyo CI
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  backend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install flake8 black
+      
+      - name: Lint with flake8
+        run: |
+          cd backend
+          # Stop auf kritische Syntax-Fehler
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Warnings für Code-Style (nicht blockierend)
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      
+      - name: Check formatting with black
+        run: |
+          cd backend
+          black --check . || echo "⚠️ Code nicht formatiert - run 'black .' lokal"
+  
+  frontend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      
+      - name: Install & Lint Dashboard
+        run: |
+          cd dashboard-react
+          npm ci
+          npm run lint
+      
+      - name: Type Check
+        run: |
+          cd dashboard-react
+          npm run type-check
+  
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build Backend Image
+        run: docker build -t complyo-backend:test ./backend
+      
+      - name: Build Dashboard Image
+        run: docker build -t complyo-dashboard:test -f ./dashboard-react/Dockerfile.prod ./dashboard-react
+

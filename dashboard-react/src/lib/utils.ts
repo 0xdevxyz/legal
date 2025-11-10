@@ -51,3 +51,51 @@ export function generateComplianceTrend(days: number): { date: string; score: nu
   
   return data;
 }
+
+/**
+ * Normalisiert URLs zu vollständigen https:// URLs
+ * Akzeptiert alle Formate: https://, http://, www., nur domain
+ * Entfernt trailing slashes für saubere URLs
+ */
+export function normalizeUrl(input: string): string {
+  if (!input || typeof input !== 'string') {
+    throw new Error('Ungültige URL');
+  }
+
+  let cleaned = input.trim();
+  
+  if (!cleaned) {
+    throw new Error('URL darf nicht leer sein');
+  }
+
+  // Protokoll hinzufügen wenn nötig
+  if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+    if (cleaned.startsWith('www.')) {
+      cleaned = 'https://' + cleaned;
+    } else {
+      cleaned = 'https://' + cleaned;
+    }
+  }
+
+  // URL-Objekt für saubere Normalisierung
+  try {
+    const urlObj = new URL(cleaned);
+    // WICHTIG: protocol + hostname (OHNE urlObj.href!)
+    // href fügt automatisch / hinzu
+    let normalized = `${urlObj.protocol}//${urlObj.hostname}`;
+    
+    // Optional: Port hinzufügen wenn vorhanden und nicht Standard
+    if (urlObj.port && urlObj.port !== '80' && urlObj.port !== '443') {
+      normalized += `:${urlObj.port}`;
+    }
+    
+    // Optional: Pathname hinzufügen (ohne trailing slash)
+    if (urlObj.pathname && urlObj.pathname !== '/') {
+      normalized += urlObj.pathname.replace(/\/+$/, '');
+    }
+    
+    return normalized;
+  } catch (e) {
+    throw new Error('Ungültiges URL-Format');
+  }
+}

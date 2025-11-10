@@ -1,1096 +1,491 @@
+'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Check, Shield, Lock, Eye, FileText, Cookie, Users, Zap } from 'lucide-react';
-import { ComplyoAccessibility } from '../lib/accessibility';
+import React, { useState, useRef } from 'react';
+import { 
+  Shield, 
+  CheckCircle, 
+  AlertTriangle,
+  ArrowRight,
+  Star,
+  Clock,
+  Zap,
+  TrendingUp,
+  Users,
+  ChevronDown,
+  Play
+} from 'lucide-react';
+import WebsiteScanner from './landing/WebsiteScanner';
 
 interface ComplyoLandingProps {
   variant: 'original' | 'high-conversion';
   sessionId: string;
 }
 
-
-interface AnalysisResult {
-  category: string;
-  status: 'pass' | 'warning' | 'fail';
-  score: number;
-  message: string;
-  details?: Record<string, any>;
-}
-
-interface AnalysisData {
-  overall_score: number;
-  total_issues: number;
-  results: AnalysisResult[];
-  scan_timestamp?: string;
-  scan_duration_ms?: number;
-}
-
-type NotificationType = 'success' | 'error' | 'warning' | 'info';
-
-interface Notification {
-  id: string;
-  message: string;
-
-  type: NotificationType;
-}
-
-const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId }) => {
-  const [url, setUrl] = useState('');
+/**
+ * High-Conversion Landing Page im MovesMethod-Stil
+ * Fokus auf Social Proof, Scarcity, Money-Back Guarantee
+ */
+export default function ComplyoHighConversionLanding({ variant, sessionId }: ComplyoLandingProps) {
+  const [websiteUrl, setWebsiteUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisResults, setAnalysisResults] = useState<AnalysisData | null>(null);
-  const [showResults, setShowResults] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  
-  // Lead generation form state
-  const [showLeadForm, setShowLeadForm] = useState(false);
-  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-  const [leadFormData, setLeadFormData] = useState({
-    email: '',
-    name: '',
-    company: ''
-  });
+  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
-  // Use relative URL to avoid CORS issues when deployed
-  const API_BASE = process.env.NODE_ENV === 'production'
-    ? '' // Empty string for production to use relative URLs
-    : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002';
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
 
-  // Initialize Accessibility Framework
-  useEffect(() => {
-    const a11y = ComplyoAccessibility.init({
-      autoFix: true,
-      announceChanges: true
-    });
+  const handleAnalyze = async () => {
+    if (!websiteUrl) return;
     
-    // Store globally for testing
-    window.ComplyoA11y = a11y;
-    
-    // Set page title for screen readers
-    document.title = 'Complyo - Automatische Website-Compliance mit Abmahnschutz';
-    
-    return () => {
-      // Cleanup if needed
-    };
-  }, []);
-
-  // Notification system
-  const addNotification = (message: string, type: NotificationType = 'info') => {
-    const id = Date.now().toString();
-    const newNotification: Notification = { id, message, type };
-    setNotifications(prev => [...prev, newNotification]);
-
-    // Announce to screen readers
-    if (window.ComplyoA11y) {
-      window.ComplyoA11y.announce(message, type === 'error' ? 'assertive' : 'polite');
-    }
-
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 5000);
-  };
-
-  const removeNotification = (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
-
-  // API Health Check
-  useEffect(() => {
-    fetch(`${API_BASE ? `${API_BASE}/health` : '/api/health'}`)
-      .then(response => response.json())
-      .then(data => {
-        console.log('API Health Check:', data);
-      })
-      .catch(error => {
-        console.warn('API not available, using demo mode:', error);
-      });
-  }, []);
-
-  // URL Normalization function
-  const normalizeUrl = (input: string): string => {
-    if (!input || typeof input !== 'string') {
-      throw new Error('URL is required and must be a string');
-    }
-
-    let url = input.trim();
-    
-    if (!url) {
-      throw new Error('URL cannot be empty');
-    }
-
-    // Remove common user input issues
-    url = url.replace(/^www\./, ''); // Remove leading www
-    url = url.replace(/\/$/, ''); // Remove trailing slash
-    
-    // Add https:// if no protocol is present
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      url = 'https://' + url;
-    }
-
-    // Basic validation
-    try {
-      const urlObj = new URL(url);
-      
-      // Basic domain validation
-      if (!urlObj.hostname || urlObj.hostname.length < 3) {
-        throw new Error('Invalid domain');
-      }
-      
-      if (!urlObj.hostname.includes('.')) {
-        throw new Error('Domain must contain at least one dot');
-      }
-      
-      return url;
-    } catch (error) {
-      throw new Error(`Invalid URL format: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
-  // Website Analysis
-  const analyzeWebsite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!url.trim()) {
-      addNotification('Bitte geben Sie eine URL ein (z.B. example.com)', 'error');
-      return;
-    }
-
-    // Normalize and validate URL
-    let normalizedUrl: string;
-    try {
-      normalizedUrl = normalizeUrl(url);
-    } catch (error) {
-      addNotification(`Ungültige URL: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`, 'error');
-      return;
-    }
-
     setIsAnalyzing(true);
-    setShowResults(false);
-
-    try {
-      const response = await fetch(`${API_BASE ? `${API_BASE}/api/analyze` : '/api/analyze'}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify({ url: normalizedUrl })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const backendData = await response.json();
-      
-      // Transform backend data to frontend format
-      const transformedData: AnalysisData = {
-        overall_score: backendData.compliance_score || 0,
-        total_issues: backendData.findings ? Object.keys(backendData.findings).filter(key => 
-          backendData.findings[key].includes('nicht') || 
-          backendData.findings[key].includes('fehlt') ||
-          backendData.findings[key].includes('Kein')
-        ).length : 0,
-        results: backendData.findings ? Object.entries(backendData.findings).map(([key, value]) => {
-          const score = getScoreFromText(String(value));
-          return {
-            category: getCategoryDisplayName(key),
-            status: getStatusFromScore(score),
-            score: score,
-            message: String(value),
-            details: { source: key }
-          };
-        }) : []
-      };
-      
-      setAnalysisResults(transformedData);
-      setShowResults(true);
-      addNotification('Analyse erfolgreich abgeschlossen!', 'success');
-      
-    } catch (error) {
-      console.error('Analysis error:', error);
-      
-      // Show demo data as fallback
-      const demoData: AnalysisData = {
-        overall_score: 65,
-        total_issues: 4,
-        results: [
-          {
-            category: "Impressum",
-            status: "warning",
-            score: 75,
-            message: "Impressum gefunden, aber unvollständig",
-            details: { found: true, complete: false }
-          },
-          {
-            category: "Datenschutzerklärung",
-            status: "pass",
-            score: 90,
-            message: "DSGVO-konforme Datenschutzerklärung gefunden",
-            details: { found: true, gdpr_compliant: true }
-          },
-          {
-            category: "Cookie-Compliance",
-            status: "fail",
-            score: 30,
-            message: "Kein Cookie-Consent-Banner gefunden",
-            details: { banner_found: false, consent_mechanism: false }
-          },
-          {
-            category: "Barrierefreiheit",
-            status: "warning",
-            score: 65,
-            message: "Grundlegende Barrierefreiheit vorhanden, Verbesserungen möglich",
-            details: { alt_texts: "partial", contrast: "good", navigation: "needs_improvement" }
-          }
-        ]
-      };
-      
-      setAnalysisResults(demoData);
-      setShowResults(true);
-      addNotification('Demo-Daten werden angezeigt (API nicht verfügbar)', 'warning');
-    } finally {
-      setIsAnalyzing(false);
-    }
+    // Redirect to full analysis
+    window.location.href = `#analysis?url=${encodeURIComponent(websiteUrl)}`;
   };
 
-  // Helper functions for data transformation
-  const getCategoryDisplayName = (key: string): string => {
-    const categoryMap: Record<string, string> = {
-      'impressum': 'Impressum',
-      'datenschutzerklaerung': 'Datenschutzerklärung',
-      'cookies': 'Cookie-Compliance',
-      'accessibility': 'Barrierefreiheit'
-    };
-    return categoryMap[key] || key;
-  };
-
-  const getScoreFromText = (text: string): number => {
-    // Simple scoring based on text analysis
-    if (text.includes('nicht') || text.includes('Kein') || text.includes('fehlt')) {
-      return 25; // fail
-    } else if (text.includes('unvollständig') || text.includes('Verbesserungen') || text.includes('mehrere')) {
-      return 65; // warning
-    } else {
-      return 90; // pass
-    }
-  };
-
-  const getStatusFromScore = (score: number): 'pass' | 'warning' | 'fail' => {
-    if (score >= 80) return 'pass';
-    if (score >= 50) return 'warning';
-    return 'fail';
-  };
-
-  const generateReport = () => {
-    if (!analysisResults) {
-      addNotification('Bitte führen Sie zuerst eine Analyse durch', 'error');
-      return;
-    }
-    setShowLeadForm(true);
-  };
-
-  const handleLeadFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!leadFormData.email.trim() || !leadFormData.name.trim()) {
-      addNotification('Bitte füllen Sie alle Pflichtfelder aus', 'error');
-      return;
-    }
-
-    setIsGeneratingReport(true);
-    
-    try {
-      // Send lead data to backend
-      const leadData = {
-        name: leadFormData.name.trim(),
-        email: leadFormData.email.trim(),
-        company: leadFormData.company.trim() || null,
-        url: url,
-        analysis_data: analysisResults,
-        session_id: sessionId
-      };
-      
-      const response = await fetch(`${API_BASE ? `${API_BASE}/api/leads/collect` : '/api/leads/collect'}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify(leadData)
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const result = await response.json();
-      
-      // Close form and show appropriate success message
-      setShowLeadForm(false);
-      
-      if (result.verified) {
-        addNotification(`✅ Report wird sofort an ${leadFormData.email} gesendet!`, 'success');
-      } else {
-        addNotification(`📧 Bestätigungs-E-Mail gesendet! Bitte prüfen Sie Ihr Postfach.`, 'success');
-      }
-      
-      // Reset form
-      setLeadFormData({ email: '', name: '', company: '' });
-      
-      console.log('Lead successfully submitted:', result);
-      
-    } catch (error) {
-      console.error('Error submitting lead:', error);
-      addNotification('Fehler beim Senden der Daten. Bitte versuchen Sie es erneut.', 'error');
-    } finally {
-      setIsGeneratingReport(false);
-    }
-  };
-
-  const closeLeadForm = () => {
-    setShowLeadForm(false);
-    setLeadFormData({ email: '', name: '', company: '' });
-  };
-
-  const upgradeToPro = () => {
-    addNotification('Weiterleitung zum Checkout...', 'info');
-    setTimeout(() => {
-      window.open('https://billing.complyo.tech/checkout/pro', '_blank');
-    }, 1000);
-  };
-
-  const contactExpert = () => {
-    addNotification('Weiterleitung zu Expertenberatung...', 'info');
-    setTimeout(() => {
-      window.open('https://calendly.com/complyo-experts', '_blank');
-    }, 1000);
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pass': return '✅';
-      case 'warning': return '⚠️';
-      case 'fail': return '❌';
-      default: return '❓';
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pass': return 'text-green-400';
-      case 'warning': return 'text-yellow-400';
-      case 'fail': return 'text-red-400';
-      default: return 'text-gray-400';
-    }
-  };
-
-  const scrollToSection = (sectionId: string) => {
-    const element = document.getElementById(sectionId);
-    element?.scrollIntoView({ behavior: 'smooth' });
-    setMobileMenuOpen(false);
+  const handlePlanSelect = (plan: 'ki' | 'expert') => {
+    window.location.href = `https://app.complyo.tech/register?plan=${plan}`;
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100" role="document">
-      {/* Skip Links for Accessibility */}
-      <a 
-        href="#main-content" 
-        className="a11y-skip-link"
-      >
-        Zum Hauptinhalt springen
-      </a>
-      <a 
-        href="#navigation" 
-        className="a11y-skip-link"
-      >
-        Zur Navigation springen
-      </a>
-
-      {/* Notifications */}
-      <div 
-        className="fixed top-4 right-4 z-50 space-y-2"
-        role="region"
-        aria-label="Benachrichtigungen"
-        aria-live="polite"
-      >
-        {notifications.map((notification) => (
-          <div
-            key={notification.id}
-            className={`p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 ${
-              notification.type === 'success' ? 'bg-green-600' :
-              notification.type === 'error' ? 'bg-red-600' :
-              notification.type === 'warning' ? 'bg-yellow-600' :
-              'bg-blue-600'
-            }`}
-            role="alert"
-            aria-atomic="true"
-          >
-            <div className="flex items-center space-x-3">
-              <span className="flex-shrink-0">
-                {notification.type === 'success' ? '✅' :
-                 notification.type === 'error' ? '❌' :
-                 notification.type === 'warning' ? '⚠️' : 'ℹ️'}
-              </span>
-              <p className="text-sm font-medium text-white">{notification.message}</p>
-              <button
-                onClick={() => removeNotification(notification.id)}
-                className="ml-auto text-white hover:opacity-70 text-lg leading-none focus:outline-none focus:ring-2 focus:ring-white/50 rounded"
-                aria-label="Benachrichtigung schließen"
-              >
-                ×
-              </button>
-            </div>
-          </div>
-        ))}
+    <div className="min-h-screen bg-gray-900 text-white">
+      {/* Top Banner - Scarcity */}
+      <div className="bg-gradient-to-r from-red-600 to-orange-600 py-3 text-center font-bold text-sm md:text-base animate-pulse">
+        🔥 HERBST-SALE! JETZT 70% SPAREN - NUR FÜR KURZE ZEIT 🔥
       </div>
 
-      {/* Navigation */}
-      <nav 
-        id="navigation"
-        className="fixed top-0 w-full z-40 bg-slate-900/80 backdrop-blur-md border-b border-slate-800"
-        role="navigation"
-        aria-label="Hauptnavigation"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <Check className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                Complyo
-              </span>
-            </div>
-            
-            <div className="hidden md:flex items-center space-x-8">
-              <button 
-                onClick={() => scrollToSection('features')}
-                className="text-slate-300 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
-                aria-describedby="features-nav-desc"
-              >
-                Features
-              </button>
-              <span id="features-nav-desc" className="sr-only">Zu den Funktionen springen</span>
-              
-              <button 
-                onClick={() => scrollToSection('pricing')}
-                className="text-slate-300 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
-                aria-describedby="pricing-nav-desc"
-              >
-                Preise
-              </button>
-              <span id="pricing-nav-desc" className="sr-only">Zu den Preisen springen</span>
-              
-              <button 
-                onClick={() => scrollToSection('contact')}
-                className="text-slate-300 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
-                aria-describedby="contact-nav-desc"
-              >
-                Kontakt
-              </button>
-              <span id="contact-nav-desc" className="sr-only">Zum Kontaktbereich springen</span>
-              
-              <button 
-                onClick={() => scrollToSection('demo')}
-                className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-lg hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900"
-                aria-describedby="demo-nav-desc"
-              >
-                Demo starten
-              </button>
-              <span id="demo-nav-desc" className="sr-only">Zur Demo-Sektion springen</span>
-            </div>
-            
-            {/* Mobile menu button */}
-            <div className="md:hidden">
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="text-slate-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded p-2"
-                aria-expanded={mobileMenuOpen}
-                aria-controls="mobile-menu"
-                aria-label={mobileMenuOpen ? 'Navigationsmenü schließen' : 'Navigationsmenü öffnen'}
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        {/* Mobile menu */}
-        {mobileMenuOpen && (
-          <div 
-            id="mobile-menu"
-            className="md:hidden bg-slate-800/95 backdrop-blur-md"
-            role="menu"
-            aria-label="Mobile Navigation"
-          >
-            <div className="px-2 pt-2 pb-3 space-y-1">
-              <button 
-                onClick={() => scrollToSection('features')}
-                className="block w-full text-left px-3 py-2 text-slate-300 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
-                role="menuitem"
-              >
-                Features
-              </button>
-              <button 
-                onClick={() => scrollToSection('pricing')}
-                className="block w-full text-left px-3 py-2 text-slate-300 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
-                role="menuitem"
-              >
-                Preise
-              </button>
-              <button 
-                onClick={() => scrollToSection('contact')}
-                className="block w-full text-left px-3 py-2 text-slate-300 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
-                role="menuitem"
-              >
-                Kontakt
-              </button>
-              <button 
-                onClick={() => scrollToSection('demo')}
-                className="w-full text-left px-3 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                role="menuitem"
-              >
-                Demo starten
-              </button>
-            </div>
-          </div>
-        )}
-      </nav>
-
       {/* Hero Section */}
-      <main id="main-content" role="main">
-        <section id="demo" className="pt-24 pb-16 px-4 sm:px-6 lg:px-8" aria-labelledby="hero-heading">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h1 id="hero-heading" className="text-4xl md:text-6xl font-bold mb-6">
-              <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                KI-gestützte
-              </span>
-              <br />
-              Website-Compliance
-            </h1>
-            <p className="text-xl text-slate-400 mb-8 max-w-3xl mx-auto">
-              Schützen Sie sich vor Abmahnungen mit automatischer DSGVO-, Cookie- und Barrierefreiheits-Analyse. 
-              Von abmahngefährdet zu rechtssicher in 24 Stunden.
-            </p>
-            
-            {/* Website Analysis Form */}
-            <div className="max-w-2xl mx-auto">
-              <div className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-8 border border-slate-700">
-                <h3 className="text-2xl font-semibold mb-6">Kostenlose Website-Analyse</h3>
-                <form 
-                  onSubmit={analyzeWebsite} 
-                  className="a11y-form space-y-4"
-                  role="search"
-                  aria-labelledby="hero-heading"
-                >
-                  <fieldset className="a11y-fieldset border-0 p-0">
-                    <legend className="sr-only">Website-URL eingeben für Compliance-Analyse</legend>
-                    <div className="flex flex-col sm:flex-row gap-4">
-                      <div className="flex-1">
-                        <label htmlFor="website-url" className="sr-only">
-                          Website-URL für Analyse
-                        </label>
-                        <input 
-                          id="website-url"
-                          type="text" 
-                          value={url}
-                          onChange={(e) => setUrl(e.target.value)}
-                          placeholder="beispiel.de oder https://ihre-website.de" 
-                          required
-                          className="a11y-input w-full px-4 py-3 rounded-lg bg-slate-700 border border-slate-600 text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          disabled={isAnalyzing}
-                          aria-describedby="url-help"
-                          aria-required="true"
-                          autoComplete="url"
-                        />
-                        <div id="url-help" className="a11y-help mt-2 text-slate-400 text-sm text-left">
-                          Geben Sie Ihre Website-URL ein (mit oder ohne https://)
-                        </div>
-                      </div>
-                      <button 
-                        type="submit" 
-                        disabled={isAnalyzing || !url.trim()}
-                        className="a11y-btn px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-800"
-                        aria-describedby="analyze-btn-desc"
-                      >
-                        {isAnalyzing ? 'Analysiere...' : 'Analysieren'}
-                      </button>
-                      <div id="analyze-btn-desc" className="sr-only">
-                        Startet eine umfassende Compliance-Analyse Ihrer Website
-                      </div>
-                    </div>
-                  </fieldset>
-                </form>
-                
-                {/* Loading State */}
-                {isAnalyzing && (
-                  <div className="mt-8 flex items-center justify-center space-x-3">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                    <span className="text-slate-400">Website wird analysiert...</span>
-                  </div>
-                )}
-                
-                {/* Results Container */}
-                {showResults && analysisResults && (
-                  <div className="mt-8" role="region" aria-labelledby="results-heading">
-                    <div className="bg-slate-700 rounded-lg p-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <h4 id="results-heading" className="text-lg font-semibold">Analyse-Ergebnisse</h4>
-                        <div 
-                          className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent"
-                          role="text"
-                          aria-label={`Gesamt-Score: ${Math.round(analysisResults.overall_score)} Prozent`}
-                        >
-                          {Math.round(analysisResults.overall_score)}%
-                        </div>
-                      </div>
-                      <div className="space-y-4" role="list" aria-label="Compliance-Ergebnisse">
-                        {analysisResults.results && analysisResults.results.length > 0 ? (
-                          analysisResults.results.map((result, index) => (
-                            <div key={index} className="border border-slate-600 rounded-lg p-4" role="listitem">
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center space-x-3">
-                                  <span 
-                                    className="text-xl"
-                                    role="img"
-                                    aria-label={`Status: ${result.status === 'pass' ? 'Bestanden' : result.status === 'warning' ? 'Warnung' : 'Fehlgeschlagen'}`}
-                                  >
-                                    {getStatusIcon(result.status)}
-                                  </span>
-                                  <h5 className="font-semibold">{result.category}</h5>
-                                </div>
-                                <span 
-                                  className={`text-sm font-medium ${getStatusColor(result.status)}`}
-                                  aria-label={`Score: ${result.score} Prozent`}
-                                >
-                                  {result.score}%
-                                </span>
-                              </div>
-                              <p className="text-slate-400 text-sm mb-2">{result.message}</p>
-                              {result.details && (
-                                <div className="mt-2 text-xs text-slate-500">
-                                  {Object.entries(result.details).map(([key, value]) => (
-                                    <span key={key} className="inline-block mr-3">
-                                      {key}: {String(value)}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-center text-slate-400 py-4">
-                            Keine Analyseergebnisse verfügbar
-                          </div>
-                        )}
-                      </div>
-                      <div className="mt-6 pt-4 border-t border-slate-600">
-                        <button 
-                          onClick={generateReport}
-                          className="a11y-btn w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-slate-700"
-                          aria-describedby="report-btn-desc"
-                        >
-                          <span role="img" aria-label="Dokument-Symbol">📄</span>
-                          <span className="ml-2">Vollständigen Report generieren</span>
-                        </button>
-                        <div id="report-btn-desc" className="sr-only">
-                          Erstellt einen detaillierten PDF-Report mit allen Compliance-Ergebnissen
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+      <div className="container mx-auto px-6 py-12 max-w-5xl text-center">
+        <div className="inline-flex items-center gap-2 bg-green-500 bg-opacity-20 border border-green-500 rounded-full px-6 py-2 mb-6">
+          <CheckCircle className="w-5 h-5 text-green-400" />
+          <span className="text-sm font-bold">Über 2.500 Websites geschützt</span>
+        </div>
+
+        {/* Main Headline - MovesMethod Style */}
+        <h1 className="text-4xl md:text-6xl font-black mb-6 leading-tight">
+          WARUM 2.500+ UNTERNEHMEN DIESE EINFACHE TÄGLICHE ROUTINE NUTZEN,<br />
+          <span className="text-yellow-400">UM ABMAHNUNGEN ZU VERMEIDEN</span><br />
+          OHNE ANWALT & OHNE STRESS
+        </h1>
+
+        <p className="text-xl md:text-2xl text-gray-300 mb-4">
+          Auch wenn Sie keine Ahnung von DSGVO haben, wenig Zeit haben, und "nicht technisch veranlagt" sind
+        </p>
+
+        <p className="text-lg text-gray-400 mb-8">
+          Nur 15 Minuten Setup, einmal, für jede Branche oder Website-Typ
+        </p>
+
+        {/* Video Placeholder */}
+        <div className="bg-gradient-to-br from-blue-900 to-purple-900 rounded-2xl p-8 mb-8 border-2 border-blue-500">
+          <div className="aspect-video bg-gray-800 rounded-xl flex items-center justify-center mb-4">
+            <Play className="w-20 h-20 text-blue-400" />
+          </div>
+          <p className="text-lg font-bold">
+            🔊 Klicken Sie auf das Video, um mehr zu erfahren 👇
+          </p>
+        </div>
+
+        {/* Primary CTA */}
+        <button
+          onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}
+          className="bg-green-600 hover:bg-green-700 text-white text-xl font-black py-6 px-12 rounded-xl shadow-2xl hover:scale-105 transition-all mb-3 w-full md:w-auto"
+        >
+          JA, ICH WILL JETZT LOSLEGEN
+        </button>
+        <p className="text-sm text-gray-400">
+          Einmalige Zahlung - Lebenslanger Zugang
+        </p>
+        <p className="text-sm text-green-400 font-bold mt-2">
+          ✓ 14-Tage Geld-zurück-Garantie - Keine Fragen
+        </p>
+      </div>
+
+      {/* Social Proof Stats */}
+      <div className="bg-gray-950 py-12">
+        <div className="container mx-auto px-6">
+          <div className="grid md:grid-cols-3 gap-8 text-center max-w-4xl mx-auto">
+            <div>
+              <div className="text-5xl md:text-6xl font-black text-blue-400 mb-2">2.500+</div>
+              <div className="text-gray-400 uppercase text-sm font-bold">Geschützte Websites</div>
+            </div>
+            <div>
+              <div className="text-5xl md:text-6xl font-black text-yellow-400 mb-2">50+</div>
+              <div className="text-gray-400 uppercase text-sm font-bold">Länder</div>
+            </div>
+            <div>
+              <div className="text-5xl md:text-6xl font-black text-green-400 mb-2">0</div>
+              <div className="text-gray-400 uppercase text-sm font-bold">Abmahnungen bei Kunden</div>
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* Features Section */}
-      <section id="features" className="py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              Vollständiger Abmahnschutz
-            </h2>
-            <p className="text-xl text-slate-400 max-w-3xl mx-auto">
-              Unsere KI-gestützte Plattform überprüft alle kritischen Compliance-Bereiche 
-              und schützt Sie vor kostspieligen Abmahnungen.
-            </p>
+      {/* Website Scanner */}
+      <div className="bg-gradient-to-b from-gray-950 to-gray-900">
+        <WebsiteScanner />
+      </div>
+
+      {/* Problem Section - MovesMethod "Breaking News" Style */}
+      <div className="bg-gradient-to-br from-gray-900 to-gray-800 py-16">
+        <div className="container mx-auto px-6 max-w-4xl">
+          <div className="bg-red-600 text-white inline-block px-4 py-2 rounded-full text-sm font-black mb-6">
+            🚨 ACHTUNG 🚨
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {/* Legal Compliance */}
-            <div className="bg-slate-800/50 backdrop-blur-md rounded-xl p-6 border border-slate-700 hover:scale-105 transition-transform">
-              <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mb-4">
-                <FileText className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-xl font-semibold mb-3">Rechtliche Texte</h3>
-              <p className="text-slate-400 mb-4">Impressum, Datenschutzerklärung, AGB - vollständig DSGVO-konform</p>
-              <div className="text-sm text-red-400 font-medium">
-                Risiko: 500-3.000€ pro Verstoß
-              </div>
-            </div>
+          <h2 className="text-4xl md:text-5xl font-black mb-8 leading-tight">
+            DIE MEHRHEIT DER UNTERNEHMEN MACHT IHRE COMPLIANCE KOMPLETT FALSCH
+          </h2>
 
-            {/* Cookie Compliance */}
-            <div className="bg-slate-800/50 backdrop-blur-md rounded-xl p-6 border border-slate-700 hover:scale-105 transition-transform">
-              <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-blue-600 rounded-lg flex items-center justify-center mb-4">
-                <Cookie className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-xl font-semibold mb-3">Cookie-Compliance</h3>
-              <p className="text-slate-400 mb-4">TTDSG-konforme Banner und Consent-Management</p>
-              <div className="text-sm text-red-400 font-medium">
-                Risiko: 1.000-5.000€ pro Fall
-              </div>
-            </div>
+          <p className="text-xl text-gray-300 mb-6">
+            Wir kennen das nur zu gut. Es ist frustrierend, wenn Sie...
+          </p>
 
-            {/* GDPR Compliance */}
-            <div className="bg-slate-800/50 backdrop-blur-md rounded-xl p-6 border border-slate-700 hover:scale-105 transition-transform">
-              <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg flex items-center justify-center mb-4">
-                <Shield className="w-6 h-6 text-white" />
+          <div className="space-y-4 mb-8">
+            {[
+              'Ständig Angst vor einer Abmahnung haben, die 8.500€ oder mehr kostet',
+              'Sich verwirrt und unsicher fühlen, welche Gesetze Sie einhalten müssen',
+              'Jeden YouTube-"Hack" ausprobieren, nur um festzustellen, dass nichts funktioniert',
+              'Tausende Euro für Anwälte ausgeben, die Ihnen nicht wirklich helfen',
+              'Ihre Website aus Angst vor Strafen gar nicht erst online stellen'
+            ].map((problem, i) => (
+              <div key={i} className="flex items-start gap-3 bg-gray-800 p-4 rounded-lg">
+                <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-1" />
+                <span className="text-gray-200">{problem}</span>
               </div>
-              <h3 className="text-xl font-semibold mb-3">DSGVO-Compliance</h3>
-              <p className="text-slate-400 mb-4">Vollständige Datenverarbeitungs-Analyse und Privacy-by-Design</p>
-              <div className="text-sm text-red-400 font-medium">
-                Risiko: 2.000-10.000€ + Bußgeld
-              </div>
-            </div>
+            ))}
+          </div>
 
-            {/* Accessibility */}
-            <div className="bg-slate-800/50 backdrop-blur-md rounded-xl p-6 border border-slate-700 hover:scale-105 transition-transform">
-              <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-red-600 rounded-lg flex items-center justify-center mb-4">
-                <Eye className="w-6 h-6 text-white" />
+          <div className="bg-yellow-500 bg-opacity-20 border-2 border-yellow-500 rounded-xl p-6 text-center">
+            <p className="text-2xl font-bold mb-2">Aber keine Sorge…</p>
+            <p className="text-lg text-gray-300">
+              Es gibt eine <span className="text-yellow-400 font-bold">schnellere & einfachere Lösung</span>,<br />
+              als alles, was Ihnen bisher erzählt wurde.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Solution Section */}
+      <div className="bg-gray-950 py-16">
+        <div className="container mx-auto px-6 max-w-4xl">
+          <div className="bg-green-600 text-white inline-block px-4 py-2 rounded-full text-sm font-black mb-6">
+            🚨 BREAKING NEWS 🚨
+          </div>
+
+          <h2 className="text-4xl md:text-5xl font-black mb-8 leading-tight">
+            ES GIBT EINEN SCHNELLEREN & EINFACHEREN WEG<br />
+            ZUR COMPLIANCE
+          </h2>
+
+          <p className="text-xl text-gray-300 mb-6">
+            Sie haben wahrscheinlich schon durch das endlose Hamsterrad gedreht:
+          </p>
+
+          <div className="grid md:grid-cols-2 gap-4 mb-8">
+            {[
+              'Anwälte (500€+ pro Stunde)',
+              'Datenschutzbeauftragte (3.000€/Jahr)',
+              'Compliance-Berater (Tausende Euro)',
+              'Online-Kurse (die nichts bewirken)',
+              'Template-Downloads (veraltet)',
+              'YouTube-Tutorials (widersprüchlich)'
+            ].map((method, i) => (
+              <div key={i} className="bg-red-900 bg-opacity-30 border border-red-500 p-4 rounded-lg flex items-center gap-3">
+                <span className="text-2xl">❌</span>
+                <span className="text-gray-200 line-through">{method}</span>
               </div>
-              <h3 className="text-xl font-semibold mb-3">Barrierefreiheit</h3>
-              <p className="text-slate-400 mb-4">WCAG 2.1 AA und BITV 2.0 Compliance für alle Nutzer</p>
-              <div className="text-sm text-red-400 font-medium">
-                Risiko: 500-2.000€ pro Mangel
-              </div>
+            ))}
+          </div>
+
+          <div className="bg-gradient-to-r from-blue-900 to-purple-900 rounded-2xl p-8 border-2 border-blue-500">
+            <h3 className="text-3xl font-black mb-6">Das Problem?</h3>
+            <p className="text-xl text-gray-200 mb-4">
+              All diese Lösungen sind nur <span className="text-red-400 font-bold">oberflächliche Pflaster</span>.
+            </p>
+            <p className="text-lg text-gray-300 mb-6">
+              Sie werden vielleicht kurzfristig beruhigt…<br />
+              …aber sie werden <span className="text-red-400 font-bold">NIEMALS</span> Ihre Website wirklich schützen.
+            </p>
+
+            <div className="bg-green-600 rounded-xl p-6">
+              <p className="text-2xl font-black mb-3">Die Lösung:</p>
+              <ul className="space-y-3 text-lg">
+                <li className="flex items-start gap-3">
+                  <CheckCircle className="w-6 h-6 text-green-200 flex-shrink-0 mt-1" />
+                  <span>KI-gestützte automatische Prüfung</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle className="w-6 h-6 text-green-200 flex-shrink-0 mt-1" />
+                  <span>Schritt-für-Schritt Implementierung</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle className="w-6 h-6 text-green-200 flex-shrink-0 mt-1" />
+                  <span>Anwalt-geprüfte Rechtstexte</span>
+                </li>
+              </ul>
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* Pricing Section */}
-      <section id="pricing" className="py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              Transparent & Skalierbar
-            </h2>
-            <p className="text-xl text-slate-400">
-              Wählen Sie die perfekte Lösung für Ihre Anforderungen
-            </p>
-          </div>
-          
+      {/* 3-Step System */}
+      <div className="bg-gradient-to-br from-gray-900 to-gray-800 py-16">
+        <div className="container mx-auto px-6 max-w-5xl">
+          <h2 className="text-4xl md:text-5xl font-black text-center mb-4">
+            DAS 3-SCHRITT COMPLYO-SYSTEM
+          </h2>
+          <p className="text-xl text-gray-400 text-center mb-12">
+            Das alles verändert…
+          </p>
+
           <div className="grid md:grid-cols-3 gap-8">
-            {/* Free Analysis */}
-            <div className="bg-slate-800/50 backdrop-blur-md rounded-xl p-8 border border-slate-700">
-              <h3 className="text-2xl font-bold mb-4">Kostenlose Analyse</h3>
-              <div className="text-4xl font-bold mb-6 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                0€
+            {[
+              {
+                step: '1',
+                title: 'Scannen',
+                icon: <Zap className="w-12 h-12" />,
+                description: 'KI analysiert Ihre Website in 90 Sekunden auf alle 4 Compliance-Säulen'
+              },
+              {
+                step: '2',
+                title: 'Fix-Code erhalten',
+                icon: <Shield className="w-12 h-12" />,
+                description: 'Sofort einsatzbereite Code-Snippets oder vollständige Rechtstexte'
+              },
+              {
+                step: '3',
+                title: 'Geschützt sein',
+                icon: <CheckCircle className="w-12 h-12" />,
+                description: 'Nie wieder Angst vor Abmahnungen - 14 Tage Geld-zurück-Garantie'
+              }
+            ].map((item, i) => (
+              <div key={i} className="bg-gray-800 rounded-2xl p-8 border-2 border-blue-500 hover:scale-105 transition-transform">
+                <div className="text-6xl font-black text-blue-400 mb-4">
+                  {item.step}
+                </div>
+                <div className="text-blue-400 mb-4">{item.icon}</div>
+                <h3 className="text-2xl font-bold mb-3">{item.title}</h3>
+                <p className="text-gray-300">{item.description}</p>
               </div>
-              <ul className="space-y-3 mb-8">
-                <li className="flex items-center text-slate-300">
-                  <Check className="w-5 h-5 text-green-500 mr-3" />
-                  Vollständiger Compliance-Scan
-                </li>
-                <li className="flex items-center text-slate-300">
-                  <Check className="w-5 h-5 text-green-500 mr-3" />
-                  Abmahn-Risiko in €
-                </li>
-                <li className="flex items-center text-slate-300">
-                  <Check className="w-5 h-5 text-green-500 mr-3" />
-                  PDF-Report
-                </li>
-              </ul>
-              <button 
-                onClick={() => scrollToSection('demo')}
-                className="w-full py-3 border border-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
-              >
-                Jetzt starten
-              </button>
-            </div>
-
-            {/* AI Automation */}
-            <div className="bg-slate-800/50 backdrop-blur-md rounded-xl p-8 border-2 border-blue-500 relative">
-              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                <span className="bg-blue-500 text-white px-4 py-1 rounded-full text-sm font-medium">
-                  Empfohlen
-                </span>
-              </div>
-              <h3 className="text-2xl font-bold mb-4">KI-Automatisierung</h3>
-              <div className="text-4xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                39€
-              </div>
-              <div className="text-slate-400 mb-6">pro Monat</div>
-              <ul className="space-y-3 mb-8">
-                <li className="flex items-center text-slate-300">
-                  <Check className="w-5 h-5 text-green-500 mr-3" />
-                  KI-gestützte Automatisierung
-                </li>
-                <li className="flex items-center text-slate-300">
-                  <Check className="w-5 h-5 text-green-500 mr-3" />
-                  Automatische Rechtstexte
-                </li>
-                <li className="flex items-center text-slate-300">
-                  <Check className="w-5 h-5 text-green-500 mr-3" />
-                  24h-Umsetzung
-                </li>
-                <li className="flex items-center text-slate-300">
-                  <Check className="w-5 h-5 text-green-500 mr-3" />
-                  Monatliche Re-Scans
-                </li>
-              </ul>
-              <button 
-                onClick={upgradeToPro}
-                className="w-full py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity"
-              >
-                Upgrade starten
-              </button>
-            </div>
-
-            {/* Expert Service */}
-            <div className="bg-slate-800/50 backdrop-blur-md rounded-xl p-8 border border-slate-700">
-              <h3 className="text-2xl font-bold mb-4">Experten-Service</h3>
-              <div className="text-4xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                2.000€
-              </div>
-              <div className="text-slate-400 mb-6">einmalig + 39€/Monat</div>
-              <ul className="space-y-3 mb-8">
-                <li className="flex items-center text-slate-300">
-                  <Check className="w-5 h-5 text-green-500 mr-3" />
-                  Persönliche Experten-Betreuung
-                </li>
-                <li className="flex items-center text-slate-300">
-                  <Check className="w-5 h-5 text-green-500 mr-3" />
-                  Branchenspezifische Compliance
-                </li>
-                <li className="flex items-center text-slate-300">
-                  <Check className="w-5 h-5 text-green-500 mr-3" />
-                  Custom-Integration
-                </li>
-                <li className="flex items-center text-slate-300">
-                  <Check className="w-5 h-5 text-green-500 mr-3" />
-                  Direkte Experten-Hotline
-                </li>
-              </ul>
-              <button 
-                onClick={contactExpert}
-                className="w-full py-3 border border-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
-              >
-                Experten kontaktieren
-              </button>
-            </div>
+            ))}
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* CTA Section */}
-      <section className="py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl p-8 text-white">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Schützen Sie sich noch heute vor Abmahnungen
+      {/* Pricing Section - Flash Sale */}
+      <div id="pricing" className="bg-gray-950 py-16">
+        <div className="container mx-auto px-6 max-w-4xl">
+          <div className="text-center mb-12">
+            <div className="bg-red-600 text-white inline-block px-6 py-3 rounded-full text-lg font-black mb-6 animate-pulse">
+              🔥 HERBST-SALE! 70% RABATT - NUR FÜR KURZE ZEIT 🔥
+            </div>
+            
+            <h2 className="text-4xl md:text-5xl font-black mb-4">
+              Normalerweise Kosten:<br />
+              <span className="line-through text-gray-500">147€ / Monat</span>
             </h2>
-            <p className="text-xl opacity-90 mb-8">
-              Über 10.000 deutsche Websites vertrauen bereits auf Complyo. 
-              Starten Sie jetzt Ihre kostenlose Analyse.
+
+            <div className="text-6xl md:text-7xl font-black text-green-400 mb-6">
+              NUR 39€
+              <span className="text-2xl text-gray-400">/Monat</span>
+            </div>
+
+            <p className="text-xl text-gray-400 mb-8">
+              Einmalige Zahlung - Lebenslanger Zugang zum KI-Plan
             </p>
-            <button 
-              onClick={() => scrollToSection('demo')}
-              className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold text-lg hover:bg-slate-100 transition-colors"
-            >
-              🚀 Kostenlose Analyse starten
-            </button>
+          </div>
+
+          {/* Plan Comparison */}
+          <div className="grid md:grid-cols-2 gap-6 mb-12">
+            {/* KI Plan */}
+            <div className="bg-gradient-to-br from-blue-900 to-blue-800 rounded-2xl p-8 border-4 border-green-500 relative">
+              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-2 rounded-full text-sm font-black">
+                ⭐ BELIEBTESTER PLAN
+              </div>
+              
+              <h3 className="text-3xl font-black mb-4 mt-6">KI Plan</h3>
+              <div className="text-5xl font-black mb-6">
+                39€
+                <span className="text-lg text-gray-400">/Monat</span>
+              </div>
+
+              <ul className="space-y-3 mb-8">
+                {[
+                  '1 Website',
+                  'KI-gestützte Prüfung',
+                  'Code-Snippets & Fixes',
+                  '10 PDF-Exporte / Monat',
+                  'DSGVO + Barrierefreiheit',
+                  'Email-Support'
+                ].map((feature, i) => (
+                  <li key={i} className="flex items-center gap-3">
+                    <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                onClick={() => handlePlanSelect('ki')}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-black py-4 rounded-xl transition"
+              >
+                JETZT STARTEN →
+              </button>
+            </div>
+
+            {/* Expert Plan */}
+            <div className="bg-gradient-to-br from-purple-900 to-purple-800 rounded-2xl p-8 border-2 border-purple-500">
+              <div className="bg-yellow-500 text-black px-4 py-2 rounded-full text-sm font-black mb-6 inline-block">
+                💎 PREMIUM
+              </div>
+              
+              <h3 className="text-3xl font-black mb-4">Expert Plan</h3>
+              <div className="text-4xl font-black mb-2">
+                2.000€
+                <span className="text-lg text-gray-400"> einmalig</span>
+              </div>
+              <div className="text-2xl font-bold text-gray-400 mb-6">
+                + 39€/Monat
+              </div>
+
+              <ul className="space-y-3 mb-8">
+                {[
+                  '1 Website (professionell)',
+                  'Persönlicher Experten-Support',
+                  'Vollständige Rechtstexte',
+                  'Unbegrenzte Exporte',
+                  'WordPress-Integration',
+                  '24/7 Prioritäts-Support',
+                  'Anwalt-Review (optional)'
+                ].map((feature, i) => (
+                  <li key={i} className="flex items-center gap-3">
+                    <Star className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                onClick={() => handlePlanSelect('expert')}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-black py-4 rounded-xl transition"
+              >
+                EXPERT WERDEN →
+              </button>
+            </div>
+          </div>
+
+          {/* Money-Back Guarantee */}
+          <div className="bg-gradient-to-r from-green-900 to-blue-900 rounded-2xl p-8 border-2 border-green-500 text-center">
+            <Shield className="w-16 h-16 text-green-400 mx-auto mb-4" />
+            <h3 className="text-2xl font-black mb-3">
+              14-TAGE GELD-ZURÜCK-GARANTIE
+            </h3>
+            <p className="text-lg text-gray-200">
+              Einfach "Vielleicht" sagen und uns 14 Tage testen.<br />
+              Wenn Sie nicht begeistert sind, gibt's Ihr Geld zurück - keine Fragen.
+            </p>
+            <p className="text-sm text-gray-400 mt-4">
+              (Ja, so überzeugt sind wir)
+            </p>
           </div>
         </div>
-      </section>
-      </main>
+      </div>
+
+      {/* FAQ Section */}
+      <div className="bg-gray-900 py-16">
+        <div className="container mx-auto px-6 max-w-4xl">
+          <h2 className="text-4xl md:text-5xl font-black text-center mb-12">
+            SIE HABEN FRAGEN, WIR HABEN ANTWORTEN
+          </h2>
+
+          <div className="space-y-4">
+            {[
+              {
+                q: 'Kann ich das nicht alles kostenlos online finden?',
+                a: 'Es gibt überall kostenlose Inhalte, aber was Sie hier bekommen, ist ein bewährtes System, das über 2.500 Unternehmen geholfen hat. Kein Zusammensetzen von zufälligen YouTube-Videos mehr. Wir haben Jahre und über 100.000€ investiert, um diesen Ansatz zu perfektionieren.'
+              },
+              {
+                q: 'Ich habe keine Ahnung von DSGVO. Funktioniert das trotzdem?',
+                a: '100%! Viele unserer besten Erfolgsgeschichten stammen von Leuten, die dachten, sie seien "nicht technisch". Dieses System funktioniert unabhängig von Ihrem Startpunkt, weil es nicht um Fachwissen geht - es geht um das Befolgen eines bewährten Prozesses.'
+              },
+              {
+                q: 'Was ist, wenn ich bereits eine Abmahnung erhalten habe?',
+                a: 'Kein Problem! Wir haben mit jedem erdenklichen Fall gearbeitet - von drohenden Abmahnungen bis hin zu laufenden Verfahren. Unser Expert-Plan beinhaltet sogar direkten Anwalts-Support für akute Fälle.'
+              },
+              {
+                q: 'Funktioniert das wirklich?',
+                a: 'Kurze Antwort: Ja, für über 2.500 Unternehmen bisher. Aber nehmen Sie nicht unser Wort dafür - deshalb bieten wir eine 14-Tage Geld-zurück-Garantie. Probieren Sie es selbst mit null Risiko aus.'
+              },
+              {
+                q: 'Wie schnell sehe ich Ergebnisse?',
+                a: 'Die meisten Kunden haben ihre Website innerhalb von 24 Stunden compliant gemacht. Der Scan dauert 90 Sekunden, die Implementierung der Fixes je nach Komplexität 1-3 Stunden.'
+              },
+              {
+                q: 'Brauche ich technische Kenntnisse?',
+                a: 'Nein! Alles wird Schritt-für-Schritt erklärt. Wenn Sie copy-paste können, können Sie Ihre Website compliant machen. Für den Expert-Plan übernehmen wir sogar die Implementierung für Sie.'
+              },
+              {
+                q: 'Was ist der Unterschied zum Anwalt?',
+                a: 'Ein Anwalt kostet 500€+/Stunde und erstellt Ihnen Dokumente. Wir prüfen, was wirklich nicht compliant ist, geben Ihnen sofort einsatzbare Lösungen UND überwachen kontinuierlich. Und das für einen Bruchteil der Kosten.'
+              },
+              {
+                q: 'Wie funktioniert die Rückerstattung?',
+                a: 'Einfach: Probieren Sie es 14 Tage aus. Wenn Sie nicht begeistert sind, schicken Sie eine Email an support@complyo.tech und wir erstatten Ihren kompletten Kaufpreis zurück - keine Fragen.'
+              }
+            ].map((faq, i) => (
+              <div key={i} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700">
+                <button
+                  onClick={() => setExpandedFaq(expandedFaq === i ? null : i)}
+                  className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-750 transition"
+                >
+                  <span className="font-bold text-lg">{faq.q}</span>
+                  <ChevronDown 
+                    className={`w-6 h-6 transition-transform ${expandedFaq === i ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {expandedFaq === i && (
+                  <div className="px-6 pb-4 text-gray-300">
+                    {faq.a}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Final CTA */}
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 py-16">
+        <div className="container mx-auto px-6 max-w-4xl text-center">
+          <h2 className="text-4xl md:text-5xl font-black mb-6">
+            BEREIT, IHRE WEBSITE ZU SCHÜTZEN?
+          </h2>
+          <p className="text-xl mb-8">
+            Schließen Sie sich 2.500+ geschützten Websites an
+          </p>
+          
+          <button
+            onClick={() => handlePlanSelect('ki')}
+            className="bg-green-600 hover:bg-green-700 text-white text-2xl font-black py-6 px-12 rounded-xl shadow-2xl hover:scale-105 transition-all mb-4"
+          >
+            JETZT STARTEN - 70% RABATT
+          </button>
+          
+          <p className="text-sm">
+            ✓ 14-Tage Geld-zurück-Garantie<br />
+            ✓ Keine versteckten Kosten<br />
+            ✓ Sofortiger Zugang
+          </p>
+        </div>
+      </div>
 
       {/* Footer */}
-      <footer id="contact" className="bg-slate-800 py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-4 gap-8">
-            <div className="col-span-2">
-              <div className="flex items-center space-x-2 mb-4">
-                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                  <Check className="w-5 h-5 text-white" />
-                </div>
-                <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                  Complyo
-                </span>
-              </div>
-              <p className="text-slate-400 mb-6 max-w-md">
-                Die führende KI-gestützte Compliance-Plattform für deutsche Websites. 
-                Automatischer Abmahnschutz und rechtssichere Umsetzung.
-              </p>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Produkt</h3>
-              <ul className="space-y-2 text-slate-400">
-                <li>
-                  <button 
-                    onClick={() => scrollToSection('features')}
-                    className="hover:text-white transition-colors"
-                  >
-                    Features
-                  </button>
-                </li>
-                <li>
-                  <button 
-                    onClick={() => scrollToSection('pricing')}
-                    className="hover:text-white transition-colors"
-                  >
-                    Preise
-                  </button>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    API
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Integrationen
-                  </a>
-                </li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Kontakt</h3>
-              <ul className="space-y-2 text-slate-400">
-                <li>
-                  <a href="mailto:hello@complyo.tech" className="hover:text-white transition-colors">
-                    hello@complyo.tech
-                  </a>
-                </li>
-                <li>
-                  <a href="tel:+4930123456789" className="hover:text-white transition-colors">
-                    +49 30 123 456 789
-                  </a>
-                </li>
-                <li>Berlin, Deutschland</li>
-              </ul>
-            </div>
-          </div>
-          
-          <div className="border-t border-slate-700 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
-            <p className="text-slate-400 text-sm">
-              © 2025 Complyo. Alle Rechte vorbehalten.
-            </p>
-            <div className="flex space-x-6 mt-4 md:mt-0">
-              <a href="#" className="text-slate-400 hover:text-white text-sm transition-colors">
-                Datenschutz
-              </a>
-              <a href="#" className="text-slate-400 hover:text-white text-sm transition-colors">
-                Impressum
-              </a>
-              <a href="#" className="text-slate-400 hover:text-white text-sm transition-colors">
-                AGB
-              </a>
-            </div>
-          </div>
+      <div className="bg-gray-950 py-8 text-center text-gray-500 text-sm">
+        <p>© 2025 Complyo GmbH - Alle Rechte vorbehalten</p>
+        <div className="flex justify-center gap-6 mt-4">
+          <a href="/impressum" className="hover:text-white">Impressum</a>
+          <a href="/datenschutz" className="hover:text-white">Datenschutz</a>
+          <a href="/agb" className="hover:text-white">AGB</a>
         </div>
-      </footer>
-
-      {/* Lead Generation Modal */}
-      {showLeadForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-2xl p-8 max-w-md w-full border border-slate-700">
-            <div className="text-center mb-6">
-              <h3 className="text-2xl font-bold mb-2">Vollständigen Report erhalten</h3>
-              <p className="text-slate-400">
-                Geben Sie Ihre Kontaktdaten ein, um den detaillierten Compliance-Report als PDF zu erhalten.
-              </p>
-            </div>
-            
-            <form onSubmit={handleLeadFormSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="lead-name" className="block text-sm font-medium mb-2">
-                  Name *
-                </label>
-                <input
-                  id="lead-name"
-                  type="text"
-                  required
-                  value={leadFormData.name}
-                  onChange={(e) => setLeadFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Ihr vollständiger Name"
-                  className="w-full px-4 py-3 rounded-lg bg-slate-700 border border-slate-600 text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="lead-email" className="block text-sm font-medium mb-2">
-                  E-Mail Adresse *
-                </label>
-                <input
-                  id="lead-email"
-                  type="email"
-                  required
-                  value={leadFormData.email}
-                  onChange={(e) => setLeadFormData(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="ihre@email.de"
-                  className="w-full px-4 py-3 rounded-lg bg-slate-700 border border-slate-600 text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="lead-company" className="block text-sm font-medium mb-2">
-                  Unternehmen (optional)
-                </label>
-                <input
-                  id="lead-company"
-                  type="text"
-                  value={leadFormData.company}
-                  onChange={(e) => setLeadFormData(prev => ({ ...prev, company: e.target.value }))}
-                  placeholder="Ihr Unternehmen"
-                  className="w-full px-4 py-3 rounded-lg bg-slate-700 border border-slate-600 text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              <div className="text-xs text-slate-400 bg-slate-700/50 p-3 rounded-lg">
-                🔒 Ihre Daten werden vertraulich behandelt und nur für die Übersendung des Reports verwendet.
-              </div>
-              
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={closeLeadForm}
-                  disabled={isGeneratingReport}
-                  className="flex-1 px-4 py-3 border border-slate-600 text-slate-300 rounded-lg hover:bg-slate-700 transition-colors disabled:opacity-50"
-                >
-                  Abbrechen
-                </button>
-                <button
-                  type="submit"
-                  disabled={isGeneratingReport || !leadFormData.email.trim() || !leadFormData.name.trim()}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center"
-                >
-                  {isGeneratingReport ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Generiere...
-                    </>
-                  ) : (
-                    '📧 Report senden'
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
-};
-
-export default ComplyoLandingPage;
+}

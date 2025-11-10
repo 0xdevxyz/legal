@@ -10,10 +10,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Ensure public directory exists for static files
+RUN mkdir -p /app/public
+
 EXPOSE 8002
 
 # Health Check hinzufügen
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8002/health || exit 1
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002"]
+CMD ["uvicorn", "main_production:app", "--host", "0.0.0.0", "--port", "8002"]

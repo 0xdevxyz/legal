@@ -1,233 +1,341 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
-from pydantic import BaseModel
-from typing import Optional
-import stripe
 import os
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from pydantic import BaseModel
+from typing import Dict, Any
+import stripe
 import logging
-from auth_routes import get_current_active_user, database
+import uuid
 
-# Stripe konfigurieren
-stripe.api_key = os.environ.get("STRIPE_API_KEY", "sk_test_your_test_key")
-STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "whsec_your_webhook_secret")
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://app.complyo.tech")
+logger = logging.getLogger(__name__)
 
-router = APIRouter()
-logger = logging.getLogger("payment")
+router = APIRouter(prefix="/api/payment", tags=["Payment"])
 
-# Models
-class PaymentIntent(BaseModel):
-    subscription_tier: str
-    payment_type: str = "subscription"  # subscription oder onetime
+# Global references (set in main_production.py)
+stripe_service = None
+db_pool = None
+auth_service = None
 
-class CheckoutSession(BaseModel):
-    session_id: str
+# Development Mode für Zahlungssimulation
+DEV_MODE = os.getenv("DEV_MODE", "false").lower() in ("true", "1", "yes")
+BYPASS_PAYMENT = os.getenv("BYPASS_PAYMENT", "false").lower() in ("true", "1", "yes")
+
+# Environment variables
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.complyo.tech")
+
+logger.info(f"🔧 Payment Routes - DEV_MODE: {DEV_MODE}, BYPASS_PAYMENT: {BYPASS_PAYMENT}")
+
+class CreateCheckoutRequest(BaseModel):
+    plan_type: str  # 'ki' oder 'expert'
+
+class CheckoutResponse(BaseModel):
     checkout_url: str
+    session_id: str
 
-# Preis-IDs (erstellen Sie diese in Ihrem Stripe-Dashboard)
-PRICE_IDS = {
-    "basic": "price_basic_monthly",  # 39€/Monat für KI-Automatisierung
-    "expert_setup": "price_expert_setup",  # 2000€ einmalig für Experten-Service
-    "expert": "price_expert_monthly",  # 39€/Monat für Experten-Service
-}
-
-@router.post("/create-checkout-session", response_model=CheckoutSession)
-async def create_checkout_session(
-    payment_intent: PaymentIntent,
-    current_user = Depends(get_current_active_user)
-):
-    """Erstellt eine Stripe-Checkout-Session für Abonnement oder Einmalzahlung"""
+async def get_current_user_from_auth_header(request: Request):
+    """Get current user from Authorization header"""
+    from auth_routes import get_current_user, security
+    from fastapi.security import HTTPAuthorizationCredentials
     
-    # Benutzerdaten für Stripe-Kunde abrufen
-    user_email = current_user["email"]
-    user_id = current_user["id"]
-    
-    # Stripe-Kunde finden oder erstellen
-    customers = stripe.Customer.list(email=user_email, limit=1)
-    if customers.data:
-        customer = customers.data[0]
-    else:
-        customer = stripe.Customer.create(
-            email=user_email,
-            metadata={"complyo_user_id": user_id}
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized"
         )
     
-    # Line-Items basierend auf Abonnement-Stufe und Zahlungsart einrichten
-    line_items = []
-    
-    if payment_intent.subscription_tier == "basic":
-        # KI-Automatisierung: 39€/Monat
-        line_items.append({
-            "price": PRICE_IDS["basic"],
-            "quantity": 1
-        })
-        mode = "subscription"
-        
-    elif payment_intent.subscription_tier == "expert":
-        if payment_intent.payment_type == "subscription":
-            # Experten-Service laufendes Abonnement: 39€/Monat
-            line_items.append({
-                "price": PRICE_IDS["expert"],
-                "quantity": 1
-            })
-            mode = "subscription"
-        else:
-            # Experten-Service Einrichtungsgebühr: 2000€ einmalig
-            line_items.append({
-                "price": PRICE_IDS["expert_setup"],
-                "quantity": 1
-            })
-            mode = "payment"
-    
-    else:
-        raise HTTPException(status_code=400, detail="Ungültige Abonnement-Stufe")
-    
-    # Checkout-Session erstellen
-    success_url = f"{FRONTEND_URL}/payment/success?session_id={{CHECKOUT_SESSION_ID}}"
-    cancel_url = f"{FRONTEND_URL}/payment/cancel"
-    
-    session = stripe.checkout.Session.create(
-        customer=customer.id,
-        payment_method_types=["card"],
-        line_items=line_items,
-        mode=mode,
-        success_url=success_url,
-        cancel_url=cancel_url,
-        metadata={
-            "complyo_user_id": user_id,
-            "subscription_tier": payment_intent.subscription_tier,
-            "payment_type": payment_intent.payment_type
-        }
-    )
-    
-    return {"session_id": session.id, "checkout_url": session.url}
+    token = auth_header.replace('Bearer ', '')
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+    return await get_current_user(credentials)
 
-@router.get("/payment/verify/{session_id}")
-async def verify_payment(
-    session_id: str,
-    current_user = Depends(get_current_active_user)
+@router.post("/create-checkout", response_model=CheckoutResponse)
+async def create_checkout(
+    request: Request,
+    data: CreateCheckoutRequest
 ):
-    """Überprüft eine Checkout-Session und aktualisiert das Benutzerabonnement, wenn bezahlt"""
+    """
+    Create Stripe checkout session for AI or Expert Plan
+    Im DEV_MODE: Simuliert erfolgreiche Zahlung ohne echten Stripe-Call
+    """
     try:
-        session = stripe.checkout.Session.retrieve(session_id)
+        # Get current user
+        current_user = await get_current_user_from_auth_header(request)
+        user_id = current_user['id']
         
-        # Überprüfen, ob die Session diesem Benutzer gehört
-        if session.metadata.get("complyo_user_id") != current_user["id"]:
-            raise HTTPException(status_code=403, detail="Unautorisierter Zugriff auf diese Zahlungssitzung")
-        
-        # Zahlungsstatus prüfen
-        if session.payment_status != "paid":
-            return {"status": "pending", "message": "Zahlung wurde noch nicht abgeschlossen"}
-        
-        # Benutzerabonnement basierend auf Zahlung aktualisieren
-        subscription_tier = session.metadata.get("subscription_tier")
-        
-        query = """
-        UPDATE users SET subscription_tier = :tier_id
-        WHERE id = :user_id
-        RETURNING id, email, subscription_tier
-        """
-        values = {"tier_id": subscription_tier, "user_id": current_user["id"]}
-        
-        result = await database.fetch_one(query=query, values=values)
-        
-        # Zusätzlichen Eintrag für Experten-Setup erstellen, falls zutreffend
-        if subscription_tier == "expert" and session.metadata.get("payment_type") == "payment":
-            # Experten-Setup-Zahlung in einer separaten Tabelle erfassen
-            setup_query = """
-            INSERT INTO expert_setups(user_id, payment_id, status)
-            VALUES (:user_id, :payment_id, 'paid')
-            """
-            setup_values = {
-                "user_id": current_user["id"],
-                "payment_id": session.payment_intent
-            }
-            await database.execute(query=setup_query, values=setup_values)
+        # 🚀 DEV MODE: Simuliere Zahlung und aktiviere direkt
+        if DEV_MODE or BYPASS_PAYMENT:
+            logger.warning(f"⚠️ DEV_MODE: Simuliere Zahlung für User {user_id}, Plan {data.plan_type}")
             
-            # TODO: Experten-Onboarding-Prozess auslösen
-            # - Compliance-Team benachrichtigen
-            # - Erstes Beratungsgespräch planen
-            # - Kundendatensatz im CRM erstellen
+            # Generiere Mock Session ID
+            mock_session_id = f"cs_test_dev_{uuid.uuid4().hex[:24]}"
+            mock_subscription_id = f"sub_dev_{uuid.uuid4().hex[:24]}"
+            
+            # Upgrade User direkt in der Datenbank
+            async with db_pool.acquire() as conn:
+                # Create or update subscription record
+                await conn.execute(
+                    """
+                    INSERT INTO subscriptions (
+                        user_id, plan_id, stripe_subscription_id,
+                        status, start_date, money_back_guarantee_end_date
+                    )
+                    VALUES (
+                        $1, $2, $3, 'active', CURRENT_TIMESTAMP,
+                        CURRENT_TIMESTAMP + INTERVAL '14 days'
+                    )
+                    ON CONFLICT (user_id) DO UPDATE
+                    SET plan_id = $2,
+                        stripe_subscription_id = $3,
+                        status = 'active',
+                        start_date = CURRENT_TIMESTAMP,
+                        money_back_guarantee_end_date = CURRENT_TIMESTAMP + INTERVAL '14 days',
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    user_id, data.plan_type, mock_subscription_id
+                )
+                
+                # Update user_limits
+                websites_max = 1
+                exports_max = -1 if data.plan_type == 'expert' else 10
+                
+                await conn.execute(
+                    """
+                    UPDATE user_limits
+                    SET plan_type = $1,
+                        websites_max = $2,
+                        exports_max = $3,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = $4
+                    """,
+                    data.plan_type, websites_max, exports_max, user_id
+                )
+                
+                logger.info(f"✅ DEV_MODE: Subscription activated for user {user_id}, plan {data.plan_type}")
+            
+            # Redirect direkt zur Success-URL
+            success_url = f"{FRONTEND_URL}/dashboard?payment=success&session_id={mock_session_id}&dev_mode=true"
+            
+            return CheckoutResponse(
+                checkout_url=success_url,
+                session_id=mock_session_id
+            )
         
-        return {
-            "status": "success",
-            "message": "Zahlung erfolgreich und Abonnement aktualisiert",
-            "subscription": {
-                "tier": result["subscription_tier"],
-                "user_id": result["id"]
-            }
-        }
+        # ✅ PRODUCTION MODE: Echter Stripe Checkout
+        # Create checkout session
+        session = await stripe_service.create_plan_checkout_session(
+            user_id=user_id,
+            plan_type=data.plan_type,
+            success_url=f"{FRONTEND_URL}/dashboard?payment=success&session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{FRONTEND_URL}/subscription?payment=cancelled"
+        )
         
-    except stripe.error.StripeError as e:
-        logger.error(f"Stripe-Fehler: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Stripe-Fehler: {str(e)}")
+        return CheckoutResponse(
+            checkout_url=session['checkout_url'],
+            session_id=session['session_id']
+        )
+    except Exception as e:
+        logger.error(f"Checkout creation error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Fehler beim Erstellen der Checkout-Session"
+        )
 
 @router.post("/webhook")
-async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
-    """Behandelt Stripe-Webhook-Events"""
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhooks"""
     payload = await request.body()
-    sig_header = request.headers.get("stripe-signature")
+    sig_header = request.headers.get('stripe-signature')
+    
+    if not sig_header:
+        raise HTTPException(400, "Missing stripe-signature header")
     
     try:
         event = stripe.Webhook.construct_event(
             payload, sig_header, STRIPE_WEBHOOK_SECRET
         )
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Ungültige Payload")
-    except stripe.error.SignatureVerificationError:
-        raise HTTPException(status_code=400, detail="Ungültige Signatur")
+    except ValueError as e:
+        logger.error(f"Invalid payload: {e}")
+        raise HTTPException(400, "Invalid payload")
+    except stripe.error.SignatureVerificationError as e:
+        logger.error(f"Invalid signature: {e}")
+        raise HTTPException(400, "Invalid signature")
     
-    # Spezifische Event-Typen behandeln
-    if event.type == "checkout.session.completed":
-        session = event.data.object
-        logger.info(f"Zahlung erfolgreich für Session {session.id}")
-        
-        # Benutzer-ID aus Metadaten abrufen
-        complyo_user_id = session.metadata.get("complyo_user_id")
-        if not complyo_user_id:
-            logger.error(f"Keine Complyo-Benutzer-ID in Session {session.id} gefunden")
-            return {"status": "error", "message": "Keine Benutzer-ID in Metadaten"}
-        
-        # Verarbeitung basierend auf Modus (Abonnement vs. Einmalzahlung)
-        if session.mode == "subscription":
-            # Abonnementzahlung - Abonnement-Updates werden durch subscription.updated behandelt
-            logger.info(f"Abonnement erstellt für Benutzer {complyo_user_id}")
-            
-        elif session.mode == "payment":
-            # Einmalzahlung für Experten-Setup
-            tier = session.metadata.get("subscription_tier")
-            if tier == "expert":
-                # Benutzer-Stufe aktualisieren und Experten-Setup-Zahlung erfassen
-                query = """
-                UPDATE users SET subscription_tier = :tier_id
-                WHERE id = :user_id
-                """
-                values = {"tier_id": tier, "user_id": complyo_user_id}
-                background_tasks.add_task(database.execute, query=query, values=values)
-                
-                # Expert-Setup erfassen
-                setup_query = """
-                INSERT INTO expert_setups(user_id, payment_id, status)
-                VALUES (:user_id, :payment_id, 'paid')
-                ON CONFLICT (user_id) DO UPDATE SET 
-                payment_id = :payment_id, status = 'paid'
-                """
-                setup_values = {
-                    "user_id": complyo_user_id,
-                    "payment_id": session.payment_intent
-                }
-                background_tasks.add_task(database.execute, query=setup_query, values=setup_values)
+    # Handle events
+    event_type = event['type']
+    logger.info(f"Received Stripe webhook: {event_type}")
+    
+    if event_type == 'checkout.session.completed':
+        await handle_checkout_completed(event['data']['object'])
+    elif event_type == 'customer.subscription.updated':
+        await handle_subscription_updated(event['data']['object'])
+    elif event_type == 'customer.subscription.deleted':
+        await handle_subscription_cancelled(event['data']['object'])
+    elif event_type == 'invoice.payment_failed':
+        await handle_payment_failed(event['data']['object'])
+    else:
+        logger.info(f"Unhandled event type: {event_type}")
     
     return {"status": "success"}
 
-# DB-Init-Funktion - rufen Sie diese auf, wenn Ihre App startet
-async def init_db():
-    # expert_setups-Tabelle erstellen, falls nicht vorhanden
-    query = """
-    CREATE TABLE IF NOT EXISTS expert_setups (
-        user_id VARCHAR(50) PRIMARY KEY REFERENCES users(id),
-        payment_id VARCHAR(100) NOT NULL,
-        status VARCHAR(20) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """
-    await database.execute(query=query)
+async def handle_checkout_completed(session):
+    """Handle successful checkout"""
+    user_id = int(session['metadata']['user_id'])
+    plan_type = session['metadata']['plan_type']
+    subscription_id = session.get('subscription')
+    
+    logger.info(f"Checkout completed for user {user_id}, plan {plan_type}")
+    
+    try:
+        async with db_pool.acquire() as conn:
+            # Create or update subscription record
+            await conn.execute(
+                """
+                INSERT INTO subscriptions (
+                    user_id, plan_id, stripe_subscription_id,
+                    status, start_date, money_back_guarantee_end_date
+                )
+                VALUES (
+                    $1, $2, $3, 'active', CURRENT_TIMESTAMP,
+                    CURRENT_TIMESTAMP + INTERVAL '14 days'
+                )
+                ON CONFLICT (user_id) DO UPDATE
+                SET plan_id = $2,
+                    stripe_subscription_id = $3,
+                    status = 'active',
+                    start_date = CURRENT_TIMESTAMP,
+                    money_back_guarantee_end_date = CURRENT_TIMESTAMP + INTERVAL '14 days',
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                user_id, plan_type, subscription_id
+            )
+            
+            # Update user_limits
+            websites_max = 1
+            exports_max = -1 if plan_type == 'expert' else 10
+            
+            await conn.execute(
+                """
+                UPDATE user_limits
+                SET plan_type = $1,
+                    websites_max = $2,
+                    exports_max = $3,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = $4
+                """,
+                plan_type, websites_max, exports_max, user_id
+            )
+            
+            logger.info(f"Subscription activated for user {user_id}")
+    except Exception as e:
+        logger.error(f"Error handling checkout completed: {e}")
+        raise
+
+async def handle_subscription_updated(subscription):
+    """Handle subscription updates"""
+    try:
+        user_id = int(subscription['metadata'].get('user_id', 0))
+        if not user_id:
+            logger.warning("No user_id in subscription metadata")
+            return
+        
+        status = subscription['status']
+        
+        async with db_pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE subscriptions
+                SET status = $1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE stripe_subscription_id = $2
+                """,
+                status, subscription['id']
+            )
+        
+        logger.info(f"Subscription updated for user {user_id}: {status}")
+    except Exception as e:
+        logger.error(f"Error handling subscription update: {e}")
+
+async def handle_subscription_cancelled(subscription):
+    """Handle subscription cancellation"""
+    try:
+        user_id = int(subscription['metadata'].get('user_id', 0))
+        if not user_id:
+            logger.warning("No user_id in subscription metadata")
+            return
+        
+        async with db_pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE subscriptions
+                SET status = 'cancelled',
+                    end_date = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE stripe_subscription_id = $1
+                """,
+                subscription['id']
+            )
+            
+            # Reset user limits to free tier
+            await conn.execute(
+                """
+                UPDATE user_limits
+                SET plan_type = 'free',
+                    websites_max = 0,
+                    exports_max = 0,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = $1
+                """,
+                user_id
+            )
+        
+        logger.info(f"Subscription cancelled for user {user_id}")
+    except Exception as e:
+        logger.error(f"Error handling subscription cancellation: {e}")
+
+async def handle_payment_failed(invoice):
+    """Handle failed payment"""
+    try:
+        subscription_id = invoice.get('subscription')
+        if not subscription_id:
+            return
+        
+        async with db_pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE subscriptions
+                SET status = 'past_due',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE stripe_subscription_id = $1
+                """,
+                subscription_id
+            )
+        
+        logger.warning(f"Payment failed for subscription {subscription_id}")
+    except Exception as e:
+        logger.error(f"Error handling payment failure: {e}")
+
+@router.get("/subscription-status")
+async def get_subscription_status(request: Request):
+    """Get current user's subscription status"""
+    try:
+        current_user = await get_current_user_from_auth_header(request)
+        user_id = current_user['id']
+        
+        status = await stripe_service.get_subscription_status(user_id)
+        return status
+    except Exception as e:
+        logger.error(f"Error getting subscription status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Fehler beim Abrufen des Subscription-Status"
+        )
+
+@router.get("/health")
+async def payment_health():
+    """Health check for payment service"""
+    return {
+        "status": "healthy",
+        "service": "payment",
+        "stripe_service_initialized": stripe_service is not None,
+        "webhook_secret_configured": STRIPE_WEBHOOK_SECRET is not None
+    }

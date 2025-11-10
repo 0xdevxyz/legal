@@ -1,239 +1,412 @@
-# auth_routes.py - Add to your FastAPI backend
-
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
+from typing import Optional
+import logging
+import secrets
 from datetime import datetime, timedelta
-from typing import Optional, List
-import jwt
-from passlib.context import CryptContext
-import uuid
-from databases import Database
-import os
 
-# Configuration
-SECRET_KEY = os.environ.get("JWT_SECRET", "9ECBjaQa7KwoyciJtLTQjc/fWRClrsMUXl5LSpIwi+I9y3wPnD1ZAZ6On+WGukAZ2bmkgInnjJjBEeU2xkluEQ==")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30*24*60  # 30 days
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://complyo_user:WrsmZTXYcjt0c7lt%2FlOzEnX1N5rtjRklLYrY8zXmBGo%3D@shared-postgres:5432/complyo_db")
+logger = logging.getLogger(__name__)
 
-# Database setup
-database = Database(DATABASE_URL)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+security = HTTPBearer()
 
-# Models
-class UserBase(BaseModel):
+# Global reference to services (will be set in main_production.py)
+auth_service = None
+db_pool = None
+oauth_service = None  # OAuth Service for Google & Apple
+firebase_verify_token = None  # Firebase token verification function
+
+class RegisterRequest(BaseModel):
     email: EmailStr
-    full_name: Optional[str] = None
-    company: Optional[str] = None
-
-class UserCreate(UserBase):
     password: str
-    subscription_tier: str = "free"  # free, basic, expert
+    full_name: str
+    company: Optional[str] = None
+    plan: str = "ki"  # 'ki' oder 'expert'
 
-class User(UserBase):
-    id: str
-    created_at: datetime
-    subscription_tier: str
-    is_active: bool
-    api_key: str
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
 
-class Token(BaseModel):
+class TokenResponse(BaseModel):
     access_token: str
-    token_type: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user: dict
 
-class TokenData(BaseModel):
-    user_id: Optional[str] = None
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
-class SubscriptionTier(BaseModel):
-    tier_id: str
-    name: str
-    price_monthly: float
-    features: List[str]
+async def init_user_limits(user_id: int, plan_type: str):
+    """Initialize user_limits for new user"""
+    async with db_pool.acquire() as conn:
+        # Check if already exists
+        exists = await conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM user_limits WHERE user_id = $1)",
+            user_id
+        )
+        
+        if not exists:
+            websites_max = 1
+            exports_max = -1 if plan_type == 'expert' else 10
+            
+            await conn.execute(
+                """
+                INSERT INTO user_limits (user_id, plan_type, websites_max, exports_max, exports_reset_date)
+                VALUES ($1, $2, $3, $4, CURRENT_DATE + INTERVAL '1 month')
+                """,
+                user_id, plan_type, websites_max, exports_max
+            )
+            logger.info(f"User limits initialized for user {user_id} with plan {plan_type}")
 
-# Functions
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
-
-async def get_user(user_id: str):
-    query = "SELECT * FROM users WHERE id = :user_id"
-    return await database.fetch_one(query=query, values={"user_id": user_id})
-
-async def get_user_by_email(email: str):
-    query = "SELECT * FROM users WHERE email = :email"
-    return await database.fetch_one(query=query, values={"email": email})
-
-async def authenticate_user(email: str, password: str):
-    user = await get_user_by_email(email)
-    if not user:
-        return False
-    if not verify_password(password, user["password"]):
-        return False
-    return user
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+@router.post("/register", response_model=TokenResponse)
+async def register(request: RegisterRequest):
+    """Register a new user"""
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-        token_data = TokenData(user_id=user_id)
-    except jwt.PyJWTError:
-        raise credentials_exception
-    user = await get_user(user_id=token_data.user_id)
-    if user is None:
-        raise credentials_exception
-    return user
+        # Check if email exists
+        existing = await auth_service.get_user_by_email(request.email)
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email bereits registriert"
+            )
+        
+        # Create user
+        user = await auth_service.register_user(
+            request.email,
+            request.password,
+            request.full_name,
+            request.company
+        )
+        
+        # Initialize user_limits
+        await init_user_limits(user['id'], request.plan)
+        
+        # Create tokens
+        access_token = auth_service.create_access_token(user['id'])
+        refresh_token = await auth_service.create_refresh_token(user['id'])
+        
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "user": {
+                "id": user['id'],
+                "email": user['email'],
+                "full_name": user['full_name'],
+                "company": user.get('company')
+            }
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Registration error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registrierung fehlgeschlagen"
+        )
 
-async def get_current_active_user(current_user = Depends(get_current_user)):
-    if not current_user["is_active"]:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
-
-# Router
-router = APIRouter()
-
-@router.post("/register", response_model=User)
-async def register_user(user: UserCreate):
-    # Check if user already exists
-    db_user = await get_user_by_email(user.email)
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+@router.post("/login", response_model=TokenResponse)
+async def login(request: LoginRequest):
+    """Login user"""
+    user = await auth_service.authenticate(request.email, request.password)
+    if not user:
+        raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Ungültige Zugangsdaten"
+        )
     
-    # Create new user
-    user_id = str(uuid.uuid4())
-    api_key = str(uuid.uuid4())
-    hashed_password = get_password_hash(user.password)
+    # Create tokens
+    access_token = auth_service.create_access_token(user['id'])
+    refresh_token = await auth_service.create_refresh_token(user['id'])
     
-    query = """
-    INSERT INTO users(id, email, password, full_name, company, subscription_tier, is_active, api_key, created_at)
-    VALUES (:id, :email, :password, :full_name, :company, :subscription_tier, :is_active, :api_key, :created_at)
-    RETURNING id, email, full_name, company, subscription_tier, is_active, api_key, created_at
-    """
-    values = {
-        "id": user_id,
-        "email": user.email,
-        "password": hashed_password,
-        "full_name": user.full_name,
-        "company": user.company,
-        "subscription_tier": user.subscription_tier,
-        "is_active": True,
-        "api_key": api_key,
-        "created_at": datetime.utcnow()
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user['id'],
+            "email": user['email'],
+            "full_name": user['full_name'],
+            "company": user.get('company')
+        }
     }
-    
-    result = await database.fetch_one(query=query, values=values)
-    return result
 
-@router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = await authenticate_user(form_data.username, form_data.password)
+@router.post("/refresh")
+async def refresh_token(request: RefreshRequest):
+    """Refresh access token"""
+    new_access_token = await auth_service.refresh_access_token(request.refresh_token)
+    if not new_access_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token"
+        )
+    
+    return {
+        "access_token": new_access_token,
+        "token_type": "bearer"
+    }
+
+@router.post("/logout")
+async def logout(request: RefreshRequest):
+    """Logout user (revoke refresh token)"""
+    await auth_service.revoke_refresh_token(request.refresh_token)
+    return {"message": "Logged out successfully"}
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Dependency to get current user from JWT token"""
+    token = credentials.credentials
+    payload = auth_service.verify_token(token)
+    
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Ungültiger oder abgelaufener Token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Ungültiger Token"
+        )
+    
+    # Get user from database
+    user = await auth_service.get_user_by_id(user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="User nicht gefunden"
         )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user["id"]}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+    
+    return user
 
-@router.get("/users/me", response_model=User)
-async def read_users_me(current_user = Depends(get_current_active_user)):
+@router.get("/me")
+async def get_current_user_info(current_user: dict = Depends(get_current_user)):
+    """Get current user information"""
     return current_user
 
-@router.get("/subscription/tiers")
-async def get_subscription_tiers():
-    """Return available subscription tiers"""
-    return [
-        {
-            "tier_id": "free",
-            "name": "Free Scan",
-            "price_monthly": 0,
-            "features": ["Single compliance scan", "Basic report", "Risk assessment"]
-        },
-        {
-            "tier_id": "basic",
-            "name": "KI-Automatisierung",
-            "price_monthly": 39,
-            "features": [
-                "Unlimited compliance scans",
-                "AI-powered fixes",
-                "Cookie banner implementation",
-                "Monthly re-scans",
-                "Compliance dashboard"
-            ]
-        },
-        {
-            "tier_id": "expert",
-            "name": "Experten-Service",
-            "price_monthly": 39,
-            "setup_fee": 2000,
-            "features": [
-                "All Basic features",
-                "Personal expert support",
-                "Deep-dive audit",
-                "Industry-specific compliance",
-                "Custom integration",
-                "Expert hotline"
-            ]
+# ============= OAuth2 Routes (Google & Apple) =============
+
+@router.get("/google")
+async def google_oauth_start():
+    """Start Google OAuth flow"""
+    if not oauth_service:
+        raise HTTPException(500, "OAuth service not initialized")
+    
+    # Generate state token for CSRF protection
+    state = secrets.token_urlsafe(32)
+    
+    # Store state in database
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO oauth_states (state_token, provider, expires_at)
+            VALUES ($1, 'google', $2)
+            """,
+            state, datetime.utcnow() + timedelta(minutes=10)
+        )
+    
+    # Redirect to Google OAuth
+    auth_url = oauth_service.get_google_auth_url(state)
+    return {"auth_url": auth_url}
+
+@router.get("/google/callback")
+async def google_oauth_callback(code: str, state: str):
+    """Handle Google OAuth callback"""
+    if not oauth_service:
+        raise HTTPException(500, "OAuth service not initialized")
+    
+    # Verify state token (CSRF protection)
+    async with db_pool.acquire() as conn:
+        state_record = await conn.fetchrow(
+            "SELECT * FROM oauth_states WHERE state_token = $1 AND provider = 'google'",
+            state
+        )
+        
+        if not state_record or state_record['expires_at'] < datetime.utcnow():
+            raise HTTPException(400, "Invalid or expired state token")
+        
+        # Delete used state token
+        await conn.execute("DELETE FROM oauth_states WHERE state_token = $1", state)
+    
+    # Exchange code for user info
+    try:
+        google_user = await oauth_service.exchange_google_code(code)
+        
+        # Get or create user
+        user = await oauth_service.get_or_create_oauth_user(
+            provider='google',
+            provider_user_id=google_user['id'],
+            email=google_user['email'],
+            full_name=google_user.get('name', google_user['email'].split('@')[0])
+        )
+        
+        # Create tokens
+        access_token = auth_service.create_access_token(user['id'])
+        refresh_token = await auth_service.create_refresh_token(user['id'])
+        
+        # Redirect to frontend with tokens (via URL hash for security)
+        frontend_url = "https://app.complyo.tech"
+        return RedirectResponse(
+            url=f"{frontend_url}/auth/callback?access_token={access_token}&refresh_token={refresh_token}"
+        )
+    
+    except Exception as e:
+        logger.error(f"Google OAuth error: {e}")
+        raise HTTPException(500, f"Google OAuth failed: {str(e)}")
+
+@router.get("/apple")
+async def apple_oauth_start():
+    """Start Apple OAuth flow"""
+    if not oauth_service:
+        raise HTTPException(500, "OAuth service not initialized")
+    
+    # Generate state token for CSRF protection
+    state = secrets.token_urlsafe(32)
+    
+    # Store state in database
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO oauth_states (state_token, provider, expires_at)
+            VALUES ($1, 'apple', $2)
+            """,
+            state, datetime.utcnow() + timedelta(minutes=10)
+        )
+    
+    # Redirect to Apple OAuth
+    auth_url = oauth_service.get_apple_auth_url(state)
+    return {"auth_url": auth_url}
+
+@router.post("/apple/callback")
+async def apple_oauth_callback(code: str, state: str):
+    """Handle Apple OAuth callback (POST)"""
+    if not oauth_service:
+        raise HTTPException(500, "OAuth service not initialized")
+    
+    # Verify state token (CSRF protection)
+    async with db_pool.acquire() as conn:
+        state_record = await conn.fetchrow(
+            "SELECT * FROM oauth_states WHERE state_token = $1 AND provider = 'apple'",
+            state
+        )
+        
+        if not state_record or state_record['expires_at'] < datetime.utcnow():
+            raise HTTPException(400, "Invalid or expired state token")
+        
+        # Delete used state token
+        await conn.execute("DELETE FROM oauth_states WHERE state_token = $1", state)
+    
+    # Exchange code for user info
+    try:
+        apple_user = await oauth_service.exchange_apple_code(code)
+        
+        # Get or create user
+        user = await oauth_service.get_or_create_oauth_user(
+            provider='apple',
+            provider_user_id=apple_user['sub'],
+            email=apple_user['email'],
+            full_name=apple_user.get('name', {}).get('firstName', apple_user['email'].split('@')[0])
+        )
+        
+        # Create tokens
+        access_token = auth_service.create_access_token(user['id'])
+        refresh_token = await auth_service.create_refresh_token(user['id'])
+        
+        # Redirect to frontend with tokens
+        frontend_url = "https://app.complyo.tech"
+        return RedirectResponse(
+            url=f"{frontend_url}/auth/callback?access_token={access_token}&refresh_token={refresh_token}"
+        )
+    
+    except Exception as e:
+        logger.error(f"Apple OAuth error: {e}")
+        raise HTTPException(500, f"Apple OAuth failed: {str(e)}")
+
+# ============= Firebase Auth Route =============
+
+class FirebaseTokenRequest(BaseModel):
+    id_token: str
+    plan: str = "ki"  # Default plan for Firebase users
+
+@router.post("/firebase-verify", response_model=TokenResponse)
+async def firebase_verify(request: FirebaseTokenRequest):
+    """
+    Verify Firebase ID token and create/login user
+    
+    This endpoint:
+    1. Verifies Firebase ID token with Admin SDK
+    2. Creates user if doesn't exist (or gets existing user)
+    3. Returns Complyo JWT tokens for API access
+    """
+    if not firebase_verify_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Firebase Auth ist nicht konfiguriert. Bitte Standardanmeldung verwenden."
+        )
+    
+    try:
+        # Verify Firebase token
+        firebase_user = await firebase_verify_token(request.id_token)
+        
+        # Get or create user in Complyo database
+        user = await auth_service.get_user_by_email(firebase_user['email'])
+        
+        if not user:
+            # Create new user from Firebase data
+            logger.info(f"Creating new user from Firebase: {firebase_user['email']}")
+            user = await auth_service.register_user(
+                email=firebase_user['email'],
+                password=None,  # No password for Firebase users
+                full_name=firebase_user.get('name', firebase_user['email'].split('@')[0]),
+                company=None,
+                firebase_uid=firebase_user['firebase_uid']
+            )
+            
+            # Initialize user limits
+            await init_user_limits(user['id'], request.plan)
+        
+        # Create Complyo JWT tokens
+        access_token = auth_service.create_access_token(user['id'])
+        refresh_token = await auth_service.create_refresh_token(user['id'])
+        
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "user": {
+                "id": user['id'],
+                "email": user['email'],
+                "full_name": user['full_name'],
+                "company": user.get('company')
+            }
         }
-    ]
-
-@router.post("/subscription/upgrade")
-async def upgrade_subscription(
-    tier_id: str,
-    current_user = Depends(get_current_active_user)
-):
-    """Upgrade user subscription tier - placeholder for Stripe integration"""
-    # In real implementation, this would integrate with Stripe
-    # and only update after successful payment
     
-    query = """
-    UPDATE users SET subscription_tier = :tier_id
-    WHERE id = :user_id
-    RETURNING id, email, full_name, company, subscription_tier, is_active, api_key, created_at
-    """
-    values = {"tier_id": tier_id, "user_id": current_user["id"]}
-    
-    result = await database.fetch_one(query=query, values=values)
-    return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Firebase verification error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Firebase Authentifizierung fehlgeschlagen: {str(e)}"
+        )
 
-# DB Init function - call this when your app starts
-async def init_db():
-    # Create users table if it doesn't exist
-    query = """
-    CREATE TABLE IF NOT EXISTS users (
-        id VARCHAR(50) PRIMARY KEY,
-        email VARCHAR(100) UNIQUE NOT NULL,
-        password VARCHAR(100) NOT NULL,
-        full_name VARCHAR(100),
-        company VARCHAR(100),
-        subscription_tier VARCHAR(20) NOT NULL,
-        is_active BOOLEAN NOT NULL,
-        api_key VARCHAR(50) UNIQUE NOT NULL,
-        created_at TIMESTAMP NOT NULL
-    )
-    """
-    await database.execute(query=query)
+# ============= Health Check =============
+
+@router.get("/health")
+async def auth_health():
+    """Health check for auth service"""
+    return {
+        "status": "healthy",
+        "service": "authentication",
+        "auth_service_initialized": auth_service is not None,
+        "db_pool_initialized": db_pool is not None,
+        "oauth_service_initialized": oauth_service is not None,
+        "firebase_auth_initialized": firebase_verify_token is not None
+    }

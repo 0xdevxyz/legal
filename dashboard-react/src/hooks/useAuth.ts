@@ -54,7 +54,7 @@ export function useAuth() {
       
       // ✅ Fallback zu Mock für Demo (falls API nicht verfügbar)
       if (error.code === 'ECONNREFUSED' || error.response?.status === 404) {
-        console.warn('API not available, using demo mode');
+
         const mockUser: User = {
           id: '1',
           email,

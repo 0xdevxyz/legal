@@ -1,0 +1,93 @@
+name: AI Fix → Pull Request
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: "PR-Titel"
+        required: true
+        type: string
+      body:
+        description: "Beschreibung"
+        required: false
+        type: string
+      patch_b64:
+        description: "Diff (Base64)"
+        required: true
+        type: string
+      branch:
+        description: "Branchname"
+        required: false
+        type: string
+        default: "ai-fix/${{ github.run_id }}"
+  
+  repository_dispatch:
+    types: [ai-fix-proposal]
+
+permissions: 
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Decode Patch
+        run: |
+          PATCH_B64="${{ github.event.client_payload.patch_b64 || inputs.patch_b64 }}"
+          echo "$PATCH_B64" | base64 -d > /tmp/ai.patch
+          echo "✅ Patch decoded"
+          head -20 /tmp/ai.patch || echo "Patch ist leer"
+      
+      - name: Apply Patch & Commit
+        run: |
+          git config user.name "complyo-bot"
+          git config user.email "bot@complyo.local"
+          
+          BRANCH="${{ github.event.client_payload.branch || inputs.branch }}"
+          echo "📝 Creating branch: $BRANCH"
+          git checkout -b "$BRANCH"
+          
+          echo "🔧 Applying patch..."
+          if git apply --3way --whitespace=fix /tmp/ai.patch; then
+            echo "✅ Patch applied successfully"
+          else
+            echo "⚠️ Patch hat Konflikte - versuche trotzdem zu committen"
+          fi
+          
+          git add -A
+          
+          if git diff --cached --quiet; then
+            echo "ℹ️ Keine Änderungen zum Committen"
+            exit 0
+          fi
+          
+          git commit -m "chore(ai-fix): apply compliance fix" || echo "Commit fehlgeschlagen"
+          
+          echo "🚀 Pushing to origin..."
+          git push origin HEAD
+      
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          title: ${{ github.event.client_payload.title || inputs.title }}
+          body: |
+            ${{ github.event.client_payload.body || inputs.body }}
+            
+            ---
+            🤖 **Automatisch generiert von Complyo KI-Fix**
+            
+            ### Was wurde geändert?
+            Dieser PR behebt automatisch erkannte Compliance-Probleme.
+            
+            ### Nächste Schritte
+            1. ✅ Code-Review durchführen
+            2. ✅ Lokal testen
+            3. ✅ Mergen wenn alles passt
+          branch: ${{ github.event.client_payload.branch || inputs.branch }}
+          labels: ai-fix, compliance, automated
+          draft: false
+

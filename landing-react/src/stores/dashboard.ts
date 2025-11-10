@@ -75,7 +75,7 @@ export const useDashboardStore = create<DashboardStore>()(
 
     getComplianceScore: () => {
       const { analysisData, metrics } = get();
-      return analysisData?.compliance_score || metrics.totalScore;
+      return analysisData?.compliance_score ?? metrics.totalScore;
     }
   }))
 );

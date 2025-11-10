@@ -339,7 +339,7 @@ audit_database() {
     echo "" >> "$REPORT_FILE"
     echo "### Password Security" >> "$REPORT_FILE"
     
-    local env_file="$PROJECT_ROOT/.env.production"
+    local env_file="$PROJECT_ROOT/.env"
     if [ -f "$env_file" ]; then
         if grep -q "password123\|admin\|root\|changeme" "$env_file"; then
             echo "❌ **CRITICAL**: Weak passwords detected in environment file" >> "$REPORT_FILE"
@@ -521,7 +521,7 @@ apply_hardening() {
     log "🛡️  Applying security hardening measures..."
     
     # Set proper file permissions
-    chmod 600 "$PROJECT_ROOT/.env.production" 2>/dev/null || true
+    chmod 600 "$PROJECT_ROOT/.env" 2>/dev/null || true
     chmod 700 "$PROJECT_ROOT/scripts/"*.sh 2>/dev/null || true
     
     # Configure log rotation

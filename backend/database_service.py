@@ -292,6 +292,13 @@ class DatabaseService:
                 return True
         return False
     
+    async def update_lead_status_by_email(self, email: str, status: str) -> bool:
+        """Update lead status by email address"""
+        lead = await self.get_lead_by_email(email)
+        if not lead:
+            return False
+        return await self.update_lead_status(lead['id'], status)
+    
     async def update_lead_status(self, lead_id: str, status: str, **kwargs) -> bool:
         """Update lead status and additional fields"""
         if self.use_fallback:
@@ -496,6 +503,186 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error permanently deleting lead: {e}")
             return False
+    
+    # ==================== AI COMPLIANCE ADD-ON METHODS ====================
+    
+    async def check_user_addon(self, user_id: str, addon_key: str) -> bool:
+        """
+        Check if user has an active add-on
+        """
+        if self.use_fallback:
+            return False  # No add-ons in fallback mode
+        
+        try:
+            async with self.get_connection() as conn:
+                query = """
+                    SELECT id FROM user_addons 
+                    WHERE user_id = $1 AND addon_key = $2 
+                    AND status = 'active'
+                    AND (expires_at IS NULL OR expires_at > NOW())
+                """
+                result = await conn.fetchrow(query, user_id, addon_key)
+                return result is not None
+        
+        except Exception as e:
+            logger.error(f"Error checking user addon: {e}")
+            return False
+    
+    async def get_addon_limits(self, user_id: str, addon_key: str) -> Dict[str, Any]:
+        """
+        Get limits for a user's add-on
+        """
+        if self.use_fallback:
+            return {"ai_systems": 10}  # Default limit
+        
+        try:
+            async with self.get_connection() as conn:
+                query = """
+                    SELECT limits FROM user_addons 
+                    WHERE user_id = $1 AND addon_key = $2 
+                    AND status = 'active'
+                """
+                result = await conn.fetchrow(query, user_id, addon_key)
+                
+                if result and result['limits']:
+                    return json.loads(result['limits']) if isinstance(result['limits'], str) else result['limits']
+                
+                # Default limits
+                return {"ai_systems": 10}
+        
+        except Exception as e:
+            logger.error(f"Error getting addon limits: {e}")
+            return {"ai_systems": 10}
+    
+    async def count_user_ai_systems(self, user_id: str) -> int:
+        """
+        Count active AI systems for a user
+        """
+        if self.use_fallback:
+            return 0
+        
+        try:
+            async with self.get_connection() as conn:
+                query = """
+                    SELECT COUNT(*) FROM ai_systems 
+                    WHERE user_id = $1 AND status = 'active'
+                """
+                count = await conn.fetchval(query, user_id)
+                return count or 0
+        
+        except Exception as e:
+            logger.error(f"Error counting user AI systems: {e}")
+            return 0
+    
+    async def create_user_addon(
+        self, 
+        user_id: str, 
+        addon_key: str,
+        addon_name: str,
+        price_monthly: float,
+        limits: Dict[str, Any],
+        stripe_subscription_id: Optional[str] = None
+    ) -> str:
+        """
+        Create a new user add-on subscription
+        """
+        if self.use_fallback:
+            return str(uuid.uuid4())
+        
+        try:
+            async with self.get_connection() as conn:
+                addon_id = str(uuid.uuid4())
+                
+                query = """
+                    INSERT INTO user_addons (
+                        id, user_id, addon_key, addon_name, 
+                        price_monthly, limits, stripe_subscription_id,
+                        status, started_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', NOW())
+                    ON CONFLICT (user_id, addon_key) 
+                    DO UPDATE SET 
+                        status = 'active',
+                        price_monthly = EXCLUDED.price_monthly,
+                        limits = EXCLUDED.limits,
+                        stripe_subscription_id = EXCLUDED.stripe_subscription_id,
+                        started_at = NOW()
+                    RETURNING id
+                """
+                
+                result = await conn.fetchrow(
+                    query,
+                    addon_id,
+                    user_id,
+                    addon_key,
+                    addon_name,
+                    price_monthly,
+                    json.dumps(limits),
+                    stripe_subscription_id
+                )
+                
+                logger.info(f"Created add-on {addon_key} for user {user_id}")
+                return str(result['id'])
+        
+        except Exception as e:
+            logger.error(f"Error creating user addon: {e}")
+            return ""
+    
+    async def cancel_user_addon(self, user_id: str, addon_key: str) -> bool:
+        """
+        Cancel a user's add-on subscription
+        """
+        if self.use_fallback:
+            return True
+        
+        try:
+            async with self.get_connection() as conn:
+                query = """
+                    UPDATE user_addons 
+                    SET status = 'cancelled', cancelled_at = NOW()
+                    WHERE user_id = $1 AND addon_key = $2
+                """
+                await conn.execute(query, user_id, addon_key)
+                logger.info(f"Cancelled add-on {addon_key} for user {user_id}")
+                return True
+        
+        except Exception as e:
+            logger.error(f"Error cancelling user addon: {e}")
+            return False
+    
+    async def get_user_addons(self, user_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all add-ons for a user
+        """
+        if self.use_fallback:
+            return []
+        
+        try:
+            async with self.get_connection() as conn:
+                query = """
+                    SELECT * FROM user_addons 
+                    WHERE user_id = $1
+                    ORDER BY started_at DESC
+                """
+                rows = await conn.fetch(query, user_id)
+                
+                return [
+                    {
+                        "id": str(row['id']),
+                        "addon_key": row['addon_key'],
+                        "addon_name": row['addon_name'],
+                        "price_monthly": float(row['price_monthly']),
+                        "status": row['status'],
+                        "limits": json.loads(row['limits']) if row['limits'] else {},
+                        "started_at": row['started_at'],
+                        "expires_at": row['expires_at'],
+                        "cancelled_at": row['cancelled_at']
+                    }
+                    for row in rows
+                ]
+        
+        except Exception as e:
+            logger.error(f"Error getting user addons: {e}")
+            return []
 
 # Global database service instance
 db_service = DatabaseService()

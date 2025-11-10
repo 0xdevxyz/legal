@@ -1,0 +1,482 @@
+# Complyo - KI-gestützte Website-Compliance-Plattform
+
+## 🎯 Projektziel
+Automatisierte Prüfung deutscher Websites auf DSGVO, TMG, TTDSG, BFSG (Barrierefreiheit) mit KI-basierter Fix-Generierung und Freemium-Modell.
+
+## 🛠️ Tech Stack
+
+### Backend (Python 3.11)
+- **Framework:** FastAPI 0.104.1 mit asyncpg für PostgreSQL
+- **Auth:** Firebase Admin SDK + JWT (PyJWT 2.8.0)
+- **Payment:** Stripe SDK 7.8.0 (Subscriptions + Webhooks)
+- **KI:** OpenRouter API (Claude 3.5 Sonnet) für personalisierte Fixes
+- **Legal:** eRecht24 API-Integration für rechtssichere Texte
+- **Scraping:** BeautifulSoup4 + aiohttp für Website-Analyse
+- **PDF:** ReportLab 4.0.7 für Compliance-Reports
+- **Caching:** Redis 5.0.1
+- **Rate Limiting:** slowapi 0.1.9
+- **Templates:** Jinja2 3.1.2
+- **Monitoring:** Prometheus Client 0.19.0
+
+### Frontend (React 18 + Next.js 14)
+- **Framework:** Next.js 14.2.32 (App Router)
+- **UI:** Tailwind CSS 3.4.6 + Lucide Icons
+- **State:** Zustand 4.5.4
+- **Data Fetching:** TanStack Query 5.50.1
+- **HTTP:** Axios 1.7.2
+- **Auth:** Firebase 12.4.0 (Client SDK)
+- **Charts:** Recharts 2.12.7
+- **Animations:** Framer Motion 11.2.12
+- **Code Display:** react-syntax-highlighter 15.5.0
+- **TypeScript:** 5.5.3 (Strict Mode)
+
+### Infrastructure
+- **Database:** PostgreSQL 15 (Docker)
+- **Cache:** Redis 7 (Docker)
+- **Reverse Proxy:** Nginx (für Production)
+- **Container:** Docker Compose 3.8
+- **CI/CD:** GitHub Actions
+
+## 📁 Projekt-Struktur
+
+```
+/opt/projects/saas-project-2/
+├── backend/
+│   ├── main_production.py          # FastAPI App Entry (Port 8002)
+│   ├── auth_service.py             # JWT + Firebase Auth
+│   ├── fix_generator.py            # KI-Fix Service (OpenRouter)
+│   ├── export_service.py           # Fix-Export (HTML/PDF)
+│   ├── erecht24_service.py         # Rechtssichere Texte
+│   ├── email_service.py            # SMTP-Versand
+│   ├── database_service.py         # DB-Helpers
+│   ├── risk_calculator.py          # DSGVO-Risikobewertung
+│   ├── news_service.py             # Legal News Feed
+│   ├── payment/
+│   │   └── stripe_service.py       # Stripe Subscriptions
+│   ├── prompts/
+│   │   └── fix_prompts.py          # KI-Prompt-Templates
+│   ├── compliance_engine/
+│   │   ├── engine.py               # AIComplianceEngine (Haupt-Scanner)
+│   │   ├── scanner.py              # ComplianceScanner
+│   │   ├── fixer.py                # AIComplianceFixer
+│   │   ├── rule_engine.py          # ComplianceRuleEngine
+│   │   ├── priority_engine.py      # PriorityEngine (Issue-Priorisierung)
+│   │   ├── solution_generator.py   # SolutionGenerator
+│   │   ├── workflow_engine.py      # WorkflowEngine (User-Journeys)
+│   │   ├── workflow_integration.py # WorkflowIntegration
+│   │   ├── cookie_analyzer.py      # Cookie-Detection
+│   │   ├── pdf_generator.py        # ComplianceReportGenerator
+│   │   └── checks/
+│   │       ├── impressum_check.py  # TMG §5
+│   │       ├── datenschutz_check.py# DSGVO Art. 13-14
+│   │       ├── cookie_check.py     # TTDSG §25
+│   │       └── barrierefreiheit_check.py # BFSG
+│   ├── *_routes.py                 # API Route Handler
+│   ├── requirements.txt            # Python Dependencies
+│   ├── init_user_limits.sql        # DB-Schema für Limits
+│   └── database_setup.sql          # Haupt-DB-Schema
+├── dashboard-react/
+│   ├── src/
+│   │   ├── app/                    # Next.js App Router
+│   │   ├── components/
+│   │   │   └── dashboard/
+│   │   │       ├── ComplianceIssueCard.tsx
+│   │   │       ├── ConfirmFixModal.tsx
+│   │   │       └── FixHistoryList.tsx
+│   │   ├── lib/
+│   │   │   └── api.ts              # Axios API Client
+│   │   └── types/
+│   │       └── api.ts              # TypeScript Interfaces
+│   └── package.json
+├── landing-react/                  # Landing Page (Next.js)
+├── simple-admin/                   # Admin Panel (Static HTML)
+└── docker-compose.yml              # Service Orchestrierung
+```
+
+## 🔌 API Endpoints
+
+### Auth (`auth_routes.py`)
+- `POST /api/auth/register` - User-Registrierung (Email + Password)
+- `POST /api/auth/login` - Login (JWT-Token)
+- `POST /api/auth/firebase-verify` - Firebase Token → JWT
+- `GET /api/auth/me` - Current User Info
+- `GET /api/auth/google` - Google OAuth Start
+- `GET /api/auth/google/callback` - OAuth Callback
+- `POST /api/auth/logout` - Session beenden
+
+### Compliance Analysis (`public_routes.py`)
+- `POST /api/analyze` - Website analysieren (Public, Rate-Limited)
+- `POST /api/analyze-preview` - Preview ohne Auth
+
+### KI-Fixes (`fix_routes.py`)
+- `POST /api/v2/fixes/generate` - KI-Fix generieren (Rate: 10/hour)
+- `POST /api/v2/fixes/export` - Fix exportieren (HTML/PDF/TXT)
+- `GET /api/v2/fixes/history` - User Fix-Historie
+- `GET /api/v2/fixes/limits` - Verbleibende Limits
+- `GET /api/v2/fixes/{fix_id}/download/{filename}` - Download Fix-File
+
+### Stripe Payment (`stripe_routes.py`)
+- `POST /api/v2/stripe/create-checkout` - Checkout-Session erstellen
+- `POST /api/v2/stripe/create-portal-session` - Customer Portal
+- `POST /api/v2/stripe/webhook` - Stripe Events (Signature-Verified)
+
+### Dashboard (`dashboard_routes.py`)
+- `GET /api/v2/dashboard/metrics` - Übersichts-Metriken
+- `GET /api/v2/dashboard/stats` - Detaillierte Statistiken
+
+### Websites (`website_routes.py`)
+- `GET /api/v2/websites` - User-Websites auflisten
+- `POST /api/v2/websites` - Website hinzufügen
+- `DELETE /api/v2/websites/{id}` - Website entfernen
+- `GET /api/v2/websites/{id}/score-history` - Score-Verlauf
+
+### Legal News (`legal_news_routes.py`)
+- `GET /api/legal/news` - Aktuelle Rechtsnews (RSS-Feed)
+- `GET /api/legal/updates` - Gesetzesänderungen
+
+### eRecht24 Webhooks (`erecht24_webhook_routes.py`)
+- `POST /api/erecht24/law-update` - Webhook für Rechtstextänderungen
+
+### User Profile (`user_routes.py`)
+- `GET /api/v2/user/profile` - User-Profil
+- `GET /api/v2/user/domain-locks` - Domain-Locks prüfen
+
+### GDPR (`gdpr_api.py`)
+- `POST /api/gdpr/request-deletion` - Datenlöschung anfragen
+
+### i18n (`i18n_api.py`)
+- `GET /api/i18n/languages` - Verfügbare Sprachen
+- `GET /api/i18n/translations` - Übersetzungen
+
+### Leads (`lead_routes.py`)
+- `POST /api/leads/collect` - Lead erfassen (Landing Page)
+- `GET /api/leads/verify/{token}` - E-Mail-Verifizierung
+
+## 🗄️ Datenbank-Schema
+
+### Haupt-Tabellen (`database_setup.sql`)
+- `users` - User-Accounts (UUID, Email, Password, Subscription)
+- `websites` - Tracked Websites (URL, Scan-Status, Score)
+- `scans` - Scan-Ergebnisse (Scores, Issues, JSONB-Results)
+- `teams` / `team_members` - Multi-User-Support
+
+### Freemium-System (`init_user_limits.sql`)
+- `user_limits` - Plan-Limits (Websites, Exports, Fixes)
+- `subscriptions` - Stripe-Abos (Refund-Tracking)
+- `generated_fixes` - Fix-History (issue_id, category, type)
+- `tracked_websites` - Website-Tracking (URL, Score, Primary-Flag)
+- `export_history` - Export-Tracking für monatliches Limit
+
+### Wichtige Constraints
+- `user_limits.user_id` → PRIMARY KEY
+- `generated_fixes.user_id` → FK zu `user_limits`
+- Erste Fix-Nutzung: `fix_started = TRUE` → `money_back_eligible = FALSE`
+
+## 🏗️ Architektur-Patterns
+
+### Services (Singleton-Pattern)
+```python
+# Initialisierung in main_production.py (Zeile 180-250)
+fix_generator = FixGenerator(db_pool)
+export_service = ExportService(db_pool)
+auth_service = AuthService(secret_key=JWT_SECRET)
+erecht24_service = ERecht24Service()
+solution_generator = SolutionGenerator()
+priority_engine = PriorityEngine()
+```
+
+### Global References in Routes
+```python
+# Beispiel: fix_routes.py
+db_pool = None        # Wird in main_production.py gesetzt
+auth_service = None   # Zeile 287-292
+fix_generator = None
+export_service = None
+```
+
+### Async/Await durchgängig
+```python
+async def generate_fix(issue_id: str, user_id: int) -> Dict:
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow("SELECT ...")
+    return result
+```
+
+### Dependency Injection für Auth
+```python
+from fastapi import Depends
+from fastapi.security import HTTPBearer
+
+security = HTTPBearer()
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> Dict[str, Any]:
+    token = credentials.credentials
+    return auth_service.verify_token(token)
+
+@router.post("/protected")
+async def protected_route(user: dict = Depends(get_current_user)):
+    # user['user_id'], user['email'], user['plan']
+    ...
+```
+
+## 🔐 Security Best Practices
+
+### Niemals direkt im Code
+- Secrets in Environment-Variablen: `os.getenv("OPENROUTER_API_KEY")`
+- JWT-Secret: `JWT_SECRET` aus `.env`
+- Stripe-Keys: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+- Firebase: `FIREBASE_PROJECT_ID`, `FIREBASE_PRIVATE_KEY`
+
+### SQL-Injection-Schutz
+```python
+# ✅ RICHTIG - Parametrisierte Queries
+await conn.execute(
+    "INSERT INTO users (email) VALUES ($1)",
+    user_email
+)
+
+# ❌ FALSCH - String-Interpolation
+await conn.execute(f"INSERT INTO users (email) VALUES ('{user_email}')")
+```
+
+### Stripe-Webhook-Verifizierung
+```python
+# stripe_routes.py Zeile 171-220
+sig_header = request.headers.get('stripe-signature')
+event = stripe.Webhook.construct_event(
+    payload, sig_header, STRIPE_WEBHOOK_SECRET
+)
+```
+
+### Rate Limiting
+```python
+from slowapi import Limiter
+limiter = Limiter(key_func=get_remote_address)
+
+@router.post("/generate")
+@limiter.limit("10/hour")  # Max 10 Fixes pro Stunde
+async def generate_fix(...):
+    ...
+```
+
+## 🎨 Frontend-Patterns
+
+### API Client (`dashboard-react/src/lib/api.ts`)
+```typescript
+import axios from 'axios';
+
+const api = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002',
+  headers: { 'Content-Type': 'application/json' }
+});
+
+// Auto-Attach JWT
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export const generateFix = async (issueId: string, category: string) => {
+  const { data } = await api.post('/api/v2/fixes/generate', {
+    issue_id: issueId,
+    issue_category: category
+  });
+  return data.fix;
+};
+```
+
+### Error Handling (Strukturiert)
+```typescript
+// Frontend erwartet strukturierte Errors:
+try {
+  await generateFix(id, cat);
+} catch (error) {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+    if (detail.error === 'FIX_LIMIT_REACHED') {
+      showPaywallModal();
+    }
+  }
+}
+```
+
+### React Components (Functional + Hooks)
+```typescript
+export const ComplianceIssueCard: React.FC<Props> = ({ issue }) => {
+  const [loading, setLoading] = useState(false);
+  const [fixResult, setFixResult] = useState<FixData | null>(null);
+
+  const handleGenerate = async () => {
+    setLoading(true);
+    try {
+      const fix = await generateFix(issue.id, issue.category);
+      setFixResult(fix);
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return <div>...</div>;
+};
+```
+
+## 🧪 Coding Standards
+
+### Python
+- **Type Hints:** Alle Funktionen mit Return-Types
+  ```python
+  async def get_user(user_id: int) -> Optional[Dict[str, Any]]:
+  ```
+- **Async/Await:** Durchgängig für I/O (DB, HTTP)
+- **Naming:** `snake_case` für Variablen/Funktionen, `PascalCase` für Klassen
+- **Docstrings:** Für alle Public-Funktionen
+  ```python
+  """
+  Generiert einen KI-Fix für ein Issue
+  
+  Args:
+      issue_id: ID des Issues
+      user_id: User ID
+  
+  Returns:
+      Dict mit Fix-Daten
+  """
+  ```
+- **Error Handling:** HTTPException mit strukturiertem `detail`
+  ```python
+  raise HTTPException(
+      status_code=402,
+      detail={
+          "error": "fix_limit_reached",
+          "message": "Limit erreicht",
+          "fixes_used": 1,
+          "fixes_limit": 1
+      }
+  )
+  ```
+
+### TypeScript
+- **Strict Mode:** `"strict": true` in `tsconfig.json`
+- **Interfaces:** Für alle API-Response-Typen
+  ```typescript
+  interface FixData {
+    type: 'code_snippet' | 'full_document';
+    code?: string;
+    steps?: Step[];
+  }
+  ```
+- **No `any`:** Verwende `unknown` oder spezifische Types
+- **Functional Components:** Hooks statt Class Components
+- **Props-Types:** Explizit definiert
+  ```typescript
+  interface CardProps {
+    issue: ComplianceIssue;
+    onFixGenerated?: (fix: FixData) => void;
+  }
+  ```
+
+### SQL
+- **Parametrisiert:** IMMER `$1, $2` statt String-Interpolation
+- **Transaktionen:** Bei Multi-Statement-Operationen
+  ```python
+  async with conn.transaction():
+      await conn.execute("UPDATE ...")
+      await conn.execute("INSERT ...")
+  ```
+- **Indizes:** Für häufige Queries (user_id, created_at)
+
+## 📊 Business Logic
+
+### Freemium-Modell
+**AI Plan (€19/Monat):**
+- 1 Website analysierbar
+- 1 KI-Fix generierbar
+- 10 Exports/Monat
+- Geld-zurück-Garantie (14 Tage)
+
+**Expert Plan (€49/Monat):**
+- Unbegrenzte Websites
+- Unbegrenzte Fixes
+- Unbegrenzte Exports
+- Vollständige Dokumente (Impressum, DSGVO)
+
+### Geld-zurück-Logik
+1. User abonniert AI Plan → `subscriptions.refund_eligible = TRUE`
+2. User generiert ersten Fix → `fix_started = TRUE`, `money_back_eligible = FALSE`
+3. `refund_deadline = started_at + 14 days` (automatisch via Trigger)
+4. Refund nur möglich wenn `fix_started = FALSE`
+
+### Domain-Locks
+- User kann nur Websites seiner Domains analysieren
+- Domain-Verifizierung über TXT-Record oder File-Upload
+- Check in `user_routes.py` → `check_domain_lock()`
+
+## 🚨 Known Issues & TODOs
+
+### Aktuelles Problem (KI-Fix)
+- KI-Fix schlägt fehl (Zeile 214+ in `fix_routes.py`)
+- Mögliche Ursachen:
+  1. `generated_fixes` Tabelle fehlt in DB
+  2. `OPENROUTER_API_KEY` nicht gesetzt
+  3. Redis nicht erreichbar (Caching optional)
+  4. OpenRouter API-Limit erreicht
+
+### Fehlende Features
+- [ ] GitHub Actions für automatische PRs
+- [ ] `.cursorrules` für bessere AI-Unterstützung
+- [ ] CMP-Adapter (Cookie-Consent-Script)
+- [ ] Error-Monitoring (Sentry)
+- [ ] Toast-Notifications (react-hot-toast)
+
+## 🔧 Development Setup
+
+### Backend starten
+```bash
+cd /opt/projects/saas-project-2/backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main_production:app --reload --host 0.0.0.0 --port 8002
+```
+
+### Frontend starten
+```bash
+cd dashboard-react
+npm install
+npm run dev  # Port 3002
+```
+
+### Docker Compose (Produktion)
+```bash
+docker-compose up -d --build
+docker-compose logs -f backend
+```
+
+### DB-Migration anwenden
+```bash
+docker cp backend/init_user_limits.sql complyo-postgres:/tmp/
+docker-compose exec postgres psql -U complyo_user -d complyo_db -f /tmp/init_user_limits.sql
+```
+
+## 📝 Commit-Konventionen
+- `feat:` - Neues Feature
+- `fix:` - Bugfix
+- `refactor:` - Code-Refactoring
+- `docs:` - Dokumentation
+- `chore:` - Maintenance (Dependencies, Config)
+- `test:` - Tests
+
+Beispiel: `feat(fix-generator): add eRecht24 integration for legal texts`
+
+## 🎯 Key Takeaways
+1. **Keine Umstrukturierung nötig** - Projekt ist gut aufgebaut
+2. **Fix-Problem liegt in DB/Config** - Nicht in Architektur
+3. **eRecht24 ist kritisch** - Rechtssichere Texte für DSGVO/TMG
+4. **Freemium-Limits strikt** - 1 Fix im AI Plan, dann Paywall
+5. **GitHub Actions fehlen** - PRs müssen automatisiert werden
+

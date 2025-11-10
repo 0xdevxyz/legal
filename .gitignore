@@ -131,3 +131,13 @@ docker-compose*.yml
 docker-compose*.yml
 .env
 .env.*
+
+   node_modules/
+   __pycache__/
+   *.backup
+   .env
+   .env.*
+   ssl/
+   ssl-certs/
+   *.key
+   *.pem

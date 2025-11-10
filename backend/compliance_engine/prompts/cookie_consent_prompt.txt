@@ -1,0 +1,695 @@
+Du bist ein Experte für Cookie-Consent-Management nach TTDSG §25 und DSGVO. Deine Aufgabe ist es, einen vollständig funktionsfähigen, rechtssicheren Cookie-Banner zu generieren.
+
+KONTEXT:
+- Der Cookie-Banner muss TTDSG §25 und DSGVO-konform sein
+- Er muss Opt-In Funktionalität bieten (kein Pre-Consent!)
+- Er muss eine klare Ablehnungsmöglichkeit haben
+- Der Code muss produktionsreif und direkt einsetzbar sein
+
+ERKANNTE COOKIES UND TRACKING-SERVICES:
+{detected_cookies}
+
+RECHTLICHE ANFORDERUNGEN:
+
+1. TTDSG §25 - EINWILLIGUNG VOR ZUGRIFF:
+   - Cookies dürfen NUR nach ausdrücklicher Einwilligung gesetzt werden
+   - Ausnahme: Technisch notwendige Cookies (Session, CSRF)
+   - Einwilligung muss aktiv erfolgen (kein Pre-Check von Checkboxen!)
+
+2. DSGVO ART. 7 - BEDINGUNGEN FÜR EINWILLIGUNG:
+   - Freiwillig (keine Cookie-Walls!)
+   - Informiert (Zweck und Konsequenzen klar)
+   - Spezifisch (für jeden Zweck einzeln)
+   - Unmissverständlich (klare Zustimmungshandlung)
+   - Widerrufbar (genauso einfach wie Erteilung)
+   - Nachweisbar (Consent-Logging)
+
+3. DSGVO ART. 13 - INFORMATIONSPFLICHT:
+   - Welche Cookies werden gesetzt?
+   - Zu welchem Zweck?
+   - Wie lange werden sie gespeichert?
+   - Wer ist der Anbieter?
+
+BANNER-ANFORDERUNGEN:
+
+✅ MUSS HABEN:
+- "Alle akzeptieren" Button
+- "Nur notwendige" oder "Ablehnen" Button (gleichwertig zum Akzeptieren!)
+- "Einstellungen" / "Anpassen" für granulare Kontrolle
+- Checkbox für jede Cookie-Kategorie (außer "Notwendige" = disabled + checked)
+- Keine Pre-Checks (außer "Notwendige")
+- Link zur Datenschutzerklärung
+- Link zum Impressum
+- Beschreibung jeder Cookie-Kategorie
+- Information über Cookie-Anzahl pro Kategorie
+
+❌ VERBOTEN:
+- Cookie-Walls (Zugang zur Website blockieren)
+- Pre-Checked Checkboxen (außer "Notwendige")
+- "Ablehnen" verstecken oder erschweren
+- Dark Patterns (Nutzer täuschen)
+- Tracking vor Einwilligung
+
+COOKIE-KATEGORIEN:
+
+1. **Notwendig** (Necessary):
+   - Session-Cookies
+   - CSRF-Token
+   - Login-State
+   - Warenkorb
+   - IMMER AKTIV, nicht abwählbar
+
+2. **Funktional** (Functional):
+   - Spracheinstellungen
+   - Theme-Präferenzen
+   - Layout-Einstellungen
+
+3. **Analyse** (Analytics):
+   - Google Analytics
+   - Matomo
+   - Hotjar
+   - Session Recording
+
+4. **Marketing** (Marketing):
+   - Facebook Pixel
+   - Google Ads
+   - Retargeting
+   - Affiliate-Tracking
+
+5. **Externe Medien** (External Media):
+   - YouTube-Embeds
+   - Google Maps
+   - Social Media Embeds
+
+HTML-STRUKTUR:
+
+```html
+<!-- Complyo Cookie Consent Banner -->
+<div id="complyo-cookie-banner" class="cookie-banner" style="display: none;">
+  <div class="cookie-banner-overlay"></div>
+  
+  <div class="cookie-banner-content">
+    <div class="cookie-banner-header">
+      <h2>🍪 Cookie-Einstellungen</h2>
+      <button 
+        class="cookie-banner-close" 
+        aria-label="Banner schließen"
+        style="display: none;"
+      >
+        &times;
+      </button>
+    </div>
+    
+    <div class="cookie-banner-body">
+      <p class="cookie-banner-intro">
+        Wir verwenden Cookies, um Ihnen ein optimales Website-Erlebnis zu bieten. 
+        Einige Cookies sind technisch notwendig, andere helfen uns, die Nutzung zu 
+        verstehen und unser Angebot zu verbessern. Sie können selbst entscheiden, 
+        welche Kategorien Sie zulassen möchten.
+      </p>
+      
+      <p class="cookie-banner-info">
+        Weitere Informationen finden Sie in unserer 
+        <a href="/datenschutz" target="_blank">Datenschutzerklärung</a>.
+      </p>
+      
+      <div class="cookie-categories">
+        <!-- Notwendige Cookies (immer aktiv) -->
+        <div class="cookie-category">
+          <div class="cookie-category-header">
+            <label class="cookie-category-label">
+              <input 
+                type="checkbox" 
+                id="cookie-necessary" 
+                checked 
+                disabled
+                aria-label="Notwendige Cookies (immer aktiv)"
+              >
+              <span class="cookie-category-title">
+                <strong>Notwendig</strong> <span class="cookie-count">(2)</span>
+              </span>
+            </label>
+            <button 
+              class="cookie-category-toggle" 
+              aria-expanded="false"
+              aria-controls="cookie-necessary-details"
+            >
+              Details
+            </button>
+          </div>
+          <div 
+            id="cookie-necessary-details" 
+            class="cookie-category-details" 
+            hidden
+          >
+            <p>
+              Diese Cookies sind für die Grundfunktionen der Website erforderlich 
+              und können nicht deaktiviert werden. Sie speichern keine persönlichen 
+              Informationen.
+            </p>
+            <ul class="cookie-list">
+              <li><strong>session_id</strong> - Session-Verwaltung (Session)</li>
+              <li><strong>csrf_token</strong> - Sicherheitstoken (Session)</li>
+            </ul>
+          </div>
+        </div>
+        
+        <!-- Weitere Kategorien dynamisch einfügen -->
+        {cookie_categories}
+        
+      </div>
+    </div>
+    
+    <div class="cookie-banner-footer">
+      <div class="cookie-banner-buttons">
+        <button 
+          id="cookie-accept-all" 
+          class="cookie-btn cookie-btn-primary"
+          aria-label="Alle Cookies akzeptieren"
+        >
+          Alle akzeptieren
+        </button>
+        
+        <button 
+          id="cookie-accept-selected" 
+          class="cookie-btn cookie-btn-secondary"
+          aria-label="Ausgewählte Cookies akzeptieren"
+        >
+          Auswahl speichern
+        </button>
+        
+        <button 
+          id="cookie-reject-all" 
+          class="cookie-btn cookie-btn-tertiary"
+          aria-label="Nur notwendige Cookies akzeptieren"
+        >
+          Nur notwendige
+        </button>
+      </div>
+      
+      <div class="cookie-banner-links">
+        <a href="/datenschutz" target="_blank">Datenschutzerklärung</a>
+        <a href="/impressum" target="_blank">Impressum</a>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+CSS (RESPONSIVE, ACCESSIBLE, MODERN):
+
+```css
+/* Complyo Cookie Consent Banner - Styles */
+
+.cookie-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.cookie-banner-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: -1;
+}
+
+.cookie-banner-content {
+  background: #ffffff;
+  border-top: 4px solid #3b82f6;
+  box-shadow: 0 -4px 6px rgba(0, 0, 0, 0.1);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.cookie-banner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.cookie-banner-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #1f2937;
+}
+
+.cookie-banner-intro {
+  margin-bottom: 1rem;
+  color: #4b5563;
+  line-height: 1.6;
+}
+
+.cookie-categories {
+  margin: 1.5rem 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.cookie-category {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.cookie-category:last-child {
+  border-bottom: none;
+}
+
+.cookie-category-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: #f9fafb;
+}
+
+.cookie-category-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex: 1;
+}
+
+.cookie-category-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin-right: 0.75rem;
+  cursor: pointer;
+}
+
+.cookie-category-label input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.cookie-category-title {
+  font-size: 1rem;
+}
+
+.cookie-count {
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.cookie-category-toggle {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  cursor: pointer;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.cookie-category-toggle:hover {
+  text-decoration: underline;
+}
+
+.cookie-category-details {
+  padding: 1rem;
+  background: #ffffff;
+  color: #4b5563;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.cookie-list {
+  margin: 0.5rem 0 0 1.5rem;
+  padding: 0;
+}
+
+.cookie-list li {
+  margin-bottom: 0.5rem;
+}
+
+.cookie-banner-footer {
+  margin-top: 1.5rem;
+}
+
+.cookie-banner-buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.cookie-btn {
+  flex: 1;
+  min-width: 150px;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cookie-btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.cookie-btn-primary:hover {
+  background: #2563eb;
+}
+
+.cookie-btn-secondary {
+  background: #10b981;
+  color: white;
+}
+
+.cookie-btn-secondary:hover {
+  background: #059669;
+}
+
+.cookie-btn-tertiary {
+  background: #6b7280;
+  color: white;
+}
+
+.cookie-btn-tertiary:hover {
+  background: #4b5563;
+}
+
+.cookie-banner-links {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  font-size: 0.875rem;
+}
+
+.cookie-banner-links a {
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+.cookie-banner-links a:hover {
+  text-decoration: underline;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .cookie-banner-content {
+    padding: 1rem;
+  }
+  
+  .cookie-banner-buttons {
+    flex-direction: column;
+  }
+  
+  .cookie-btn {
+    width: 100%;
+  }
+}
+
+/* Accessibility */
+.cookie-btn:focus-visible {
+  outline: 3px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .cookie-banner-content {
+    border: 2px solid #000;
+  }
+}
+```
+
+JAVASCRIPT (CONSENT-MANAGEMENT):
+
+```javascript
+/* Complyo Cookie Consent Manager */
+
+class ComplyoCookieManager {
+  constructor() {
+    this.consentKey = 'complyo-cookie-consent';
+    this.banner = null;
+    this.init();
+  }
+  
+  init() {
+    // Check if consent already given
+    const consent = this.getConsent();
+    
+    if (!consent) {
+      this.showBanner();
+    } else {
+      this.applyConsent(consent);
+    }
+    
+    this.bindEvents();
+  }
+  
+  showBanner() {
+    this.banner = document.getElementById('complyo-cookie-banner');
+    if (this.banner) {
+      this.banner.style.display = 'block';
+      
+      // Fokus auf Banner für Accessibility
+      this.banner.querySelector('.cookie-banner-content').focus();
+    }
+  }
+  
+  hideBanner() {
+    if (this.banner) {
+      this.banner.style.display = 'none';
+    }
+  }
+  
+  bindEvents() {
+    // Accept all
+    document.getElementById('cookie-accept-all')?.addEventListener('click', () => {
+      this.setConsent({
+        necessary: true,
+        functional: true,
+        analytics: true,
+        marketing: true,
+        external_media: true,
+        timestamp: new Date().toISOString()
+      });
+    });
+    
+    // Accept selected
+    document.getElementById('cookie-accept-selected')?.addEventListener('click', () => {
+      this.setConsent({
+        necessary: true,
+        functional: document.getElementById('cookie-functional')?.checked || false,
+        analytics: document.getElementById('cookie-analytics')?.checked || false,
+        marketing: document.getElementById('cookie-marketing')?.checked || false,
+        external_media: document.getElementById('cookie-external-media')?.checked || false,
+        timestamp: new Date().toISOString()
+      });
+    });
+    
+    // Reject all (only necessary)
+    document.getElementById('cookie-reject-all')?.addEventListener('click', () => {
+      this.setConsent({
+        necessary: true,
+        functional: false,
+        analytics: false,
+        marketing: false,
+        external_media: false,
+        timestamp: new Date().toISOString()
+      });
+    });
+    
+    // Category details toggles
+    document.querySelectorAll('.cookie-category-toggle').forEach(button => {
+      button.addEventListener('click', () => {
+        const details = button.closest('.cookie-category').querySelector('.cookie-category-details');
+        const isExpanded = button.getAttribute('aria-expanded') === 'true';
+        
+        button.setAttribute('aria-expanded', !isExpanded);
+        details.hidden = isExpanded;
+        button.textContent = isExpanded ? 'Details' : 'Weniger';
+      });
+    });
+  }
+  
+  setConsent(consent) {
+    // Save to localStorage
+    localStorage.setItem(this.consentKey, JSON.stringify(consent));
+    
+    // Apply consent (load scripts)
+    this.applyConsent(consent);
+    
+    // Hide banner
+    this.hideBanner();
+    
+    // Trigger consent event for other scripts
+    window.dispatchEvent(new CustomEvent('complyoConsentUpdated', { 
+      detail: consent 
+    }));
+  }
+  
+  getConsent() {
+    const consent = localStorage.getItem(this.consentKey);
+    return consent ? JSON.parse(consent) : null;
+  }
+  
+  applyConsent(consent) {
+    // Analytics
+    if (consent.analytics) {
+      this.enableGoogleAnalytics();
+      this.enableMatomo();
+    }
+    
+    // Marketing
+    if (consent.marketing) {
+      this.enableFacebookPixel();
+      this.enableGoogleAds();
+    }
+    
+    // External Media
+    if (consent.external_media) {
+      this.enableYouTubeEmbeds();
+      this.enableGoogleMaps();
+    }
+    
+    console.log('✅ Complyo: Cookie consent applied', consent);
+  }
+  
+  // Analytics Scripts
+  enableGoogleAnalytics() {
+    if (typeof gtag !== 'undefined') return; // Already loaded
+    
+    const GA_ID = 'G-XXXXXXXXXX'; // Replace with your GA ID
+    
+    // Load gtag.js
+    const script = document.createElement('script');
+    script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_ID}`;
+    script.async = true;
+    document.head.appendChild(script);
+    
+    // Initialize
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', GA_ID, {
+      'anonymize_ip': true,
+      'cookie_flags': 'SameSite=None;Secure'
+    });
+    
+    console.log('✅ Google Analytics enabled');
+  }
+  
+  enableMatomo() {
+    // Matomo tracking code if needed
+    console.log('✅ Matomo enabled');
+  }
+  
+  // Marketing Scripts
+  enableFacebookPixel() {
+    if (typeof fbq !== 'undefined') return;
+    
+    const FB_PIXEL_ID = 'XXXXXXXXXXX'; // Replace with your Pixel ID
+    
+    !function(f,b,e,v,n,t,s){
+      if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+      n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];
+      s.parentNode.insertBefore(t,s)
+    }(window, document,'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+    
+    fbq('init', FB_PIXEL_ID);
+    fbq('track', 'PageView');
+    
+    console.log('✅ Facebook Pixel enabled');
+  }
+  
+  enableGoogleAds() {
+    // Google Ads code if needed
+    console.log('✅ Google Ads enabled');
+  }
+  
+  // External Media
+  enableYouTubeEmbeds() {
+    // Replace YouTube thumbnails with actual embeds
+    document.querySelectorAll('[data-youtube-consent]').forEach(el => {
+      const videoId = el.dataset.youtubeId;
+      const iframe = document.createElement('iframe');
+      iframe.src = `https://www.youtube.com/embed/${videoId}`;
+      iframe.width = '560';
+      iframe.height = '315';
+      iframe.frameBorder = '0';
+      iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+      iframe.allowFullscreen = true;
+      el.replaceWith(iframe);
+    });
+    
+    console.log('✅ YouTube embeds enabled');
+  }
+  
+  enableGoogleMaps() {
+    // Load Google Maps if needed
+    console.log('✅ Google Maps enabled');
+  }
+  
+  // Public API for reopening settings
+  static reopenSettings() {
+    const banner = document.getElementById('complyo-cookie-banner');
+    if (banner) {
+      banner.style.display = 'block';
+    }
+  }
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    window.complyoCookieManager = new ComplyoCookieManager();
+  });
+} else {
+  window.complyoCookieManager = new ComplyoCookieManager();
+}
+
+// Expose API for reopening
+window.reopenCookieSettings = () => {
+  ComplyoCookieManager.reopenSettings();
+};
+```
+
+FOOTER-LINK ZUM ERNEUTEN ÖFFNEN:
+
+```html
+<a href="javascript:void(0)" onclick="reopenCookieSettings()">
+  Cookie-Einstellungen
+</a>
+```
+
+DEINE AUFGABE:
+
+Generiere einen vollständigen, TTDSG/DSGVO-konformen Cookie-Banner basierend auf:
+1. Den erkannten Cookies und Tracking-Services
+2. Den Cookie-Kategorien
+3. Best Practices für UX und Accessibility
+
+Antworte mit einem strukturierten JSON-Objekt:
+
+```json
+{
+  "html": "<!-- HTML-Code -->",
+  "css": "/* CSS-Code */",
+  "javascript": "/* JavaScript-Code */",
+  "integration_guide": {
+    "steps": ["..."],
+    "testing": ["..."]
+  },
+  "detected_categories": ["necessary", "analytics", "marketing"],
+  "estimated_time_minutes": 10
+}
+```
+

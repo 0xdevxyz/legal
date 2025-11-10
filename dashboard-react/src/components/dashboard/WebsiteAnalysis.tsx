@@ -1,296 +1,481 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Globe, RefreshCw, AlertTriangle, AlertCircle, CheckCircle, Bot, UserCheck, Search } from 'lucide-react';
+import { Globe, RefreshCw, AlertTriangle, AlertCircle, CheckCircle, Bot, Download, Eye, Shield, FileText, Cookie, ChevronDown } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useDashboardStore } from '@/stores/dashboard';
-import { useStartAIFix, useBookExpert, useComplianceAnalysis } from '@/hooks/useCompliance';
+import { useStartAIFix, useBookExpert, useComplianceAnalysis, useLatestScan, useActiveFixJobs } from '@/hooks/useCompliance';
 import { formatRelativeTime } from '@/lib/utils';
+import type { ComplianceIssue } from '@/types/api';
+import { ComplianceIssueCard } from './ComplianceIssueCard';
+import { ActiveJobsPanel } from './ActiveJobsPanel';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const WebsiteAnalysis: React.FC = () => {
-  const { currentWebsite, setCurrentWebsite } = useDashboardStore();
-  const [newUrl, setNewUrl] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const { user } = useAuth();
+  const { currentWebsite, analysisData: storedAnalysisData, setAnalysisData } = useDashboardStore();
+  const [expandedPillar, setExpandedPillar] = useState<string | null>(null);
   
-  // ✅ FIX: Nur API-Call wenn URL vorhanden ist
-  const { data: analysisData, refetch, isLoading } = useComplianceAnalysis(
+  // Get plan type from user, default to 'free'
+  const planType: 'free' | 'ai' | 'expert' = user?.plan_type || 'free';
+  
+  // ✅ PERSISTENCE: Lade letzte Scan-Ergebnisse beim Mount
+  const { data: latestScanData, isLoading: isLoadingLatestScan } = useLatestScan();
+  const { data: activeJobs = [] } = useActiveFixJobs();
+  
+  // ✅ FIX: Zuerst aus Store lesen, dann ggf. neu laden
+  const { data: fetchedAnalysisData, refetch, isLoading } = useComplianceAnalysis(
     currentWebsite?.url || null // ← CRITICAL FIX: null statt undefined
   );
+  
+  // Priorität: Store > Fetched > Latest Scan (beim Mount)
+  const analysisData = storedAnalysisData || fetchedAnalysisData || latestScanData;
+  
+  // ✅ DEBUG: Log final analysisData
+  React.useEffect(() => {
+    console.log('📊 Final analysisData:', {
+      hasData: !!analysisData,
+      url: analysisData?.url,
+      issues: analysisData?.issues?.length,
+      source: storedAnalysisData ? 'store' : fetchedAnalysisData ? 'fetched' : latestScanData ? 'latest' : 'none'
+    });
+  }, [analysisData, storedAnalysisData, fetchedAnalysisData, latestScanData]);
+  
+  // ✅ FIX: Gesamter Loading-State berücksichtigt auch latestScan
+  const isActuallyLoading = isLoading || (isLoadingLatestScan && !storedAnalysisData && !fetchedAnalysisData);
+  
+  // Wenn neue Daten vom Hook kommen, in Store speichern
+  React.useEffect(() => {
+    if (fetchedAnalysisData && !storedAnalysisData) {
+
+      setAnalysisData(fetchedAnalysisData);
+    }
+  }, [fetchedAnalysisData, storedAnalysisData, setAnalysisData]);
+  
+  // ✅ PERSISTENCE: Letzte Scan-Ergebnisse beim Mount in Store laden
+  React.useEffect(() => {
+    console.log('🔍 PERSISTENCE DEBUG:', {
+      hasLatestScanData: !!latestScanData,
+      hasStoredData: !!storedAnalysisData,
+      hasFetchedData: !!fetchedAnalysisData,
+      latestScanUrl: latestScanData?.url,
+      latestScanIssues: latestScanData?.issues?.length
+    });
+    
+    if (latestScanData && !storedAnalysisData && !fetchedAnalysisData) {
+      console.log('✅ Loading latest scan into store:', latestScanData.url);
+      setAnalysisData(latestScanData);
+    }
+  }, [latestScanData, storedAnalysisData, fetchedAnalysisData, setAnalysisData]);
+  
   const startAIFix = useStartAIFix();
   const bookExpert = useBookExpert();
 
-  const handleAnalyzeNewWebsite = async () => {
-  // Strenge URL-Validierung
-  const trimmedUrl = newUrl?.trim();
-  if (!trimmedUrl || typeof trimmedUrl !== 'string' || !isValidUrl(trimmedUrl)) {
-    console.warn('Invalid URL provided:', { newUrl, trimmedUrl, type: typeof newUrl });
-    return;
-  }
-
-  console.log('Starting website analysis for:', trimmedUrl);
-  setIsAnalyzing(true);
-
-  // URL normalisieren
-  let normalizedUrl = trimmedUrl;
-  if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
-    normalizedUrl = 'https://' + normalizedUrl;
-  }
-
-  const newWebsite = {
-    id: Date.now().toString(),
-    url: normalizedUrl,
-    name: trimmedUrl,
-    lastScan: new Date().toISOString(),
-    complianceScore: 0,
-    status: 'scanning' as const
-  };
-
-  setCurrentWebsite(newWebsite);
-  setNewUrl('');
-
-  try {
-    await refetch();
-  } catch (error) {
-    console.error('Website analysis failed:', error);
-  } finally {
-    setIsAnalyzing(false);
-  }
-};
-
   const handleRescan = async () => {
     if (!currentWebsite?.url) {
-      console.warn('🚫 No website URL to rescan');
+
       return;
     }
-    console.log('🔄 Rescanning website:', currentWebsite.url);
-    await refetch();
+
+    try {
+      const result = await refetch();
+      
+      // Update Dashboard Store mit den Ergebnissen
+      if (result.data) {
+        const { setAnalysisData, updateMetrics } = useDashboardStore.getState();
+        setAnalysisData(result.data);
+        
+        // Metrics aktualisieren
+        const criticalCount = Array.isArray(result.data.issues)
+          ? result.data.issues.filter((issue: any) => {
+              if (typeof issue === 'string') {
+                return issue.toLowerCase().includes('fehlt') || 
+                       issue.toLowerCase().includes('nicht gefunden');
+              }
+              return issue.severity === 'critical';
+            }).length
+          : 0;
+        
+        updateMetrics({
+          totalScore: result.data.compliance_score || 0,
+          criticalIssues: criticalCount,
+          scansUsed: (useDashboardStore.getState().metrics.scansUsed || 0) + 1
+        });
+      }
+    } catch (error) {
+      console.error('Rescan failed:', error);
+    }
   };
 
-  const handleAIFix = (issueId: string) => {
-    console.log('🤖 Starting AI fix for issue:', issueId);
-    startAIFix.mutate(issueId);
+  const handleAIFix = (category: string) => {
+    if (!analysisData || !analysisData.scan_id) return;
+
+    startAIFix.mutate({ scanId: analysisData.scan_id, categories: [category] });
   };
 
   const handleBookExpert = (issueId: string) => {
-    console.log('👨‍💼 Booking expert for issue:', issueId);
+
     bookExpert.mutate(issueId);
   };
 
-  // ✅ Echte API-Daten verwenden statt mockFindings
-  const findings = analysisData?.findings ? Object.values(analysisData.findings) : [];
-  const complianceScore = analysisData?.compliance_score || currentWebsite?.complianceScore || 0;
+  // ✅ Echte API-Daten verwenden und Issues konvertieren
+  const rawIssues = analysisData?.issues || [];
+  
+  // Konvertiere String-Issues zu strukturierten Objects
+  const findings: ComplianceIssue[] = Array.isArray(rawIssues) 
+    ? rawIssues.map((issue: any, index: number) => {
+        if (typeof issue === 'string') {
+          // String-Issue zu Object konvertieren
+          const severity = issue.toLowerCase().includes('kritisch') || 
+                          issue.toLowerCase().includes('fehlt') ||
+                          issue.toLowerCase().includes('nicht gefunden')
+            ? 'critical'
+            : issue.toLowerCase().includes('empfehlung') 
+            ? 'info'
+            : 'warning';
+          
+          // Category aus Text ableiten
+          let category = 'compliance';
+          if (issue.includes('Impressum')) category = 'impressum';
+          if (issue.includes('Datenschutz')) category = 'datenschutz';
+          if (issue.includes('Cookie')) category = 'cookies';
+          if (issue.includes('E-Mail')) category = 'contact';
+          
+          return {
+            id: `issue-${index}`,
+            category,
+            severity,
+            title: issue.substring(0, 100),
+            description: issue,
+            risk_euro: severity === 'critical' ? 5000 : severity === 'warning' ? 1000 : 0,
+            recommendation: 'Bitte korrigieren Sie diesen Punkt',
+            legal_basis: severity === 'critical' ? 'DSGVO, TMG, TTDSG' : 'Best Practice',
+            auto_fixable: category === 'impressum' || category === 'datenschutz' || category === 'cookies'
+          } as ComplianceIssue;
+        }
+        return issue as ComplianceIssue;
+      })
+    : [];
+  
+  const complianceScore = analysisData?.compliance_score ?? currentWebsite?.complianceScore ?? 0;
+  const totalRisk = analysisData?.total_risk_euro || (analysisData as any)?.estimated_risk_euro || '0€';
 
-  // ✅ FIX: Input validation with better UX
-  const handleUrlInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setNewUrl(value);
-  };
-
-  const handleUrlInputKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleAnalyzeNewWebsite();
+  // Gruppiere Issues nach Kategorien (4 Säulen)
+  const pillars = [
+    {
+      id: 'accessibility',
+      name: 'Barrierefreiheit',
+      icon: Eye,
+      color: 'blue',
+      description: 'WCAG 2.1 AA Konformität',
+      keywords: ['accessibility', 'wcag', 'barrierefreiheit', 'alt', 'kontrast', 'tastat']
+    },
+    {
+      id: 'gdpr',
+      name: 'DSGVO',
+      icon: Shield,
+      color: 'green',
+      description: 'Datenschutz-Compliance',
+      keywords: ['gdpr', 'dsgvo', 'datenschutz', 'privacy', 'personenbezogen']
+    },
+    {
+      id: 'legal',
+      name: 'Rechtssichere Texte',
+      icon: FileText,
+      color: 'purple',
+      description: 'Impressum, AGB, Widerrufsrecht',
+      keywords: ['impressum', 'agb', 'legal', 'widerruf', 'rechtlich', 'tmg']
+    },
+    {
+      id: 'cookies',
+      name: 'Cookie Compliance',
+      icon: Cookie,
+      color: 'orange',
+      description: 'Cookie-Banner & Consent',
+      keywords: ['cookie', 'consent', 'tracking', 'ttdsg']
     }
+  ];
+
+  const categorizeIssue = (issue: ComplianceIssue): string => {
+    const text = `${issue.title} ${issue.description} ${issue.category}`.toLowerCase();
+    
+    for (const pillar of pillars) {
+      if (pillar.keywords.some(keyword => text.includes(keyword))) {
+        return pillar.id;
+      }
+    }
+    
+    return 'legal'; // Default
   };
 
-  const isValidUrl = (url: string) => {
-    const trimmed = url.trim();
-    if (!trimmed) return false;
+  // ✅ NEU: Verwende Backend-Säulen-Scores (wenn vorhanden), sonst Fallback
+  const groupedIssues = pillars.map(pillar => {
+    const pillarIssues = findings.filter(issue => categorizeIssue(issue) === pillar.id);
     
-    // Basic URL validation
-    const urlPattern = /^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(\/.*)?$/;
-    const fullUrlPattern = /^https?:\/\/([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(\/.*)?$/;
+    // Prüfe ob Backend pillar_scores liefert
+    const backendPillarScore = (analysisData as any)?.pillar_scores?.find(
+      (p: any) => p.pillar === pillar.id
+    );
     
-    return fullUrlPattern.test(trimmed) || urlPattern.test(trimmed);
-  };
+    let score = 100; // Default wenn keine Issues
+    
+    if (backendPillarScore) {
+      // ✅ BESTE OPTION: Backend-Score verwenden!
+      score = backendPillarScore.score;
+
+    } else if (pillarIssues.length > 0) {
+      // Fallback: Client-seitige Berechnung mit VERSCHÄRFTER Formel
+      const criticalCount = pillarIssues.filter(i => i.severity === 'critical').length;
+      const warningCount = pillarIssues.filter(i => i.severity === 'warning').length;
+      
+      // WICHTIG: Verschärfte Formel wie Backend!
+      // CRITICAL = -60, WARNING = -15, max 40 bei critical > 0
+      score = 100 - (criticalCount * 60 + warningCount * 15);
+      if (criticalCount > 0) {
+        score = Math.min(score, 40);
+      }
+      score = Math.max(0, score);
+    }
+    
+    return {
+      ...pillar,
+      issues: pillarIssues,
+      score: Math.round(score)
+    };
+  });
 
   return (
-    <Card className="mb-6">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center">
-            <Globe className="mr-2 text-blue-400" />
-            Website-Compliance-Analyse
-          </CardTitle>
-          {currentWebsite && (
-            <div className="text-sm text-gray-400">
-              Zuletzt gescannt: {formatRelativeTime(currentWebsite.lastScan)}
-            </div>
-          )}
-        </div>
-      </CardHeader>
-
-      <CardContent>
-        {/* ✅ NEUE WEBSITE ANALYSIEREN - Verbessertes Eingabefeld */}
-        <div className="bg-gray-800/50 rounded-lg p-4 mb-4 border border-gray-600/30">
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="Website-URL eingeben (z.B. example.com oder https://example.com)"
-                value={newUrl}
-                onChange={handleUrlInputChange}
-                onKeyPress={handleUrlInputKeyPress}
-                className={`w-full p-3 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none transition-colors ${
-                  newUrl.trim() && !isValidUrl(newUrl) 
-                    ? 'border-red-500 focus:border-red-400' 
-                    : 'border-gray-600 focus:border-blue-500'
-                }`}
-                disabled={isAnalyzing}
-              />
-              {newUrl.trim() && !isValidUrl(newUrl) && (
-                <div className="text-red-400 text-sm mt-1">
-                  Bitte geben Sie eine gültige URL ein (z.B. example.com)
-                </div>
-              )}
-            </div>
-            <Button
-              onClick={handleAnalyzeNewWebsite}
-              disabled={!newUrl.trim() || !isValidUrl(newUrl) || isAnalyzing}
-              className="flex items-center whitespace-nowrap"
-            >
-              <Search className="mr-2 h-4 w-4" />
-              {isAnalyzing ? 'Analysiere...' : 'Analysieren'}
-            </Button>
-          </div>
-        </div>
-
-        {/* ✅ AKTUELLE WEBSITE ANZEIGEN */}
-        {currentWebsite && (
-          <div className="bg-gray-800/50 rounded-lg p-4 mb-4 border border-gray-600/30">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm text-gray-400">Analysierte Website:</div>
-                <div className="text-lg font-semibold text-blue-400">{currentWebsite.name || currentWebsite.url}</div>
-                <div className="text-xs text-gray-500 mb-1">{currentWebsite.url}</div>
-                <div className="text-sm text-gray-300">
-                  Compliance-Score: <span className={`font-bold ${complianceScore >= 80 ? 'text-green-400' : complianceScore >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>
-                    {complianceScore}/100
+    <div className="space-y-6">
+      {/* ✅ PROMINENTER WEBSITE-BANNER - IMMER SICHTBAR */}
+      {currentWebsite && (
+        <div className="glass-strong rounded-2xl p-6 border-2 border-sky-500/30 shadow-glow-blue sticky top-20 z-40 mb-6">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-4 flex-1">
+              <div className="p-3 bg-gradient-to-br from-sky-500 to-purple-500 rounded-xl shadow-lg">
+                <Globe className="w-8 h-8 text-white" />
+              </div>
+              <div className="flex-1">
+                <div className="text-xs font-semibold text-sky-400 mb-1 uppercase tracking-wider">📊 Analysierte Website</div>
+                <div className="text-2xl font-bold text-white mb-1">{currentWebsite.name || currentWebsite.url}</div>
+                <div className="flex items-center gap-3 text-sm text-zinc-400">
+                  <span className="font-mono bg-zinc-900/70 px-3 py-1 rounded-lg border border-zinc-700">{currentWebsite.url}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    {formatRelativeTime(currentWebsite.lastScan)}
                   </span>
                 </div>
               </div>
+            </div>
+            
+            <div className="flex gap-2 flex-wrap">
               <Button
                 variant="secondary"
+                size="sm"
                 onClick={handleRescan}
-                disabled={isLoading || !currentWebsite.url}
-                className="flex items-center"
+                disabled={isActuallyLoading || !currentWebsite.url}
               >
-                <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                {isLoading ? 'Analysiere...' : 'Erneut scannen'}
+                <RefreshCw className={`mr-2 h-4 w-4 ${isActuallyLoading ? 'animate-spin' : ''}`} />
+                {isActuallyLoading ? 'Analysiere...' : 'Neu scannen'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (analysisData && analysisData.scan_id) {
+                    window.open(`/api/v2/reports/${analysisData.scan_id}/download`, '_blank');
+                  }
+                }}
+                disabled={!analysisData || !analysisData.scan_id}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                PDF
               </Button>
             </div>
           </div>
-        )}
+        </div>
+      )}
+
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-3">
+            <div className="p-2.5 bg-gradient-to-br from-sky-500/20 to-purple-500/20 rounded-xl">
+              <AlertTriangle className="w-6 h-6 text-sky-400" />
+            </div>
+            <span>Compliance-Analyse</span>
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          {/* ✅ METRIKEN ÜBERSICHT */}
+          {currentWebsite && (
+            <div className="glass-card rounded-xl p-6 mb-6 border border-zinc-700/50">
+              {/* Website-Anzeige */}
+              <div className="mb-4 pb-4 border-b border-zinc-800">
+                <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Analysierte Website</div>
+                <div className="text-lg font-semibold text-white flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-indigo-400" />
+                  {currentWebsite.url}
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+                  <div className="text-xs text-zinc-400 mb-2 font-semibold uppercase tracking-wider">Compliance-Score</div>
+                  <div className={`text-3xl font-bold ${complianceScore >= 80 ? 'text-green-400' : complianceScore >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>
+                    {complianceScore}<span className="text-lg text-zinc-500">/100</span>
+                  </div>
+                </div>
+                
+                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+                  <div className="text-xs text-zinc-400 mb-2 font-semibold uppercase tracking-wider">Geschätztes Risiko</div>
+                  <div className="text-3xl font-bold text-red-400">
+                    {typeof totalRisk === 'string' ? totalRisk : new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(totalRisk)}
+                  </div>
+                </div>
+                
+                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+                  <div className="text-xs text-zinc-400 mb-2 font-semibold uppercase tracking-wider">Gefundene Issues</div>
+                  <div className="text-3xl font-bold text-orange-400">
+                    {findings.length}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
         {/* ✅ LOADING STATE */}
-        {(isLoading || isAnalyzing) && (
-          <div className="text-center py-8">
-            <div className="animate-spin mx-auto mb-4 h-8 w-8 border-4 border-blue-400 border-t-transparent rounded-full"></div>
-            <p className="text-gray-300">
-              {isAnalyzing ? 'Website wird analysiert...' : 'Daten werden geladen...'}
+        {isActuallyLoading && (
+          <div className="text-center py-12">
+            <div className="relative mx-auto mb-6 w-16 h-16">
+              <div className="absolute inset-0 border-4 border-zinc-800 rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-t-sky-500 border-r-purple-500 border-b-transparent border-l-transparent rounded-full animate-spin"></div>
+            </div>
+            <p className="text-white font-semibold text-lg mb-2">
+              {isLoadingLatestScan && !isLoading ? 'Lade letzte Scan-Ergebnisse...' : 'Daten werden geladen...'}
             </p>
             {currentWebsite && (
-              <p className="text-gray-400 text-sm mt-2">
-                Analysiere: {currentWebsite.name}
+              <p className="text-zinc-400 text-sm">
+                Analysiere: <span className="text-sky-400 font-medium">{currentWebsite.name}</span>
               </p>
             )}
           </div>
         )}
 
-        {/* ✅ ECHTE API-ERGEBNISSE ANZEIGEN */}
-        {!isLoading && !isAnalyzing && findings.length > 0 && (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-white mb-4">
-              Gefundene Issues ({findings.length})
-            </h3>
-            
-            {findings.map((finding, index) => {
-              const badgeVariant = finding.severity === 'critical' ? 'critical' :
-                                finding.severity === 'high' ? 'warning' : 
-                                finding.severity === 'medium' ? 'warning' : 'success';
-
-              const IconComponent = finding.severity === 'critical' ? AlertTriangle :
-                                  finding.severity === 'high' ? AlertCircle : CheckCircle;
-
-              return (
-                <div
-                  key={finding.category || `finding-${index}`}
-                  className={`rounded-lg p-4 border ${
-                    finding.severity === 'critical' || finding.severity === 'high'
-                      ? 'bg-red-900/30 border-red-500/50'
-                      : finding.severity === 'medium'
-                      ? 'bg-yellow-900/30 border-yellow-500/50'
-                      : 'bg-green-900/30 border-green-500/50'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center mb-2">
-                        <IconComponent className={`mr-2 h-5 w-5 ${
-                          finding.severity === 'critical' || finding.severity === 'high' ? 'text-red-400' :
-                          finding.severity === 'medium' ? 'text-yellow-400' : 'text-green-400'
-                        }`} />
-                        <Badge variant={badgeVariant}>
-                          {finding.severity === 'critical' ? 'Kritisches Problem' :
-                           finding.severity === 'high' ? 'Hohes Risiko' :
-                           finding.severity === 'medium' ? 'Verbesserung erforderlich' : 'OK'}
-                        </Badge>
-                      </div>
-
-                      <h3 className="font-semibold mb-2 text-white">
-                        {finding.title || (finding.category ? finding.category.replace('_', ' ').toUpperCase() : 'UNBEKANNTE KATEGORIE')}
-                        {finding.status === 'error' ? ' - Problem erkannt' : 
-                         finding.status === 'warning' ? ' - Verbesserung möglich' : ' - Konform'}
-                      </h3>
-                      
-                      <p className="text-sm text-gray-300 mb-3">{finding.details}</p>
-
-                      {finding.estimated_risk && finding.estimated_risk.abmahn_risiko_euro !== '0€' && (
-                        <div className={`rounded p-3 mb-3 ${
-                          finding.severity === 'critical' || finding.severity === 'high' ? 'bg-red-800/30' : 'bg-yellow-800/30'
-                        }`}>
-                          <div className="text-sm font-semibold text-gray-300">Abmahnrisiko:</div>
-                          <div className={`text-lg font-bold ${
-                            finding.severity === 'critical' || finding.severity === 'high' ? 'text-red-400' : 'text-yellow-400'
-                          }`}>
-                            {finding.estimated_risk.abmahn_risiko_euro}
-                          </div>
-                        </div>
-                      )}
-
-                      {(finding.severity === 'critical' || finding.severity === 'high' || finding.severity === 'medium') && (
-                        <div className="flex space-x-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handleAIFix(finding.category || 'unknown')}
-                            disabled={startAIFix.isPending}
-                          >
-                            <Bot className="mr-1 h-4 w-4" />
-                            {startAIFix.isPending ? 'Wird gestartet...' : 'KI-Fix starten'}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleBookExpert(finding.category || 'unknown')}
-                            disabled={bookExpert.isPending}
-                          >
-                            <UserCheck className="mr-1 h-4 w-4" />
-                            {bookExpert.isPending ? 'Wird gebucht...' : 'Experte beauftragen'}
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+        {/* ✅ AKTIVE FIX-JOBS */}
+        {activeJobs.length > 0 && (
+          <div className="mb-6">
+            <ActiveJobsPanel jobs={activeJobs} />
           </div>
         )}
 
-        {/* ✅ EMPTY STATE - Verbessert */}
-        {!currentWebsite && !isLoading && !isAnalyzing && (
+        {/* ✅ 4-SÄULEN COMPLIANCE-ANALYSE */}
+        {!isActuallyLoading && findings.length > 0 && (
+          <div>
+            <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <span className="w-1 h-6 bg-gradient-to-b from-sky-500 to-purple-500 rounded-full"></span>
+              Compliance-Analyse nach Kategorien
+            </h3>
+            
+            {/* Akkordion-Karten mit Score */}
+            <div className="space-y-4">
+              {groupedIssues.map((pillar) => {
+                const Icon = pillar.icon;
+                const issueCount = pillar.issues.length;
+                const criticalCount = pillar.issues.filter(i => i.severity === 'critical').length;
+                const isExpanded = expandedPillar === pillar.id;
+                
+                return (
+                  <div 
+                    key={pillar.id} 
+                    className="glass-card rounded-2xl overflow-hidden border border-zinc-800/50 hover:border-zinc-700/70 transition-all"
+                  >
+                    {/* Header - Klickbar */}
+                    <button
+                      onClick={() => setExpandedPillar(isExpanded ? null : pillar.id)}
+                      className="w-full p-6 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`p-3 rounded-xl bg-gradient-to-br ${
+                          pillar.color === 'blue' ? 'from-sky-500/20 to-blue-500/20' :
+                          pillar.color === 'green' ? 'from-green-500/20 to-emerald-500/20' :
+                          pillar.color === 'purple' ? 'from-purple-500/20 to-pink-500/20' :
+                          'from-orange-500/20 to-red-500/20'
+                        }`}>
+                          <Icon className={`w-6 h-6 ${
+                            pillar.color === 'blue' ? 'text-sky-400' :
+                            pillar.color === 'green' ? 'text-green-400' :
+                            pillar.color === 'purple' ? 'text-purple-400' :
+                            'text-orange-400'
+                          }`} />
+                        </div>
+                        <div className="text-left">
+                          <h4 className="text-lg font-bold text-white flex items-center gap-2">
+                            {pillar.name}
+                            {issueCount > 0 && (
+                              <Badge variant={criticalCount > 0 ? 'critical' : 'warning'}>
+                                {issueCount} Issue{issueCount !== 1 ? 's' : ''}
+                              </Badge>
+                            )}
+                          </h4>
+                          <p className="text-sm text-zinc-400 mt-0.5">{pillar.description}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-4">
+                        {/* Score */}
+                        <div className="text-right">
+                          <div className={`text-3xl font-bold ${
+                            pillar.score >= 80 ? 'text-green-400' : 
+                            pillar.score >= 60 ? 'text-yellow-400' : 
+                            'text-red-400'
+                          }`}>
+                            {pillar.score}
+                          </div>
+                          <div className="text-xs text-zinc-500">/100</div>
+                        </div>
+                        
+                        {/* Chevron */}
+                        <ChevronDown className={`w-5 h-5 text-zinc-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                      </div>
+                    </button>
+
+                    {/* Ausklappbare Details */}
+                    {isExpanded && issueCount > 0 && (
+                      <div className="border-t border-zinc-800/50 p-6 bg-black/20 animate-slide-down">
+                        <div className="space-y-4">
+                          {pillar.issues.map((issue, idx) => (
+                            <ComplianceIssueCard
+                              key={`${issue.id}-${idx}`}
+                              issue={issue}
+                              planType={planType}
+                              scanId={analysisData?.scan_id}
+                              websiteUrl={analysisData?.url}
+                              onStartFix={handleAIFix}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Leerer Zustand wenn keine Issues */}
+                    {isExpanded && issueCount === 0 && (
+                      <div className="border-t border-zinc-800/50 p-6 bg-black/20 text-center">
+                        <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-3" />
+                        <p className="text-zinc-300 font-medium">Keine Issues gefunden</p>
+                        <p className="text-zinc-500 text-sm mt-1">Diese Kategorie ist vollständig compliant! 🎉</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ✅ EMPTY STATE - Nur anzeigen wenn wirklich keine Daten */}
+        {!currentWebsite && !analysisData && !isActuallyLoading && (
           <div className="text-center py-8">
             <Globe className="mx-auto mb-4 h-12 w-12 text-gray-400" />
             <p className="text-gray-300 mb-4">Keine Website analysiert</p>
@@ -299,7 +484,7 @@ export const WebsiteAnalysis: React.FC = () => {
         )}
 
         {/* ✅ NO FINDINGS STATE */}
-        {currentWebsite && !isLoading && !isAnalyzing && findings.length === 0 && analysisData && (
+        {currentWebsite && !isActuallyLoading && findings.length === 0 && analysisData && (
           <div className="text-center py-8">
             <CheckCircle className="mx-auto mb-4 h-12 w-12 text-green-400" />
             <p className="text-gray-300 mb-2">Analyse abgeschlossen</p>
@@ -312,5 +497,6 @@ export const WebsiteAnalysis: React.FC = () => {
         )}
       </CardContent>
     </Card>
+    </div>
   );
 };

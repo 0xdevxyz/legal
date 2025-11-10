@@ -1,49 +1,102 @@
 'use client';
 
-import React from 'react';
-import { TrendingUp, Globe, AlertTriangle, BarChart3 } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { TrendingUp, Globe, AlertTriangle, BarChart3, Sparkles } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { useDashboardStore } from '@/stores/dashboard';
+import { useDashboardMetrics } from '@/hooks/useMetrics';
 
 export const MetricsCards: React.FC = () => {
+  const { updateMetrics } = useDashboardStore();
+  const { metrics: apiMetrics, isLoading } = useDashboardMetrics();
+  
+  // Update store when API data arrives
+  useEffect(() => {
+    if (apiMetrics) {
+      updateMetrics({
+        totalScore: apiMetrics.totalScore,
+        websites: apiMetrics.websites,
+        criticalIssues: apiMetrics.criticalIssues,
+        scansAvailable: apiMetrics.scansAvailable,
+        scansUsed: apiMetrics.scansUsed
+      });
+    }
+  }, [apiMetrics, updateMetrics]);
+  
+  // Use API metrics if available, otherwise fall back to store
   const { metrics } = useDashboardStore();
+
+  // Hole Limits aus API-Metriken
+  const aiFixesUsed = apiMetrics?.aiFixesUsed ?? 0;
+  const aiFixesMax = apiMetrics?.aiFixesMax ?? 1;
+  const websitesMax = apiMetrics?.websitesMax ?? 3;
+
+  // Berechne Trend-Anzeigen
+  const getScoreTrendDisplay = () => {
+    const trend = apiMetrics?.scoreTrend;
+    if (trend === null || trend === undefined) {
+      return { text: 'Keine Vergleichsdaten', type: 'neutral' as const };
+    }
+    if (trend > 0) {
+      return { text: `+${trend}% diese Woche`, type: 'positive' as const };
+    } else if (trend < 0) {
+      return { text: `${trend}% diese Woche`, type: 'negative' as const };
+    }
+    return { text: 'Unverändert', type: 'neutral' as const };
+  };
+
+  const getCriticalTrendDisplay = () => {
+    const trend = apiMetrics?.criticalTrend;
+    if (trend === null || trend === undefined) {
+      return { text: 'Sofortige Beachtung', type: 'negative' as const };
+    }
+    if (trend > 0) {
+      return { text: `+${trend} seit letzter Woche`, type: 'negative' as const };
+    } else if (trend < 0) {
+      return { text: `${trend} seit letzter Woche`, type: 'positive' as const };
+    }
+    return { text: 'Unverändert', type: 'neutral' as const };
+  };
+
+  const scoreTrend = getScoreTrendDisplay();
+  const criticalTrend = getCriticalTrendDisplay();
 
   const metricCards = [
     {
       title: 'Gesamt-Score',
       value: metrics.totalScore,
-      change: '+2.3% diese Woche',
-      changeType: 'positive' as const,
+      change: scoreTrend.text,
+      changeType: scoreTrend.type,
       icon: TrendingUp,
       color: 'text-green-400',
       bgColor: 'bg-green-500/20'
     },
     {
-      title: 'Websites',
-      value: metrics.websites,
-      change: '3 aktive Scans',
-      changeType: 'neutral' as const,
+      title: 'Analysen',
+      value: `${metrics.websites}/${websitesMax}`,
+      change: `${websitesMax - metrics.websites} verfügbar`,
+      changeType: metrics.websites >= websitesMax ? 'negative' as const : 'neutral' as const,
       icon: Globe,
       color: 'text-blue-400',
       bgColor: 'bg-blue-500/20'
     },
     {
+      title: 'KI-Optimierungen',
+      value: `${aiFixesUsed}/${aiFixesMax}`,
+      change: aiFixesUsed >= aiFixesMax ? 'Limit erreicht' : `${aiFixesMax - aiFixesUsed} verfügbar`,
+      changeType: aiFixesUsed >= aiFixesMax ? 'negative' as const : 'positive' as const,
+      icon: Sparkles,
+      color: 'text-purple-400',
+      bgColor: 'bg-purple-500/20'
+    },
+    {
       title: 'Kritische Issues',
       value: metrics.criticalIssues,
-      change: 'Sofortige Beachtung',
-      changeType: 'negative' as const,
+      change: criticalTrend.text,
+      changeType: criticalTrend.type,
       icon: AlertTriangle,
       color: 'text-red-400',
       bgColor: 'bg-red-500/20'
-    },
-    {
-      title: 'Scans verfügbar',
-      value: `${metrics.scansUsed}/${metrics.scansAvailable}`,
-      change: `${Math.round((metrics.scansUsed / metrics.scansAvailable) * 100)}% genutzt`,
-      changeType: 'neutral' as const,
-      icon: BarChart3,
-      color: 'text-purple-400',
-      bgColor: 'bg-purple-500/20'
     }
   ];
 

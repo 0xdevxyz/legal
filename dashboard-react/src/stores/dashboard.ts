@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { DashboardState, Website } from '@/types/dashboard';
-import { ComplianceAnalysis, LegalNews, Finding } from '@/types/api';
+import { ComplianceAnalysis, LegalNews, ComplianceIssue } from '@/types/api';
 
 interface DashboardStore extends DashboardState {
   // Actions
@@ -42,7 +42,7 @@ export const useDashboardStore = create<DashboardStore>()(
       metrics: {
         ...get().metrics,
         totalScore: data.compliance_score,
-        criticalIssues: data.summary.critical_issues
+        criticalIssues: data.critical_issues
       }
     }),
 
@@ -61,9 +61,9 @@ export const useDashboardStore = create<DashboardStore>()(
       const { analysisData } = get();
       if (!analysisData) return 0;
 
-      return (Object.values(analysisData.findings) as Finding[]).filter(
-        finding => finding.severity === 'critical'
-      ).length;
+      return analysisData?.issues.filter(
+        issue => issue.severity === 'critical'
+      ).length || 0;
     },
 
     getComplianceScore: () => {
