@@ -4,10 +4,11 @@ Endpoints for serving and managing widgets
 """
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, JSONResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import os
+from accessibility_templates import AccessibilityTemplates
 
 router = APIRouter()
 
@@ -46,7 +47,8 @@ async def serve_cookie_consent_widget():
         }
     )
 
-@router.get("/api/widgets/cookie-compliance.js")
+@router.get("/api/widgets/privacy-manager.js")
+@router.get("/api/widgets/cookie-compliance.js")  # Legacy support
 async def serve_cookie_compliance_widget(site_id: Optional[str] = None):
     """
     Serve the complete Cookie Compliance Widget (v2)
@@ -58,6 +60,8 @@ async def serve_cookie_compliance_widget(site_id: Optional[str] = None):
     
     Query params:
     - site_id: Optional site identifier for custom configuration
+    
+    Note: Also available at /privacy-manager.js to avoid ad-blocker issues
     """
     try:
         # Load both widgets
@@ -93,9 +97,10 @@ async def serve_cookie_compliance_widget(site_id: Optional[str] = None):
             content=combined_code,
             media_type='application/javascript',
             headers={
-                'Cache-Control': 'public, max-age=3600',
+                'Cache-Control': 'public, max-age=300',  # 5 Minuten Cache
                 'Access-Control-Allow-Origin': '*',
-                'X-Complyo-Version': '2.0.0'
+                'X-Complyo-Version': '2.0.0',
+                'ETag': '2.0.0-service-selection'  # Cache-Busting
             }
         )
         
@@ -211,4 +216,47 @@ async def get_widget_snippet(widget_type: str, site_id: str):
         "snippet": snippet,
         "instructions": "Fügen Sie diesen Code in den <head>-Bereich Ihrer Website ein."
     }
+
+
+@router.get("/api/widgets/accessibility-templates")
+async def get_accessibility_templates():
+    """
+    Get all accessibility code templates
+    Returns different WCAG compliance levels with actual code
+    """
+    templates = AccessibilityTemplates.get_all_templates()
+    
+    return JSONResponse(
+        content={
+            "success": True,
+            "templates": templates,
+            "version": "3.0.0"
+        },
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=1800'
+        }
+    )
+
+
+@router.get("/api/widgets/accessibility-templates/{template_id}")
+async def get_accessibility_template(template_id: str):
+    """
+    Get a specific accessibility template by ID
+    """
+    template = AccessibilityTemplates.get_template_by_id(template_id)
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    return JSONResponse(
+        content={
+            "success": True,
+            "template": template
+        },
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=1800'
+        }
+    )
 
