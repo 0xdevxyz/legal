@@ -1,6 +1,7 @@
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
+import Script from 'next/script'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -30,6 +31,13 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} antialiased`}>
         {children}
+        <Script
+          src="https://widget.complyo.tech/accessibility.js"
+          data-site-id="scan-91778ad450e1"
+          data-auto-fix="true"
+          data-show-toolbar="true"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   )
