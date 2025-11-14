@@ -355,7 +355,13 @@
   
   // Auto-initialize
   if (document.currentScript && document.currentScript.getAttribute('data-site-id')) {
-    new ComplyoAccessibility();
+    const script = document.currentScript;
+    const config = {
+      siteId: script.getAttribute('data-site-id'),
+      autoFix: script.getAttribute('data-auto-fix') !== 'false',
+      showToolbar: script.getAttribute('data-show-toolbar') !== 'false'
+    };
+    new ComplyoAccessibility(config);
   }
   
   // Export for manual initialization
