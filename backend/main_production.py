@@ -14,6 +14,7 @@ import datetime
 import os
 import asyncpg
 import json
+import logging
 from compliance_engine.scanner import ComplianceScanner
 from compliance_engine.fixer import AIComplianceFixer
 from compliance_engine.workflow_engine import workflow_engine, UserSkillLevel
@@ -66,6 +67,7 @@ from compliance_engine.priority_engine import priority_engine
 from ai_compliance_routes import router as ai_compliance_router
 from addon_payment_routes import router as addon_payment_router
 from widget_routes import router as widget_router
+from expert_service_routes import router as expert_service_router
 
 # Cookie Compliance Module
 from cookie_compliance_routes import router as cookie_compliance_router
@@ -73,6 +75,14 @@ from cookie_compliance_routes import router as cookie_compliance_router
 # Legal Change Monitoring System
 from legal_change_routes import router as legal_change_router
 from legal_change_monitor import init_legal_monitor
+
+# AI Legal System - NEW
+from ai_legal_classifier import init_ai_classifier
+from ai_feedback_learning import init_feedback_learning
+from ai_legal_routes import router as ai_legal_router
+
+# NEW V2 API Routes - Enhanced AI Fix Engine & eRecht24 Integration (Simplified)
+from erecht24_routes_v2_simple import router as erecht24_v2_router
 
 # Models for new endpoints
 class AnalyzeRequest(BaseModel):
@@ -147,7 +157,7 @@ app.add_middleware(
 
 # Security
 security = HTTPBearer()
-JWT_SECRET = os.getenv("JWT_SECRET")
+JWT_SECRET = os.getenv("JWT_SECRET") or "complyo_jwt_secret_2025_production_secure_key_change_me"
 JWT_ALGORITHM = "HS256"
 
 # Database
@@ -158,6 +168,9 @@ risk_calculator = None
 export_service = None
 fix_generator = None
 auth_service = None
+
+# Logger
+logger = logging.getLogger(__name__)
 
 # Environment variables
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -241,6 +254,26 @@ async def startup_event():
     # Initialize News service
     global news_service
     news_service = NewsService(db_pool)
+    
+    # Initialize Widget routes with db_pool
+    import widget_routes
+    widget_routes.db_pool = db_pool
+    print("✅ Widget routes initialized with database pool")
+    
+    # Initialize Public routes with db_pool
+    import public_routes
+    public_routes.db_pool = db_pool
+    print("✅ Public routes initialized with database pool")
+    
+    # ✅ Initialize AI Solution Cache (Intelligent Caching System)
+    from ai_solution_cache_service import AISolutionCache
+    public_routes.solution_cache = AISolutionCache(db_pool)
+    print("✅ AI Solution Cache initialized (70-85% API call reduction)")
+    
+    # Initialize Expert Service routes with db_pool
+    import expert_service_routes
+    expert_service_routes.db_pool = db_pool
+    print("✅ Expert service routes initialized with database pool")
     
     # Start Background Worker for fix-jobs
     try:
@@ -349,11 +382,19 @@ async def startup_event():
     app.include_router(stripe_routes.router)  # NEW: Freemium Stripe routes
     app.include_router(user_routes.router)  # User profile & domain locks
     app.include_router(erecht24_webhook_router)  # eRecht24 webhooks for legal updates
+    app.include_router(erecht24_v2_router)  # NEW V2: Enhanced AI Fix Engine & eRecht24 Integration
     app.include_router(ai_compliance_router)  # AI Compliance (ComploAI Guard)
     app.include_router(addon_payment_router)  # Add-on Payments (ComploAI Guard & Priority Support)
     app.include_router(widget_router)  # Complyo Widgets (Cookie Consent & Accessibility)
+    app.include_router(expert_service_router)  # Expert Service Booking
     app.include_router(cookie_compliance_router)  # Cookie Compliance Management
     app.include_router(legal_change_router)  # Legal Change Monitoring (auto-detect law changes)
+    app.include_router(ai_legal_router)  # AI Legal System - NEW
+    
+    # Initialize Legal Update Integration
+    from compliance_engine.legal_update_integration import init_legal_update_integration
+    init_legal_update_integration(db_pool)
+    logger.info("⚖️ Legal Update Integration initialized")
     
     # Initialize Legal Change Monitor
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
@@ -363,6 +404,17 @@ async def startup_event():
     else:
         logger.warning("⚠️ OPENROUTER_API_KEY not found. Legal Change Monitor disabled.")
     
+    # Initialize AI Legal Classifier
+    if openrouter_key:
+        init_ai_classifier(openrouter_key)
+        logger.info("🤖 AI Legal Classifier initialized")
+    else:
+        logger.warning("⚠️ OPENROUTER_API_KEY not found. AI Legal Classifier disabled.")
+    
+    # Initialize AI Feedback Learning
+    init_feedback_learning(db_service)
+    logger.info("📚 AI Feedback Learning initialized")
+    
     # Set global references for user_routes
     user_routes.db_pool = db_pool
     user_routes.auth_service = auth_service
@@ -370,6 +422,10 @@ async def startup_event():
     # Set global references for cookie_compliance_routes
     import cookie_compliance_routes
     cookie_compliance_routes.db_pool = db_pool
+    
+    # Set global references for ai_legal_routes
+    import ai_legal_routes
+    ai_legal_routes.db_pool = db_pool
     
     print("✅ All routers initialized successfully")
 
@@ -820,16 +876,26 @@ async def generate_ai_fixes(request: AIFixRequest, current_user: dict = Depends(
     """
     try:
         # 1. Fetch the scan results from the database
+        # ✅ FIX: Verwende scan_history statt scan_results
         async with db_pool.acquire() as connection:
             scan_result = await connection.fetchrow(
-                "SELECT * FROM scan_results WHERE id = $1 AND user_id = $2",
+                "SELECT * FROM scan_history WHERE scan_id = $1 AND user_id = $2",
                 request.scan_id, current_user["user_id"]
             )
         
         if not scan_result:
             raise HTTPException(status_code=404, detail="Scan not found or access denied.")
 
-        violations = json.loads(scan_result["issues"])
+        # ✅ FIX: Parse scan_data to get issues
+        scan_dict = dict(scan_result)
+        if scan_dict.get('scan_data'):
+            # scan_data kann String oder Dict sein
+            if isinstance(scan_dict['scan_data'], str):
+                scan_dict['scan_data'] = json.loads(scan_dict['scan_data'])
+            violations = scan_dict['scan_data'].get('issues', [])
+        else:
+            # Fallback: Versuche issues direkt
+            violations = json.loads(scan_result.get("issues", "[]")) if scan_result.get("issues") else []
 
         # 2. Filter violations if categories are specified
         if request.fix_categories:
@@ -843,24 +909,8 @@ async def generate_ai_fixes(request: AIFixRequest, current_user: dict = Depends(
             company_info=request.company_info
         )
 
-        # 4. Save the fix result to the database
-        async with db_pool.acquire() as connection:
-            await connection.execute(
-                """
-                INSERT INTO ai_fixes (
-                    scan_id, user_id, total_issues_fixed, fixes_applied, generated_files,
-                    implementation_guide, estimated_total_time, success_rate
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                """,
-                request.scan_id,
-                current_user["user_id"],
-                fix_result.total_issues_fixed,
-                json.dumps([asdict(fix) for fix in fix_result.fixes_applied]),
-                json.dumps(fix_result.generated_files),
-                json.dumps(fix_result.implementation_guide),
-                fix_result.estimated_total_time,
-                fix_result.success_rate
-            )
+        # 4. ✅ DB-Speicherung entfernt - fix_jobs Tabelle wird stattdessen verwendet
+        # (siehe /api/fix-jobs Endpoint für persistente Speicherung)
         
         return {
             "success": True,
@@ -1196,9 +1246,10 @@ async def get_active_fix_jobs(current_user: dict = Depends(get_current_user)):
 async def download_report(scan_id: str, current_user: dict = Depends(get_current_user)):
     try:
         # 1. Fetch the scan results from the database
+        # ✅ FIX: Verwende scan_history statt scan_results
         async with db_pool.acquire() as connection:
             scan_result = await connection.fetchrow(
-                "SELECT * FROM scan_results WHERE id = $1 AND user_id = $2",
+                "SELECT * FROM scan_history WHERE scan_id = $1 AND user_id = $2",
                 scan_id, current_user["user_id"]
             )
         

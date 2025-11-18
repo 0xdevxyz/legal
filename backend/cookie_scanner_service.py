@@ -19,6 +19,7 @@ class CookieScanner:
     
     # Service Detection Patterns
     DETECTION_PATTERNS = {
+        # === Analytics & Tracking ===
         'google_analytics_ga4': {
             'patterns': [
                 r'googletagmanager\.com/gtag/js',
@@ -26,6 +27,8 @@ class CookieScanner:
                 r'GA_MEASUREMENT_ID',
                 r'gtag\(.*?config.*?G-',
                 r'_ga',
+                r'_gid',
+                r'_gat',
             ],
             'confidence_boost': ['gtag', 'GA_MEASUREMENT_ID']
         },
@@ -36,22 +39,103 @@ class CookieScanner:
             ],
             'confidence_boost': ['GTM-']
         },
+        'matomo': {
+            'patterns': [
+                r'matomo\.js',
+                r'piwik\.js',
+                r'_pk_id',
+                r'_pk_ses',
+            ],
+            'confidence_boost': ['matomo.js', 'piwik.js']
+        },
+        'hotjar': {
+            'patterns': [
+                r'static\.hotjar\.com',
+                r'hotjar\.com/c/hotjar',
+                r'_hjid',
+                r'_hjSession',
+            ],
+            'confidence_boost': ['static.hotjar.com']
+        },
+        'plausible': {
+            'patterns': [
+                r'plausible\.io/js',
+            ],
+            'confidence_boost': ['plausible.io/js']
+        },
+        
+        # === Marketing & Advertising ===
         'facebook_pixel': {
             'patterns': [
                 r'connect\.facebook\.net',
                 r'fbq\(',
                 r'facebook\.com/tr',
                 r'_fbp',
+                r'_fbc',
             ],
             'confidence_boost': ['fbq(', 'facebook.com/tr']
         },
+        'google_ads': {
+            'patterns': [
+                r'googleadservices\.com',
+                r'doubleclick\.net',
+                r'_gcl_au',
+                r'_gcl_aw',
+                r'_gac_',
+            ],
+            'confidence_boost': ['googleadservices.com', 'doubleclick.net']
+        },
+        'linkedin_insight': {
+            'patterns': [
+                r'snap\.licdn\.com',
+                r'linkedin\.com/px',
+                r'li_fat_id',
+                r'lidc',
+            ],
+            'confidence_boost': ['snap.licdn.com']
+        },
+        'tiktok_pixel': {
+            'patterns': [
+                r'analytics\.tiktok\.com',
+                r'ttq\.load',
+                r'_ttp',
+            ],
+            'confidence_boost': ['analytics.tiktok.com']
+        },
+        'twitter_x': {
+            'patterns': [
+                r'platform\.twitter\.com',
+                r'platform\.x\.com',
+                r'twitter\.com/widgets',
+                r'twq\(',
+            ],
+            'confidence_boost': ['platform.twitter.com', 'twitter.com/widgets']
+        },
+        
+        # === Content & Media ===
         'youtube': {
             'patterns': [
                 r'youtube\.com/embed',
                 r'youtube-nocookie\.com',
                 r'youtu\.be',
+                r'youtube\.com/iframe_api',
             ],
             'confidence_boost': ['youtube.com/embed']
+        },
+        'vimeo': {
+            'patterns': [
+                r'player\.vimeo\.com',
+                r'vimeo\.com/video',
+                r'vimeo_player',
+            ],
+            'confidence_boost': ['player.vimeo.com']
+        },
+        'instagram': {
+            'patterns': [
+                r'instagram\.com/embed',
+                r'cdninstagram\.com',
+            ],
+            'confidence_boost': ['instagram.com/embed']
         },
         'google_maps': {
             'patterns': [
@@ -61,85 +145,67 @@ class CookieScanner:
             ],
             'confidence_boost': ['maps.googleapis.com', 'maps.google.com/maps/embed']
         },
-        'vimeo': {
+        'openstreetmap': {
             'patterns': [
-                r'player\.vimeo\.com',
-                r'vimeo\.com/video',
+                r'openstreetmap\.org',
+                r'tile\.openstreetmap\.org',
             ],
-            'confidence_boost': ['player.vimeo.com']
+            'confidence_boost': ['openstreetmap.org/export/embed']
         },
-        'linkedin_insight': {
+        
+        # === WordPress & CMS ===
+        'wordpress': {
             'patterns': [
-                r'snap\.licdn\.com',
-                r'linkedin\.com/px',
+                r'wp-content/',
+                r'wp-includes/',
+                r'/wp-json/',
+                r'wordpress_logged_in',
+                r'wordpress_test_cookie',
+                r'wp-settings-',
+                r'wp_woocommerce_session',
+                r'woocommerce_cart_hash',
+                r'wp-admin',
+                r'/wp-',
             ],
-            'confidence_boost': ['snap.licdn.com']
+            'confidence_boost': ['wp-content/', 'wp-includes/', 'wordpress_']
         },
-        'tiktok_pixel': {
+        'woocommerce': {
             'patterns': [
-                r'analytics\.tiktok\.com',
-                r'ttq\.load',
+                r'woocommerce',
+                r'woocommerce_cart_hash',
+                r'woocommerce_items_in_cart',
+                r'wp_woocommerce_session',
+                r'wc_cart_hash',
+                r'wc_fragments',
             ],
-            'confidence_boost': ['analytics.tiktok.com']
+            'confidence_boost': ['woocommerce', 'wc_cart_hash']
         },
-        'google_ads': {
+        'elementor': {
             'patterns': [
-                r'googleadservices\.com',
-                r'doubleclick\.net',
-                r'_gcl_au',
+                r'elementor',
+                r'wp-content/plugins/elementor',
+                r'elementor-kit-',
             ],
-            'confidence_boost': ['googleadservices.com']
+            'confidence_boost': ['elementor']
         },
-        'matomo': {
+        'yoast_seo': {
             'patterns': [
-                r'matomo\.js',
-                r'piwik\.js',
-                r'_pk_id',
+                r'yoast',
+                r'wp-content/plugins/wordpress-seo',
             ],
-            'confidence_boost': ['matomo.js', 'piwik.js']
+            'confidence_boost': ['yoast']
         },
-        'hotjar': {
+        
+        # === E-Commerce ===
+        'shopify': {
             'patterns': [
-                r'static\.hotjar\.com',
-                r'hotjar\.com/c/hotjar',
+                r'cdn\.shopify\.com',
+                r'myshopify\.com',
+                r'_shopify_',
+                r'cart_currency',
+                r'secure_customer_sig',
             ],
-            'confidence_boost': ['static.hotjar.com']
-        },
-        'intercom': {
-            'patterns': [
-                r'widget\.intercom\.io',
-                r'intercom\.io',
-            ],
-            'confidence_boost': ['widget.intercom.io']
-        },
-        'zendesk': {
-            'patterns': [
-                r'static\.zdassets\.com',
-                r'zendesk\.com',
-            ],
-            'confidence_boost': ['static.zdassets.com']
-        },
-        'instagram': {
-            'patterns': [
-                r'instagram\.com/embed',
-                r'cdninstagram\.com',
-            ],
-            'confidence_boost': ['instagram.com/embed']
-        },
-        'twitter_x': {
-            'patterns': [
-                r'platform\.twitter\.com',
-                r'platform\.x\.com',
-                r'twitter\.com/widgets',
-            ],
-            'confidence_boost': ['platform.twitter.com', 'twitter.com/widgets']
-        },
-        'google_fonts': {
-            'patterns': [
-                r'fonts\.googleapis\.com',
-                r'fonts\.gstatic\.com',
-            ],
-            'confidence_boost': ['fonts.googleapis.com']
+            'confidence_boost': ['cdn.shopify.com', '_shopify_']
         },
         'stripe': {
             'patterns': [
@@ -148,18 +214,110 @@ class CookieScanner:
             ],
             'confidence_boost': ['js.stripe.com']
         },
-        'openstreetmap': {
+        'paypal': {
             'patterns': [
-                r'openstreetmap\.org',
-                r'tile\.openstreetmap\.org',
+                r'paypal\.com/sdk',
+                r'paypalobjects\.com',
+                r'PYPF',
             ],
-            'confidence_boost': ['openstreetmap.org/export/embed']
+            'confidence_boost': ['paypal.com/sdk']
         },
-        'plausible': {
+        
+        # === Support & Chat ===
+        'intercom': {
             'patterns': [
-                r'plausible\.io/js',
+                r'widget\.intercom\.io',
+                r'intercom\.io',
+                r'intercom-',
             ],
-            'confidence_boost': ['plausible.io/js']
+            'confidence_boost': ['widget.intercom.io']
+        },
+        'zendesk': {
+            'patterns': [
+                r'static\.zdassets\.com',
+                r'zendesk\.com',
+                r'__zlcmid',
+            ],
+            'confidence_boost': ['static.zdassets.com']
+        },
+        'tawk': {
+            'patterns': [
+                r'embed\.tawk\.to',
+                r'tawk\.to',
+            ],
+            'confidence_boost': ['embed.tawk.to']
+        },
+        'crisp': {
+            'patterns': [
+                r'client\.crisp\.chat',
+                r'crisp\.chat',
+            ],
+            'confidence_boost': ['client.crisp.chat']
+        },
+        
+        # === Fonts & Resources ===
+        'google_fonts': {
+            'patterns': [
+                r'fonts\.googleapis\.com',
+                r'fonts\.gstatic\.com',
+            ],
+            'confidence_boost': ['fonts.googleapis.com']
+        },
+        
+        # === Other CMS/Platforms ===
+        'joomla': {
+            'patterns': [
+                r'/media/jui/',
+                r'/media/system/',
+                r'Joomla!',
+                r'joomla_',
+            ],
+            'confidence_boost': ['Joomla!', '/media/jui/']
+        },
+        'drupal': {
+            'patterns': [
+                r'Drupal',
+                r'/sites/all/',
+                r'/sites/default/',
+                r'drupal\.js',
+            ],
+            'confidence_boost': ['Drupal', '/sites/all/']
+        },
+        'magento': {
+            'patterns': [
+                r'Magento',
+                r'/mage/',
+                r'frontend_cid',
+                r'mage-cache',
+            ],
+            'confidence_boost': ['Magento', '/mage/']
+        },
+        'prestashop': {
+            'patterns': [
+                r'PrestaShop',
+                r'/modules/',
+                r'prestashop',
+            ],
+            'confidence_boost': ['PrestaShop']
+        },
+        
+        # === CDN & Performance ===
+        'cloudflare': {
+            'patterns': [
+                r'cloudflare',
+                r'__cfduid',
+                r'cf_clearance',
+                r'cdn\.cloudflare\.com',
+            ],
+            'confidence_boost': ['cloudflare', '__cfduid']
+        },
+        
+        # === Session & Authentication ===
+        'php_session': {
+            'patterns': [
+                r'PHPSESSID',
+            ],
+            'confidence_boost': ['PHPSESSID']
         },
     }
     
@@ -197,13 +355,14 @@ class CookieScanner:
             scripts = self._extract_scripts(soup)
             iframes = self._extract_iframes(soup)
             links = self._extract_links(soup)
+            meta_tags = self._extract_meta_tags(soup)
             text_content = soup.get_text()
             
             # Combine all content for analysis
-            all_content = html_content + '\n' + text_content
+            all_content = html_content + '\n' + text_content + '\n' + '\n'.join(meta_tags)
             
             # Detect services
-            detected = self._detect_services(all_content, scripts, iframes, links)
+            detected = self._detect_services(all_content, scripts, iframes, links, meta_tags)
             
             return {
                 'url': url,
@@ -268,27 +427,51 @@ class CookieScanner:
                 links.append(link['href'])
         return links
     
+    def _extract_meta_tags(self, soup: BeautifulSoup) -> List[str]:
+        """Extracts all meta tag content"""
+        meta_content = []
+        for meta in soup.find_all('meta'):
+            if meta.get('name'):
+                meta_content.append(f"{meta.get('name')}: {meta.get('content', '')}")
+            if meta.get('property'):
+                meta_content.append(f"{meta.get('property')}: {meta.get('content', '')}")
+            if meta.get('content'):
+                meta_content.append(meta.get('content'))
+        return meta_content
+    
     def _detect_services(
         self, 
         content: str, 
         scripts: List[str], 
         iframes: List[str],
-        links: List[str]
+        links: List[str],
+        meta_tags: List[str]
     ) -> Dict[str, Any]:
         """Detects services based on patterns"""
         
         detected_services: Set[str] = set()
         confidence: Dict[str, float] = {}
         
+        # Combine all sources for comprehensive scanning
+        all_sources = '\n'.join([
+            content,
+            '\n'.join(scripts),
+            '\n'.join(iframes),
+            '\n'.join(links),
+            '\n'.join(meta_tags)
+        ])
+        
         for service_key, detection in self.DETECTION_PATTERNS.items():
             score = 0
             matches = 0
+            matched_patterns = []
             
             # Check patterns
             for pattern in detection['patterns']:
-                if re.search(pattern, content, re.IGNORECASE):
+                if re.search(pattern, all_sources, re.IGNORECASE):
                     matches += 1
                     score += 1
+                    matched_patterns.append(pattern)
                     
                     # Boost confidence for high-value patterns
                     if any(boost in pattern for boost in detection.get('confidence_boost', [])):
@@ -297,18 +480,22 @@ class CookieScanner:
             # Calculate confidence
             if matches > 0:
                 # Base confidence on number of matches
-                conf = min(0.5 + (matches * 0.2), 1.0)
+                conf = min(0.5 + (matches * 0.15), 1.0)
                 
                 # Boost confidence for multiple matches
-                if matches >= 3:
-                    conf = 0.95
+                if matches >= 4:
+                    conf = 0.98
+                elif matches >= 3:
+                    conf = 0.90
                 elif matches == 2:
-                    conf = 0.8
+                    conf = 0.75
                 elif matches == 1:
-                    conf = 0.6
+                    conf = 0.60
                 
                 detected_services.add(service_key)
                 confidence[service_key] = conf
+                
+                logger.info(f"Detected {service_key} with {matches} matches (confidence: {conf:.2f})")
         
         return {
             'services': detected_services,

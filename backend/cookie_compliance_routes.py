@@ -151,13 +151,13 @@ async def log_consent(
         # Get user agent
         user_agent = consent.user_agent or request.headers.get("User-Agent", "")[:500]
         
-        # Get banner revision
-        revision_query = """
-            SELECT revision FROM cookie_banner_configs 
+        # Get banner config ID (instead of revision)
+        config_query = """
+            SELECT id FROM cookie_banner_configs 
             WHERE site_id = $1
         """
-        revision_row = await db_pool.fetchrow(revision_query, consent.site_id)
-        revision_id = revision_row['revision'] if revision_row else 1
+        config_row = await db_pool.fetchrow(config_query, consent.site_id)
+        revision_id = config_row['id'] if config_row else 1
         
         # Insert consent log
         insert_query = """
@@ -257,7 +257,7 @@ async def get_banner_config(
                 texts, services, show_on_pages, geo_restriction,
                 auto_block_scripts, respect_dnt, cookie_lifetime_days,
                 show_branding, custom_logo_url,
-                revision, is_active, created_at, updated_at
+                is_active, created_at, updated_at
             FROM cookie_banner_configs
             WHERE site_id = $1 AND is_active = true
         """
@@ -314,8 +314,18 @@ async def get_banner_config(
                 "message": "Default configuration (not yet customized)"
             }
         
-        # Convert row to dict
+        # Convert row to dict and parse JSON fields
         config = dict(row)
+        
+        # Parse JSONB fields if they are strings
+        if isinstance(config.get('texts'), str):
+            config['texts'] = json.loads(config['texts'])
+        if isinstance(config.get('services'), str):
+            config['services'] = json.loads(config['services'])
+        if isinstance(config.get('show_on_pages'), str):
+            config['show_on_pages'] = json.loads(config['show_on_pages'])
+        if isinstance(config.get('geo_restriction'), str):
+            config['geo_restriction'] = json.loads(config['geo_restriction'])
         
         return {
             "success": True,
@@ -358,7 +368,7 @@ async def create_or_update_config(
                     cookie_lifetime_days = $16, show_branding = $17,
                     custom_logo_url = $18, updated_at = NOW()
                 WHERE site_id = $1
-                RETURNING id, revision
+                RETURNING id
             """
             
             result = await db_pool.fetchrow(
@@ -400,7 +410,7 @@ async def create_or_update_config(
                     show_branding, custom_logo_url
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-                RETURNING id, revision
+                RETURNING id
             """
             
             result = await db_pool.fetchrow(
@@ -470,7 +480,7 @@ async def update_config_partial(
                 {', '.join(update_fields)},
                 updated_at = NOW()
             WHERE site_id = $1
-            RETURNING id, revision
+            RETURNING id
         """
         
         result = await db_pool.fetchrow(update_query, *values)
@@ -825,6 +835,79 @@ async def scan_website(
     except Exception as e:
         print(f"Error scanning website: {e}")
         raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
+
+@router.get("/api/cookie-compliance/blocking-config/{site_id}")
+async def get_blocking_config(
+    site_id: str,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Get blocking configuration for auto-blocking script
+    Returns all services with their blocking patterns
+    """
+    try:
+        # Get banner config to know which services are active
+        config_query = """
+            SELECT services, auto_block_scripts
+            FROM cookie_banner_configs
+            WHERE site_id = $1 AND is_active = true
+        """
+        config = await db_pool.fetchrow(config_query, site_id)
+        
+        if not config:
+            # Return empty config if not set up yet
+            return {
+                "success": True,
+                "site_id": site_id,
+                "auto_block": False,
+                "services": []
+            }
+        
+        selected_services = config['services'] if config['services'] else []
+        auto_block = config['auto_block_scripts'] if config['auto_block_scripts'] is not None else True
+        
+        # Get service details with blocking info
+        if selected_services and len(selected_services) > 0:
+            services_query = """
+                SELECT 
+                    service_key,
+                    name,
+                    category,
+                    script_patterns,
+                    iframe_patterns,
+                    cookie_names,
+                    local_storage_keys,
+                    block_method
+                FROM cookie_services
+                WHERE service_key = ANY($1::text[]) AND is_active = true
+            """
+            rows = await db_pool.fetch(services_query, selected_services)
+        else:
+            rows = []
+        
+        services_data = []
+        for row in rows:
+            services_data.append({
+                'service_key': row['service_key'],
+                'name': row['name'],
+                'category': row['category'],
+                'script_patterns': row['script_patterns'] or [],
+                'iframe_patterns': row['iframe_patterns'] or [],
+                'cookie_names': row['cookie_names'] or [],
+                'local_storage_keys': row['local_storage_keys'] or [],
+                'block_method': row['block_method'] or 'script_rewrite'
+            })
+        
+        return {
+            "success": True,
+            "site_id": site_id,
+            "auto_block": auto_block,
+            "services": services_data
+        }
+        
+    except Exception as e:
+        print(f"Error getting blocking config: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get blocking configuration: {str(e)}")
 
 @router.get("/api/cookie-compliance/health")
 async def health_check(db_pool: asyncpg.Pool = Depends(get_db_connection)):

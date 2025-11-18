@@ -9,6 +9,7 @@ import { ConfirmFixModal } from './ConfirmFixModal';
 import { FixModal } from './FixModal';
 import { useToast } from '@/components/ui/Toast';
 import { AIFixPreview, AIFixPreviewMini } from '@/components/ai/AIFixPreview';
+import { AIFixDisplay } from '@/components/ai/AIFixDisplay'; // NEW: Enhanced Fix Display
 import { useCreateFixJob } from '@/hooks/useCompliance';
 
 const extractDomain = (url: string): string => {
@@ -86,6 +87,12 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showAIPreview, setShowAIPreview] = useState(false);
   
+  // 💬 Chat-State für KI-Rückfragen
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Array<{ role: string; content: string }>>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  
   const domain = websiteUrl ? extractDomain(websiteUrl) : undefined;
 
   // Severity-basierte Farben
@@ -108,6 +115,9 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   };
 
   const handleCopyCode = async (code: string) => {
+    // ✅ SSR-Check
+    if (typeof navigator === 'undefined') return;
+    
     try {
       await navigator.clipboard.writeText(code);
       setCopiedCode(true);
@@ -115,6 +125,55 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       showToast('Code kopiert!', 'success');
     } catch {
       showToast('Kopieren fehlgeschlagen', 'error');
+    }
+  };
+
+  // 💬 Chat-Funktion für KI-Rückfragen
+  const handleSendChatMessage = async () => {
+    if (!chatInput.trim() || isChatLoading) return;
+    
+    const userMessage = chatInput.trim();
+    setChatInput('');
+    setIsChatLoading(true);
+    
+    // Füge User-Message zum Chat hinzu
+    const newMessages = [...chatMessages, { role: 'user', content: userMessage }];
+    setChatMessages(newMessages);
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('https://api.complyo.tech/api/chat/issue-solution', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          website_url: websiteUrl || 'unknown',
+          issue_title: issue.title,
+          issue_description: issue.description,
+          ai_solution: (issue as any).ai_solution || null,
+          user_question: userMessage,
+          chat_history: chatMessages
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Chat-Anfrage fehlgeschlagen');
+      }
+      
+      const data = await response.json();
+      
+      // Füge AI-Response zum Chat hinzu
+      setChatMessages([...newMessages, { role: 'assistant', content: data.response }]);
+      showToast('Antwort erhalten!', 'success');
+    } catch (error) {
+      console.error('Chat-Fehler:', error);
+      showToast('Fehler beim Chat. Bitte versuchen Sie es erneut.', 'error');
+      // Entferne letzte User-Message bei Fehler
+      setChatMessages(chatMessages);
+    } finally {
+      setIsChatLoading(false);
     }
   };
 
@@ -173,16 +232,19 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         const data = await response.json();
         
         // Auto-Download
-        const filename = textType === 'imprint' ? 'impressum.html' : 'datenschutzerklaerung.html';
-        const blob = new Blob([data.html], { type: 'text/html;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        // ✅ SSR-Check
+        if (typeof document !== 'undefined') {
+          const filename = textType === 'imprint' ? 'impressum.html' : 'datenschutzerklaerung.html';
+          const blob = new Blob([data.html], { type: 'text/html;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }
 
         showToast('✅ Rechtstext wurde generiert und heruntergeladen!', 'success', 5000);
         
@@ -211,7 +273,10 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         console.log('✅ Fix-Job erstellt:', jobData);
         
         // Scroll to top to show the active jobs panel
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        // ✅ SSR-Check
+        if (typeof window !== 'undefined') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
         
         showToast(
           '🤖 KI-Fix wird im Hintergrund generiert! Sie können die Seite refreshen, der Fix läuft weiter.',
@@ -349,10 +414,105 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       {/* Beschreibung */}
       <p className="text-gray-700 mb-4 leading-relaxed">{issue.description}</p>
 
+      {/* ✅ KI-Lösung - Individuell generiert (wenn vorhanden) */}
+      {(issue as any).ai_solution && (
+        <>
+          <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-5 border-2 border-blue-200 mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-2xl">🤖</span>
+              <h4 className="font-bold text-gray-800">KI-Analyse & Lösung</h4>
+              <span className="ml-auto px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded-full">
+                Individuell für Ihre Website
+              </span>
+            </div>
+            
+            <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-4 border border-blue-100">
+              {(issue as any).ai_solution}
+            </div>
+          </div>
+          
+          {/* 💬 KI-Chat für Rückfragen */}
+          <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-lg p-4 border-2 border-purple-200 mb-4">
+            <button
+              onClick={() => setShowChat(!showChat)}
+              className="flex items-center gap-2 w-full text-left font-semibold text-gray-800 hover:text-purple-600 transition-colors"
+            >
+              <span className="text-xl">💬</span>
+              <span>Fragen Sie die KI zur Umsetzung</span>
+              <span className="ml-auto text-xs bg-purple-600 text-white px-2 py-1 rounded-full">
+                {showChat ? 'Schließen' : 'Öffnen'}
+              </span>
+            </button>
+            
+            {showChat && (
+              <div className="mt-4">
+                {/* Chat-Messages */}
+                {chatMessages.length > 0 && (
+                  <div className="space-y-3 mb-4 max-h-96 overflow-y-auto bg-white rounded-lg p-3 border border-purple-100">
+                    {chatMessages.map((msg, idx) => (
+                      <div
+                        key={idx}
+                        className={`${
+                          msg.role === 'user' 
+                            ? 'bg-blue-100 ml-8 text-right' 
+                            : 'bg-gray-100 mr-8 text-left'
+                        } rounded-lg p-3`}
+                      >
+                        <div className="text-xs font-semibold mb-1 text-gray-600">
+                          {msg.role === 'user' ? '👤 Sie' : '🤖 KI-Assistent'}
+                        </div>
+                        <div className="text-sm text-gray-800 whitespace-pre-wrap">
+                          {msg.content}
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {isChatLoading && (
+                      <div className="bg-gray-100 mr-8 rounded-lg p-3 animate-pulse">
+                        <div className="text-xs font-semibold mb-1 text-gray-600">
+                          🤖 KI-Assistent
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Tippt...
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Chat-Input */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSendChatMessage()}
+                    placeholder="z.B. 'Wie implementiere ich das in React?'"
+                    className="flex-1 px-4 py-2 border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    disabled={isChatLoading}
+                  />
+                  <button
+                    onClick={handleSendChatMessage}
+                    disabled={!chatInput.trim() || isChatLoading}
+                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors"
+                  >
+                    {isChatLoading ? '...' : 'Senden'}
+                  </button>
+                </div>
+                
+                <p className="text-xs text-gray-500 mt-2">
+                  💡 Stellen Sie spezifische Fragen zur Umsetzung, Code-Beispielen oder Ihrem Tech-Stack
+                </p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* Lösung - IMMER SICHTBAR */}
       {issue.solution && (
         <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
-          <h4 className="font-semibold text-gray-800 mb-3">📝 Manuelle Lösung:</h4>
+          <h4 className="font-semibold text-gray-800 mb-3">📝 Manuelle Umsetzungsschritte:</h4>
           
           {/* Steps */}
           {issue.solution.steps && issue.solution.steps.length > 0 && (

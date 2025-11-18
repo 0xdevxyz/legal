@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, TrendingUp, Bot, Globe, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDashboardStore } from '@/stores/dashboard';
-import { analyzeWebsite } from '@/lib/api';
+import { analyzeWebsite, getTrackedWebsites } from '@/lib/api';
 
 interface DomainHeroSectionProps {
   onAnalyze?: (url: string) => void;
@@ -27,9 +27,87 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
 
   const score = currentWebsite?.complianceScore ?? metrics.totalScore ?? 0;
 
-  const handleAnalyze = async () => {
-    const trimmedUrl = url.trim();
-    if (!trimmedUrl) {
+  // ✅ AUTO-TRIGGER SCAN bei URL-Parametern (von Legal Updates)
+  useEffect(() => {
+    const checkAutoTrigger = () => {
+      // ✅ SSR-Check
+      if (typeof window === 'undefined' || typeof document === 'undefined') return;
+      
+      const params = new URLSearchParams(window.location.search);
+      const triggerScan = params.get('trigger_scan');
+      const legalUpdateId = params.get('legal_update_id');
+      const legalContext = params.get('legal_context');
+      const focus = params.get('focus');
+      
+      if (triggerScan === 'true') {
+        console.log('🔍 Auto-Trigger Scan von Legal Update:', {
+          legalUpdateId,
+          legalContext,
+          focus
+        });
+        
+        // Zeige Hinweis
+        const contextMsg = legalContext ? `\n\nWegen Gesetzesänderung: "${decodeURIComponent(legalContext)}"` : '';
+        const focusMsg = focus ? `\n\nFokus: ${focus}` : '';
+        
+        alert(`🔍 Website-Scan wird vorbereitet...${contextMsg}${focusMsg}\n\nBitte geben Sie Ihre Website-URL ein und starten Sie den Scan.`);
+        
+        // URL-Parameter entfernen (damit nicht bei jedem Reload getriggert wird)
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        // Scroll zur URL-Eingabe
+        const urlInput = document.querySelector('input[type="text"]') as HTMLInputElement;
+        if (urlInput) {
+          urlInput.focus();
+          urlInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    };
+    
+    checkAutoTrigger();
+  }, []);
+
+  // ✅ Load saved website on mount (nur wenn noch keine Website im Store ist)
+  useEffect(() => {
+    const loadSavedWebsite = async () => {
+      // ✅ Nur laden wenn noch keine Website im Store ist
+      if (currentWebsite?.url) {
+        console.log('✅ Website bereits im Store geladen:', currentWebsite.url);
+        return;
+      }
+      
+      try {
+        const websites = await getTrackedWebsites();
+        if (websites && websites.length > 0) {
+          const latestWebsite = websites[0]; // Get most recent website
+          console.log('✅ Lade gespeicherte Website:', latestWebsite.url);
+          setCurrentWebsite({
+            id: String(latestWebsite.id),
+            url: latestWebsite.url,
+            name: latestWebsite.url,
+            lastScan: latestWebsite.last_scan || new Date().toISOString(),
+            complianceScore: latestWebsite.compliance_score || 0,
+            status: 'completed' as const
+          });
+          updateMetrics({
+            totalScore: latestWebsite.compliance_score || 0,
+            websites: websites.length
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load saved website:', error);
+        // Silent fail - user can still scan new websites
+      }
+    };
+    
+    loadSavedWebsite();
+  }, [currentWebsite?.url, setCurrentWebsite, updateMetrics]);
+
+  const handleAnalyze = async (forceUrl?: string) => {
+    // ✅ FIX: Nutze entweder übergebene URL, url State, oder currentWebsite.url
+    const urlToUse = forceUrl || url.trim() || currentWebsite?.url;
+    
+    if (!urlToUse) {
       setError('Bitte geben Sie eine Domain ein');
       return;
     }
@@ -40,7 +118,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
 
     try {
       // Normalize URL
-      let normalizedUrl = trimmedUrl;
+      let normalizedUrl = urlToUse;
       if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
         normalizedUrl = 'https://' + normalizedUrl;
       }
@@ -257,11 +335,12 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={handleAnalyze}
-                      className="text-zinc-300 hover:text-white hover:bg-white/5 rounded-xl"
+                      onClick={() => handleAnalyze(currentWebsite?.url)}
+                      disabled={isAnalyzing || !currentWebsite?.url}
+                      className="text-zinc-300 hover:text-white hover:bg-white/5 rounded-xl disabled:opacity-50"
                     >
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Erneut scannen
+                      <RefreshCw className={`w-4 h-4 mr-2 ${isAnalyzing ? 'animate-spin' : ''}`} />
+                      {isAnalyzing ? 'Scanne...' : 'Erneut scannen'}
                     </Button>
                   </div>
                 </div>
