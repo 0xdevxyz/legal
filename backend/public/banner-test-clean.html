@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cookie-Banner Test - Sauber</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            background: white;
+            border-radius: 16px;
+            padding: 60px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        
+        h1 {
+            color: #667eea;
+            font-size: 42px;
+            margin-bottom: 20px;
+        }
+        
+        p {
+            color: #666;
+            font-size: 18px;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
+        .debug {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            font-size: 14px;
+            z-index: 9999999;
+        }
+        
+        .debug strong {
+            color: #667eea;
+        }
+        
+        .instructions {
+            background: #f0f9ff;
+            border-left: 4px solid #0284c7;
+            padding: 20px;
+            margin: 30px 0;
+            border-radius: 8px;
+            text-align: left;
+        }
+        
+        .instructions h3 {
+            color: #0284c7;
+            margin-bottom: 10px;
+        }
+        
+        .instructions ol {
+            margin-left: 20px;
+            color: #555;
+        }
+        
+        .instructions li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="debug" id="debug">
+        <strong>🔍 Status:</strong> <span id="status">Banner lädt...</span>
+    </div>
+    
+    <div class="container">
+        <h1>🍪 Cookie-Banner Test</h1>
+        
+        <p>
+            Diese Seite zeigt das neue Cookie-Banner mit<br>
+            <strong>Service-basierter Auswahl</strong> wie bei Cookiebot.
+        </p>
+        
+        <div class="instructions">
+            <h3>📍 So sehen Sie die Service-Liste:</h3>
+            <ol>
+                <li>Klicken Sie unten auf <strong>"Banner anzeigen"</strong></li>
+                <li>Im Banner: Klicken Sie auf <strong>"Individuelle Einstellungen"</strong></li>
+                <li><strong>Jetzt sehen Sie:</strong>
+                    <ul>
+                        <li>✅ Kategorien (z.B. "Statistiken 5")</li>
+                        <li>✅ Service-Listen unter jeder Kategorie</li>
+                        <li>✅ Toggle für jeden einzelnen Service</li>
+                        <li>✅ Cookie-Anzahl pro Service</li>
+                        <li>✅ "Erfahren Sie mehr"-Links</li>
+                    </ul>
+                </li>
+            </ol>
+        </div>
+        
+        <button onclick="showBanner()">🍪 Banner anzeigen</button>
+        <button onclick="clearAndReload()">🗑️ Cookies löschen</button>
+    </div>
+    
+    <!-- Complyo Cookie Banner -->
+    <script src="https://api.complyo.tech/public/cookie-blocker.js?v=2" data-site-id="test-site"></script>
+    <script src="https://api.complyo.tech/api/widgets/cookie-compliance.js?v=2" data-site-id="test-site"></script>
+    
+    <script>
+        function updateStatus(msg) {
+            document.getElementById('status').innerHTML = msg;
+        }
+        
+        // Check if banner loaded
+        let checks = 0;
+        const interval = setInterval(() => {
+            checks++;
+            if (window.complyoCookieBanner) {
+                updateStatus('✅ Banner geladen!');
+                clearInterval(interval);
+            } else if (checks > 20) {
+                updateStatus('❌ Fehler beim Laden');
+                clearInterval(interval);
+            } else {
+                updateStatus(`⏳ Lädt... (${checks}/20)`);
+            }
+        }, 200);
+        
+        function showBanner() {
+            if (window.complyoCookieBanner) {
+                updateStatus('🍪 Banner wird angezeigt');
+                window.complyoCookieBanner.showBanner();
+            } else {
+                alert('Banner noch nicht geladen. Bitte warten...');
+            }
+        }
+        
+        function clearAndReload() {
+            if (confirm('Alle Cookies löschen und neu laden?')) {
+                localStorage.clear();
+                document.cookie.split(";").forEach(c => {
+                    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+                });
+                location.reload();
+            }
+        }
+    </script>
+</body>
+</html>
+

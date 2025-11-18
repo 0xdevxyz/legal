@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cookie-Banner Test - Service-Auswahl (Production)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            position: relative;
+            /* WICHTIG: Damit das Banner richtig positioniert wird */
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 1;
+        }
+        h1 { color: #667eea; margin-top: 0; }
+        .info-box {
+            background: #f0f9ff;
+            border-left: 4px solid #0284c7;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 10px 10px 10px 0;
+        }
+        button:hover { background: #764ba2; }
+        .highlight {
+            background: #fef3c7;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #f59e0b;
+            margin: 20px 0;
+        }
+        code {
+            background: #1f2937;
+            color: #10b981;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .debug-info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            font-size: 12px;
+            z-index: 9999999;
+        }
+    </style>
+</head>
+<body>
+    <div class="debug-info" id="debug-info">
+        <strong>🔍 Debug Info:</strong><br>
+        <span id="banner-status">Banner: Lädt...</span>
+    </div>
+    
+    <div class="container">
+        <h1>🍪 Cookie-Banner Test</h1>
+        
+        <div class="info-box">
+            <h3 style="margin-top: 0;">✅ Neues Feature: Service-basierte Auswahl!</h3>
+            <p><strong>Was Sie sehen werden:</strong></p>
+            <ul>
+                <li>✅ Kategorien mit Service-Zählern (z.B. "Statistiken 5")</li>
+                <li>✅ Einzelne Services unter jeder Kategorie</li>
+                <li>✅ Toggle-Schalter für jeden Service</li>
+                <li>✅ Cookie-Anzahl-Badges</li>
+                <li>✅ "Erfahren Sie mehr"-Links</li>
+            </ul>
+        </div>
+        
+        <div class="highlight">
+            <h3 style="margin-top: 0;">📍 So testen Sie das neue Feature:</h3>
+            <ol style="margin: 15px 0;">
+                <li><strong>Klicken Sie unten auf "Cookie-Banner anzeigen"</strong></li>
+                <li>Im Banner: Klick auf <code>"Individuelle Einstellungen"</code></li>
+                <li><strong>Jetzt sehen Sie die Service-Listen!</strong>
+                    <ul>
+                        <li>Jede Kategorie zeigt die Anzahl (z.B. "Statistiken 5")</li>
+                        <li>Darunter: Alle Services mit Toggles</li>
+                        <li>Service-Name, Cookie-Anzahl, Beschreibung</li>
+                        <li>"Erfahren Sie mehr"-Links</li>
+                    </ul>
+                </li>
+            </ol>
+        </div>
+        
+        <div style="margin: 30px 0;">
+            <button onclick="showBanner()" style="font-size: 18px; padding: 16px 32px;">
+                🍪 Cookie-Banner anzeigen
+            </button>
+            <button onclick="clearAndReload()">
+                🗑️ Cookies löschen & neu laden
+            </button>
+        </div>
+        
+        <div style="margin-top: 40px; padding: 20px; background: #ecfdf5; border-radius: 8px;">
+            <h3 style="margin-top: 0; color: #059669;">💡 Beispiel: Statistiken-Kategorie</h3>
+            <pre style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #d1fae5;">┌─ Statistiken 5 ────────────── [ON] ─┐
+│                                        │
+│  ☑ Google Analytics 4    (6) [ON]    │
+│    Website-Analyse und...             │
+│    Erfahren Sie mehr ↗                │
+│                                        │
+│  ☑ Hotjar                (7) [ON]     │
+│    Heatmaps, Session-Recordings       │
+│    Erfahren Sie mehr ↗                │
+│                                        │
+│  ...                                   │
+└────────────────────────────────────────┘</pre>
+        </div>
+    </div>
+    
+    <!-- Complyo Cookie Banner -->
+    <script src="https://api.complyo.tech/public/cookie-blocker.js?v=2" data-site-id="test-site"></script>
+    <script src="https://api.complyo.tech/api/widgets/cookie-compliance.js?v=2" data-site-id="test-site"></script>
+    
+    <script>
+        // Debug-Status aktualisieren
+        function updateDebugStatus(msg) {
+            const status = document.getElementById('banner-status');
+            if (status) {
+                status.innerHTML = msg;
+            }
+            console.log('[DEBUG]', msg);
+        }
+        
+        // Warte auf Banner-Load
+        let checkCount = 0;
+        const checkBanner = setInterval(() => {
+            checkCount++;
+            if (window.complyoCookieBanner) {
+                updateDebugStatus('✅ Banner geladen!');
+                clearInterval(checkBanner);
+            } else if (checkCount > 20) {
+                updateDebugStatus('❌ Banner konnte nicht geladen werden');
+                clearInterval(checkBanner);
+            } else {
+                updateDebugStatus(`⏳ Lädt... (${checkCount}/20)`);
+            }
+        }, 200);
+        
+        function showBanner() {
+            if (window.complyoCookieBanner) {
+                updateDebugStatus('🍪 Banner wird angezeigt');
+                window.complyoCookieBanner.showBanner();
+            } else {
+                updateDebugStatus('⚠️ Banner nicht geladen - versuche erneut...');
+                setTimeout(showBanner, 500);
+            }
+        }
+        
+        function clearAndReload() {
+            if (confirm('Alle Cookies löschen und Seite neu laden?')) {
+                localStorage.clear();
+                document.cookie.split(";").forEach(function(c) { 
+                    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+                });
+                location.reload();
+            }
+        }
+        
+        // Auto-show nach 2 Sekunden wenn kein Consent
+        setTimeout(() => {
+            const consent = localStorage.getItem('complyo_cookie_consent');
+            if (!consent && window.complyoCookieBanner) {
+                updateDebugStatus('🍪 Kein Consent - zeige Banner automatisch');
+                // Banner sollte automatisch erscheinen
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

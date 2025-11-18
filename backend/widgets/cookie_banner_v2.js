@@ -51,28 +51,32 @@
         // Services
         services: [],
         
-        // Texts (default German)
+        // Texts (default German) - synchronisiert mit Dashboard
         texts: {
-            title: 'Privatsphäre-Einstellungen',
-            description: 'Wir verwenden Cookies und ähnliche Technologien auf unserer Website und verarbeiten personenbezogene Daten von dir (z.B. IP-Adresse), um z.B. Inhalte und Anzeigen zu personalisieren, Medien von Drittanbietern einzubinden oder Zugriffe auf unsere Website zu analysieren. Die Datenverarbeitung kann auch erst in Folge gesetzter Cookies stattfinden. Wir teilen diese Daten mit Dritten, die wir in den Privatsphäre-Einstellungen benennen.',
-            description2: 'Die Datenverarbeitung kann mit deiner Einwilligung oder auf Basis eines berechtigten Interesses erfolgen, dem du in den Privatsphäre-Einstellungen widersprechen kannst. Du hast das Recht, nicht einzuwilligen und deine Einwilligung zu einem späteren Zeitpunkt zu ändern oder zu widerrufen. Weitere Informationen zur Verwendung deiner Daten findest du in unserer <a href="/datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a>.',
-            ageNotice: 'Du bist unter 16 Jahre alt? Dann kannst du nicht in optionale Services einwilligen. Du kannst deine Eltern oder Erziehungsberechtigten bitten, mit dir in diese Services einzuwilligen.',
+            title: '🍪 Wir respektieren Ihre Privatsphäre',
+            description: 'Wir verwenden Cookies und ähnliche Technologien, um Inhalte zu personalisieren und die Nutzung unserer Website zu analysieren. Einige davon sind essentiell, während andere uns helfen, die Website zu verbessern.',
+            description2: '',
+            ageNotice: '',
             acceptAll: 'Alle akzeptieren',
-            continueWithout: 'Weiter ohne Einwilligung',
-            settingsLink: 'Privatsphäre-Einstellungen individuell festlegen',
+            continueWithout: 'Nur notwendige',
+            settingsLink: 'Individuelle Einstellungen',
             acceptSelected: 'Auswahl speichern',
             settings: 'Einstellungen',
             privacyPolicy: 'Datenschutzerklärung',
-            cookiePolicy: 'Cookie-Richtlinie',
+            cookiePolicy: 'Über Cookies',
             imprint: 'Impressum',
             necessary: 'Notwendig',
-            functional: 'Funktional',
-            analytics: 'Statistik',
+            functional: 'Präferenzen',
+            analytics: 'Statistiken',
             marketing: 'Marketing',
-            necessaryDesc: 'Notwendige Cookies ermöglichen grundlegende Funktionen und sind für die einwandfreie Funktion der Website erforderlich.',
-            functionalDesc: 'Funktionale Cookies ermöglichen erweiterte Funktionen wie Live-Chat oder personalisierte Inhalte.',
-            analyticsDesc: 'Statistik-Cookies helfen uns zu verstehen, wie Besucher mit unserer Website interagieren.',
-            marketingDesc: 'Marketing-Cookies werden von Drittanbietern verwendet, um personalisierte Werbung anzuzeigen.'
+            necessaryDesc: 'Notwendige Cookies helfen dabei, eine Webseite nutzbar zu machen, indem sie Grundfunktionen wie Seitennavigation und Zugriff auf sichere Bereiche der Webseite ermöglichen. Die Webseite kann ohne diese Cookies nicht richtig funktionieren.',
+            functionalDesc: 'Präferenz-Cookies ermöglichen einer Webseite sich an Informationen zu erinnern, die die Art beeinflussen, wie sich eine Webseite verhält oder aussieht, wie z.B. Ihre bevorzugte Sprache oder die Region in der Sie sich befinden.',
+            analyticsDesc: 'Statistik-Cookies helfen Webseiten-Besitzern zu verstehen, wie Besucher mit Webseiten interagieren, indem Informationen anonym gesammelt und gemeldet werden.',
+            marketingDesc: 'Marketing-Cookies werden verwendet, um Besuchern auf Webseiten zu folgen. Die Absicht ist, Anzeigen zu zeigen, die relevant und ansprechend für den einzelnen Benutzer sind und daher wertvoller für Publisher und werbetreibende Drittparteien sind.',
+            serviceCount: 'Service',
+            learnMore: 'Erfahren Sie mehr über diesen Anbieter',
+            expand: 'Details anzeigen',
+            collapse: 'Details ausblenden'
         }
     };
     
@@ -88,6 +92,8 @@
             this.visitorId = this.getOrCreateVisitorId();
             this.modalOpen = false;
             this.settingsOpen = false;
+            this.serviceDetails = {}; // Store service information
+            this.selectedServices = {}; // Track individual service selections
             
             // Initialize
             this.init();
@@ -158,8 +164,32 @@
                         this.applyServerConfig(data.data);
                     }
                 }
+                
+                // Load detailed service information
+                await this.loadServiceDetails();
             } catch (error) {
                 console.warn('[Complyo] Could not load server config:', error);
+            }
+        }
+        
+        async loadServiceDetails() {
+            try {
+                // Get all available services
+                const servicesResponse = await fetch(`${API_BASE}/api/cookie-compliance/services`);
+                if (servicesResponse.ok) {
+                    const servicesData = await servicesResponse.json();
+                    if (servicesData.success && servicesData.services) {
+                        // Group services by category
+                        servicesData.services.forEach(service => {
+                            if (!this.serviceDetails[service.category]) {
+                                this.serviceDetails[service.category] = [];
+                            }
+                            this.serviceDetails[service.category].push(service);
+                        });
+                    }
+                }
+            } catch (error) {
+                console.warn('[Complyo] Could not load service details:', error);
             }
         }
         
@@ -318,16 +348,28 @@
             this.injectStyles();
             
             // Create banner element
-            const banner = this.createBanner();
-            document.body.appendChild(banner);
+            const container = this.createBanner();
+            document.body.appendChild(container);
             
             // Animate in
             requestAnimationFrame(() => {
-                banner.classList.add('complyo-show');
+                // Animate backdrop if exists
+                const backdrop = container.querySelector('.complyo-backdrop');
+                if (backdrop) {
+                    backdrop.classList.add('complyo-show');
+                }
+                
+                // Animate banner
+                const banner = container.querySelector('.complyo-box-layout, .complyo-banner-layout');
+                if (banner) {
+                    banner.classList.add('complyo-show');
+                }
+                
+                container.classList.add('complyo-show');
             });
             
             // Bind events
-            this.bindEvents(banner);
+            this.bindEvents(container);
         }
         
         injectStyles() {
@@ -347,28 +389,22 @@
             return `
                 /* Complyo Cookie Banner Styles v${VERSION} - Modern Edition */
                 .complyo-cookie-banner {
-                    position: fixed;
-                    z-index: 999999;
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
                     font-size: 14px;
                     line-height: 1.6;
                     box-sizing: border-box;
-                    opacity: 0;
-                    transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
                 }
                 
                 .complyo-cookie-banner * {
                     box-sizing: border-box;
                 }
                 
-                .complyo-cookie-banner.complyo-show {
-                    opacity: 1;
-                }
-                
                 /* Banner Layout (Bottom/Top) - Modern Glassmorphism */
                 .complyo-banner-layout {
+                    position: fixed;
                     left: 0;
                     right: 0;
+                    z-index: 999999;
                     background: linear-gradient(135deg, ${bgColor}f5 0%, ${bgColor}fa 100%);
                     backdrop-filter: blur(20px) saturate(180%);
                     -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -376,6 +412,8 @@
                     padding: 28px;
                     box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.12), 0 -2px 8px rgba(0, 0, 0, 0.08);
                     border-top: 1px solid rgba(255, 255, 255, 0.2);
+                    opacity: 0;
+                    transition: opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
                 }
                 
                 .complyo-banner-layout.complyo-position-bottom {
@@ -384,6 +422,7 @@
                 }
                 
                 .complyo-banner-layout.complyo-position-bottom.complyo-show {
+                    opacity: 1;
                     transform: translateY(0);
                     animation: slideUpFade 0.5s cubic-bezier(0.4, 0, 0.2, 1);
                 }
@@ -396,6 +435,7 @@
                 }
                 
                 .complyo-banner-layout.complyo-position-top.complyo-show {
+                    opacity: 1;
                     transform: translateY(0);
                     animation: slideDownFade 0.5s cubic-bezier(0.4, 0, 0.2, 1);
                 }
@@ -424,6 +464,7 @@
                 
                 /* Box/Modal Layout - Clean & Professional */
                 .complyo-box-layout {
+                    position: fixed;
                     top: 50%;
                     left: 50%;
                     transform: translate(-50%, -50%) scale(0.95);
@@ -436,9 +477,13 @@
                     max-height: 88vh;
                     overflow-y: auto;
                     box-shadow: 0 24px 72px rgba(0, 0, 0, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1);
+                    z-index: 1000000;
+                    opacity: 0;
+                    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
                 }
                 
                 .complyo-box-layout.complyo-show {
+                    opacity: 1;
                     transform: translate(-50%, -50%) scale(1);
                 }
                 
@@ -670,15 +715,101 @@
                     margin-bottom: 8px;
                 }
                 
+                .complyo-category-info {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+                
                 .complyo-category-name {
                     font-weight: 600;
                     font-size: 16px;
                 }
                 
+                .complyo-service-count {
+                    display: inline-block;
+                    background: ${primaryColor};
+                    color: white;
+                    font-size: 11px;
+                    font-weight: 600;
+                    padding: 2px 8px;
+                    border-radius: 12px;
+                    min-width: 20px;
+                    text-align: center;
+                }
+                
                 .complyo-category-desc {
                     font-size: 13px;
                     opacity: 0.8;
-                    margin: 0;
+                    margin: 0 0 12px 0;
+                    line-height: 1.5;
+                }
+                
+                /* Services List */
+                .complyo-services-list {
+                    margin-top: 12px;
+                    padding-left: 0;
+                    border-left: 2px solid rgba(0, 0, 0, 0.08);
+                    margin-left: 8px;
+                }
+                
+                .complyo-service-item {
+                    padding: 12px 16px;
+                    margin-bottom: 8px;
+                    background: white;
+                    border-radius: 6px;
+                    border: 1px solid rgba(0, 0, 0, 0.06);
+                }
+                
+                .complyo-service-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 6px;
+                }
+                
+                .complyo-service-info {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex: 1;
+                }
+                
+                .complyo-service-name {
+                    font-weight: 500;
+                    font-size: 14px;
+                    color: ${textColor};
+                }
+                
+                .complyo-cookie-count {
+                    display: inline-block;
+                    background: rgba(0, 0, 0, 0.06);
+                    color: ${textColor};
+                    font-size: 10px;
+                    font-weight: 600;
+                    padding: 2px 6px;
+                    border-radius: 10px;
+                    opacity: 0.7;
+                }
+                
+                .complyo-service-desc {
+                    font-size: 12px;
+                    opacity: 0.7;
+                    margin: 4px 0;
+                    line-height: 1.4;
+                }
+                
+                .complyo-service-link {
+                    font-size: 11px;
+                    color: ${primaryColor};
+                    text-decoration: none;
+                    font-weight: 500;
+                    display: inline-block;
+                    margin-top: 4px;
+                }
+                
+                .complyo-service-link:hover {
+                    text-decoration: underline;
                 }
                 
                 /* Toggle Switch */
@@ -687,6 +818,26 @@
                     display: inline-block;
                     width: 48px;
                     height: 24px;
+                }
+                
+                .complyo-toggle-small {
+                    width: 40px;
+                    height: 20px;
+                }
+                
+                .complyo-toggle-small .complyo-toggle-slider {
+                    height: 20px;
+                }
+                
+                .complyo-toggle-small .complyo-toggle-slider:before {
+                    height: 14px;
+                    width: 14px;
+                    left: 3px;
+                    bottom: 3px;
+                }
+                
+                .complyo-toggle-small input:checked + .complyo-toggle-slider:before {
+                    transform: translateX(20px);
                 }
                 
                 .complyo-toggle input {
@@ -1043,6 +1194,78 @@
             modal.setAttribute('aria-labelledby', 'complyo-settings-title');
             modal.setAttribute('aria-modal', 'true');
             
+            // Build categories HTML with services
+            let categoriesHTML = '';
+            
+            // Helper to build category section
+            const buildCategory = (categoryKey, categoryName, description, disabled = false) => {
+                const services = this.serviceDetails[categoryKey] || [];
+                const serviceCount = services.length;
+                
+                // Filter services to only show those configured for this site
+                const configuredServices = this.config.services || [];
+                const visibleServices = services.filter(s => configuredServices.includes(s.service_key));
+                
+                return `
+                    <div class="complyo-category" data-category="${categoryKey}">
+                        <div class="complyo-category-header">
+                            <div class="complyo-category-info">
+                                <span class="complyo-category-name">${categoryName}</span>
+                                ${serviceCount > 0 ? `<span class="complyo-service-count">${serviceCount}</span>` : ''}
+                            </div>
+                            <label class="complyo-toggle">
+                                <input type="checkbox" 
+                                       id="toggle-${categoryKey}" 
+                                       ${disabled ? 'checked disabled' : ''}
+                                       data-category="${categoryKey}">
+                                <span class="complyo-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <p class="complyo-category-desc">${description}</p>
+                        
+                        ${visibleServices.length > 0 ? `
+                            <div class="complyo-services-list">
+                                ${visibleServices.map(service => `
+                                    <div class="complyo-service-item">
+                                        <div class="complyo-service-header">
+                                            <div class="complyo-service-info">
+                                                <span class="complyo-service-name">${service.name}</span>
+                                                ${service.cookies && service.cookies.length > 0 ? 
+                                                    `<span class="complyo-cookie-count">${service.cookies.length}</span>` : ''}
+                                            </div>
+                                            <label class="complyo-toggle complyo-toggle-small">
+                                                <input type="checkbox" 
+                                                       data-service="${service.service_key}"
+                                                       data-category="${categoryKey}"
+                                                       class="service-toggle">
+                                                <span class="complyo-toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        ${service.description ? `
+                                            <p class="complyo-service-desc">${service.description}</p>
+                                        ` : ''}
+                                        ${service.privacy_policy_url ? `
+                                            <a href="${service.privacy_policy_url}" 
+                                               target="_blank" 
+                                               rel="noopener" 
+                                               class="complyo-service-link">
+                                                ${this.config.texts.learnMore} ↗
+                                            </a>
+                                        ` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            };
+            
+            // Build all categories
+            categoriesHTML += buildCategory('necessary', this.config.texts.necessary, this.config.texts.necessaryDesc, true);
+            categoriesHTML += buildCategory('functional', this.config.texts.functional, this.config.texts.functionalDesc);
+            categoriesHTML += buildCategory('analytics', this.config.texts.analytics, this.config.texts.analyticsDesc);
+            categoriesHTML += buildCategory('marketing', this.config.texts.marketing, this.config.texts.marketingDesc);
+            
             modal.innerHTML = `
                 <div class="complyo-settings-header">
                     <h3 id="complyo-settings-title" class="complyo-settings-title">${this.config.texts.settings}</h3>
@@ -1050,53 +1273,7 @@
                 </div>
                 
                 <div class="complyo-categories">
-                    <!-- Necessary -->
-                    <div class="complyo-category">
-                        <div class="complyo-category-header">
-                            <span class="complyo-category-name">${this.config.texts.necessary}</span>
-                            <label class="complyo-toggle">
-                                <input type="checkbox" checked disabled>
-                                <span class="complyo-toggle-slider"></span>
-                            </label>
-                        </div>
-                        <p class="complyo-category-desc">${this.config.texts.necessaryDesc}</p>
-                    </div>
-                    
-                    <!-- Functional -->
-                    <div class="complyo-category">
-                        <div class="complyo-category-header">
-                            <span class="complyo-category-name">${this.config.texts.functional}</span>
-                            <label class="complyo-toggle">
-                                <input type="checkbox" id="toggle-functional">
-                                <span class="complyo-toggle-slider"></span>
-                            </label>
-                        </div>
-                        <p class="complyo-category-desc">${this.config.texts.functionalDesc}</p>
-                    </div>
-                    
-                    <!-- Analytics -->
-                    <div class="complyo-category">
-                        <div class="complyo-category-header">
-                            <span class="complyo-category-name">${this.config.texts.analytics}</span>
-                            <label class="complyo-toggle">
-                                <input type="checkbox" id="toggle-analytics">
-                                <span class="complyo-toggle-slider"></span>
-                            </label>
-                        </div>
-                        <p class="complyo-category-desc">${this.config.texts.analyticsDesc}</p>
-                    </div>
-                    
-                    <!-- Marketing -->
-                    <div class="complyo-category">
-                        <div class="complyo-category-header">
-                            <span class="complyo-category-name">${this.config.texts.marketing}</span>
-                            <label class="complyo-toggle">
-                                <input type="checkbox" id="toggle-marketing">
-                                <span class="complyo-toggle-slider"></span>
-                            </label>
-                        </div>
-                        <p class="complyo-category-desc">${this.config.texts.marketingDesc}</p>
-                    </div>
+                    ${categoriesHTML}
                 </div>
                 
                 <div class="complyo-actions">
@@ -1121,13 +1298,52 @@
             modal.querySelector('.complyo-close-btn').addEventListener('click', () => this.closeSettings());
             backdrop.addEventListener('click', () => this.closeSettings());
             
+            // Category toggle - toggle all services in category
+            modal.querySelectorAll('input[data-category]').forEach(toggle => {
+                if (!toggle.disabled) {
+                    toggle.addEventListener('change', (e) => {
+                        const category = e.target.getAttribute('data-category');
+                        const checked = e.target.checked;
+                        
+                        // Toggle all services in this category
+                        modal.querySelectorAll(`input[data-service][data-category="${category}"]`).forEach(serviceToggle => {
+                            serviceToggle.checked = checked;
+                        });
+                    });
+                }
+            });
+            
+            // Service toggle - update category toggle if all services are toggled
+            modal.querySelectorAll('input[data-service]').forEach(toggle => {
+                toggle.addEventListener('change', (e) => {
+                    const category = e.target.getAttribute('data-category');
+                    const categoryToggle = modal.querySelector(`#toggle-${category}`);
+                    
+                    if (categoryToggle) {
+                        // Check if all services in category are checked
+                        const allServices = modal.querySelectorAll(`input[data-service][data-category="${category}"]`);
+                        const checkedServices = Array.from(allServices).filter(s => s.checked);
+                        
+                        categoryToggle.checked = checkedServices.length > 0;
+                    }
+                });
+            });
+            
+            // Save settings
             modal.querySelector('#complyo-save-settings').addEventListener('click', () => {
+                // Collect category selections
                 const selections = {
-                    functional: modal.querySelector('#toggle-functional').checked,
-                    analytics: modal.querySelector('#toggle-analytics').checked,
-                    marketing: modal.querySelector('#toggle-marketing').checked,
-                    services: this.config.services
+                    functional: modal.querySelector('#toggle-functional')?.checked || false,
+                    analytics: modal.querySelector('#toggle-analytics')?.checked || false,
+                    marketing: modal.querySelector('#toggle-marketing')?.checked || false,
+                    services: []
                 };
+                
+                // Collect individual service selections
+                modal.querySelectorAll('input[data-service]:checked').forEach(toggle => {
+                    selections.services.push(toggle.getAttribute('data-service'));
+                });
+                
                 this.saveCustom(selections);
             });
         }

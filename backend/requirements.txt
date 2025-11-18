@@ -29,3 +29,6 @@ uvicorn[standard]==0.24.0
 email-validator==2.1.0
 firebase-admin==6.3.0
 slowapi==0.1.9
+jsonschema==4.20.0
+playwright==1.40.0
+certifi==2023.11.17

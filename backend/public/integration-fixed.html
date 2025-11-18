@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✅ Ad-Blocker Problem gelöst!</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            background: white;
+            border-radius: 16px;
+            padding: 50px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: #059669;
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #6b7280;
+            font-size: 18px;
+            margin-bottom: 30px;
+        }
+        
+        .problem-box {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .problem-box h3 {
+            color: #d97706;
+            margin-bottom: 10px;
+        }
+        
+        .solution-box {
+            background: #ecfdf5;
+            border-left: 4px solid #10b981;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .solution-box h3 {
+            color: #059669;
+            margin-bottom: 15px;
+        }
+        
+        code {
+            background: #1f2937;
+            color: #10b981;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        pre {
+            background: #1f2937;
+            color: #10b981;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+            line-height: 1.6;
+        }
+        
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .old {
+            background: #fee2e2;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #ef4444;
+        }
+        
+        .old h4 {
+            color: #dc2626;
+            margin-bottom: 10px;
+        }
+        
+        .new {
+            background: #d1fae5;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #10b981;
+        }
+        
+        .new h4 {
+            color: #059669;
+            margin-bottom: 10px;
+        }
+        
+        button {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 10px 10px 10px 0;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            background: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
+        ul {
+            margin-left: 20px;
+            line-height: 2;
+        }
+        
+        .test-section {
+            background: #f9fafb;
+            padding: 30px;
+            border-radius: 8px;
+            margin: 30px 0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✅ Ad-Blocker Problem gelöst!</h1>
+        <p class="subtitle">Cookie-Banner funktioniert jetzt auch mit aktivierten Ad-Blockern</p>
+        
+        <div class="problem-box">
+            <h3>🚨 Das Problem:</h3>
+            <p>
+                Ad-Blocker (uBlock Origin, Adblock Plus, etc.) blockieren URLs mit folgenden Keywords:
+            </p>
+            <ul>
+                <li><code>cookie-compliance</code> ❌ Blockiert</li>
+                <li><code>cookie-blocker</code> ❌ Blockiert</li>
+                <li><code>cookie-consent</code> ❌ Blockiert</li>
+            </ul>
+        </div>
+        
+        <div class="solution-box">
+            <h3>✅ Die Lösung:</h3>
+            <p>
+                <strong>Neue Ad-Blocker-freundliche URLs:</strong>
+            </p>
+            <ul>
+                <li><code>privacy-manager.js</code> ✅ Nicht blockiert</li>
+                <li><code>privacy-shield.js</code> ✅ Nicht blockiert</li>
+            </ul>
+        </div>
+        
+        <div class="comparison">
+            <div class="old">
+                <h4>❌ ALT (wird blockiert):</h4>
+                <pre style="background: white; color: #dc2626; padding: 15px; font-size: 12px;">&lt;script src="api.complyo.tech/public/
+  cookie-blocker.js"&gt;&lt;/script&gt;
+
+&lt;script src="api.complyo.tech/api/
+  widgets/cookie-compliance.js"&gt;
+&lt;/script&gt;</pre>
+            </div>
+            
+            <div class="new">
+                <h4>✅ NEU (funktioniert):</h4>
+                <pre style="background: white; color: #059669; padding: 15px; font-size: 12px;">&lt;script src="api.complyo.tech/public/
+  privacy-shield.js"&gt;&lt;/script&gt;
+
+&lt;script src="api.complyo.tech/api/
+  widgets/privacy-manager.js"&gt;
+&lt;/script&gt;</pre>
+            </div>
+        </div>
+        
+        <h2 style="margin-top: 40px; margin-bottom: 20px;">📋 Neue Integration (Ad-Blocker-sicher):</h2>
+        
+<pre>&lt;!-- Complyo Privacy Manager --&gt;
+&lt;!-- Schritt 1: Privacy Shield (blockiert Scripts) --&gt;
+&lt;script 
+  src="https://api.complyo.tech/public/privacy-shield.js" 
+  data-site-id="ihre-domain-com"
+&gt;&lt;/script&gt;
+
+&lt;!-- Schritt 2: Privacy Manager Widget --&gt;
+&lt;script 
+  src="https://api.complyo.tech/api/widgets/privacy-manager.js" 
+  data-site-id="ihre-domain-com"
+  async
+&gt;&lt;/script&gt;</pre>
+        
+        <div class="test-section">
+            <h3 style="margin-bottom: 20px; color: #059669;">🧪 Jetzt testen (auch mit Ad-Blocker!):</h3>
+            <button onclick="location.href='banner-demo-final.html'">
+                🚀 Demo öffnen
+            </button>
+            <p style="margin-top: 15px; color: #6b7280;">
+                Die Demo verwendet die neuen URLs und funktioniert<br>
+                auch mit aktiviertem Ad-Blocker!
+            </p>
+        </div>
+        
+        <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; border: 1px solid #0284c7; margin-top: 30px;">
+            <h3 style="color: #0284c7; margin-bottom: 10px;">💡 Hinweis:</h3>
+            <p style="color: #075985; line-height: 1.6;">
+                Die alten URLs (<code>cookie-compliance.js</code>, <code>cookie-blocker.js</code>) 
+                funktionieren weiterhin, aber nur wenn kein Ad-Blocker aktiv ist. 
+                Für maximale Kompatibilität empfehlen wir die neuen URLs.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+
