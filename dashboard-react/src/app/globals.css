@@ -74,10 +74,22 @@
 
   /* Moderne AI Card */
   .ai-card {
-    @apply bg-zinc-900/80 backdrop-blur-md rounded-2xl border border-zinc-800/50;
+    @apply bg-zinc-900/80 dark:bg-zinc-900/80 backdrop-blur-md rounded-2xl border border-zinc-800/50 dark:border-zinc-800/50;
     @apply shadow-lg hover:shadow-2xl hover:shadow-blue-500/10;
     @apply transition-all duration-300 ease-out;
-    @apply hover:border-zinc-700/70;
+    @apply hover:border-zinc-700/70 dark:hover:border-zinc-700/70;
+  }
+
+  .light .ai-card {
+    @apply bg-white border-gray-200/40;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    border-radius: 16px;
+    @apply hover:border-gray-300/60;
+  }
+  
+  .light .ai-card:hover {
+    box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.08), 0 2px 6px 0 rgba(14, 165, 233, 0.1);
+    transform: translateY(-2px);
   }
 
   /* Moderner AI-Gradient Text */
@@ -93,7 +105,11 @@
     @apply bg-gradient-to-r from-sky-500 to-purple-500;
     @apply text-white text-sm font-medium rounded-full;
     @apply shadow-md shadow-blue-500/30;
-    @apply border border-white/10;
+    @apply border border-white/10 dark:border-white/10;
+  }
+
+  .light .ai-badge {
+    @apply border-white/30;
   }
 
   /* AI Loading Bar */
@@ -321,8 +337,25 @@
 
 @layer base {
   :root {
+    /* Dark Theme (Default) */
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
+    --card-bg: 240 10% 3.9%;
+    --card-border: 240 3.7% 15.9%;
+    --glass-bg: rgba(255, 255, 255, 0.03);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --gradient-mesh: linear-gradient(135deg, #0c0a09 0%, #18181b 35%, #0c0a09 100%);
+  }
+
+  .light {
+    /* Light Theme - Professional Clean Design wie UserWay */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card-bg: 0 0% 100%;
+    --card-border: 240 5.9% 90%;
+    --glass-bg: rgba(255, 255, 255, 1);
+    --glass-border: rgba(0, 0, 0, 0.08);
+    --gradient-mesh: #f8f9fa;
   }
 
   * {
@@ -332,10 +365,20 @@
   }
   
   body {
-    @apply bg-background text-foreground antialiased;
-    background: linear-gradient(135deg, #0c0a09 0%, #18181b 35%, #0c0a09 100%);
-    background-attachment: fixed;
+    @apply antialiased;
     min-height: 100vh;
+    transition: background 0.3s ease, color 0.3s ease;
+  }
+  
+  .light body {
+    background: #f8f9fa !important;
+    color: #111827 !important;
+  }
+  
+  .dark body {
+    background: linear-gradient(135deg, #0c0a09 0%, #18181b 35%, #0c0a09 100%) !important;
+    background-attachment: fixed !important;
+    color: white !important;
   }
   
   /* Moderne Schriftglättung */
@@ -348,18 +391,36 @@
 @layer components {
   /* Moderne Glassmorphism-Effekte */
   .glass-effect {
-    @apply bg-white/[0.03] backdrop-blur-xl border border-white/[0.08];
+    @apply bg-white/[0.03] dark:bg-white/[0.03] backdrop-blur-xl border border-white/[0.08] dark:border-white/[0.08];
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.18), inset 0 1px 2px 0 rgba(255, 255, 255, 0.05);
   }
   
+  .light .glass-effect {
+    @apply bg-white border-gray-200/30;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    border-radius: 12px;
+  }
+  
   .glass-card {
-    @apply bg-zinc-900/50 backdrop-blur-md border border-zinc-800/50;
+    @apply bg-zinc-900/50 dark:bg-zinc-900/50 backdrop-blur-md border border-zinc-800/50 dark:border-zinc-800/50;
     box-shadow: 0 8px 24px 0 rgba(0, 0, 0, 0.2), inset 0 1px 1px 0 rgba(255, 255, 255, 0.03);
   }
   
+  .light .glass-card {
+    @apply bg-white border-gray-200/30;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    border-radius: 12px;
+  }
+  
   .glass-strong {
-    @apply bg-zinc-800/60 backdrop-blur-xl border border-zinc-700/60;
+    @apply bg-zinc-800/60 dark:bg-zinc-800/60 backdrop-blur-xl border border-zinc-700/60 dark:border-zinc-700/60;
     box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.3), inset 0 1px 2px 0 rgba(255, 255, 255, 0.08);
+  }
+  
+  .light .glass-strong {
+    @apply bg-white border-gray-200/30;
+    box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.06);
+    border-radius: 12px;
   }
   
   /* Moderne Animationen */
@@ -379,6 +440,63 @@
   .gradient-overlay::before {
     content: '';
     @apply absolute inset-0 bg-gradient-to-b from-transparent via-black/5 to-black/20 pointer-events-none;
+  }
+
+  /* Theme-aware text colors */
+  .text-theme-primary {
+    @apply text-white dark:text-white;
+  }
+
+  .light .text-theme-primary {
+    @apply text-gray-900;
+  }
+
+  .text-theme-secondary {
+    @apply text-zinc-400 dark:text-zinc-400;
+  }
+
+  .light .text-theme-secondary {
+    @apply text-gray-700;
+  }
+
+  .text-theme-muted {
+    @apply text-zinc-500 dark:text-zinc-500;
+  }
+
+  .light .text-theme-muted {
+    @apply text-gray-600;
+  }
+  
+  /* Force dark text in light mode for content elements */
+  .light h1,
+  .light h2,
+  .light h3,
+  .light h4,
+  .light h5,
+  .light h6,
+  .light p,
+  .light span:not(.bg-clip-text),
+  .light div:not(.bg-clip-text) {
+    color: inherit;
+  }
+
+  /* Theme-aware backgrounds */
+  .bg-theme-card {
+    @apply bg-zinc-900/50 dark:bg-zinc-900/50;
+  }
+
+  .light .bg-theme-card {
+    @apply bg-white;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    border-radius: 12px;
+  }
+
+  .bg-theme-hover {
+    @apply hover:bg-white/5 dark:hover:bg-white/5;
+  }
+
+  .light .bg-theme-hover {
+    @apply hover:bg-gray-50/80;
   }
 }
 
@@ -409,6 +527,10 @@
   border-radius: 4px;
 }
 
+.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
 ::-webkit-scrollbar-thumb {
   background: linear-gradient(135deg, #3f3f46 0%, #52525b 100%);
   border-radius: 4px;
@@ -416,12 +538,25 @@
   transition: all 0.2s;
 }
 
+.light ::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%);
+  border: 1px solid #e2e8f0;
+}
+
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(135deg, #52525b 0%, #71717a 100%);
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
 }
 
 /* Firefox Scrollbar */
 * {
   scrollbar-width: thin;
   scrollbar-color: #3f3f46 #18181b;
+}
+
+.light * {
+  scrollbar-color: #cbd5e1 #f1f5f9;
 }

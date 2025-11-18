@@ -1793,15 +1793,26 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
   // Main Return
   return (
     <div className="bg-gray-900 text-white overflow-x-hidden">
-      <Navigation />
-      <HeroSection />
-      <AnalyzerSection />
-      <FeaturesSection />
-      <SocialProofSection />
-      <PricingSection />
-      <FAQSection />
-      <CTASection />
-      <Footer />
+      {/* Header mit Navigation und Hero */}
+      <header>
+        <Navigation />
+        <HeroSection />
+      </header>
+      
+      {/* Hauptinhalt */}
+      <main role="main">
+        <AnalyzerSection />
+        <FeaturesSection />
+        <SocialProofSection />
+        <PricingSection />
+        <FAQSection />
+        <CTASection />
+      </main>
+      
+      {/* Footer */}
+      <footer role="contentinfo">
+        <Footer />
+      </footer>
       
       {/* Modals */}
       {activeModal === 'demo-modal' && <DemoModal />}

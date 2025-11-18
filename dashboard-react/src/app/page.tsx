@@ -15,6 +15,7 @@ import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard'
 // NEU: AI Compliance Card
 import { AIComplianceCard } from '@/components/dashboard/AIComplianceCard'
 import { useAuth } from '@/contexts/AuthContext'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 export default function Page() {
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -39,35 +40,45 @@ export default function Page() {
 
   return (
     <PlanGuard requiredPlan="ai">
-      <div className="min-h-screen">
-        {/* Header */}
-        <DashboardHeader />
-        
-        {/* Hero Section: Domain Input + Score + KI-CTA */}
-        <DomainHeroSection />
-        
-        {/* Main Content Grid */}
-        <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Left Column - AI Compliance Sidebar (schmaler) */}
-            <div className="lg:col-span-1">
-              <AIComplianceCard user={user || undefined} />
-            </div>
-            
-            {/* Right Column - Main Content */}
-            <div className="lg:col-span-3 space-y-8">
-              {/* Website Compliance-Analyse */}
-              <WebsiteAnalysis />
+      <ErrorBoundary componentName="Dashboard Page">
+        <div className="min-h-screen">
+          {/* Header */}
+          <DashboardHeader />
+          
+          {/* Hero Section: Domain Input + Score + KI-CTA */}
+          <DomainHeroSection />
+          
+          {/* Main Content Grid */}
+          <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+              {/* Left Column - AI Compliance Sidebar (schmaler) */}
+              <div className="lg:col-span-1">
+                <ErrorBoundary componentName="AIComplianceCard">
+                  <AIComplianceCard user={user || undefined} />
+                </ErrorBoundary>
+              </div>
               
-              {/* Legal News */}
-              <LegalNews />
-              
-              {/* Cookie-Compliance Management */}
-              <CookieComplianceWidget />
+              {/* Right Column - Main Content */}
+              <div className="lg:col-span-3 space-y-8">
+                {/* Website Compliance-Analyse */}
+                <ErrorBoundary componentName="WebsiteAnalysis">
+                  <WebsiteAnalysis />
+                </ErrorBoundary>
+                
+                {/* Legal News */}
+                <ErrorBoundary componentName="LegalNews">
+                  <LegalNews />
+                </ErrorBoundary>
+                
+                {/* Cookie-Compliance Management */}
+                <ErrorBoundary componentName="CookieComplianceWidget">
+                  <CookieComplianceWidget />
+                </ErrorBoundary>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </ErrorBoundary>
     </PlanGuard>
   )
 }

@@ -15,7 +15,27 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="de" className="scroll-smooth">
-      <body className="min-h-screen bg-gradient-mesh text-white antialiased">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('complyo-theme');
+                  if (!theme) {
+                    theme = 'dark'; // ✅ ALWAYS dark by default!
+                    localStorage.setItem('complyo-theme', 'dark');
+                  }
+                  document.documentElement.classList.add(theme);
+                } catch (e) {
+                  document.documentElement.classList.add('dark');
+                }
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body className="min-h-screen text-white dark:text-white light:text-gray-900 antialiased">
         <Providers>
           {children}
           <AIAssistant />

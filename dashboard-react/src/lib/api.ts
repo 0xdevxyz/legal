@@ -75,23 +75,33 @@ apiClient.interceptors.response.use(
 // ✅ URL Validation Helper - Akzeptiert ALLE gängigen Formate
 // Unterstützt: https://, http://, www., nur domain (z.B. complyo.tech)
 const validateAndNormalizeUrl = (url: string): string => {
+ // Type-safe check für undefined/null
  if (!url || typeof url !== 'string') {
+   console.error('❌ validateAndNormalizeUrl: Invalid input:', typeof url, url);
    throw new Error('URL must be a non-empty string');
  }
 
- let trimmed = url.trim();
+ // Sicher trimmen
+ const trimmed = String(url).trim();
  if (!trimmed) {
    throw new Error('URL cannot be empty or whitespace only');
  }
 
+ // Type-safe startsWith Checks
+ const hasHttp = trimmed.indexOf('http://') === 0;
+ const hasHttps = trimmed.indexOf('https://') === 0;
+ const hasWww = trimmed.indexOf('www.') === 0;
+
  // Protokoll hinzufügen wenn nötig
- if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-   if (trimmed.startsWith('www.')) {
-     trimmed = 'https://' + trimmed;
+ if (!hasHttp && !hasHttps) {
+   if (hasWww) {
+     return 'https://' + trimmed;
    } else {
-     trimmed = 'https://' + trimmed;
+     return 'https://' + trimmed;
    }
  }
+ 
+ return trimmed;
 
  // URL parsen und validieren
  try {

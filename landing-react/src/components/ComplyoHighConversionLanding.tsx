@@ -24,6 +24,8 @@ interface ComplyoLandingProps {
 /**
  * High-Conversion Landing Page im MovesMethod-Stil
  * Fokus auf Social Proof, Scarcity, Money-Back Guarantee
+ * 
+ * ✅ Barrierefreiheit: Semantisches HTML5 (header, nav, main, footer)
  */
 export default function ComplyoHighConversionLanding({ variant, sessionId }: ComplyoLandingProps) {
   const [websiteUrl, setWebsiteUrl] = useState('');
@@ -46,13 +48,36 @@ export default function ComplyoHighConversionLanding({ variant, sessionId }: Com
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Top Banner - Scarcity */}
-      <div className="bg-gradient-to-r from-red-600 to-orange-600 py-3 text-center font-bold text-sm md:text-base animate-pulse">
-        🔥 HERBST-SALE! JETZT 70% SPAREN - NUR FÜR KURZE ZEIT 🔥
-      </div>
+      {/* Header mit Top Banner und Hero */}
+      <header>
+        {/* Navigation */}
+        <nav className="bg-gray-950 border-b border-gray-800" role="navigation" aria-label="Hauptnavigation">
+          <div className="container mx-auto px-6">
+            <div className="flex justify-between items-center h-16">
+              <a href="/" className="text-2xl font-bold text-white" aria-label="Zur Startseite">
+                Complyo
+              </a>
+              <div className="hidden md:flex items-center space-x-8">
+                <a href="#pricing" className="text-gray-300 hover:text-white transition-colors">Preise</a>
+                <a href="#faq" className="text-gray-300 hover:text-white transition-colors">FAQ</a>
+                <a 
+                  href={process.env.NODE_ENV === 'production' ? 'https://app.complyo.tech' : 'http://localhost:3001'}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Login
+                </a>
+              </div>
+            </div>
+          </div>
+        </nav>
+        
+        {/* Top Banner - Scarcity */}
+        <div className="bg-gradient-to-r from-red-600 to-orange-600 py-3 text-center font-bold text-sm md:text-base animate-pulse">
+          🔥 HERBST-SALE! JETZT 70% SPAREN - NUR FÜR KURZE ZEIT 🔥
+        </div>
 
-      {/* Hero Section */}
-      <div className="container mx-auto px-6 py-12 max-w-5xl text-center">
+        {/* Hero Section */}
+        <div className="container mx-auto px-6 py-12 max-w-5xl text-center">
         <div className="inline-flex items-center gap-2 bg-green-500 bg-opacity-20 border border-green-500 rounded-full px-6 py-2 mb-6">
           <CheckCircle className="w-5 h-5 text-green-400" />
           <span className="text-sm font-bold">Über 2.500 Websites geschützt</span>
@@ -97,9 +122,12 @@ export default function ComplyoHighConversionLanding({ variant, sessionId }: Com
           ✓ 14-Tage Geld-zurück-Garantie - Keine Fragen
         </p>
       </div>
+      </header>
 
-      {/* Social Proof Stats */}
-      <div className="bg-gray-950 py-12">
+      {/* Hauptinhalt */}
+      <main role="main">
+        {/* Social Proof Stats */}
+        <div className="bg-gray-950 py-12">
         <div className="container mx-auto px-6">
           <div className="grid md:grid-cols-3 gap-8 text-center max-w-4xl mx-auto">
             <div>
@@ -476,16 +504,19 @@ export default function ComplyoHighConversionLanding({ variant, sessionId }: Com
           </p>
         </div>
       </div>
+      </main>
 
       {/* Footer */}
-      <div className="bg-gray-950 py-8 text-center text-gray-500 text-sm">
-        <p>© 2025 Complyo GmbH - Alle Rechte vorbehalten</p>
-        <div className="flex justify-center gap-6 mt-4">
-          <a href="/impressum" className="hover:text-white">Impressum</a>
-          <a href="/datenschutz" className="hover:text-white">Datenschutz</a>
-          <a href="/agb" className="hover:text-white">AGB</a>
+      <footer role="contentinfo">
+        <div className="bg-gray-950 py-8 text-center text-gray-500 text-sm">
+          <p>© 2025 Complyo GmbH - Alle Rechte vorbehalten</p>
+          <div className="flex justify-center gap-6 mt-4">
+            <a href="/impressum" className="hover:text-white">Impressum</a>
+            <a href="/datenschutz" className="hover:text-white">Datenschutz</a>
+            <a href="/agb" className="hover:text-white">AGB</a>
+          </div>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

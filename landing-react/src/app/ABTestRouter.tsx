@@ -5,9 +5,10 @@ import { useSearchParams } from 'next/navigation';
 import ComplyoOriginalLanding from '../components/ComplyoOriginalLanding';
 import ComplyoHighConversionLanding from '../components/ComplyoHighConversionLanding';
 import ProfessionalLanding from '../components/ProfessionalLanding';
+import ComplyoModernLanding from '../components/ComplyoModernLanding';
 import { useABTestTracking } from '../hooks/useABTestTracking';
 
-type Variant = 'professional' | 'original' | 'high-conversion';
+type Variant = 'professional' | 'original' | 'high-conversion' | 'modern';
 
 function ABTestContent() {
   const [variant, setVariant] = useState<Variant | null>(null);
@@ -22,7 +23,7 @@ function ABTestContent() {
         const forceVariant = searchParams.get('variant');
 
         // Force-Modus: Nutzer kann Variante per URL-Parameter wählen
-        if (forceVariant === 'professional' || forceVariant === 'original' || forceVariant === 'high-conversion') {
+        if (forceVariant === 'professional' || forceVariant === 'original' || forceVariant === 'high-conversion' || forceVariant === 'modern') {
           console.log(`🔧 Force-Modus: ${forceVariant}`);
           setVariant(forceVariant);
           const sessionId = await trackVariantAssignment(forceVariant, 'forced');
@@ -33,7 +34,7 @@ function ABTestContent() {
 
           // Returning User: Zeige gespeicherte Variante
           if (storedVariant && storedSessionId &&
-              (storedVariant === 'professional' || storedVariant === 'original' || storedVariant === 'high-conversion')) {
+              (storedVariant === 'professional' || storedVariant === 'original' || storedVariant === 'high-conversion' || storedVariant === 'modern')) {
             console.log(`🔄 Returning User: ${storedVariant}`);
             setVariant(storedVariant as Variant);
             setSessionId(storedSessionId);
@@ -86,7 +87,9 @@ function ABTestContent() {
   }
 
   // Render entsprechende Variante
-  if (variant === 'professional') {
+  if (variant === 'modern') {
+    return <ComplyoModernLanding />;
+  } else if (variant === 'professional') {
     return <ProfessionalLanding />;
   } else if (variant === 'original') {
     const commonProps = { variant: 'original' as const, sessionId };

@@ -61,10 +61,14 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 async def get_websites(user=Depends(get_current_user)):
     """Get all tracked websites for the current user"""
     try:
-        user_id = user.get("user_id")
+        user_id = user.get("id") or user.get("user_id")
         
         if not db_pool:
             raise HTTPException(status_code=500, detail="Database not available")
+        
+        if not user_id:
+            logger.error(f"No user_id in token: {user}")
+            raise HTTPException(status_code=403, detail="User ID not found in token")
         
         async with db_pool.acquire() as conn:
             # Get tracked websites

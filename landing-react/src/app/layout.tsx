@@ -32,7 +32,7 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`}>
         {children}
         <Script
-          src="https://api.complyo.tech/api/widgets/accessibility.js"
+          src="https://api.complyo.tech/api/widgets/accessibility.js?version=6"
           data-site-id="scan-91778ad450e1"
           data-auto-fix="true"
           data-show-toolbar="true"

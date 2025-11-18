@@ -43,10 +43,12 @@ services:
       - DATABASE_URL=postgresql://complyo_user:ComplYo2025SecurePass@postgres:5432/complyo_db
       - REDIS_HOST=redis
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - UNLIMITED_FIXES=true
+      - BYPASS_PAYMENT=true
       - ENVIRONMENT=production
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
-      - JWT_SECRET=${JWT_SECRET:-complyo_jwt_secret_change_in_production}
+      - JWT_SECRET=complyo_jwt_secret_2025_production_secure_key_change_me
       - FRONTEND_URL=https://complyo.tech
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
       - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}

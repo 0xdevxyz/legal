@@ -29,7 +29,7 @@ class AuthService:
         """Get user by ID"""
         async with self.db_pool.acquire() as conn:
             user = await conn.fetchrow(
-                "SELECT id, email, full_name, company, is_active, is_verified, created_at FROM users WHERE id = $1",
+                "SELECT id, email, full_name, is_active, is_verified, created_at FROM users WHERE id = $1",
                 user_id
             )
             return dict(user) if user else None

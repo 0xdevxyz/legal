@@ -110,22 +110,20 @@ export const useLatestScan = () => {
     queryKey: ['latest-scan'],
     queryFn: async () => {
       try {
-        console.log('📡 Fetching latest scan from API...');
         const response = await apiClient.get('/api/scans/latest');
-        console.log('📦 Latest scan response:', {
-          success: response.data?.success,
-          hasData: !!response.data?.data,
-          url: response.data?.data?.url,
-          issues: response.data?.data?.issues?.length
-        });
         return response.data?.data || null;
-      } catch (error) {
-        console.error('❌ Error loading latest scan:', error);
+      } catch (error: any) {
+        // ✅ Graceful error handling
+        if (error?.response?.status === 404) {
+          // Noch keine Scans vorhanden
+          return null;
+        }
+        console.log('Latest scan nicht verfügbar');
         return null;
       }
     },
     staleTime: 1 * 60 * 1000, // 1 Minute
-    retry: 1,
+    retry: false, // ✅ Kein Retry
   });
 };
 
@@ -137,13 +135,17 @@ export const useScanHistory = (limit: number = 10) => {
       try {
         const response = await apiClient.get(`/api/scans/history?limit=${limit}`);
         return response.data?.data || [];
-      } catch (error) {
-        console.error('Error loading scan history:', error);
+      } catch (error: any) {
+        // ✅ Graceful error handling
+        if (error?.response?.status === 404) {
+          return [];
+        }
+        console.log('Scan history nicht verfügbar');
         return [];
       }
     },
     staleTime: 2 * 60 * 1000, // 2 Minuten
-    retry: 1,
+    retry: false, // ✅ Kein Retry
   });
 };
 
@@ -213,12 +215,25 @@ export const useActiveFixJobs = () => {
       try {
         const response = await apiClient.get('/api/fix-jobs/active');
         return response.data?.data || [];
-      } catch (error) {
-        console.error('Error loading active jobs:', error);
+      } catch (error: any) {
+        // ✅ Graceful error handling - keine Spam-Logs
+        if (error?.response?.status === 404) {
+          // Endpoint existiert nicht - return leeres Array
+          return [];
+        }
+        console.log('Active jobs nicht verfügbar');
         return [];
       }
     },
-    refetchInterval: 5000, // Alle 5 Sekunden aktualisieren
+    // ✅ Nur pollen wenn Jobs existieren
+    refetchInterval: (query) => {
+      const jobs = query.state.data || [];
+      const hasActiveJobs = jobs.length > 0 && jobs.some((j: any) => 
+        ['pending', 'processing'].includes(j.status)
+      );
+      return hasActiveJobs ? 5000 : false;
+    },
     staleTime: 0,
+    retry: false, // ✅ Kein Retry bei Fehlern
   });
 };

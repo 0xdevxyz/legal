@@ -19,33 +19,72 @@ import ConsentStatistics from '@/components/cookie-compliance/ConsentStatistics'
 export default function CookieCompliancePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [siteId, setSiteId] = useState<string>('my-site');
+  const [siteId, setSiteId] = useState<string>('');
   const [config, setConfig] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('design');
   
   useEffect(() => {
-    loadConfig();
+    loadSiteIdAndConfig();
   }, []);
   
-  const loadConfig = async () => {
+  const loadSiteIdAndConfig = async () => {
     try {
       setLoading(true);
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
       
-      const response = await fetch(`/api/cookie-compliance/config/${siteId}`, {
+      // 1. Hole die Website des Users
+      const websiteResponse = await fetch(`${API_URL}/api/v2/websites`, {
         credentials: 'include',
       });
       
-      if (response.ok) {
-        const data = await response.json();
+      if (!websiteResponse.ok) {
+        console.log('Keine Websites verfügbar');
+        setLoading(false);
+        return;
+      }
+      
+      const websiteData = await websiteResponse.json();
+      if (!websiteData.success || !websiteData.websites?.length) {
+        console.log('Keine Websites konfiguriert');
+        setLoading(false);
+        return;
+      }
+      
+      // ✅ Generiere site_id aus echter Website
+      const primaryWebsite = websiteData.websites.find((w: any) => w.is_primary) || websiteData.websites[0];
+      const determinedSiteId = generateSiteIdFromUrl(primaryWebsite.url);
+      setSiteId(determinedSiteId);
+      
+      // 2. Lade Cookie-Config mit dem korrekten site_id
+      const configResponse = await fetch(`${API_URL}/api/cookie-compliance/config/${determinedSiteId}`, {
+        credentials: 'include',
+      });
+      
+      if (configResponse.ok) {
+        const data = await configResponse.json();
         if (data.success) {
           setConfig(data.data);
-          setSiteId(data.data.site_id || 'my-site');
+          // Überschreibe mit site_id aus Config falls vorhanden
+          if (data.data.site_id) {
+            setSiteId(data.data.site_id);
+          }
         }
       }
     } catch (error) {
       console.error('Error loading config:', error);
     } finally {
       setLoading(false);
+    }
+  };
+  
+  const generateSiteIdFromUrl = (url: string): string => {
+    try {
+      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+      const hostname = urlObj.hostname.replace('www.', '');
+      // Wandle z.B. "example.com" in "example-com"
+      return hostname.replace(/\./g, '-').toLowerCase();
+    } catch {
+      return 'unknown-site';
     }
   };
   

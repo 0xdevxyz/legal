@@ -8,8 +8,8 @@ export function useAuth() {
 
   useEffect(() => {
     // Check for existing session
-    const token = localStorage.getItem('complyo_token');
-    const userData = localStorage.getItem('complyo_user');
+    const token = localStorage.getItem('access_token');
+    const userData = localStorage.getItem('user');
 
     if (token && userData) {
       try {
@@ -19,8 +19,8 @@ export function useAuth() {
         verifyToken(token);
       } catch (error) {
         console.error('Error parsing user data:', error);
-        localStorage.removeItem('complyo_token');
-        localStorage.removeItem('complyo_user');
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('user');
       }
     }
 
@@ -42,11 +42,12 @@ export function useAuth() {
     try {
       // ✅ ECHTE API-INTEGRATION
       const response = await api.post('/api/auth/login', { email, password });
-      const { user: userData, token } = response.data;
+      const { user: userData, access_token, refresh_token } = response.data;
 
       setUser(userData);
-      localStorage.setItem('complyo_token', token);
-      localStorage.setItem('complyo_user', JSON.stringify(userData));
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('refresh_token', refresh_token);
+      localStorage.setItem('user', JSON.stringify(userData));
 
       return { success: true };
     } catch (error: any) {
@@ -64,8 +65,8 @@ export function useAuth() {
         };
 
         setUser(mockUser);
-        localStorage.setItem('complyo_token', 'demo-token');
-        localStorage.setItem('complyo_user', JSON.stringify(mockUser));
+        localStorage.setItem('access_token', 'demo-token');
+        localStorage.setItem('user', JSON.stringify(mockUser));
 
         return { success: true };
       }
@@ -81,8 +82,10 @@ export function useAuth() {
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('complyo_token');
-    localStorage.removeItem('complyo_user');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+    document.cookie = 'access_token=; path=/; max-age=0';
   };
 
   return {
