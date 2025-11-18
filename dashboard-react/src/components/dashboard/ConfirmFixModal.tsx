@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { X, AlertTriangle, CheckCircle, Info, Code, FileText, BookOpen } from 'lucide-react';
+import { ClientOnlyPortal } from '../ClientOnlyPortal';
 
 // KI-Fix Typen für bessere UX
 type FixType = 'code' | 'text' | 'guide';
@@ -64,13 +64,18 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
 }) => {
   const [acknowledged, setAcknowledged] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const fixInfo = FIX_TYPE_INFO[fixType];
-  const FixIcon = fixInfo.icon;
-
+  
   useEffect(() => {
     setMounted(true);
     return () => setMounted(false);
   }, []);
+
+  // ✅ CRITICAL: EARLY RETURN für SSR - BEVOR irgendetwas anderes passiert!
+  if (!mounted || typeof document === 'undefined') return null;
+  if (!isOpen) return null;
+
+  const fixInfo = FIX_TYPE_INFO[fixType];
+  const FixIcon = fixInfo.icon;
 
   const handleConfirm = () => {
     if (isFirstFix && !acknowledged) {
@@ -80,10 +85,6 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
     console.log('✅ Modal: Bestätigt, starte Fix...');
     onConfirm();
   };
-
-  console.log('🎨 ConfirmFixModal rendered:', { isOpen, fixType, issueTitle, mounted });
-
-  if (!isOpen || !mounted) return null;
 
   const modalContent = (
     <div 
@@ -209,6 +210,7 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
     </div>
   );
 
-  return createPortal(modalContent, document.body);
+  // ✅ 100% SSR-SAFE mit ClientOnlyPortal
+  return <ClientOnlyPortal>{modalContent}</ClientOnlyPortal>;
 };
 

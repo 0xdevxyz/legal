@@ -70,7 +70,6 @@ export default function OptimizationBanner() {
         </div>
         <button
           onClick={() => {
-            // Modal öffnen
             const modal = document.getElementById('expert-service-modal');
             if (modal) {
               (modal as any).showModal?.();

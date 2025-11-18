@@ -4,8 +4,8 @@ import React, { useState } from 'react';
 import { X, CheckCircle, Copy, Download, Code, FileText, Sparkles, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { createPortal } from 'react-dom';
 import { LegalTextWizard } from './LegalTextWizard';
+import { ClientOnlyPortal } from '../ClientOnlyPortal';
 
 interface FixResultModalProps {
   isOpen: boolean;
@@ -23,6 +23,10 @@ export const FixResultModal: React.FC<FixResultModalProps> = ({ isOpen, onClose,
     return () => setMounted(false);
   }, []);
 
+  // ✅ CRITICAL: EARLY RETURN für SSR - BEVOR irgendetwas anderes passiert!
+  if (!mounted || typeof document === 'undefined') return null;
+  if (!isOpen || !fixResult) return null;
+
   // Check if this is a legal text fix
   const isLegalText = fixResult?.type === 'text' && 
     (fixResult?.title?.toLowerCase().includes('impressum') || 
@@ -38,15 +42,6 @@ export const FixResultModal: React.FC<FixResultModalProps> = ({ isOpen, onClose,
     if (title.includes('widerruf')) return 'widerruf';
     return 'impressum';
   };
-
-  React.useEffect(() => {
-    // Auto-open wizard for legal texts
-    if (isOpen && isLegalText && !fixResult?.content?.includes('[')) {
-      setShowWizard(false); // Start with wizard for empty/template content
-    }
-  }, [isOpen, isLegalText, fixResult]);
-
-  if (!isOpen || !fixResult || !mounted) return null;
 
   const handleCopy = () => {
     const content = fixResult.content || JSON.stringify(fixResult, null, 2);
@@ -339,6 +334,7 @@ export const FixResultModal: React.FC<FixResultModalProps> = ({ isOpen, onClose,
     </div>
   );
 
-  return createPortal(modalContent, document.body);
+  // ✅ 100% SSR-SAFE mit ClientOnlyPortal
+  return <ClientOnlyPortal>{modalContent}</ClientOnlyPortal>;
 };
 

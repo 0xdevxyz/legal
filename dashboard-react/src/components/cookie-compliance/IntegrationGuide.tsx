@@ -31,7 +31,14 @@ const IntegrationGuide: React.FC<IntegrationGuideProps> = ({ siteId, config }) =
   
   const API_BASE = 'https://api.complyo.tech';
   
-  const scriptCode = `<!-- Complyo Cookie Compliance Widget -->
+  const scriptCode = `<!-- Complyo Cookie Compliance & Auto-Blocking -->
+<!-- Step 1: Cookie Blocker (lädt ZUERST, blockiert Scripts) -->
+<script 
+  src="${API_BASE}/public/cookie-blocker.js" 
+  data-site-id="${siteId}"
+></script>
+
+<!-- Step 2: Cookie Banner Widget -->
 <script 
   src="${API_BASE}/api/widgets/cookie-compliance.js" 
   data-site-id="${siteId}"
@@ -39,12 +46,16 @@ const IntegrationGuide: React.FC<IntegrationGuideProps> = ({ siteId, config }) =
   async
 ></script>`;
 
-  const manualCode = `<script>
-  // Manually initialize Complyo Cookie Banner
+  const manualCode = `<!-- Auto-Blocking Script -->
+<script src="${API_BASE}/public/cookie-blocker.js" data-site-id="${siteId}"></script>
+
+<!-- Manual Configuration -->
+<script>
   window.complyoConfig = {
     siteId: '${siteId}',
     layout: '${config?.layout || 'banner_bottom'}',
     primaryColor: '${config?.primary_color || '#f97316'}',
+    autoBlock: true,
     // ... weitere Optionen
   };
 </script>
@@ -57,6 +68,14 @@ export default function Document() {
   return (
     <Html>
       <Head>
+        {/* Auto-Blocking Script (FIRST!) */}
+        <Script 
+          src="${API_BASE}/public/cookie-blocker.js"
+          data-site-id="${siteId}"
+          strategy="beforeInteractive"
+        />
+        
+        {/* Cookie Banner */}
         <Script 
           src="${API_BASE}/api/widgets/cookie-compliance.js"
           data-site-id="${siteId}"
@@ -309,6 +328,61 @@ export default function Document() {
             <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-gray-300">
               <strong className="text-green-300">Tipp:</strong> Löschen Sie Cookies & LocalStorage um das Banner erneut zu testen.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+      
+      {/* Auto-Blocking Info */}
+      <Card className="border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-white">
+            <Zap className="w-5 h-5 text-purple-400" />
+            Automatisches Blocking
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-300">
+            Das integrierte Auto-Blocking-System blockiert automatisch alle konfigurierten Services, bis der User seine Zustimmung erteilt.
+          </p>
+          
+          <div className="space-y-3">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-white">Scripts blockieren</p>
+                <p className="text-xs text-gray-400">Tracking-Scripts werden vor der Ausführung geblockt</p>
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-white">iFrames ersetzen</p>
+                <p className="text-xs text-gray-400">YouTube, Google Maps etc. werden durch Platzhalter ersetzt</p>
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-white">Cookies löschen</p>
+                <p className="text-xs text-gray-400">Bei Ablehnung werden alle Tracking-Cookies entfernt</p>
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-white">35+ Services unterstützt</p>
+                <p className="text-xs text-gray-400">Google Analytics, Facebook Pixel, WordPress, und viele mehr</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+            <p className="text-xs text-gray-300">
+              <strong className="text-purple-300">100% DSGVO-konform:</strong> Keine Tracking-Scripts laden vor Zustimmung.
             </p>
           </div>
         </CardContent>

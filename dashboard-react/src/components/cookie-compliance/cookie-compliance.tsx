@@ -64,8 +64,32 @@ const CookieCompliancePage: React.FC<CookieCompliancePageProps> = () => {
       setLoading(true);
       
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
-      // Get site_id (from user's first website or create new)
-      const response = await fetch(`${API_URL}/api/cookie-compliance/config/my-site`, {
+      
+      // ✅ Erst Website-Info laden
+      const websiteResponse = await fetch(`${API_URL}/api/v2/websites`, {
+        credentials: 'include',
+      });
+      
+      if (!websiteResponse.ok || !websiteResponse) {
+        console.log('Keine Websites konfiguriert');
+        setLoading(false);
+        return;
+      }
+      
+      const websiteData = await websiteResponse.json();
+      if (!websiteData.success || !websiteData.websites?.length) {
+        console.log('Keine Websites verfügbar');
+        setLoading(false);
+        return;
+      }
+      
+      // ✅ Site-ID aus echter Website generieren
+      const primaryWebsite = websiteData.websites.find((w: any) => w.is_primary) || websiteData.websites[0];
+      const generatedSiteId = generateSiteIdFromUrl(primaryWebsite.url);
+      setSiteId(generatedSiteId);
+      
+      // ✅ Jetzt Config mit echter Site-ID laden
+      const response = await fetch(`${API_URL}/api/cookie-compliance/config/${generatedSiteId}`, {
         credentials: 'include',
       });
       
@@ -73,7 +97,6 @@ const CookieCompliancePage: React.FC<CookieCompliancePageProps> = () => {
         const data = await response.json();
         if (data.success) {
           setConfig(data.data);
-          setSiteId(data.data.site_id || 'my-site');
         }
       }
     } catch (error) {
@@ -87,6 +110,16 @@ const CookieCompliancePage: React.FC<CookieCompliancePageProps> = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+  
+  const generateSiteIdFromUrl = (url: string): string => {
+    try {
+      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+      const hostname = urlObj.hostname.replace('www.', '');
+      return hostname.replace(/\./g, '-').toLowerCase();
+    } catch {
+      return 'unknown-site';
     }
   };
   

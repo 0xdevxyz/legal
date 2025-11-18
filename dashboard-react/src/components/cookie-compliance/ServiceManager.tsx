@@ -43,38 +43,72 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
-  const [scanUrl, setScanUrl] = useState('');
+  const [userWebsiteUrl, setUserWebsiteUrl] = useState('');
   const [scanResults, setScanResults] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [autoScanComplete, setAutoScanComplete] = useState(false);
   
   useEffect(() => {
-    loadServices();
+    loadServicesAndWebsite();
   }, []);
   
-  const loadServices = async () => {
+  const loadServicesAndWebsite = async () => {
     try {
       setLoading(true);
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
-      const response = await fetch(`${API_URL}/api/cookie-compliance/services`);
       
-      if (response.ok) {
-        const data = await response.json();
+      // 1. Lade verfügbare Services
+      const servicesResponse = await fetch(`${API_URL}/api/cookie-compliance/services`);
+      if (servicesResponse.ok) {
+        const data = await servicesResponse.json();
         if (data.success) {
           setServices(data.services || []);
         }
       }
+      
+      // 2. Hole User-Website URL (primäre Website)
+      try {
+        const websiteResponse = await fetch(`${API_URL}/api/v2/websites`, {
+          credentials: 'include',
+        });
+        
+        if (websiteResponse.ok) {
+          const websiteData = await websiteResponse.json();
+          console.log('Website data:', websiteData);
+          
+          if (websiteData.success && websiteData.websites?.length > 0) {
+            // Nehme die primäre Website oder die erste
+            const primaryWebsite = websiteData.websites.find((w: any) => w.is_primary) || websiteData.websites[0];
+            const url = primaryWebsite.url;
+            console.log('Using website URL:', url);
+            setUserWebsiteUrl(url);
+            
+            // 3. Starte automatischen Scan beim ersten Laden
+            if (!autoScanComplete) {
+              console.log('Starting automatic scan...');
+              setTimeout(() => {
+                scanWebsiteAutomatically(url);
+              }, 800);
+            }
+          } else {
+            console.warn('No websites found for user');
+          }
+        } else {
+          console.error('Failed to load websites:', websiteResponse.status);
+        }
+      } catch (websiteError) {
+        console.error('Error loading website:', websiteError);
+      }
     } catch (error) {
-      console.error('Error loading services:', error);
+      console.error('Error loading services and website:', error);
     } finally {
       setLoading(false);
     }
   };
   
-  const scanWebsite = async () => {
-    if (!scanUrl) {
-      return;
-    }
+  const scanWebsiteAutomatically = async (url: string) => {
+    if (!url) return;
     
     try {
       setScanning(true);
@@ -82,13 +116,14 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
       const response = await fetch(`${API_URL}/api/cookie-compliance/scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: scanUrl }),
+        body: JSON.stringify({ url }),
       });
       
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
           setScanResults(data);
+          setAutoScanComplete(true);
           
           // Auto-select detected services
           if (data.detected_services && data.detected_services.length > 0) {
@@ -102,6 +137,13 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
       console.error('Scan error:', error);
     } finally {
       setScanning(false);
+    }
+  };
+  
+  const rescanWebsite = () => {
+    if (userWebsiteUrl) {
+      setScanResults(null);
+      scanWebsiteAutomatically(userWebsiteUrl);
     }
   };
   
@@ -165,72 +207,89 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
       <Card className="border-orange-500/30 bg-gradient-to-br from-orange-500/10 to-orange-600/5 backdrop-blur-sm">
         <CardContent className="pt-6">
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <Radio className="w-5 h-5 text-orange-400" />
-              <h4 className="font-semibold text-white">Automatischer Service-Scanner</h4>
-              <Badge variant="secondary" className="bg-orange-500 text-white text-xs">
-                <Sparkles className="w-3 h-3 mr-1" />
-                AI
-              </Badge>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Radio className="w-5 h-5 text-orange-400" />
+                <h4 className="font-semibold text-white">Automatischer Service-Scanner</h4>
+                <Badge variant="secondary" className="bg-orange-500 text-white text-xs">
+                  <Sparkles className="w-3 h-3 mr-1" />
+                  AI
+                </Badge>
+              </div>
+              {!scanning && userWebsiteUrl && (
+                <Button
+                  onClick={rescanWebsite}
+                  variant="outline"
+                  size="sm"
+                  className="border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
+                >
+                  <Zap className="w-4 h-4 mr-2" />
+                  Erneut scannen
+                </Button>
+              )}
             </div>
+            
+            {userWebsiteUrl && (
+              <div className="flex items-center gap-2 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+                <div className="flex-1">
+                  <p className="text-xs text-gray-400 mb-1">Ihre Website</p>
+                  <p className="text-sm text-white font-medium truncate">{userWebsiteUrl}</p>
+                </div>
+              </div>
+            )}
+            
             <p className="text-sm text-gray-300">
-              Scannen Sie Ihre Website automatisch und erkennen Sie verwendete Cookie-Services.
+              {scanning ? 'Analysiere Ihre Website und erkenne verwendete Cookie-Services...' : 
+               scanResults ? 'Scan abgeschlossen! Gefundene Services wurden automatisch ausgewählt.' :
+               'Website wird automatisch gescannt...'}
             </p>
-            <div className="flex gap-2">
-              <Input
-                placeholder="https://ihre-website.de"
-                value={scanUrl}
-                onChange={(e) => setScanUrl(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && scanWebsite()}
-                className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 flex-1"
-              />
-              <Button
-                onClick={scanWebsite}
-                disabled={scanning || !scanUrl}
-                className="bg-orange-500 hover:bg-orange-600 min-w-[140px]"
-              >
-                {scanning ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Scannt...
-                  </>
-                ) : (
-                  <>
-                    <Radio className="w-4 h-4 mr-2" />
-                    Scannen
-                  </>
-                )}
-              </Button>
-            </div>
             {scanning && (
               <div className="space-y-2">
-                <div className="h-1 bg-gray-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-orange-500 animate-pulse rounded-full w-1/2"></div>
+                <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-orange-500 via-orange-400 to-orange-500 animate-[shimmer_1.5s_infinite] rounded-full"></div>
                 </div>
-                <p className="text-xs text-gray-400">Analysiere Website...</p>
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 text-orange-400 animate-spin" />
+                  <p className="text-xs text-gray-400">Analysiere {userWebsiteUrl}...</p>
+                </div>
               </div>
             )}
             {scanResults && !scanning && (
-              <div className={`p-3 rounded-lg border ${
+              <div className={`p-4 rounded-lg border ${
                 scanResults.total_found > 0
                   ? 'bg-green-500/10 border-green-500/30'
                   : 'bg-blue-500/10 border-blue-500/30'
               }`}>
-                <div className="flex items-start gap-2">
-                  <Check className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                    scanResults.total_found > 0 ? 'text-green-400' : 'text-blue-400'
-                  }`} />
-                  <div>
-                    <p className={`font-semibold text-sm ${
+                <div className="flex items-start gap-3">
+                  <div className={`p-2 rounded-lg ${
+                    scanResults.total_found > 0 ? 'bg-green-500/20' : 'bg-blue-500/20'
+                  }`}>
+                    <Check className={`w-5 h-5 ${
+                      scanResults.total_found > 0 ? 'text-green-400' : 'text-blue-400'
+                    }`} />
+                  </div>
+                  <div className="flex-1">
+                    <p className={`font-semibold text-base mb-1 ${
                       scanResults.total_found > 0 ? 'text-green-400' : 'text-blue-400'
                     }`}>
                       {scanResults.total_found > 0
-                        ? `${scanResults.total_found} Services gefunden!`
-                        : 'Keine Services erkannt'}
+                        ? `✅ ${scanResults.total_found} Services automatisch erkannt`
+                        : 'ℹ️ Keine Cookie-Services gefunden'}
                     </p>
-                    {scanResults.detected_services && scanResults.detected_services.length > 0 && (
-                      <p className="text-xs text-gray-300 mt-1">
-                        {scanResults.detected_services.map((s: any) => s.name).join(', ')}
+                    {scanResults.detected_services && scanResults.detected_services.length > 0 ? (
+                      <div className="mt-2">
+                        <p className="text-xs text-gray-400 mb-2">Automatisch ausgewählt:</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {scanResults.detected_services.map((s: any, idx: number) => (
+                            <Badge key={idx} className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
+                              {s.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 mt-1">
+                        Keine Cookie-Services auf Ihrer Website gefunden. Sie können Services manuell hinzufügen.
                       </p>
                     )}
                   </div>

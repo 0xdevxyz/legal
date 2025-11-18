@@ -11,23 +11,64 @@ export const CookieComplianceWidget: React.FC = () => {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [stats, setStats] = useState<any>(null);
+  const [siteId, setSiteId] = useState<string>('my-site');
 
   const integrationCode = `<!-- Complyo Cookie-Compliance Widget -->
 <script 
   src="https://api.complyo.tech/api/widgets/cookie-compliance.js" 
-  data-site-id="my-site"
+  data-site-id="${siteId}"
   async
 ></script>`;
 
   useEffect(() => {
-    // Load quick stats
-    loadStats();
+    // Load site ID and stats
+    loadSiteIdAndStats();
   }, []);
 
-  const loadStats = async () => {
+  const generateSiteIdFromUrl = (url: string): string => {
+    try {
+      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+      const hostname = urlObj.hostname.replace('www.', '');
+      return hostname.replace(/\./g, '-').toLowerCase();
+    } catch {
+      return 'my-site';
+    }
+  };
+
+  const loadSiteIdAndStats = async () => {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
-      const response = await fetch(`${API_URL}/api/cookie-compliance/stats/my-site?days=7`);
+      
+      let determinedSiteId: string | null = null;
+      
+      // 1. Hole Website-Info für echten site_id
+      try {
+        const websiteResponse = await fetch(`${API_URL}/api/v2/websites`, {
+          credentials: 'include',
+        });
+        
+        if (websiteResponse.ok) {
+          const websiteData = await websiteResponse.json();
+          if (websiteData.success && websiteData.websites?.length > 0) {
+            const primaryWebsite = websiteData.websites.find((w: any) => w.is_primary) || websiteData.websites[0];
+            determinedSiteId = generateSiteIdFromUrl(primaryWebsite.url);
+            setSiteId(determinedSiteId);
+          }
+        }
+      } catch (e) {
+        console.log('Could not load website info');
+      }
+      
+      // 2. ✅ Nur Stats laden, wenn eine echte Website existiert
+      if (!determinedSiteId) {
+        console.log('Keine Website konfiguriert - überspringe Cookie-Stats');
+        return;
+      }
+      
+      // 3. Hole Stats mit dem ermittelten siteId
+      const response = await fetch(`${API_URL}/api/cookie-compliance/stats/${determinedSiteId}?days=7`, {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         if (data.success) {

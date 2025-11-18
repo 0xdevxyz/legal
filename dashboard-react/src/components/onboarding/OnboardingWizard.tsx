@@ -15,6 +15,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
   const [step, setStep] = useState(1);
   const [url, setUrl] = useState('');
   const [urlValid, setUrlValid] = useState(false);
+  const [urlError, setUrlError] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [currentCheck, setCurrentCheck] = useState('');
@@ -23,22 +24,75 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
   const { showToast } = useToast();
   const { setCurrentWebsite, setAnalysisData, updateMetrics } = useDashboardStore();
 
-  // Validate URL in real-time
+  // Validate URL in real-time with strict validation
   useEffect(() => {
     if (!url) {
       setUrlValid(false);
+      setUrlError('');
       return;
     }
 
     try {
       let testUrl = url.trim();
-      if (!testUrl.startsWith('http://') && !testUrl.startsWith('https://')) {
-        testUrl = 'https://' + testUrl;
+      
+      // Remove protocol if present for validation
+      testUrl = testUrl.replace(/^https?:\/\//, '');
+      
+      // Remove trailing slashes and paths for validation
+      testUrl = testUrl.split('/')[0];
+      
+      // Check basic format: must have at least one dot
+      if (!testUrl.includes('.')) {
+        setUrlValid(false);
+        setUrlError('Bitte geben Sie eine gültige Domain ein (z.B. beispiel.de)');
+        return;
       }
-      const urlObj = new URL(testUrl);
+      
+      // Split domain and TLD
+      const parts = testUrl.split('.');
+      
+      // Must have at least 2 parts (domain.tld)
+      if (parts.length < 2) {
+        setUrlValid(false);
+        setUrlError('Domain muss mindestens aus Name und Endung bestehen (z.B. beispiel.de)');
+        return;
+      }
+      
+      // Check each part is not empty
+      if (parts.some(part => part.length === 0)) {
+        setUrlValid(false);
+        setUrlError('Ungültiges Domain-Format');
+        return;
+      }
+      
+      // Get TLD (last part)
+      const tld = parts[parts.length - 1];
+      
+      // TLD must be at least 2 characters and only letters
+      if (tld.length < 2 || !/^[a-zA-Z]{2,}$/.test(tld)) {
+        setUrlValid(false);
+        setUrlError(`Ungültige Domain-Endung: "${tld}". Bitte verwenden Sie eine gültige Endung wie .de, .com, .net`);
+        return;
+      }
+      
+      // Domain parts should only contain alphanumeric and hyphens
+      const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!domainRegex.test(parts[i])) {
+          setUrlValid(false);
+          setUrlError('Domain darf nur Buchstaben, Zahlen und Bindestriche enthalten');
+          return;
+        }
+      }
+      
+      // Final check with URL constructor
+      const fullUrl = 'https://' + testUrl;
+      const urlObj = new URL(fullUrl);
       setUrlValid(!!urlObj.hostname);
+      setUrlError('');
     } catch {
       setUrlValid(false);
+      setUrlError('Ungültiges URL-Format');
     }
   }, [url]);
 
@@ -123,6 +177,108 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
     onComplete();
   };
 
+  // Helper: Get compliance message based on score
+  const getComplianceMessage = (score: number, criticalCount: number, warningCount: number, totalIssues: number) => {
+    if (score >= 90) {
+      return {
+        title: "Großartig! Ihre Website ist compliant!",
+        color: "text-green-700",
+        bgColor: "bg-green-100",
+        emoji: "🎉"
+      };
+    } else if (score >= 70) {
+      const issueCount = criticalCount + warningCount;
+      const issueText = issueCount === 1 ? 'Optimierungsmöglichkeit' : 'Optimierungsmöglichkeiten';
+      return {
+        title: `Größtenteils compliant! Es gibt ${issueCount} ${issueText}.`,
+        color: "text-emerald-700",
+        bgColor: "bg-emerald-100",
+        emoji: "👍"
+      };
+    } else if (score >= 40) {
+      const issueCount = totalIssues || (criticalCount + warningCount);
+      const issueText = issueCount === 1 ? 'Problem' : 'Probleme';
+      return {
+        title: `Verbesserungsbedarf vorhanden. Ich habe ${issueCount} ${issueText} gefunden.`,
+        color: "text-yellow-700",
+        bgColor: "bg-yellow-100",
+        emoji: "⚠️"
+      };
+    } else {
+      // Score unter 40 = kritisch
+      const issueCount = totalIssues || (criticalCount + warningCount);
+      let title = "Erhebliche Compliance-Probleme gefunden.";
+      
+      if (criticalCount > 0) {
+        const criticalText = criticalCount === 1 ? 'kritisches Issue muss' : 'kritische Issues müssen';
+        title = `Erhebliche Compliance-Probleme gefunden. ${criticalCount} ${criticalText} sofort behoben werden.`;
+      } else if (issueCount > 0) {
+        const issueText = issueCount === 1 ? 'Problem muss' : 'Probleme müssen';
+        title = `Erhebliche Compliance-Probleme gefunden. ${issueCount} ${issueText} behoben werden.`;
+      }
+      
+      return {
+        title,
+        color: "text-red-700",
+        bgColor: "bg-red-100",
+        emoji: "🚨"
+      };
+    }
+  };
+
+  // Helper: Get top issues prioritized by severity
+  const getTopIssues = (issues: ComplianceIssue[], limit: number = 5): ComplianceIssue[] => {
+    if (!issues || issues.length === 0) return [];
+    
+    const severityOrder = { critical: 0, warning: 1, info: 2 };
+    
+    return [...issues]
+      .sort((a, b) => {
+        const severityDiff = severityOrder[a.severity] - severityOrder[b.severity];
+        if (severityDiff !== 0) return severityDiff;
+        return 0;
+      })
+      .slice(0, limit);
+  };
+
+  // Helper: Get category icon and label
+  const getCategoryInfo = (category: string) => {
+    const categoryMap: Record<string, { icon: string; label: string; color: string }> = {
+      impressum: { icon: '📋', label: 'Impressum', color: 'text-blue-700' },
+      datenschutz: { icon: '🔒', label: 'Datenschutz', color: 'text-purple-700' },
+      privacy: { icon: '🔒', label: 'Datenschutz', color: 'text-purple-700' },
+      cookies: { icon: '🍪', label: 'Cookies', color: 'text-orange-700' },
+      cookie: { icon: '🍪', label: 'Cookies', color: 'text-orange-700' },
+      ssl: { icon: '🔐', label: 'SSL/Sicherheit', color: 'text-green-700' },
+      security: { icon: '🔐', label: 'Sicherheit', color: 'text-green-700' },
+      agb: { icon: '📄', label: 'AGB', color: 'text-indigo-700' },
+      terms: { icon: '📄', label: 'AGB', color: 'text-indigo-700' },
+    };
+    
+    return categoryMap[category.toLowerCase()] || { icon: '⚡', label: 'Sonstige', color: 'text-gray-700' };
+  };
+
+  // Helper: Group issues by category
+  const groupIssuesByCategory = (issues: ComplianceIssue[]) => {
+    if (!issues || issues.length === 0) return [];
+    
+    const grouped = issues.reduce((acc, issue) => {
+      const category = issue.category || 'sonstige';
+      if (!acc[category]) {
+        acc[category] = [];
+      }
+      acc[category].push(issue);
+      return acc;
+    }, {} as Record<string, ComplianceIssue[]>);
+    
+    return Object.entries(grouped).map(([category, categoryIssues]) => ({
+      category,
+      issues: categoryIssues,
+      criticalCount: categoryIssues.filter(i => i.severity === 'critical').length,
+      warningCount: categoryIssues.filter(i => i.severity === 'warning').length,
+    }));
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center p-4">
       <div className="max-w-2xl w-full">
@@ -162,9 +318,9 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
                     <CheckCircle className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" />
                   )}
                 </div>
-                {url && !urlValid && (
+                {url && !urlValid && urlError && (
                   <p className="text-sm text-red-600 mt-2">
-                    Bitte geben Sie eine gültige URL ein
+                    ✗ {urlError}
                   </p>
                 )}
                 {urlValid && (
@@ -253,66 +409,108 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
         )}
 
         {/* Step 3: Results */}
-        {step === 3 && scanResult && (
-          <div className="bg-white rounded-2xl shadow-2xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex items-center justify-center mb-6">
-              <div className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold ${
-                scanResult.compliance_score >= 80 ? 'bg-green-100 text-green-700' :
-                scanResult.compliance_score >= 60 ? 'bg-yellow-100 text-yellow-700' :
-                'bg-red-100 text-red-700'
-              }`}>
-                {scanResult.compliance_score}
+        {step === 3 && scanResult && (() => {
+          const totalIssues = (scanResult.issues || []).length;
+          const complianceMsg = getComplianceMessage(
+            scanResult.compliance_score || 0,
+            scanResult.critical_issues || 0,
+            scanResult.warning_issues || 0,
+            totalIssues
+          );
+          const topIssues = getTopIssues(scanResult.issues || [], 5);
+          const categorizedIssues = groupIssuesByCategory(scanResult.issues || []);
+
+          return (
+            <div className="bg-white rounded-2xl shadow-2xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-center mb-6">
+                <div className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold ${complianceMsg.bgColor} ${complianceMsg.color}`}>
+                  {scanResult.compliance_score}
+                </div>
               </div>
-            </div>
-            
-            <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">
-              Analyse abgeschlossen!
-            </h2>
-            
-            <p className="text-gray-600 text-center mb-8">
-              {scanResult.critical_issues > 0 ? (
-                <>Ich habe <span className="font-bold text-red-600">{scanResult.critical_issues} kritische Probleme</span> gefunden, die Sie sofort beheben sollten.</>
-              ) : scanResult.warning_issues > 0 ? (
-                <>Ihre Website ist größtenteils compliant. Es gibt <span className="font-bold text-yellow-600">{scanResult.warning_issues} Verbesserungsvorschläge</span>.</>
-              ) : (
-                <>🎉 Großartig! Ihre Website ist compliant!</>
+              
+              <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">
+                Analyse abgeschlossen!
+              </h2>
+              
+              <p className="text-gray-600 text-center mb-8">
+                <span className="text-2xl mr-2">{complianceMsg.emoji}</span>
+                {complianceMsg.title}
+              </p>
+
+              {/* Issues by Category */}
+              {categorizedIssues.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="font-semibold text-gray-900 mb-3 text-lg">Gefundene Problembereiche:</h3>
+                  <div className="grid grid-cols-1 gap-2">
+                    {categorizedIssues.map((cat, idx) => {
+                      const catInfo = getCategoryInfo(cat.category);
+                      return (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">{catInfo.icon}</span>
+                            <div>
+                              <p className={`font-medium ${catInfo.color}`}>{catInfo.label}</p>
+                              <p className="text-sm text-gray-600">
+                                {cat.criticalCount > 0 && <span className="text-red-600">{cat.criticalCount} kritisch</span>}
+                                {cat.criticalCount > 0 && cat.warningCount > 0 && <span className="text-gray-400"> • </span>}
+                                {cat.warningCount > 0 && <span className="text-yellow-600">{cat.warningCount} Warnung</span>}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-gray-400 font-semibold">{cat.issues.length}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
-            </p>
 
-            {/* Top Issues */}
-            {scanResult.issues && scanResult.issues.length > 0 && (
-              <div className="mb-8 space-y-3">
-                <h3 className="font-semibold text-gray-900 mb-3">Top Probleme:</h3>
-                {scanResult.issues
-                  .filter((issue: ComplianceIssue) => issue.severity === 'critical')
-                  .slice(0, 3)
-                  .map((issue: ComplianceIssue, idx: number) => (
-                    <div key={idx} className="flex items-start gap-3 p-3 bg-red-50 rounded-lg border border-red-200">
-                      <span className="text-red-600 font-bold text-lg">{idx + 1}</span>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{issue.title}</p>
-                        <p className="text-sm text-gray-600">{issue.description}</p>
+              {/* Top Issues */}
+              {topIssues.length > 0 && (
+                <div className="mb-8 space-y-3">
+                  <h3 className="font-semibold text-gray-900 mb-3 text-lg">Wichtigste Probleme:</h3>
+                  {topIssues.map((issue: ComplianceIssue, idx: number) => {
+                    const severityColors = {
+                      critical: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', badge: 'bg-red-100 text-red-700' },
+                      warning: { bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-700', badge: 'bg-yellow-100 text-yellow-700' },
+                      info: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-700' }
+                    };
+                    const colors = severityColors[issue.severity] || severityColors.info;
+                    
+                    return (
+                      <div key={idx} className={`flex items-start gap-3 p-4 ${colors.bg} rounded-lg border ${colors.border}`}>
+                        <span className={`${colors.text} font-bold text-lg`}>{idx + 1}</span>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-1">
+                            <p className="font-medium text-gray-900">{issue.title}</p>
+                            <span className={`text-xs px-2 py-1 rounded-full ${colors.badge} font-semibold uppercase ml-2`}>
+                              {issue.severity === 'critical' ? 'Kritisch' : issue.severity === 'warning' ? 'Warnung' : 'Info'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 line-clamp-2">{issue.description}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
 
-            {/* CTA */}
-            <button
-              onClick={handleComplete}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-4 rounded-xl font-semibold text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
-            >
-              <Sparkles className="w-5 h-5" />
-              Jetzt Probleme beheben
-              <ArrowRight className="w-5 h-5" />
-            </button>
+              {/* CTA */}
+              <button
+                onClick={handleComplete}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-4 rounded-xl font-semibold text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+              >
+                <Sparkles className="w-5 h-5" />
+                Jetzt Probleme beheben
+                <ArrowRight className="w-5 h-5" />
+              </button>
 
-            <p className="text-center text-sm text-gray-500 mt-4">
-              💡 Tiefere Analyse läuft im Hintergrund weiter...
-            </p>
-          </div>
-        )}
+              <p className="text-center text-sm text-gray-500 mt-4">
+                💡 Tiefere Analyse läuft im Hintergrund weiter...
+              </p>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
