@@ -3,14 +3,26 @@ Complyo Widget API Routes
 Endpoints for serving and managing widgets
 """
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, Response, JSONResponse
+from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Depends
+from fastapi.responses import FileResponse, Response, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import os
+from datetime import datetime
+import time
 from accessibility_templates import AccessibilityTemplates
+from accessibility_patch_generator import AccessibilityPatchGenerator
+from accessibility_fix_saver import AccessibilityFixSaver
 
 router = APIRouter()
+
+# Database pool (wird von main.py gesetzt)
+db_pool = None
+
+def set_db_pool(pool):
+    """Setzt den Database Pool (called from main.py)"""
+    global db_pool
+    return pool
 
 # Widget directory
 WIDGET_DIR = os.path.join(os.path.dirname(__file__), 'widgets')
@@ -21,6 +33,14 @@ class WidgetTrackingEvent(BaseModel):
     event: str
     timestamp: str
     metadata: Optional[Dict[str, Any]] = None
+
+
+class WidgetAnalyticsRequest(BaseModel):
+    site_id: str
+    feature: str
+    value: Any
+    timestamp: int
+    session_id: str
 
 
 @router.get("/api/widgets/cookie-consent.js")
@@ -110,14 +130,25 @@ async def serve_cookie_compliance_widget(site_id: Optional[str] = None):
 
 
 @router.get("/api/widgets/accessibility.js")
-async def serve_accessibility_widget():
+async def serve_accessibility_widget(version: str = "6"):
     """
     Serve the Accessibility Widget JavaScript
+    
+    Args:
+        version: Widget version (4, 5 or 6, default 6)
     """
-    widget_path = os.path.join(WIDGET_DIR, 'accessibility.js')
+    # V6 ist jetzt default - Next Level Edition mit Grid-Layout
+    if version == "6":
+        widget_filename = 'accessibility-v6.js'
+    elif version == "5":
+        widget_filename = 'accessibility-v5.js'
+    else:
+        widget_filename = 'accessibility.js'
+    
+    widget_path = os.path.join(WIDGET_DIR, widget_filename)
     
     if not os.path.exists(widget_path):
-        raise HTTPException(status_code=404, detail="Widget not found")
+        raise HTTPException(status_code=404, detail=f"Widget {widget_filename} not found")
     
     # Read widget content
     with open(widget_path, 'r', encoding='utf-8') as f:
@@ -128,8 +159,9 @@ async def serve_accessibility_widget():
         content=content,
         media_type='application/javascript',
         headers={
-            'Cache-Control': 'public, max-age=3600',
-            'Access-Control-Allow-Origin': '*'
+            'Cache-Control': 'public, max-age=60',  # 60 Sekunden Cache für schnelle Updates
+            'Access-Control-Allow-Origin': '*',
+            'X-Complyo-Widget-Version': '6.1.0'
         }
     )
 
@@ -161,6 +193,84 @@ async def track_widget_event(event: WidgetTrackingEvent):
             "success": False,
             "message": "Tracking failed"
         }
+
+
+@router.post("/api/widgets/analytics")
+async def track_widget_analytics(
+    data: WidgetAnalyticsRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Track widget usage analytics for Upsell-Insights
+    
+    Tracks feature usage patterns to identify:
+    - Most used features
+    - User preferences
+    - Potential for permanent deployment
+    
+    Args:
+        data: Analytics data (feature, value, session_id, etc.)
+        background_tasks: Background task queue
+        
+    Returns:
+        Success response
+    """
+    try:
+        # ✅ Save to database
+        if db_pool:
+            async with db_pool.acquire() as conn:
+                # Use the stored procedure for efficient tracking
+                await conn.execute(
+                    "SELECT track_widget_feature($1, $2, $3, $4)",
+                    data.site_id,
+                    data.session_id,
+                    data.feature,
+                    json.dumps({"value": data.value, "timestamp": data.timestamp}) if data.value else None
+                )
+            
+            logger.info(f"📊 Widget Analytics: Site={data.site_id}, Feature={data.feature}, Session={data.session_id[:8]}...")
+        else:
+            # Fallback: Log wenn DB nicht verfügbar
+            logger.warning(f"[Widget Analytics] DB not available - Site: {data.site_id}, Feature: {data.feature}")
+        
+        return {
+            "success": True,
+            "message": "Analytics tracked"
+        }
+    
+    except Exception as e:
+        print(f"Error tracking widget analytics: {e}")
+        # Don't fail the request - analytics shouldn't break the widget
+        return {
+            "success": True,  # Return success even on error
+            "message": "Analytics tracking failed silently"
+        }
+
+
+async def _check_upsell_opportunity(site_id: str):
+    """
+    Background task to check if user should see upsell notification
+    
+    Checks:
+    - Total usage count > 100 (widget is heavily used)
+    - Specific features used frequently (font-size > 50x)
+    
+    If threshold met: Send notification to dashboard
+    """
+    try:
+        # TODO: Implement with database
+        # usage_count = await db_service.fetchval(
+        #     """SELECT COUNT(*) FROM widget_usage_stats
+        #     WHERE site_id = $1 AND timestamp > NOW() - INTERVAL '30 days'""",
+        #     site_id
+        # )
+        # 
+        # if usage_count > 100:
+        #     await _send_upsell_notification(site_id, usage_count)
+        
+        pass
+    except Exception as e:
+        print(f"Error checking upsell opportunity: {e}")
 
 
 @router.get("/api/widgets/config/{site_id}")
@@ -260,3 +370,342 @@ async def get_accessibility_template(template_id: str):
         }
     )
 
+
+@router.get("/api/accessibility/alt-text-fixes")
+async def get_alt_text_fixes_for_widget(site_id: str):
+    """
+    Gibt AI-generierte Alt-Texte für Widget-Runtime-Injection zurück
+    
+    Dies ist der Hybrid-Ansatz:
+    - Widget lädt diese Alt-Texte und fügt sie runtime ins DOM ein
+    - Für sofortige Barrierefreiheit ohne Code-Änderungen
+    - Später können Patches für permanente SEO-Optimierung heruntergeladen werden
+    
+    Args:
+        site_id: Site-Identifier
+        
+    Returns:
+        JSON mit Alt-Text-Fixes
+    """
+    try:
+        # Lade Fixes aus Datenbank
+        fixes = []
+        
+        if db_pool:
+            fix_saver = AccessibilityFixSaver(db_pool)
+            fixes = await fix_saver.get_fixes_for_site(site_id, status='approved')
+        else:
+            # Fallback: Demo-Daten wenn DB nicht verfügbar
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"DB pool not available, using demo data for site_id={site_id}")
+            
+            fixes = [
+                {
+                    "image_src": "/images/logo.png",
+                    "image_filename": "logo.png",
+                    "suggested_alt": "Firmenlogo Mustermann GmbH",
+                    "page_url": "/",
+                    "confidence": 0.95
+                },
+                {
+                    "image_src": "/images/team.jpg",
+                    "image_filename": "team.jpg",
+                    "suggested_alt": "Team-Foto der Mitarbeiter",
+                    "page_url": "/about",
+                    "confidence": 0.89
+                },
+                {
+                    "image_src": "/images/product.png",
+                    "image_filename": "product.png",
+                    "suggested_alt": "Produktabbildung Premium-Modell",
+                    "page_url": "/products",
+                    "confidence": 0.92
+                }
+            ]
+        
+        return JSONResponse(
+            content={
+                "success": True,
+                "fixes": fixes,
+                "count": len(fixes),
+                "mode": "runtime",
+                "version": "4.0.0"
+            },
+            headers={
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=600'  # 10 Minuten Cache
+            }
+        )
+        
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error loading alt-text fixes: {e}")
+        
+        return JSONResponse(
+            content={
+                "success": False,
+                "fixes": [],
+                "error": str(e)
+            },
+            headers={
+                'Access-Control-Allow-Origin': '*'
+            }
+        )
+
+
+@router.post("/api/accessibility/patches/generate")
+async def generate_accessibility_patches(
+    site_id: str,
+    background_tasks: BackgroundTasks,
+    # user_id: int = Depends(get_current_user_id)  # TODO: Add auth
+):
+    """
+    Generiert Barrierefreiheits-Patches als ZIP-Download
+    
+    Teil des Hybrid-Modells:
+    - Widget liefert sofortige Runtime-Fixes
+    - Diese Patches liefern permanente SEO-optimierte Lösung
+    
+    Args:
+        site_id: Site-Identifier
+        background_tasks: Background task queue
+        
+    Returns:
+        Download-URL für ZIP-Datei
+    """
+    try:
+        # TODO: Load real fixes from database
+        # In production: Query from accessibility_fixes table
+        # For now: Use demo data
+        demo_fixes = [
+            {
+                "type": "alt_text",
+                "page_url": "/",
+                "image_src": "/images/logo.png",
+                "image_filename": "logo.png",
+                "suggested_alt": "Firmenlogo Mustermann GmbH",
+                "confidence": 0.95
+            },
+            {
+                "type": "alt_text",
+                "page_url": "/about",
+                "image_src": "/images/team.jpg",
+                "image_filename": "team.jpg",
+                "suggested_alt": "Team-Foto der Mitarbeiter",
+                "confidence": 0.89
+            },
+            {
+                "type": "contrast",
+                "selector": ".text-muted",
+                "new_color": "#4a5568",
+                "issue": "Kontrast zu niedrig"
+            },
+            {
+                "type": "aria_label",
+                "element_id": "search-button",
+                "aria_label": "Suche starten",
+                "issue": "Button ohne Label"
+            }
+        ]
+        
+        # Generate patches
+        generator = AccessibilityPatchGenerator()
+        zip_buffer = await generator.generate_patch_bundle(
+            site_id=site_id,
+            user_id=1,  # TODO: Real user_id
+            fixes=demo_fixes
+        )
+        
+        # Create download ID (timestamp-based)
+        download_id = f"{site_id}_{int(time.time())}"
+        
+        # TODO: Store in temporary storage (Redis/file)
+        # For now: Return immediately
+        
+        # Store ZIP in memory for this session (simplified)
+        # In production: Use Redis or filesystem
+        if not hasattr(generate_accessibility_patches, '_temp_storage'):
+            generate_accessibility_patches._temp_storage = {}
+        
+        generate_accessibility_patches._temp_storage[download_id] = zip_buffer.getvalue()
+        
+        return {
+            "success": True,
+            "download_id": download_id,
+            "download_url": f"/api/accessibility/patches/download/{download_id}",
+            "file_size": len(zip_buffer.getvalue()),
+            "expires_in": "1 Stunde",
+            "patches_count": len(demo_fixes)
+        }
+        
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error generating patches: {e}", exc_info=True)
+        
+        raise HTTPException(
+            status_code=500,
+            detail=f"Fehler beim Generieren der Patches: {str(e)}"
+        )
+
+
+@router.get("/api/accessibility/patches/download/{download_id}")
+async def download_accessibility_patches(download_id: str):
+    """
+    Lädt generierte Barrierefreiheits-Patches herunter
+    
+    Args:
+        download_id: Download-Identifier (von generate-Endpoint)
+        
+    Returns:
+        ZIP-Datei mit Patches
+    """
+    try:
+        # Retrieve from temporary storage
+        if not hasattr(generate_accessibility_patches, '_temp_storage'):
+            raise HTTPException(status_code=404, detail="Download nicht gefunden oder abgelaufen")
+        
+        zip_content = generate_accessibility_patches._temp_storage.get(download_id)
+        
+        if not zip_content:
+            raise HTTPException(status_code=404, detail="Download nicht gefunden oder abgelaufen")
+        
+        # Return as streaming response
+        return StreamingResponse(
+            iter([zip_content]),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f"attachment; filename=complyo-barrierefreiheit-patches-{download_id}.zip",
+                "Content-Length": str(len(zip_content))
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error downloading patches: {e}", exc_info=True)
+        
+        raise HTTPException(
+            status_code=500,
+            detail=f"Fehler beim Download: {str(e)}"
+        )
+
+
+
+@router.get("/api/widgets/analytics/{site_id}")
+async def get_widget_analytics(site_id: str, days: int = 30):
+    """
+    Holt Widget-Analytics für Dashboard
+    
+    Args:
+        site_id: Site-Identifier
+        days: Anzahl Tage zurück (default 30)
+        
+    Returns:
+        Analytics-Statistiken
+    """
+    try:
+        if not db_pool:
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": "Database not available"
+                },
+                headers={'Access-Control-Allow-Origin': '*'}
+            )
+        
+        async with db_pool.acquire() as conn:
+            # 1. Feature-Popularität
+            feature_stats = await conn.fetch(
+                f"""
+                SELECT 
+                    feature,
+                    COUNT(*) as usage_count,
+                    COUNT(DISTINCT session_id) as unique_sessions
+                FROM widget_analytics
+                WHERE site_id = $1 
+                  AND timestamp > NOW() - INTERVAL '{days} days'
+                  AND event_type = 'feature_toggle'
+                  AND feature IS NOT NULL
+                GROUP BY feature
+                ORDER BY usage_count DESC
+                """,
+                site_id
+            )
+            
+            # 2. Tägliche Nutzung
+            daily_stats = await conn.fetch(
+                f"""
+                SELECT 
+                    DATE(timestamp) as date,
+                    COUNT(*) as events,
+                    COUNT(DISTINCT session_id) as sessions
+                FROM widget_analytics
+                WHERE site_id = $1 
+                  AND timestamp > NOW() - INTERVAL '{days} days'
+                GROUP BY DATE(timestamp)
+                ORDER BY date DESC
+                LIMIT 30
+                """,
+                site_id
+            )
+            
+            # 3. Gesamt-Statistiken
+            total_stats = await conn.fetchrow(
+                f"""
+                SELECT 
+                    COUNT(*) as total_events,
+                    COUNT(DISTINCT session_id) as total_sessions,
+                    COUNT(DISTINCT DATE(timestamp)) as active_days
+                FROM widget_analytics
+                WHERE site_id = $1 
+                  AND timestamp > NOW() - INTERVAL '{days} days'
+                """,
+                site_id
+            )
+        
+        return JSONResponse(
+            content={
+                "success": True,
+                "site_id": site_id,
+                "period_days": days,
+                "features": [
+                    {
+                        "feature": row['feature'],
+                        "usage_count": row['usage_count'],
+                        "unique_sessions": row['unique_sessions']
+                    }
+                    for row in feature_stats
+                ],
+                "daily_usage": [
+                    {
+                        "date": row['date'].isoformat(),
+                        "events": row['events'],
+                        "sessions": row['sessions']
+                    }
+                    for row in daily_stats
+                ],
+                "totals": {
+                    "total_events": total_stats['total_events'],
+                    "total_sessions": total_stats['total_sessions'],
+                    "active_days": total_stats['active_days']
+                } if total_stats else {}
+            },
+            headers={'Access-Control-Allow-Origin': '*'}
+        )
+        
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error loading widget analytics: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": str(e)
+            },
+            headers={'Access-Control-Allow-Origin': '*'}
+        )

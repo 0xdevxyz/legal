@@ -1,16 +1,91 @@
 """
 Barrierefreiheit Check (BFSG)
 Prüft Website auf Barrierefreiheitsstärkungsgesetz-Compliance
+
+✨ NEU: Browser-basiertes Rendering für moderne JavaScript-Websites
 """
 
 from bs4 import BeautifulSoup
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict, field
 import re
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 import logging
+import aiohttp
+from xml.etree import ElementTree as ET
 
 logger = logging.getLogger(__name__)
+
+
+async def check_barrierefreiheit_compliance_smart(url: str, html: str = None, session=None) -> List[Dict[str, Any]]:
+    """
+    🚀 SMART Barrierefreiheits-Check mit automatischer Browser-Erkennung
+    
+    Nutzt Browser-Rendering für Client-Side-gerenderte Websites (React, Vue, etc.)
+    Nutzt einfaches HTTP für Server-rendered Websites (schneller)
+    
+    Args:
+        url: URL der zu prüfenden Website
+        html: Optional bereits gefetchtes HTML (sonst wird es geholt)
+        session: Optional aiohttp Session für Requests
+        
+    Returns:
+        Liste von Issues (wie check_barrierefreiheit_compliance)
+    """
+    from ..browser_renderer import smart_fetch_html, detect_client_rendering
+    
+    # ✅ FIX: URL-Normalisierung (falls direkt aufgerufen, ohne Scanner)
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+        logger.info(f"✅ URL normalized to: {url}")
+    
+    logger.info(f"🔍 Smart Barrierefreiheits-Check für: {url}")
+    
+    try:
+        # 1. Hole HTML (smart mit Browser wenn nötig)
+        if html is None:
+            # Fetch initial HTML
+            import ssl
+            import certifi
+            
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            
+            async with aiohttp.ClientSession(connector=connector) as temp_session:
+                async with temp_session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
+                    html = await response.text()
+        
+        # 2. Prüfe ob Browser nötig ist
+        needs_browser, reason = detect_client_rendering(html)
+        
+        if needs_browser:
+            logger.info(f"🌐 Browser needed: {reason}")
+            # Hole vollständig gerendertes HTML
+            html, metadata = await smart_fetch_html(url, html)
+            logger.info(f"✅ Browser rendering completed: {metadata.get('rendering_type', 'unknown')}")
+        else:
+            logger.info(f"⚡ Server-rendered detected, using simple HTML")
+        
+        # 3. Führe normalen Check mit (potenziell gerenderten) HTML durch
+        soup = BeautifulSoup(html, 'html.parser')
+        issues = await check_barrierefreiheit_compliance(url, soup, session)
+        
+        # 4. Füge Metadaten hinzu
+        for issue_dict in issues:
+            if 'metadata' not in issue_dict:
+                issue_dict['metadata'] = {}
+            issue_dict['metadata']['used_browser_rendering'] = needs_browser
+            issue_dict['metadata']['detection_reason'] = reason
+        
+        return issues
+        
+    except Exception as e:
+        logger.error(f"❌ Smart compliance check failed: {e}")
+        # Fallback zu normalem Check
+        logger.info("📋 Falling back to simple check")
+        soup = BeautifulSoup(html if html else "", 'html.parser')
+        return await check_barrierefreiheit_compliance(url, soup, session)
+
 
 @dataclass
 class BarrierefreiheitIssue:
@@ -32,17 +107,22 @@ class BarrierefreiheitIssue:
 
 async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, session=None) -> List[Dict[str, Any]]:
     """
-    Umfassender Barrierefreiheits-Check
+    Umfassender Barrierefreiheits-Check mit Multi-Page Scanning
     
     Prüft:
     1. Accessibility-Widget/Tool vorhanden
     2. Kontrast-Verhältnisse
-    3. Alt-Texte für Bilder
+    3. Alt-Texte für Bilder (ALLE Seiten!)
     4. ARIA-Labels und Rollen
     5. Tastaturbedienung
     6. Semantisches HTML
     7. Screenreader-Kompatibilität
     """
+    # ✅ FIX: URL-Normalisierung (falls direkt aufgerufen)
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+        logger.info(f"✅ URL normalized to: {url}")
+    
     issues = []
     
     # 1. Check für Accessibility-Tools/Widgets
@@ -131,9 +211,32 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
         ))
     else:
         # Widget vorhanden, führe detaillierte Checks durch
-        # 2. Alt-Texte prüfen (mit Screenshot & AI)
-        alt_issues = await _check_alt_texts_enhanced(url, soup, session)
-        issues.extend(alt_issues)
+        # 2. Alt-Texte prüfen (MULTI-PAGE SCAN!)
+        logger.info(f"🔍 Starting multi-page accessibility scan for {url}")
+        
+        # NEU: Multi-Page Scan für Bilder
+        if session:
+            all_pages = await _discover_pages(url, session)
+            logger.info(f"📄 Discovered {len(all_pages)} pages to scan")
+            
+            for page_url in all_pages[:50]:  # Max 50 Seiten
+                try:
+                    page_content = await _fetch_page(page_url, session)
+                    if page_content:
+                        page_soup = BeautifulSoup(page_content, 'html.parser')
+                        
+                        # Scanne Bilder auf dieser Seite
+                        page_issues = await _check_images_for_alt_text(page_url, page_soup)
+                        issues.extend(page_issues)
+                        logger.info(f"  ✓ {page_url}: {len(page_issues)} issues found")
+                except Exception as e:
+                    logger.warning(f"  ✗ Failed to scan {page_url}: {e}")
+                    continue
+        else:
+            # Fallback: Nur Hauptseite scannen
+            logger.info("⚠️ No session provided, scanning main page only")
+            alt_issues = await _check_alt_texts_enhanced(url, soup, session)
+            issues.extend(alt_issues)
         
         # 3. ARIA-Labels prüfen
         aria_issues = await _check_aria_labels(soup)
@@ -158,20 +261,46 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
     Prüft ob ein Accessibility-Widget/Tool vorhanden ist
     
     Bekannte Widgets:
+    - Complyo (eigenes Widget)
     - UserWay
     - AccessiBe
     - Eye-Able
     - EqualWeb
     - AudioEye
+    - Recite Me
+    - UserZoom
+    - Level Access
     """
     widget_patterns = [
+        # Complyo eigenes Widget (WICHTIG!)
+        r'complyo',
+        r'api\.complyo\.tech',
+        r'complyo.*accessibility',
+        r'complyo.*widget',
+        r'complyo.*a11y',
+        
+        # Bekannte Drittanbieter
         r'userway',
         r'accessibe',
+        r'acsbapp',  # AccessiBe Domain
         r'eye-able',
+        r'eyeable',
         r'equalweb',
         r'audioeye',
+        r'reciteme',
+        r'userzoom',
+        r'levelaccess',
+        r'adally',  # Adally Widget
+        r'max-access',  # MaxAccess
+        r'essl\.ai',  # Essential Accessibility
+        
+        # Generische Patterns
         r'accessibility.*widget',
-        r'a11y.*widget'
+        r'accessibility.*tool',
+        r'a11y.*widget',
+        r'a11y.*tool',
+        r'barrier.*free.*widget',
+        r'wcag.*widget'
     ]
     
     # Suche in Scripts
@@ -182,6 +311,23 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
             if re.search(pattern, src, re.I):
                 return None  # Widget gefunden, kein Issue
     
+    # NEU: Suche in Preload-Links (für Next.js, React etc.)
+    # Modern frameworks nutzen <link rel="preload" as="script">
+    preload_links = soup.find_all('link', rel='preload', attrs={'as': 'script'})
+    for link in preload_links:
+        href = link.get('href', '').lower()
+        for pattern in widget_patterns:
+            if re.search(pattern, href, re.I):
+                return None  # Widget gefunden (via preload), kein Issue
+    
+    # NEU: Suche in normalen Link-Tags (manchmal wird das Widget so geladen)
+    link_tags = soup.find_all('link', href=True)
+    for link in link_tags:
+        href = link.get('href', '').lower()
+        for pattern in widget_patterns:
+            if re.search(pattern, href, re.I):
+                return None  # Widget gefunden, kein Issue
+    
     # Suche in Script-Content
     script_contents = soup.find_all('script', src=False)
     for script in script_contents:
@@ -190,9 +336,19 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
             if re.search(pattern, content, re.I):
                 return None
     
-    # Suche nach DIV-Containern mit accessibility-Klassen
-    accessibility_divs = soup.find_all(['div', 'aside'], class_=re.compile(r'accessibility|a11y|barrier.*free', re.I))
+    # Suche nach DIV-Containern mit accessibility-Klassen (inkl. Complyo)
+    accessibility_divs = soup.find_all(
+        ['div', 'aside', 'section'], 
+        class_=re.compile(r'accessibility|a11y|barrier.*free|complyo', re.I)
+    )
     if accessibility_divs:
+        return None
+    
+    # Suche nach IDs mit accessibility-Bezug
+    accessibility_ids = soup.find_all(
+        id=re.compile(r'accessibility|a11y|complyo.*widget|complyo.*a11y', re.I)
+    )
+    if accessibility_ids:
         return None
     
     # Kein Widget gefunden - HAUPTELEMENT FEHLT
@@ -523,4 +679,267 @@ async def _check_color_contrast(soup: BeautifulSoup) -> List[BarrierefreiheitIss
         ))
     
     return issues
+
+
+# ============================================================================
+# Multi-Page Scanning Helper Functions
+# ============================================================================
+
+async def _discover_pages(base_url: str, session: aiohttp.ClientSession, max_pages: int = 50) -> List[str]:
+    """
+    Entdeckt alle Seiten einer Website (via Sitemap oder Link-Following)
+    
+    Args:
+        base_url: Die Basis-URL der Website
+        session: HTTP-Session für Requests
+        max_pages: Maximale Anzahl zu scannender Seiten
+        
+    Returns:
+        Liste von URLs
+    """
+    pages = set()
+    pages.add(base_url)  # Hauptseite immer dabei
+    
+    # 1. Versuche Sitemap zu laden
+    sitemap_urls = await _get_sitemap_urls(base_url, session)
+    if sitemap_urls:
+        logger.info(f"📄 Found {len(sitemap_urls)} URLs in sitemap")
+        pages.update(sitemap_urls[:max_pages])
+    else:
+        # 2. Fallback: Crawle Links rekursiv (begrenzt)
+        logger.info("📄 No sitemap found, crawling links...")
+        crawled_urls = await _crawl_links_recursive(base_url, session, max_depth=2, max_pages=max_pages)
+        pages.update(crawled_urls)
+    
+    # Begrenze auf max_pages
+    return list(pages)[:max_pages]
+
+
+async def _get_sitemap_urls(base_url: str, session: aiohttp.ClientSession) -> List[str]:
+    """
+    Versucht URLs aus sitemap.xml zu extrahieren
+    
+    Args:
+        base_url: Die Basis-URL der Website
+        session: HTTP-Session
+        
+    Returns:
+        Liste von URLs aus der Sitemap
+    """
+    sitemap_locations = [
+        f"{base_url}/sitemap.xml",
+        f"{base_url}/sitemap_index.xml",
+        f"{base_url}/sitemap/sitemap.xml",
+    ]
+    
+    for sitemap_url in sitemap_locations:
+        try:
+            async with session.get(sitemap_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                if response.status == 200:
+                    content = await response.text()
+                    
+                    # Parse XML
+                    try:
+                        root = ET.fromstring(content)
+                        
+                        # Namespace handling
+                        ns = {'sm': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+                        
+                        # Extrahiere URLs
+                        urls = []
+                        for url_elem in root.findall('.//sm:loc', ns):
+                            if url_elem.text:
+                                urls.append(url_elem.text)
+                        
+                        # Fallback ohne Namespace
+                        if not urls:
+                            for url_elem in root.findall('.//{*}loc'):
+                                if url_elem.text:
+                                    urls.append(url_elem.text)
+                        
+                        if urls:
+                            logger.info(f"✓ Found sitemap at {sitemap_url} with {len(urls)} URLs")
+                            return urls
+                    except ET.ParseError as e:
+                        logger.debug(f"Failed to parse XML from {sitemap_url}: {e}")
+                        continue
+        except Exception as e:
+            logger.debug(f"Failed to fetch sitemap from {sitemap_url}: {e}")
+            continue
+    
+    return []
+
+
+async def _crawl_links_recursive(
+    base_url: str,
+    session: aiohttp.ClientSession,
+    max_depth: int = 2,
+    max_pages: int = 50
+) -> List[str]:
+    """
+    Crawlt Links rekursiv (begrenzt)
+    
+    Args:
+        base_url: Die Basis-URL
+        session: HTTP-Session
+        max_depth: Maximale Crawl-Tiefe
+        max_pages: Maximale Anzahl Seiten
+        
+    Returns:
+        Liste von gefundenen URLs
+    """
+    visited = set()
+    to_visit = [(base_url, 0)]  # (url, depth)
+    found_urls = []
+    
+    base_domain = urlparse(base_url).netloc
+    
+    while to_visit and len(found_urls) < max_pages:
+        current_url, depth = to_visit.pop(0)
+        
+        if current_url in visited or depth > max_depth:
+            continue
+        
+        visited.add(current_url)
+        found_urls.append(current_url)
+        
+        # Hole Links von dieser Seite
+        try:
+            content = await _fetch_page(current_url, session)
+            if content:
+                soup = BeautifulSoup(content, 'html.parser')
+                
+                for link in soup.find_all('a', href=True):
+                    href = link['href']
+                    absolute_url = urljoin(current_url, href)
+                    
+                    # Nur Links der gleichen Domain
+                    if urlparse(absolute_url).netloc == base_domain:
+                        # Filter: Nur HTML-Seiten (keine PDFs, Bilder, etc.)
+                        if not any(absolute_url.endswith(ext) for ext in ['.pdf', '.jpg', '.png', '.gif', '.zip', '.doc']):
+                            if absolute_url not in visited:
+                                to_visit.append((absolute_url, depth + 1))
+        except Exception as e:
+            logger.debug(f"Failed to crawl {current_url}: {e}")
+            continue
+    
+    return found_urls
+
+
+async def _fetch_page(url: str, session: aiohttp.ClientSession) -> Optional[str]:
+    """
+    Lädt den HTML-Inhalt einer Seite
+    
+    Args:
+        url: Die URL der Seite
+        session: HTTP-Session
+        
+    Returns:
+        HTML-Inhalt oder None bei Fehler
+    """
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
+            if response.status == 200:
+                return await response.text()
+    except Exception as e:
+        logger.debug(f"Failed to fetch {url}: {e}")
+    
+    return None
+
+
+async def _check_images_for_alt_text(url: str, soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
+    """
+    Findet Bilder ohne Alt-Text und bereitet Daten für KI-Alt-Text-Generation vor
+    
+    Args:
+        url: URL der Seite
+        soup: BeautifulSoup-Objekt der Seite
+        
+    Returns:
+        Liste von Issues für Bilder ohne Alt-Text
+    """
+    issues = []
+    
+    for img in soup.find_all('img'):
+        img_src = img.get('src', '')
+        alt_text = img.get('alt')
+        
+        # Skip decorative images
+        if img.get('role') == 'presentation' or img.get('aria-hidden') == 'true':
+            continue
+        
+        # Skip tracking pixels and tiny images
+        if any(x in img_src.lower() for x in ['pixel', 'tracking', '1x1', 'analytics']):
+            continue
+        
+        if not alt_text or alt_text.strip() == '':
+            # Sammle Kontext für KI-Generierung
+            page_title = soup.find('title').get_text() if soup.find('title') else ''
+            surrounding_text = _get_surrounding_text(img, soup)
+            filename = img_src.split('/')[-1] if '/' in img_src else img_src
+            
+            context = {
+                'page_url': url,
+                'page_title': page_title,
+                'surrounding_text': surrounding_text,
+                'filename': filename,
+                'element_html': str(img)
+            }
+            
+            issues.append(BarrierefreiheitIssue(
+                category='Barrierefreiheit',
+                severity='warning',
+                title=f'Bild ohne Alt-Text: {filename[:50]}',
+                description=f'Das Bild "{filename}" auf Seite {url} hat keinen Alternativtext für Screenreader.',
+                risk_euro=500,
+                recommendation='Fügen Sie einen beschreibenden Alt-Text hinzu. KI kann Vorschläge generieren.',
+                legal_basis='WCAG 2.1 Level A (1.1.1 Non-text Content), BFSG §12',
+                auto_fixable=True,
+                image_src=urljoin(url, img_src),  # Make absolute URL
+                element_html=str(img),
+                metadata={
+                    'needs_ai_alt_text': True,
+                    'context': context,
+                    'page_url': url
+                }
+            ))
+    
+    return issues
+
+
+def _get_surrounding_text(img, soup: BeautifulSoup, max_length: int = 200) -> str:
+    """
+    Extrahiert den umgebenden Text eines Bildes für Kontext
+    
+    Args:
+        img: Das img-Element
+        soup: BeautifulSoup-Objekt
+        max_length: Maximale Länge des Texts
+        
+    Returns:
+        Umgebender Text
+    """
+    surrounding = []
+    
+    # Text vom parent-Element
+    if img.parent:
+        parent_text = img.parent.get_text(strip=True)
+        if parent_text:
+            surrounding.append(parent_text)
+    
+    # Text von vorherigem Geschwister-Element
+    if img.previous_sibling:
+        prev_text = img.previous_sibling.get_text(strip=True) if hasattr(img.previous_sibling, 'get_text') else str(img.previous_sibling).strip()
+        if prev_text:
+            surrounding.append(prev_text)
+    
+    # Text von nächstem Geschwister-Element
+    if img.next_sibling:
+        next_text = img.next_sibling.get_text(strip=True) if hasattr(img.next_sibling, 'get_text') else str(img.next_sibling).strip()
+        if next_text:
+            surrounding.append(next_text)
+    
+    # Kombiniere und begrenze
+    full_text = ' '.join(surrounding)
+    return full_text[:max_length] if full_text else ''
 

@@ -1,586 +1,774 @@
 /**
- * Complyo Accessibility Widget v3.0
- * REVOLUTIONÄR: Wechselt zwischen ECHTEN CODE-TEMPLATES
- * KEIN Overlay! ECHTE Code-Lösungen die man einbauen kann!
+ * Complyo Accessibility Widget v4.0
+ * Overlay-Lösung für sofortige Barrierefreiheit
  * 
- * Das macht Complyo einzigartig: Keine Runtime-Magic,
- * sondern echte Code-Vorlagen die permanent integriert werden können.
+ * Features:
+ * - Toggle-Interface (wie AccessiBe/UserWay)
+ * - Analytics-Tracking für Upsell-Insights
+ * - LocalStorage für User-Präferenzen
+ * - Keine Code-Anzeige (nur für Website-Besucher)
+ * 
+ * © 2025 Complyo.tech
  */
 
 (function() {
   'use strict';
   
-  const WIDGET_VERSION = '3.0.0';
-  const API_BASE = 'https://api.complyo.tech';
+  const WIDGET_VERSION = '4.0.0';
+  const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://api.complyo.tech';
   
   class ComplyoAccessibilityWidget {
     constructor(config = {}) {
       this.config = {
         siteId: config.siteId || this.getSiteIdFromScript(),
-        autoLoad: config.autoLoad !== false,
         showToolbar: config.showToolbar !== false,
-        defaultTemplate: config.defaultTemplate || 'standard',
-        ...config
+        position: config.position || 'bottom-right'
       };
       
-      this.templates = null;
-      this.activeTemplate = null;
-      this.injectedElements = {
-        css: null,
-        html: [],
-        js: null
+      this.features = {
+        fontSize: 100,
+        lineHeight: 1.5,
+        contrast: false,
+        highlightLinks: false,
+        readableFont: false,
+        stopAnimations: false,
+        bigCursor: false
       };
+      
+      this.sessionId = this.generateSessionId();
+      this.isOpen = false;
       
       this.init();
     }
     
-    getSiteIdFromScript() {
-      const script = document.currentScript || 
-                     document.querySelector('script[src*="accessibility.js"]');
-      return script ? script.getAttribute('data-site-id') : null;
-    }
-    
     async init() {
-      console.log(`[Complyo v${WIDGET_VERSION}] Initialisiere Code-Template-Widget...`);
+      // Load preferences from localStorage
+      this.loadPreferences();
       
-      try {
-        await this.loadTemplates();
-        
-        if (this.config.showToolbar) {
-          this.renderToolbar();
-        }
-        
-        // Auto-load gespeichertes oder Default-Template
-        const savedTemplate = localStorage.getItem('complyo_active_template');
-        const templateToLoad = savedTemplate || this.config.defaultTemplate;
-        
-        if (this.config.autoLoad && templateToLoad) {
-          await this.applyTemplate(templateToLoad);
-        }
-        
-        console.log('[Complyo] Widget bereit ✓');
-      } catch (error) {
-        console.error('[Complyo] Fehler beim Laden:', error);
-      }
+      // Render toolbar
+      this.renderToolbar();
+      
+      // Apply saved features
+      this.applyAllFeatures();
+      
+      // Inject CSS
+      this.injectCSS();
+      
+      // Load and apply AI-generated alt texts
+      await this.loadAndApplyAltTexts();
+      
+      console.log(`🎨 Complyo Accessibility Widget v${WIDGET_VERSION} initialized`);
     }
     
-    async loadTemplates() {
-      try {
-        const response = await fetch(`${API_BASE}/api/widgets/accessibility-templates`);
-        const data = await response.json();
-        
-        if (data.success) {
-          this.templates = data.templates;
-          console.log(`[Complyo] ${Object.keys(this.templates).length} Templates geladen`);
-        }
-      } catch (error) {
-        console.error('[Complyo] Fehler beim Laden der Templates:', error);
-        throw error;
-      }
+    getSiteIdFromScript() {
+      const script = document.currentScript || document.querySelector('script[data-site-id]');
+      return script ? script.getAttribute('data-site-id') : 'demo';
     }
     
-    async applyTemplate(templateId) {
-      if (!this.templates || !this.templates[templateId]) {
-        console.error(`[Complyo] Template "${templateId}" nicht gefunden`);
-        return;
-      }
-      
-      const template = this.templates[templateId];
-      console.log(`[Complyo] Aktiviere Template: ${template.name}`);
-      
-      // 1. Entferne altes Template
-      this.removeCurrentTemplate();
-      
-      // 2. Injiziere CSS
-      if (template.css) {
-        const style = document.createElement('style');
-        style.id = 'complyo-template-css';
-        style.textContent = template.css;
-        document.head.appendChild(style);
-        this.injectedElements.css = style;
-      }
-      
-      // 3. Führe JavaScript aus
-      if (template.js) {
-        try {
-          // Wrap in IIFE to avoid global scope pollution
-          const scriptFunc = new Function(template.js);
-          scriptFunc();
-          console.log('[Complyo] JavaScript ausgeführt');
-        } catch (error) {
-          console.error('[Complyo] Fehler beim Ausführen von JavaScript:', error);
-        }
-      }
-      
-      // 4. Speichere aktives Template
-      this.activeTemplate = templateId;
-      localStorage.setItem('complyo_active_template', templateId);
-      
-      // 5. Update Toolbar UI
-      this.updateToolbarUI();
-      
-      console.log(`[Complyo] Template "${template.name}" aktiviert ✓`);
-    }
-    
-    removeCurrentTemplate() {
-      // Entferne CSS
-      if (this.injectedElements.css) {
-        this.injectedElements.css.remove();
-        this.injectedElements.css = null;
-      }
-      
-      // Entferne HTML-Elemente (z.B. Skip-Links)
-      this.injectedElements.html.forEach(el => {
-        if (el && el.parentNode) {
-          el.remove();
-        }
-      });
-      this.injectedElements.html = [];
-      
-      // Remove Complyo-specific attributes and classes
-      document.querySelectorAll('[data-complyo-alt-generated]').forEach(el => {
-        el.removeAttribute('data-complyo-alt-generated');
-      });
-      
-      document.querySelectorAll('[data-complyo-aria-generated]').forEach(el => {
-        el.removeAttribute('data-complyo-aria-generated');
-      });
-      
-      // Remove skip links
-      document.querySelectorAll('.complyo-skip-link, .complyo-skip-links').forEach(el => el.remove());
+    generateSessionId() {
+      return 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
     
     renderToolbar() {
-      const toolbar = document.createElement('div');
-      toolbar.id = 'complyo-a11y-widget';
-      toolbar.innerHTML = `
-        <style>
-          #complyo-a11y-widget {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-            z-index: 2147483647;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            max-width: 420px;
-            transition: all 0.3s ease;
-          }
-          
-          #complyo-a11y-widget.minimized {
-            max-width: 60px;
-          }
-          
-          .complyo-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 16px;
-            background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
-            color: white;
-            border-radius: 16px 16px 0 0;
-            cursor: pointer;
-          }
-          
-          .complyo-title {
-            font-size: 16px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-          }
-          
-          #complyo-a11y-widget.minimized .complyo-title span {
-            display: none;
-          }
-          
-          .complyo-toggle {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            transition: all 0.2s;
-          }
-          
-          .complyo-toggle:hover {
-            background: rgba(255,255,255,0.3);
-            transform: scale(1.1);
-          }
-          
-          #complyo-a11y-widget.minimized .complyo-toggle {
-            display: none;
-          }
-          
-          .complyo-content {
-            padding: 20px;
-            max-height: 70vh;
-            overflow-y: auto;
-          }
-          
-          #complyo-a11y-widget.minimized .complyo-content {
-            display: none;
-          }
-          
-          .complyo-section {
-            margin-bottom: 20px;
-          }
-          
-          .complyo-section-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: #374151;
-            margin-bottom: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-          }
-          
-          .complyo-template-card {
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-            background: white;
-          }
-          
-          .complyo-template-card:hover {
-            border-color: #7c3aed;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.15);
-          }
-          
-          .complyo-template-card.active {
-            border-color: #7c3aed;
-            background: linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(168, 85, 247, 0.05) 100%);
-          }
-          
-          .complyo-template-name {
-            font-size: 15px;
-            font-weight: 600;
-            color: #1f2937;
-            margin-bottom: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-          }
-          
-          .complyo-template-level {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 700;
-            background: #7c3aed;
-            color: white;
-          }
-          
-          .complyo-template-desc {
-            font-size: 13px;
-            color: #6b7280;
-            margin-bottom: 8px;
-          }
-          
-          .complyo-template-features {
-            font-size: 12px;
-            color: #9ca3af;
-          }
-          
-          .complyo-active-badge {
-            background: #10b981;
-            color: white;
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 600;
-          }
-          
-          .complyo-code-section {
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 12px;
-            margin-top: 12px;
-          }
-          
-          .complyo-code-title {
-            font-size: 12px;
-            font-weight: 600;
-            color: #6b7280;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-          }
-          
-          .complyo-code-content {
-            font-family: 'Courier New', monospace;
-            font-size: 11px;
-            color: #374151;
-            background: white;
-            padding: 10px;
-            border-radius: 4px;
-            max-height: 200px;
-            overflow-y: auto;
-            white-space: pre-wrap;
-            word-break: break-all;
-          }
-          
-          .complyo-btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-          }
-          
-          .complyo-btn-primary {
-            background: #7c3aed;
-            color: white;
-          }
-          
-          .complyo-btn-primary:hover {
-            background: #6d28d9;
-          }
-          
-          .complyo-btn-secondary {
-            background: #e5e7eb;
-            color: #374151;
-          }
-          
-          .complyo-btn-secondary:hover {
-            background: #d1d5db;
-          }
-          
-          .complyo-branding {
-            text-align: center;
-            padding: 12px;
-            font-size: 11px;
-            color: #9ca3af;
-            border-top: 1px solid #e5e7eb;
-          }
-          
-          .complyo-branding a {
-            color: #7c3aed;
-            text-decoration: none;
-            font-weight: 600;
-          }
-        </style>
+      // Create container
+      const container = document.createElement('div');
+      container.id = 'complyo-a11y-widget';
+      container.className = `complyo-widget-${this.config.position}`;
+      
+      container.innerHTML = `
+        <button class="complyo-toggle-btn" aria-label="Barrierefreiheitsoptionen öffnen" aria-expanded="false">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+          </svg>
+        </button>
         
-        <div class="complyo-header" onclick="document.getElementById('complyo-a11y-widget').classList.toggle('minimized')">
-          <div class="complyo-title">
-            <span>♿</span>
-            <span>Barrierefreiheit</span>
-          </div>
-          <button class="complyo-toggle" aria-label="Minimieren">−</button>
-        </div>
-        
-        <div class="complyo-content">
-          <div class="complyo-section">
-            <div class="complyo-section-title">📋 WCAG Code-Templates</div>
-            <div id="template-list">Lade Templates...</div>
+        <div class="complyo-panel" hidden aria-label="Barrierefreiheitsoptionen">
+          <div class="complyo-panel-header">
+            <h3>♿ Barrierefreiheit</h3>
+            <button class="complyo-close-btn" aria-label="Schließen">✕</button>
           </div>
           
-          <div class="complyo-section" id="active-template-code" style="display: none;">
-            <div class="complyo-section-title">💻 Aktiver Code</div>
-            <div class="complyo-code-section">
-              <div class="complyo-code-title">
-                <span>CSS</span>
-                <button class="complyo-btn complyo-btn-secondary" onclick="window.complyoWidget.copyCode('css')">Kopieren</button>
+          <div class="complyo-panel-content">
+            <!-- Text-Sektion -->
+            <div class="complyo-section">
+              <h4>📝 Text</h4>
+              
+              <div class="complyo-control">
+                <label for="complyo-font-size">
+                  Schriftgröße: <span id="complyo-font-size-value">100%</span>
+                </label>
+                <input 
+                  type="range" 
+                  id="complyo-font-size" 
+                  min="80" 
+                  max="200" 
+                  step="10" 
+                  value="100"
+                  aria-label="Schriftgröße anpassen"
+                >
               </div>
-              <div class="complyo-code-content" id="code-css"></div>
+              
+              <div class="complyo-control">
+                <label for="complyo-line-height">
+                  Zeilenabstand: <span id="complyo-line-height-value">1.5</span>
+                </label>
+                <input 
+                  type="range" 
+                  id="complyo-line-height" 
+                  min="1.0" 
+                  max="2.5" 
+                  step="0.1" 
+                  value="1.5"
+                  aria-label="Zeilenabstand anpassen"
+                >
+              </div>
             </div>
             
-            <div class="complyo-code-section">
-              <div class="complyo-code-title">
-                <span>HTML</span>
-                <button class="complyo-btn complyo-btn-secondary" onclick="window.complyoWidget.copyCode('html')">Kopieren</button>
-              </div>
-              <div class="complyo-code-content" id="code-html"></div>
+            <!-- Anzeige-Sektion -->
+            <div class="complyo-section">
+              <h4>🎨 Anzeige</h4>
+              
+              <label class="complyo-checkbox">
+                <input type="checkbox" id="complyo-contrast" aria-label="Hoher Kontrast aktivieren">
+                <span>Hoher Kontrast</span>
+              </label>
+              
+              <label class="complyo-checkbox">
+                <input type="checkbox" id="complyo-highlight-links" aria-label="Links hervorheben">
+                <span>Links hervorheben</span>
+              </label>
+              
+              <label class="complyo-checkbox">
+                <input type="checkbox" id="complyo-readable-font" aria-label="Lesbare Schriftart aktivieren">
+                <span>Lesbare Schriftart</span>
+              </label>
+              
+              <label class="complyo-checkbox">
+                <input type="checkbox" id="complyo-stop-animations" aria-label="Animationen stoppen">
+                <span>Animationen stoppen</span>
+              </label>
             </div>
             
-            <div class="complyo-code-section">
-              <div class="complyo-code-title">
-                <span>JavaScript</span>
-                <button class="complyo-btn complyo-btn-secondary" onclick="window.complyoWidget.copyCode('js')">Kopieren</button>
-              </div>
-              <div class="complyo-code-content" id="code-js"></div>
+            <!-- Navigation-Sektion -->
+            <div class="complyo-section">
+              <h4>🖱️ Navigation</h4>
+              
+              <label class="complyo-checkbox">
+                <input type="checkbox" id="complyo-big-cursor" aria-label="Großen Cursor aktivieren">
+                <span>Großer Cursor</span>
+              </label>
+            </div>
+            
+            <!-- Reset-Button -->
+            <div class="complyo-section">
+              <button class="complyo-reset-btn">🔄 Zurücksetzen</button>
             </div>
           </div>
-        </div>
-        
-        <div class="complyo-branding">
-          Powered by <a href="https://complyo.tech" target="_blank">Complyo</a> v${WIDGET_VERSION}
+          
+          <div class="complyo-panel-footer">
+            <p>Powered by <a href="https://complyo.tech" target="_blank" rel="noopener">Complyo</a></p>
+          </div>
         </div>
       `;
       
-      document.body.appendChild(toolbar);
-      this.toolbarElement = toolbar;
+      document.body.appendChild(container);
+      this.container = container;
       
-      // Render template list
-      this.renderTemplateList();
+      // Attach event listeners
+      this.attachEventListeners();
+      
+      // Set initial values
+      this.updateUIValues();
     }
     
-    renderTemplateList() {
-      if (!this.templates) return;
+    attachEventListeners() {
+      const toggleBtn = this.container.querySelector('.complyo-toggle-btn');
+      const closeBtn = this.container.querySelector('.complyo-close-btn');
+      const panel = this.container.querySelector('.complyo-panel');
+      const resetBtn = this.container.querySelector('.complyo-reset-btn');
       
-      const list = document.getElementById('template-list');
-      if (!list) return;
+      // Toggle panel
+      toggleBtn.addEventListener('click', () => {
+        this.isOpen = !this.isOpen;
+        panel.hidden = !this.isOpen;
+        toggleBtn.setAttribute('aria-expanded', this.isOpen.toString());
+      });
       
-      list.innerHTML = '';
+      // Close panel
+      closeBtn.addEventListener('click', () => {
+        this.isOpen = false;
+        panel.hidden = true;
+        toggleBtn.setAttribute('aria-expanded', 'false');
+      });
       
-      Object.entries(this.templates).forEach(([id, template]) => {
-        const card = document.createElement('div');
-        card.className = 'complyo-template-card';
-        if (this.activeTemplate === id) {
-          card.classList.add('active');
+      // Font size
+      const fontSizeInput = this.container.querySelector('#complyo-font-size');
+      fontSizeInput.addEventListener('input', (e) => {
+        this.features.fontSize = parseInt(e.target.value);
+        this.updateUIValues();
+        this.applyFeature('fontSize');
+        this.savePreferences();
+        this.trackFeatureUsage('fontSize', this.features.fontSize);
+      });
+      
+      // Line height
+      const lineHeightInput = this.container.querySelector('#complyo-line-height');
+      lineHeightInput.addEventListener('input', (e) => {
+        this.features.lineHeight = parseFloat(e.target.value);
+        this.updateUIValues();
+        this.applyFeature('lineHeight');
+        this.savePreferences();
+        this.trackFeatureUsage('lineHeight', this.features.lineHeight);
+      });
+      
+      // Checkboxes
+      const checkboxes = {
+        'complyo-contrast': 'contrast',
+        'complyo-highlight-links': 'highlightLinks',
+        'complyo-readable-font': 'readableFont',
+        'complyo-stop-animations': 'stopAnimations',
+        'complyo-big-cursor': 'bigCursor'
+      };
+      
+      Object.entries(checkboxes).forEach(([id, feature]) => {
+        const checkbox = this.container.querySelector(`#${id}`);
+        checkbox.addEventListener('change', (e) => {
+          this.features[feature] = e.target.checked;
+          this.applyFeature(feature);
+          this.savePreferences();
+          this.trackFeatureUsage(feature, this.features[feature]);
+        });
+      });
+      
+      // Reset button
+      resetBtn.addEventListener('click', () => {
+        this.resetAllFeatures();
+      });
+      
+      // Close on Escape
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && this.isOpen) {
+          this.isOpen = false;
+          panel.hidden = true;
+          toggleBtn.setAttribute('aria-expanded', 'false');
+          toggleBtn.focus();
+        }
+      });
+    }
+    
+    updateUIValues() {
+      // Update range displays
+      const fontSizeValue = this.container.querySelector('#complyo-font-size-value');
+      const lineHeightValue = this.container.querySelector('#complyo-line-height-value');
+      
+      fontSizeValue.textContent = `${this.features.fontSize}%`;
+      lineHeightValue.textContent = this.features.lineHeight.toFixed(1);
+      
+      // Update range inputs
+      this.container.querySelector('#complyo-font-size').value = this.features.fontSize;
+      this.container.querySelector('#complyo-line-height').value = this.features.lineHeight;
+      
+      // Update checkboxes
+      this.container.querySelector('#complyo-contrast').checked = this.features.contrast;
+      this.container.querySelector('#complyo-highlight-links').checked = this.features.highlightLinks;
+      this.container.querySelector('#complyo-readable-font').checked = this.features.readableFont;
+      this.container.querySelector('#complyo-stop-animations').checked = this.features.stopAnimations;
+      this.container.querySelector('#complyo-big-cursor').checked = this.features.bigCursor;
+    }
+    
+    applyFeature(feature) {
+      const body = document.body;
+      
+      switch(feature) {
+        case 'fontSize':
+          body.style.fontSize = `${this.features.fontSize}%`;
+          break;
+          
+        case 'lineHeight':
+          body.style.lineHeight = this.features.lineHeight;
+          break;
+          
+        case 'contrast':
+          body.classList.toggle('complyo-high-contrast', this.features.contrast);
+          break;
+          
+        case 'highlightLinks':
+          body.classList.toggle('complyo-highlight-links', this.features.highlightLinks);
+          break;
+          
+        case 'readableFont':
+          body.classList.toggle('complyo-readable-font', this.features.readableFont);
+          break;
+          
+        case 'stopAnimations':
+          body.classList.toggle('complyo-stop-animations', this.features.stopAnimations);
+          break;
+          
+        case 'bigCursor':
+          body.classList.toggle('complyo-big-cursor', this.features.bigCursor);
+          break;
+      }
+    }
+    
+    applyAllFeatures() {
+      Object.keys(this.features).forEach(feature => {
+        this.applyFeature(feature);
+      });
+    }
+    
+    resetAllFeatures() {
+      this.features = {
+        fontSize: 100,
+        lineHeight: 1.5,
+        contrast: false,
+        highlightLinks: false,
+        readableFont: false,
+        stopAnimations: false,
+        bigCursor: false
+      };
+      
+      this.applyAllFeatures();
+      this.updateUIValues();
+      this.savePreferences();
+      this.trackFeatureUsage('reset', true);
+    }
+    
+    savePreferences() {
+      try {
+        localStorage.setItem('complyo_a11y_prefs', JSON.stringify(this.features));
+      } catch (e) {
+        console.warn('Failed to save preferences:', e);
+      }
+    }
+    
+    loadPreferences() {
+      try {
+        const saved = localStorage.getItem('complyo_a11y_prefs');
+        if (saved) {
+          this.features = { ...this.features, ...JSON.parse(saved) };
+        }
+      } catch (e) {
+        console.warn('Failed to load preferences:', e);
+      }
+    }
+    
+    trackFeatureUsage(feature, value) {
+      // Sendet anonyme Nutzungsdaten für Upsell-Insights
+      const data = {
+        site_id: this.config.siteId,
+        feature: feature,
+        value: value,
+        timestamp: Date.now(),
+        session_id: this.sessionId
+      };
+      
+      fetch(`${API_BASE}/api/widgets/analytics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      }).catch(() => {
+        // Silent fail - analytics shouldn't break the widget
+      });
+    }
+    
+    async loadAndApplyAltTexts() {
+      /**
+       * Lädt AI-generierte Alt-Texte vom Backend und fügt sie runtime ins DOM ein
+       * Dies ist der Hybrid-Ansatz: Widget funktioniert sofort, Alt-Texte werden nachgeladen
+       */
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/accessibility/alt-text-fixes?site_id=${this.config.siteId}`
+        );
+        
+        if (!response.ok) {
+          console.warn('Alt-Text-Fixes konnten nicht geladen werden:', response.status);
+          return;
         }
         
-        card.innerHTML = `
-          <div class="complyo-template-name">
-            <span>${template.name}</span>
-            ${this.activeTemplate === id ? '<span class="complyo-active-badge">AKTIV</span>' : `<span class="complyo-template-level">${template.level}</span>`}
-          </div>
-          <div class="complyo-template-desc">${template.description}</div>
-          <div class="complyo-template-features">
-            ${template.features.length} Features • ~${template.estimated_time}
-          </div>
-        `;
+        const data = await response.json();
         
-        card.addEventListener('click', () => {
-          this.applyTemplate(id);
+        if (data.success && data.fixes && data.fixes.length > 0) {
+          this.applyAltTextFixes(data.fixes);
+          console.log(`✅ ${data.fixes.length} Alt-Texte angewendet (runtime)`);
+        }
+      } catch (e) {
+        console.warn('Fehler beim Laden der Alt-Text-Fixes:', e);
+        // Silent fail - sollte Widget nicht blockieren
+      }
+    }
+    
+    applyAltTextFixes(fixes) {
+      /**
+       * Wendet Alt-Text-Fixes auf Bilder an
+       * Unterstützt verschiedene Bild-Formate (normal, lazy-loading, responsive)
+       */
+      fixes.forEach(fix => {
+        // Verschiedene Selektoren für verschiedene Bild-Implementierungen
+        const selectors = [
+          `img[src="${fix.image_src}"]`,  // Normales Bild
+          `img[src*="${fix.image_filename}"]`,  // Dateiname im Pfad
+          `img[data-src="${fix.image_src}"]`,  // Lazy loading
+          `img[srcset*="${fix.image_filename}"]`  // Responsive images
+        ];
+        
+        for (const selector of selectors) {
+          try {
+            const images = document.querySelectorAll(selector);
+            images.forEach(img => {
+              // Nur wenn noch kein Alt-Text vorhanden
+              if (!img.alt || img.alt.trim() === '') {
+                img.setAttribute('alt', fix.suggested_alt);
+                img.setAttribute('data-complyo-alt', 'runtime');
+                img.setAttribute('title', fix.suggested_alt); // Zusätzlich als Tooltip
+              }
+            });
+          } catch (e) {
+            console.warn(`Fehler bei Selector ${selector}:`, e);
+          }
+        }
+      });
+      
+      // Beobachte dynamisch nachgeladene Bilder (für SPAs)
+      this.observeNewImages(fixes);
+    }
+    
+    observeNewImages(fixes) {
+      /**
+       * MutationObserver für dynamisch nachgeladene Bilder
+       * Wichtig für Single-Page Applications und Lazy Loading
+       */
+      if (this.imageObserver) {
+        return; // Observer läuft bereits
+      }
+      
+      this.imageObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          mutation.addedNodes.forEach((node) => {
+            // Prüfe ob es ein img-Element ist
+            if (node.tagName === 'IMG') {
+              this.applyAltTextFixes(fixes);
+            }
+            // Prüfe ob es ein Container mit Bildern ist
+            else if (node.querySelectorAll) {
+              const images = node.querySelectorAll('img');
+              if (images.length > 0) {
+                this.applyAltTextFixes(fixes);
+              }
+            }
+          });
         });
-        
-        list.appendChild(card);
+      });
+      
+      this.imageObserver.observe(document.body, {
+        childList: true,
+        subtree: true
       });
     }
     
-    updateToolbarUI() {
-      this.renderTemplateList();
-      
-      // Show code section
-      const codeSection = document.getElementById('active-template-code');
-      if (codeSection && this.activeTemplate) {
-        codeSection.style.display = 'block';
+    injectCSS() {
+      const style = document.createElement('style');
+      style.textContent = `
+        /* Complyo Accessibility Widget v4.0 Styles */
         
-        const template = this.templates[this.activeTemplate];
-        document.getElementById('code-css').textContent = template.css || '// Kein CSS';
-        document.getElementById('code-html').textContent = template.html || '<!-- Kein HTML -->';
-        document.getElementById('code-js').textContent = template.js || '// Kein JavaScript';
-      }
-    }
-    
-    async copyCode(type) {
-      if (!this.activeTemplate) return;
+        #complyo-a11y-widget {
+          position: fixed;
+          z-index: 999999;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .complyo-widget-bottom-right {
+          bottom: 100px;
+          right: 30px;
+        }
+        
+        .complyo-toggle-btn {
+          width: 60px;
+          height: 60px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+          border: none;
+          color: white;
+          cursor: pointer;
+          box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
+          transition: transform 0.2s, box-shadow 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        
+        .complyo-toggle-btn:hover {
+          transform: scale(1.05);
+          box-shadow: 0 6px 16px rgba(124, 58, 237, 0.5);
+        }
+        
+        .complyo-toggle-btn:focus {
+          outline: 3px solid #7c3aed;
+          outline-offset: 3px;
+        }
+        
+        .complyo-panel {
+          position: absolute;
+          bottom: 75px;
+          right: 0;
+          width: 320px;
+          max-height: 600px;
+          background: white;
+          border-radius: 12px;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+          overflow: hidden;
+          animation: slideUp 0.3s ease;
+        }
+        
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        .complyo-panel-header {
+          background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+          color: white;
+          padding: 16px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        
+        .complyo-panel-header h3 {
+          margin: 0;
+          font-size: 18px;
+          font-weight: 600;
+        }
+        
+        .complyo-close-btn {
+          background: none;
+          border: none;
+          color: white;
+          font-size: 24px;
+          cursor: pointer;
+          padding: 0;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 4px;
+          transition: background 0.2s;
+        }
+        
+        .complyo-close-btn:hover {
+          background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .complyo-panel-content {
+          padding: 16px;
+          max-height: 480px;
+          overflow-y: auto;
+        }
+        
+        .complyo-section {
+          margin-bottom: 20px;
+          padding-bottom: 20px;
+          border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .complyo-section:last-child {
+          border-bottom: none;
+          margin-bottom: 0;
+        }
+        
+        .complyo-section h4 {
+          margin: 0 0 12px 0;
+          font-size: 14px;
+          font-weight: 600;
+          color: #374151;
+        }
+        
+        .complyo-control {
+          margin-bottom: 16px;
+        }
+        
+        .complyo-control label {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 8px;
+          font-size: 14px;
+          color: #4b5563;
+        }
+        
+        .complyo-control input[type="range"] {
+          width: 100%;
+          height: 6px;
+          border-radius: 3px;
+          background: #e5e7eb;
+          outline: none;
+          -webkit-appearance: none;
+        }
+        
+        .complyo-control input[type="range"]::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: #7c3aed;
+          cursor: pointer;
+          box-shadow: 0 2px 4px rgba(124, 58, 237, 0.3);
+        }
+        
+        .complyo-control input[type="range"]::-moz-range-thumb {
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: #7c3aed;
+          cursor: pointer;
+          border: none;
+          box-shadow: 0 2px 4px rgba(124, 58, 237, 0.3);
+        }
+        
+        .complyo-checkbox {
+          display: flex;
+          align-items: center;
+          margin-bottom: 12px;
+          cursor: pointer;
+          font-size: 14px;
+          color: #4b5563;
+        }
+        
+        .complyo-checkbox input[type="checkbox"] {
+          width: 20px;
+          height: 20px;
+          margin-right: 10px;
+          cursor: pointer;
+          accent-color: #7c3aed;
+        }
+        
+        .complyo-reset-btn {
+          width: 100%;
+          padding: 12px;
+          background: #f3f4f6;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          color: #374151;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: background 0.2s, border-color 0.2s;
+        }
+        
+        .complyo-reset-btn:hover {
+          background: #e5e7eb;
+          border-color: #9ca3af;
+        }
+        
+        .complyo-panel-footer {
+          padding: 12px 16px;
+          background: #f9fafb;
+          text-align: center;
+          font-size: 12px;
+          color: #6b7280;
+        }
+        
+        .complyo-panel-footer a {
+          color: #7c3aed;
+          text-decoration: none;
+        }
+        
+        .complyo-panel-footer a:hover {
+          text-decoration: underline;
+        }
+        
+        /* Feature Styles */
+        body.complyo-high-contrast {
+          filter: contrast(1.5) brightness(1.1);
+        }
+        
+        /* ⚠️ WICHTIG: Widget selbst vom Kontrast-Filter ausnehmen */
+        body.complyo-high-contrast #complyo-a11y-widget {
+          filter: none !important;
+          isolation: isolate;
+        }
+        
+        /* Sicherstellen dass der Button immer sichtbar bleibt */
+        body.complyo-high-contrast .complyo-toggle-btn {
+          background: #7c3aed !important;
+          color: white !important;
+          box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4) !important;
+        }
+        
+        /* Panel auch normal darstellen */
+        body.complyo-high-contrast .complyo-panel {
+          filter: none !important;
+          background: white !important;
+          color: #1f2937 !important;
+        }
+        
+        body.complyo-highlight-links a {
+          background-color: #fef3c7 !important;
+          padding: 2px 4px !important;
+          border-radius: 2px !important;
+        }
+        
+        body.complyo-readable-font,
+        body.complyo-readable-font * {
+          font-family: 'Arial', 'Helvetica', sans-serif !important;
+        }
+        
+        body.complyo-stop-animations * {
+          animation-duration: 0s !important;
+          animation-delay: 0s !important;
+          transition-duration: 0s !important;
+        }
+        
+        body.complyo-big-cursor,
+        body.complyo-big-cursor * {
+          cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="black" stroke="white" stroke-width="2" d="M2 2 L2 28 L12 20 L17 30 L22 28 L17 18 L28 18 Z"/></svg>') 0 0, auto !important;
+        }
+        
+        /* Responsive */
+        @media (max-width: 480px) {
+          .complyo-panel {
+            width: calc(100vw - 40px);
+            right: 20px;
+            left: 20px;
+          }
+        }
+      `;
       
-      const template = this.templates[this.activeTemplate];
-      let code = '';
-      
-      switch(type) {
-        case 'css':
-          code = template.css || '';
-          break;
-        case 'html':
-          code = template.html || '';
-          break;
-        case 'js':
-          code = template.js || '';
-          break;
-      }
-      
-      try {
-        await navigator.clipboard.writeText(code);
-        alert(`${type.toUpperCase()}-Code kopiert! Sie können ihn jetzt in Ihre Website einfügen.`);
-      } catch (err) {
-        console.error('[Complyo] Fehler beim Kopieren:', err);
-        // Fallback: Show code in prompt
-        prompt(`${type.toUpperCase()}-Code (Strg+C zum Kopieren):`, code);
-      }
-    }
-    
-    downloadTemplate() {
-      if (!this.activeTemplate) return;
-      
-      const template = this.templates[this.activeTemplate];
-      
-      // Create a comprehensive integration file
-      const content = `
-# Complyo Accessibility Template: ${template.name}
-# WCAG ${template.level} Compliance
-# Generiert am: ${new Date().toLocaleDateString('de-DE')}
-
-## CSS (Fügen Sie dies in Ihre style.css ein)
-${template.css}
-
-## HTML (Fügen Sie dies in Ihre HTML-Dateien ein)
-${template.html}
-
-## JavaScript (Fügen Sie dies vor </body> ein)
-<script>
-${template.js}
-</script>
-
-## Features
-${template.features.map(f => `- ${f}`).join('\n')}
-
-## WCAG Kriterien
-${template.wcag_criteria.map(c => `- ${c}`).join('\n')}
-
-## Integration
-Geschätzte Zeit: ${template.estimated_time}
-
-1. Kopieren Sie den CSS-Code in Ihre Haupt-CSS-Datei
-2. Fügen Sie den HTML-Code in Ihre Templates ein
-3. Fügen Sie den JavaScript-Code vor dem </body>-Tag ein
-4. Testen Sie mit Tab-Taste und Screen-Reader
-
----
-Powered by Complyo • https://complyo.tech
-`;
-      
-      const blob = new Blob([content], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `complyo-accessibility-${this.activeTemplate}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      document.head.appendChild(style);
     }
   }
   
-  // Auto-initialize
-  if (document.currentScript && document.currentScript.getAttribute('data-site-id')) {
-    const script = document.currentScript;
-    const config = {
-      siteId: script.getAttribute('data-site-id'),
-      autoLoad: script.getAttribute('data-auto-load') !== 'false',
-      showToolbar: script.getAttribute('data-show-toolbar') !== 'false',
-      defaultTemplate: script.getAttribute('data-default-template') || 'standard'
-    };
+  // Auto-initialize when script is loaded
+  // ✅ FIX: Warte immer auf DOMContentLoaded für async/defer Scripts
+  function initWidget() {
+    // Suche nach Widget-Script mit data-site-id
+    const script = document.currentScript || 
+                   document.querySelector('script[src*="accessibility.js"][data-site-id]') ||
+                   document.querySelector('script[data-site-id]');
     
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        window.complyoWidget = new ComplyoAccessibilityWidget(config);
+    if (script && script.hasAttribute('data-site-id')) {
+      console.log('🚀 Initializing Complyo Widget with site-id:', script.getAttribute('data-site-id'));
+      new ComplyoAccessibilityWidget({
+        siteId: script.getAttribute('data-site-id'),
+        showToolbar: script.getAttribute('data-show-toolbar') !== 'false'
       });
     } else {
-      window.complyoWidget = new ComplyoAccessibilityWidget(config);
+      console.warn('⚠️ Complyo Widget: No script tag with data-site-id found');
     }
   }
   
-  // Export for manual initialization
-  window.ComplyoAccessibilityWidget = ComplyoAccessibilityWidget;
-  
-  console.log(`[Complyo] Widget v${WIDGET_VERSION} geladen - ECHTE Code-Templates, KEIN Overlay!`);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initWidget);
+  } else {
+    // DOM already loaded - init immediately
+    initWidget();
+  }
 })();

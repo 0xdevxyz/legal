@@ -62,8 +62,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         const data = await response.json();
                         setAccessToken(data.access_token);
                         localStorage.setItem('access_token', data.access_token);
-                        document.cookie = `access_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax; Secure`;
-
+                        // ✅ SSR-Check
+                        if (typeof document !== 'undefined') {
+                            document.cookie = `access_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax; Secure`;
+                        }
                     } else {
 
                         logout();
@@ -118,7 +120,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.setItem('user', JSON.stringify(data.user));
         
         // Also store as cookie for middleware (30 days)
-        document.cookie = `access_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax; Secure`;
+        // ✅ SSR-Check
+        if (typeof document !== 'undefined') {
+            document.cookie = `access_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax; Secure`;
+        }
     };
     
     const register = async (data: RegisterData) => {
@@ -144,7 +149,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.setItem('user', JSON.stringify(result.user));
         
         // Also store as cookie for middleware
-        document.cookie = `access_token=${result.access_token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax; Secure`;
+        // ✅ SSR-Check
+        if (typeof document !== 'undefined') {
+            document.cookie = `access_token=${result.access_token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax; Secure`;
+        }
     };
     
     const logout = () => {
@@ -155,7 +163,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.removeItem('user');
         
         // Delete cookie
-        document.cookie = 'access_token=; path=/; max-age=0';
+        // ✅ SSR-Check
+        if (typeof document !== 'undefined') {
+            document.cookie = 'access_token=; path=/; max-age=0';
+        }
     };
     
     return (

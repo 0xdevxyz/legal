@@ -3,28 +3,60 @@ Public API Routes for Unauthenticated Access
 Provides website analysis without requiring authentication
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, HttpUrl
 from typing import Dict, Any, Optional, List
 import logging
 import json
+import os
+import asyncio
+import aiohttp
 from datetime import datetime
 from compliance_engine.scanner import ComplianceScanner
 from compliance_engine.priority_engine import priority_engine
 from compliance_engine.solution_generator import solution_generator
 from compliance_engine.cookie_analyzer import cookie_analyzer
 from website_crawler import WebsiteCrawler
+from auth_routes import get_current_user
+from accessibility_post_scan_processor import AccessibilityPostScanProcessor
+from ai_solution_cache_service import AISolutionCache
 
 logger = logging.getLogger(__name__)
+
+# ✅ OpenRouter API für individuelle KI-Lösungen
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 
 public_router = APIRouter(prefix="/api", tags=["public"])
 
 # Für v1 API (Widget-Support)
 v1_router = APIRouter(prefix="/v1", tags=["widget-api"])
 
+# Database pool (wird von main.py gesetzt)
+db_pool = None
+
+# ✅ AI Solution Cache (wird von main_production.py initialisiert)
+solution_cache: Optional[AISolutionCache] = None
+
+def set_db_pool(pool):
+    """Setzt den Database Pool (called from main.py)"""
+    global db_pool
+    return pool
+
 class AnalyzeRequest(BaseModel):
-    url: HttpUrl
+    url: str  # Akzeptiert URLs mit oder ohne Protokoll
+
+class ChatMessage(BaseModel):
+    role: str  # "user" oder "assistant"
+    content: str
+
+class IssueChatRequest(BaseModel):
+    website_url: str
+    issue_title: str
+    issue_description: str
+    ai_solution: Optional[str] = None
+    user_question: str
+    chat_history: List[ChatMessage] = []
 
 class IssueLocation(BaseModel):
     area: str
@@ -46,6 +78,7 @@ class ComplianceIssue(BaseModel):
     legal_basis: str
     location: IssueLocation
     solution: IssueSolution
+    ai_solution: Optional[str] = None  # ✅ Individuelle KI-generierte Lösung
     auto_fixable: bool
     is_missing: bool = False  # True wenn komplettes Hauptelement fehlt (für 0-Score-Logik)
 
@@ -71,9 +104,9 @@ class AnalysisResponse(BaseModel):
     timestamp: str
 
 @public_router.post("/analyze", response_model=AnalysisResponse)
-async def analyze_website_public(request: AnalyzeRequest, http_request: Request):
+async def analyze_website_public(request: AnalyzeRequest, http_request: Request, current_user: dict = Depends(get_current_user)):
     """
-    Public website analysis endpoint (no authentication required)
+    Website analysis endpoint (requires authentication)
     
     Performs a compliance scan of a website and returns:
     - Compliance score (0-100)
@@ -81,19 +114,19 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request)
     - Estimated risk in EUR
     - Scan metadata
     
-    Rate limiting should be applied to prevent abuse.
+    Now saves website and scan results to database for persistence.
     """
     try:
         url = str(request.url)
+        # ✅ FIX: Key ist "id", nicht "user_id" (siehe auth_service.get_user_by_id)
+        user_id = current_user.get("id") or current_user.get("user_id")
         
-        logger.info(f"Public analysis request for: {url}")
-        
-        # Validate URL format
+        # ✅ FIX: Normalisiere URL (füge https:// hinzu falls fehlt)
         if not url.startswith(('http://', 'https://')):
-            raise HTTPException(
-                status_code=400,
-                detail="URL muss mit http:// oder https:// beginnen"
-            )
+            url = 'https://' + url
+            logger.info(f"✅ URL normalized to: {url}")
+        
+        logger.info(f"Analysis request for: {url} (User: {user_id})")
         
         # Get risk calculator from app state
         from main_production import db_pool, risk_calculator
@@ -138,8 +171,16 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request)
                     # ✅ FIX: Prüfe ob Issue bereits strukturiert ist (von Check-Modulen)
                     if isinstance(issue, dict) and 'severity' in issue:
                         # Issue kommt von Check-Modulen - behalte Original-Severity!
+                        # ✅ Generiere aussagekräftige ID basierend auf Kategorie und Titel
+                        category = issue.get('category', 'compliance')
+                        title = issue.get('title', issue.get('description', ''))
+                        # Erstelle Slug aus Title (erste 3-4 Worte)
+                        title_words = ''.join(c if c.isalnum() or c.isspace() else '' for c in title.lower())
+                        title_slug = '-'.join(title_words.split()[:4])
+                        issue_id = f"{category}-{title_slug}"[:50]  # Max 50 Zeichen
+                        
                         structured_issue = ComplianceIssue(
-                            id=f"issue-{idx+1}",
+                            id=issue_id,
                             category=issue.get('category', 'compliance'),
                             severity=issue.get('severity'),  # ✅ Original-Severity beibehalten!
                             title=issue.get('title', issue.get('description', ''))[:100],
@@ -152,7 +193,11 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request)
                                 area=_determine_issue_area(issue.get('category', 'compliance')),
                                 hint=f"{_determine_issue_area(issue.get('category', 'compliance'))} fehlt oder ist fehlerhaft"
                             ),
-                            solution=_generate_solution(issue.get('category', 'compliance')),
+                            solution=_generate_solution_for_issue(
+                                category=issue.get('category', 'compliance'),
+                                title=issue.get('title', ''),
+                                description=issue.get('description', '')
+                            ),
                             auto_fixable=issue.get('auto_fixable', False),
                             is_missing=issue.get('is_missing', False)  # ✅ is_missing von Check-Modulen übernehmen
                         )
@@ -164,8 +209,14 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request)
                         # Calculate risk for this issue
                         risk_data = await risk_calculator.calculate_issue_risk(issue_text)
                         
+                        # ✅ Generiere aussagekräftige ID für Legacy-Issues
+                        category = risk_data['category']
+                        title_words = ''.join(c if c.isalnum() or c.isspace() else '' for c in issue_text[:100].lower())
+                        title_slug = '-'.join(title_words.split()[:4])
+                        issue_id = f"{category}-{title_slug}"[:50]
+                        
                         structured_issue = ComplianceIssue(
-                            id=f"issue-{idx+1}",
+                            id=issue_id,
                             category=risk_data['category'],
                             severity=risk_data['severity'],
                             title=issue_text[:100],  # Truncate long titles
@@ -229,6 +280,43 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request)
                 scan_result.get("compliance_score", 50)
             )
             
+            # ✅ NEU: Generiere individuelle KI-Lösungen (ERHÖHTER TIMEOUT für Reasoning Model)
+            if OPENROUTER_API_KEY and len(structured_issues) > 0:
+                logger.info(f"🤖 Generiere KI-Lösungen für erste 5 Critical Issues...")
+                
+                # Priorisiere Critical Issues
+                critical_issues = [i for i in structured_issues if i.severity == 'critical'][:5]
+                if not critical_issues:
+                    critical_issues = structured_issues[:5]
+                
+                ai_tasks = []
+                for issue in critical_issues:
+                    ai_tasks.append(_generate_ai_solution(
+                        issue_title=issue.title,
+                        issue_description=issue.description,
+                        category=issue.category,
+                        url=url
+                    ))
+                
+                # Parallel KI-Lösungen generieren mit LÄNGEREM Timeout (für kimi-k2-thinking)
+                try:
+                    ai_solutions = await asyncio.wait_for(
+                        asyncio.gather(*ai_tasks, return_exceptions=True),
+                        timeout=20.0  # 20 Sekunden für Reasoning Model
+                    )
+                    
+                    # Füge KI-Lösungen zu Issues hinzu
+                    for idx, issue in enumerate(critical_issues):
+                        if idx < len(ai_solutions) and ai_solutions[idx] and not isinstance(ai_solutions[idx], Exception):
+                            issue.ai_solution = ai_solutions[idx]
+                    
+                    successful = sum(1 for s in ai_solutions if s and not isinstance(s, Exception))
+                    logger.info(f"✅ {successful}/{len(critical_issues)} KI-Lösungen generiert")
+                except asyncio.TimeoutError:
+                    logger.warning("⚠️ KI-Generierung Timeout - Scan wird trotzdem zurückgegeben")
+            else:
+                logger.info("ℹ️ KI-Lösungen übersprungen (kein API Key)")
+            
             # ✅ NEU: Berechne Säulen-Scores nach Backend-Logik
             pillar_scores = _calculate_pillar_scores(structured_issues)
             logger.info(f"✅ Säulen-Scores berechnet: {[(p.pillar, p.score) for p in pillar_scores]}")
@@ -236,6 +324,129 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request)
             # ✅ FIX: Berechne Gesamt-Score als Durchschnitt der 4 Säulen
             overall_compliance_score = int(sum(p.score for p in pillar_scores) / len(pillar_scores)) if pillar_scores else 0
             logger.info(f"✅ Gesamt-Compliance-Score (Durchschnitt): {overall_compliance_score}/100")
+            
+            # ✅ PERSISTENCE: Save website and scan to database
+            from main_production import db_pool
+            try:
+                async with db_pool.acquire() as conn:
+                    # Convert user_id to UUID if it's a string
+                    import uuid
+                    if isinstance(user_id, str):
+                        user_id_uuid = uuid.UUID(user_id)
+                    else:
+                        user_id_uuid = user_id
+                    
+                    # 1. Check if website exists, if not create it
+                    website = await conn.fetchrow(
+                        "SELECT id FROM websites WHERE user_id = $1::uuid AND url = $2",
+                        str(user_id_uuid), scan_result.get("url", url)
+                    )
+                    
+                    if not website:
+                        # Create new website
+                        website_id = await conn.fetchval(
+                            """
+                            INSERT INTO websites (user_id, url, name, last_scan, compliance_score, status)
+                            VALUES ($1::uuid, $2, $3, NOW(), $4, 'active')
+                            RETURNING id
+                            """,
+                            str(user_id_uuid),
+                            scan_result.get("url", url),
+                            scan_result.get("url", url).replace('https://', '').replace('http://', ''),
+                            overall_compliance_score
+                        )
+                        logger.info(f"✅ Created new website ID {website_id} for user {user_id}")
+                    else:
+                        # Update existing website
+                        website_id = website['id']
+                        await conn.execute(
+                            """
+                            UPDATE websites
+                            SET last_scan = NOW(), compliance_score = $1, status = 'active', scan_count = COALESCE(scan_count, 0) + 1
+                            WHERE id = $2
+                            """,
+                            overall_compliance_score,
+                            website_id
+                        )
+                        logger.info(f"✅ Updated website ID {website_id}")
+                    
+                    # 2. Save scan to scan_history
+                    scan_id = f"scan_{user_id_uuid}_{int(datetime.now().timestamp())}"  # ✅ Generiere eindeutige scan_id
+                    await conn.execute(
+                        """
+                        INSERT INTO scan_history (
+                            scan_id, user_id, website_id, url, website_name, scan_timestamp,
+                            scan_data, compliance_score, total_risk_euro, critical_issues,
+                            warning_issues, total_issues, scan_duration_ms
+                        ) VALUES ($1, $2::uuid, $3, $4, $5, NOW(), $6, $7, $8, $9, $10, $11, $12)
+                        """,
+                        scan_id,  # ✅ scan_id als erstes Argument
+                        str(user_id_uuid),
+                        website_id,
+                        scan_result.get("url", url),
+                        scan_result.get("url", url).replace('https://', '').replace('http://', ''),
+                        json.dumps({
+                            'issues': [
+                                {
+                                    'id': i.id,
+                                    'category': i.category,
+                                    'severity': i.severity,
+                                    'title': i.title,
+                                    'description': i.description,
+                                    'risk_euro_min': i.risk_euro_min,
+                                    'risk_euro_max': i.risk_euro_max
+                                }
+                                for i in structured_issues
+                            ],
+                            'positive_checks': positive_checks,
+                            'pillar_scores': [{'pillar': p.pillar, 'score': p.score} for p in pillar_scores]
+                        }),
+                        overall_compliance_score,
+                        total_risk_data.get('total_risk_max', 0),
+                        critical_issues_count,
+                        warning_issues_count,
+                        len(structured_issues),
+                        scan_result.get("scan_duration_ms")
+                    )
+                    logger.info(f"✅ Saved scan history for website ID {website_id}")
+                    
+                    # 🚀 NEU: Post-Process Accessibility-Issues (Alt-Text-Generierung)
+                    try:
+                        if db_pool:
+                            processor = AccessibilityPostScanProcessor(db_pool)
+                            
+                            # Generiere scan_id basierend auf website_id + timestamp
+                            scan_id = f"scan-{website_id}-{int(datetime.now().timestamp())}"
+                            
+                            post_process_result = await processor.process_scan_results(
+                                scan_id=scan_id,
+                                user_id=str(user_id_uuid),
+                                scan_data={
+                                    'issues': [
+                                        {
+                                            'id': i.id,
+                                            'category': i.category,
+                                            'severity': i.severity,
+                                            'title': i.title,
+                                            'description': i.description
+                                        }
+                                        for i in structured_issues
+                                    ]
+                                },
+                                site_url=scan_result.get("url", url)
+                            )
+                            
+                            if post_process_result['success']:
+                                logger.info(f"✨ Post-processing: {post_process_result['message']}")
+                            else:
+                                logger.warning(f"⚠️ Post-processing failed: {post_process_result.get('error', 'Unknown')}")
+                    except Exception as post_error:
+                        logger.error(f"❌ Accessibility post-processing failed: {post_error}")
+                        # Don't fail the request if post-processing fails
+                    
+            except Exception as db_error:
+                logger.error(f"❌ Database persistence failed: {db_error}")
+                # Don't fail the request if DB save fails
             
             response_data = AnalysisResponse(
                 success=True,
@@ -250,124 +461,6 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request)
                 scan_duration_ms=scan_result.get("scan_duration_ms"),
                 timestamp=datetime.now().isoformat()
             )
-            
-            # Save scan to database (if db_pool available)
-            if db_pool:
-                try:
-                    async with db_pool.acquire() as conn:
-                        # Prepare scan_data JSON (datetime-safe)
-                        def make_json_serializable(obj):
-                            """Convert datetime objects to strings for JSON"""
-                            if isinstance(obj, datetime):
-                                return obj.isoformat()
-                            elif isinstance(obj, dict):
-                                return {k: make_json_serializable(v) for k, v in obj.items()}
-                            elif isinstance(obj, list):
-                                return [make_json_serializable(item) for item in obj]
-                            return obj
-                        
-                        scan_data_json = {
-                            "url": url,
-                            "compliance_score": response_data.compliance_score,
-                            "total_risk": total_risk_data,
-                            "issues": [
-                                {
-                                    "id": issue.id,
-                                    "category": issue.category,
-                                    "severity": issue.severity,
-                                    "title": issue.title,
-                                    "description": issue.description,
-                                    "risk_euro_min": issue.risk_euro_min,
-                                    "risk_euro_max": issue.risk_euro_max,
-                                    "legal_basis": issue.legal_basis,
-                                    "auto_fixable": issue.auto_fixable
-                                }
-                                for issue in structured_issues
-                            ],
-                            "scan_result": make_json_serializable(scan_result),
-                            "website_structure": make_json_serializable(website_structure)
-                        }
-                        
-                        # Check if user is authenticated (from header)
-                        user_id = None
-                        website_id = None
-                        auth_header = http_request.headers.get("Authorization")
-                        if auth_header and auth_header.startswith("Bearer "):
-                            # Try to get user from token
-                            try:
-                                from main_production import auth_service
-                                token = auth_header.split(" ")[1]
-                                user_data = auth_service.verify_token(token)  # Note: verify_token is NOT async
-                                if user_data:
-                                    user_id = user_data.get("user_id")
-                                    
-                                    # Check if website is tracked for this user
-                                    if user_id:
-                                        website_row = await conn.fetchrow(
-                                            "SELECT id FROM tracked_websites WHERE user_id = $1 AND url = $2",
-                                            user_id, url
-                                        )
-                                        if website_row:
-                                            website_id = website_row['id']
-                                            # Update last_scan_date and score
-                                            await conn.execute(
-                                                """UPDATE tracked_websites 
-                                                   SET last_score = $1, last_scan_date = $2, scan_count = scan_count + 1
-                                                   WHERE id = $3""",
-                                                response_data.compliance_score, datetime.now(), website_id
-                                            )
-                            except Exception as auth_error:
-                                logger.warning(f"Could not authenticate user for scan save: {auth_error}")
-                        
-                        # Insert scan history
-                        await conn.execute(
-                            """INSERT INTO scan_history 
-                               (scan_id, website_id, user_id, url, scan_data, compliance_score, 
-                                total_risk_euro, critical_issues, warning_issues, total_issues, scan_duration_ms)
-                               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)""",
-                            scan_id,
-                            website_id,
-                            user_id,
-                            url,
-                            json.dumps(scan_data_json),
-                            response_data.compliance_score,
-                            total_risk_data.get('total_risk_max', 0),
-                            critical_issues_count,
-                            warning_issues_count,
-                            len(structured_issues),
-                            response_data.scan_duration_ms
-                        )
-                        
-                        logger.info(f"✅ Scan {scan_id} saved to database for URL: {url}")
-                        
-                        # Speichere auch in score_history für Verlaufs-Tracking
-                        try:
-                            await conn.execute("""
-                                INSERT INTO score_history (
-                                    website_id,
-                                    compliance_score,
-                                    critical_issues_count,
-                                    warning_issues_count,
-                                    info_issues_count,
-                                    scan_type,
-                                    scan_trigger
-                                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-                            """,
-                                website_id,
-                                response_data.compliance_score,
-                                critical_issues_count,
-                                warning_issues_count,
-                                0,  # info_issues_count
-                                'initial',  # scan_type
-                                'manual'  # scan_trigger
-                            )
-                            logger.info(f"✅ Score-History Entry erstellt")
-                        except Exception as score_err:
-                            logger.warning(f"Score-History konnte nicht gespeichert werden: {score_err}")
-                        
-                except Exception as db_error:
-                    logger.error(f"Failed to save scan to database: {db_error}", exc_info=True)
-                    # Continue anyway - don't fail the request
             
             return response_data
             
@@ -517,6 +610,253 @@ def _generate_positive_checks(structured_issues: list, compliance_score: int) ->
         })
     
     return positive_checks
+
+async def _generate_ai_solution(issue_title: str, issue_description: str, category: str, url: str, retry_count: int = 0) -> Optional[str]:
+    """
+    Generiert individuelle KI-Lösung mit intelligentem Caching
+    
+    Flow:
+    1. Prüfe Cache (Exact + Fuzzy Match)
+    2. Bei Cache-Miss: OpenRouter API
+    3. Speichere neue Lösung im Cache
+    """
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 1️⃣ VERSUCHE CACHE-LOOKUP ZUERST
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if solution_cache:
+        try:
+            cached = await solution_cache.get_cached_solution(
+                category=category,
+                title=issue_title,
+                description=issue_description,
+                use_fuzzy=True
+            )
+            
+            if cached:
+                # ✅ Cache Hit - Spare API Call!
+                match_type = cached.get('match_type', 'exact')
+                usage = cached.get('usage_count', 0)
+                success = cached.get('success_rate', 0.0)
+                
+                prefix = f"🎯 **Bewährte Lösung** ({usage}x erfolgreich umgesetzt, {success:.0%} Success Rate)\n\n"
+                
+                if match_type == 'fuzzy':
+                    similarity = cached.get('similarity', 0.0)
+                    prefix = f"🎯 **Ähnliche bewährte Lösung** ({similarity:.0%} Match, {usage}x verwendet)\n\n"
+                
+                return prefix + cached['solution']
+        except Exception as e:
+            logger.error(f"❌ Cache lookup failed: {e} - Falling back to API")
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 2️⃣ CACHE MISS - Nutze OpenRouter API
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if not OPENROUTER_API_KEY:
+        logger.warning("⚠️ No OPENROUTER_API_KEY - skipping AI solution")
+        return None
+    
+    # Rate Limit Handling: Max 3 Retries mit exponential backoff
+    MAX_RETRIES = 3
+    BACKOFF_SECONDS = [2, 5, 10]  # 2s, 5s, 10s
+    
+    try:
+        prompt = f"""Du bist ein Experte für Website-Compliance und Barrierefreiheit.
+
+WEBSITE: {url}
+PROBLEM: {issue_title}
+DETAILS: {issue_description}
+KATEGORIE: {category}
+
+Erstelle eine **praxisnahe, individuell auf dieses Problem zugeschnittene Lösung**.
+
+WICHTIG:
+- Beziehe dich konkret auf die Website {url}
+- Gib spezifische, umsetzbare Schritte
+- Füge passende Code-Beispiele hinzu
+- Erkläre anfängerfreundlich
+
+Format:
+1. Kurze Analyse des Problems (2-3 Sätze)
+2. Konkrete Lösungsschritte (3-5 Punkte)
+3. Code-Beispiel (falls relevant)
+4. Hinweis zur Überprüfung
+
+Antworte auf Deutsch, maximal 300 Wörter."""
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://complyo.tech",
+                    "X-Title": "Complyo Compliance Scanner"
+                },
+                json={
+                    "model": "moonshotai/kimi-k2-thinking",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    "max_tokens": 800,
+                    "temperature": 0.7
+                },
+                timeout=aiohttp.ClientTimeout(total=15)
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    ai_solution = data.get('choices', [{}])[0].get('message', {}).get('content', '')
+                    logger.info(f"✅ KI-Lösung generiert für: {issue_title[:50]}...")
+                    
+                    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                    # 3️⃣ SPEICHERE NEUE LÖSUNG IM CACHE
+                    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                    if solution_cache and ai_solution:
+                        try:
+                            await solution_cache.store_solution(
+                                category=category,
+                                title=issue_title,
+                                description=issue_description,
+                                solution=ai_solution,
+                                model="moonshotai/kimi-k2-thinking"
+                            )
+                        except Exception as e:
+                            logger.error(f"❌ Failed to cache solution: {e}")
+                    
+                    return ai_solution
+                elif response.status == 429:
+                    # Rate Limit - Retry mit Backoff
+                    if retry_count < MAX_RETRIES:
+                        wait_time = BACKOFF_SECONDS[retry_count]
+                        logger.warning(f"⚠️ Rate Limit (429) - Retry {retry_count + 1}/{MAX_RETRIES} in {wait_time}s...")
+                        await asyncio.sleep(wait_time)
+                        return await _generate_ai_solution(issue_title, issue_description, category, url, retry_count + 1)
+                    else:
+                        logger.error(f"❌ Rate Limit (429) - Max Retries erreicht")
+                        return "⚠️ KI-Analyse vorübergehend nicht verfügbar (Rate Limit). Bitte in wenigen Minuten erneut versuchen."
+                else:
+                    error_text = await response.text()
+                    logger.error(f"❌ OpenRouter API Error: {response.status} - {error_text[:200]}")
+                    return None
+                    
+    except asyncio.TimeoutError:
+        logger.error(f"❌ KI-Lösung Timeout für: {issue_title[:50]}")
+        return None
+    except Exception as e:
+        logger.error(f"❌ KI-Lösung Generation failed: {e}")
+        return None
+
+def _generate_solution_for_issue(category: str, title: str = '', description: str = '') -> IssueSolution:
+    """Generiert issue-spezifische Lösungsvorschläge"""
+    
+    # ✅ Spezielle Lösungen für Barrierefreiheit basierend auf Issue-Titel
+    if category == 'barrierefreiheit':
+        title_lower = title.lower()
+        
+        # H1-Überschrift fehlt
+        if 'h1' in title_lower or 'überschrift' in title_lower:
+            return IssueSolution(
+                code_snippet='<h1>Hauptüberschrift der Seite</h1>',
+                steps=[
+                    '1. Fügen Sie eine aussagekräftige H1-Überschrift am Seitenanfang ein',
+                    '2. Die H1 sollte das Hauptthema der Seite beschreiben',
+                    '3. Verwenden Sie nur eine H1 pro Seite',
+                    '4. Weitere Überschriften hierarchisch strukturieren (H2, H3, etc.)'
+                ]
+            )
+        
+        # Semantische HTML-Elemente fehlen
+        if 'semantisch' in title_lower or 'html5' in title_lower or 'html-elemente' in title_lower:
+            return IssueSolution(
+                code_snippet='''<!-- Beispiel-Struktur mit semantischen HTML5-Elementen -->
+<header>
+    <nav><!-- Navigation --></nav>
+</header>
+<main>
+    <article><!-- Hauptinhalt --></article>
+</main>
+<footer><!-- Footer-Bereich --></footer>''',
+                steps=[
+                    '1. Ersetzen Sie <div>-Container durch semantische Elemente: <header>, <nav>, <main>, <footer>',
+                    '2. Nutzen Sie <article> für eigenständige Inhalte und <section> für thematische Gruppierungen',
+                    '3. Verwenden Sie <aside> für ergänzende Inhalte (Sidebars)',
+                    '4. Testen Sie die Struktur mit einem Screenreader (z.B. NVDA oder VoiceOver)'
+                ]
+            )
+        
+        # Alt-Texte fehlen
+        if 'alt' in title_lower or 'bild' in title_lower:
+            return IssueSolution(
+                code_snippet='<img src="logo.png" alt="Firmenname Logo - Zurück zur Startseite">',
+                steps=[
+                    '1. Fügen Sie jedem <img>-Tag ein alt-Attribut hinzu',
+                    '2. Beschreiben Sie den Inhalt und Zweck des Bildes präzise',
+                    '3. Dekorative Bilder: Leeres alt-Attribut verwenden (alt="")',
+                    '4. Prüfen Sie alle Bilder auf der gesamten Website'
+                ]
+            )
+        
+        # Kontraste
+        if 'kontrast' in title_lower or 'farb' in title_lower:
+            return IssueSolution(
+                code_snippet='''/* Beispiel mit ausreichendem Kontrast */
+.text {
+    color: #1a1a1a;        /* Dunkler Text */
+    background: #ffffff;    /* Heller Hintergrund */
+    /* Kontrast-Verhältnis: 15:1 ✓ */
+}''',
+                steps=[
+                    '1. Prüfen Sie Farbkontraste mit einem Tool (z.B. WebAIM Contrast Checker)',
+                    '2. Mindestanforderung: 4.5:1 für normalen Text, 3:1 für großen Text (>18pt)',
+                    '3. Passen Sie Farben an, um ausreichenden Kontrast zu erreichen',
+                    '4. Testen Sie auch Hover- und Focus-Zustände'
+                ]
+            )
+        
+        # Tastatur-Navigation
+        if 'tastatur' in title_lower or 'keyboard' in title_lower or 'focus' in title_lower:
+            return IssueSolution(
+                code_snippet='''<button tabindex="0" aria-label="Menü öffnen">
+    Menu
+</button>
+
+<style>
+button:focus {
+    outline: 3px solid #4a90e2;
+    outline-offset: 2px;
+}
+</style>''',
+                steps=[
+                    '1. Stellen Sie sicher, dass alle interaktiven Elemente per Tab-Taste erreichbar sind',
+                    '2. Fügen Sie sichtbare Focus-Indikatoren hinzu (outline, border, etc.)',
+                    '3. Verwenden Sie tabindex="0" für fokussierbare custom Elemente',
+                    '4. Testen Sie die Navigation komplett per Tastatur (ohne Maus)'
+                ]
+            )
+        
+        # ARIA-Labels
+        if 'aria' in title_lower or 'label' in title_lower:
+            return IssueSolution(
+                code_snippet='''<button aria-label="Schließen">
+    <svg><!-- X Icon --></svg>
+</button>
+
+<nav aria-label="Hauptnavigation">
+    <!-- Navigation Items -->
+</nav>''',
+                steps=[
+                    '1. Fügen Sie aria-label zu Buttons ohne Text-Inhalt hinzu',
+                    '2. Verwenden Sie aria-labelledby bei komplexeren Elementen',
+                    '3. Nutzen Sie role-Attribute für custom Komponenten',
+                    '4. Validieren Sie mit dem WAVE Browser Extension'
+                ]
+            )
+    
+    # Fallback für andere Kategorien
+    return _generate_solution(category)
 
 def _generate_solution(category: str) -> IssueSolution:
     """Generiert Lösungsvorschläge basierend auf Kategorie"""
@@ -681,12 +1021,10 @@ async def analyze_website_preview(request: AnalyzeRequest, http_request: Request
         
         logger.info(f"Preview analysis request for: {url}")
         
-        # Validate URL format
+        # ✅ FIX: Normalisiere URL (füge https:// hinzu falls fehlt)
         if not url.startswith(('http://', 'https://')):
-            raise HTTPException(
-                status_code=400,
-                detail="URL muss mit http:// oder https:// beginnen"
-            )
+            url = 'https://' + url
+            logger.info(f"✅ URL normalized to: {url}")
         
         # Get risk calculator
         from main_production import risk_calculator
@@ -1142,4 +1480,117 @@ async def download_code_package(
     except Exception as e:
         logger.error(f"Failed to generate code package: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate package")
+
+
+@public_router.post("/chat/issue-solution")
+async def chat_with_ai_about_issue(
+    request: IssueChatRequest,
+    http_request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Chat-Endpoint für Rückfragen zu KI-generierten Lösungen
+    
+    Ermöglicht es Nutzern, spezifische Fragen zur Implementierung
+    der vorgeschlagenen Lösung zu stellen.
+    """
+    try:
+        if not OPENROUTER_API_KEY:
+            raise HTTPException(
+                status_code=503,
+                detail="KI-Chat ist momentan nicht verfügbar. Bitte kontaktieren Sie den Support."
+            )
+        
+        logger.info(f"💬 Chat-Anfrage: {request.user_question[:50]}... für Issue: {request.issue_title[:50]}")
+        
+        # Baue Kontext für KI auf
+        context_prompt = f"""Du bist ein Experte für Website-Compliance und unterstützt bei der Implementierung von Lösungen.
+
+**KONTEXT:**
+Website: {request.website_url}
+Problem: {request.issue_title}
+Details: {request.issue_description}
+"""
+        
+        if request.ai_solution:
+            context_prompt += f"\n**Bereits vorgeschlagene Lösung:**\n{request.ai_solution}\n"
+        
+        context_prompt += f"""
+**AUFGABE:**
+Beantworte die folgende Frage des Nutzers präzise und praxisnah.
+Gib konkrete Code-Beispiele, wenn relevant.
+Bleibe im Kontext der Website {request.website_url} und des Problems "{request.issue_title}".
+
+**NUTZER-FRAGE:**
+{request.user_question}
+
+Antworte auf Deutsch, maximal 250 Wörter."""
+
+        # Erstelle Nachrichten-Array mit Chat-History
+        messages = []
+        
+        # Füge Chat-History hinzu (falls vorhanden)
+        for msg in request.chat_history:
+            messages.append({
+                "role": msg.role,
+                "content": msg.content
+            })
+        
+        # Füge aktuelle Frage hinzu
+        messages.append({
+            "role": "user",
+            "content": context_prompt
+        })
+        
+        # Rufe OpenRouter API auf
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://complyo.tech",
+                    "X-Title": "Complyo Compliance Scanner - Chat Support"
+                },
+                json={
+                    "model": "moonshotai/kimi-k2-thinking",
+                    "messages": messages,
+                    "max_tokens": 700,
+                    "temperature": 0.7
+                },
+                timeout=aiohttp.ClientTimeout(total=20)
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    ai_response = data.get('choices', [{}])[0].get('message', {}).get('content', '')
+                    
+                    if not ai_response:
+                        raise HTTPException(
+                            status_code=500,
+                            detail="KI konnte keine Antwort generieren"
+                        )
+                    
+                    logger.info(f"✅ Chat-Antwort generiert ({len(ai_response)} Zeichen)")
+                    
+                    return {
+                        "success": True,
+                        "response": ai_response,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                else:
+                    error_text = await response.text()
+                    logger.error(f"❌ OpenRouter API Error: {response.status} - {error_text}")
+                    raise HTTPException(
+                        status_code=503,
+                        detail="KI-Service vorübergehend nicht verfügbar"
+                    )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Chat-Fehler: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Ein Fehler ist beim Chat aufgetreten"
+        )
 

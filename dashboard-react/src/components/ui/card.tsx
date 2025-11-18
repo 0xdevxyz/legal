@@ -43,11 +43,29 @@ export const CardTitle: React.FC<{ children: React.ReactNode; className?: string
   </h3>
 );
 
+export const CardDescription: React.FC<{ children: React.ReactNode; className?: string }> = ({ 
+  children, 
+  className 
+}) => (
+  <p className={cn('text-sm text-zinc-400 mt-1', className)}>
+    {children}
+  </p>
+);
+
 export const CardContent: React.FC<{ children: React.ReactNode; className?: string }> = ({ 
   children, 
   className 
 }) => (
   <div className={cn('text-zinc-300', className)}>
+    {children}
+  </div>
+);
+
+export const CardFooter: React.FC<{ children: React.ReactNode; className?: string }> = ({ 
+  children, 
+  className 
+}) => (
+  <div className={cn('mt-5 pt-5 border-t border-zinc-800/50', className)}>
     {children}
   </div>
 );

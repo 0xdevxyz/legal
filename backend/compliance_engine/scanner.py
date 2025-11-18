@@ -20,8 +20,12 @@ from compliance_engine.checks import (
     check_impressum_compliance,
     check_datenschutz_compliance,
     check_cookie_compliance,
-    check_barrierefreiheit_compliance
+    check_barrierefreiheit_compliance,
+    check_barrierefreiheit_compliance_smart  # ✨ NEU: Browser-basiert
 )
+
+# Import Legal Update Integration
+from compliance_engine.legal_update_integration import legal_update_integration
 
 @dataclass
 class ComplianceIssue:
@@ -88,7 +92,19 @@ class ComplianceScanner:
             
             # Run all compliance checks (using modular check system)
             # Barrierefreiheit (BFSG) - Höchste Priorität
-            barriere_issues = await check_barrierefreiheit_compliance(url, soup, self.session)
+            # ✨ NEU: Nutzt Browser-Rendering für moderne JS-Websites
+            barriere_issues = await check_barrierefreiheit_compliance_smart(
+                url, 
+                html=main_page['content'], 
+                session=self.session
+            )
+            
+            # ✅ NEU: Prüfe ob Accessibility-Widget gefunden wurde
+            has_accessibility_widget = not any(
+                issue.get('title') == 'Kein Barrierefreiheits-Tool/Widget gefunden' 
+                for issue in barriere_issues
+            )
+            
             for issue_dict in barriere_issues:
                 issues.append(ComplianceIssue(**issue_dict))
             
@@ -128,7 +144,7 @@ class ComplianceScanner:
             end_time = datetime.now()
             scan_duration = int((end_time - start_time).total_seconds() * 1000)
             
-            return {
+            scan_results = {
                 "url": url,
                 "scan_timestamp": start_time,
                 "scan_duration_ms": scan_duration,
@@ -139,8 +155,22 @@ class ComplianceScanner:
                 "total_issues": len(issues),
                 "issues": [asdict(issue) for issue in issues],
                 "recommendations": self._generate_recommendations(issues),
-                "next_steps": self._generate_next_steps(issues)
+                "next_steps": self._generate_next_steps(issues),
+                "has_accessibility_widget": has_accessibility_widget  # ✅ NEU: Widget-Status
             }
+            
+            # 🆕 LEGAL UPDATE INTEGRATION: Anwendung aktueller Gesetzesänderungen
+            if legal_update_integration:
+                try:
+                    # Lade aktive Legal Updates
+                    await legal_update_integration.get_active_legal_updates()
+                    # Wende Updates auf Scan-Ergebnisse an
+                    scan_results = legal_update_integration.apply_updates_to_scan_results(scan_results)
+                    logger.info(f"✅ Legal Updates auf Scan angewendet")
+                except Exception as e:
+                    logger.warning(f"⚠️ Legal Update Integration fehlgeschlagen: {e}")
+            
+            return scan_results
             
         except Exception as e:
             return self._create_error_response(url, f"Scanner-Fehler: {str(e)}")

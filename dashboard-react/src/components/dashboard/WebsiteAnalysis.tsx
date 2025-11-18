@@ -12,6 +12,8 @@ import type { ComplianceIssue } from '@/types/api';
 import { ComplianceIssueCard } from './ComplianceIssueCard';
 import { ActiveJobsPanel } from './ActiveJobsPanel';
 import { useAuth } from '@/contexts/AuthContext';
+import { PatchDownloadCard, WidgetIntegrationCard } from '@/components/accessibility';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export const WebsiteAnalysis: React.FC = () => {
   const { user } = useAuth();
@@ -67,6 +69,34 @@ export const WebsiteAnalysis: React.FC = () => {
     if (latestScanData && !storedAnalysisData && !fetchedAnalysisData) {
       console.log('✅ Loading latest scan into store:', latestScanData.url);
       setAnalysisData(latestScanData);
+      
+      // ✅ WICHTIG: Auch die Website-URL im Store setzen, damit der Score angezeigt wird
+      const { setCurrentWebsite, updateMetrics } = useDashboardStore.getState();
+      setCurrentWebsite({
+        id: latestScanData.scan_id || Date.now().toString(),
+        url: latestScanData.url,
+        name: latestScanData.url,
+        lastScan: latestScanData.scan_timestamp || new Date().toISOString(),
+        complianceScore: latestScanData.compliance_score || 0,
+        status: 'completed' as const
+      });
+      
+      // Metrics aktualisieren
+      const criticalCount = Array.isArray(latestScanData.issues)
+        ? latestScanData.issues.filter((issue: any) => {
+            if (typeof issue === 'string') {
+              return issue.toLowerCase().includes('fehlt') || 
+                     issue.toLowerCase().includes('nicht gefunden');
+            }
+            return issue.severity === 'critical';
+          }).length
+        : 0;
+      
+      updateMetrics({
+        totalScore: latestScanData.compliance_score || 0,
+        criticalIssues: criticalCount,
+        websites: 1
+      });
     }
   }, [latestScanData, storedAnalysisData, fetchedAnalysisData, setAnalysisData]);
   
@@ -136,12 +166,20 @@ export const WebsiteAnalysis: React.FC = () => {
             ? 'info'
             : 'warning';
           
-          // Category aus Text ableiten
+          // Category aus Text ableiten (✅ MIT BARRIEREFREIHEIT!)
           let category = 'compliance';
           if (issue.includes('Impressum')) category = 'impressum';
           if (issue.includes('Datenschutz')) category = 'datenschutz';
           if (issue.includes('Cookie')) category = 'cookies';
           if (issue.includes('E-Mail')) category = 'contact';
+          if (issue.toLowerCase().includes('barrierefreiheit') || 
+              issue.toLowerCase().includes('accessibility') ||
+              issue.toLowerCase().includes('wcag') ||
+              issue.toLowerCase().includes('alt-text') ||
+              issue.toLowerCase().includes('kontrast') ||
+              issue.toLowerCase().includes('aria')) {
+            category = 'barrierefreiheit';
+          }
           
           return {
             id: `issue-${index}`,
@@ -386,6 +424,12 @@ export const WebsiteAnalysis: React.FC = () => {
                 const criticalCount = pillar.issues.filter(i => i.severity === 'critical').length;
                 const isExpanded = expandedPillar === pillar.id;
                 
+                // ✅ CRITICAL FIX: Überspringe Pillars ohne Icon (Error #130 Prevention!)
+                if (!Icon) {
+                  console.error('🔴 Pillar ohne Icon gefunden:', pillar.id, pillar);
+                  return null;
+                }
+                
                 return (
                   <div 
                     key={pillar.id} 
@@ -446,15 +490,51 @@ export const WebsiteAnalysis: React.FC = () => {
                       <div className="border-t border-zinc-800/50 p-6 bg-black/20 animate-slide-down">
                         <div className="space-y-4">
                           {pillar.issues.map((issue, idx) => (
-                            <ComplianceIssueCard
-                              key={`${issue.id}-${idx}`}
-                              issue={issue}
-                              planType={planType}
-                              scanId={analysisData?.scan_id}
-                              websiteUrl={analysisData?.url}
-                              onStartFix={handleAIFix}
-                            />
+                            <ErrorBoundary key={`eb-${issue.id}-${idx}`} componentName={`ComplianceIssueCard (${issue.title})`}>
+                              <ComplianceIssueCard
+                                key={`${issue.id}-${idx}`}
+                                issue={issue}
+                                planType={planType}
+                                scanId={analysisData?.scan_id}
+                                websiteUrl={analysisData?.url}
+                                onStartFix={handleAIFix}
+                              />
+                            </ErrorBoundary>
                           ))}
+                          
+                          {/* 🚀 NEU: Barrierefreiheits-Spezifische Komponenten */}
+                          {pillar.id === 'accessibility' && analysisData && (
+                            <div className="mt-6 space-y-4">
+                              {/* Widget-Integration Card */}
+                              <ErrorBoundary componentName="WidgetIntegrationCard">
+                                <WidgetIntegrationCard
+                                  siteId={analysisData.site_id || analysisData.scan_id || 'unknown'}
+                                  websiteUrl={analysisData.url}
+                                  isWidgetActive={analysisData.has_accessibility_widget || false}
+                                />
+                              </ErrorBoundary>
+                              
+                              {/* Patch-Download Card */}
+                              <ErrorBoundary componentName="PatchDownloadCard">
+                                <PatchDownloadCard
+                                  siteId={analysisData.site_id || analysisData.scan_id || 'unknown'}
+                                  fixesCount={pillar.issues.length}
+                                  altTextCount={pillar.issues.filter(i => 
+                                    i.title?.toLowerCase().includes('alt') || 
+                                    i.description?.toLowerCase().includes('alt')
+                                  ).length}
+                                  contrastCount={pillar.issues.filter(i => 
+                                    i.title?.toLowerCase().includes('kontrast') || 
+                                    i.description?.toLowerCase().includes('kontrast')
+                                  ).length}
+                                  ariaCount={pillar.issues.filter(i => 
+                                    i.title?.toLowerCase().includes('aria') || 
+                                    i.description?.toLowerCase().includes('aria')
+                                  ).length}
+                                />
+                              </ErrorBoundary>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}

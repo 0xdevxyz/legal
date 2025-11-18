@@ -51,6 +51,7 @@ export interface ComplianceAnalysis {
   total_issues: number;
   issues: ComplianceIssue[];
   positive_checks?: PositiveCheck[]; // NEW: Was funktioniert bereits
+  has_accessibility_widget?: boolean; // ✅ NEU: Widget-Status vom Scanner
   recommendations: string[];
   next_steps: any[]; // Can be typed more strictly if needed
 }
