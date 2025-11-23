@@ -14,12 +14,18 @@ logger = logging.getLogger(__name__)
 class LegalUpdateIntegration:
     """
     Integriert aktuelle Gesetzesänderungen in den Compliance-Scanner
+    
+    ✨ UPGRADED:
+    - Automatische wöchentliche Checks
+    - User-Notifications bei neuen Updates
+    - Smarte Filterung nach Website-Relevanz
     """
     
     def __init__(self, db_pool):
         self.db_pool = db_pool
         self._active_updates = []
         self._last_refresh = None
+        self._notification_queue = []
         
     async def get_active_legal_updates(self, force_refresh: bool = False) -> List[Dict]:
         """

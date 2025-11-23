@@ -225,7 +225,7 @@ async def get_classified_updates(
                     ac.user_impact,
                     ac.consequences_if_ignored
                 FROM legal_updates lu
-                LEFT JOIN ai_classifications ac ON lu.id = ac.update_id
+                LEFT JOIN ai_classifications ac ON lu.id::text = ac.update_id
                 WHERE lu.archived = FALSE  -- ✅ Nur nicht-archivierte Updates
                 {where_clause.replace('WHERE ', 'AND ') if where_clause.startswith('WHERE') else where_clause}
                 ORDER BY 
@@ -512,7 +512,7 @@ async def get_archive(
                     ac.user_impact,
                     ac.classified_at
                 FROM legal_updates lu
-                LEFT JOIN ai_classifications ac ON lu.id = ac.update_id
+                LEFT JOIN ai_classifications ac ON lu.id::text = ac.update_id
                 WHERE lu.published_date < (
                     SELECT published_date FROM legal_updates
                     ORDER BY published_date DESC

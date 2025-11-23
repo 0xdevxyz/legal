@@ -1,12 +1,17 @@
 """
 Impressum Check (TMG §5)
 Prüft Impressum-Compliance
+
+✨ UPGRADED: Nutzt Deep-Content-Analyzer für echte Seitenanalyse
 """
 
 from bs4 import BeautifulSoup
 from typing import List, Dict, Any
 from dataclasses import dataclass, asdict
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class ImpressumIssue:
@@ -122,9 +127,95 @@ async def check_impressum_compliance(url: str, soup: BeautifulSoup, session=None
             is_missing=True
         )))
     else:
-        # TODO: Erweiterte Prüfung - Impressum-Seite crawlen und Pflichtangaben prüfen
-        # wenn Link vorhanden ist, aber Inhalte unvollständig sind
-        pass
+        # ✅ DEEP-ANALYSE: Link gefunden → Crawle und analysiere Impressum-Seite
+        logger.info(f"✅ Impressum-Link gefunden, starte Deep-Analyse")
+        
+        try:
+            from ..hybrid_validator import HybridValidator
+            
+            # Hole Impressum-URL
+            impressum_link = all_impressum_links[0]
+            impressum_href = impressum_link.get('href', '')
+            
+            # Erstelle absolute URL
+            from urllib.parse import urljoin
+            impressum_url = urljoin(url, impressum_href)
+            
+            # Fetche Impressum-Seite
+            if session:
+                try:
+                    async with session.get(impressum_url, timeout=10) as response:
+                        if response.status == 200:
+                            impressum_html = await response.text()
+                            
+                            # Deep-Analyse mit Hybrid-Validator
+                            validator = HybridValidator()
+                            analysis = await validator.validate_page(
+                                page_type="impressum",
+                                text_content=impressum_html,
+                                url=impressum_url
+                            )
+                            
+                            # Generiere Issues basierend auf fehlenden Feldern
+                            for field_result in analysis["results"]:
+                                if not field_result["found"] and field_result["field"] in ["firmenname", "adresse", "email", "telefon"]:
+                                    
+                                    # Nur kritische Pflichtfelder als Issues
+                                    risk_euros = {
+                                        "firmenname": 2000,
+                                        "adresse": 2000,
+                                        "email": 1500,
+                                        "telefon": 1500
+                                    }
+                                    
+                                    titles = {
+                                        "firmenname": "Firmenname/Name fehlt im Impressum",
+                                        "adresse": "Anschrift fehlt im Impressum",
+                                        "email": "E-Mail-Adresse fehlt im Impressum",
+                                        "telefon": "Telefonnummer fehlt im Impressum"
+                                    }
+                                    
+                                    descriptions = {
+                                        "firmenname": "Die Angabe des vollständigen Firmennamens fehlt im Impressum.",
+                                        "adresse": "Die vollständige Postanschrift fehlt im Impressum.",
+                                        "email": "Es fehlt eine E-Mail-Adresse für Kontaktaufnahme.",
+                                        "telefon": "Es fehlt eine Telefonnummer für Kontaktaufnahme."
+                                    }
+                                    
+                                    issues.append(asdict(ImpressumIssue(
+                                        category='impressum',
+                                        severity='critical',
+                                        title=titles[field_result["field"]],
+                                        description=descriptions[field_result["field"]],
+                                        risk_euro=risk_euros[field_result["field"]],
+                                        recommendation=f'Fügen Sie {field_result["field"]} zum Impressum hinzu.',
+                                        legal_basis='§5 TMG',
+                                        auto_fixable=False,
+                                        is_missing=False  # Link existiert, nur Inhalt fehlt
+                                    )))
+                            
+                            # Qualitäts-Warnung bei niedriger Qualität
+                            if analysis["quality"] in ["poor", "insufficient"]:
+                                issues.append(asdict(ImpressumIssue(
+                                    category='impressum',
+                                    severity='warning',
+                                    title='Impressum unvollständig',
+                                    description=f'Das Impressum wurde gefunden, ist aber unvollständig (Qualität: {analysis["quality"]}). Mehrere Pflichtangaben fehlen oder sind unzureichend.',
+                                    risk_euro=3000,
+                                    recommendation='Vervollständigen Sie Ihr Impressum mit allen Pflichtangaben nach §5 TMG.',
+                                    legal_basis='§5 TMG',
+                                    auto_fixable=True,
+                                    is_missing=False
+                                )))
+                            
+                            logger.info(f"✅ Deep-Analyse abgeschlossen: {analysis['quality']} ({len(issues)} Issues)")
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ Deep-Analyse fehlgeschlagen: {e}")
+                    # Fallback: Keine zusätzlichen Issues, nur Link-Check war erfolgreich
+        
+        except ImportError:
+            logger.warning("⚠️ HybridValidator nicht verfügbar - überspringe Deep-Analyse")
     
     return issues
 

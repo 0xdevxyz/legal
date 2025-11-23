@@ -6,6 +6,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useRouter } from 'next/navigation';
 import { Shield, LogOut, User, Sparkles, ChevronDown, Settings, CreditCard, Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Logo } from '@/components/Logo';
 
 export const DashboardHeader: React.FC = () => {
   const { user, logout } = useAuth();
@@ -23,17 +24,7 @@ export const DashboardHeader: React.FC = () => {
       <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
-          <div className="flex items-center gap-3 group cursor-pointer" onClick={() => router.push('/')}>
-            <div className="relative">
-              <div className="absolute -inset-1 bg-gradient-to-r from-sky-500 to-purple-500 rounded-lg blur opacity-30 group-hover:opacity-50 transition duration-500"></div>
-              <div className="relative bg-zinc-900 dark:bg-zinc-900 light:bg-white p-2 rounded-lg">
-                <Shield className="w-6 h-6 text-sky-400 group-hover:scale-110 transition-transform duration-300" />
-              </div>
-            </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-sky-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
-              Complyo
-            </span>
-          </div>
+          <Logo size="lg" onClick={() => router.push('/')} />
 
           {/* User Info & Actions */}
           <div className="flex items-center gap-4">

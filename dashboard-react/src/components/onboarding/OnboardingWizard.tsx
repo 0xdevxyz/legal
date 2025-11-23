@@ -244,38 +244,70 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
   // Helper: Get category icon and label
   const getCategoryInfo = (category: string) => {
     const categoryMap: Record<string, { icon: string; label: string; color: string }> = {
+      // Impressum
       impressum: { icon: '📋', label: 'Impressum', color: 'text-blue-700' },
+      
+      // Datenschutz
       datenschutz: { icon: '🔒', label: 'Datenschutz', color: 'text-purple-700' },
       privacy: { icon: '🔒', label: 'Datenschutz', color: 'text-purple-700' },
+      
+      // Cookies
       cookies: { icon: '🍪', label: 'Cookies', color: 'text-orange-700' },
       cookie: { icon: '🍪', label: 'Cookies', color: 'text-orange-700' },
-      ssl: { icon: '🔐', label: 'SSL/Sicherheit', color: 'text-green-700' },
+      'cookie-compliance': { icon: '🍪', label: 'Cookies', color: 'text-orange-700' },
+      
+      // Sicherheit
+      ssl: { icon: '🔐', label: 'Sicherheit', color: 'text-green-700' },
       security: { icon: '🔐', label: 'Sicherheit', color: 'text-green-700' },
+      sicherheit: { icon: '🔐', label: 'Sicherheit', color: 'text-green-700' },
+      
+      // AGB
       agb: { icon: '📄', label: 'AGB', color: 'text-indigo-700' },
       terms: { icon: '📄', label: 'AGB', color: 'text-indigo-700' },
+      
+      // Barrierefreiheit
+      barrierefreiheit: { icon: '♿', label: 'Barrierefreiheit', color: 'text-cyan-700' },
+      accessibility: { icon: '♿', label: 'Barrierefreiheit', color: 'text-cyan-700' },
+      
+      // Kontaktdaten
+      kontaktdaten: { icon: '📞', label: 'Kontaktdaten', color: 'text-teal-700' },
+      contact: { icon: '📞', label: 'Kontaktdaten', color: 'text-teal-700' },
+      
+      // Social Media
+      'social media': { icon: '📱', label: 'Social Media', color: 'text-pink-700' },
+      social: { icon: '📱', label: 'Social Media', color: 'text-pink-700' },
     };
     
     return categoryMap[category.toLowerCase()] || { icon: '⚡', label: 'Sonstige', color: 'text-gray-700' };
   };
 
-  // Helper: Group issues by category
+  // Helper: Group issues by category (using display name for grouping)
   const groupIssuesByCategory = (issues: ComplianceIssue[]) => {
     if (!issues || issues.length === 0) return [];
     
     const grouped = issues.reduce((acc, issue) => {
       const category = issue.category || 'sonstige';
-      if (!acc[category]) {
-        acc[category] = [];
+      // Get the display name for grouping (so different backend categories with same display name get grouped together)
+      const catInfo = getCategoryInfo(category);
+      const displayKey = catInfo.label.toLowerCase();
+      
+      if (!acc[displayKey]) {
+        acc[displayKey] = {
+          originalCategory: category, // Keep one original category for reference
+          displayInfo: catInfo,
+          issues: []
+        };
       }
-      acc[category].push(issue);
+      acc[displayKey].issues.push(issue);
       return acc;
-    }, {} as Record<string, ComplianceIssue[]>);
+    }, {} as Record<string, { originalCategory: string; displayInfo: any; issues: ComplianceIssue[] }>);
     
-    return Object.entries(grouped).map(([category, categoryIssues]) => ({
-      category,
-      issues: categoryIssues,
-      criticalCount: categoryIssues.filter(i => i.severity === 'critical').length,
-      warningCount: categoryIssues.filter(i => i.severity === 'warning').length,
+    return Object.entries(grouped).map(([displayKey, data]) => ({
+      category: data.originalCategory,
+      displayInfo: data.displayInfo,
+      issues: data.issues,
+      criticalCount: data.issues.filter(i => i.severity === 'critical').length,
+      warningCount: data.issues.filter(i => i.severity === 'warning').length,
     }));
   };
 
@@ -443,7 +475,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
                   <h3 className="font-semibold text-gray-900 mb-3 text-lg">Gefundene Problembereiche:</h3>
                   <div className="grid grid-cols-1 gap-2">
                     {categorizedIssues.map((cat, idx) => {
-                      const catInfo = getCategoryInfo(cat.category);
+                      const catInfo = cat.displayInfo;
                       return (
                         <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
                           <div className="flex items-center gap-3">

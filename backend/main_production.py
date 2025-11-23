@@ -81,8 +81,8 @@ from ai_legal_classifier import init_ai_classifier
 from ai_feedback_learning import init_feedback_learning
 from ai_legal_routes import router as ai_legal_router
 
-# NEW V2 API Routes - Enhanced AI Fix Engine & eRecht24 Integration (Simplified)
-from erecht24_routes_v2_simple import router as erecht24_v2_router
+# NEW V2 API Routes - Enhanced AI Fix Engine & eRecht24 Integration (Full Version)
+from erecht24_routes_v2 import router as erecht24_v2_router
 
 # Models for new endpoints
 class AnalyzeRequest(BaseModel):
@@ -780,13 +780,15 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
         
         # Save quick scan to database
         async with db_pool.acquire() as connection:
+            scan_id = f"quick_{current_user['user_id']}_{int(datetime.datetime.now().timestamp())}"
             await connection.execute(
                 """
-                INSERT INTO scan_results (
-                    user_id, url, scan_duration_ms, compliance_score, total_risk_euro,
-                    critical_issues, warning_issues, total_issues, issues, recommendations, next_steps
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                INSERT INTO scan_history (
+                    scan_id, user_id, url, scan_duration_ms, compliance_score, total_risk_euro,
+                    critical_issues, warning_issues, total_issues, scan_data
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 """,
+                scan_id,
                 current_user["user_id"],
                 scan_result["url"],
                 scan_result["scan_duration_ms"],
@@ -795,12 +797,10 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
                 scan_result["critical_issues"],
                 scan_result["warning_issues"],
                 scan_result["total_issues"],
-                json.dumps(scan_result["issues"]),
-                json.dumps([]),  # No recommendations in quick scan
-                json.dumps(scan_result.get("next_steps", []))
+                json.dumps(scan_result, default=str)  # Store full scan result as JSONB
             )
             new_scan = await connection.fetchrow(
-                "SELECT id FROM scan_results WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", 
+                "SELECT id FROM scan_history WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", 
                 current_user["user_id"]
             )
         
@@ -833,13 +833,15 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
 
         # Save the detailed scan result to the database
         async with db_pool.acquire() as connection:
+            scan_id = f"scan_{current_user['user_id']}_{int(datetime.datetime.now().timestamp())}"
             await connection.execute(
                 """
-                INSERT INTO scan_results (
-                    user_id, url, scan_duration_ms, compliance_score, total_risk_euro,
-                    critical_issues, warning_issues, total_issues, issues, recommendations, next_steps
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                INSERT INTO scan_history (
+                    scan_id, user_id, url, scan_duration_ms, compliance_score, total_risk_euro,
+                    critical_issues, warning_issues, total_issues, scan_data
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 """,
+                scan_id,
                 current_user["user_id"],
                 scan_result["url"],
                 scan_result["scan_duration_ms"],
@@ -848,16 +850,14 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
                 scan_result["critical_issues"],
                 scan_result["warning_issues"],
                 scan_result["total_issues"],
-                json.dumps(scan_result["issues"]),
-                json.dumps(scan_result.get("recommendations")),
-                json.dumps(scan_result.get("next_steps"))
+                json.dumps(scan_result, default=str)  # Store full scan result as JSONB
             )
             # Get the id of the new scan to return it
-            new_scan = await connection.fetchrow("SELECT id FROM scan_results WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", current_user["user_id"])
+            new_scan = await connection.fetchrow("SELECT id, scan_id FROM scan_history WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", current_user["user_id"])
 
         return {
             "success": True,
-            "data": {**scan_result, "scan_id": str(new_scan['id'])}
+            "data": {**scan_result, "scan_id": new_scan['scan_id']}
         }
 
     except HTTPException:
@@ -1016,6 +1016,9 @@ async def get_latest_scan(current_user: dict = Depends(get_current_user)):
                     scan_dict['scan_data'] = json.loads(scan_dict['scan_data'])
                 scan_dict['issues'] = scan_dict['scan_data'].get('issues', [])
                 scan_dict['recommendations'] = scan_dict['scan_data'].get('recommendations', [])
+                # ✅ NEU: Issue-Gruppen für professionelle UX
+                scan_dict['issue_groups'] = scan_dict['scan_data'].get('issue_groups', [])
+                scan_dict['grouping_stats'] = scan_dict['scan_data'].get('grouping_stats', {})
             
             return {
                 "success": True,
@@ -1030,7 +1033,10 @@ async def get_latest_scan(current_user: dict = Depends(get_current_user)):
                     "scan_timestamp": scan_dict['scan_timestamp'].isoformat(),
                     "scan_duration_ms": scan_dict['scan_duration_ms'],
                     "issues": scan_dict.get('issues', []),
-                    "recommendations": scan_dict.get('recommendations', [])
+                    "recommendations": scan_dict.get('recommendations', []),
+                    # ✅ NEU: Issue-Gruppen für professionelle UX
+                    "issue_groups": scan_dict.get('issue_groups', []),
+                    "grouping_stats": scan_dict.get('grouping_stats', {})
                 }
             }
     

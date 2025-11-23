@@ -20,6 +20,7 @@ import logging
 from ai_fix_engine.unified_fix_engine import UnifiedFixEngine
 from ai_fix_engine.monitoring import get_monitor, AICallMetrics, FixMetrics
 from erecht24_integration import ERecht24Integration
+from erecht24_manager import ERecht24Manager  # ✅ NEU: Unified Manager
 from widget_manager import WidgetManager, WidgetType
 # Import get_current_user from auth_routes, not auth_service
 from auth_routes import get_current_user
@@ -91,9 +92,17 @@ async def get_fix_engine() -> UnifiedFixEngine:
     return UnifiedFixEngine()
 
 
-async def get_erecht24_integration(db_pool) -> ERecht24Integration:
-    """Dependency: eRecht24 Integration"""
-    return ERecht24Integration(db_pool)
+async def get_erecht24_integration() -> ERecht24Integration:
+    """Dependency: eRecht24 Integration (Legacy)"""
+    from database_service import db_service
+    return ERecht24Integration(db_service.pool)
+
+
+async def get_erecht24_manager() -> ERecht24Manager:
+    """Dependency: eRecht24 Manager (Unified)"""
+    from database_service import db_service
+    # Redis optional (wird später hinzugefügt)
+    return ERecht24Manager(db_service.pool, redis_client=None)
 
 
 async def get_widget_manager() -> WidgetManager:
@@ -354,6 +363,106 @@ async def erecht24_webhook(
     except Exception as e:
         logger.error(f"❌ Webhook processing failed: {e}")
         return {"status": "error", "message": str(e)}
+
+
+@router.get("/erecht24/health")
+async def get_erecht24_health(
+    current_user: Dict = Depends(get_current_user),
+    manager: ERecht24Manager = Depends(get_erecht24_manager)
+):
+    """
+    🏥 Health-Check für eRecht24-Integration
+    
+    Zeigt Status von:
+    - API-Verbindung
+    - Redis-Cache
+    - DB-Cache
+    - Gesamtstatus
+    
+    Verwendung im Dashboard zur Anzeige von Service-Status
+    """
+    try:
+        health_status = await manager.get_health_status()
+        
+        return {
+            "success": True,
+            "health": health_status,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"❌ Health check failed: {e}")
+        return {
+            "success": False,
+            "health": {
+                "overall": "error",
+                "error": str(e)
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+
+@router.get("/legal-texts-v2/{text_type}")
+async def get_legal_text_v2(
+    text_type: str,
+    domain: str,
+    language: str = "de",
+    force_refresh: bool = False,
+    current_user: Dict = Depends(get_current_user),
+    manager: ERecht24Manager = Depends(get_erecht24_manager)
+):
+    """
+    🆕 V2: Unified Legal Text Retrieval mit robuster Fallback-Kette
+    
+    **Fallback-Hierarchie:**
+    1. eRecht24 Live-API
+    2. Redis Cache (< 7 Tage)
+    3. DB Cache (< 30 Tage)
+    4. AI-Generator (mit Warnung)
+    
+    **Unterstützte Text-Typen:**
+    - impressum
+    - datenschutz / privacy_policy
+    - agb
+    - widerruf
+    - disclaimer
+    
+    **Response:**
+    ```json
+    {
+        "success": true,
+        "content": "<html>...</html>",
+        "source": "api"|"redis"|"db"|"ai",
+        "last_updated": "2025-11-21T...",
+        "cached": true|false,
+        "warning": "..." (nur bei AI)
+    }
+    ```
+    """
+    try:
+        result = await manager.get_legal_text(
+            user_id=current_user["user_id"],
+            domain=domain,
+            text_type=text_type,
+            language=language,
+            force_refresh=force_refresh
+        )
+        
+        if result.get("content"):
+            return {
+                "success": True,
+                **result
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.get("error", "Unbekannter Fehler"),
+                "source": result.get("source", "none")
+            }
+    
+    except Exception as e:
+        logger.error(f"❌ Legal text retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/widgets/configure")

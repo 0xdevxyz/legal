@@ -10,6 +10,7 @@ import { useStartAIFix, useBookExpert, useComplianceAnalysis, useLatestScan, use
 import { formatRelativeTime } from '@/lib/utils';
 import type { ComplianceIssue } from '@/types/api';
 import { ComplianceIssueCard } from './ComplianceIssueCard';
+import { ComplianceIssueGroup } from './ComplianceIssueGroup';
 import { ActiveJobsPanel } from './ActiveJobsPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { PatchDownloadCard, WidgetIntegrationCard } from '@/components/accessibility';
@@ -41,8 +42,17 @@ export const WebsiteAnalysis: React.FC = () => {
       hasData: !!analysisData,
       url: analysisData?.url,
       issues: analysisData?.issues?.length,
+      issue_groups: analysisData?.issue_groups?.length,
+      grouping_stats: analysisData?.grouping_stats,
       source: storedAnalysisData ? 'store' : fetchedAnalysisData ? 'fetched' : latestScanData ? 'latest' : 'none'
     });
+    
+    // 🔍 DEBUG: Log issue_groups im Detail
+    if (analysisData?.issue_groups) {
+      console.log('🎯 Issue Groups gefunden:', analysisData.issue_groups);
+    } else {
+      console.warn('⚠️ Keine issue_groups in analysisData!', analysisData);
+    }
   }, [analysisData, storedAnalysisData, fetchedAnalysisData, latestScanData]);
   
   // ✅ FIX: Gesamter Loading-State berücksichtigt auch latestScan
@@ -489,18 +499,71 @@ export const WebsiteAnalysis: React.FC = () => {
                     {isExpanded && issueCount > 0 && (
                       <div className="border-t border-zinc-800/50 p-6 bg-black/20 animate-slide-down">
                         <div className="space-y-4">
-                          {pillar.issues.map((issue, idx) => (
-                            <ErrorBoundary key={`eb-${issue.id}-${idx}`} componentName={`ComplianceIssueCard (${issue.title})`}>
-                              <ComplianceIssueCard
-                                key={`${issue.id}-${idx}`}
-                                issue={issue}
-                                planType={planType}
-                                scanId={analysisData?.scan_id}
-                                websiteUrl={analysisData?.url}
-                                onStartFix={handleAIFix}
-                              />
-                            </ErrorBoundary>
-                          ))}
+                          {/* ✨ NEU: Gruppierte Issues (wenn vorhanden) */}
+                          {(() => {
+                            const issueGroups = (analysisData as any)?.issue_groups || [];
+                            const ungroupedIssues = (analysisData as any)?.ungrouped_issues || [];
+                            
+                            // 🔍 DEBUG: Log für diese Säule
+                            console.log(`🔧 Rendering pillar: ${pillar.id}`, {
+                              totalGroups: issueGroups.length,
+                              groups: issueGroups,
+                              pillarIssues: pillar.issues.length
+                            });
+                            
+                            // Filtere Gruppen für diese Säule
+                            const pillarGroups = issueGroups.filter((group: any) => 
+                              group.category === pillar.id || 
+                              (pillar.id === 'gdpr' && group.category === 'datenschutz') ||
+                              (pillar.id === 'legal' && group.category === 'impressum')
+                            );
+                            
+                            console.log(`📦 Filtered groups for ${pillar.id}:`, pillarGroups.length, pillarGroups);
+                            
+                            // Filtere ungrouped Issues für diese Säule
+                            const pillarUngrouped = pillar.issues.filter((issue: any) => {
+                              // Prüfe ob Issue nicht in einer Gruppe ist
+                              const inGroup = issueGroups.some((group: any) => {
+                                const groupIssueIds = [
+                                  ...(group.sub_issues || []).map((si: any) => si.id),
+                                  group.parent_issue?.id
+                                ].filter(Boolean);
+                                return groupIssueIds.includes(issue.id);
+                              });
+                              return !inGroup;
+                            });
+                            
+                            return (
+                              <>
+                                {/* Zeige gruppierte Issues */}
+                                {pillarGroups.map((group: any, idx: number) => (
+                                  <ErrorBoundary key={`group-${group.group_id}-${idx}`} componentName={`ComplianceIssueGroup (${group.title})`}>
+                                    <ComplianceIssueGroup
+                                      group={group}
+                                      planType={planType}
+                                      websiteUrl={analysisData?.url}
+                                      scanId={analysisData?.scan_id}
+                                      onStartFix={handleAIFix}
+                                    />
+                                  </ErrorBoundary>
+                                ))}
+                                
+                                {/* Zeige ungrouped Issues */}
+                                {pillarUngrouped.map((issue: any, idx: number) => (
+                                  <ErrorBoundary key={`eb-${issue.id}-${idx}`} componentName={`ComplianceIssueCard (${issue.title})`}>
+                                    <ComplianceIssueCard
+                                      key={`${issue.id}-${idx}`}
+                                      issue={issue}
+                                      planType={planType}
+                                      scanId={analysisData?.scan_id}
+                                      websiteUrl={analysisData?.url}
+                                      onStartFix={handleAIFix}
+                                    />
+                                  </ErrorBoundary>
+                                ))}
+                              </>
+                            );
+                          })()}
                           
                           {/* 🚀 NEU: Barrierefreiheits-Spezifische Komponenten */}
                           {pillar.id === 'accessibility' && analysisData && (

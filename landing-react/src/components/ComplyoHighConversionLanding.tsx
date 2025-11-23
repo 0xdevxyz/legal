@@ -15,6 +15,7 @@ import {
   Play
 } from 'lucide-react';
 import WebsiteScanner from './landing/WebsiteScanner';
+import { Logo } from './Logo';
 
 interface ComplyoLandingProps {
   variant: 'original' | 'high-conversion';
@@ -54,8 +55,8 @@ export default function ComplyoHighConversionLanding({ variant, sessionId }: Com
         <nav className="bg-gray-950 border-b border-gray-800" role="navigation" aria-label="Hauptnavigation">
           <div className="container mx-auto px-6">
             <div className="flex justify-between items-center h-16">
-              <a href="/" className="text-2xl font-bold text-white" aria-label="Zur Startseite">
-                Complyo
+              <a href="/" aria-label="Zur Startseite">
+                <Logo size="lg" />
               </a>
               <div className="hidden md:flex items-center space-x-8">
                 <a href="#pricing" className="text-gray-300 hover:text-white transition-colors">Preise</a>

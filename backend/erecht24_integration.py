@@ -19,7 +19,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from enum import Enum
 
-from .ai_fix_engine.white_label import WhiteLabelProcessor
+from ai_fix_engine.white_label import WhiteLabelProcessor
 
 
 logger = logging.getLogger(__name__)

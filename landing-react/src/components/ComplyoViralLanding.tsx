@@ -25,6 +25,7 @@ import {
 import AccessibilityWidget from './AccessibilityWidget';
 import CookieBanner from './CookieBanner';
 import VideoDemo from './landing/VideoDemo';
+import { Logo } from './Logo';
 
 interface ComplyoViralLandingProps {
   variant: 'viral' | 'high-conversion';
@@ -191,10 +192,7 @@ const ComplyoViralLanding: React.FC<ComplyoViralLandingProps> = ({ variant, sess
         <nav className="relative z-10 container mx-auto px-6 py-6">
           <div className="flex justify-between items-center">
             {/* Logo */}
-            <div className="flex items-center gap-2">
-              <Shield className="w-8 h-8 text-blue-400" />
-              <span className="text-2xl font-bold">Complyo</span>
-            </div>
+            <Logo size="xl" />
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-8">
@@ -845,10 +843,7 @@ const ComplyoViralLanding: React.FC<ComplyoViralLandingProps> = ({ variant, sess
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             {/* Company Info */}
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Shield className="w-8 h-8 text-blue-400" aria-hidden="true" />
-                <span className="text-2xl font-bold">Complyo</span>
-              </div>
+              <Logo size="xl" className="mb-4" />
               <p className="text-gray-400 text-sm mb-4">
                 Automatisierte Compliance-Prüfung für DSGVO, Barrierefreiheit und Rechtstexte.
               </p>

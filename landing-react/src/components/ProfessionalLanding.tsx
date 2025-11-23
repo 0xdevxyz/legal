@@ -13,6 +13,7 @@ import PricingTable from './landing/PricingTable';
 import FAQAccordion from './landing/FAQAccordion';
 import TrustMetrics from './landing/TrustMetrics';
 import CTASection from './landing/CTASection';
+import { Logo } from './Logo';
 
 /**
  * ProfessionalLanding - Professional Audit Dashboard Landing-Page
@@ -30,8 +31,8 @@ export default function ProfessionalLanding() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center">
-                <a href="/" className="text-2xl font-bold text-blue-600" aria-label="Zur Startseite">
-                  Complyo
+                <a href="/" aria-label="Zur Startseite">
+                  <Logo size="lg" variant="light" />
                 </a>
               </div>
               <div className="hidden md:flex items-center space-x-8">

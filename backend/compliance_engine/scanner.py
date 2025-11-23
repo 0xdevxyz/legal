@@ -14,6 +14,9 @@ import json
 from dataclasses import dataclass, asdict
 import ssl
 import certifi
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import modulare Checks
 from compliance_engine.checks import (
@@ -26,6 +29,9 @@ from compliance_engine.checks import (
 
 # Import Legal Update Integration
 from compliance_engine.legal_update_integration import legal_update_integration
+
+# Import Issue Grouper
+from compliance_engine.issue_grouper import IssueGrouper
 
 @dataclass
 class ComplianceIssue:
@@ -169,6 +175,14 @@ class ComplianceScanner:
                     logger.info(f"✅ Legal Updates auf Scan angewendet")
                 except Exception as e:
                     logger.warning(f"⚠️ Legal Update Integration fehlgeschlagen: {e}")
+            
+            # 🆕 ISSUE GROUPING: Intelligente Gruppierung für bessere UX
+            try:
+                grouper = IssueGrouper()
+                scan_results = grouper.enrich_scan_results(scan_results)
+                logger.info(f"✅ Issue-Gruppierung abgeschlossen: {scan_results.get('grouping_stats', {}).get('total_groups', 0)} Gruppen")
+            except Exception as e:
+                logger.warning(f"⚠️ Issue-Gruppierung fehlgeschlagen: {e}")
             
             return scan_results
             

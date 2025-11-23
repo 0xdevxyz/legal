@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Cookie, Shield, CheckCircle, X, Settings } from 'lucide-react';
+import { Logo } from './Logo';
 
 /**
  * DSGVO-konformes Cookie-Banner mit Consent-Management
@@ -267,9 +268,15 @@ export default function CookieBanner() {
                 <p className="text-sm font-bold text-white">
                   ✓ DSGVO & TTDSG konform
                 </p>
-                <p className="text-xs text-gray-300">
-                  Powered by Complyo • Anwalt-geprüft
-                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="text-xs text-gray-300">
+                    Powered by
+                  </p>
+                  <Logo size="sm" showText={true} variant="default" />
+                  <p className="text-xs text-gray-300">
+                    • Anwalt-geprüft
+                  </p>
+                </div>
               </div>
               <a 
                 href="#" 

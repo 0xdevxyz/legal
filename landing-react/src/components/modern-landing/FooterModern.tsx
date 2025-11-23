@@ -12,6 +12,7 @@ import {
   MapPin,
   Phone,
 } from 'lucide-react';
+import { Logo } from '../Logo';
 
 /**
  * FooterModern - Moderner, umfassender Footer
@@ -71,9 +72,7 @@ export default function FooterModern() {
               viewport={{ once: true }}
             >
               {/* Logo */}
-              <h3 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-4">
-                Complyo
-              </h3>
+              <Logo size="xl" variant="default" className="mb-4" />
               <p className="text-gray-400 mb-6 leading-relaxed">
                 Die führende Plattform für Web-Barrierefreiheit und WCAG-Compliance. 
                 Automatisiert, KI-gestützt und von Experten unterstützt.
@@ -136,14 +135,17 @@ export default function FooterModern() {
         {/* Bottom Footer */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Copyright */}
-          <motion.p
+          <motion.div
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            className="text-sm text-gray-400"
+            className="flex items-center gap-3"
           >
-            © {currentYear} Complyo. Alle Rechte vorbehalten.
-          </motion.p>
+            <Logo size="sm" variant="default" />
+            <p className="text-sm text-gray-400">
+              © {currentYear} Alle Rechte vorbehalten.
+            </p>
+          </motion.div>
 
           {/* Social Links */}
           <motion.div
