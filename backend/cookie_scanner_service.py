@@ -1,17 +1,29 @@
 """
 Cookie Scanner Service
 Scannt Websites und erkennt automatisch verwendete Cookie-Services
+
+Unterstützt zwei Modi:
+1. Light Scan (HTTP-basiert) - Schnell, aber keine JS-Ausführung
+2. Deep Scan (Headless Browser) - Vollständig mit Cookie/Storage-Erkennung
 """
 
 import asyncio
 import re
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any, Set, Optional
 import aiohttp
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Import headless scanner
+try:
+    from scanner.headless_scanner import HeadlessCookieScanner, scan_website_headless
+    HEADLESS_AVAILABLE = True
+except ImportError:
+    HEADLESS_AVAILABLE = False
+    logger.warning("Headless scanner not available. Deep scans disabled.")
 
 
 class CookieScanner:
@@ -506,8 +518,167 @@ class CookieScanner:
         """Returns current timestamp"""
         from datetime import datetime
         return datetime.now().isoformat()
+    
+    async def scan_website_deep(self, url: str) -> Dict[str, Any]:
+        """
+        Führt einen Deep Scan mit Headless Browser durch
+        
+        Features:
+        - Echtes Browser-Rendering
+        - JavaScript-Ausführung
+        - Cookie-Erkennung
+        - Local Storage Scanning
+        - Session Storage Scanning
+        - Third-Party Request Tracking
+        
+        Args:
+            url: Die zu scannende URL
+            
+        Returns:
+            Umfassendes Scan-Ergebnis
+        """
+        if not HEADLESS_AVAILABLE:
+            logger.warning("Headless scanner not available, falling back to light scan")
+            result = await self.scan_website(url)
+            result['scan_method'] = 'light_fallback'
+            result['note'] = 'Headless scanning not available, using HTTP-based scan'
+            return result
+        
+        try:
+            return await scan_website_headless(url)
+        except Exception as e:
+            logger.error(f"Deep scan failed for {url}: {e}")
+            # Fallback to light scan
+            result = await self.scan_website(url)
+            result['scan_method'] = 'light_fallback'
+            result['error'] = f"Deep scan failed: {str(e)}"
+            return result
+    
+    async def scan_website_combined(self, url: str, include_deep: bool = True) -> Dict[str, Any]:
+        """
+        Kombiniert Light und Deep Scan für beste Ergebnisse
+        
+        Args:
+            url: Die zu scannende URL
+            include_deep: Ob Deep Scan eingeschlossen werden soll
+            
+        Returns:
+            Kombiniertes Scan-Ergebnis
+        """
+        # Start with light scan (fast)
+        light_result = await self.scan_website(url)
+        
+        if not include_deep or not HEADLESS_AVAILABLE:
+            light_result['scan_type'] = 'light_only'
+            return light_result
+        
+        # Add deep scan
+        try:
+            deep_result = await scan_website_headless(url)
+            
+            # Merge results
+            combined = {
+                'url': url,
+                'scan_type': 'combined',
+                'scan_timestamp': self._get_timestamp(),
+                
+                # Combine detected services (union)
+                'detected_services': list(set(
+                    light_result.get('detected_services', []) + 
+                    deep_result.get('detected_services', [])
+                )),
+                
+                # Use higher confidence values
+                'confidence': {
+                    **light_result.get('confidence', {}),
+                    **deep_result.get('confidence', {})
+                },
+                
+                # Deep scan specific data
+                'cookies': deep_result.get('cookies', {}),
+                'local_storage': deep_result.get('local_storage', {}),
+                'session_storage': deep_result.get('session_storage', {}),
+                'third_party_requests': deep_result.get('third_party_requests', {}),
+                
+                # Scripts and iframes from both
+                'scripts': deep_result.get('scripts', light_result.get('scripts', [])),
+                'iframes': deep_result.get('iframes', light_result.get('iframes', [])),
+                
+                # Summary
+                'summary': deep_result.get('summary', {}),
+                'service_details': deep_result.get('service_details', {}),
+            }
+            
+            return combined
+            
+        except Exception as e:
+            logger.error(f"Combined scan deep portion failed: {e}")
+            light_result['scan_type'] = 'light_only'
+            light_result['deep_scan_error'] = str(e)
+            return light_result
 
 
-# Singleton instance
+class CookieScannerManager:
+    """
+    Manager für Cookie Scanner mit Lifecycle-Management
+    
+    Verwaltet den Headless Browser für mehrere Scans
+    """
+    
+    def __init__(self):
+        self._headless_scanner: Optional[HeadlessCookieScanner] = None
+        self._light_scanner = CookieScanner()
+    
+    async def start_headless(self):
+        """Startet den Headless Browser"""
+        if HEADLESS_AVAILABLE and self._headless_scanner is None:
+            self._headless_scanner = HeadlessCookieScanner()
+            await self._headless_scanner.start()
+            logger.info("Headless scanner started")
+    
+    async def stop_headless(self):
+        """Stoppt den Headless Browser"""
+        if self._headless_scanner:
+            await self._headless_scanner.stop()
+            self._headless_scanner = None
+            logger.info("Headless scanner stopped")
+    
+    async def scan_light(self, url: str) -> Dict[str, Any]:
+        """Schneller HTTP-basierter Scan"""
+        return await self._light_scanner.scan_website(url)
+    
+    async def scan_deep(self, url: str) -> Dict[str, Any]:
+        """Vollständiger Headless Browser Scan"""
+        if not HEADLESS_AVAILABLE:
+            return await self.scan_light(url)
+        
+        if self._headless_scanner is None:
+            await self.start_headless()
+        
+        return await self._headless_scanner.scan_website(url)
+    
+    async def scan_batch(self, urls: List[str], deep: bool = False) -> List[Dict[str, Any]]:
+        """Scannt mehrere URLs"""
+        results = []
+        
+        if deep and HEADLESS_AVAILABLE:
+            await self.start_headless()
+        
+        for url in urls:
+            if deep:
+                result = await self.scan_deep(url)
+            else:
+                result = await self.scan_light(url)
+            results.append(result)
+        
+        return results
+    
+    def is_headless_available(self) -> bool:
+        """Prüft ob Headless Scanning verfügbar ist"""
+        return HEADLESS_AVAILABLE
+
+
+# Singleton instances
 cookie_scanner = CookieScanner()
+scanner_manager = CookieScannerManager()
 

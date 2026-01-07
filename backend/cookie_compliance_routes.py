@@ -11,7 +11,7 @@ import hashlib
 import uuid
 from datetime import datetime, date, timedelta
 import json
-from cookie_scanner_service import cookie_scanner
+from cookie_scanner_service import cookie_scanner, scanner_manager
 
 router = APIRouter()
 
@@ -37,6 +37,7 @@ class ConsentLog(BaseModel):
     banner_shown: bool = True
     user_agent: Optional[str] = None
     ip_address: Optional[str] = None  # Will be hashed
+    device_fingerprint: Optional[str] = None  # Privacy-friendly alternative to IP
 
     @validator('site_id', 'visitor_id')
     def validate_ids(cls, v):
@@ -159,14 +160,17 @@ async def log_consent(
         config_row = await db_pool.fetchrow(config_query, consent.site_id)
         revision_id = config_row['id'] if config_row else 1
         
-        # Insert consent log
+        # Insert consent log (with optional device fingerprint as IP alternative)
         insert_query = """
             INSERT INTO cookie_consent_logs (
                 site_id, visitor_id, consent_categories, services_accepted,
-                ip_address_hash, user_agent, revision_id, language, banner_shown
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                ip_address_hash, device_fingerprint, user_agent, revision_id, language, banner_shown
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING id, timestamp
         """
+        
+        # Use device fingerprint if provided, otherwise fall back to IP hash
+        device_fp = consent.device_fingerprint if consent.device_fingerprint else None
         
         result = await db_pool.fetchrow(
             insert_query,
@@ -175,6 +179,7 @@ async def log_consent(
             json.dumps(consent.consent_categories.dict()),
             json.dumps(consent.services_accepted) if consent.services_accepted else None,
             ip_hash,
+            device_fp,
             user_agent,
             revision_id,
             consent.language,
@@ -835,6 +840,154 @@ async def scan_website(
     except Exception as e:
         print(f"Error scanning website: {e}")
         raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
+
+
+@router.post("/api/cookie-compliance/scan/deep")
+async def scan_website_deep(
+    request: Request,
+    data: Dict[str, Any],
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Deep Scan einer Website mit Headless Browser
+    
+    Erkennt:
+    - Alle Cookies (First & Third Party)
+    - Local Storage Eintraege
+    - Session Storage Eintraege
+    - Third-Party Requests
+    - Dynamisch geladene Scripts
+    
+    Body:
+    - url: Website URL zum Scannen
+    - wait_time: (optional) Wartezeit in ms nach Page Load (default: 3000)
+    
+    Returns:
+    - Umfassendes Scan-Ergebnis mit allen Tracking-Daten
+    """
+    try:
+        url = data.get('url')
+        if not url:
+            raise HTTPException(status_code=400, detail="URL required")
+        
+        wait_time = data.get('wait_time', 3000)
+        
+        # Check if headless scanning is available
+        if not scanner_manager.is_headless_available():
+            return {
+                "success": False,
+                "error": "Headless scanning not available. Playwright not installed.",
+                "url": url,
+                "fallback_available": True
+            }
+        
+        # Perform deep scan
+        scan_result = await scanner_manager.scan_deep(url)
+        
+        if scan_result.get('error'):
+            return {
+                "success": False,
+                "error": scan_result['error'],
+                "url": url
+            }
+        
+        # Match detected services with database
+        matched_services = []
+        if scan_result.get('detected_services'):
+            service_keys = list(scan_result['detected_services'])
+            
+            query = """
+                SELECT service_key, name, category, provider, template
+                FROM cookie_services
+                WHERE service_key = ANY($1::text[]) AND is_active = true
+            """
+            
+            rows = await db_pool.fetch(query, service_keys)
+            
+            for row in rows:
+                matched_services.append({
+                    'service_key': row['service_key'],
+                    'name': row['name'],
+                    'category': row['category'],
+                    'provider': row['provider'],
+                    'confidence': scan_result.get('confidence', {}).get(row['service_key'], 0.5),
+                    'evidence': scan_result.get('service_details', {}).get(row['service_key'], {}).get('evidence', [])
+                })
+        
+        return {
+            "success": True,
+            "url": url,
+            "scan_method": "headless_browser",
+            "scan_timestamp": scan_result.get('scan_timestamp'),
+            
+            # Detected services
+            "detected_services": matched_services,
+            "total_services": len(matched_services),
+            
+            # Cookie data
+            "cookies": scan_result.get('cookies', {}),
+            
+            # Storage data
+            "local_storage": scan_result.get('local_storage', {}),
+            "session_storage": scan_result.get('session_storage', {}),
+            
+            # Network data
+            "third_party_requests": scan_result.get('third_party_requests', {}),
+            
+            # Content
+            "scripts": scan_result.get('scripts', []),
+            "iframes": scan_result.get('iframes', []),
+            
+            # Summary
+            "summary": scan_result.get('summary', {}),
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in deep scan: {e}")
+        raise HTTPException(status_code=500, detail=f"Deep scan failed: {str(e)}")
+
+
+@router.get("/api/cookie-compliance/scan/capabilities")
+async def get_scan_capabilities():
+    """
+    Gibt die verfuegbaren Scan-Capabilities zurueck
+    
+    Returns:
+    - light_scan: Immer verfuegbar (HTTP-basiert)
+    - deep_scan: Verfuegbar wenn Playwright installiert
+    - features: Liste der Features pro Scan-Typ
+    """
+    return {
+        "success": True,
+        "capabilities": {
+            "light_scan": {
+                "available": True,
+                "description": "HTTP-basierter Scan ohne Browser-Rendering",
+                "features": [
+                    "Script-Erkennung via HTML-Parsing",
+                    "Iframe-Erkennung",
+                    "Pattern-basierte Service-Erkennung",
+                    "Schnell (< 5 Sekunden)"
+                ]
+            },
+            "deep_scan": {
+                "available": scanner_manager.is_headless_available(),
+                "description": "Headless Browser Scan mit vollstaendiger JS-Ausfuehrung",
+                "features": [
+                    "Echtes Browser-Rendering",
+                    "Cookie-Auslesen (First & Third Party)",
+                    "Local Storage Scanning",
+                    "Session Storage Scanning",
+                    "Third-Party Request Tracking",
+                    "Dynamisch geladene Scripts",
+                    "Genauere Erkennung (10-30 Sekunden)"
+                ]
+            }
+        }
+    }
+
 
 @router.get("/api/cookie-compliance/blocking-config/{site_id}")
 async def get_blocking_config(

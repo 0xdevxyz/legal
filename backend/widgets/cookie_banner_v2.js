@@ -135,6 +135,87 @@
             });
         }
         
+        /**
+         * Generates a privacy-friendly browser fingerprint
+         * 
+         * This is NOT a tracking fingerprint - it's a pseudonymized device identifier
+         * used for consent documentation (GDPR requirement).
+         * 
+         * We only use non-identifying characteristics:
+         * - Language
+         * - Screen resolution
+         * - Timezone offset
+         * - Hardware concurrency
+         * - Platform type
+         * 
+         * This creates a hash that is:
+         * - Consistent across sessions (same device = same hash)
+         * - Not unique enough for cross-site tracking
+         * - Privacy-compliant as per GDPR guidelines
+         */
+        generateFingerprint() {
+            try {
+                const components = [
+                    // Language
+                    navigator.language || 'unknown',
+                    
+                    // Screen characteristics (not exact dimensions for privacy)
+                    Math.round(screen.width / 100) * 100 + 'x' + Math.round(screen.height / 100) * 100,
+                    screen.colorDepth || 24,
+                    
+                    // Timezone
+                    new Date().getTimezoneOffset(),
+                    
+                    // Hardware (rough category, not exact)
+                    navigator.hardwareConcurrency ? 
+                        (navigator.hardwareConcurrency <= 2 ? 'low' : 
+                         navigator.hardwareConcurrency <= 4 ? 'medium' : 'high') : 'unknown',
+                    
+                    // Platform type (generic, not specific)
+                    navigator.platform ? navigator.platform.split(' ')[0] : 'unknown',
+                    
+                    // Touch capability
+                    'ontouchstart' in window || navigator.maxTouchPoints > 0 ? 'touch' : 'no-touch',
+                    
+                    // Cookie support
+                    navigator.cookieEnabled ? 'cookies' : 'no-cookies',
+                ];
+                
+                // Create hash from components
+                const data = components.join('|');
+                return this.hashString(data);
+                
+            } catch (error) {
+                console.warn('[Complyo] Fingerprint generation failed:', error);
+                return null;
+            }
+        }
+        
+        /**
+         * Simple string hash function (FNV-1a inspired)
+         * Not cryptographic, but sufficient for fingerprinting
+         */
+        hashString(str) {
+            let hash = 2166136261; // FNV offset basis
+            for (let i = 0; i < str.length; i++) {
+                hash ^= str.charCodeAt(i);
+                hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+            }
+            // Convert to hex string
+            return ('00000000' + (hash >>> 0).toString(16)).slice(-8) + 
+                   ('00000000' + ((hash >>> 0) ^ 0x9e3779b9).toString(16)).slice(-8);
+        }
+        
+        /**
+         * Gets the device fingerprint (cached for performance)
+         */
+        getDeviceFingerprint() {
+            if (!this._deviceFingerprint) {
+                this._deviceFingerprint = this.generateFingerprint();
+            }
+            return this._deviceFingerprint;
+        }
+        
         async init() {
             // Check Do Not Track
             if (this.config.respectDNT && this.isDNTEnabled()) {
@@ -157,11 +238,25 @@
         
         async loadServerConfig() {
             try {
-                const response = await fetch(`${API_BASE}/api/cookie-compliance/config/${this.siteId}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success && data.data) {
-                        this.applyServerConfig(data.data);
+                // Check for A/B test variant first
+                const abTestVariant = await this.checkABTest();
+                
+                if (abTestVariant && abTestVariant.config) {
+                    // Use A/B test config
+                    console.log(`[Complyo] A/B Test active - Variant ${abTestVariant.variant}`);
+                    this.abTest = {
+                        testId: abTestVariant.test_id,
+                        variant: abTestVariant.variant
+                    };
+                    this.applyServerConfig(abTestVariant.config);
+                } else {
+                    // Use regular config
+                    const response = await fetch(`${API_BASE}/api/cookie-compliance/config/${this.siteId}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.success && data.data) {
+                            this.applyServerConfig(data.data);
+                        }
                     }
                 }
                 
@@ -170,6 +265,60 @@
             } catch (error) {
                 console.warn('[Complyo] Could not load server config:', error);
             }
+        }
+        
+        async checkABTest() {
+            try {
+                const response = await fetch(
+                    `${API_BASE}/api/ab-tests/assign/${this.siteId}/${this.visitorId}`
+                );
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.has_test) {
+                        return {
+                            test_id: data.test_id,
+                            variant: data.variant,
+                            config: data.config
+                        };
+                    }
+                }
+            } catch (error) {
+                console.warn('[Complyo] Could not check A/B test:', error);
+            }
+            return null;
+        }
+        
+        async trackABTestResult(action) {
+            if (!this.abTest) return;
+            
+            try {
+                const result = {
+                    test_id: this.abTest.testId,
+                    variant: this.abTest.variant,
+                    impressions: action === 'impression' ? 1 : 0,
+                    accepted_all: action === 'accept_all' ? 1 : 0,
+                    accepted_partial: action === 'accept_partial' ? 1 : 0,
+                    rejected_all: action === 'reject_all' ? 1 : 0,
+                    accepted_analytics: 0,
+                    accepted_marketing: 0,
+                    accepted_functional: 0,
+                    avg_decision_time_ms: this.getDecisionTime()
+                };
+                
+                await fetch(`${API_BASE}/api/ab-tests/track`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(result)
+                });
+            } catch (error) {
+                console.warn('[Complyo] Could not track A/B result:', error);
+            }
+        }
+        
+        getDecisionTime() {
+            if (!this.bannerShownAt) return 0;
+            return Date.now() - this.bannerShownAt;
         }
         
         async loadServiceDetails() {
@@ -278,6 +427,9 @@
         
         async logConsentToServer(consent) {
             try {
+                // Get device fingerprint for pseudonymized tracking
+                const deviceFingerprint = this.getDeviceFingerprint();
+                
                 await fetch(`${API_BASE}/api/cookie-compliance/consent`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -292,7 +444,9 @@
                         },
                         services_accepted: consent.services || [],
                         language: navigator.language.split('-')[0],
-                        banner_shown: true
+                        banner_shown: true,
+                        // Privacy-friendly device fingerprint (alternative to IP hash)
+                        device_fingerprint: deviceFingerprint
                     })
                 });
             } catch (error) {
@@ -350,6 +504,14 @@
             // Create banner element
             const container = this.createBanner();
             document.body.appendChild(container);
+            
+            // Track banner shown time for A/B test
+            this.bannerShownAt = Date.now();
+            
+            // Track A/B test impression
+            if (this.abTest) {
+                this.trackABTestResult('impression');
+            }
             
             // Animate in
             requestAnimationFrame(() => {
@@ -1117,6 +1279,11 @@
                 timestamp: new Date().toISOString()
             };
             
+            // Track A/B test result
+            if (this.abTest) {
+                this.trackABTestResult('accept_all');
+            }
+            
             this.saveConsent(consent);
             this.hideBanner();
         }
@@ -1130,6 +1297,11 @@
                 services: [],
                 timestamp: new Date().toISOString()
             };
+            
+            // Track A/B test result
+            if (this.abTest) {
+                this.trackABTestResult('reject_all');
+            }
             
             this.saveConsent(consent);
             this.hideBanner();
@@ -1149,6 +1321,11 @@
                 services: selections.services || [],
                 timestamp: new Date().toISOString()
             };
+            
+            // Track A/B test result
+            if (this.abTest) {
+                this.trackABTestResult('accept_partial');
+            }
             
             this.saveConsent(consent);
             this.closeSettings();
@@ -1383,6 +1560,37 @@
         if (!window.complyoCookieBanner) {
             window.complyoCookieBanner = new ComplyoCookieBanner();
         }
+        
+        // Register global API (window.complyo)
+        registerGlobalAPI(window.complyoCookieBanner);
+    };
+    
+    // Register global window.complyo API
+    const registerGlobalAPI = (bannerInstance) => {
+        window.complyo = window.complyo || {};
+        
+        // Core API
+        window.complyo.openPreferences = () => bannerInstance.openSettings();
+        window.complyo.getConsent = () => bannerInstance.getConsent();
+        window.complyo.hasConsent = (category) => bannerInstance.hasConsent(category);
+        window.complyo.revokeConsent = () => bannerInstance.revokeConsent();
+        window.complyo.showBanner = () => bannerInstance.showBanner();
+        
+        // Extended API
+        window.complyo.acceptAll = () => bannerInstance.acceptAll();
+        window.complyo.rejectAll = () => bannerInstance.rejectAll();
+        window.complyo.saveCustom = (selections) => bannerInstance.saveCustom(selections);
+        
+        // Info
+        window.complyo.version = VERSION;
+        window.complyo.siteId = bannerInstance.siteId;
+        
+        // Event subscription
+        window.complyo.onConsent = (callback) => {
+            window.addEventListener('complyoConsent', (e) => callback(e.detail));
+        };
+        
+        console.log('[Complyo] Global API registered: window.complyo');
     };
     
     // Wait for DOM or init immediately

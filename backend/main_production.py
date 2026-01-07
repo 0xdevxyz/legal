@@ -72,6 +72,17 @@ from expert_service_routes import router as expert_service_router
 # Cookie Compliance Module
 from cookie_compliance_routes import router as cookie_compliance_router
 
+# A/B Testing Module for Cookie Banner
+from ab_test_routes import router as ab_test_router
+
+# TCF 2.2 Module
+try:
+    from tcf_routes import router as tcf_router
+    TCF_ROUTES_AVAILABLE = True
+except ImportError:
+    TCF_ROUTES_AVAILABLE = False
+    print("⚠️ TCF routes not available")
+
 # Legal Change Monitoring System
 from legal_change_routes import router as legal_change_router
 from legal_change_monitor import init_legal_monitor
@@ -83,6 +94,9 @@ from ai_legal_routes import router as ai_legal_router
 
 # NEW V2 API Routes - Enhanced AI Fix Engine & eRecht24 Integration (Full Version)
 from erecht24_routes_v2 import router as erecht24_v2_router
+
+# BFSG Accessibility Fix Pipeline - Anfängerfreundliche Fix-Generierung
+from accessibility_fix_routes import accessibility_fix_router, init_routes as init_accessibility_routes
 
 # Models for new endpoints
 class AnalyzeRequest(BaseModel):
@@ -147,7 +161,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:3002",  # Dashboard Dev-Server
-        "http://localhost:3003"
+        "http://localhost:3003",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
@@ -157,7 +171,9 @@ app.add_middleware(
 
 # Security
 security = HTTPBearer()
-JWT_SECRET = os.getenv("JWT_SECRET") or "complyo_jwt_secret_2025_production_secure_key_change_me"
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError("❌ CRITICAL: JWT_SECRET environment variable is required! Set it in your .env file.")
 JWT_ALGORITHM = "HS256"
 
 # Database
@@ -275,6 +291,10 @@ async def startup_event():
     expert_service_routes.db_pool = db_pool
     print("✅ Expert service routes initialized with database pool")
     
+    # Initialize BFSG Accessibility Fix routes
+    init_accessibility_routes(db_pool, auth_service)
+    print("✅ BFSG Accessibility Fix routes initialized")
+    
     # Start Background Worker for fix-jobs
     try:
         await start_background_worker(db_pool)
@@ -366,6 +386,7 @@ async def startup_event():
     # Set global references for legal_news_routes
     import legal_news_routes
     legal_news_routes.db_pool = db_pool
+    legal_news_routes.news_service = news_service
 
     # Include API routers
     app.include_router(public_router)
@@ -388,8 +409,15 @@ async def startup_event():
     app.include_router(widget_router)  # Complyo Widgets (Cookie Consent & Accessibility)
     app.include_router(expert_service_router)  # Expert Service Booking
     app.include_router(cookie_compliance_router)  # Cookie Compliance Management
+    app.include_router(ab_test_router)  # A/B Testing for Cookie Banner
+    
+    # TCF 2.2 Routes
+    if TCF_ROUTES_AVAILABLE:
+        app.include_router(tcf_router)  # TCF 2.2 Transparency & Consent Framework
+    
     app.include_router(legal_change_router)  # Legal Change Monitoring (auto-detect law changes)
     app.include_router(ai_legal_router)  # AI Legal System - NEW
+    app.include_router(accessibility_fix_router)  # BFSG Accessibility Fix Pipeline - NEW
     
     # Initialize Legal Update Integration
     from compliance_engine.legal_update_integration import init_legal_update_integration
@@ -422,6 +450,10 @@ async def startup_event():
     # Set global references for cookie_compliance_routes
     import cookie_compliance_routes
     cookie_compliance_routes.db_pool = db_pool
+    
+    # Set global references for ab_test_routes
+    import ab_test_routes
+    ab_test_routes.db_pool = db_pool
     
     # Set global references for ai_legal_routes
     import ai_legal_routes
