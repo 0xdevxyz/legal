@@ -11,6 +11,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/legal-ai", tags=["legal-ai"])
 
+# Global db_pool - wird von main_production.py gesetzt
+db_pool = None
+
 
 async def get_current_user(authorization: str = None):
     """Dependency für User-Auth (vereinfacht)"""
@@ -31,10 +34,11 @@ async def get_legal_updates(
         List of legal updates with AI classification
     """
     try:
-        from database import get_db_pool
-        pool = await get_db_pool()
+        if db_pool is None:
+            logger.error("❌ db_pool is not initialized!")
+            return []
         
-        async with pool.acquire() as connection:
+        async with db_pool.acquire() as connection:
             # Filter nach action_required wenn include_info_only=False
             where_clause = "WHERE is_active = TRUE"
             if not include_info_only:

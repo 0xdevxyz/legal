@@ -1,12 +1,21 @@
 """
 Cookie Check (TTDSG §25)
 Prüft Cookie-Banner und Consent-Compliance
+Inkludiert TCF 2.2 (Transparency & Consent Framework) Support
 """
 
 from bs4 import BeautifulSoup
 from typing import List, Dict, Any
 from dataclasses import dataclass, asdict
 import re
+
+# TCF 2.2 Support
+try:
+    from compliance_engine.checks.tcf_check import check_tcf_compliance
+    TCF_AVAILABLE = True
+except ImportError:
+    TCF_AVAILABLE = False
+    print("⚠️ TCF Check module not available")
 
 @dataclass
 class CookieIssue:
@@ -208,8 +217,24 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None) -
             is_missing=True
         )))
     else:
+        # Banner vorhanden - prüfe auf erweiterte Compliance
         # TODO: Erweiterte Prüfung - wenn Banner vorhanden ist, aber unvollständig
         pass
+    
+    # ========================================
+    # TCF 2.2 Check (optional, informational)
+    # ========================================
+    if TCF_AVAILABLE:
+        try:
+            tcf_data = await check_tcf_compliance(url, soup, page_content="")
+            
+            # TCF Issues hinzufügen (falls vorhanden)
+            if tcf_data.get("issues"):
+                issues.extend(tcf_data["issues"])
+                
+        except Exception as e:
+            print(f"⚠️ TCF Check failed: {e}")
+            # Fehler nicht zum Absturz führen lassen
     
     return issues
 

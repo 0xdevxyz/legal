@@ -6,9 +6,10 @@ import ComplyoOriginalLanding from '../components/ComplyoOriginalLanding';
 import ComplyoHighConversionLanding from '../components/ComplyoHighConversionLanding';
 import ProfessionalLanding from '../components/ProfessionalLanding';
 import ComplyoModernLanding from '../components/ComplyoModernLanding';
+import ComplyoViralLanding from '../components/ComplyoViralLanding';
 import { useABTestTracking } from '../hooks/useABTestTracking';
 
-type Variant = 'professional' | 'original' | 'high-conversion' | 'modern';
+type Variant = 'professional' | 'original' | 'high-conversion' | 'modern' | 'viral';
 
 function ABTestContent() {
   const [variant, setVariant] = useState<Variant | null>(null);
@@ -23,7 +24,7 @@ function ABTestContent() {
         const forceVariant = searchParams.get('variant');
 
         // Force-Modus: Nutzer kann Variante per URL-Parameter wählen
-        if (forceVariant === 'professional' || forceVariant === 'original' || forceVariant === 'high-conversion' || forceVariant === 'modern') {
+        if (forceVariant === 'professional' || forceVariant === 'original' || forceVariant === 'high-conversion' || forceVariant === 'modern' || forceVariant === 'viral') {
           console.log(`🔧 Force-Modus: ${forceVariant}`);
           setVariant(forceVariant);
           const sessionId = await trackVariantAssignment(forceVariant, 'forced');
@@ -34,7 +35,7 @@ function ABTestContent() {
 
           // Returning User: Zeige gespeicherte Variante
           if (storedVariant && storedSessionId &&
-              (storedVariant === 'professional' || storedVariant === 'original' || storedVariant === 'high-conversion' || storedVariant === 'modern')) {
+              (storedVariant === 'professional' || storedVariant === 'original' || storedVariant === 'high-conversion' || storedVariant === 'modern' || storedVariant === 'viral')) {
             console.log(`🔄 Returning User: ${storedVariant}`);
             setVariant(storedVariant as Variant);
             setSessionId(storedSessionId);
@@ -87,7 +88,9 @@ function ABTestContent() {
   }
 
   // Render entsprechende Variante
-  if (variant === 'modern') {
+  if (variant === 'viral') {
+    return <ComplyoViralLanding />;
+  } else if (variant === 'modern') {
     return <ComplyoModernLanding />;
   } else if (variant === 'professional') {
     return <ProfessionalLanding />;

@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Shield, LogIn, Loader2, AlertCircle, Sparkles, Lock, Mail } from 'lucide-react';
 import SocialLoginButtons from '@/components/SocialLoginButtons';
+import { Logo } from '@/components/Logo';
 
 const loadingMessages = [
     "Sicherheitsprotokolle werden geladen...",
@@ -81,7 +82,7 @@ export default function LoginPage() {
     };
     
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 px-4 relative overflow-hidden">
+        <main role="main" aria-label="Login" className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 px-4 relative overflow-hidden">
             {/* Animated Background Blobs */}
             <div className="absolute inset-0 overflow-hidden">
                 <div className="absolute -top-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
@@ -89,14 +90,11 @@ export default function LoginPage() {
                 <div className="absolute top-40 right-40 w-80 h-80 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
             </div>
             
-            <div className="relative bg-gray-800 bg-opacity-90 backdrop-blur-lg p-8 rounded-2xl max-w-md w-full border border-gray-700 shadow-2xl">
+            <section className="relative bg-gray-800 bg-opacity-90 backdrop-blur-lg p-8 rounded-2xl max-w-md w-full border border-gray-700 shadow-2xl">
                 {/* Logo with Animation */}
-                <div className="flex items-center justify-center gap-2 mb-6 group">
-                    <Shield className="w-10 h-10 text-blue-400 group-hover:rotate-12 transition-transform duration-300" />
-                    <span className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                        Complyo
-                    </span>
-                    <Sparkles className="w-5 h-5 text-yellow-400 animate-pulse" />
+                <div className="flex items-center justify-center mb-6">
+                    <Logo size="xl" />
+                    <Sparkles className="w-5 h-5 text-yellow-400 animate-pulse ml-2" />
                 </div>
                 
                 <h1 className="text-3xl font-bold mb-2 text-center">Willkommen zurück</h1>
@@ -209,7 +207,7 @@ export default function LoginPage() {
                     <Lock className="w-3 h-3" />
                     <span>256-bit SSL verschlüsselt</span>
                 </div>
-            </div>
+            </section>
             
             {/* CSS Animations */}
             <style jsx>{`
@@ -251,6 +249,6 @@ export default function LoginPage() {
                     animation-delay: 4s;
                 }
             `}</style>
-        </div>
+        </main>
     );
 }

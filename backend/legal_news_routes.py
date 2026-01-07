@@ -11,6 +11,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/legal", tags=["legal-news"])
 
+# Global variables - werden von main_production.py gesetzt
+db_pool = None
+news_service = None
+
 # Response Models
 class NewsItem(BaseModel):
     id: str
@@ -73,9 +77,8 @@ async def get_news_stats():
     Gibt Statistiken über die rechtlichen Neuigkeiten zurück
     """
     try:
-        from main_production import news_service
-        
         if not news_service:
+            logger.error("❌ news_service is not initialized!")
             raise HTTPException(status_code=503, detail="News service not available")
         
         stats = await news_service.get_news_stats()
@@ -96,8 +99,6 @@ async def fetch_feeds():
     (Normalerweise wird dies automatisch per Cronjob gemacht)
     """
     try:
-        from main_production import news_service
-        
         if not news_service:
             raise HTTPException(status_code=503, detail="News service not available")
         

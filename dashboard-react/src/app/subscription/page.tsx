@@ -47,16 +47,16 @@ const SubscriptionPage: React.FC = () => {
   };
 
   if (loading) {
-    return <p className="text-center">Loading subscription status...</p>;
+    return <main role="main" aria-label="Abonnement wird geladen" className="min-h-screen bg-gray-900 text-white flex items-center justify-center"><p className="text-center">Loading subscription status...</p></main>;
   }
 
   if (error) {
-    return <p className="text-center text-red-500">{error}</p>;
+    return <main role="main" aria-label="Fehler beim Laden des Abonnements" className="min-h-screen bg-gray-900 text-white flex items-center justify-center"><p className="text-center text-red-500">{error}</p></main>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main role="main" aria-label="Abonnement-Verwaltung" className="min-h-screen bg-gray-900 text-white">
+      <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-3xl font-bold mb-8">Subscription Management</h1>
         {subscription ? (
           <div className="bg-gray-800 rounded-lg shadow-md p-6">
@@ -91,8 +91,8 @@ const SubscriptionPage: React.FC = () => {
             </button>
           </div>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 };
 

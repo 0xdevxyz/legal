@@ -93,24 +93,43 @@ function complyo_accessibility_widget() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Status Alert */}
+        {/* Status Alert mit konkreten Handlungsanweisungen */}
         {!isWidgetActive && (
-          <Alert className="bg-blue-50 border-blue-200">
-            <Sparkles className="h-4 w-4 text-blue-600" />
-            <AlertTitle className="text-blue-900">Widget noch nicht aktiv</AlertTitle>
-            <AlertDescription className="text-blue-700">
-              Fügen Sie den Code unten auf Ihrer Website ein, damit das Widget erscheint.
-              Die Alt-Texte und Features sind bereits vorbereitet!
+          <Alert className="bg-amber-50 border-amber-300">
+            <Sparkles className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-amber-900 font-bold">🎯 Nächster Schritt: Widget einbinden</AlertTitle>
+            <AlertDescription className="text-amber-800 space-y-2">
+              <p className="font-medium">
+                Ihr Barrierefreiheits-Widget ist bereit zur Integration!
+              </p>
+              <div className="bg-white/60 rounded-lg p-3 border border-amber-200">
+                <p className="font-semibold text-sm mb-2">📋 So geht's (2 Minuten):</p>
+                <ol className="list-decimal list-inside text-sm space-y-1">
+                  <li>Kopieren Sie den Code unten</li>
+                  <li>Öffnen Sie Ihre Website im Editor (WordPress/HTML)</li>
+                  <li>Fügen Sie den Code vor <code className="bg-amber-100 px-1 rounded">&lt;/body&gt;</code> ein</li>
+                  <li>Speichern & fertig! Das Widget erscheint sofort ♿</li>
+                </ol>
+              </div>
+              <p className="text-xs text-amber-700 mt-2">
+                💡 <strong>Tipp:</strong> Das Widget behebt automatisch viele WCAG-Probleme wie fehlende Alt-Texte!
+              </p>
             </AlertDescription>
           </Alert>
         )}
 
         {isWidgetActive && (
-          <Alert className="bg-green-50 border-green-200">
+          <Alert className="bg-green-50 border-green-300">
             <CheckCircle className="h-4 w-4 text-green-600" />
-            <AlertTitle className="text-green-900">Widget ist aktiv! ✅</AlertTitle>
-            <AlertDescription className="text-green-700">
-              Besucher Ihrer Website können jetzt Barrierefreiheits-Features nutzen.
+            <AlertTitle className="text-green-900 font-bold">✅ Widget ist live auf Ihrer Website!</AlertTitle>
+            <AlertDescription className="text-green-800 space-y-2">
+              <p>Ihre Besucher können jetzt folgende Features nutzen:</p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">🔠 Schriftgröße</span>
+                <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">🎨 Kontrast</span>
+                <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">🖼️ Alt-Texte</span>
+                <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">⌨️ Tastatur</span>
+              </div>
             </AlertDescription>
           </Alert>
         )}

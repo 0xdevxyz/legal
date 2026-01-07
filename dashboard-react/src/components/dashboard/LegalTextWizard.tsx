@@ -69,14 +69,38 @@ export const LegalTextWizard: React.FC<LegalTextWizardProps> = ({
   const handleGenerate = async () => {
     setIsGenerating(true);
     
-    // Simulate API call to generate personalized legal text
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Generate personalized content
-    const content = generatePersonalizedContent(companyData);
-    setFinalContent(content);
-    setIsGenerating(false);
-    setStep(3);
+    try {
+      // Call eRecht24 API to generate personalized legal text
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v2/legal/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          text_type: fixType === 'datenschutz' ? 'datenschutz' : fixType,
+          company_data: companyData,
+          language: 'de'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Rechtstext-Generierung fehlgeschlagen');
+      }
+      
+      const data = await response.json();
+      setFinalContent(data.html || data.content || '');
+      setStep(3);
+    } catch (error) {
+      console.error('Fehler bei Rechtstext-Generierung:', error);
+      // Fallback to local generation if API fails
+      const content = generatePersonalizedContent(companyData);
+      setFinalContent(content);
+      setStep(3);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const generatePersonalizedContent = (data: Partial<CompanyData>) => {

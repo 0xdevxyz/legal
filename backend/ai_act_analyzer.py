@@ -107,57 +107,181 @@ class AIActAnalyzer:
                 "article": "Art. 9",
                 "title": "Risikomanagementsystem",
                 "description": "Etablierung und Dokumentation eines Risikomanagementsystems",
-                "mandatory_for": ["high"]
+                "mandatory_for": ["high"],
+                "sub_requirements": [
+                    "Identifikation und Analyse bekannter und vorhersehbarer Risiken",
+                    "Bewertung von Risiken nach Eintrittswahrscheinlichkeit und Schwere",
+                    "Evaluation von Risiken im Hinblick auf Testdaten",
+                    "Geeignete Risikomanagement-Maßnahmen",
+                    "Regelmäßige systematische Aktualisierung"
+                ]
             },
             {
                 "id": "art_10",
                 "article": "Art. 10",
                 "title": "Daten-Governance",
                 "description": "Data governance und Management-Praktiken für Trainingsdaten",
-                "mandatory_for": ["high"]
+                "mandatory_for": ["high"],
+                "sub_requirements": [
+                    "Relevante, repräsentative und fehlerfreie Datensätze",
+                    "Prüfung auf mögliche Verzerrungen (Bias)",
+                    "Datenlücken identifizieren und beheben",
+                    "Datenaufbereitungsprozesse dokumentieren",
+                    "Datenschutz und Datensicherheit gewährleisten"
+                ]
             },
             {
                 "id": "art_11",
                 "article": "Art. 11",
                 "title": "Technische Dokumentation",
                 "description": "Umfassende technische Dokumentation des AI-Systems",
-                "mandatory_for": ["high"]
+                "mandatory_for": ["high"],
+                "sub_requirements": [
+                    "Allgemeine Beschreibung des KI-Systems",
+                    "Detaillierte Beschreibung der Systemarchitektur",
+                    "Entwicklungsprozess und verwendete Methoden",
+                    "Spezifikationen zu Training, Testing und Validierung",
+                    "Informationen zu Daten, Modellen und Ressourcen"
+                ]
             },
             {
                 "id": "art_12",
                 "article": "Art. 12",
                 "title": "Aufzeichnungspflichten",
                 "description": "Automatische Protokollierung von Ereignissen (Logging)",
-                "mandatory_for": ["high"]
+                "mandatory_for": ["high"],
+                "sub_requirements": [
+                    "Automatische Aufzeichnung von Ereignissen",
+                    "Zeitstempel und Benutzeridentifikation",
+                    "Input-Daten und Output-Ergebnisse protokollieren",
+                    "Angemessene Aufbewahrungsfristen",
+                    "Schutz vor Manipulation der Logs"
+                ]
             },
             {
                 "id": "art_13",
                 "article": "Art. 13",
                 "title": "Transparenz",
                 "description": "Transparenz und Informationspflichten gegenüber Nutzern",
-                "mandatory_for": ["high", "limited"]
+                "mandatory_for": ["high", "limited"],
+                "sub_requirements": [
+                    "Informationen über Identität und Kontaktdaten des Anbieters",
+                    "Merkmale, Fähigkeiten und Leistungsgrenzen",
+                    "Zweck des KI-Systems und beabsichtigte Verwendung",
+                    "Grad der Genauigkeit, Robustheit und Cybersicherheit",
+                    "Für Nutzer verständliche Informationen"
+                ]
             },
             {
                 "id": "art_14",
                 "article": "Art. 14",
                 "title": "Menschliche Aufsicht",
                 "description": "Human oversight und Möglichkeit zur Intervention",
-                "mandatory_for": ["high"]
+                "mandatory_for": ["high"],
+                "sub_requirements": [
+                    "Menschliche Aufsichtsmechanismen implementiert",
+                    "Personen können System überwachen und verstehen",
+                    "Eingriffsmöglichkeiten in Echtzeit",
+                    "Möglichkeit System zu deaktivieren",
+                    "Entscheidungen des Systems können überstimmt werden"
+                ]
             },
             {
                 "id": "art_15",
                 "article": "Art. 15",
                 "title": "Genauigkeit, Robustheit, Cybersicherheit",
                 "description": "Accuracy, Robustness und Cybersecurity-Maßnahmen",
-                "mandatory_for": ["high"]
+                "mandatory_for": ["high"],
+                "sub_requirements": [
+                    "Angemessenes Genauigkeitsniveau",
+                    "Robustheit gegen Fehler und Inkonsistenzen",
+                    "Resilience gegen Angriffe (Adversarial Attacks)",
+                    "Cybersicherheitsmaßnahmen implementiert",
+                    "Regelmäßige Tests und Validierung"
+                ]
+            },
+            {
+                "id": "art_47_49",
+                "article": "Art. 47 & 49",
+                "title": "CE-Kennzeichnung und Konformitätserklärung",
+                "description": "EU-Konformitätserklärung und CE-Kennzeichnung",
+                "mandatory_for": ["high"],
+                "sub_requirements": [
+                    "EU-Konformitätserklärung erstellt",
+                    "CE-Kennzeichnung angebracht",
+                    "Konformitätsbewertung durchgeführt",
+                    "Dokumentation für Marktaufsicht verfügbar"
+                ]
+            },
+            {
+                "id": "art_71",
+                "article": "Art. 71",
+                "title": "Registrierung in EU-Datenbank",
+                "description": "Registrierung des Hochrisiko-Systems in EU-Datenbank",
+                "mandatory_for": ["high"],
+                "sub_requirements": [
+                    "System in EU-Datenbank registriert",
+                    "Alle erforderlichen Informationen bereitgestellt",
+                    "Regelmäßige Aktualisierung der Daten"
+                ]
+            },
+            {
+                "id": "art_72",
+                "article": "Art. 72",
+                "title": "Post-Market Monitoring",
+                "description": "Überwachung nach Markteinführung",
+                "mandatory_for": ["high"],
+                "sub_requirements": [
+                    "Post-Market Monitoring Plan erstellt",
+                    "Systematische Datenerfassung und -analyse",
+                    "Meldung schwerwiegender Vorfälle",
+                    "Maßnahmen bei identifizierten Risiken"
+                ]
             }
         ]
     
     async def classify_risk_category(self, ai_system: AISystem) -> RiskClassification:
         """
         Klassifiziert ein KI-System in eine der 4 Risikokategorien
+        Mit verstärkter Detection für verbotene Systeme (Art. 5)
         """
         
+        # ✅ STRENGERE PROHIBITED SYSTEMS DETECTION
+        # Prüfe Keywords und Kontexte für Art. 5 (Verbotene Systeme)
+        prohibited_keywords = {
+            "social scoring": ["social scor", "sozial", "bewertung", "bürger", "verhalten"],
+            "manipulation": ["manipulat", "subliminal", "unterschwellig", "vulnerabel", "kinder"],
+            "real-time biometric": ["echtzeit", "biometr", "gesichtserkennung", "öffentlich", "identifizier"],
+            "emotion recognition workplace": ["emotion", "gefühl", "arbeitsplatz", "schule", "bildung"]
+        }
+        
+        # Kombiniere alle Textfelder des Systems
+        system_text = f"{ai_system.name} {ai_system.description} {ai_system.purpose} {ai_system.domain or ''}".lower()
+        
+        # Prüfe auf prohibited patterns
+        prohibited_matches = []
+        for category, keywords in prohibited_keywords.items():
+            matches = sum(1 for kw in keywords if kw in system_text)
+            if matches >= 2:  # Mind. 2 Keywords müssen matchen
+                prohibited_matches.append(category)
+        
+        # Wenn starke Hinweise auf verbotenes System
+        if prohibited_matches:
+            return RiskClassification(
+                risk_category="prohibited",
+                reasoning=f"⚠️ WARNUNG: System zeigt Merkmale verbotener Systeme (Art. 5 AI Act): {', '.join(prohibited_matches)}. "
+                         f"Solche Systeme dürfen in der EU nicht in Verkehr gebracht oder in Betrieb genommen werden. "
+                         f"Bitte prüfen Sie dringend, ob Ihr System unter die Verbotstatbestände fällt.",
+                confidence=0.95,
+                relevant_articles=["Art. 5"],
+                key_concerns=[
+                    "Möglicher Verstoß gegen Art. 5 AI Act",
+                    "System könnte verboten sein",
+                    "Rechtliche Prüfung dringend erforderlich"
+                ]
+            )
+        
+        # Normale AI-basierte Klassifizierung
         prompt = self._build_classification_prompt(ai_system)
         
         try:

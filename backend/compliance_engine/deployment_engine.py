@@ -580,6 +580,81 @@ class DeploymentEngine:
                     sftp.chdir(current)
                 except Exception as e:
                     logger.warning(f"Could not create directory {current}: {e}")
+    
+    async def rollback(self, backup_id: str, config: DeploymentConfig) -> Dict[str, Any]:
+        """
+        Rollback: Stellt vorherigen Zustand wieder her
+        
+        Args:
+            backup_id: ID des Backups
+            config: Deployment-Config (Credentials, etc.)
+            
+        Returns:
+            Dict mit Rollback-Result
+        """
+        try:
+            logger.info(f"🔄 Starting rollback from backup: {backup_id}")
+            
+            # 1. Backup-Dateien aus Verzeichnis laden
+            backup_path = os.path.join(self.backup_dir, backup_id)
+            
+            if not os.path.exists(backup_path):
+                raise FileNotFoundError(f"Backup {backup_id} not found at {backup_path}")
+            
+            # 2. Liste der Backup-Dateien
+            backup_files = []
+            for root, dirs, files in os.walk(backup_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    relative_path = os.path.relpath(file_path, backup_path)
+                    backup_files.append({
+                        'local_path': file_path,
+                        'remote_path': os.path.join(config.target_path, relative_path).replace('\\', '/')
+                    })
+            
+            logger.info(f"Found {len(backup_files)} files in backup")
+            
+            # 3. Deployment-Config für Rollback
+            rollback_config = DeploymentConfig(
+                method=config.method,
+                credentials=config.credentials,
+                target_path=config.target_path,
+                backup_before_deploy=False,  # Kein Backup beim Rollback
+                files=backup_files
+            )
+            
+            # 4. Deploy Backup-Files
+            if config.method == 'ftp':
+                result = await self._deploy_ftp(rollback_config)
+            elif config.method == 'sftp':
+                result = await self._deploy_sftp(rollback_config)
+            elif config.method == 'wordpress':
+                result = await self._deploy_wordpress(rollback_config)
+            elif config.method == 'netlify':
+                result = await self._deploy_netlify(rollback_config)
+            elif config.method == 'vercel':
+                result = await self._deploy_vercel(rollback_config)
+            else:
+                raise ValueError(f"Unsupported rollback method: {config.method}")
+            
+            logger.info(f"✅ Rollback completed successfully from backup {backup_id}")
+            
+            return {
+                'success': True,
+                'backup_id': backup_id,
+                'files_restored': len(backup_files),
+                'method': config.method,
+                'restored_at': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Rollback failed: {e}")
+            return {
+                'success': False,
+                'backup_id': backup_id,
+                'error': str(e),
+                'method': config.method
+            }
 
 
 # Global instance

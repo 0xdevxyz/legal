@@ -145,6 +145,27 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
             </ul>
           </div>
 
+          {/* Rechtlicher Disclaimer (IMMER anzeigen) */}
+          <div className="bg-gray-50 border border-gray-300 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <Info className="w-5 h-5 text-gray-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-gray-900 mb-2">📋 Rechtlicher Hinweis</h3>
+                <p className="text-sm text-gray-700 mb-2">
+                  <strong>Complyo generiert Patches basierend auf öffentlich zugänglichem Code.</strong> 
+                  Sie übernehmen die Verantwortung für die Anwendung dieser Änderungen in Ihrem System.
+                </p>
+                <p className="text-xs text-gray-600">
+                  Complyo wendet Code-Änderungen ausschließlich nach ausdrücklicher Bestätigung durch den Nutzer an. 
+                  Wir übernehmen keine Haftung für fehlerhafte Patches. 
+                  <a href="/terms-liability" target="_blank" className="text-blue-600 hover:underline ml-1">
+                    Vollständige AGB lesen →
+                  </a>
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Warning für ersten Fix */}
           {isFirstFix && (
             <div className="bg-yellow-50 border-l-4 border-yellow-500 rounded-r-lg p-4">

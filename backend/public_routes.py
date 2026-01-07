@@ -98,6 +98,8 @@ class AnalysisResponse(BaseModel):
     issues: List[ComplianceIssue]  # Changed from list to List[ComplianceIssue]
     positive_checks: Optional[List[Dict[str, Any]]] = []  # NEW: Was funktioniert bereits
     pillar_scores: Optional[List[PillarScore]] = []  # NEW: Säulen-Scores
+    issue_groups: Optional[List[Dict[str, Any]]] = []  # ✅ NEU: Gruppierte Issues
+    grouping_stats: Optional[Dict[str, Any]] = {}  # ✅ NEU: Gruppierungs-Statistiken
     riskAmount: str
     score: int
     scan_duration_ms: Optional[int] = None
@@ -399,7 +401,9 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                                 for i in structured_issues
                             ],
                             'positive_checks': positive_checks,
-                            'pillar_scores': [{'pillar': p.pillar, 'score': p.score} for p in pillar_scores]
+                            'pillar_scores': [{'pillar': p.pillar, 'score': p.score} for p in pillar_scores],
+                            'issue_groups': scan_result.get('issue_groups', []),  # ✅ NEU: Gruppierte Issues
+                            'grouping_stats': scan_result.get('grouping_stats', {})  # ✅ NEU: Gruppierungs-Statistiken
                         }),
                         overall_compliance_score,
                         total_risk_data.get('total_risk_max', 0),
@@ -456,11 +460,15 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 issues=structured_issues,
                 positive_checks=positive_checks,
                 pillar_scores=pillar_scores,  # ✅ NEU: Säulen-Scores
+                issue_groups=scan_result.get("issue_groups", []),  # ✅ NEU: Gruppierte Issues
+                grouping_stats=scan_result.get("grouping_stats", {}),  # ✅ NEU: Gruppierungs-Statistiken
                 riskAmount=total_risk_data['total_risk_range'],
                 score=overall_compliance_score,  # ✅ Durchschnitt statt Scanner-Score
                 scan_duration_ms=scan_result.get("scan_duration_ms"),
                 timestamp=datetime.now().isoformat()
             )
+            
+            logger.info(f"✅ Scan completed with {len(response_data.issue_groups)} issue groups")
             
             return response_data
             

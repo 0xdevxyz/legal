@@ -1,0 +1,248 @@
+name: 🚀 Deploy to Production
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment Environment"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  # ==========================================
+  # Build & Push Docker Images
+  # ==========================================
+  build-and-push:
+    name: 🏗️ Build & Push Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      backend_image: ${{ steps.meta-backend.outputs.tags }}
+      dashboard_image: ${{ steps.meta-dashboard.outputs.tags }}
+      landing_image: ${{ steps.meta-landing.outputs.tags }}
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Backend
+      - name: 📝 Extract metadata (Backend)
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/backend
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: 🏗️ Build & Push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Dashboard
+      - name: 📝 Extract metadata (Dashboard)
+        id: meta-dashboard
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/dashboard
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: 🏗️ Build & Push Dashboard
+        uses: docker/build-push-action@v5
+        with:
+          context: ./dashboard-react
+          file: ./dashboard-react/Dockerfile.prod
+          push: true
+          tags: ${{ steps.meta-dashboard.outputs.tags }}
+          labels: ${{ steps.meta-dashboard.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+
+      # Landing
+      - name: 📝 Extract metadata (Landing)
+        id: meta-landing
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/landing
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: 🏗️ Build & Push Landing
+        uses: docker/build-push-action@v5
+        with:
+          context: ./landing-react
+          file: ./landing-react/Dockerfile.prod
+          push: true
+          tags: ${{ steps.meta-landing.outputs.tags }}
+          labels: ${{ steps.meta-landing.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+
+  # ==========================================
+  # Deploy to Server
+  # ==========================================
+  deploy:
+    name: 🚀 Deploy to ${{ github.event.inputs.environment || 'production' }}
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Setup SSH Key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: 📋 Add Server to Known Hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 🚀 Deploy via SSH
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh $SERVER_USER@$SERVER_HOST << 'ENDSSH'
+            cd ${{ secrets.DEPLOY_PATH }}
+            
+            # Pull latest images
+            docker-compose pull
+            
+            # Restart services with zero-downtime
+            docker-compose up -d --remove-orphans
+            
+            # Clean up old images
+            docker image prune -f
+            
+            # Health check
+            sleep 10
+            curl -f http://localhost:8002/health || exit 1
+            
+            echo "✅ Deployment successful!"
+          ENDSSH
+
+      - name: 📢 Notify on Success
+        if: success()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "✅ Complyo deployed successfully!",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "✅ *Complyo Deployment Successful*\n\n*Environment:* ${{ github.event.inputs.environment || 'production' }}\n*Commit:* `${{ github.sha }}`\n*Author:* ${{ github.actor }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        continue-on-error: true
+
+      - name: 📢 Notify on Failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "❌ Complyo deployment failed!",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "❌ *Complyo Deployment Failed*\n\n*Environment:* ${{ github.event.inputs.environment || 'production' }}\n*Commit:* `${{ github.sha }}`\n*Author:* ${{ github.actor }}\n*Check:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Logs>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        continue-on-error: true
+
+  # ==========================================
+  # Post-Deployment Smoke Tests
+  # ==========================================
+  smoke-tests:
+    name: 🧪 Smoke Tests
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: success()
+
+    steps:
+      - name: 🧪 Health Check - Backend
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://api.complyo.tech/health)
+          if [ "$response" != "200" ]; then
+            echo "❌ Backend health check failed (HTTP $response)"
+            exit 1
+          fi
+          echo "✅ Backend is healthy"
+
+      - name: 🧪 Health Check - Dashboard
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://app.complyo.tech)
+          if [ "$response" != "200" ]; then
+            echo "❌ Dashboard health check failed (HTTP $response)"
+            exit 1
+          fi
+          echo "✅ Dashboard is healthy"
+
+      - name: 🧪 Health Check - Landing
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://complyo.tech)
+          if [ "$response" != "200" ]; then
+            echo "❌ Landing page health check failed (HTTP $response)"
+            exit 1
+          fi
+          echo "✅ Landing page is healthy"
+

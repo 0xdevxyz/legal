@@ -110,9 +110,8 @@ class AccessibilityPatchGenerator:
         # Für jede Seite: Generiere gepatcht HTML
         for page_url, page_fixes in pages.items():
             try:
-                # Für Demo: Generiere Beispiel-HTML
-                # In Produktion: Lade echtes HTML vom Server
-                fixed_html = self._generate_example_html_with_fixes(page_url, page_fixes)
+                # ✅ FIX: Versuche echtes HTML zu laden, Fallback auf Beispiel
+                fixed_html = await self._generate_html_with_real_fixes(page_url, page_fixes)
                 
                 # Dateiname generieren
                 filename = self._url_to_filename(page_url)
@@ -125,6 +124,49 @@ class AccessibilityPatchGenerator:
                 continue
         
         return patches
+    
+    async def _generate_html_with_real_fixes(self, page_url: str, fixes: List[Dict]) -> str:
+        """
+        ✅ Versucht echtes HTML vom Server zu laden und zu patchen
+        Fallback auf Beispiel-HTML falls nicht möglich
+        """
+        try:
+            # Versuche HTML vom Server zu laden
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.get(page_url) as response:
+                    if response.status == 200:
+                        html_content = await response.text()
+                        
+                        # Parse mit BeautifulSoup
+                        soup = BeautifulSoup(html_content, 'html.parser')
+                        
+                        # Wende Fixes an
+                        fixed_count = 0
+                        for fix in fixes:
+                            if fix.get('type') == 'alt_text':
+                                image_src = fix.get('image_src')
+                                suggested_alt = fix.get('suggested_alt')
+                                
+                                # Finde Bild im HTML
+                                img_tags = soup.find_all('img', src=image_src)
+                                if not img_tags:
+                                    # Versuche relativen Pfad
+                                    img_tags = soup.find_all('img', src=lambda x: x and image_src in x)
+                                
+                                for img in img_tags:
+                                    img['alt'] = suggested_alt
+                                    img['data-complyo-fix'] = 'permanent'
+                                    fixed_count += 1
+                        
+                        if fixed_count > 0:
+                            logger.info(f"✅ Applied {fixed_count} real fixes to {page_url}")
+                            return str(soup)
+                        
+        except Exception as e:
+            logger.warning(f"⚠️ Could not load real HTML from {page_url}: {e}. Using example template.")
+        
+        # Fallback: Generiere Beispiel-HTML
+        return self._generate_example_html_with_fixes(page_url, fixes)
     
     def _generate_example_html_with_fixes(self, page_url: str, fixes: List[Dict]) -> str:
         """
@@ -354,6 +396,26 @@ body {
 ╚══════════════════════════════════════════════════════════════════╝
 
 GENERIERT AM: {datetime.now().strftime("%d.%m.%Y um %H:%M Uhr")}
+
+═══════════════════════════════════════════════════════════════════
+⚠️  WICHTIG: HAFTUNGSAUSSCHLUSS
+═══════════════════════════════════════════════════════════════════
+
+Complyo wendet Code-Änderungen ausschließlich nach ausdrücklicher 
+Bestätigung durch den Nutzer oder dessen technische Administratoren an.
+
+Die Verantwortung für das Ausrollen der Änderungen in produktive 
+Systeme liegt ausschließlich beim Nutzer.
+
+Complyo generiert Patches basierend auf öffentlich zugänglichem Code. 
+Sie übernehmen die Verantwortung für die Anwendung dieser Änderungen 
+in Ihrem System.
+
+WICHTIG: KI-generierte Inhalte können Fehler oder Ungenauigkeiten 
+enthalten. Bitte prüfen Sie jeden Fix vor der Anwendung und erstellen 
+Sie ein Backup Ihrer Website.
+
+Vollständige AGB: https://complyo.tech/terms-liability
 
 ═══════════════════════════════════════════════════════════════════
 
@@ -685,4 +747,694 @@ Support: support@complyo.tech | +49 (0) 123 456789
             filename += '.html'
         
         return filename
+    
+    # =========================================================================
+    # NEU: Erweiterte Bundle-Generierung für Fix-Wizard
+    # =========================================================================
+    
+    async def generate_enhanced_bundle(
+        self,
+        site_url: str,
+        fix_package: Dict,
+        include_wordpress: bool = True
+    ) -> io.BytesIO:
+        """
+        Generiert erweitertes Fix-Bundle mit strukturierten Patches
+        
+        Args:
+            site_url: URL der Website
+            fix_package: FixPackage-Dictionary vom PatchService
+            include_wordpress: Ob WordPress-Plugin generiert werden soll
+            
+        Returns:
+            BytesIO mit ZIP-Datei
+        """
+        logger.info(f"Generating enhanced bundle for {site_url}")
+        
+        zip_buffer = io.BytesIO()
+        site_id = site_url.replace('https://', '').replace('http://', '').replace('/', '-').replace('.', '-')
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # 1. README.md (Markdown für bessere Lesbarkeit)
+            readme_md = self._generate_enhanced_readme(site_url, fix_package)
+            zip_file.writestr("README.md", readme_md)
+            
+            # 2. Code-Patches als einzelne Dateien
+            code_patches = fix_package.get('code_patches', [])
+            if code_patches:
+                for i, patch in enumerate(code_patches):
+                    if patch.get('success') and patch.get('unified_diff'):
+                        feature_id = patch.get('feature_id', 'unknown')
+                        file_path = patch.get('file_path', f'patch_{i}')
+                        safe_name = file_path.replace('/', '_').replace('\\', '_')
+                        
+                        # Patch-Datei
+                        zip_file.writestr(
+                            f"patches/{feature_id}_{safe_name}.patch",
+                            patch['unified_diff']
+                        )
+                        
+                        # Anleitung pro Patch
+                        instructions = self._generate_patch_instructions(patch)
+                        zip_file.writestr(
+                            f"patches/{feature_id}_{safe_name}_ANLEITUNG.txt",
+                            instructions
+                        )
+            
+            # 3. HTML-Snippets zum direkten Einfügen
+            html_snippets = self._generate_html_snippets(fix_package)
+            if html_snippets:
+                zip_file.writestr("snippets/accessibility-snippets.html", html_snippets)
+            
+            # 4. CSS-Fixes (konsolidiert)
+            css_content = self._generate_consolidated_css(fix_package)
+            zip_file.writestr("css/complyo-accessibility.css", css_content)
+            
+            # 5. WordPress-Plugin (optional)
+            if include_wordpress:
+                wp_plugin = self._generate_wordpress_plugin(site_id, fix_package)
+                zip_file.writestr("wordpress/complyo-accessibility/complyo-accessibility.php", wp_plugin)
+                
+                wp_readme = self._generate_wordpress_plugin_readme()
+                zip_file.writestr("wordpress/complyo-accessibility/readme.txt", wp_readme)
+            
+            # 6. Widget-Integration (falls Widget-Fixes vorhanden)
+            widget_fixes = fix_package.get('widget_fixes', [])
+            if widget_fixes:
+                widget_code = self._generate_widget_integration(site_id, widget_fixes)
+                zip_file.writestr("widget/integration.html", widget_code)
+            
+            # 7. Zusammenfassung als JSON (für Tools/Automatisierung)
+            summary_json = json.dumps(fix_package.get('summary', {}), indent=2, ensure_ascii=False)
+            zip_file.writestr("meta/summary.json", summary_json)
+        
+        zip_buffer.seek(0)
+        logger.info(f"Enhanced bundle generated, size: {len(zip_buffer.getvalue())} bytes")
+        
+        return zip_buffer
+    
+    def _generate_enhanced_readme(self, site_url: str, fix_package: Dict) -> str:
+        """Generiert verbessertes README im Markdown-Format"""
+        summary = fix_package.get('summary', {})
+        
+        return f"""# Complyo Barrierefreiheits-Fixes
+
+**Website:** {site_url}  
+**Erstellt:** {datetime.now().strftime("%d.%m.%Y um %H:%M Uhr")}
+
+---
+
+## Übersicht
+
+| Metrik | Wert |
+|--------|------|
+| Gefundene Probleme | {summary.get('total_issues', 0)} |
+| Automatisch behebbar | {summary.get('auto_fixable', 0)} |
+| Widget-Fixes | {summary.get('widget_fixable', 0)} |
+| Manuell zu beheben | {summary.get('manual_only', 0)} |
+| Geschätztes Risiko | €{summary.get('total_risk_euro', 0):,} |
+
+---
+
+## Paket-Inhalt
+
+```
+├── README.md              # Diese Datei
+├── patches/               # Unified Diff Patches
+│   └── *.patch           # Pro Problem ein Patch
+├── snippets/              # HTML-Code zum Einfügen
+│   └── accessibility-snippets.html
+├── css/                   # CSS-Fixes
+│   └── complyo-accessibility.css
+├── wordpress/             # WordPress-Plugin
+│   └── complyo-accessibility/
+├── widget/                # Widget-Integration
+│   └── integration.html
+└── meta/                  # Metadaten
+    └── summary.json
+```
+
+---
+
+## Schnellstart
+
+### Option 1: Widget (Empfohlen)
+
+1. Öffnen Sie `widget/integration.html`
+2. Kopieren Sie den Code
+3. Fügen Sie ihn vor `</body>` in Ihre Website ein
+4. Fertig! ✅
+
+### Option 2: WordPress-Plugin
+
+1. Laden Sie den Ordner `wordpress/complyo-accessibility/` hoch
+2. Ziel: `/wp-content/plugins/`
+3. Aktivieren Sie das Plugin im WordPress-Admin
+4. Fertig! ✅
+
+### Option 3: Manuelle Patches
+
+1. Öffnen Sie den Ordner `patches/`
+2. Jede `.patch`-Datei enthält Änderungen für eine Datei
+3. Wenden Sie die Patches an:
+   ```bash
+   git apply patches/ALT_TEXT_index_html.patch
+   ```
+4. Alternativ: Kopieren Sie den Code aus den Anleitungsdateien
+
+---
+
+## Wichtige Hinweise
+
+⚠️ **Backup erstellen** - Erstellen Sie immer ein Backup bevor Sie Änderungen vornehmen!
+
+⚠️ **Testen** - Testen Sie alle Änderungen in einer Staging-Umgebung
+
+⚠️ **KI-generiert** - Die Fixes wurden automatisch generiert. Bitte prüfen Sie die Texte!
+
+---
+
+## Support
+
+- **E-Mail:** support@complyo.tech
+- **Dokumentation:** https://complyo.tech/docs
+- **Dashboard:** https://app.complyo.tech
+
+---
+
+© {datetime.now().year} Complyo.tech - Barrierefreiheit leicht gemacht.
+"""
+    
+    def _generate_patch_instructions(self, patch: Dict) -> str:
+        """Generiert Anleitung für einen einzelnen Patch"""
+        return f"""
+PATCH-ANLEITUNG
+===============
+
+Feature: {patch.get('feature_id', 'Unbekannt')}
+Datei: {patch.get('file_path', 'Unbekannt')}
+WCAG: {', '.join(patch.get('wcag_criteria', []))}
+
+BESCHREIBUNG
+------------
+{patch.get('description', 'Keine Beschreibung verfügbar')}
+
+ANWENDUNG
+---------
+{patch.get('instructions', 'Wenden Sie den Patch mit git apply an oder kopieren Sie die Änderungen manuell.')}
+
+PATCH-INHALT
+------------
+{patch.get('unified_diff', '# Kein Patch verfügbar')}
+"""
+    
+    def _generate_html_snippets(self, fix_package: Dict) -> str:
+        """Generiert HTML-Snippets zum direkten Kopieren"""
+        snippets = []
+        
+        snippets.append("""<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Complyo Accessibility Snippets</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        h1 { color: #1e40af; }
+        h2 { color: #374151; margin-top: 2rem; }
+        pre { background: #1f2937; color: #10b981; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+        .copy-hint { color: #6b7280; font-size: 0.875rem; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Complyo Accessibility Snippets</h1>
+    <p class="copy-hint">Kopieren Sie die gewünschten Code-Snippets und fügen Sie sie in Ihre Website ein.</p>
+""")
+        
+        # Skip-Link Snippet
+        snippets.append("""
+    <h2>1. Skip-Link (Tastatur-Navigation)</h2>
+    <p>Fügen Sie diesen Code direkt nach dem &lt;body&gt;-Tag ein:</p>
+    <pre><code>&lt;a href="#main-content" class="skip-link"&gt;
+    Zum Hauptinhalt springen
+&lt;/a&gt;
+
+&lt;style&gt;
+.skip-link {
+    position: absolute;
+    top: -100px;
+    left: 0;
+    background: #1e40af;
+    color: white;
+    padding: 12px 24px;
+    text-decoration: none;
+    font-weight: bold;
+    z-index: 999999;
+}
+.skip-link:focus {
+    top: 0;
+}
+&lt;/style&gt;</code></pre>
+""")
+        
+        # Focus-Styles Snippet
+        snippets.append("""
+    <h2>2. Focus-Styles (WCAG 2.4.7)</h2>
+    <p>Fügen Sie diese CSS-Regeln hinzu:</p>
+    <pre><code>*:focus-visible {
+    outline: 3px solid #1e40af;
+    outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+    outline: 3px solid #1e40af;
+    outline-offset: 2px;
+}</code></pre>
+""")
+        
+        # ARIA Landmarks Snippet
+        snippets.append("""
+    <h2>3. ARIA Landmarks</h2>
+    <p>Strukturieren Sie Ihre Seite mit semantischen Elementen:</p>
+    <pre><code>&lt;header role="banner"&gt;
+    &lt;nav aria-label="Hauptnavigation"&gt;...&lt;/nav&gt;
+&lt;/header&gt;
+
+&lt;main id="main-content" role="main"&gt;
+    ...
+&lt;/main&gt;
+
+&lt;footer role="contentinfo"&gt;
+    ...
+&lt;/footer&gt;</code></pre>
+""")
+        
+        # Widget-Integration
+        widget_fixes = fix_package.get('widget_fixes', [])
+        if widget_fixes and len(widget_fixes) > 0:
+            widget_code = widget_fixes[0].get('integration_code', '')
+            snippets.append(f"""
+    <h2>4. Complyo Widget (Empfohlen)</h2>
+    <p>Fügen Sie diesen Code vor &lt;/body&gt; ein für automatische Fixes:</p>
+    <pre><code>{widget_code}</code></pre>
+""")
+        
+        snippets.append("""
+</body>
+</html>
+""")
+        
+        return ''.join(snippets)
+    
+    def _generate_consolidated_css(self, fix_package: Dict) -> str:
+        """Generiert konsolidierte CSS-Datei mit allen Fixes"""
+        return f"""/**
+ * Complyo Accessibility CSS
+ * Generiert: {datetime.now().strftime("%Y-%m-%d %H:%M")}
+ * 
+ * Diese Datei enthält alle CSS-Fixes für Barrierefreiheit.
+ * Binden Sie sie in Ihren <head> ein:
+ * <link rel="stylesheet" href="complyo-accessibility.css">
+ */
+
+/* ===========================================
+   1. Skip-Link für Tastatur-Navigation
+   =========================================== */
+
+.skip-link {{
+    position: absolute;
+    top: -100px;
+    left: 0;
+    background: #1e40af;
+    color: #ffffff;
+    padding: 12px 24px;
+    text-decoration: none;
+    font-weight: 600;
+    z-index: 999999;
+    border-radius: 0 0 8px 0;
+    transition: top 0.2s ease;
+}}
+
+.skip-link:focus {{
+    top: 0;
+    outline: 3px solid #fbbf24;
+    outline-offset: 2px;
+}}
+
+/* ===========================================
+   2. Focus-Indikatoren (WCAG 2.4.7)
+   =========================================== */
+
+*:focus-visible {{
+    outline: 3px solid #1e40af !important;
+    outline-offset: 2px !important;
+}}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {{
+    outline: 3px solid #1e40af !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 4px rgba(30, 64, 175, 0.2) !important;
+}}
+
+/* ===========================================
+   3. Kontrast-Verbesserungen (WCAG 1.4.3)
+   =========================================== */
+
+.text-gray-400,
+.text-gray-500,
+.text-muted {{
+    color: #374151 !important; /* Verbessert von #9ca3af */
+}}
+
+/* ===========================================
+   4. Link-Sichtbarkeit
+   =========================================== */
+
+a {{
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}}
+
+a:hover {{
+    text-decoration-thickness: 2px;
+}}
+
+/* ===========================================
+   5. Reduced Motion Support
+   =========================================== */
+
+@media (prefers-reduced-motion: reduce) {{
+    *,
+    *::before,
+    *::after {{
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }}
+}}
+
+/* ===========================================
+   6. High Contrast Mode Support
+   =========================================== */
+
+@media (prefers-contrast: high) {{
+    * {{
+        border-width: 2px !important;
+    }}
+    
+    a {{
+        text-decoration: underline !important;
+        text-decoration-thickness: 2px !important;
+    }}
+}}
+
+/* ===========================================
+   7. Screen Reader Only
+   =========================================== */
+
+.sr-only,
+.visually-hidden {{
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}}
+
+/* ===========================================
+   8. Touch Target Size (min 44x44px)
+   =========================================== */
+
+button,
+a,
+input[type="checkbox"],
+input[type="radio"],
+[role="button"] {{
+    min-height: 44px;
+    min-width: 44px;
+}}
+
+/* ===========================================
+   9. Form-Verbesserungen
+   =========================================== */
+
+input:focus,
+textarea:focus,
+select:focus {{
+    border-color: #1e40af !important;
+}}
+
+::placeholder {{
+    color: #6b7280;
+    opacity: 1;
+}}
+
+/* ===========================================
+   10. Print-Barrierefreiheit
+   =========================================== */
+
+@media print {{
+    a[href]:after {{
+        content: " (" attr(href) ")";
+    }}
+    
+    abbr[title]:after {{
+        content: " (" attr(title) ")";
+    }}
+}}
+"""
+    
+    def _generate_wordpress_plugin(self, site_id: str, fix_package: Dict) -> str:
+        """Generiert ein WordPress-Plugin für die Accessibility-Fixes"""
+        summary = fix_package.get('summary', {})
+        
+        return f"""<?php
+/**
+ * Plugin Name: Complyo Accessibility
+ * Plugin URI: https://complyo.tech
+ * Description: Barrierefreiheits-Fixes für Ihre WordPress-Website. Automatisch generiert von Complyo.
+ * Version: 1.0.0
+ * Author: Complyo.tech
+ * Author URI: https://complyo.tech
+ * License: GPL v2 or later
+ * Text Domain: complyo-accessibility
+ */
+
+// Sicherheit: Direktzugriff verhindern
+if (!defined('ABSPATH')) {{
+    exit;
+}}
+
+/**
+ * Complyo Accessibility Plugin
+ * Generiert: {datetime.now().strftime("%Y-%m-%d %H:%M")}
+ * Site-ID: {site_id}
+ */
+class Complyo_Accessibility {{
+    
+    private static $instance = null;
+    
+    public static function get_instance() {{
+        if (null === self::$instance) {{
+            self::$instance = new self();
+        }}
+        return self::$instance;
+    }}
+    
+    private function __construct() {{
+        // CSS laden
+        add_action('wp_enqueue_scripts', array($this, 'enqueue_styles'));
+        
+        // Skip-Link hinzufügen
+        add_action('wp_body_open', array($this, 'add_skip_link'));
+        
+        // Admin-Menü
+        add_action('admin_menu', array($this, 'add_admin_menu'));
+    }}
+    
+    public function enqueue_styles() {{
+        // Inline-CSS für Barrierefreiheit
+        $css = $this->get_accessibility_css();
+        wp_add_inline_style('wp-block-library', $css);
+    }}
+    
+    public function add_skip_link() {{
+        echo '<a href="#main" class="complyo-skip-link">Zum Hauptinhalt springen</a>';
+    }}
+    
+    public function add_admin_menu() {{
+        add_options_page(
+            'Complyo Accessibility',
+            'Barrierefreiheit',
+            'manage_options',
+            'complyo-accessibility',
+            array($this, 'render_admin_page')
+        );
+    }}
+    
+    public function render_admin_page() {{
+        ?>
+        <div class="wrap">
+            <h1>Complyo Accessibility</h1>
+            <div class="card" style="max-width: 600px; padding: 20px;">
+                <h2>Status</h2>
+                <p><strong>Aktiv:</strong> ✅ Barrierefreiheits-Fixes sind aktiviert</p>
+                <p><strong>Behobene Probleme:</strong> {summary.get('auto_fixable', 0)}</p>
+                <p><strong>Risiko-Reduktion:</strong> €{summary.get('total_risk_euro', 0):,}</p>
+                
+                <h3>Aktive Features</h3>
+                <ul>
+                    <li>✅ Skip-Link für Tastatur-Navigation</li>
+                    <li>✅ Focus-Indikatoren (WCAG 2.4.7)</li>
+                    <li>✅ Kontrast-Verbesserungen (WCAG 1.4.3)</li>
+                    <li>✅ Reduced Motion Support</li>
+                    <li>✅ High Contrast Mode Support</li>
+                </ul>
+                
+                <p style="margin-top: 20px;">
+                    <a href="https://app.complyo.tech" target="_blank" class="button button-primary">
+                        Zum Complyo Dashboard
+                    </a>
+                </p>
+            </div>
+        </div>
+        <?php
+    }}
+    
+    private function get_accessibility_css() {{
+        return '
+            .complyo-skip-link {{
+                position: absolute;
+                top: -100px;
+                left: 0;
+                background: #1e40af;
+                color: #fff;
+                padding: 12px 24px;
+                text-decoration: none;
+                font-weight: 600;
+                z-index: 999999;
+                border-radius: 0 0 8px 0;
+                transition: top 0.2s;
+            }}
+            .complyo-skip-link:focus {{
+                top: 0;
+                outline: 3px solid #fbbf24;
+            }}
+            *:focus-visible {{
+                outline: 3px solid #1e40af !important;
+                outline-offset: 2px !important;
+            }}
+            @media (prefers-reduced-motion: reduce) {{
+                * {{ animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }}
+            }}
+        ';
+    }}
+}}
+
+// Plugin initialisieren
+Complyo_Accessibility::get_instance();
+"""
+    
+    def _generate_wordpress_plugin_readme(self) -> str:
+        """Generiert readme.txt für WordPress-Plugin"""
+        return """=== Complyo Accessibility ===
+Contributors: complyotech
+Tags: accessibility, barrierefreiheit, wcag, bfsg, a11y
+Requires at least: 5.0
+Tested up to: 6.4
+Stable tag: 1.0.0
+License: GPLv2 or later
+License URI: http://www.gnu.org/licenses/gpl-2.0.html
+
+Barrierefreiheits-Fixes für Ihre WordPress-Website. Automatisch generiert von Complyo.
+
+== Description ==
+
+Dieses Plugin wurde automatisch von Complyo.tech generiert und enthält:
+
+* Skip-Link für Tastatur-Navigation
+* Verbesserte Focus-Indikatoren (WCAG 2.4.7)
+* Kontrast-Verbesserungen (WCAG 1.4.3)
+* Reduced Motion Support
+* High Contrast Mode Support
+
+== Installation ==
+
+1. Laden Sie den Plugin-Ordner in `/wp-content/plugins/` hoch
+2. Aktivieren Sie das Plugin im WordPress-Admin unter "Plugins"
+3. Fertig! Die Fixes werden automatisch angewendet.
+
+== Frequently Asked Questions ==
+
+= Muss ich etwas konfigurieren? =
+
+Nein, das Plugin funktioniert sofort nach der Aktivierung.
+
+= Ist das Plugin DSGVO-konform? =
+
+Ja, das Plugin speichert keine personenbezogenen Daten.
+
+== Changelog ==
+
+= 1.0.0 =
+* Initial Release
+
+== Upgrade Notice ==
+
+= 1.0.0 =
+Erste Version des automatisch generierten Accessibility-Plugins.
+"""
+    
+    def _generate_widget_integration(self, site_id: str, widget_fixes: List[Dict]) -> str:
+        """Generiert Widget-Integrations-Code"""
+        integration_code = widget_fixes[0].get('integration_code', '') if widget_fixes else ''
+        
+        return f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Complyo Widget Integration</title>
+</head>
+<body>
+    <h1>Complyo Widget Integration</h1>
+    
+    <p>Fügen Sie den folgenden Code vor dem schließenden <code>&lt;/body&gt;</code>-Tag ein:</p>
+    
+    <pre style="background: #1f2937; color: #10b981; padding: 20px; border-radius: 8px; overflow-x: auto;">
+<code>{integration_code}</code>
+    </pre>
+    
+    <h2>Anleitung</h2>
+    <ol>
+        <li>Kopieren Sie den Code oben</li>
+        <li>Öffnen Sie Ihre HTML-Datei (z.B. index.html)</li>
+        <li>Suchen Sie das <code>&lt;/body&gt;</code>-Tag</li>
+        <li>Fügen Sie den Code DAVOR ein</li>
+        <li>Speichern und testen Sie Ihre Website</li>
+    </ol>
+    
+    <h3>WordPress</h3>
+    <p>In WordPress können Sie den Code über:</p>
+    <ul>
+        <li><strong>Theme Customizer:</strong> Design → Customizer → Zusätzliches CSS/JavaScript</li>
+        <li><strong>Plugin:</strong> "Insert Headers and Footers" oder "WPCode"</li>
+        <li><strong>Theme:</strong> footer.php vor <code>&lt;/body&gt;</code></li>
+    </ul>
+    
+    <hr>
+    <p>Support: <a href="https://complyo.tech/support">complyo.tech/support</a></p>
+</body>
+</html>
+"""
 

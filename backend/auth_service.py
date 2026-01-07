@@ -12,7 +12,9 @@ logger = logging.getLogger(__name__)
 class AuthService:
     def __init__(self, db_pool: asyncpg.Pool):
         self.db_pool = db_pool
-        self.jwt_secret = os.getenv("JWT_SECRET", "default-secret-change-in-production")
+        self.jwt_secret = os.getenv("JWT_SECRET")
+        if not self.jwt_secret:
+            raise RuntimeError("❌ CRITICAL: JWT_SECRET environment variable is required!")
         self.access_token_expire = 7 * 24 * 60  # 7 Tage = 10080 Minuten
         self.refresh_token_expire = 30 * 24 * 60  # 30 days
     

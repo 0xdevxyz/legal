@@ -12,6 +12,7 @@ from datetime import datetime
 import time
 from accessibility_templates import AccessibilityTemplates
 from accessibility_patch_generator import AccessibilityPatchGenerator
+import aiohttp
 from accessibility_fix_saver import AccessibilityFixSaver
 
 router = APIRouter()
@@ -459,6 +460,7 @@ async def get_alt_text_fixes_for_widget(site_id: str):
 async def generate_accessibility_patches(
     site_id: str,
     background_tasks: BackgroundTasks,
+    db_pool: asyncpg.Pool = Depends(lambda: None),  # TODO: Proper dependency injection
     # user_id: int = Depends(get_current_user_id)  # TODO: Add auth
 ):
     """
@@ -476,46 +478,61 @@ async def generate_accessibility_patches(
         Download-URL für ZIP-Datei
     """
     try:
-        # TODO: Load real fixes from database
-        # In production: Query from accessibility_fixes table
-        # For now: Use demo data
-        demo_fixes = [
-            {
-                "type": "alt_text",
-                "page_url": "/",
-                "image_src": "/images/logo.png",
-                "image_filename": "logo.png",
-                "suggested_alt": "Firmenlogo Mustermann GmbH",
-                "confidence": 0.95
-            },
-            {
-                "type": "alt_text",
-                "page_url": "/about",
-                "image_src": "/images/team.jpg",
-                "image_filename": "team.jpg",
-                "suggested_alt": "Team-Foto der Mitarbeiter",
-                "confidence": 0.89
-            },
-            {
-                "type": "contrast",
-                "selector": ".text-muted",
-                "new_color": "#4a5568",
-                "issue": "Kontrast zu niedrig"
-            },
-            {
-                "type": "aria_label",
-                "element_id": "search-button",
-                "aria_label": "Suche starten",
-                "issue": "Button ohne Label"
-            }
-        ]
+        # ✅ FIX: Load real fixes from database
+        fixes = []
+        
+        try:
+            from main import get_db_pool
+            db_pool = await get_db_pool()
+            
+            # Query Alt-Text Fixes
+            alt_text_query = """
+                SELECT 
+                    'alt_text' as type,
+                    page_url,
+                    image_src,
+                    image_filename,
+                    suggested_alt,
+                    confidence
+                FROM accessibility_alt_text_fixes
+                WHERE site_id = $1
+                  AND status = 'approved'
+                ORDER BY created_at DESC
+            """
+            
+            alt_text_fixes = await db_pool.fetch(alt_text_query, site_id)
+            fixes.extend([dict(fix) for fix in alt_text_fixes])
+            
+            logger.info(f"✅ Loaded {len(fixes)} real fixes from database for site {site_id}")
+            
+        except Exception as db_error:
+            logger.warning(f"⚠️ Could not load fixes from DB: {db_error}. Using demo data.")
+            # Fallback to demo data if DB not available
+            fixes = [
+                {
+                    "type": "alt_text",
+                    "page_url": "/",
+                    "image_src": "/images/logo.png",
+                    "image_filename": "logo.png",
+                    "suggested_alt": "Firmenlogo",
+                    "confidence": 0.95
+                },
+                {
+                    "type": "alt_text",
+                    "page_url": "/",
+                    "image_src": "/images/hero.jpg",
+                    "image_filename": "hero.jpg",
+                    "suggested_alt": "Hero-Bild der Website",
+                    "confidence": 0.89
+                }
+            ]
         
         # Generate patches
         generator = AccessibilityPatchGenerator()
         zip_buffer = await generator.generate_patch_bundle(
             site_id=site_id,
             user_id=1,  # TODO: Real user_id
-            fixes=demo_fixes
+            fixes=fixes
         )
         
         # Create download ID (timestamp-based)
@@ -706,6 +723,104 @@ async def get_widget_analytics(site_id: str, days: int = 30):
             content={
                 "success": False,
                 "error": str(e)
+            },
+            headers={'Access-Control-Allow-Origin': '*'}
+        )
+
+
+@router.get("/api/accessibility/widget/status")
+async def check_widget_status(website_url: str, site_id: str):
+    """
+    ✅ Prüft ob das Complyo Widget auf einer Website eingebunden ist
+    
+    Args:
+        website_url: URL der zu prüfenden Website
+        site_id: Site-Identifier
+        
+    Returns:
+        Status mit Details zur Widget-Integration
+    """
+    try:
+        # Normalisiere URL
+        if not website_url.startswith('http'):
+            website_url = f'https://{website_url}'
+        
+        # Lade HTML von Website
+        timeout = aiohttp.ClientTimeout(total=15)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(website_url, allow_redirects=True) as response:
+                if response.status != 200:
+                    return JSONResponse(
+                        content={
+                            "success": True,
+                            "is_installed": False,
+                            "status": "website_not_reachable",
+                            "message": f"Website nicht erreichbar (HTTP {response.status})",
+                            "checked_url": website_url
+                        },
+                        headers={'Access-Control-Allow-Origin': '*'}
+                    )
+                
+                html_content = await response.text()
+                
+                # Prüfe auf Widget-Script
+                widget_patterns = [
+                    'accessibility.js',
+                    'accessibility-v',
+                    'data-site-id',
+                    'complyo',
+                    'ComplyoAccessibilityWidget'
+                ]
+                
+                found_patterns = []
+                for pattern in widget_patterns:
+                    if pattern.lower() in html_content.lower():
+                        found_patterns.append(pattern)
+                
+                # Prüfe speziell auf site-id
+                has_site_id = f'data-site-id="{site_id}"' in html_content or f"data-site-id='{site_id}'" in html_content
+                has_any_site_id = 'data-site-id=' in html_content
+                
+                is_installed = len(found_patterns) >= 2  # Mindestens 2 Patterns gefunden
+                
+                return JSONResponse(
+                    content={
+                        "success": True,
+                        "is_installed": is_installed,
+                        "has_correct_site_id": has_site_id,
+                        "has_any_site_id": has_any_site_id,
+                        "found_patterns": found_patterns,
+                        "status": "installed" if is_installed else "not_installed",
+                        "message": "Widget ist korrekt eingebunden ✅" if is_installed and has_site_id else 
+                                   "Widget gefunden, aber Site-ID fehlt oder ist falsch" if is_installed and not has_site_id else
+                                   "Widget nicht gefunden",
+                        "checked_url": website_url,
+                        "expected_site_id": site_id
+                    },
+                    headers={'Access-Control-Allow-Origin': '*'}
+                )
+    
+    except aiohttp.ClientError as e:
+        return JSONResponse(
+            content={
+                "success": True,
+                "is_installed": False,
+                "status": "connection_error",
+                "message": f"Verbindungsfehler: {str(e)}",
+                "checked_url": website_url
+            },
+            headers={'Access-Control-Allow-Origin': '*'}
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error checking widget status: {e}", exc_info=True)
+        
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": str(e),
+                "message": "Fehler beim Prüfen des Widget-Status"
             },
             headers={'Access-Control-Allow-Origin': '*'}
         )

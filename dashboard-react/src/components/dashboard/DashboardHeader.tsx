@@ -105,7 +105,7 @@ export const DashboardHeader: React.FC = () => {
                       </div>
 
                       {/* Menu Items */}
-                      <div className="py-2">
+                      <nav aria-label="Benutzer-Navigation" className="py-2">
                         <button
                           onClick={() => {
                             router.push('/profile');
@@ -137,7 +137,7 @@ export const DashboardHeader: React.FC = () => {
                             <div className="text-xs text-zinc-500 dark:text-zinc-500 light:text-gray-600">Zahlungen verwalten</div>
                           </div>
                         </button>
-                      </div>
+                      </nav>
 
                       {/* Logout */}
                       <div className="border-t border-white/10 dark:border-white/10 light:border-gray-200 py-2">

@@ -66,7 +66,7 @@ export default function AICompliancePage() {
   
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white p-8">
+      <main role="main" aria-label="AI Compliance Dashboard wird geladen" className="min-h-screen bg-gray-900 text-white p-8">
         <div className="max-w-7xl mx-auto">
           <div className="animate-pulse space-y-6">
             <div className="h-8 bg-gray-800 rounded w-64" />
@@ -77,15 +77,15 @@ export default function AICompliancePage() {
             </div>
           </div>
         </div>
-      </div>
+      </main>
     );
   }
   
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
+    <main role="main" aria-label="AI Compliance Dashboard" className="min-h-screen bg-gray-900 text-white p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <header className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold mb-2">
               AI Compliance Dashboard
@@ -102,7 +102,7 @@ export default function AICompliancePage() {
             <Plus className="w-5 h-5" />
             KI-System hinzufügen
           </button>
-        </div>
+        </header>
         
         {/* Error Message */}
         {error && (
@@ -113,9 +113,9 @@ export default function AICompliancePage() {
         
         {/* Stats Overview */}
         {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <section aria-label="Statistik-Übersicht" className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             {/* Total Systems */}
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+            <article className="bg-gray-800 border border-gray-700 rounded-xl p-6">
               <div className="flex items-center justify-between mb-3">
                 <div className="p-2 bg-purple-500/20 rounded-lg">
                   <Sparkles className="w-6 h-6 text-purple-400" />
@@ -123,10 +123,10 @@ export default function AICompliancePage() {
                 <span className="text-3xl font-bold">{stats.total_systems}</span>
               </div>
               <div className="text-sm text-gray-400">KI-Systeme</div>
-            </div>
+            </article>
             
             {/* Average Compliance */}
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+            <article className="bg-gray-800 border border-gray-700 rounded-xl p-6">
               <div className="flex items-center justify-between mb-3">
                 <div className="p-2 bg-green-500/20 rounded-lg">
                   <Shield className="w-6 h-6 text-green-400" />
@@ -134,10 +134,10 @@ export default function AICompliancePage() {
                 <span className="text-3xl font-bold">{stats.average_compliance_score}%</span>
               </div>
               <div className="text-sm text-gray-400">Ø Compliance</div>
-            </div>
+            </article>
             
             {/* Scans Last 30 Days */}
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+            <article className="bg-gray-800 border border-gray-700 rounded-xl p-6">
               <div className="flex items-center justify-between mb-3">
                 <div className="p-2 bg-blue-500/20 rounded-lg">
                   <TrendingUp className="w-6 h-6 text-blue-400" />
@@ -145,10 +145,10 @@ export default function AICompliancePage() {
                 <span className="text-3xl font-bold">{stats.scans_last_30_days}</span>
               </div>
               <div className="text-sm text-gray-400">Scans (30 Tage)</div>
-            </div>
+            </article>
             
             {/* Risk Distribution */}
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+            <article className="bg-gray-800 border border-gray-700 rounded-xl p-6">
               <div className="flex items-center justify-between mb-3">
                 <div className="p-2 bg-orange-500/20 rounded-lg">
                   <Clock className="w-6 h-6 text-orange-400" />
@@ -158,12 +158,12 @@ export default function AICompliancePage() {
                 </span>
               </div>
               <div className="text-sm text-gray-400">Hochrisiko-Systeme</div>
-            </div>
-          </div>
+            </article>
+          </section>
         )}
         
         {/* Systems List */}
-        <div className="mb-6">
+        <section aria-label="KI-Systeme Übersicht" className="mb-6">
           <h2 className="text-xl font-semibold mb-4">Ihre KI-Systeme</h2>
           
           {systems.length === 0 ? (
@@ -194,11 +194,11 @@ export default function AICompliancePage() {
               ))}
             </div>
           )}
-        </div>
+        </section>
         
         {/* Risk Distribution Chart */}
         {stats && stats.total_systems > 0 && (
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+          <section aria-label="Risiko-Verteilung" className="bg-gray-800 border border-gray-700 rounded-xl p-6">
             <h3 className="text-lg font-semibold mb-4">Risiko-Verteilung</h3>
             <div className="grid grid-cols-4 gap-4">
               {Object.entries(stats.risk_distribution || {}).map(([category, count]) => (
@@ -208,10 +208,10 @@ export default function AICompliancePage() {
                 </div>
               ))}
             </div>
-          </div>
+          </section>
         )}
       </div>
-    </div>
+    </main>
   );
 }
 

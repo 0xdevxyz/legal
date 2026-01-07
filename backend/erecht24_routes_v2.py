@@ -16,6 +16,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 import os
 import logging
+import traceback
 
 from ai_fix_engine.unified_fix_engine import UnifiedFixEngine
 from ai_fix_engine.monitoring import get_monitor, AICallMetrics, FixMetrics
@@ -62,6 +63,29 @@ class LegalTextRequest(BaseModel):
     text_type: str = Field(..., description="impressum, datenschutz, agb, widerruf")
     language: str = Field("de", description="de, en, fr")
     force_refresh: bool = Field(False, description="Cache ignorieren")
+
+
+class CompanyData(BaseModel):
+    """Firmendaten für personalisierte Rechtstexte"""
+    company_name: str
+    legal_form: str
+    address: str
+    postal_code: str
+    city: str
+    country: str = "Deutschland"
+    representative: str
+    email: str
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    ust_id: Optional[str] = None
+    registration_number: Optional[str] = None
+
+
+class LegalTextWithCompanyDataRequest(BaseModel):
+    """Request für Rechtstext-Generierung mit Firmendaten"""
+    text_type: str = Field(..., description="impressum, datenschutz, agb, widerruf")
+    company_data: CompanyData
+    language: str = Field("de", description="de, en, fr")
 
 
 class FeedbackRequest(BaseModel):
@@ -463,6 +487,325 @@ async def get_legal_text_v2(
     except Exception as e:
         logger.error(f"❌ Legal text retrieval failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/legal/generate")
+async def generate_legal_text_with_company_data(
+    request: LegalTextWithCompanyDataRequest,
+    current_user: Dict = Depends(get_current_user),
+    manager: ERecht24Manager = Depends(get_erecht24_manager)
+):
+    """
+    🆕 Generiert personalisierten Rechtstext mit Firmendaten
+    
+    **Prozess:**
+    1. Validiert Firmendaten
+    2. Generiert personalisierten Rechtstext mit eRecht24 API
+    3. Falls API nicht verfügbar: Fallback zu AI-Generator mit Firmendaten
+    4. Speichert Text in Cache
+    
+    **Unterstützte Text-Typen:**
+    - impressum
+    - datenschutz / privacy_policy
+    - agb
+    - widerruf
+    
+    **Response:**
+    ```json
+    {
+        "success": true,
+        "html": "<html>...</html>",
+        "source": "erecht24"|"ai_fallback",
+        "company_data": {...}
+    }
+    ```
+    """
+    try:
+        company = request.company_data.dict()
+        domain = company.get("website", "") or f"{company['company_name'].lower().replace(' ', '-')}.de"
+        
+        # Versuch 1: eRecht24 API mit Firmendaten
+        try:
+            result = await manager.get_legal_text(
+                user_id=current_user["user_id"],
+                domain=domain,
+                text_type=request.text_type,
+                language=request.language,
+                force_refresh=True  # Immer frisch generieren
+            )
+            
+            if result.get("content") and result.get("source") == "api":
+                return {
+                    "success": True,
+                    "html": result["content"],
+                    "source": "erecht24",
+                    "company_data": company,
+                    "last_updated": result.get("last_updated")
+                }
+        except Exception as e:
+            logger.warning(f"⚠️ eRecht24 API nicht verfügbar, nutze AI-Fallback: {e}")
+        
+        # Fallback: AI-Generator mit Firmendaten
+        if request.text_type == "impressum":
+            html_content = _generate_impressum_html(company)
+        elif request.text_type in ["datenschutz", "privacy_policy"]:
+            html_content = _generate_datenschutz_html(company)
+        elif request.text_type == "agb":
+            html_content = _generate_agb_html(company)
+        elif request.text_type == "widerruf":
+            html_content = _generate_widerruf_html(company)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unbekannter Text-Typ: {request.text_type}")
+        
+        return {
+            "success": True,
+            "html": html_content,
+            "source": "ai_fallback",
+            "company_data": company,
+            "warning": "Generiert mit AI-Fallback. Für rechtssichere Texte empfehlen wir die eRecht24-Integration."
+        }
+    
+    except Exception as e:
+        logger.error(f"❌ Legal text generation failed: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail={
+            "error": "legal_text_generation_failed",
+            "message": str(e),
+            "details": "Bitte prüfen Sie die Firmendaten und versuchen Sie es erneut."
+        })
+
+
+def _generate_impressum_html(company: Dict[str, Any]) -> str:
+    """Generiert Impressum-HTML mit Firmendaten"""
+    return f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Impressum - {company.get('company_name', '')}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }}
+        h1 {{ color: #333; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }}
+        h2 {{ color: #0066cc; margin-top: 30px; }}
+        p {{ margin: 10px 0; }}
+    </style>
+</head>
+<body>
+    <h1>Impressum</h1>
+    
+    <h2>Angaben gemäß § 5 TMG</h2>
+    <p>
+        {company.get('company_name', '[Firmenname]')}<br>
+        {company.get('legal_form', '[Rechtsform]')}<br>
+        {company.get('address', '[Straße und Hausnummer]')}<br>
+        {company.get('postal_code', '[PLZ]')} {company.get('city', '[Stadt]')}<br>
+        {company.get('country', 'Deutschland')}
+    </p>
+    
+    <h2>Vertreten durch</h2>
+    <p>{company.get('representative', '[Geschäftsführer/Vertretungsberechtigter]')}</p>
+    
+    <h2>Kontakt</h2>
+    <p>
+        E-Mail: {company.get('email', '[E-Mail-Adresse]')}<br>
+        {f"Telefon: {company.get('phone')}<br>" if company.get('phone') else ''}
+        {f"Website: {company.get('website')}" if company.get('website') else ''}
+    </p>
+    
+    {f'''<h2>Umsatzsteuer-ID</h2>
+    <p>Umsatzsteuer-Identifikationsnummer gemäß §27 a Umsatzsteuergesetz:<br>
+    {company.get('ust_id')}</p>''' if company.get('ust_id') else ''}
+    
+    {f'''<h2>Registereintrag</h2>
+    <p>Handelsregisternummer: {company.get('registration_number')}</p>''' if company.get('registration_number') else ''}
+    
+    <h2>EU-Streitschlichtung</h2>
+    <p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: 
+    <a href="https://ec.europa.eu/consumers/odr" target="_blank">https://ec.europa.eu/consumers/odr</a><br>
+    Unsere E-Mail-Adresse finden Sie oben im Impressum.</p>
+    
+    <h2>Verbraucherstreitbeilegung/Universalschlichtungsstelle</h2>
+    <p>Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer 
+    Verbraucherschlichtungsstelle teilzunehmen.</p>
+    
+    <p style="margin-top: 40px; font-size: 12px; color: #666;">
+        <em>Erstellt mit Complyo - Ihrer Compliance-Plattform | Stand: {datetime.now().strftime('%d.%m.%Y')}</em>
+    </p>
+</body>
+</html>"""
+
+
+def _generate_datenschutz_html(company: Dict[str, Any]) -> str:
+    """Generiert Datenschutzerklärung-HTML mit Firmendaten"""
+    return f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datenschutzerklärung - {company.get('company_name', '')}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }}
+        h1 {{ color: #333; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }}
+        h2 {{ color: #0066cc; margin-top: 30px; }}
+        h3 {{ color: #555; margin-top: 20px; }}
+        p {{ margin: 10px 0; }}
+        ul {{ margin: 10px 0; padding-left: 20px; }}
+    </style>
+</head>
+<body>
+    <h1>Datenschutzerklärung</h1>
+    
+    <h2>1. Datenschutz auf einen Blick</h2>
+    <h3>Allgemeine Hinweise</h3>
+    <p>Die folgenden Hinweise geben einen einfachen Überblick darüber, was mit Ihren personenbezogenen Daten 
+    passiert, wenn Sie diese Website besuchen. Personenbezogene Daten sind alle Daten, mit denen Sie 
+    persönlich identifiziert werden können.</p>
+    
+    <h3>Datenerfassung auf dieser Website</h3>
+    <p><strong>Wer ist verantwortlich für die Datenerfassung auf dieser Website?</strong></p>
+    <p>Die Datenverarbeitung auf dieser Website erfolgt durch den Websitebetreiber. Dessen Kontaktdaten 
+    können Sie dem Abschnitt „Hinweis zur Verantwortlichen Stelle" in dieser Datenschutzerklärung entnehmen.</p>
+    
+    <h2>2. Hosting</h2>
+    <p>Wir hosten die Inhalte unserer Website bei einem externen Dienstleister.</p>
+    
+    <h2>3. Allgemeine Hinweise und Pflichtinformationen</h2>
+    <h3>Datenschutz</h3>
+    <p>Die Betreiber dieser Seiten nehmen den Schutz Ihrer persönlichen Daten sehr ernst. Wir behandeln Ihre 
+    personenbezogenen Daten vertraulich und entsprechend den gesetzlichen Datenschutzvorschriften sowie 
+    dieser Datenschutzerklärung.</p>
+    
+    <h3>Hinweis zur verantwortlichen Stelle</h3>
+    <p>Die verantwortliche Stelle für die Datenverarbeitung auf dieser Website ist:</p>
+    <p>
+        {company.get('company_name', '[Firmenname]')}<br>
+        {company.get('address', '[Straße und Hausnummer]')}<br>
+        {company.get('postal_code', '[PLZ]')} {company.get('city', '[Stadt]')}
+    </p>
+    <p>
+        Telefon: {company.get('phone', '[Telefonnummer]')}<br>
+        E-Mail: {company.get('email', '[E-Mail-Adresse]')}
+    </p>
+    
+    <h2>4. Datenerfassung auf dieser Website</h2>
+    <h3>Cookies</h3>
+    <p>Unsere Internetseiten verwenden so genannte „Cookies". Cookies sind kleine Textdateien und richten auf 
+    Ihrem Endgerät keinen Schaden an. Sie werden entweder vorübergehend für die Dauer einer Sitzung 
+    (Session-Cookies) oder dauerhaft (permanente Cookies) auf Ihrem Endgerät gespeichert.</p>
+    
+    <h3>Server-Log-Dateien</h3>
+    <p>Der Provider der Seiten erhebt und speichert automatisch Informationen in so genannten Server-Log-Dateien, 
+    die Ihr Browser automatisch an uns übermittelt. Dies sind:</p>
+    <ul>
+        <li>Browsertyp und Browserversion</li>
+        <li>verwendetes Betriebssystem</li>
+        <li>Referrer URL</li>
+        <li>Hostname des zugreifenden Rechners</li>
+        <li>Uhrzeit der Serveranfrage</li>
+        <li>IP-Adresse</li>
+    </ul>
+    
+    <h2>5. Ihre Rechte</h2>
+    <p>Sie haben jederzeit das Recht:</p>
+    <ul>
+        <li>gemäß Art. 15 DSGVO Auskunft über Ihre von uns verarbeiteten personenbezogenen Daten zu verlangen</li>
+        <li>gemäß Art. 16 DSGVO unverzüglich die Berichtigung unrichtiger oder Vervollständigung Ihrer bei uns gespeicherten personenbezogenen Daten zu verlangen</li>
+        <li>gemäß Art. 17 DSGVO die Löschung Ihrer bei uns gespeicherten personenbezogenen Daten zu verlangen</li>
+        <li>gemäß Art. 18 DSGVO die Einschränkung der Verarbeitung Ihrer personenbezogenen Daten zu verlangen</li>
+        <li>gemäß Art. 20 DSGVO Ihre personenbezogenen Daten, die Sie uns bereitgestellt haben, in einem strukturierten, gängigen und maschinenlesebaren Format zu erhalten</li>
+        <li>gemäß Art. 7 Abs. 3 DSGVO Ihre einmal erteilte Einwilligung jederzeit gegenüber uns zu widerrufen</li>
+        <li>gemäß Art. 77 DSGVO sich bei einer Aufsichtsbehörde zu beschweren</li>
+    </ul>
+    
+    <p style="margin-top: 40px; font-size: 12px; color: #666;">
+        <em>Stand: {datetime.now().strftime('%d.%m.%Y')}<br>
+        Erstellt mit Complyo - Ihrer Compliance-Plattform</em>
+    </p>
+</body>
+</html>"""
+
+
+def _generate_agb_html(company: Dict[str, Any]) -> str:
+    """Generiert AGB-HTML mit Firmendaten"""
+    return f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Allgemeine Geschäftsbedingungen - {company.get('company_name', '')}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }}
+        h1 {{ color: #333; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }}
+        h2 {{ color: #0066cc; margin-top: 30px; }}
+        p {{ margin: 10px 0; }}
+    </style>
+</head>
+<body>
+    <h1>Allgemeine Geschäftsbedingungen (AGB)</h1>
+    
+    <h2>§ 1 Geltungsbereich</h2>
+    <p>Diese Allgemeinen Geschäftsbedingungen gelten für alle Verträge zwischen {company.get('company_name', '[Firmenname]')} und den Kunden.</p>
+    
+    <h2>§ 2 Vertragspartner</h2>
+    <p>Der Vertrag kommt zustande mit:<br>
+    {company.get('company_name', '[Firmenname]')}<br>
+    {company.get('address', '[Straße und Hausnummer]')}<br>
+    {company.get('postal_code', '[PLZ]')} {company.get('city', '[Stadt]')}<br>
+    E-Mail: {company.get('email', '[E-Mail-Adresse]')}</p>
+    
+    <h2>§ 3 Vertragsschluss</h2>
+    <p>Die Präsentation der Waren im Online-Shop stellt kein rechtlich bindendes Angebot dar.</p>
+    
+    <h2>§ 4 Preise und Zahlung</h2>
+    <p>Alle Preise verstehen sich inklusive der gesetzlichen Mehrwertsteuer.</p>
+    
+    <p style="margin-top: 40px; font-size: 12px; color: #666;">
+        <em>Stand: {datetime.now().strftime('%d.%m.%Y')}<br>
+        Erstellt mit Complyo - Ihrer Compliance-Plattform</em>
+    </p>
+</body>
+</html>"""
+
+
+def _generate_widerruf_html(company: Dict[str, Any]) -> str:
+    """Generiert Widerrufsbelehrung-HTML mit Firmendaten"""
+    return f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Widerrufsbelehrung - {company.get('company_name', '')}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }}
+        h1 {{ color: #333; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }}
+        h2 {{ color: #0066cc; margin-top: 30px; }}
+        p {{ margin: 10px 0; }}
+    </style>
+</head>
+<body>
+    <h1>Widerrufsbelehrung</h1>
+    
+    <h2>Widerrufsrecht</h2>
+    <p>Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen.</p>
+    
+    <h2>Folgen des Widerrufs</h2>
+    <p>Wenn Sie diesen Vertrag widerrufen, haben wir Ihnen alle Zahlungen, die wir von Ihnen erhalten haben, 
+    unverzüglich und spätestens binnen vierzehn Tagen zurückzuzahlen.</p>
+    
+    <h2>Kontakt für Widerruf</h2>
+    <p>
+        {company.get('company_name', '[Firmenname]')}<br>
+        {company.get('address', '[Straße und Hausnummer]')}<br>
+        {company.get('postal_code', '[PLZ]')} {company.get('city', '[Stadt]')}<br>
+        E-Mail: {company.get('email', '[E-Mail-Adresse]')}
+    </p>
+    
+    <p style="margin-top: 40px; font-size: 12px; color: #666;">
+        <em>Stand: {datetime.now().strftime('%d.%m.%Y')}<br>
+        Erstellt mit Complyo - Ihrer Compliance-Plattform</em>
+    </p>
+</body>
+</html>"""
 
 
 @router.post("/widgets/configure")

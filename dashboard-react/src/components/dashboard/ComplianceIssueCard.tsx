@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/Toast';
 import { AIFixPreview, AIFixPreviewMini } from '@/components/ai/AIFixPreview';
 import { AIFixDisplay } from '@/components/ai/AIFixDisplay'; // NEW: Enhanced Fix Display
 import { useCreateFixJob } from '@/hooks/useCompliance';
+import { UnifiedFixButton } from './UnifiedFixButton';
 
 const extractDomain = (url: string): string => {
   try {
@@ -509,13 +510,48 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         </>
       )}
 
-      {/* Lösung - IMMER SICHTBAR */}
+      {/* Lösung - IMMER SICHTBAR, mit spezifischen Handlungsanweisungen */}
       {issue.solution && (
         <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
-          <h4 className="font-semibold text-gray-800 mb-3">📝 Manuelle Umsetzungsschritte:</h4>
+          <h4 className="font-semibold text-gray-800 mb-3">📝 Konkrete Handlungsschritte:</h4>
           
-          {/* Steps */}
-          {issue.solution.steps && issue.solution.steps.length > 0 && (
+          {/* ✅ Datenschutz/Impressum: Spezifische Anleitung */}
+          {(issue.category === 'datenschutz' || issue.title?.toLowerCase().includes('datenschutz')) && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-blue-800 font-medium mb-2">🔒 Datenschutz-Problem beheben:</p>
+              <ol className="list-decimal list-inside text-sm text-blue-700 space-y-2">
+                <li>Klicken Sie oben auf <strong>"Alle Probleme beheben"</strong> für eine vollständige Datenschutzerklärung</li>
+                <li>Laden Sie die generierte HTML-Datei herunter</li>
+                <li>Ersetzen Sie Ihre bestehende Datenschutzerklärung mit dem neuen Text</li>
+                <li>Führen Sie einen neuen Scan durch, um die Behebung zu bestätigen</li>
+              </ol>
+              <p className="text-xs text-blue-600 mt-2">
+                💡 Der generierte Text ist rechtssicher und DSGVO-konform!
+              </p>
+            </div>
+          )}
+          
+          {(issue.category === 'impressum' || issue.title?.toLowerCase().includes('impressum')) && (
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-purple-800 font-medium mb-2">📋 Impressum-Problem beheben:</p>
+              <ol className="list-decimal list-inside text-sm text-purple-700 space-y-2">
+                <li>Klicken Sie oben auf <strong>"Alle Probleme beheben"</strong> für ein vollständiges Impressum</li>
+                <li>Laden Sie die generierte HTML-Datei herunter</li>
+                <li>Ersetzen Sie Ihr bestehendes Impressum mit dem neuen Text</li>
+                <li>Achten Sie darauf, alle Pflichtangaben (Name, Adresse, E-Mail) korrekt einzutragen</li>
+              </ol>
+              <p className="text-xs text-purple-600 mt-2">
+                💡 Das generierte Impressum erfüllt alle TMG-Anforderungen!
+              </p>
+            </div>
+          )}
+          
+          {/* Steps für andere Issue-Typen */}
+          {issue.solution.steps && issue.solution.steps.length > 0 && 
+           !issue.category?.includes('datenschutz') && 
+           !issue.category?.includes('impressum') &&
+           !issue.title?.toLowerCase().includes('datenschutz') &&
+           !issue.title?.toLowerCase().includes('impressum') && (
             <div className="space-y-3 mb-4">
               {issue.solution.steps.map((step, index) => (
                 <div key={index} className="flex items-start gap-2">
@@ -563,13 +599,13 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         <div className="mt-4 space-y-3">
           {!showAIPreview ? (
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowAIPreview(true)}
-                className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all"
-              >
-                <Sparkles className="w-5 h-5" />
-                <span>🤖 KI-Fix (5 Min)</span>
-              </button>
+              <UnifiedFixButton
+                issueTitle={issue.title}
+                isGroup={false}
+                onFix={() => setShowAIPreview(true)}
+                disabled={false}
+                isLoading={false}
+              />
               <span className="text-sm text-gray-600">
                 Lassen Sie die KI eine Lösung generieren
               </span>

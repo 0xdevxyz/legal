@@ -70,6 +70,7 @@ export const LegalNews: React.FC = () => {
   const [newsData, setNewsData] = useState<NewsItem[]>([]);
   const [selectedArticle, setSelectedArticle] = useState<NewsItem | null>(null);
   const [showArticleModal, setShowArticleModal] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null); // ✅ Fehlerstatus für API
   const [showArchive, setShowArchive] = useState(false);
   const [selectedUpdate, setSelectedUpdate] = useState<LegalUpdate | null>(null);
 
@@ -246,11 +247,13 @@ export const LegalNews: React.FC = () => {
   };
 
   const fetchLegalUpdates = async () => {
+    setLoadError(null);
+    
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
 
-      // Nutze neue KI-API mit Klassifizierung
-      const response = await fetch(`${API_URL}/api/legal-ai/updates?limit=6&include_info_only=false`, {
+      // ✅ Lade ALLE Updates (include_info_only=true), damit auch News ohne action_required sichtbar sind
+      const response = await fetch(`${API_URL}/api/legal-ai/updates?limit=10&include_info_only=true`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`
         }
@@ -259,11 +262,12 @@ export const LegalNews: React.FC = () => {
       if (response.ok) {
         const updates = await response.json();
         
-        console.log('📥 Raw Backend Data:', updates[0]); // DEBUG: Zeige erstes Update
+        console.log('📥 Legal Updates geladen:', updates?.length || 0);
         
         // Parse Classification-Daten
-        const parsedUpdates = updates.map((update: any) => ({
+        const parsedUpdates = (updates || []).map((update: any) => ({
           ...update,
+          severity: update.severity || (update.action_required ? 'warning' : 'info'),
           classification: update.primary_action ? {
             action_required: update.action_required,
             confidence: update.confidence,
@@ -277,17 +281,15 @@ export const LegalNews: React.FC = () => {
           } : null
         }));
         
-        console.log('✅ KI-klassifizierte Updates geladen:', parsedUpdates.length);
-        console.log('📤 Parsed Update mit Classification:', parsedUpdates[0]); // DEBUG
-        console.log('🔍 Primary Action:', parsedUpdates[0]?.classification?.primary_action); // DEBUG
-        
         setLegalUpdates(parsedUpdates);
       } else {
         console.error('❌ Legal Updates API Fehler:', response.status, response.statusText);
+        setLoadError(`API-Fehler: ${response.status} ${response.statusText}`);
         setLegalUpdates([]);
       }
     } catch (error) {
       console.error('❌ Fehler beim Laden der Gesetzesänderungen:', error);
+      setLoadError('Verbindung zur API fehlgeschlagen. Bitte später erneut versuchen.');
       setLegalUpdates([]);
     }
   };
@@ -620,6 +622,23 @@ export const LegalNews: React.FC = () => {
                   Archiv anzeigen (ältere Änderungen)
                 </button>
               </div>
+            </div>
+          ) : loadError ? (
+            // ✅ Fehlermeldung bei API-Problemen
+            <div className="text-center py-8">
+              <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+              <p className="text-red-400 font-medium mb-2">
+                Fehler beim Laden der Gesetzesänderungen
+              </p>
+              <p className="text-gray-500 text-sm mb-4">
+                {loadError}
+              </p>
+              <button
+                onClick={fetchLegalUpdates}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors"
+              >
+                Erneut versuchen
+              </button>
             </div>
           ) : (
             <div className="text-center py-8">

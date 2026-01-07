@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Shield, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import SocialLoginButtons from '@/components/SocialLoginButtons';
+import { Logo } from '@/components/Logo';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
 
@@ -61,12 +62,11 @@ function RegisterForm() {
     const planName = plan === 'expert' ? 'Expert Plan' : 'KI Plan';
     
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-900 px-4">
-            <div className="bg-gray-800 p-8 rounded-lg max-w-md w-full border border-gray-700 shadow-xl">
+        <main role="main" aria-label="Registrierung" className="min-h-screen flex items-center justify-center bg-gray-900 px-4">
+            <section className="bg-gray-800 p-8 rounded-lg max-w-md w-full border border-gray-700 shadow-xl">
                 {/* Logo */}
-                <div className="flex items-center justify-center gap-2 mb-6">
-                    <Shield className="w-8 h-8 text-blue-400" />
-                    <span className="text-2xl font-bold">Complyo</span>
+                <div className="flex items-center justify-center mb-6">
+                    <Logo size="xl" />
                 </div>
                 
                 <h1 className="text-3xl font-bold mb-2 text-center">Jetzt registrieren</h1>
@@ -186,17 +186,17 @@ function RegisterForm() {
                     <a href="/agb" className="text-blue-400 hover:underline">AGB</a> und der{' '}
                     <a href="/datenschutz" className="text-blue-400 hover:underline">Datenschutzerklärung</a> zu.
                 </div>
-            </div>
-        </div>
+            </section>
+        </main>
     );
 }
 
 export default function RegisterPage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen flex items-center justify-center bg-gray-900">
+            <main role="main" aria-label="Registrierung wird geladen" className="min-h-screen flex items-center justify-center bg-gray-900">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
-            </div>
+            </main>
         }>
             <RegisterForm />
         </Suspense>

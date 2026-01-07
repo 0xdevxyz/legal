@@ -102,6 +102,24 @@ class CodePackageGenerator:
 
 ---
 
+## ⚠️ WICHTIG: Haftungsausschluss
+
+**Complyo wendet Code-Änderungen ausschließlich nach ausdrücklicher Bestätigung durch den Nutzer oder dessen technische Administratoren an.**
+
+Die Verantwortung für das Ausrollen der Änderungen in produktive Systeme liegt **ausschließlich beim Nutzer**.
+
+**Complyo generiert Patches basierend auf öffentlich zugänglichem Code. Sie übernehmen die Verantwortung für die Anwendung dieser Änderungen in Ihrem System.**
+
+**WICHTIG:** KI-generierte Inhalte können Fehler, Ungenauigkeiten oder nicht optimale Lösungen enthalten. Bitte:
+- ✅ Prüfen Sie jeden Fix vor der Anwendung
+- ✅ Erstellen Sie ein Backup Ihrer Website
+- ✅ Testen Sie in einer Staging-Umgebung
+- ✅ Konsultieren Sie bei rechtlichen Fragen einen Anwalt
+
+**Vollständige AGB:** https://complyo.tech/terms-liability
+
+---
+
 ## Übersicht
 
 Dieses Paket enthält automatisch generierte Barrierefreiheits-Fixes für Ihre Webseite nach **WCAG 2.1 Level AA** Standard.

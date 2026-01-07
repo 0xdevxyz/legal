@@ -120,19 +120,19 @@ export default function CookieCompliancePage() {
   
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+      <main role="main" aria-label="Cookie-Compliance wird geladen" className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
           <p className="text-gray-400">Lade Cookie-Compliance-Konfiguration...</p>
         </div>
-      </div>
+      </main>
     );
   }
   
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <main role="main" aria-label="Cookie-Compliance Management" className="min-h-screen bg-gray-900 text-white">
       {/* Header */}
-      <div className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-10">
+      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between py-4">
             <div className="flex items-center gap-4">
@@ -164,10 +164,10 @@ export default function CookieCompliancePage() {
             </div>
           </div>
         </div>
-      </div>
+      </header>
       
       {/* Main Content */}
-      <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <section aria-label="Cookie-Compliance Konfiguration" className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20 hover:border-green-500/40 transition-all duration-200 hover:shadow-lg hover:shadow-green-900/20">
@@ -320,8 +320,8 @@ export default function CookieCompliancePage() {
             </Tabs>
           </CardContent>
         </Card>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
 

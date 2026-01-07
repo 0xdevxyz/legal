@@ -9,20 +9,29 @@ Complyo ist eine moderne SaaS-Lösung zur automatisierten Prüfung von Websites 
 ```
 /opt/projects/saas-project-2/
 ├── backend/              # FastAPI Backend (API, Auth, Payment, Reports)
-│   ├── main.py
-│   ├── payment_routes.py
-│   ├── report_generator.py
+│   ├── main_production.py  # Haupt-Einstiegspunkt
+│   ├── auth_service.py     # Authentifizierung (bcrypt + JWT)
+│   ├── compliance_engine/  # KI-Compliance-Scanner
+│   ├── payment/            # Stripe-Integration
 │   ├── requirements.txt
-│   ├── database_setup.sql
 │   └── ...
-├── dashboard/            # Next.js Dashboard (Frontend)
-│   ├── pages/
+├── dashboard-react/      # Next.js Dashboard (Frontend)
+│   ├── src/
 │   ├── next.config.js
 │   └── ...
+├── landing-react/        # Next.js Landing Page
+│   ├── src/
+│   └── ...
+├── simple-admin/         # Admin Panel (Nginx)
+├── docs/                 # Dokumentation
+│   └── ENV_CONFIGURATION.md  # 🔐 Erforderliche Umgebungsvariablen
 ├── docker-compose.yml    # Orchestrierung aller Services
-├── .env                  # Zentrale Konfiguration (Secrets, Keys)
+├── .env                  # Zentrale Konfiguration (NICHT committen!)
 └── README.md
 ```
+
+> ⚠️ **WICHTIG:** Erstelle vor dem Start eine `.env` Datei!  
+> Siehe [`docs/ENV_CONFIGURATION.md`](docs/ENV_CONFIGURATION.md) für alle erforderlichen Variablen.
 
 ---
 
@@ -123,26 +132,63 @@ docker-compose logs -f [service]
 
 ## 👨‍💻 Entwickler-Quickstart
 
+### Mit Docker (empfohlen)
+
+```bash
+# 1. .env Datei erstellen (siehe docs/ENV_CONFIGURATION.md)
+cp docs/ENV_CONFIGURATION.md .env  # Dann Werte anpassen!
+
+# 2. Generiere sichere Secrets
+echo "JWT_SECRET=$(openssl rand -base64 64 | tr -d '\n')" >> .env
+echo "POSTGRES_PASSWORD=$(openssl rand -base64 32 | tr -d '\n')" >> .env
+
+# 3. Services starten
+docker-compose up -d --build
+
+# 4. Status prüfen
+docker-compose ps
+docker-compose logs -f backend
+```
+
+### Lokale Entwicklung
+
 1. **Backend lokal starten:**
    ```bash
    cd backend
    python3 -m venv .venv && source .venv/bin/activate
    pip install -r requirements.txt
-   uvicorn main.py --reload --host 0.0.0.0 --port 8002
+   
+   # Erforderliche Umgebungsvariablen setzen!
+   export JWT_SECRET="your-dev-secret-min-64-chars"
+   export DATABASE_URL="postgresql://user:pass@localhost:5432/complyo_db"
+   
+   uvicorn main_production:app --reload --host 0.0.0.0 --port 8002
    ```
 
-2. **Frontend lokal starten:**
+2. **Dashboard lokal starten:**
    ```bash
-   cd dashboard
+   cd dashboard-react
    npm install
    npm run dev
    ```
 
-3. **Datenbank initialisieren:**
-   - PostgreSQL starten (Docker oder lokal)
-   - `backend/database_setup.sql` ausführen
+3. **Landing Page lokal starten:**
+   ```bash
+   cd landing-react
+   npm install
+   npm run dev
+   ```
 
-4. **.env anpassen:** Alle Secrets & Keys setzen!
+4. **Datenbank initialisieren:**
+   ```bash
+   # PostgreSQL starten (Docker oder lokal)
+   docker run -d --name complyo-db \
+     -e POSTGRES_PASSWORD=devpass \
+     -p 5432:5432 postgres:15-alpine
+   
+   # Schema anwenden
+   psql -h localhost -U postgres -f backend/database_setup.sql
+   ```
 
 ---
 

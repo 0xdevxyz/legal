@@ -8,12 +8,10 @@ import { analyzeWebsite, getTrackedWebsites } from '@/lib/api';
 
 interface DomainHeroSectionProps {
   onAnalyze?: (url: string) => void;
-  onOptimize?: () => void;
 }
 
 export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
-  onAnalyze,
-  onOptimize
+  onAnalyze
 }) => {
   const { currentWebsite, metrics, updateMetrics, setCurrentWebsite } = useDashboardStore();
   const [url, setUrl] = useState('');
@@ -195,14 +193,6 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
     }
   };
 
-  const handleOptimize = () => {
-    if (onOptimize) {
-      onOptimize();
-    } else {
-      // Scroll to optimization section or open modal
-      alert('🤖 KI-Optimierung wird gestartet...\n\n(Feature wird im nächsten Schritt vollständig implementiert)');
-    }
-  };
 
   const getScoreColor = (score: number): string => {
     if (score >= 90) return 'text-green-400';
@@ -403,30 +393,16 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                   </div>
                 </div>
 
-                {/* KI-Optimization CTA */}
-                <Button
-                  size="lg"
-                  onClick={handleOptimize}
-                  className={`bg-gradient-to-r ${getScoreGradient(score)} hover:shadow-2xl font-bold text-lg px-10 py-6 rounded-2xl shadow-lg transition-all transform hover:scale-105 disabled:opacity-60 disabled:hover:scale-100`}
-                  disabled={score === 100}
-                >
-                  {score === 100 ? (
-                    <>
-                      <TrendingUp className="mr-3 h-6 w-6" />
-                      100% erreicht!
-                    </>
-                  ) : (
-                    <>
-                      <Bot className="mr-3 h-6 w-6" />
-                      Mit KI auf 100% optimieren
-                    </>
-                  )}
-                </Button>
-
-                {score < 100 && (
+                {/* Score Info Text */}
+                {score < 100 ? (
                   <p className="text-sm text-zinc-400 mt-5 text-center">
                     Noch <strong className="text-white font-semibold">{100 - score} Punkte</strong> bis zum Abmahnschutz
                   </p>
+                ) : (
+                  <div className="flex items-center gap-2 text-green-400 mt-5">
+                    <TrendingUp className="w-5 h-5" />
+                    <p className="text-sm font-semibold">100% Compliance erreicht!</p>
+                  </div>
                 )}
               </>
             ) : (

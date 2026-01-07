@@ -13,8 +13,10 @@ import { ComplianceIssueCard } from './ComplianceIssueCard';
 import { ComplianceIssueGroup } from './ComplianceIssueGroup';
 import { ActiveJobsPanel } from './ActiveJobsPanel';
 import { useAuth } from '@/contexts/AuthContext';
-import { PatchDownloadCard, WidgetIntegrationCard } from '@/components/accessibility';
+import { WidgetIntegrationCard } from '@/components/accessibility';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import TCFComplianceWidget from './TCFComplianceWidget';
+import { generateSiteId, isScanHash } from '@/lib/siteIdUtils';
 
 export const WebsiteAnalysis: React.FC = () => {
   const { user } = useAuth();
@@ -565,35 +567,37 @@ export const WebsiteAnalysis: React.FC = () => {
                             );
                           })()}
                           
-                          {/* 🚀 NEU: Barrierefreiheits-Spezifische Komponenten */}
+                          {/* 🚀 BARRIEREFREIHEIT: Eine einzige, klare Widget-Karte (nicht doppelt!) */}
                           {pillar.id === 'accessibility' && analysisData && (
-                            <div className="mt-6 space-y-4">
-                              {/* Widget-Integration Card */}
+                            <div className="mt-6">
+                              {/* ✅ EINZIGE Widget-Integration Card - mit korrektem Status */}
                               <ErrorBoundary componentName="WidgetIntegrationCard">
                                 <WidgetIntegrationCard
-                                  siteId={analysisData.site_id || analysisData.scan_id || 'unknown'}
+                                  siteId={(() => {
+                                    // ✅ FIX: Generiere Site-ID aus URL statt Scan-Hash zu verwenden
+                                    const currentSiteId = analysisData.site_id || analysisData.scan_id || '';
+                                    
+                                    // Wenn site_id ein Scan-Hash ist, generiere aus URL
+                                    if (isScanHash(currentSiteId) || !currentSiteId) {
+                                      return generateSiteId(analysisData.url || currentWebsite?.url || '');
+                                    }
+                                    
+                                    return currentSiteId;
+                                  })()}
                                   websiteUrl={analysisData.url}
-                                  isWidgetActive={analysisData.has_accessibility_widget || false}
+                                  isWidgetActive={analysisData.has_accessibility_widget === true}
                                 />
                               </ErrorBoundary>
-                              
-                              {/* Patch-Download Card */}
-                              <ErrorBoundary componentName="PatchDownloadCard">
-                                <PatchDownloadCard
-                                  siteId={analysisData.site_id || analysisData.scan_id || 'unknown'}
-                                  fixesCount={pillar.issues.length}
-                                  altTextCount={pillar.issues.filter(i => 
-                                    i.title?.toLowerCase().includes('alt') || 
-                                    i.description?.toLowerCase().includes('alt')
-                                  ).length}
-                                  contrastCount={pillar.issues.filter(i => 
-                                    i.title?.toLowerCase().includes('kontrast') || 
-                                    i.description?.toLowerCase().includes('kontrast')
-                                  ).length}
-                                  ariaCount={pillar.issues.filter(i => 
-                                    i.title?.toLowerCase().includes('aria') || 
-                                    i.description?.toLowerCase().includes('aria')
-                                  ).length}
+                            </div>
+                          )}
+                          
+                          {/* 🍪 NEU: Cookie/TCF-Spezifische Komponenten */}
+                          {pillar.id === 'cookies' && analysisData && analysisData.tcf_data && (
+                            <div className="mt-6">
+                              <ErrorBoundary componentName="TCFComplianceWidget">
+                                <TCFComplianceWidget
+                                  scanId={analysisData.scan_id || analysisData.site_id}
+                                  tcfData={analysisData.tcf_data}
                                 />
                               </ErrorBoundary>
                             </div>

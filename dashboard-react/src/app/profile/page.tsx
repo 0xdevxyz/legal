@@ -89,9 +89,9 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <main role="main" aria-label="Profil und Einstellungen" className="min-h-screen bg-gray-900 text-white">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-900 to-purple-900 py-12">
+      <header className="bg-gradient-to-r from-blue-900 to-purple-900 py-12">
         <div className="max-w-4xl mx-auto px-4">
           <div className="flex items-center gap-3 mb-2">
             <Shield className="w-8 h-8 text-blue-400" />
@@ -99,10 +99,10 @@ export default function ProfilePage() {
           </div>
           <p className="text-gray-300">Verwalten Sie Ihre persönlichen Daten und Rechnungsinformationen</p>
         </div>
-      </div>
+      </header>
 
       {/* Content */}
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <section aria-label="Profil-Verwaltung" className="max-w-4xl mx-auto px-4 py-8">
         {/* Success/Error Messages */}
         {successMessage && (
           <div className="mb-6 p-4 bg-green-900/30 border border-green-500 rounded-lg flex items-center gap-2 text-green-200">
@@ -374,8 +374,8 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
 

@@ -33,6 +33,15 @@ from compliance_engine.legal_update_integration import legal_update_integration
 # Import Issue Grouper
 from compliance_engine.issue_grouper import IssueGrouper
 
+# Import TCF 2.2 Support
+try:
+    from compliance_engine.checks.tcf_check import check_tcf_compliance
+    from compliance_engine.tcf_vendor_analyzer import tcf_vendor_analyzer
+    TCF_AVAILABLE = True
+except ImportError:
+    TCF_AVAILABLE = False
+    logger.warning("⚠️ TCF 2.2 module not available")
+
 @dataclass
 class ComplianceIssue:
     category: str
@@ -124,10 +133,26 @@ class ComplianceScanner:
             for issue_dict in datenschutz_issues:
                 issues.append(ComplianceIssue(**issue_dict))
             
-            # Cookie-Compliance (TTDSG)
+            # Cookie-Compliance (TTDSG) - inkludiert TCF 2.2 Check
             cookie_issues = await check_cookie_compliance(url, soup, self.session)
             for issue_dict in cookie_issues:
                 issues.append(ComplianceIssue(**issue_dict))
+            
+            # ✅ TCF 2.2: Vendor Analysis (optional, additional data)
+            tcf_data = {}
+            if TCF_AVAILABLE:
+                try:
+                    tcf_data = await check_tcf_compliance(url, soup, main_page['content'])
+                    
+                    # Vendor Detection
+                    detected_vendors = await tcf_vendor_analyzer.analyze_vendors_on_page(soup, main_page['content'])
+                    tcf_data["detected_vendors"] = detected_vendors
+                    tcf_data["vendor_count"] = len(detected_vendors)
+                    
+                    logger.info(f"✅ TCF 2.2 Check completed: {tcf_data.get('cmp_name', 'No CMP')}, {len(detected_vendors)} vendors")
+                except Exception as e:
+                    logger.warning(f"⚠️ TCF analysis failed: {e}")
+                    tcf_data = {"has_tcf": False, "error": str(e)}
             
             # Legacy checks (still useful)
             issues.extend(await self._check_ssl_security(url))
@@ -146,6 +171,11 @@ class ComplianceScanner:
             max_possible_issues = 15  # Rough estimate of maximum issues
             compliance_score = max(0, 100 - (critical_issues * 20 + warning_issues * 5))
             
+            # ✅ TCF 2.2 Bonus: +5 Punkte für vollständige TCF Implementation
+            if tcf_data.get("has_tcf") and tcf_data.get("tc_string_found") and len(tcf_data.get("issues", [])) == 0:
+                compliance_score = min(100, compliance_score + 5)
+                logger.info(f"✅ TCF 2.2 Bonus: +5 points (TCF fully compliant)")
+            
             # End timing
             end_time = datetime.now()
             scan_duration = int((end_time - start_time).total_seconds() * 1000)
@@ -162,7 +192,8 @@ class ComplianceScanner:
                 "issues": [asdict(issue) for issue in issues],
                 "recommendations": self._generate_recommendations(issues),
                 "next_steps": self._generate_next_steps(issues),
-                "has_accessibility_widget": has_accessibility_widget  # ✅ NEU: Widget-Status
+                "has_accessibility_widget": has_accessibility_widget,  # ✅ Widget-Status
+                "tcf_data": tcf_data  # ✅ NEU: TCF 2.2 Data
             }
             
             # 🆕 LEGAL UPDATE INTEGRATION: Anwendung aktueller Gesetzesänderungen
@@ -180,9 +211,9 @@ class ComplianceScanner:
             try:
                 grouper = IssueGrouper()
                 scan_results = grouper.enrich_scan_results(scan_results)
-                logger.info(f"✅ Issue-Gruppierung abgeschlossen: {scan_results.get('grouping_stats', {}).get('total_groups', 0)} Gruppen")
+                logger.info(f"✅ Issue-Gruppierung abgeschlossen: {scan_results.get('grouping_stats', {}).get('total_groups', 0)} Gruppen, {scan_results.get('grouping_stats', {}).get('grouping_rate', 0):.1f}% gruppiert")
             except Exception as e:
-                logger.warning(f"⚠️ Issue-Gruppierung fehlgeschlagen: {e}")
+                logger.error(f"❌ Issue-Gruppierung fehlgeschlagen: {e}", exc_info=True)
             
             return scan_results
             

@@ -4,14 +4,14 @@ import React, { useState, useEffect } from 'react';
 import { TrendingUp, Users, Target, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface AnalyticsData {
-  visitors: { professional: number; original: number; highConversion: number };
-  conversions: { professional: number; original: number; highConversion: number };
+  visitors: { professional: number; original: number; highConversion: number; viral: number };
+  conversions: { professional: number; original: number; highConversion: number; viral: number };
 }
 
 export default function AdminDashboard() {
   const [analytics, setAnalytics] = useState<AnalyticsData>({
-    visitors: { professional: 0, original: 0, highConversion: 0 },
-    conversions: { professional: 0, original: 0, highConversion: 0 }
+    visitors: { professional: 0, original: 0, highConversion: 0, viral: 0 },
+    conversions: { professional: 0, original: 0, highConversion: 0, viral: 0 }
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,9 +42,10 @@ export default function AdminDashboard() {
         visitors: { 
           professional: storedVariant === 'professional' ? 1 : 0,
           original: storedVariant === 'original' ? 1 : 0, 
-          highConversion: storedVariant === 'high-conversion' ? 1 : 0 
+          highConversion: storedVariant === 'high-conversion' ? 1 : 0,
+          viral: storedVariant === 'viral' ? 1 : 0
         },
-        conversions: { professional: 0, original: 0, highConversion: 0 }
+        conversions: { professional: 0, original: 0, highConversion: 0, viral: 0 }
       };
       setAnalytics(mockData);
     } finally {
@@ -59,8 +60,8 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const totalVisitors = analytics.visitors.professional + analytics.visitors.original + analytics.visitors.highConversion;
-  const totalConversions = analytics.conversions.professional + analytics.conversions.original + analytics.conversions.highConversion;
+  const totalVisitors = analytics.visitors.professional + analytics.visitors.original + analytics.visitors.highConversion + analytics.visitors.viral;
+  const totalConversions = analytics.conversions.professional + analytics.conversions.original + analytics.conversions.highConversion + analytics.conversions.viral;
   
   const conversionRateProfessional = analytics.visitors.professional > 0 
     ? (analytics.conversions.professional / analytics.visitors.professional * 100) 
@@ -71,9 +72,12 @@ export default function AdminDashboard() {
   const conversionRateHighConversion = analytics.visitors.highConversion > 0
     ? (analytics.conversions.highConversion / analytics.visitors.highConversion * 100)
     : 0;
+  const conversionRateViral = analytics.visitors.viral > 0
+    ? (analytics.conversions.viral / analytics.visitors.viral * 100)
+    : 0;
   
-  const bestRate = Math.max(conversionRateProfessional, conversionRateOriginal, conversionRateHighConversion);
-  const improvement = bestRate > 0 ? bestRate - Math.min(conversionRateProfessional || 100, conversionRateOriginal || 100, conversionRateHighConversion || 100) : 0;
+  const bestRate = Math.max(conversionRateProfessional, conversionRateOriginal, conversionRateHighConversion, conversionRateViral);
+  const improvement = bestRate > 0 ? bestRate - Math.min(conversionRateProfessional || 100, conversionRateOriginal || 100, conversionRateHighConversion || 100, conversionRateViral || 100) : 0;
 
   if (loading && totalVisitors === 0) {
     return (
@@ -91,7 +95,7 @@ export default function AdminDashboard() {
       <div className="bg-gray-800 border-b border-gray-700">
         <div className="container mx-auto px-6 py-6 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Complyo A/B Test Dashboard (3 Varianten)</h1>
+            <h1 className="text-3xl font-bold">Complyo A/B Test Dashboard (5 Varianten)</h1>
             <p className="text-gray-400 mt-1">
               Live Performance Analytics 
               {error && <span className="text-orange-400"> · {error}</span>}
@@ -157,7 +161,7 @@ export default function AdminDashboard() {
           <div className="mb-8 p-6 rounded-xl border-2 bg-green-900/20 border-green-500">
             <div className="text-center">
               <h2 className="text-2xl font-bold mb-2">
-                🏆 {conversionRateProfessional === bestRate ? 'PROFESSIONAL' : conversionRateHighConversion === bestRate ? 'HIGH-CONVERSION' : 'ORIGINAL'} VARIANT GEWINNT!
+                🏆 {conversionRateViral === bestRate ? 'VIRAL' : conversionRateProfessional === bestRate ? 'PROFESSIONAL' : conversionRateHighConversion === bestRate ? 'HIGH-CONVERSION' : 'ORIGINAL'} VARIANT GEWINNT!
               </h2>
               <p className="text-lg">
                 {improvement > 0 && `${improvement.toFixed(1)}% bessere Performance als die schlechteste Variante`}
@@ -219,7 +223,7 @@ export default function AdminDashboard() {
                     )}
                   </td>
                 </tr>
-                <tr>
+                <tr className="border-b border-gray-700">
                   <td className="py-4 px-4">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-red-500 rounded-full"></div>
@@ -238,6 +242,25 @@ export default function AdminDashboard() {
                     )}
                   </td>
                 </tr>
+                <tr>
+                  <td className="py-4 px-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
+                      Viral (Pykaso/Web3)
+                    </div>
+                  </td>
+                  <td className="py-4 px-4 text-gray-400">Manuell</td>
+                  <td className="py-4 px-4 font-semibold">{analytics.visitors.viral}</td>
+                  <td className="py-4 px-4 font-semibold">{analytics.conversions.viral}</td>
+                  <td className="py-4 px-4 font-semibold">{conversionRateViral.toFixed(2)}%</td>
+                  <td className="py-4 px-4">
+                    {conversionRateViral === bestRate ? (
+                      <span className="text-green-400 font-semibold">🏆 Winner</span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -245,7 +268,7 @@ export default function AdminDashboard() {
 
         <div className="mt-8 bg-gray-800 rounded-xl p-6 border border-gray-700">
           <h3 className="text-xl font-bold mb-4">Test URLs</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <a href="/" className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg text-center font-semibold transition-colors">
               🎲 Random (gewichtet)
             </a>
@@ -257,6 +280,9 @@ export default function AdminDashboard() {
             </a>
             <a href="/?variant=high-conversion" className="bg-red-600 hover:bg-red-700 text-white p-4 rounded-lg text-center font-semibold transition-colors">
               🔥 High-Conversion
+            </a>
+            <a href="/?variant=viral" className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white p-4 rounded-lg text-center font-semibold transition-colors">
+              ✨ Viral (Neu!)
             </a>
           </div>
         </div>
