@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { ComplianceIssue, FixResult } from '@/types/api';
 import { generateFix } from '@/lib/api';
-import { Copy, Check, FileText, Shield, ExternalLink, Sparkles } from 'lucide-react';
+import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie } from 'lucide-react';
 import { StripePaywallModal } from './StripePaywallModal';
 import { ConfirmFixModal } from './ConfirmFixModal';
 import { FixModal } from './FixModal';
@@ -12,6 +12,15 @@ import { AIFixPreview, AIFixPreviewMini } from '@/components/ai/AIFixPreview';
 import { AIFixDisplay } from '@/components/ai/AIFixDisplay'; // NEW: Enhanced Fix Display
 import { useCreateFixJob } from '@/hooks/useCompliance';
 import { UnifiedFixButton } from './UnifiedFixButton';
+import { useRouter } from 'next/navigation';
+import { useDashboardStore } from '@/stores/dashboard';
+
+// Hilfsfunktion: Ist es ein Cookie-Problem?
+const isCookieIssue = (issue: ComplianceIssue): boolean => {
+  const category = issue.category?.toLowerCase() || '';
+  const title = issue.title?.toLowerCase() || '';
+  return category.includes('cookie') || title.includes('cookie') || title.includes('consent');
+};
 
 const extractDomain = (url: string): string => {
   try {
@@ -78,7 +87,16 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   onStartFix
 }) => {
   const { showToast } = useToast();
+  const router = useRouter();
   const createFixJob = useCreateFixJob();
+  const { isInOptimizationMode, lockedOptimizationUrl } = useDashboardStore();
+  
+  // Prüfe ob Optimierung erlaubt ist (nur für gelockte Seite oder wenn kein Lock aktiv)
+  const canOptimize = !isInOptimizationMode || 
+    (lockedOptimizationUrl && websiteUrl && 
+     (websiteUrl === lockedOptimizationUrl || 
+      websiteUrl.includes(lockedOptimizationUrl) ||
+      lockedOptimizationUrl.includes(websiteUrl)));
   const [isFixing, setIsFixing] = useState(false);
   const [generatedFix, setGeneratedFix] = useState<FixResult | null>(null);
   const [showFixModal, setShowFixModal] = useState(false);
@@ -346,7 +364,13 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       
       setGeneratedFix(result);
       setShowFixModal(true);
-      showToast('Fix erfolgreich generiert!', 'success');
+      showToast('✅ Fix erfolgreich generiert!', 'success', 5000);
+      // ✅ Success-Animation für wichtige Erfolge
+      if (window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('complyo:fix-success', { 
+          detail: { issueId: issue.id, category: issue.category } 
+        }));
+      }
       
       if (onStartFix) {
         onStartFix(issue.id);
@@ -546,6 +570,53 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
             </div>
           )}
           
+          {/* ✅ NEU: Cookie-Compliance Anleitung mit Link zur integrierten Lösung */}
+          {isCookieIssue(issue) && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-orange-500/20 rounded-lg flex-shrink-0">
+                  <Cookie className="w-5 h-5 text-orange-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-orange-800 font-medium mb-2">🍪 Cookie-Compliance mit Complyo beheben:</p>
+                  <p className="text-sm text-orange-700 mb-3">
+                    Complyo bietet eine <strong>integrierte DSGVO-konforme Cookie-Banner-Lösung</strong> - 
+                    ohne externe Tools wie Cookiebot oder Usercentrics!
+                  </p>
+                  <ul className="text-sm text-orange-700 space-y-1.5 mb-4">
+                    <li className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      Automatische Cookie-Erkennung
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      Anpassbares Design & Texte
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      Consent-Statistiken & Reporting
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      WCAG 2.2 Level AA barrierefrei
+                    </li>
+                  </ul>
+                  <button
+                    onClick={() => router.push('/cookie-compliance')}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold rounded-lg hover:from-orange-600 hover:to-red-600 transition-all shadow-lg shadow-orange-500/25"
+                  >
+                    <Cookie className="w-5 h-5" />
+                    Cookie-Compliance einrichten
+                    <ExternalLink className="w-4 h-4" />
+                  </button>
+                  <p className="text-xs text-orange-600 mt-2 text-center">
+                    ✨ Im AI Plan enthalten - keine Zusatzkosten!
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          
           {/* Steps für andere Issue-Typen */}
           {issue.solution.steps && issue.solution.steps.length > 0 && 
            !issue.category?.includes('datenschutz') && 
@@ -597,7 +668,25 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       {/* AI-Fix Section - Prominent und interaktiv - ALLE NUTZER (auch Free!) */}
       {issue.auto_fixable && (planType === 'free' || planType === 'ai' || planType === 'expert') && (
         <div className="mt-4 space-y-3">
-          {!showAIPreview ? (
+          {/* ✅ Warnung wenn Optimierung nicht für diese Seite erlaubt */}
+          {!canOptimize && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-center gap-2 text-amber-800">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span className="text-sm font-medium">
+                  Optimierung nur für gelockte Seite verfügbar
+                </span>
+              </div>
+              <p className="text-xs text-amber-700 mt-1 ml-6">
+                KI-Fixes sind nur für <strong>{lockedOptimizationUrl}</strong> personalisiert. 
+                Diese Analyse dient nur zur Information.
+              </p>
+            </div>
+          )}
+          
+          {canOptimize && !showAIPreview ? (
             <div className="flex items-center gap-3">
               <UnifiedFixButton
                 issueTitle={issue.title}
@@ -610,15 +699,15 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                 Lassen Sie die KI eine Lösung generieren
               </span>
             </div>
-          ) : (
+          ) : canOptimize && showAIPreview ? (
             <AIFixPreview
               issue={issue}
               onGenerateFull={handleStartFixClick}
             />
-          )}
+          ) : null}
           
           {/* Mini alternative for less prominent placement */}
-          {!showAIPreview && issue.severity === 'critical' && (
+          {canOptimize && !showAIPreview && issue.severity === 'critical' && (
             <div className="p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
               <p className="text-sm text-gray-700 mb-2">
                 💡 <strong>KI-Tipp:</strong> Dieses Problem lässt sich schnell beheben

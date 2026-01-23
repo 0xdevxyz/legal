@@ -57,11 +57,11 @@ async def get_legal_updates(
                     severity,
                     impact_level,
                     affected_areas,
-                    published_at,
+                    published_date as published_at,
                     action_required
                 FROM legal_updates
                 {where_clause}
-                ORDER BY published_at DESC NULLS LAST
+                ORDER BY published_date DESC NULLS LAST
                 LIMIT $1
             """
             

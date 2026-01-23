@@ -57,18 +57,38 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         logger.error(f"Authentication failed: {e}")
         raise HTTPException(status_code=401, detail="Not authenticated")
 
+# ✅ Helper function to extract user_id from token (with DB lookup)
+async def get_user_id_from_token(user: Dict[str, Any]) -> Any:
+    """Extract user_id from token and verify in database"""
+    user_id_from_token = user.get("id") or user.get("user_id")
+    
+    if not user_id_from_token:
+        logger.error(f"No user_id in token: {user}")
+        raise HTTPException(status_code=403, detail="User ID not found in token")
+    
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database not available")
+    
+    # ✅ Hole echte user_id aus DB (kann UUID sein)
+    async with db_pool.acquire() as conn:
+        db_user = await conn.fetchrow(
+            "SELECT id FROM users WHERE id::text = $1 OR email = $2 LIMIT 1",
+            str(user_id_from_token),
+            user.get("email", "")
+        )
+        
+        if not db_user:
+            logger.error(f"User not found in database for token: {user_id_from_token}")
+            raise HTTPException(status_code=403, detail="User not found in database")
+        
+        return db_user["id"]
+
 @router.get("", response_model=WebsitesResponse)
 async def get_websites(user=Depends(get_current_user)):
     """Get all tracked websites for the current user"""
     try:
-        user_id = user.get("id") or user.get("user_id")
-        
-        if not db_pool:
-            raise HTTPException(status_code=500, detail="Database not available")
-        
-        if not user_id:
-            logger.error(f"No user_id in token: {user}")
-            raise HTTPException(status_code=403, detail="User ID not found in token")
+        # ✅ FIX: Verwende Helper-Funktion für user_id
+        user_id = await get_user_id_from_token(user)
         
         async with db_pool.acquire() as conn:
             # Get tracked websites
@@ -90,10 +110,10 @@ async def get_websites(user=Depends(get_current_user)):
                 {
                     "id": row["id"],
                     "url": row["url"],
-                    "last_score": row["last_score"],
+                    "last_score": int(row["last_score"]) if row["last_score"] is not None else 0,
                     "last_scan_date": row["last_scan_date"].isoformat() if row["last_scan_date"] else None,
-                    "scan_count": row["scan_count"],
-                    "is_primary": row["is_primary"]
+                    "scan_count": int(row.get("scan_count", 0)) if row.get("scan_count") is not None else 0,
+                    "is_primary": bool(row.get("is_primary", False))
                 }
                 for row in rows
             ]
@@ -114,10 +134,8 @@ async def get_websites(user=Depends(get_current_user)):
 async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
     """Save or update a tracked website"""
     try:
-        user_id = user.get("user_id")
-        
-        if not db_pool:
-            raise HTTPException(status_code=500, detail="Database not available")
+        # ✅ FIX: Verwende Helper-Funktion für user_id
+        user_id = await get_user_id_from_token(user)
         
         async with db_pool.acquire() as conn:
             # Check if website already exists
@@ -213,13 +231,13 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
             
             return {
                 "success": True,
-                "website": {
+                "website":                 {
                     "id": website["id"],
                     "url": website["url"],
-                    "last_score": website["last_score"],
+                    "last_score": int(website["last_score"]) if website["last_score"] is not None else 0,
                     "last_scan_date": website["last_scan_date"].isoformat() if website["last_scan_date"] else None,
-                    "scan_count": website["scan_count"],
-                    "is_primary": website["is_primary"]
+                    "scan_count": int(website.get("scan_count", 0)) if website.get("scan_count") is not None else 0,
+                    "is_primary": bool(website.get("is_primary", False))
                 }
             }
             
@@ -234,10 +252,8 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
 async def delete_website(website_id: int, user=Depends(get_current_user)):
     """Delete a tracked website"""
     try:
-        user_id = user.get("user_id")
-        
-        if not db_pool:
-            raise HTTPException(status_code=500, detail="Database not available")
+        # ✅ FIX: Verwende Helper-Funktion für user_id
+        user_id = await get_user_id_from_token(user)
         
         async with db_pool.acquire() as conn:
             # Check if website exists and belongs to user
@@ -283,11 +299,10 @@ async def get_last_scan(
     website_id: int,
     user: Dict[str, Any] = Depends(get_current_user)
 ):
-    """
-    Get the last scan result for a specific website
-    """
+    """Get last scan for a website"""
     try:
-        user_id = user.get('user_id')
+        # ✅ FIX: Verwende Helper-Funktion für user_id
+        user_id = await get_user_id_from_token(user)
         
         async with db_pool.acquire() as conn:
             # Verify website belongs to user
@@ -349,10 +364,8 @@ async def get_score_history(
         List of score history entries
     """
     try:
-        user_id = user.get("user_id")
-        
-        if not db_pool:
-            raise HTTPException(status_code=500, detail="Database not available")
+        # ✅ FIX: Verwende Helper-Funktion für user_id
+        user_id = await get_user_id_from_token(user)
         
         async with db_pool.acquire() as conn:
             # Verify website belongs to user

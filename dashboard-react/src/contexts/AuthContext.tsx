@@ -1,6 +1,28 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+// Intelligente API-URL-Erkennung
+const getApiBase = () => {
+  // 1. Environment-Variable hat Priorität
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  
+  // 2. Für Browser: Prüfe Hostname
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:8002';
+    }
+    if (hostname.includes('complyo.tech')) {
+      return 'https://api.complyo.tech';
+    }
+  }
+  
+  // 3. Fallback für lokale Entwicklung
+  return 'http://localhost:8002';
+};
+
+const API_BASE = getApiBase();
 
 interface User {
     id: number;
@@ -47,16 +69,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     useEffect(() => {
         if (!accessToken) return;
         
-        const refreshInterval = setInterval(async () => {
+        const refreshTokenWithRetry = async (retries = 3): Promise<boolean> => {
             const refreshToken = localStorage.getItem('refresh_token');
-            if (refreshToken) {
+            if (!refreshToken) return false;
+            
+            for (let i = 0; i < retries; i++) {
                 try {
-
+                    // ✅ Timeout für Request (10 Sekunden)
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 10000);
+                    
                     const response = await fetch(`${API_BASE}/api/auth/refresh`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ refresh_token: refreshToken }),
+                        signal: controller.signal,
                     });
+                    
+                    clearTimeout(timeoutId);
                     
                     if (response.ok) {
                         const data = await response.json();
@@ -66,14 +96,48 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         if (typeof document !== 'undefined') {
                             document.cookie = `access_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax; Secure`;
                         }
-                    } else {
-
-                        logout();
+                        return true;
                     }
-                } catch (error) {
-                    console.error('Token refresh error:', error);
+                    
+                    // ✅ Bei 401: Token ungültig, nicht retry
+                    if (response.status === 401) {
+                        console.log('Refresh token invalid, logging out');
+                        logout();
+                        return false;
+                    }
+                    
+                    // ✅ Bei anderen Fehlern: Retry mit exponential backoff
+                    if (i < retries - 1) {
+                        const delay = 1000 * Math.pow(2, i); // 1s, 2s, 4s
+                        console.log(`Token refresh failed, retrying in ${delay}ms... (attempt ${i + 1}/${retries})`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+                } catch (error: any) {
+                    // ✅ Netzwerk-Fehler: Retry
+                    if (error.name === 'AbortError' || error.name === 'TypeError' || error.message?.includes('fetch')) {
+                        if (i < retries - 1) {
+                            const delay = 1000 * Math.pow(2, i); // 1s, 2s, 4s
+                            console.log(`Network error during token refresh, retrying in ${delay}ms... (attempt ${i + 1}/${retries})`);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            continue;
+                        }
+                    }
+                    
+                    // ✅ Letzter Versuch fehlgeschlagen
+                    if (i === retries - 1) {
+                        console.error('Token refresh failed after all retries:', error);
+                        // ✅ Nicht sofort ausloggen bei Netzwerk-Fehlern
+                        // User kann noch arbeiten, Token wird beim nächsten Request refreshed
+                        return false;
+                    }
                 }
             }
+            return false;
+        };
+        
+        const refreshInterval = setInterval(async () => {
+            await refreshTokenWithRetry();
         }, 50 * 60 * 1000); // 50 minutes
         
         return () => clearInterval(refreshInterval);

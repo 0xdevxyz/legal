@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import logging
 import secrets
+import os
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,20 @@ async def init_user_limits(user_id: int, plan_type: str):
 @router.post("/register", response_model=TokenResponse)
 async def register(request: RegisterRequest):
     """Register a new user"""
+    if auth_service is None:
+        logger.error("Auth service not initialized")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication service not available"
+        )
+    
+    if db_pool is None:
+        logger.error("Database pool not initialized")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database not available"
+        )
+    
     try:
         # Check if email exists
         existing = await auth_service.get_user_by_email(request.email)
@@ -98,6 +113,14 @@ async def register(request: RegisterRequest):
                 "company": user.get('company')
             }
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Registration error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -113,28 +136,44 @@ async def register(request: RegisterRequest):
 @router.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest):
     """Login user"""
-    user = await auth_service.authenticate(request.email, request.password)
-    if not user:
+    if auth_service is None:
+        logger.error("Auth service not initialized")
         raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungültige Zugangsdaten"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication service not available"
         )
     
-    # Create tokens
-    access_token = auth_service.create_access_token(user['id'])
-    refresh_token = await auth_service.create_refresh_token(user['id'])
-    
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "user": {
-            "id": user['id'],
-            "email": user['email'],
-            "full_name": user['full_name'],
-            "company": user.get('company')
+    try:
+        user = await auth_service.authenticate(request.email, request.password)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Ungültige Zugangsdaten"
+            )
+        
+        # Create tokens
+        access_token = auth_service.create_access_token(user['id'])
+        refresh_token = await auth_service.create_refresh_token(user['id'])
+        
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "user": {
+                "id": user['id'],
+                "email": user['email'],
+                "full_name": user['full_name'],
+                "company": user.get('company')
+            }
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Login error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login failed: {str(e)}"
+        )
 
 @router.post("/refresh")
 async def refresh_token(request: RefreshRequest):
@@ -410,3 +449,86 @@ async def auth_health():
         "oauth_service_initialized": oauth_service is not None,
         "firebase_auth_initialized": firebase_verify_token is not None
     }
+
+@router.post("/admin/reset-master-password")
+async def reset_master_password(admin_key: str = Query(..., alias="admin_key")):
+    """
+    Admin Endpoint: Setzt das Passwort für master@complyo.tech zurück
+    
+    Query Parameter:
+    - admin_key: Admin-Schlüssel (default: "admin_reset_2025")
+    """
+    import bcrypt
+    
+    # Einfache Admin-Authentifizierung
+    expected_key = os.getenv("ADMIN_KEY", "admin_reset_2025")
+    if admin_key != expected_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized"
+        )
+    
+    if auth_service is None or db_pool is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Services not initialized"
+        )
+    
+    email = "master@complyo.tech"
+    new_password = "Master123!"  # Standard-Passwort
+    
+    try:
+        # Prüfe ob User existiert
+        user = await auth_service.get_user_by_email(email)
+        
+        if not user:
+            # User erstellen
+            user = await auth_service.register_user(
+                email,
+                new_password,
+                "Master User",
+                "Complyo"
+            )
+            
+            # User Limits initialisieren
+            await init_user_limits(user['id'], 'expert')
+            
+            logger.info(f"Master user created: {email}")
+            return {
+                "success": True,
+                "message": "Master user created",
+                "email": email,
+                "password": new_password,
+                "warning": "Please change password after first login"
+            }
+        else:
+            # Passwort zurücksetzen
+            password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            
+            async with db_pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    UPDATE users 
+                    SET hashed_password = $1, 
+                        is_active = TRUE, 
+                        is_verified = TRUE
+                    WHERE email = $2
+                    """,
+                    password_hash, email
+                )
+            
+            logger.info(f"Master user password reset: {email}")
+            return {
+                "success": True,
+                "message": "Password reset successfully",
+                "email": email,
+                "password": new_password,
+                "warning": "Please change password after first login"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error resetting master password: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset password: {str(e)}"
+        )

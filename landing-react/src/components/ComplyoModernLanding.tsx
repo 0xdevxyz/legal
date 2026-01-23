@@ -28,7 +28,7 @@ import { Logo } from './Logo';
  */
 export default function ComplyoModernLanding() {
   return (
-    <div className="min-h-screen bg-white overflow-hidden">
+    <div className="min-h-screen bg-white">
       {/* Header mit Hero Section */}
       <header>
         {/* Navigation */}

@@ -30,6 +30,9 @@
     const CONSENT_DATE_KEY = 'complyo_consent_date';
     const VISITOR_ID_KEY = 'complyo_visitor_id';
     
+    // Supported Languages (Phase 7)
+    const SUPPORTED_LANGUAGES = ['de', 'en', 'fr', 'es', 'it', 'nl', 'pl', 'pt', 'sv', 'da', 'fi', 'no', 'cs', 'hu', 'ro', 'el', 'ru'];
+    
     // Default Configuration
     const DEFAULT_CONFIG = {
         // Design
@@ -48,35 +51,83 @@
         cookieLifetimeDays: 365,
         showBranding: true,
         
+        // Google Consent Mode v2 (Pflicht seit Maerz 2024)
+        consent_mode_enabled: true,
+        consent_mode_default: {
+            ad_storage: 'denied',
+            analytics_storage: 'denied',
+            ad_user_data: 'denied',
+            ad_personalization: 'denied'
+        },
+        
+        // Google Tag Manager
+        gtm_enabled: false,
+        gtm_container_id: null,
+        
+        // Geo-Restriction
+        geo_restriction_enabled: false,
+        geo_countries: [],
+        
+        // Age Verification (Jugendschutz)
+        age_verification_enabled: false,
+        age_verification_min_age: 16,
+        
+        // Bannerless Mode
+        bannerless_mode: false,
+        
+        // Services
+        consent_mode_enabled: true,
+        consent_mode_default: {
+            ad_storage: 'denied',
+            analytics_storage: 'denied',
+            ad_user_data: 'denied',
+            ad_personalization: 'denied'
+        },
+        
+        // Google Tag Manager
+        gtm_enabled: false,
+        gtm_container_id: null,
+        
+        // Geo-Restriction
+        geo_restriction_enabled: false,
+        geo_countries: [],
+        
+        // Age Verification (Jugendschutz)
+        age_verification_enabled: false,
+        age_verification_min_age: 16,
+        
+        // Bannerless Mode
+        bannerless_mode: false,
+        
         // Services
         services: [],
         
         // Texts (default German) - synchronisiert mit Dashboard
         texts: {
-            title: '🍪 Wir respektieren Ihre Privatsphäre',
-            description: 'Wir verwenden Cookies und ähnliche Technologien, um Inhalte zu personalisieren und die Nutzung unserer Website zu analysieren. Einige davon sind essentiell, während andere uns helfen, die Website zu verbessern.',
-            description2: '',
+            title: 'Datenschutz-Präferenz',
+            description: 'Wir benötigen Ihre Einwilligung, bevor Sie unsere Website weiter besuchen können.\n\nWenn Sie unter 16 Jahre alt sind und Ihre Einwilligung zu optionalen Services geben möchten, müssen Sie Ihre Erziehungsberechtigten um Erlaubnis bitten.\n\nWir verwenden Cookies und andere Technologien auf unserer Website. Einige von ihnen sind essenziell, während andere uns helfen, diese Website und Ihre Erfahrung zu verbessern. Personenbezogene Daten können verarbeitet werden (z. B. IP-Adressen), z. B. für personalisierte Anzeigen und Inhalte oder die Messung von Anzeigen und Inhalten. Weitere Informationen über die Verwendung Ihrer Daten finden Sie in unserer Datenschutzerklärung. Es besteht keine Verpflichtung, in die Verarbeitung Ihrer Daten einzuwilligen, um dieses Angebot zu nutzen. Sie können Ihre Auswahl jederzeit unter Einstellungen widerrufen oder anpassen. Bitte beachten Sie, dass aufgrund individueller Einstellungen möglicherweise nicht alle Funktionen der Website verfügbar sind.',
+            description2: 'Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwilligung zur Nutzung dieser Services willigen Sie auch in die Verarbeitung Ihrer Daten in den USA gemäß Art. 49 (1) lit. a DSGVO ein. Der EuGH stuft die USA als ein Land mit unzureichendem Datenschutz nach EU-Standards ein. Es besteht beispielsweise die Gefahr, dass US-Behörden personenbezogene Daten in Überwachungsprogrammen verarbeiten, ohne dass für Europäerinnen und Europäer eine Klagemöglichkeit besteht.',
             ageNotice: '',
             acceptAll: 'Alle akzeptieren',
-            continueWithout: 'Nur notwendige',
-            settingsLink: 'Individuelle Einstellungen',
-            acceptSelected: 'Auswahl speichern',
+            continueWithout: 'Nur essenzielle Cookies akzeptieren',
+            settingsLink: 'Individuelle Datenschutzeinstellungen',
+            acceptSelected: 'Speichern',
             settings: 'Einstellungen',
             privacyPolicy: 'Datenschutzerklärung',
             cookiePolicy: 'Über Cookies',
             imprint: 'Impressum',
-            necessary: 'Notwendig',
-            functional: 'Präferenzen',
+            necessary: 'Essenziell',
+            functional: 'Funktional',
             analytics: 'Statistiken',
-            marketing: 'Marketing',
-            necessaryDesc: 'Notwendige Cookies helfen dabei, eine Webseite nutzbar zu machen, indem sie Grundfunktionen wie Seitennavigation und Zugriff auf sichere Bereiche der Webseite ermöglichen. Die Webseite kann ohne diese Cookies nicht richtig funktionieren.',
-            functionalDesc: 'Präferenz-Cookies ermöglichen einer Webseite sich an Informationen zu erinnern, die die Art beeinflussen, wie sich eine Webseite verhält oder aussieht, wie z.B. Ihre bevorzugte Sprache oder die Region in der Sie sich befinden.',
+            marketing: 'Externe Medien',
+            necessaryDesc: 'Essenzielle Services ermöglichen grundlegende Funktionen und sind für das ordnungsgemäße Funktionieren der Website erforderlich.',
+            functionalDesc: 'Funktionale Cookies speichern Ihre Präferenzen wie Sprache und Region für ein verbessertes Nutzungserlebnis.',
             analyticsDesc: 'Statistik-Cookies helfen Webseiten-Besitzern zu verstehen, wie Besucher mit Webseiten interagieren, indem Informationen anonym gesammelt und gemeldet werden.',
-            marketingDesc: 'Marketing-Cookies werden verwendet, um Besuchern auf Webseiten zu folgen. Die Absicht ist, Anzeigen zu zeigen, die relevant und ansprechend für den einzelnen Benutzer sind und daher wertvoller für Publisher und werbetreibende Drittparteien sind.',
+            marketingDesc: 'Inhalte von Videoplattformen und Social-Media-Plattformen werden standardmäßig blockiert. Wenn externe Services akzeptiert werden, ist für den Zugriff auf diese Inhalte keine manuelle Einwilligung mehr erforderlich.',
             serviceCount: 'Service',
             learnMore: 'Erfahren Sie mehr über diesen Anbieter',
-            expand: 'Details anzeigen',
-            collapse: 'Details ausblenden'
+            expand: 'Informationen anzeigen',
+            collapse: 'Informationen ausblenden'
         }
     };
     
@@ -217,9 +268,15 @@
         }
         
         async init() {
+            // ✅ Initialize Google Consent Mode v2 FIRST (before any Google scripts load)
+            // This MUST happen before gtag.js or analytics.js loads
+            this.initGoogleConsentMode();
+            
             // Check Do Not Track
             if (this.config.respectDNT && this.isDNTEnabled()) {
                 console.log('[Complyo] Do Not Track detected. Banner not shown.');
+                // Still update consent mode for DNT users
+                this.updateGoogleConsentMode({ necessary: true, functional: false, analytics: false, marketing: false });
                 return;
             }
             
@@ -228,12 +285,161 @@
                 await this.loadServerConfig();
             }
             
+            // ✅ Phase 2: Check Geo-Restriction
+            if (this.config.geo_restriction_enabled && this.config.geo_countries?.length > 0) {
+                const shouldShow = await this.checkGeoRestriction();
+                if (!shouldShow) {
+                    console.log('[Complyo] Geo-restriction: Banner not shown in this region');
+                    return;
+                }
+            }
+            
+            // ✅ Phase 6: Check for Bannerless Mode
+            if (this.config.bannerless_mode) {
+                console.log('[Complyo] Bannerless mode enabled - only content blockers active');
+                // In bannerless mode, we don't show a banner but content blockers are still active
+                // The consent will be set to "only necessary" automatically
+                this.consent = {
+                    necessary: true,
+                    functional: false,
+                    analytics: false,
+                    marketing: false,
+                    bannerless: true
+                };
+                this.updateGoogleConsentMode(this.consent);
+                return;
+            }
+            
             // Wait for DOM
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', () => this.onDOMReady());
             } else {
                 this.onDOMReady();
             }
+        }
+        
+        /**
+         * ✅ Phase 2: Geo-Restriction Check
+         */
+        async checkGeoRestriction() {
+            try {
+                const response = await fetch(`${API_BASE}/api/cookie-compliance/geo-check`);
+                if (response.ok) {
+                    const data = await response.json();
+                    const visitorCountry = data.country_code;
+                    const allowedCountries = this.config.geo_countries || [];
+                    
+                    // Check if visitor's country is in the allowed list
+                    return allowedCountries.includes(visitorCountry);
+                }
+            } catch (error) {
+                console.warn('[Complyo] Geo-check failed, showing banner:', error);
+            }
+            // Default: show banner on error
+            return true;
+        }
+        
+        /**
+         * ✅ Phase 1: Age Verification Check
+         */
+        async checkAgeVerification() {
+            if (!this.config.age_verification_enabled) {
+                return true; // Age verification disabled
+            }
+            
+            // Check if already verified
+            const verified = localStorage.getItem('complyo_age_verified');
+            if (verified) {
+                return true;
+            }
+            
+            // Show age verification modal
+            return new Promise((resolve) => {
+                this.showAgeVerificationModal(resolve);
+            });
+        }
+        
+        showAgeVerificationModal(callback) {
+            const minAge = this.config.age_verification_min_age || 16;
+            
+            const modal = document.createElement('div');
+            modal.className = 'complyo-age-modal';
+            modal.innerHTML = `
+                <style>
+                    .complyo-age-modal {
+                        position: fixed; inset: 0; z-index: 1000000;
+                        background: rgba(0,0,0,0.8);
+                        display: flex; align-items: center; justify-content: center;
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    }
+                    .complyo-age-content {
+                        background: white; border-radius: 12px; padding: 32px;
+                        max-width: 400px; text-align: center;
+                    }
+                    .complyo-age-icon { font-size: 48px; margin-bottom: 16px; }
+                    .complyo-age-title { font-size: 20px; font-weight: 600; margin-bottom: 8px; color: #1f2937; }
+                    .complyo-age-text { color: #6b7280; margin-bottom: 24px; font-size: 14px; }
+                    .complyo-age-buttons { display: flex; gap: 12px; justify-content: center; }
+                    .complyo-age-btn {
+                        padding: 12px 24px; border-radius: 8px; font-weight: 500;
+                        cursor: pointer; border: none; font-size: 14px;
+                    }
+                    .complyo-age-btn-yes { background: ${this.config.primaryColor || '#7c3aed'}; color: white; }
+                    .complyo-age-btn-no { background: #e5e7eb; color: #374151; }
+                </style>
+                <div class="complyo-age-content">
+                    <div class="complyo-age-icon">🔒</div>
+                    <div class="complyo-age-title">Altersverifikation</div>
+                    <div class="complyo-age-text">
+                        Um diese Website zu nutzen, müssen Sie mindestens ${minAge} Jahre alt sein.
+                    </div>
+                    <div class="complyo-age-buttons">
+                        <button class="complyo-age-btn complyo-age-btn-yes" data-age="yes">
+                            Ich bin ${minAge}+ Jahre alt
+                        </button>
+                        <button class="complyo-age-btn complyo-age-btn-no" data-age="no">
+                            Ich bin jünger
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            modal.querySelector('[data-age="yes"]').addEventListener('click', () => {
+                localStorage.setItem('complyo_age_verified', 'true');
+                modal.remove();
+                callback(true);
+            });
+            
+            modal.querySelector('[data-age="no"]').addEventListener('click', () => {
+                modal.remove();
+                callback(false);
+                // Optionally redirect to another page
+                // window.location.href = '/age-restricted';
+            });
+        }
+        
+        /**
+         * ✅ Phase 6: Check if Reconsent is Required
+         */
+        async checkReconsentRequired() {
+            if (!this.consent || !this.consent.configHash) {
+                return false; // No previous consent to compare
+            }
+            
+            try {
+                const response = await fetch(
+                    `${API_BASE}/api/cookie-compliance/reconsent-check/${this.siteId}?config_hash=${this.consent.configHash}`
+                );
+                if (response.ok) {
+                    const data = await response.json();
+                    return data.requires_reconsent;
+                }
+            } catch (error) {
+                console.warn('[Complyo] Reconsent check failed:', error);
+            }
+            return false;
         }
         
         async loadServerConfig() {
@@ -251,11 +457,11 @@
                     this.applyServerConfig(abTestVariant.config);
                 } else {
                     // Use regular config
-                    const response = await fetch(`${API_BASE}/api/cookie-compliance/config/${this.siteId}`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.success && data.data) {
-                            this.applyServerConfig(data.data);
+                const response = await fetch(`${API_BASE}/api/cookie-compliance/config/${this.siteId}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.data) {
+                        this.applyServerConfig(data.data);
                         }
                     }
                 }
@@ -322,19 +528,44 @@
         }
         
         async loadServiceDetails() {
+            // Lade NUR Services die für diese spezifische Website konfiguriert wurden
+            // (d.h. nach einem Scan gefunden wurden)
+            const configuredServices = this.config.services || [];
+            
+            // Wenn keine Services konfiguriert sind, zeige nichts
+            if (!configuredServices || configuredServices.length === 0) {
+                console.log('[Complyo] Keine gescannten Services für diese Website');
+                this.serviceDetails = {};
+                return;
+            }
+            
             try {
-                // Get all available services
                 const servicesResponse = await fetch(`${API_BASE}/api/cookie-compliance/services`);
                 if (servicesResponse.ok) {
                     const servicesData = await servicesResponse.json();
                     if (servicesData.success && servicesData.services) {
-                        // Group services by category
-                        servicesData.services.forEach(service => {
-                            if (!this.serviceDetails[service.category]) {
-                                this.serviceDetails[service.category] = [];
-                            }
-                            this.serviceDetails[service.category].push(service);
-                        });
+                        // Filtere nur Services die für DIESE Website konfiguriert sind
+                        servicesData.services
+                            .filter(service => configuredServices.includes(service.service_key))
+                            .forEach(service => {
+                                if (!this.serviceDetails[service.category]) {
+                                    this.serviceDetails[service.category] = [];
+                                }
+                                // Parse cookies if it's a JSON string
+                                let cookies = service.cookies || [];
+                                if (typeof cookies === 'string') {
+                                    try {
+                                        cookies = JSON.parse(cookies);
+                                    } catch (e) {
+                                        cookies = [];
+                                    }
+                                }
+                                this.serviceDetails[service.category].push({
+                                    ...service,
+                                    cookies: cookies
+                                });
+                            });
+                        console.log('[Complyo] Gescannte Services geladen:', this.serviceDetails);
                     }
                 }
             } catch (error) {
@@ -355,13 +586,69 @@
             this.config.showBranding = serverConfig.show_branding !== false;
             this.config.services = serverConfig.services || [];
             
-            // Merge texts (use browser language)
-            const browserLang = navigator.language.split('-')[0];
+            // Phase 6 features
+            this.config.bannerless_mode = serverConfig.bannerless_mode || false;
+            this.config.age_verification_enabled = serverConfig.age_verification_enabled || false;
+            this.config.age_verification_min_age = serverConfig.age_verification_min_age || 16;
+            this.config.geo_restriction_enabled = serverConfig.geo_restriction_enabled || false;
+            this.config.geo_countries = serverConfig.geo_countries || [];
+            
+            // ✅ Phase 7: Auto-detect language and merge texts
+            const browserLang = this.detectLanguage();
+            this.currentLanguage = browserLang;
+            
+            // Load translations if available
+            if (window.COMPLYO_TRANSLATIONS && window.COMPLYO_TRANSLATIONS[browserLang]) {
+                this.config.texts = { ...this.config.texts, ...window.COMPLYO_TRANSLATIONS[browserLang] };
+            }
+            
+            // Override with server texts if available
             if (serverConfig.texts && serverConfig.texts[browserLang]) {
                 this.config.texts = { ...this.config.texts, ...serverConfig.texts[browserLang] };
             } else if (serverConfig.texts && serverConfig.texts['de']) {
                 this.config.texts = { ...this.config.texts, ...serverConfig.texts['de'] };
             }
+        }
+        
+        /**
+         * ✅ Phase 7: Detect browser language
+         */
+        detectLanguage() {
+            // Priority 1: URL parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlLang = urlParams.get('lang') || urlParams.get('language');
+            if (urlLang && SUPPORTED_LANGUAGES.includes(urlLang)) {
+                return urlLang;
+            }
+            
+            // Priority 2: HTML lang attribute
+            const htmlLang = document.documentElement.lang?.split('-')[0];
+            if (htmlLang && SUPPORTED_LANGUAGES.includes(htmlLang)) {
+                return htmlLang;
+            }
+            
+            // Priority 3: Browser language
+            const browserLang = navigator.language?.split('-')[0] || 'de';
+            if (SUPPORTED_LANGUAGES.includes(browserLang)) {
+                return browserLang;
+            }
+            
+            // Default: German
+            return 'de';
+        }
+        
+        /**
+         * ✅ Phase 7: Get translated text
+         */
+        t(key, params = {}) {
+            let text = this.config.texts[key] || key;
+            
+            // Replace placeholders
+            Object.keys(params).forEach(param => {
+                text = text.replace(new RegExp(`\\{${param}\\}`, 'g'), params[param]);
+            });
+            
+            return text;
         }
         
         isDNTEnabled() {
@@ -370,14 +657,62 @@
                    navigator.msDoNotTrack === '1';
         }
         
-        onDOMReady() {
+        async onDOMReady() {
+            console.log('[Complyo] onDOMReady - Site-ID:', this.siteId);
+            
+            // ✅ Phase 1: Age Verification Check
+            if (this.config.age_verification_enabled) {
+                const ageVerified = await this.checkAgeVerification();
+                if (!ageVerified) {
+                    console.log('[Complyo] Age verification failed - content blocked');
+                    return;
+                }
+            }
+            
+            // ✅ WICHTIG: Prüfe ob die Website überhaupt Cookies verwendet
+            const configuredServices = this.config.services || [];
+            const hasTrackingServices = Array.isArray(configuredServices) && configuredServices.length > 0;
+            
+            console.log('[Complyo] Konfigurierte Services:', configuredServices);
+            
+            // Wenn KEINE Services konfiguriert sind → KEIN Banner nötig!
+            // Das ist korrekt: Wenn keine Tracking-Cookies, braucht man keinen Banner
+            if (!hasTrackingServices) {
+                console.log('[Complyo] ✅ Keine Tracking-Services konfiguriert - kein Banner erforderlich');
+                console.log('[Complyo] ℹ️ Ihre Website verwendet nur essenzielle Cookies');
+                // Setze automatisch "nur notwendige" Cookies als Consent
+                const autoConsent = {
+                    necessary: true,
+                    functional: false,
+                    analytics: false,
+                    marketing: false,
+                    services: [],
+                    timestamp: new Date().toISOString(),
+                    auto: true // Markiere als automatisch gesetzt
+                };
+                this.consent = autoConsent;
+                this.applyConsent(autoConsent);
+                return; // Kein Banner, kein Floating-Button
+            }
+            
+            // ✅ Phase 6: Check if reconsent is required due to config changes
             if (this.consent) {
-                // Consent already given - apply and trigger content unblocking
-                console.log('[Complyo] Consent already given:', this.consent);
+                const needsReconsent = await this.checkReconsentRequired();
+                if (needsReconsent) {
+                    console.log('[Complyo] Config changed - requesting new consent');
+                    this.consent = null;
+                    localStorage.removeItem(CONSENT_STORAGE_KEY);
+                }
+            }
+            
+            // Ab hier: Website HAT Tracking-Services → Banner erforderlich
+            if (this.consent) {
+                console.log('[Complyo] Consent vorhanden:', this.consent);
                 this.applyConsent(this.consent);
                 this.triggerConsentEvent(this.consent);
+                this.renderFloatingButton();
             } else {
-                // Show banner
+                console.log('[Complyo] Kein Consent - zeige Banner');
                 this.render();
             }
         }
@@ -458,6 +793,12 @@
             // Store consent in window for other scripts to access
             window.complyoConsent = consent;
             
+            // ✅ Google Consent Mode v2 Update
+            this.updateGoogleConsentMode(consent);
+            
+            // ✅ Google Tag Manager dataLayer Event
+            this.pushDataLayerEvent(consent);
+            
             // Enable cookies based on consent
             if (consent.analytics) {
                 this.enableCategory('analytics');
@@ -468,6 +809,103 @@
             if (consent.functional) {
                 this.enableCategory('functional');
             }
+        }
+        
+        /**
+         * ========================================================================
+         * Google Consent Mode v2 Integration
+         * ========================================================================
+         * Required since March 2024 for Google services (Analytics, Ads, etc.)
+         * 
+         * Consent Types:
+         * - ad_storage: Advertising cookies
+         * - analytics_storage: Analytics cookies
+         * - ad_user_data: Data sharing with Google Ads
+         * - ad_personalization: Personalized advertising
+         * - functionality_storage: Functional cookies
+         * - personalization_storage: Personalization cookies
+         * - security_storage: Security cookies (always granted)
+         */
+        initGoogleConsentMode() {
+            // Initialize gtag if not present
+            window.dataLayer = window.dataLayer || [];
+            function gtag() { dataLayer.push(arguments); }
+            window.gtag = window.gtag || gtag;
+            
+            // Set default consent state (denied until user consents)
+            const defaultConsent = this.config.consent_mode_default || {
+                'ad_storage': 'denied',
+                'analytics_storage': 'denied',
+                'ad_user_data': 'denied',
+                'ad_personalization': 'denied',
+                'functionality_storage': 'denied',
+                'personalization_storage': 'denied',
+                'security_storage': 'granted' // Always granted
+            };
+            
+            gtag('consent', 'default', {
+                ...defaultConsent,
+                'wait_for_update': 500 // Wait 500ms for consent update
+            });
+            
+            console.log('[Complyo] Google Consent Mode v2 initialized (default: denied)');
+        }
+        
+        updateGoogleConsentMode(consent) {
+            if (!this.config.consent_mode_enabled) return;
+            
+            // Map Complyo consent categories to Google Consent Mode
+            const consentUpdate = {
+                'ad_storage': consent.marketing ? 'granted' : 'denied',
+                'analytics_storage': consent.analytics ? 'granted' : 'denied',
+                'ad_user_data': consent.marketing ? 'granted' : 'denied',
+                'ad_personalization': consent.marketing ? 'granted' : 'denied',
+                'functionality_storage': consent.functional ? 'granted' : 'denied',
+                'personalization_storage': consent.functional ? 'granted' : 'denied',
+                'security_storage': 'granted'
+            };
+            
+            // Update Google Consent Mode
+            if (typeof gtag === 'function') {
+                gtag('consent', 'update', consentUpdate);
+                console.log('[Complyo] Google Consent Mode v2 updated:', consentUpdate);
+            }
+        }
+        
+        /**
+         * ========================================================================
+         * Google Tag Manager Integration
+         * ========================================================================
+         * Push consent events to dataLayer for GTM triggers
+         */
+        pushDataLayerEvent(consent) {
+            window.dataLayer = window.dataLayer || [];
+            
+            // Push consent update event
+            dataLayer.push({
+                'event': 'complyo_consent_update',
+                'complyo_consent': {
+                    'necessary': true,
+                    'functional': consent.functional || false,
+                    'analytics': consent.analytics || false,
+                    'marketing': consent.marketing || false
+                },
+                'complyo_services': consent.services || [],
+                'complyo_timestamp': new Date().toISOString()
+            });
+            
+            // Push individual category events for easier GTM triggers
+            if (consent.analytics) {
+                dataLayer.push({ 'event': 'complyo_analytics_granted' });
+            }
+            if (consent.marketing) {
+                dataLayer.push({ 'event': 'complyo_marketing_granted' });
+            }
+            if (consent.functional) {
+                dataLayer.push({ 'event': 'complyo_functional_granted' });
+            }
+            
+            console.log('[Complyo] GTM dataLayer events pushed');
         }
         
         enableCategory(category) {
@@ -486,7 +924,14 @@
                         analytics: consent.analytics || false,
                         marketing: consent.marketing || false
                     },
-                    services: consent.services || []
+                    services: consent.services || [],
+                    // ✅ Include Google Consent Mode status
+                    googleConsentMode: {
+                        ad_storage: consent.marketing ? 'granted' : 'denied',
+                        analytics_storage: consent.analytics ? 'granted' : 'denied',
+                        ad_user_data: consent.marketing ? 'granted' : 'denied',
+                        ad_personalization: consent.marketing ? 'granted' : 'denied'
+                    }
                 }
             });
             window.dispatchEvent(event);
@@ -695,6 +1140,7 @@
                     line-height: 1.75;
                     font-size: 15px;
                     text-align: left;
+                    white-space: pre-line;
                 }
                 
                 .complyo-description a {
@@ -1336,21 +1782,26 @@
             const banner = document.querySelector('.complyo-cookie-banner');
             if (banner) {
                 banner.classList.remove('complyo-show');
-                setTimeout(() => banner.remove(), 300);
+                setTimeout(() => {
+                    banner.remove();
+                    // Zeige Floating Button nach Banner-Schließung
+                    this.renderFloatingButton();
+                }, 300);
             }
         }
         
         closeSettings() {
-            const modal = document.querySelector('.complyo-settings-modal');
-            const backdrop = document.querySelector('#complyo-settings-backdrop');
+            const modal = document.getElementById('complyo-settings-modal');
+            const backdrop = document.getElementById('complyo-settings-backdrop');
             
             if (modal) {
-                modal.classList.remove('complyo-show');
+                modal.style.opacity = '0';
+                modal.style.transform = 'translate(-50%, -50%) scale(0.95)';
                 setTimeout(() => modal.remove(), 300);
             }
             
             if (backdrop) {
-                backdrop.classList.remove('complyo-show');
+                backdrop.style.opacity = '0';
                 setTimeout(() => backdrop.remove(), 300);
             }
             
@@ -1358,170 +1809,1320 @@
         }
         
         renderSettingsModal() {
+            const { primaryColor, accentColor, bgColor, textColor } = this.config;
+            this.activeSettingsTab = 'service-groups';
+            this.selectedServices = this.selectedServices || {};
+            this.expandedItems = {};
+            
+            // Initialize selections from existing consent or default
+            if (this.consent) {
+                this.categorySelections = {
+                    necessary: true,
+                    functional: this.consent.functional || false,
+                    analytics: this.consent.analytics || false,
+                    marketing: this.consent.marketing || false
+                };
+            } else {
+                this.categorySelections = {
+                    necessary: true,
+                    functional: false,
+                    analytics: false,
+                    marketing: false
+                };
+            }
+            
+            // Inject Borlabs-style CSS
+            this.injectSettingsStyles();
+            
             // Create backdrop
             const backdrop = document.createElement('div');
-            backdrop.className = 'complyo-backdrop';
             backdrop.id = 'complyo-settings-backdrop';
+            backdrop.className = 'cps-backdrop';
             document.body.appendChild(backdrop);
             
             // Create modal
             const modal = document.createElement('div');
-            modal.className = 'complyo-settings-modal';
+            modal.id = 'complyo-settings-modal';
+            modal.className = 'cps-modal';
             modal.setAttribute('role', 'dialog');
             modal.setAttribute('aria-labelledby', 'complyo-settings-title');
             modal.setAttribute('aria-modal', 'true');
             
-            // Build categories HTML with services
-            let categoriesHTML = '';
-            
-            // Helper to build category section
-            const buildCategory = (categoryKey, categoryName, description, disabled = false) => {
-                const services = this.serviceDetails[categoryKey] || [];
-                const serviceCount = services.length;
-                
-                // Filter services to only show those configured for this site
-                const configuredServices = this.config.services || [];
-                const visibleServices = services.filter(s => configuredServices.includes(s.service_key));
-                
-                return `
-                    <div class="complyo-category" data-category="${categoryKey}">
-                        <div class="complyo-category-header">
-                            <div class="complyo-category-info">
-                                <span class="complyo-category-name">${categoryName}</span>
-                                ${serviceCount > 0 ? `<span class="complyo-service-count">${serviceCount}</span>` : ''}
-                            </div>
-                            <label class="complyo-toggle">
-                                <input type="checkbox" 
-                                       id="toggle-${categoryKey}" 
-                                       ${disabled ? 'checked disabled' : ''}
-                                       data-category="${categoryKey}">
-                                <span class="complyo-toggle-slider"></span>
-                            </label>
-                        </div>
-                        <p class="complyo-category-desc">${description}</p>
-                        
-                        ${visibleServices.length > 0 ? `
-                            <div class="complyo-services-list">
-                                ${visibleServices.map(service => `
-                                    <div class="complyo-service-item">
-                                        <div class="complyo-service-header">
-                                            <div class="complyo-service-info">
-                                                <span class="complyo-service-name">${service.name}</span>
-                                                ${service.cookies && service.cookies.length > 0 ? 
-                                                    `<span class="complyo-cookie-count">${service.cookies.length}</span>` : ''}
-                                            </div>
-                                            <label class="complyo-toggle complyo-toggle-small">
-                                                <input type="checkbox" 
-                                                       data-service="${service.service_key}"
-                                                       data-category="${categoryKey}"
-                                                       class="service-toggle">
-                                                <span class="complyo-toggle-slider"></span>
-                                            </label>
-                                        </div>
-                                        ${service.description ? `
-                                            <p class="complyo-service-desc">${service.description}</p>
-                                        ` : ''}
-                                        ${service.privacy_policy_url ? `
-                                            <a href="${service.privacy_policy_url}" 
-                                               target="_blank" 
-                                               rel="noopener" 
-                                               class="complyo-service-link">
-                                                ${this.config.texts.learnMore} ↗
-                                            </a>
-                                        ` : ''}
-                                    </div>
-                                `).join('')}
-                            </div>
-                        ` : ''}
-                    </div>
-                `;
-            };
-            
-            // Build all categories
-            categoriesHTML += buildCategory('necessary', this.config.texts.necessary, this.config.texts.necessaryDesc, true);
-            categoriesHTML += buildCategory('functional', this.config.texts.functional, this.config.texts.functionalDesc);
-            categoriesHTML += buildCategory('analytics', this.config.texts.analytics, this.config.texts.analyticsDesc);
-            categoriesHTML += buildCategory('marketing', this.config.texts.marketing, this.config.texts.marketingDesc);
-            
-            modal.innerHTML = `
-                <div class="complyo-settings-header">
-                    <h3 id="complyo-settings-title" class="complyo-settings-title">${this.config.texts.settings}</h3>
-                    <button class="complyo-close-btn" aria-label="Schließen">×</button>
-                </div>
-                
-                <div class="complyo-categories">
-                    ${categoriesHTML}
-                </div>
-                
-                <div class="complyo-actions">
-                    <button 
-                        id="complyo-save-settings" 
-                        class="complyo-btn complyo-btn-primary complyo-btn-${this.config.buttonStyle}"
-                    >
-                        ${this.config.texts.acceptSelected}
-                    </button>
-                </div>
-            `;
-            
+            modal.innerHTML = this.renderSettingsHTML();
             document.body.appendChild(modal);
             
             // Animate in
             requestAnimationFrame(() => {
-                backdrop.classList.add('complyo-show');
-                modal.classList.add('complyo-show');
+                backdrop.classList.add('cps-show');
+                modal.classList.add('cps-show');
             });
             
-            // Bind events
-            modal.querySelector('.complyo-close-btn').addEventListener('click', () => this.closeSettings());
-            backdrop.addEventListener('click', () => this.closeSettings());
+            // Bind all events
+            this.bindSettingsEvents(modal, backdrop);
+        }
+        
+        injectSettingsStyles() {
+            if (document.getElementById('complyo-settings-styles')) return;
             
-            // Category toggle - toggle all services in category
-            modal.querySelectorAll('input[data-category]').forEach(toggle => {
-                if (!toggle.disabled) {
-                    toggle.addEventListener('change', (e) => {
-                        const category = e.target.getAttribute('data-category');
-                        const checked = e.target.checked;
-                        
-                        // Toggle all services in this category
-                        modal.querySelectorAll(`input[data-service][data-category="${category}"]`).forEach(serviceToggle => {
-                            serviceToggle.checked = checked;
-                        });
-                    });
+            const { primaryColor, accentColor } = this.config;
+            const style = document.createElement('style');
+            style.id = 'complyo-settings-styles';
+            style.textContent = `
+                /* Complyo Settings Modal - Borlabs Style */
+                .cps-backdrop {
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(0, 0, 0, 0.5);
+                    z-index: 999998;
+                    opacity: 0;
+                    transition: opacity 0.3s ease;
                 }
+                .cps-backdrop.cps-show { opacity: 1; }
+                
+                .cps-modal {
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%) scale(0.95);
+                    background: #fff;
+                    border-radius: 0;
+                    width: 95%;
+                    max-width: 900px;
+                    max-height: 90vh;
+                    display: flex;
+                    flex-direction: column;
+                    z-index: 999999;
+                    opacity: 0;
+                    transition: all 0.3s ease;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                    border: 1px solid #e5e7eb;
+                }
+                .cps-modal.cps-show {
+                    opacity: 1;
+                    transform: translate(-50%, -50%) scale(1);
+                }
+                
+                /* Header */
+                .cps-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 20px 24px;
+                    border-bottom: 1px solid #e5e7eb;
+                    background: #fff;
+                }
+                .cps-header-left {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                }
+                .cps-logo {
+                    width: 36px;
+                    height: 36px;
+                    background: ${primaryColor};
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-weight: bold;
+                    font-size: 16px;
+                }
+                .cps-title {
+                    font-size: 18px;
+                    font-weight: 600;
+                    color: #1f2937;
+                    margin: 0;
+                }
+                .cps-header-links {
+                    display: flex;
+                    gap: 16px;
+                }
+                .cps-header-links a {
+                    color: #6b7280;
+                    text-decoration: none;
+                    font-size: 13px;
+                }
+                .cps-header-links a:hover {
+                    color: ${primaryColor};
+                }
+                
+                /* Description */
+                .cps-description {
+                    padding: 16px 24px;
+                    background: #f9fafb;
+                    border-bottom: 1px solid #e5e7eb;
+                    font-size: 13px;
+                    color: #6b7280;
+                    line-height: 1.6;
+                    white-space: pre-line;
+                    max-height: 200px;
+                    overflow-y: auto;
+                }
+                
+                /* Tabs */
+                .cps-tabs {
+                    display: flex;
+                    border-bottom: 1px solid #e5e7eb;
+                    background: #fff;
+                }
+                .cps-tab {
+                    flex: 1;
+                    padding: 14px 16px;
+                    background: transparent;
+                    border: none;
+                    font-size: 13px;
+                    font-weight: 500;
+                    color: #6b7280;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    border-bottom: 3px solid transparent;
+                    text-align: center;
+                }
+                .cps-tab:hover {
+                    background: #f9fafb;
+                    color: #374151;
+                }
+                .cps-tab.cps-active {
+                    background: ${primaryColor};
+                    color: white;
+                    border-bottom-color: ${primaryColor};
+                }
+                
+                /* Tab Content */
+                .cps-content {
+                    flex: 1;
+                    overflow-y: auto;
+                    max-height: calc(90vh - 280px);
+                    background: #fff;
+                }
+                .cps-tab-panel {
+                    display: none;
+                    padding: 0;
+                }
+                .cps-tab-panel.cps-active {
+                    display: block;
+                }
+                
+                /* Actions Bar (Alle auswählen/abwählen) */
+                .cps-actions-bar {
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 8px;
+                    padding: 12px 24px;
+                    border-bottom: 1px solid #e5e7eb;
+                    background: #f9fafb;
+                }
+                .cps-action-btn {
+                    padding: 6px 12px;
+                    font-size: 12px;
+                    border: 1px solid #d1d5db;
+                    background: #fff;
+                    color: #374151;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                }
+                .cps-action-btn:hover {
+                    background: #f3f4f6;
+                }
+                
+                /* Search Bar */
+                .cps-search-bar {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 12px 24px;
+                    border-bottom: 1px solid #e5e7eb;
+                    background: #fff;
+                }
+                .cps-search-input {
+                    flex: 1;
+                    max-width: 400px;
+                    padding: 8px 12px;
+                    border: 1px solid #d1d5db;
+                    border-radius: 4px;
+                    font-size: 13px;
+                    outline: none;
+                }
+                .cps-search-input:focus {
+                    border-color: ${primaryColor};
+                }
+                .cps-search-count {
+                    font-size: 13px;
+                    color: #6b7280;
+                }
+                
+                /* Category/Service Item */
+                .cps-item {
+                    border-bottom: 1px solid #e5e7eb;
+                }
+                .cps-item:last-child {
+                    border-bottom: none;
+                }
+                .cps-item-header {
+                    display: flex;
+                    align-items: flex-start;
+                    padding: 16px 24px;
+                    gap: 12px;
+                }
+                .cps-item-checkbox {
+                    margin-top: 2px;
+                }
+                .cps-item-checkbox input[type="checkbox"] {
+                    width: 18px;
+                    height: 18px;
+                    accent-color: ${primaryColor};
+                    cursor: pointer;
+                }
+                .cps-item-content {
+                    flex: 1;
+                }
+                .cps-item-title {
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #1f2937;
+                    margin: 0 0 4px 0;
+                }
+                .cps-item-desc {
+                    font-size: 13px;
+                    color: #6b7280;
+                    line-height: 1.5;
+                    margin: 0;
+                }
+                .cps-item-actions {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                }
+                .cps-expand-btn {
+                    background: none;
+                    border: none;
+                    color: ${primaryColor};
+                    font-size: 12px;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                    white-space: nowrap;
+                }
+                .cps-expand-btn:hover {
+                    text-decoration: underline;
+                }
+                
+                /* Toggle Switch */
+                .cps-toggle {
+                    position: relative;
+                    width: 48px;
+                    height: 26px;
+                    flex-shrink: 0;
+                }
+                .cps-toggle input {
+                    opacity: 0;
+                    width: 0;
+                    height: 0;
+                }
+                .cps-toggle-slider {
+                    position: absolute;
+                    cursor: pointer;
+                    inset: 0;
+                    background: #d1d5db;
+                    border-radius: 26px;
+                    transition: 0.3s;
+                }
+                .cps-toggle-slider:before {
+                    position: absolute;
+                    content: "";
+                    height: 20px;
+                    width: 20px;
+                    left: 3px;
+                    bottom: 3px;
+                    background: white;
+                    border-radius: 50%;
+                    transition: 0.3s;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                }
+                .cps-toggle input:checked + .cps-toggle-slider {
+                    background: ${primaryColor};
+                }
+                .cps-toggle input:checked + .cps-toggle-slider:before {
+                    transform: translateX(22px);
+                }
+                .cps-toggle input:disabled + .cps-toggle-slider {
+                    opacity: 0.6;
+                    cursor: not-allowed;
+                }
+                
+                /* Expanded Details */
+                .cps-item-details {
+                    display: none;
+                    padding: 0 24px 16px 54px;
+                    background: #f9fafb;
+                }
+                .cps-item-details.cps-expanded {
+                    display: block;
+                }
+                .cps-details-section {
+                    margin-bottom: 12px;
+                }
+                .cps-details-title {
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: #374151;
+                    margin-bottom: 8px;
+                }
+                .cps-details-row {
+                    display: flex;
+                    padding: 6px 0;
+                    font-size: 12px;
+                    border-bottom: 1px solid #e5e7eb;
+                }
+                .cps-details-row:last-child {
+                    border-bottom: none;
+                }
+                .cps-details-label {
+                    width: 180px;
+                    color: #6b7280;
+                    flex-shrink: 0;
+                }
+                .cps-details-value {
+                    color: #1f2937;
+                    word-break: break-word;
+                }
+                .cps-details-value a {
+                    color: ${primaryColor};
+                    text-decoration: none;
+                }
+                .cps-details-value a:hover {
+                    text-decoration: underline;
+                }
+                
+                /* History Tab */
+                .cps-history-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 13px;
+                }
+                .cps-history-table th {
+                    background: ${primaryColor};
+                    color: white;
+                    padding: 12px 16px;
+                    text-align: left;
+                    font-weight: 500;
+                }
+                .cps-history-table td {
+                    padding: 12px 16px;
+                    border-bottom: 1px solid #e5e7eb;
+                    vertical-align: top;
+                }
+                .cps-uid {
+                    padding: 16px 24px;
+                    font-size: 12px;
+                    color: #6b7280;
+                    border-top: 1px solid #e5e7eb;
+                }
+                
+                /* Footer */
+                .cps-footer {
+                    display: flex;
+                    gap: 12px;
+                    padding: 16px 24px;
+                    border-top: 1px solid #e5e7eb;
+                    background: #fff;
+                }
+                .cps-footer-btn {
+                    flex: 1;
+                    padding: 14px 20px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    border: none;
+                    border-radius: 0;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                .cps-btn-save {
+                    background: ${primaryColor};
+                    color: white;
+                }
+                .cps-btn-save:hover {
+                    background: ${accentColor};
+                }
+                .cps-btn-accept {
+                    background: ${primaryColor};
+                    color: white;
+                }
+                .cps-btn-accept:hover {
+                    background: ${accentColor};
+                }
+                .cps-btn-reject {
+                    background: #dc2626;
+                    color: white;
+                }
+                .cps-btn-reject:hover {
+                    background: #b91c1c;
+                }
+                
+                /* Responsive */
+                @media (max-width: 640px) {
+                    .cps-modal {
+                        width: 100%;
+                        height: 100%;
+                        max-height: 100%;
+                        border-radius: 0;
+                    }
+                    .cps-tabs {
+                        flex-wrap: wrap;
+                    }
+                    .cps-tab {
+                        flex: 1 1 50%;
+                    }
+                    .cps-footer {
+                        flex-direction: column;
+                    }
+                    .cps-header-links {
+                        display: none;
+                    }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        renderSettingsHTML() {
+            const { primaryColor } = this.config;
+            return `
+                <!-- Header -->
+                <div class="cps-header">
+                    <div class="cps-header-left">
+                        <div class="cps-logo">C</div>
+                        <h2 class="cps-title" id="complyo-settings-title">Datenschutz-Präferenz</h2>
+                    </div>
+                    <div class="cps-header-links">
+                        <a href="/datenschutz" target="_blank">Datenschutzerklärung</a>
+                        <a href="/impressum" target="_blank">Impressum</a>
+                    </div>
+                </div>
+                
+                <!-- Description -->
+                <div class="cps-description">
+                    ${this.config.texts?.description || 'Hier finden Sie eine Übersicht über alle verwendeten Cookies. Sie können Ihre Einwilligung für ganze Kategorien geben oder sich weitere Informationen anzeigen lassen und bestimmte Cookies auswählen.'}
+                </div>
+                
+                <!-- Tabs -->
+                <div class="cps-tabs">
+                    <button class="cps-tab cps-active" data-tab="service-groups">Service-Gruppen</button>
+                    <button class="cps-tab" data-tab="services">Services</button>
+                    <button class="cps-tab" data-tab="providers">Provider</button>
+                    <button class="cps-tab" data-tab="history">Einwilligung-Historie</button>
+                </div>
+                
+                <!-- Tab Content -->
+                <div class="cps-content">
+                    <!-- Service Groups Tab -->
+                    <div class="cps-tab-panel cps-active" data-panel="service-groups">
+                        ${this.renderServiceGroupsTab()}
+                    </div>
+                    
+                    <!-- Services Tab -->
+                    <div class="cps-tab-panel" data-panel="services">
+                        ${this.renderServicesTab()}
+                    </div>
+                    
+                    <!-- Providers Tab -->
+                    <div class="cps-tab-panel" data-panel="providers">
+                        ${this.renderProvidersTab()}
+                    </div>
+                    
+                    <!-- History Tab -->
+                    <div class="cps-tab-panel" data-panel="history">
+                        ${this.renderHistoryTab()}
+                    </div>
+                </div>
+                
+                <!-- Footer -->
+                <div class="cps-footer">
+                    <button class="cps-footer-btn cps-btn-save" id="cps-save">Speichern</button>
+                    <button class="cps-footer-btn cps-btn-accept" id="cps-accept-all">Alle akzeptieren</button>
+                    <button class="cps-footer-btn cps-btn-reject" id="cps-reject-all">Nur essenzielle Cookies akzeptieren</button>
+                </div>
+            `;
+        }
+        
+        renderServiceGroupsTab() {
+            const categories = [
+                {
+                    key: 'necessary',
+                    name: this.config.texts.necessary || 'Essenziell',
+                    desc: this.config.texts.necessaryDesc || 'Essenzielle Services ermöglichen grundlegende Funktionen und sind für das ordnungsgemäße Funktionieren der Website erforderlich.',
+                    required: true
+                },
+                {
+                    key: 'functional',
+                    name: this.config.texts.functional || 'Funktional',
+                    desc: this.config.texts.functionalDesc || 'Funktionale Cookies speichern Ihre Präferenzen wie Sprache und Region.'
+                },
+                {
+                    key: 'analytics',
+                    name: this.config.texts.analytics || 'Statistiken',
+                    desc: this.config.texts.analyticsDesc || 'Statistik-Cookies helfen uns zu verstehen, wie Besucher mit der Website interagieren.'
+                },
+                {
+                    key: 'marketing',
+                    name: 'Externe Medien',
+                    desc: 'Inhalte von Videoplattformen und Social-Media-Plattformen werden standardmäßig blockiert. Wenn externe Services akzeptiert werden, ist für den Zugriff auf diese Inhalte keine manuelle Einwilligung mehr erforderlich.'
+                }
+            ];
+            
+            let html = `
+                <div class="cps-actions-bar">
+                    <button class="cps-action-btn" id="cps-select-all">○ Alle auswählen</button>
+                    <button class="cps-action-btn" id="cps-deselect-all">○ Alle abwählen</button>
+                </div>
+            `;
+            
+            categories.forEach(cat => {
+                const services = this.serviceDetails[cat.key] || [];
+                const isChecked = this.categorySelections[cat.key];
+                
+                html += `
+                    <div class="cps-item" data-category="${cat.key}">
+                        <div class="cps-item-header">
+                            <div class="cps-item-checkbox">
+                                <input type="checkbox" 
+                                       id="cat-${cat.key}" 
+                                       data-category="${cat.key}"
+                                       ${isChecked ? 'checked' : ''} 
+                                       ${cat.required ? 'checked disabled' : ''}>
+                            </div>
+                            <div class="cps-item-content">
+                                <h3 class="cps-item-title">${cat.name}</h3>
+                                <p class="cps-item-desc">${cat.desc}</p>
+                            </div>
+                            <div class="cps-item-actions">
+                                <button class="cps-expand-btn" data-expand="cat-${cat.key}">
+                                    Informationen anzeigen <span>▼</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="cps-item-details" id="details-cat-${cat.key}">
+                            ${services.length > 0 ? `
+                                <div class="cps-details-section">
+                                    <div class="cps-details-title">Zugehörige Services (${services.length})</div>
+                                    ${services.map(s => `
+                                        <div class="cps-details-row">
+                                            <span class="cps-details-label">${s.name}</span>
+                                            <span class="cps-details-value">${s.description || ''}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : '<p style="font-size: 12px; color: #9ca3af; padding: 8px 0;">Keine Services in dieser Kategorie.</p>'}
+                        </div>
+                    </div>
+                `;
             });
             
-            // Service toggle - update category toggle if all services are toggled
-            modal.querySelectorAll('input[data-service]').forEach(toggle => {
-                toggle.addEventListener('change', (e) => {
-                    const category = e.target.getAttribute('data-category');
-                    const categoryToggle = modal.querySelector(`#toggle-${category}`);
+            return html;
+        }
+        
+        renderServicesTab() {
+            // Flatten all services
+            const allServices = [];
+            Object.entries(this.serviceDetails).forEach(([category, services]) => {
+                services.forEach(s => {
+                    allServices.push({ ...s, category });
+                });
+            });
+            
+            let html = `
+                <div class="cps-search-bar">
+                    <input type="text" class="cps-search-input" id="cps-service-search" placeholder="Services suchen...">
+                    <span class="cps-search-count">${allServices.length} Services</span>
+                </div>
+                <div id="cps-services-list">
+            `;
+            
+            if (allServices.length === 0) {
+                html += '<p style="padding: 24px; text-align: center; color: #9ca3af;">Keine Services konfiguriert.</p>';
+            } else {
+                allServices.forEach((service, idx) => {
+                    const isEnabled = this.categorySelections[service.category] || false;
+                    const isEssential = service.category === 'necessary';
                     
-                    if (categoryToggle) {
-                        // Check if all services in category are checked
-                        const allServices = modal.querySelectorAll(`input[data-service][data-category="${category}"]`);
-                        const checkedServices = Array.from(allServices).filter(s => s.checked);
-                        
-                        categoryToggle.checked = checkedServices.length > 0;
+                    html += `
+                        <div class="cps-item cps-service-item" data-service="${service.service_key || service.name}" data-category="${service.category}">
+                            <div class="cps-item-header">
+                                <div class="cps-item-content">
+                                    <h3 class="cps-item-title">${service.name}</h3>
+                                </div>
+                                <div class="cps-item-actions">
+                                    <button class="cps-expand-btn" data-expand="svc-${idx}">
+                                        Informationen anzeigen <span>▼</span>
+                                    </button>
+                                    <label class="cps-toggle">
+                                        <input type="checkbox" 
+                                               data-service-toggle="${service.service_key || service.name}"
+                                               data-category="${service.category}"
+                                               ${isEnabled || isEssential ? 'checked' : ''} 
+                                               ${isEssential ? 'disabled' : ''}>
+                                        <span class="cps-toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="cps-item-details" id="details-svc-${idx}">
+                                <div class="cps-details-section">
+                                    ${service.description ? `
+                                        <div class="cps-details-row">
+                                            <span class="cps-details-label">Beschreibung</span>
+                                            <span class="cps-details-value">${service.description}</span>
+                                        </div>
+                                    ` : ''}
+                                    <div class="cps-details-row">
+                                        <span class="cps-details-label">Kategorie</span>
+                                        <span class="cps-details-value">${this.getCategoryName(service.category)}</span>
+                                    </div>
+                                    ${service.provider ? `
+                                        <div class="cps-details-row">
+                                            <span class="cps-details-label">Anbieter</span>
+                                            <span class="cps-details-value">${service.provider}</span>
+                                        </div>
+                                    ` : ''}
+                                    ${service.cookies && service.cookies.length > 0 ? `
+                                        <div class="cps-details-row">
+                                            <span class="cps-details-label">Cookies</span>
+                                            <span class="cps-details-value">${service.cookies.map(c => typeof c === 'string' ? c : c.name).join(', ')}</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            html += '</div>';
+            return html;
+        }
+        
+        renderProvidersTab() {
+            // Group services by provider
+            const providers = {};
+            Object.entries(this.serviceDetails).forEach(([category, services]) => {
+                services.forEach(s => {
+                    const providerName = s.provider || 'Unbekannt';
+                    if (!providers[providerName]) {
+                        providers[providerName] = {
+                            name: providerName,
+                            description: s.provider_description || '',
+                            address: s.provider_address || '',
+                            privacy_url: s.provider_privacy_url || s.privacy_url || '',
+                            cookie_url: s.provider_cookie_url || '',
+                            services: []
+                        };
+                    }
+                    providers[providerName].services.push(s);
+                });
+            });
+            
+            const providerList = Object.values(providers);
+            
+            let html = `
+                <div class="cps-search-bar">
+                    <input type="text" class="cps-search-input" id="cps-provider-search" placeholder="Provider suchen...">
+                    <span class="cps-search-count">${providerList.length} Provider</span>
+                </div>
+                <div id="cps-providers-list">
+            `;
+            
+            if (providerList.length === 0) {
+                html += '<p style="padding: 24px; text-align: center; color: #9ca3af;">Keine Provider konfiguriert.</p>';
+            } else {
+                providerList.forEach((provider, idx) => {
+                    html += `
+                        <div class="cps-item cps-provider-item" data-provider="${provider.name}">
+                            <div class="cps-item-header">
+                                <div class="cps-item-content">
+                                    <h3 class="cps-item-title">${provider.name}</h3>
+                                    <p class="cps-item-desc">${provider.description || `Anbieter von ${provider.services.length} Service(s)`}</p>
+                                </div>
+                                <div class="cps-item-actions">
+                                    <button class="cps-expand-btn" data-expand="prov-${idx}">
+                                        Informationen anzeigen <span>▼</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cps-item-details" id="details-prov-${idx}">
+                                <div class="cps-details-section">
+                                    <div class="cps-details-title">Provider-Informationen</div>
+                                    ${provider.address ? `
+                                        <div class="cps-details-row">
+                                            <span class="cps-details-label">Adresse</span>
+                                            <span class="cps-details-value">${provider.address}</span>
+                                        </div>
+                                    ` : ''}
+                                    ${provider.privacy_url ? `
+                                        <div class="cps-details-row">
+                                            <span class="cps-details-label">URL der Datenschutzerklärung</span>
+                                            <span class="cps-details-value"><a href="${provider.privacy_url}" target="_blank">${provider.privacy_url}</a></span>
+                                        </div>
+                                    ` : ''}
+                                    ${provider.cookie_url ? `
+                                        <div class="cps-details-row">
+                                            <span class="cps-details-label">Cookie-URL</span>
+                                            <span class="cps-details-value"><a href="${provider.cookie_url}" target="_blank">${provider.cookie_url}</a></span>
+                                        </div>
+                                    ` : ''}
+                                    <div class="cps-details-row">
+                                        <span class="cps-details-label">Services</span>
+                                        <span class="cps-details-value">${provider.services.map(s => s.name).join(', ')}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            html += '</div>';
+            return html;
+        }
+        
+        renderHistoryTab() {
+            // Load consent history from localStorage
+            const consentHistory = this.loadConsentHistory();
+            const currentConsent = this.consent;
+            
+            let html = `
+                <table class="cps-history-table">
+                    <thead>
+                        <tr>
+                            <th>Datum</th>
+                            <th>Einwilligungen</th>
+                            <th>Änderungen</th>
+                            <th>Version</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            if (currentConsent && currentConsent.timestamp) {
+                const services = this.formatConsentServices(currentConsent);
+                html += `
+                    <tr>
+                        <td>${this.formatDate(currentConsent.timestamp)}</td>
+                        <td>${services}</td>
+                        <td></td>
+                        <td>${currentConsent.version || 1}</td>
+                    </tr>
+                `;
+            } else {
+                html += `
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: #9ca3af;">Keine Einwilligung erteilt</td>
+                    </tr>
+                `;
+            }
+            
+            html += `
+                    </tbody>
+                </table>
+                <div class="cps-uid">
+                    UID: ${this.visitorId || 'Nicht verfügbar'}
+                </div>
+            `;
+            
+            return html;
+        }
+        
+        getCategoryName(key) {
+            const names = {
+                necessary: 'Essenziell',
+                functional: 'Funktional',
+                analytics: 'Statistiken',
+                marketing: 'Externe Medien'
+            };
+            return names[key] || key;
+        }
+        
+        formatConsentServices(consent) {
+            const parts = [];
+            
+            if (consent.necessary !== false) {
+                const services = this.serviceDetails.necessary || [];
+                if (services.length > 0) {
+                    parts.push(`<strong>Essenziell:</strong> ${services.map(s => s.name).join(', ')}`);
+                }
+            }
+            
+            if (consent.functional) {
+                const services = this.serviceDetails.functional || [];
+                if (services.length > 0) {
+                    parts.push(`<strong>Funktional:</strong> ${services.map(s => s.name).join(', ')}`);
+                }
+            }
+            
+            if (consent.analytics) {
+                const services = this.serviceDetails.analytics || [];
+                if (services.length > 0) {
+                    parts.push(`<strong>Statistiken:</strong> ${services.map(s => s.name).join(', ')}`);
+                }
+            }
+            
+            if (consent.marketing) {
+                const services = this.serviceDetails.marketing || [];
+                if (services.length > 0) {
+                    parts.push(`<strong>Externe Medien:</strong> ${services.map(s => s.name).join(', ')}`);
+                }
+            }
+            
+            return parts.join('<br>') || 'Nur essenzielle Cookies';
+        }
+        
+        formatDate(dateStr) {
+            try {
+                const d = new Date(dateStr);
+                return d.toLocaleString('de-DE', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } catch (e) {
+                return dateStr;
+            }
+        }
+        
+        loadConsentHistory() {
+            try {
+                const history = localStorage.getItem('complyo_consent_history');
+                return history ? JSON.parse(history) : [];
+            } catch (e) {
+                return [];
+            }
+        }
+        
+        bindSettingsEvents(modal, backdrop) {
+            const { primaryColor, accentColor } = this.config;
+            
+            // Tab switching
+            modal.querySelectorAll('.cps-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabName = tab.dataset.tab;
+                    
+                    // Update tabs
+                    modal.querySelectorAll('.cps-tab').forEach(t => t.classList.remove('cps-active'));
+                    tab.classList.add('cps-active');
+                    
+                    // Update panels
+                    modal.querySelectorAll('.cps-tab-panel').forEach(p => p.classList.remove('cps-active'));
+                    modal.querySelector(`[data-panel="${tabName}"]`).classList.add('cps-active');
+                });
+            });
+            
+            // Expand/collapse
+            modal.querySelectorAll('.cps-expand-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const targetId = btn.dataset.expand;
+                    const details = modal.querySelector(`#details-${targetId}`);
+                    const arrow = btn.querySelector('span');
+                    
+                    if (details) {
+                        details.classList.toggle('cps-expanded');
+                        arrow.textContent = details.classList.contains('cps-expanded') ? '▲' : '▼';
+                        btn.innerHTML = details.classList.contains('cps-expanded') 
+                            ? 'Informationen ausblenden <span>▲</span>'
+                            : 'Informationen anzeigen <span>▼</span>';
                     }
                 });
             });
             
-            // Save settings
-            modal.querySelector('#complyo-save-settings').addEventListener('click', () => {
-                // Collect category selections
-                const selections = {
-                    functional: modal.querySelector('#toggle-functional')?.checked || false,
-                    analytics: modal.querySelector('#toggle-analytics')?.checked || false,
-                    marketing: modal.querySelector('#toggle-marketing')?.checked || false,
-                    services: []
-                };
-                
-                // Collect individual service selections
-                modal.querySelectorAll('input[data-service]:checked').forEach(toggle => {
-                    selections.services.push(toggle.getAttribute('data-service'));
+            // Category checkboxes
+            modal.querySelectorAll('.cps-item-checkbox input[type="checkbox"]').forEach(checkbox => {
+                checkbox.addEventListener('change', (e) => {
+                    if (!e.target.disabled) {
+                        const category = e.target.dataset.category;
+                        this.categorySelections[category] = e.target.checked;
+                        
+                        // Update service toggles for this category
+                        modal.querySelectorAll(`[data-service-toggle][data-category="${category}"]`).forEach(toggle => {
+                            if (!toggle.disabled) {
+                                toggle.checked = e.target.checked;
+                            }
+                        });
+                    }
                 });
+            });
+            
+            // Service toggles
+            modal.querySelectorAll('[data-service-toggle]').forEach(toggle => {
+                toggle.addEventListener('change', (e) => {
+                    const category = e.target.dataset.category;
+                    // Check if all services in category are enabled
+                    const categoryToggles = modal.querySelectorAll(`[data-service-toggle][data-category="${category}"]`);
+                    const allEnabled = Array.from(categoryToggles).every(t => t.checked || t.disabled);
+                    
+                    const categoryCheckbox = modal.querySelector(`#cat-${category}`);
+                    if (categoryCheckbox && !categoryCheckbox.disabled) {
+                        categoryCheckbox.checked = allEnabled;
+                        this.categorySelections[category] = allEnabled;
+                    }
+                });
+            });
+            
+            // Select all / Deselect all
+            const selectAllBtn = modal.querySelector('#cps-select-all');
+            const deselectAllBtn = modal.querySelector('#cps-deselect-all');
+            
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', () => {
+                    modal.querySelectorAll('.cps-item-checkbox input[type="checkbox"]').forEach(cb => {
+                        if (!cb.disabled) {
+                            cb.checked = true;
+                            const category = cb.dataset.category;
+                            this.categorySelections[category] = true;
+                        }
+                    });
+                    modal.querySelectorAll('[data-service-toggle]').forEach(toggle => {
+                        if (!toggle.disabled) toggle.checked = true;
+                    });
+                });
+            }
+            
+            if (deselectAllBtn) {
+                deselectAllBtn.addEventListener('click', () => {
+                    modal.querySelectorAll('.cps-item-checkbox input[type="checkbox"]').forEach(cb => {
+                        if (!cb.disabled) {
+                            cb.checked = false;
+                            const category = cb.dataset.category;
+                            this.categorySelections[category] = false;
+                        }
+                    });
+                    modal.querySelectorAll('[data-service-toggle]').forEach(toggle => {
+                        if (!toggle.disabled) toggle.checked = false;
+                    });
+                });
+            }
+            
+            // Search functionality
+            const serviceSearch = modal.querySelector('#cps-service-search');
+            if (serviceSearch) {
+                serviceSearch.addEventListener('input', (e) => {
+                    const query = e.target.value.toLowerCase();
+                    modal.querySelectorAll('.cps-service-item').forEach(item => {
+                        const name = item.querySelector('.cps-item-title').textContent.toLowerCase();
+                        item.style.display = name.includes(query) ? '' : 'none';
+                    });
+                });
+            }
+            
+            const providerSearch = modal.querySelector('#cps-provider-search');
+            if (providerSearch) {
+                providerSearch.addEventListener('input', (e) => {
+                    const query = e.target.value.toLowerCase();
+                    modal.querySelectorAll('.cps-provider-item').forEach(item => {
+                        const name = item.querySelector('.cps-item-title').textContent.toLowerCase();
+                        item.style.display = name.includes(query) ? '' : 'none';
+                    });
+                });
+            }
+            
+            // Footer buttons
+            modal.querySelector('#cps-save').addEventListener('click', () => {
+                this.saveCustom(this.categorySelections);
+            });
+            
+            modal.querySelector('#cps-accept-all').addEventListener('click', () => {
+                this.acceptAll();
+            });
+            
+            modal.querySelector('#cps-reject-all').addEventListener('click', () => {
+                this.rejectAll();
+            });
+            
+            // Close on backdrop click
+            backdrop.addEventListener('click', () => this.closeSettings());
+        }
+        
+        // ====================================================================
+        // Floating Settings Button (nach Consent)
+        // ====================================================================
+        
+        renderFloatingButton() {
+            // Entferne existierenden Button
+            const existing = document.getElementById('complyo-cookie-settings-btn');
+            if (existing) existing.remove();
+            
+            const primaryColor = this.config.primaryColor || '#7c3aed';
+            
+            const button = document.createElement('button');
+            button.id = 'complyo-cookie-settings-btn';
+            button.setAttribute('aria-label', 'Cookie-Einstellungen ändern');
+            button.setAttribute('title', 'Cookie-Einstellungen ändern');
+            
+            // SVG Cookie Icon (passend zum Accessibility-Button-Style)
+            button.innerHTML = `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <circle cx="8" cy="9" r="1" fill="currentColor"/>
+                    <circle cx="15" cy="8" r="1" fill="currentColor"/>
+                    <circle cx="10" cy="14" r="1" fill="currentColor"/>
+                    <circle cx="15" cy="14" r="1" fill="currentColor"/>
+                    <circle cx="12" cy="11" r="1" fill="currentColor"/>
+                </svg>
+            `;
+            
+            // Styles passend zum Accessibility-Button (rechts)
+            Object.assign(button.style, {
+                position: 'fixed',
+                bottom: '20px',
+                left: '20px',
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: primaryColor,
+                color: 'white',
+                border: 'none',
+                boxShadow: `0 4px 14px ${primaryColor}50`,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: '999997',
+                transition: 'all 0.2s ease',
+                padding: '0'
+            });
+            
+            // Hover-Effekt
+            button.addEventListener('mouseenter', () => {
+                button.style.transform = 'translateY(-2px)';
+                button.style.boxShadow = `0 6px 20px ${primaryColor}60`;
+            });
+            button.addEventListener('mouseleave', () => {
+                button.style.transform = 'translateY(0)';
+                button.style.boxShadow = `0 4px 14px ${primaryColor}50`;
+            });
+            
+            // Click öffnet Einstellungen
+            button.addEventListener('click', () => {
+                this.openSettings();
+            });
+            
+            document.body.appendChild(button);
+            console.log('[Complyo] Cookie-Settings-Button angezeigt');
+        }
+        
+        hideFloatingButton() {
+            const button = document.getElementById('complyo-cookie-settings-btn');
+            if (button) button.remove();
+        }
+        
+        // ====================================================================
+        // Age Verification (Jugendschutz Art. 8 DSGVO)
+        // ====================================================================
+        
+        /**
+         * Laenderspezifische Altersgrenzen fuer digitale Einwilligung
+         * Basierend auf Art. 8 DSGVO und nationalen Umsetzungen
+         */
+        getAgeThresholdByCountry() {
+            return {
+                'DE': 16, // Deutschland
+                'AT': 14, // Oesterreich
+                'BE': 13, // Belgien
+                'BG': 14, // Bulgarien
+                'CY': 14, // Zypern
+                'CZ': 15, // Tschechien
+                'DK': 13, // Daenemark
+                'EE': 13, // Estland
+                'ES': 14, // Spanien
+                'FI': 13, // Finnland
+                'FR': 15, // Frankreich
+                'GR': 15, // Griechenland
+                'HR': 16, // Kroatien
+                'HU': 16, // Ungarn
+                'IE': 16, // Irland
+                'IT': 14, // Italien
+                'LT': 14, // Litauen
+                'LU': 16, // Luxemburg
+                'LV': 13, // Lettland
+                'MT': 13, // Malta
+                'NL': 16, // Niederlande
+                'PL': 16, // Polen
+                'PT': 13, // Portugal
+                'RO': 16, // Rumaenien
+                'SE': 13, // Schweden
+                'SI': 15, // Slowenien
+                'SK': 16, // Slowakei
+                'UK': 13, // Grossbritannien
+                'CH': 16, // Schweiz
+                'DEFAULT': 16
+            };
+        }
+        
+        checkAgeVerification() {
+            const verified = localStorage.getItem('complyo_age_verified');
+            if (verified) {
+                try {
+                    const data = JSON.parse(verified);
+                    // Pruefe ob Verifikation noch gueltig ist (30 Tage)
+                    const daysSince = (Date.now() - new Date(data.timestamp).getTime()) / (1000 * 60 * 60 * 24);
+                    if (daysSince < 30 && data.verified === true) {
+                        return true;
+                    }
+                } catch (e) {
+                    console.warn('[Complyo] Age verification data invalid');
+                }
+            }
+            return false;
+        }
+        
+        saveAgeVerification(verified, birthYear = null) {
+            const data = {
+                verified: verified,
+                birthYear: birthYear,
+                timestamp: new Date().toISOString(),
+                minAge: this.config.age_verification_min_age || 16
+            };
+            localStorage.setItem('complyo_age_verified', JSON.stringify(data));
+        }
+        
+        renderAgeVerificationModal() {
+            const { primaryColor, accentColor, bgColor, textColor } = this.config;
+            const minAge = this.config.age_verification_min_age || 16;
+            
+            // Backdrop
+            const backdrop = document.createElement('div');
+            backdrop.id = 'complyo-age-backdrop';
+            Object.assign(backdrop.style, {
+                position: 'fixed',
+                top: '0', left: '0', right: '0', bottom: '0',
+                background: 'rgba(0, 0, 0, 0.7)',
+                backdropFilter: 'blur(8px)',
+                zIndex: '999999',
+                opacity: '0',
+                transition: 'opacity 0.3s ease'
+            });
+            
+            // Modal
+            const modal = document.createElement('div');
+            modal.id = 'complyo-age-modal';
+            Object.assign(modal.style, {
+                position: 'fixed',
+                top: '50%', left: '50%',
+                transform: 'translate(-50%, -50%) scale(0.9)',
+                background: bgColor || '#ffffff',
+                borderRadius: '20px',
+                padding: '40px',
+                maxWidth: '420px',
+                width: '90%',
+                textAlign: 'center',
+                boxShadow: '0 25px 80px rgba(0,0,0,0.3)',
+                zIndex: '1000000',
+                opacity: '0',
+                transition: 'all 0.3s ease',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+            });
+            
+            const currentYear = new Date().getFullYear();
+            const maxYear = currentYear - minAge;
+            
+            modal.innerHTML = \`
+                <div style="font-size: 48px; margin-bottom: 20px;">🔒</div>
+                <h2 style="margin: 0 0 16px 0; font-size: 24px; font-weight: 700; color: \${textColor || '#1f2937'};">
+                    Altersverifikation
+                </h2>
+                <p style="margin: 0 0 24px 0; font-size: 15px; color: \${textColor || '#6b7280'}; line-height: 1.6;">
+                    Um fortzufahren, bestaetigen Sie bitte, dass Sie mindestens <strong>\${minAge} Jahre</strong> alt sind.
+                    <br><small style="opacity: 0.7;">(Gemaess Art. 8 DSGVO)</small>
+                </p>
                 
-                this.saveCustom(selections);
+                <div style="margin-bottom: 24px;">
+                    <label style="display: block; font-size: 14px; font-weight: 500; color: \${textColor || '#374151'}; margin-bottom: 8px;">
+                        Geburtsjahr eingeben:
+                    </label>
+                    <input 
+                        type="number" 
+                        id="complyo-birth-year" 
+                        min="1920" 
+                        max="\${currentYear}" 
+                        placeholder="\${maxYear}"
+                        style="width: 100%; padding: 14px; font-size: 18px; border: 2px solid #e5e7eb; border-radius: 12px; text-align: center; outline: none; transition: border-color 0.2s;"
+                        onfocus="this.style.borderColor='\${primaryColor}'"
+                        onblur="this.style.borderColor='#e5e7eb'"
+                    >
+                </div>
+                
+                <button 
+                    id="complyo-age-confirm" 
+                    style="width: 100%; padding: 16px; background: \${primaryColor}; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-bottom: 12px;"
+                    onmouseover="this.style.background='\${accentColor}'; this.style.transform='translateY(-2px)';"
+                    onmouseout="this.style.background='\${primaryColor}'; this.style.transform='translateY(0)';"
+                >
+                    Bestaetigen
+                </button>
+                
+                <p style="margin: 0; font-size: 12px; color: #9ca3af;">
+                    Diese Angabe wird lokal gespeichert und nicht an Server uebertragen.
+                </p>
+            \`;
+            
+            document.body.appendChild(backdrop);
+            document.body.appendChild(modal);
+            
+            // Animate in
+            requestAnimationFrame(() => {
+                backdrop.style.opacity = '1';
+                modal.style.opacity = '1';
+                modal.style.transform = 'translate(-50%, -50%) scale(1)';
+            });
+            
+            // Confirm button
+            const confirmBtn = modal.querySelector('#complyo-age-confirm');
+            const birthYearInput = modal.querySelector('#complyo-birth-year');
+            
+            confirmBtn.addEventListener('click', () => {
+                const birthYear = parseInt(birthYearInput.value);
+                const age = currentYear - birthYear;
+                
+                if (!birthYear || birthYear < 1920 || birthYear > currentYear) {
+                    birthYearInput.style.borderColor = '#ef4444';
+                    return;
+                }
+                
+                if (age >= minAge) {
+                    // Alter OK
+                    this.saveAgeVerification(true, birthYear);
+                    backdrop.style.opacity = '0';
+                    modal.style.opacity = '0';
+                    modal.style.transform = 'translate(-50%, -50%) scale(0.9)';
+                    setTimeout(() => {
+                        backdrop.remove();
+                        modal.remove();
+                        this.continueOnDOMReady();
+                    }, 300);
+                } else {
+                    // Zu jung
+                    modal.innerHTML = \`
+                        <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
+                        <h2 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 700; color: #ef4444;">
+                            Zugriff nicht moeglich
+                        </h2>
+                        <p style="margin: 0; font-size: 15px; color: \${textColor || '#6b7280'}; line-height: 1.6;">
+                            Diese Website erfordert ein Mindestalter von <strong>\${minAge} Jahren</strong>.
+                            <br><br>
+                            Bitte wende dich an einen Erziehungsberechtigten.
+                        </p>
+                    \`;
+                    this.saveAgeVerification(false, birthYear);
+                }
+            });
+            
+            // Enter key
+            birthYearInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') confirmBtn.click();
             });
         }
         
@@ -1541,12 +3142,14 @@
             localStorage.removeItem(CONSENT_STORAGE_KEY);
             localStorage.removeItem(CONSENT_DATE_KEY);
             this.consent = null;
+            this.hideFloatingButton();
             location.reload();
         }
         
         showBanner() {
             this.consent = null;
             localStorage.removeItem(CONSENT_STORAGE_KEY);
+            this.hideFloatingButton();
             this.render();
         }
     }
@@ -1557,12 +3160,32 @@
     
     // Auto-initialize if data-site-id is present
     const initBanner = () => {
+        console.log('[Complyo] Initialisiere Cookie-Banner...');
+        
+        // ✅ DEBUG: Prüfe ob Script-Tag gefunden wurde
+        const script = document.currentScript || 
+                      document.querySelector('script[data-site-id]') ||
+                      document.querySelector('script[src*="cookie-compliance.js"]');
+        
+        if (script) {
+            const siteId = script.getAttribute('data-site-id') || 
+                          script.getAttribute('data-complyo-site-id');
+            console.log('[Complyo] Script-Tag gefunden, site-id:', siteId);
+        } else {
+            console.warn('[Complyo] Script-Tag nicht gefunden!');
+        }
+        
         if (!window.complyoCookieBanner) {
+            console.log('[Complyo] Erstelle neue Banner-Instanz...');
             window.complyoCookieBanner = new ComplyoCookieBanner();
+        } else {
+            console.log('[Complyo] Banner-Instanz bereits vorhanden');
         }
         
         // Register global API (window.complyo)
         registerGlobalAPI(window.complyoCookieBanner);
+        
+        console.log('[Complyo] Banner-Initialisierung abgeschlossen');
     };
     
     // Register global window.complyo API

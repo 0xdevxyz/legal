@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional
 import os
 from datetime import datetime
 import time
+import asyncpg
 from accessibility_templates import AccessibilityTemplates
 from accessibility_patch_generator import AccessibilityPatchGenerator
 import aiohttp

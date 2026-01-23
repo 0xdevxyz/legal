@@ -20,6 +20,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
   const [scanProgress, setScanProgress] = useState(0);
   const [currentCheck, setCurrentCheck] = useState('');
   const [scanResult, setScanResult] = useState<any>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
   
   const { showToast } = useToast();
   const { setCurrentWebsite, setAnalysisData, updateMetrics } = useDashboardStore();
@@ -121,6 +122,9 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
     }
 
     try {
+      // ✅ Reset error state
+      setScanError(null);
+      
       // Normalize URL
       let normalizedUrl = url.trim();
       if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
@@ -164,9 +168,28 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
         setStep(3);
       }, 800);
 
-    } catch (error) {
-      showToast('Scan fehlgeschlagen. Bitte versuchen Sie es erneut.', 'error');
+    } catch (error: any) {
+      console.error('❌ Onboarding scan failed:', error);
+      
+      // ✅ FIX: Parse error message with details
+      let errorMessage = 'Scan fehlgeschlagen. Bitte versuchen Sie es erneut.';
+      
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      // ✅ Set error state for UI display
+      setScanError(errorMessage);
+      
+      // ✅ Show toast with error message
+      showToast(errorMessage, 'error');
+      
+      // ✅ Reset scanning state and go back to step 1
       setIsScanning(false);
+      setScanProgress(0);
+      setCurrentCheck('');
       setStep(1);
     }
   };
@@ -382,8 +405,31 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
         {/* Step 2: Scanning */}
         {step === 2 && (
           <div className="bg-white rounded-2xl shadow-2xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex items-center justify-center mb-6">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center animate-pulse">
+            {/* ✅ FIX: Error-Anzeige wenn Scan fehlgeschlagen */}
+            {scanError && (
+              <div className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-xl">
+                <h3 className="text-lg font-semibold text-red-800 mb-2">
+                  ⚠️ Scan fehlgeschlagen
+                </h3>
+                <p className="text-sm text-red-700 whitespace-pre-line">
+                  {scanError}
+                </p>
+                <button
+                  onClick={() => {
+                    setScanError(null);
+                    setStep(1);
+                  }}
+                  className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Zurück zur Eingabe
+                </button>
+              </div>
+            )}
+            
+            {!scanError && (
+              <>
+                <div className="flex items-center justify-center mb-6">
+                  <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center animate-pulse">
                 <Loader2 className="w-8 h-8 text-white animate-spin" />
               </div>
             </div>
@@ -437,6 +483,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
                 </div>
               ))}
             </div>
+              </>
+            )}
           </div>
         )}
 

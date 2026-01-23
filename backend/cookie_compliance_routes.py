@@ -11,7 +11,7 @@ import hashlib
 import uuid
 from datetime import datetime, date, timedelta
 import json
-from cookie_scanner_service import cookie_scanner, scanner_manager
+from cookie_scanner_service import cookie_scanner
 
 router = APIRouter()
 
@@ -239,6 +239,82 @@ async def log_consent(
 # Banner Configuration Endpoints
 # ============================================================================
 
+@router.get("/api/cookie-compliance/my-config")
+async def get_my_config(
+    request: Request,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Get the user's existing cookie banner configuration.
+    
+    WICHTIG: 1 Account = 1 Website!
+    Jeder User kann nur EINE Website mit Cookie-Banner absichern.
+    
+    Returns:
+    - has_config: true wenn bereits konfiguriert
+    - data: bestehende Config oder null
+    """
+    try:
+        # TODO: Get user_id from session/auth
+        user_id = 1  # Replace with actual user from session
+        
+        query = """
+            SELECT 
+                id, site_id, user_id,
+                layout, primary_color, accent_color, text_color, bg_color,
+                button_style, position, width_mode,
+                texts, services, show_on_pages, geo_restriction,
+                auto_block_scripts, respect_dnt, cookie_lifetime_days,
+                show_branding, custom_logo_url,
+                is_active, created_at, updated_at,
+                scan_completed_at, last_scan_url
+            FROM cookie_banner_configs
+            WHERE user_id = $1 AND is_active = true
+            ORDER BY created_at DESC
+            LIMIT 1
+        """
+        
+        row = await db_pool.fetchrow(query, user_id)
+        
+        if not row:
+            return {
+                "success": True,
+                "has_config": False,
+                "data": None,
+                "message": "Keine Konfiguration gefunden - Onboarding erforderlich"
+            }
+        
+        config = dict(row)
+        
+        # Parse JSON fields
+        if isinstance(config.get('texts'), str):
+            config['texts'] = json.loads(config['texts'])
+        if isinstance(config.get('services'), str):
+            config['services'] = json.loads(config['services'])
+        if isinstance(config.get('show_on_pages'), str):
+            config['show_on_pages'] = json.loads(config['show_on_pages'])
+        if isinstance(config.get('geo_restriction'), str):
+            config['geo_restriction'] = json.loads(config['geo_restriction'])
+        
+        config['scan_completed'] = config.get('scan_completed_at') is not None
+        
+        # Convert datetime to ISO string
+        for field in ['scan_completed_at', 'created_at', 'updated_at']:
+            if config.get(field):
+                config[field] = config[field].isoformat()
+        
+        return {
+            "success": True,
+            "has_config": True,
+            "data": config,
+            "message": "Konfiguration gefunden - 1 Website bereits registriert"
+        }
+        
+    except Exception as e:
+        print(f"Error getting user config: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get configuration: {str(e)}")
+
+
 @router.get("/api/cookie-compliance/config/{site_id}")
 async def get_banner_config(
     site_id: str,
@@ -262,7 +338,8 @@ async def get_banner_config(
                 texts, services, show_on_pages, geo_restriction,
                 auto_block_scripts, respect_dnt, cookie_lifetime_days,
                 show_branding, custom_logo_url,
-                is_active, created_at, updated_at
+                is_active, created_at, updated_at,
+                scan_completed_at, last_scan_url
             FROM cookie_banner_configs
             WHERE site_id = $1 AND is_active = true
         """
@@ -270,7 +347,15 @@ async def get_banner_config(
         row = await db_pool.fetchrow(query, site_id)
         
         if not row:
-            # Return default configuration
+            # Return default configuration - OHNE scan_completed
+            default_description = """Wir benötigen Ihre Einwilligung, bevor Sie unsere Website weiter besuchen können.
+
+Wenn Sie unter 16 Jahre alt sind und Ihre Einwilligung zu optionalen Services geben möchten, müssen Sie Ihre Erziehungsberechtigten um Erlaubnis bitten.
+
+Wir verwenden Cookies und andere Technologien auf unserer Website. Einige von ihnen sind essenziell, während andere uns helfen, diese Website und Ihre Erfahrung zu verbessern. Personenbezogene Daten können verarbeitet werden (z. B. IP-Adressen), z. B. für personalisierte Anzeigen und Inhalte oder die Messung von Anzeigen und Inhalten. Weitere Informationen über die Verwendung Ihrer Daten finden Sie in unserer Datenschutzerklärung. Es besteht keine Verpflichtung, in die Verarbeitung Ihrer Daten einzuwilligen, um dieses Angebot zu nutzen. Sie können Ihre Auswahl jederzeit unter Einstellungen widerrufen oder anpassen. Bitte beachten Sie, dass aufgrund individueller Einstellungen möglicherweise nicht alle Funktionen der Website verfügbar sind.
+
+Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwilligung zur Nutzung dieser Services willigen Sie auch in die Verarbeitung Ihrer Daten in den USA gemäß Art. 49 (1) lit. a DSGVO ein. Der EuGH stuft die USA als ein Land mit unzureichendem Datenschutz nach EU-Standards ein. Es besteht beispielsweise die Gefahr, dass US-Behörden personenbezogene Daten in Überwachungsprogrammen verarbeiten, ohne dass für Europäerinnen und Europäer eine Klagemöglichkeit besteht."""
+
             return {
                 "success": True,
                 "data": {
@@ -285,24 +370,22 @@ async def get_banner_config(
                     "width_mode": "full",
                     "texts": {
                         "de": {
-                            "title": "🍪 Wir respektieren Ihre Privatsphäre",
-                            "description": "Wir verwenden Cookies, um Ihre Erfahrung zu verbessern. Weitere Informationen finden Sie in unserer Datenschutzerklärung.",
+                            "title": "Datenschutz-Präferenz",
+                            "description": default_description,
                             "accept_all": "Alle akzeptieren",
-                            "reject_all": "Ablehnen",
-                            "accept_selected": "Auswahl akzeptieren",
-                            "settings": "Einstellungen",
-                            "privacy_policy": "Datenschutzerklärung",
-                            "imprint": "Impressum"
-                        },
-                        "en": {
-                            "title": "🍪 We respect your privacy",
-                            "description": "We use cookies to enhance your experience. More information in our privacy policy.",
-                            "accept_all": "Accept all",
-                            "reject_all": "Reject",
-                            "accept_selected": "Accept selection",
-                            "settings": "Settings",
-                            "privacy_policy": "Privacy Policy",
-                            "imprint": "Imprint"
+                            "reject_all": "Nur essenzielle Cookies akzeptieren",
+                            "accept_selected": "Speichern",
+                            "settings": "Individuelle Datenschutzeinstellungen",
+                            "necessary": "Essenziell",
+                            "necessaryDesc": "Essenzielle Services ermöglichen grundlegende Funktionen und sind für das ordnungsgemäße Funktionieren der Website erforderlich.",
+                            "functional": "Funktional",
+                            "functionalDesc": "Funktionale Cookies speichern Ihre Präferenzen wie Sprache und Region für ein verbessertes Nutzungserlebnis.",
+                            "analytics": "Statistiken",
+                            "analyticsDesc": "Statistik-Cookies helfen Webseiten-Besitzern zu verstehen, wie Besucher mit Webseiten interagieren, indem Informationen anonym gesammelt und gemeldet werden.",
+                            "marketing": "Externe Medien",
+                            "marketingDesc": "Inhalte von Videoplattformen und Social-Media-Plattformen werden standardmäßig blockiert. Wenn externe Services akzeptiert werden, ist für den Zugriff auf diese Inhalte keine manuelle Einwilligung mehr erforderlich.",
+                            "privacy_link": "Datenschutzerklärung",
+                            "imprint_link": "Impressum"
                         }
                     },
                     "services": [],
@@ -314,9 +397,12 @@ async def get_banner_config(
                     "show_branding": True,
                     "custom_logo_url": None,
                     "revision": 1,
-                    "is_active": True
+                    "is_active": False,  # ✅ FIX: Default ist FALSE - Banner nur zeigen wenn im Backend konfiguriert!
+                    "scan_completed": False,
+                    "scan_completed_at": None,
+                    "last_scan_url": None
                 },
-                "message": "Default configuration (not yet customized)"
+                "message": "Default configuration - no banner configured yet"
             }
         
         # Convert row to dict and parse JSON fields
@@ -331,6 +417,17 @@ async def get_banner_config(
             config['show_on_pages'] = json.loads(config['show_on_pages'])
         if isinstance(config.get('geo_restriction'), str):
             config['geo_restriction'] = json.loads(config['geo_restriction'])
+        
+        # ✅ Füge scan_completed Status hinzu
+        config['scan_completed'] = config.get('scan_completed_at') is not None
+        
+        # Convert datetime to ISO string
+        if config.get('scan_completed_at'):
+            config['scan_completed_at'] = config['scan_completed_at'].isoformat()
+        if config.get('created_at'):
+            config['created_at'] = config['created_at'].isoformat()
+        if config.get('updated_at'):
+            config['updated_at'] = config['updated_at'].isoformat()
         
         return {
             "success": True,
@@ -527,8 +624,9 @@ async def get_available_services(
         query = """
             SELECT 
                 id, service_key, name, category, provider,
-                template, plan_required, is_active,
-                created_at, updated_at
+                description, cookies, template, plan_required, is_active,
+                created_at, updated_at, privacy_url,
+                provider_address, provider_privacy_url, provider_cookie_url, provider_description
             FROM cookie_services
             WHERE is_active = true
         """
@@ -777,19 +875,34 @@ async def scan_website(
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
-    Scannt eine Website und erkennt automatisch verwendete Cookie-Services
+    Scannt eine Website und erkennt automatisch verwendete Cookie-Services.
+    Speichert die gefundenen Services automatisch in der Banner-Konfiguration.
     
     Body:
     - url: Website URL zum Scannen
+    - site_id: (optional) Site-ID für die Konfiguration
     
     Returns:
     - detected_services: Liste erkannter Services
-    - confidence: Konfidenz-Score pro Service
+    - config_updated: Boolean ob Config aktualisiert wurde
     """
     try:
         url = data.get('url')
         if not url:
             raise HTTPException(status_code=400, detail="URL required")
+        
+        # Site-ID aus URL generieren wenn nicht angegeben
+        site_id = data.get('site_id')
+        if not site_id:
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(url if url.startswith('http') else f'https://{url}')
+                hostname = parsed.netloc.replace('www.', '')
+                site_id = hostname.replace('.', '-').lower()
+            except:
+                site_id = 'unknown-site'
+        
+        print(f"[Scan] Scanning {url} for site_id: {site_id}")
         
         # Scan website
         scan_result = await cookie_scanner.scan_website(url)
@@ -803,12 +916,13 @@ async def scan_website(
         
         # Match detected services with database services
         matched_services = []
+        service_keys_found = []
+        
         if scan_result['detected_services']:
             service_keys = scan_result['detected_services']
-            placeholders = ','.join([f'${i+1}' for i in range(len(service_keys))])
             
-            query = f"""
-                SELECT service_key, name, category
+            query = """
+                SELECT service_key, name, category, description, cookies
                 FROM cookie_services
                 WHERE service_key = ANY($1::text[]) AND is_active = true
             """
@@ -816,18 +930,53 @@ async def scan_website(
             rows = await db_pool.fetch(query, service_keys)
             
             for row in rows:
+                service_keys_found.append(row['service_key'])
                 matched_services.append({
                     'service_key': row['service_key'],
                     'name': row['name'],
                     'category': row['category'],
+                    'description': row['description'],
                     'confidence': scan_result['confidence'].get(row['service_key'], 0.5)
                 })
+        
+        # ✅ AUTOMATISCH: Speichere gefundene Services in cookie_banner_configs
+        config_updated = False
+        if site_id:
+            # Prüfe ob Config existiert
+            existing = await db_pool.fetchrow(
+                "SELECT id FROM cookie_banner_configs WHERE site_id = $1",
+                site_id
+            )
+            
+            if existing:
+                # Update existierende Config mit gefundenen Services
+                await db_pool.execute("""
+                    UPDATE cookie_banner_configs SET
+                        services = $2::text[],
+                        scan_completed_at = NOW(),
+                        last_scan_url = $3,
+                        updated_at = NOW()
+                    WHERE site_id = $1
+                """, site_id, service_keys_found, url)
+                config_updated = True
+                print(f"[Scan] ✅ Config updated for {site_id} with {len(service_keys_found)} services")
+            else:
+                # Erstelle neue Config mit gefundenen Services
+                await db_pool.execute("""
+                    INSERT INTO cookie_banner_configs (
+                        site_id, services, scan_completed_at, last_scan_url, is_active
+                    ) VALUES ($1, $2::text[], NOW(), $3, true)
+                """, site_id, service_keys_found, url)
+                config_updated = True
+                print(f"[Scan] ✅ New config created for {site_id} with {len(service_keys_found)} services")
         
         return {
             "success": True,
             "url": url,
+            "site_id": site_id,
             "detected_services": matched_services,
             "total_found": len(matched_services),
+            "config_updated": config_updated,
             "scan_timestamp": scan_result.get('scan_timestamp'),
             "raw_detection": {
                 'scripts_count': len(scan_result.get('scripts', [])),
@@ -873,16 +1022,16 @@ async def scan_website_deep(
         wait_time = data.get('wait_time', 3000)
         
         # Check if headless scanning is available
-        if not scanner_manager.is_headless_available():
-            return {
-                "success": False,
-                "error": "Headless scanning not available. Playwright not installed.",
-                "url": url,
-                "fallback_available": True
-            }
+        # Note: Deep scan requires Playwright which is not installed
+        return {
+            "success": False,
+            "error": "Headless scanning not available. Use light scan instead.",
+            "url": url,
+            "fallback_available": True
+        }
         
-        # Perform deep scan
-        scan_result = await scanner_manager.scan_deep(url)
+        # Deep scan disabled - use light scan via /scan endpoint
+        scan_result = {"error": "Deep scan not available"}
         
         if scan_result.get('error'):
             return {
@@ -973,7 +1122,7 @@ async def get_scan_capabilities():
                 ]
             },
             "deep_scan": {
-                "available": scanner_manager.is_headless_available(),
+                "available": False,  # Playwright not installed
                 "description": "Headless Browser Scan mit vollstaendiger JS-Ausfuehrung",
                 "features": [
                     "Echtes Browser-Rendering",
@@ -1085,4 +1234,853 @@ async def health_check(db_pool: asyncpg.Pool = Depends(get_db_connection)):
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
+
+
+# ============================================================================
+# Phase 1: Google Consent Mode v2, Jugendschutz, TCF
+# ============================================================================
+
+@router.get("/api/cookie-compliance/consent-mode-config/{site_id}")
+async def get_consent_mode_config(
+    site_id: str,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Get Google Consent Mode v2 configuration
+    Pflicht seit März 2024 für Google Services
+    """
+    try:
+        query = """
+            SELECT 
+                consent_mode_enabled,
+                consent_mode_default,
+                gtm_enabled,
+                gtm_container_id
+            FROM cookie_banner_configs
+            WHERE site_id = $1 AND is_active = true
+        """
+        row = await db_pool.fetchrow(query, site_id)
+        
+        if not row:
+            return {
+                "success": True,
+                "data": {
+                    "consent_mode_enabled": True,
+                    "consent_mode_default": {
+                        "ad_storage": "denied",
+                        "analytics_storage": "denied",
+                        "ad_user_data": "denied",
+                        "ad_personalization": "denied"
+                    },
+                    "gtm_enabled": False,
+                    "gtm_container_id": None
+                }
+            }
+        
+        return {
+            "success": True,
+            "data": {
+                "consent_mode_enabled": row['consent_mode_enabled'],
+                "consent_mode_default": row['consent_mode_default'] or {
+                    "ad_storage": "denied",
+                    "analytics_storage": "denied",
+                    "ad_user_data": "denied",
+                    "ad_personalization": "denied"
+                },
+                "gtm_enabled": row.get('gtm_enabled', False),
+                "gtm_container_id": row.get('gtm_container_id')
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/cookie-compliance/consent-mode-config")
+async def update_consent_mode_config(
+    request: Request,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Update Google Consent Mode v2 configuration
+    """
+    try:
+        data = await request.json()
+        site_id = data.get('site_id')
+        
+        if not site_id:
+            raise HTTPException(status_code=400, detail="site_id required")
+        
+        query = """
+            UPDATE cookie_banner_configs SET
+                consent_mode_enabled = COALESCE($2, consent_mode_enabled),
+                consent_mode_default = COALESCE($3, consent_mode_default),
+                gtm_enabled = COALESCE($4, gtm_enabled),
+                gtm_container_id = COALESCE($5, gtm_container_id),
+                updated_at = NOW()
+            WHERE site_id = $1
+            RETURNING id
+        """
+        
+        result = await db_pool.fetchrow(
+            query,
+            site_id,
+            data.get('consent_mode_enabled'),
+            json.dumps(data.get('consent_mode_default')) if data.get('consent_mode_default') else None,
+            data.get('gtm_enabled'),
+            data.get('gtm_container_id')
+        )
+        
+        return {"success": True, "updated": result is not None}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/cookie-compliance/age-verification/{site_id}")
+async def get_age_verification_config(
+    site_id: str,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Get age verification (Jugendschutz) configuration
+    Art. 8 DSGVO - Altersgrenzen für Minderjährige
+    """
+    try:
+        query = """
+            SELECT 
+                age_verification_enabled,
+                age_verification_min_age
+            FROM cookie_banner_configs
+            WHERE site_id = $1 AND is_active = true
+        """
+        row = await db_pool.fetchrow(query, site_id)
+        
+        # Länderspezifische Altersgrenzen nach DSGVO
+        country_age_limits = {
+            "DE": 16, "AT": 14, "BE": 13, "BG": 14, "HR": 16,
+            "CY": 14, "CZ": 15, "DK": 13, "EE": 13, "FI": 13,
+            "FR": 15, "GR": 15, "HU": 16, "IE": 16, "IT": 14,
+            "LV": 13, "LT": 14, "LU": 16, "MT": 13, "NL": 16,
+            "PL": 16, "PT": 13, "RO": 16, "SK": 16, "SI": 16,
+            "ES": 14, "SE": 13, "GB": 13, "CH": 16
+        }
+        
+        if not row:
+            return {
+                "success": True,
+                "data": {
+                    "enabled": False,
+                    "min_age": 16,
+                    "country_age_limits": country_age_limits
+                }
+            }
+        
+        return {
+            "success": True,
+            "data": {
+                "enabled": row['age_verification_enabled'] or False,
+                "min_age": row['age_verification_min_age'] or 16,
+                "country_age_limits": country_age_limits
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/cookie-compliance/age-verification")
+async def update_age_verification_config(
+    request: Request,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Update age verification configuration
+    """
+    try:
+        data = await request.json()
+        site_id = data.get('site_id')
+        
+        if not site_id:
+            raise HTTPException(status_code=400, detail="site_id required")
+        
+        query = """
+            UPDATE cookie_banner_configs SET
+                age_verification_enabled = COALESCE($2, age_verification_enabled),
+                age_verification_min_age = COALESCE($3, age_verification_min_age),
+                updated_at = NOW()
+            WHERE site_id = $1
+            RETURNING id
+        """
+        
+        result = await db_pool.fetchrow(
+            query,
+            site_id,
+            data.get('enabled'),
+            data.get('min_age')
+        )
+        
+        return {"success": True, "updated": result is not None}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# TCF 2.2 Endpoints (UI vorbereitet)
+@router.get("/api/cookie-compliance/tcf/vendors")
+async def get_tcf_vendors(
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Get available TCF vendors
+    """
+    try:
+        query = """
+            SELECT 
+                vendor_id, name, purposes, legitimate_interests,
+                special_purposes, features, special_features, policy_url
+            FROM tcf_vendors
+            WHERE is_active = true
+            ORDER BY name
+        """
+        rows = await db_pool.fetch(query)
+        
+        vendors = []
+        for row in rows:
+            vendors.append({
+                "vendor_id": row['vendor_id'],
+                "name": row['name'],
+                "purposes": row['purposes'] or [],
+                "legitimate_interests": row['legitimate_interests'] or [],
+                "special_purposes": row['special_purposes'] or [],
+                "features": row['features'] or [],
+                "special_features": row['special_features'] or [],
+                "policy_url": row['policy_url']
+            })
+        
+        # TCF 2.2 Purposes
+        purposes = [
+            {"id": 1, "name": "Speicherung von und Zugriff auf Informationen", "description": "Cookies, Geräte- oder ähnliche Online-Kennungen"},
+            {"id": 2, "name": "Einfache Anzeigen", "description": "Anzeige von Werbung"},
+            {"id": 3, "name": "Anzeigenauswahl, -schaltung und -berichterstattung", "description": "Personalisierte Werbung"},
+            {"id": 4, "name": "Personalisierung von Inhalten", "description": "Auswahl personalisierter Inhalte"},
+            {"id": 5, "name": "Messung", "description": "Messung der Anzeigen- und Inhaltsleistung"},
+            {"id": 6, "name": "Anwendung von Marktforschung", "description": "Erkenntnisse über Zielgruppen"},
+            {"id": 7, "name": "Entwicklung und Verbesserung von Produkten", "description": "Entwicklung neuer Produkte"},
+            {"id": 8, "name": "Auswahl einfacher Anzeigen", "description": "Grundlegende Anzeigenauswahl"},
+            {"id": 9, "name": "Erstellung eines personalisierten Anzeigenprofils", "description": "Profil für personalisierte Werbung"},
+            {"id": 10, "name": "Auswahl personalisierter Anzeigen", "description": "Personalisierte Anzeigen basierend auf Profil"}
+        ]
+        
+        return {
+            "success": True,
+            "vendors": vendors,
+            "purposes": purposes,
+            "tcf_version": "2.2"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/cookie-compliance/tcf/config/{site_id}")
+async def get_tcf_config(
+    site_id: str,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Get TCF configuration for a site
+    """
+    try:
+        query = """
+            SELECT 
+                tcf_enabled,
+                tcf_vendors
+            FROM cookie_banner_configs
+            WHERE site_id = $1 AND is_active = true
+        """
+        row = await db_pool.fetchrow(query, site_id)
+        
+        if not row:
+            return {
+                "success": True,
+                "data": {
+                    "tcf_enabled": False,
+                    "tcf_vendors": [],
+                    "notice": "TCF erfordert Registrierung bei IAB Europe als CMP"
+                }
+            }
+        
+        tcf_vendors = row['tcf_vendors']
+        if isinstance(tcf_vendors, str):
+            tcf_vendors = json.loads(tcf_vendors)
+        
+        return {
+            "success": True,
+            "data": {
+                "tcf_enabled": row['tcf_enabled'] or False,
+                "tcf_vendors": tcf_vendors or [],
+                "notice": "TCF erfordert Registrierung bei IAB Europe als CMP"
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/cookie-compliance/tcf/config")
+async def update_tcf_config(
+    request: Request,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Update TCF configuration
+    """
+    try:
+        data = await request.json()
+        site_id = data.get('site_id')
+        
+        if not site_id:
+            raise HTTPException(status_code=400, detail="site_id required")
+        
+        query = """
+            UPDATE cookie_banner_configs SET
+                tcf_enabled = COALESCE($2, tcf_enabled),
+                tcf_vendors = COALESCE($3, tcf_vendors),
+                updated_at = NOW()
+            WHERE site_id = $1
+            RETURNING id
+        """
+        
+        result = await db_pool.fetchrow(
+            query,
+            site_id,
+            data.get('tcf_enabled'),
+            json.dumps(data.get('tcf_vendors')) if data.get('tcf_vendors') else None
+        )
+        
+        return {"success": True, "updated": result is not None}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Phase 2: Geo-Restriction, Consent Forwarding
+# ============================================================================
+
+@router.get("/api/cookie-compliance/geo-check")
+async def geo_check(
+    request: Request,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Detect visitor's country for geo-restriction
+    Uses IP-based geolocation
+    """
+    try:
+        # Get client IP
+        client_ip = request.headers.get('X-Forwarded-For', request.client.host)
+        if ',' in client_ip:
+            client_ip = client_ip.split(',')[0].strip()
+        
+        # Hash IP for privacy
+        ip_hash = hashlib.sha256(client_ip.encode()).hexdigest()[:16]
+        
+        # Check cache first
+        cache_query = """
+            SELECT country_code FROM geo_ip_cache 
+            WHERE ip_hash = $1 AND cached_at > NOW() - INTERVAL '24 hours'
+        """
+        cached = await db_pool.fetchrow(cache_query, ip_hash)
+        
+        if cached:
+            return {
+                "success": True,
+                "country_code": cached['country_code'],
+                "cached": True
+            }
+        
+        # Simple IP-based detection (can be enhanced with MaxMind)
+        # For now, use a basic approach or default to EU
+        country_code = "DE"  # Default
+        
+        # Try to detect from common headers
+        cf_country = request.headers.get('CF-IPCountry')
+        if cf_country:
+            country_code = cf_country
+        
+        # Cache result
+        cache_insert = """
+            INSERT INTO geo_ip_cache (ip_hash, country_code)
+            VALUES ($1, $2)
+            ON CONFLICT (ip_hash) DO UPDATE SET 
+                country_code = $2, cached_at = NOW()
+        """
+        await db_pool.execute(cache_insert, ip_hash, country_code)
+        
+        return {
+            "success": True,
+            "country_code": country_code,
+            "cached": False
+        }
+    except Exception as e:
+        return {
+            "success": True,
+            "country_code": "EU",  # Default to EU on error
+            "error": str(e)
+        }
+
+
+@router.get("/api/cookie-compliance/geo-restriction/{site_id}")
+async def get_geo_restriction_config(
+    site_id: str,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Get geo-restriction configuration
+    """
+    try:
+        query = """
+            SELECT 
+                geo_restriction_enabled,
+                geo_countries
+            FROM cookie_banner_configs
+            WHERE site_id = $1 AND is_active = true
+        """
+        row = await db_pool.fetchrow(query, site_id)
+        
+        # EU/EEA countries that require cookie consent
+        eu_countries = [
+            "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR",
+            "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL",
+            "PL", "PT", "RO", "SK", "SI", "ES", "SE", "GB", "CH", "NO", "IS", "LI"
+        ]
+        
+        if not row:
+            return {
+                "success": True,
+                "data": {
+                    "enabled": False,
+                    "countries": [],
+                    "eu_countries": eu_countries,
+                    "mode": "show_all"  # show_all, show_in_countries, hide_in_countries
+                }
+            }
+        
+        return {
+            "success": True,
+            "data": {
+                "enabled": row['geo_restriction_enabled'] or False,
+                "countries": row['geo_countries'] or [],
+                "eu_countries": eu_countries,
+                "mode": "show_in_countries"
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/cookie-compliance/geo-restriction")
+async def update_geo_restriction(
+    request: Request,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Update geo-restriction settings
+    """
+    try:
+        data = await request.json()
+        site_id = data.get('site_id')
+        
+        if not site_id:
+            raise HTTPException(status_code=400, detail="site_id required")
+        
+        query = """
+            UPDATE cookie_banner_configs SET
+                geo_restriction_enabled = COALESCE($2, geo_restriction_enabled),
+                geo_countries = COALESCE($3, geo_countries),
+                updated_at = NOW()
+            WHERE site_id = $1
+            RETURNING id
+        """
+        
+        result = await db_pool.fetchrow(
+            query,
+            site_id,
+            data.get('enabled'),
+            data.get('countries')
+        )
+        
+        return {"success": True, "updated": result is not None}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Consent Forwarding
+@router.get("/api/cookie-compliance/forwarding/{site_id}")
+async def get_forwarding_config(
+    site_id: str,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Get consent forwarding configuration
+    """
+    try:
+        query = """
+            SELECT 
+                forwarding_enabled,
+                forwarding_target_sites
+            FROM cookie_banner_configs
+            WHERE site_id = $1 AND is_active = true
+        """
+        row = await db_pool.fetchrow(query, site_id)
+        
+        if not row:
+            return {
+                "success": True,
+                "data": {
+                    "enabled": False,
+                    "target_sites": [],
+                    "mode": "one_way"  # one_way, two_way
+                }
+            }
+        
+        return {
+            "success": True,
+            "data": {
+                "enabled": row['forwarding_enabled'] or False,
+                "target_sites": row['forwarding_target_sites'] or [],
+                "mode": "one_way"
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/cookie-compliance/forwarding")
+async def update_forwarding_config(
+    request: Request,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Update consent forwarding settings
+    """
+    try:
+        data = await request.json()
+        site_id = data.get('site_id')
+        
+        if not site_id:
+            raise HTTPException(status_code=400, detail="site_id required")
+        
+        query = """
+            UPDATE cookie_banner_configs SET
+                forwarding_enabled = COALESCE($2, forwarding_enabled),
+                forwarding_target_sites = COALESCE($3, forwarding_target_sites),
+                updated_at = NOW()
+            WHERE site_id = $1
+            RETURNING id
+        """
+        
+        result = await db_pool.fetchrow(
+            query,
+            site_id,
+            data.get('enabled'),
+            data.get('target_sites')
+        )
+        
+        return {"success": True, "updated": result is not None}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Phase 5: Cookie Policy Generator, Revision System, Import/Export
+# ============================================================================
+
+@router.get("/api/cookie-compliance/policy/{site_id}")
+async def generate_cookie_policy(
+    site_id: str,
+    lang: str = "de",
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Generate cookie policy document from configured services
+    """
+    try:
+        # Get config and services
+        config_query = """
+            SELECT c.*, 
+                   array_agg(s.name) as service_names,
+                   array_agg(s.category) as service_categories,
+                   array_agg(s.provider) as service_providers,
+                   array_agg(s.description) as service_descriptions,
+                   array_agg(s.cookies) as service_cookies
+            FROM cookie_banner_configs c
+            LEFT JOIN cookie_services s ON s.service_key = ANY(c.services)
+            WHERE c.site_id = $1 AND c.is_active = true
+            GROUP BY c.id
+        """
+        row = await db_pool.fetchrow(config_query, site_id)
+        
+        if not row:
+            return {"success": False, "error": "Site not configured"}
+        
+        # Build policy document
+        policy = {
+            "title": "Cookie-Richtlinie" if lang == "de" else "Cookie Policy",
+            "last_updated": datetime.now().isoformat(),
+            "site_id": site_id,
+            "sections": []
+        }
+        
+        # Introduction
+        policy["sections"].append({
+            "title": "Einleitung" if lang == "de" else "Introduction",
+            "content": "Diese Website verwendet Cookies und ähnliche Technologien, um die Benutzererfahrung zu verbessern und bestimmte Funktionen bereitzustellen." if lang == "de" else "This website uses cookies and similar technologies to improve user experience and provide certain features."
+        })
+        
+        # Categorize services
+        categories = {
+            "necessary": {"name": "Notwendig", "services": []},
+            "functional": {"name": "Funktional", "services": []},
+            "analytics": {"name": "Statistik", "services": []},
+            "marketing": {"name": "Marketing", "services": []}
+        }
+        
+        if row['service_names'] and row['service_names'][0]:
+            for i, name in enumerate(row['service_names']):
+                if name:
+                    cat = row['service_categories'][i] if row['service_categories'] else 'functional'
+                    if cat in categories:
+                        categories[cat]["services"].append({
+                            "name": name,
+                            "provider": row['service_providers'][i] if row['service_providers'] else "",
+                            "description": row['service_descriptions'][i] if row['service_descriptions'] else "",
+                            "cookies": row['service_cookies'][i] if row['service_cookies'] else []
+                        })
+        
+        for cat_key, cat_data in categories.items():
+            if cat_data["services"]:
+                section = {
+                    "title": cat_data["name"],
+                    "services": cat_data["services"]
+                }
+                policy["sections"].append(section)
+        
+        # Rights section
+        policy["sections"].append({
+            "title": "Ihre Rechte" if lang == "de" else "Your Rights",
+            "content": "Sie können Ihre Einwilligung jederzeit widerrufen, indem Sie auf den Cookie-Einstellungen-Link klicken." if lang == "de" else "You can withdraw your consent at any time by clicking the cookie settings link."
+        })
+        
+        return {
+            "success": True,
+            "policy": policy,
+            "format": "json"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/cookie-compliance/revisions/{site_id}")
+async def get_config_revisions(
+    site_id: str,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Get configuration revision history
+    """
+    try:
+        query = """
+            SELECT 
+                revision_number, config_snapshot, changes_summary, created_at
+            FROM cookie_consent_revisions
+            WHERE site_id = $1
+            ORDER BY revision_number DESC
+            LIMIT 50
+        """
+        rows = await db_pool.fetch(query, site_id)
+        
+        revisions = []
+        for row in rows:
+            revisions.append({
+                "revision": row['revision_number'],
+                "snapshot": row['config_snapshot'],
+                "changes": row['changes_summary'],
+                "created_at": row['created_at'].isoformat() if row['created_at'] else None
+            })
+        
+        return {
+            "success": True,
+            "revisions": revisions,
+            "total": len(revisions)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/cookie-compliance/export/{site_id}")
+async def export_config(
+    site_id: str,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Export complete configuration as JSON
+    """
+    try:
+        query = """
+            SELECT * FROM cookie_banner_configs
+            WHERE site_id = $1 AND is_active = true
+        """
+        row = await db_pool.fetchrow(query, site_id)
+        
+        if not row:
+            return {"success": False, "error": "Configuration not found"}
+        
+        config = dict(row)
+        
+        # Remove internal fields
+        for field in ['id', 'user_id', 'created_at', 'updated_at', 'is_active']:
+            config.pop(field, None)
+        
+        # Convert datetime fields
+        if config.get('scan_completed_at'):
+            config['scan_completed_at'] = config['scan_completed_at'].isoformat()
+        
+        return {
+            "success": True,
+            "export": {
+                "version": "1.0",
+                "exported_at": datetime.now().isoformat(),
+                "site_id": site_id,
+                "config": config
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/cookie-compliance/import")
+async def import_config(
+    request: Request,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Import configuration from JSON
+    """
+    try:
+        data = await request.json()
+        site_id = data.get('site_id')
+        import_data = data.get('import')
+        
+        if not site_id or not import_data:
+            raise HTTPException(status_code=400, detail="site_id and import data required")
+        
+        config = import_data.get('config', {})
+        
+        # Check if config exists
+        existing = await db_pool.fetchrow(
+            "SELECT id FROM cookie_banner_configs WHERE site_id = $1",
+            site_id
+        )
+        
+        if existing:
+            # Update existing
+            query = """
+                UPDATE cookie_banner_configs SET
+                    layout = $2,
+                    primary_color = $3,
+                    accent_color = $4,
+                    text_color = $5,
+                    bg_color = $6,
+                    services = $7,
+                    texts = $8,
+                    consent_mode_enabled = $9,
+                    consent_mode_default = $10,
+                    updated_at = NOW()
+                WHERE site_id = $1
+                RETURNING id
+            """
+            result = await db_pool.fetchrow(
+                query,
+                site_id,
+                config.get('layout', 'box_modal'),
+                config.get('primary_color', '#7c3aed'),
+                config.get('accent_color', '#9333ea'),
+                config.get('text_color', '#333333'),
+                config.get('bg_color', '#ffffff'),
+                config.get('services', []),
+                json.dumps(config.get('texts', {})),
+                config.get('consent_mode_enabled', True),
+                json.dumps(config.get('consent_mode_default', {}))
+            )
+        else:
+            return {"success": False, "error": "Site not found. Create configuration first."}
+        
+        return {
+            "success": True,
+            "imported": True,
+            "site_id": site_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Phase 6: Auto-Reconsent, Bannerless Mode
+# ============================================================================
+
+@router.get("/api/cookie-compliance/reconsent-check/{site_id}")
+async def check_reconsent_required(
+    site_id: str,
+    config_hash: str = None,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Check if reconsent is required due to config changes
+    """
+    try:
+        query = """
+            SELECT config_hash, requires_reconsent
+            FROM cookie_banner_configs
+            WHERE site_id = $1 AND is_active = true
+        """
+        row = await db_pool.fetchrow(query, site_id)
+        
+        if not row:
+            return {"success": True, "requires_reconsent": False}
+        
+        current_hash = row['config_hash']
+        requires_reconsent = row['requires_reconsent'] or False
+        
+        # Compare hashes if provided
+        if config_hash and current_hash and config_hash != current_hash:
+            requires_reconsent = True
+        
+        return {
+            "success": True,
+            "requires_reconsent": requires_reconsent,
+            "current_hash": current_hash
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/cookie-compliance/bannerless/{site_id}")
+async def get_bannerless_config(
+    site_id: str,
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Get bannerless mode configuration
+    Only content blockers, no cookie banner
+    """
+    try:
+        query = """
+            SELECT bannerless_mode
+            FROM cookie_banner_configs
+            WHERE site_id = $1 AND is_active = true
+        """
+        row = await db_pool.fetchrow(query, site_id)
+        
+        return {
+            "success": True,
+            "bannerless_mode": row['bannerless_mode'] if row else False
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 

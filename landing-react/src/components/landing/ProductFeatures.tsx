@@ -1,125 +1,113 @@
 'use client';
 
 import React from 'react';
-import { BarChart3, Code, TrendingUp, Shield, Zap, FileCheck } from 'lucide-react';
+import { BookOpenCheck, FileText, CalendarCheck, Mail, Sparkles, BarChart3 } from 'lucide-react';
 
-/**
- * ProductFeatures - Zeigt die 3 Hauptfeatures mit visuellen Mockups
- */
+const features = [
+  {
+    icon: BookOpenCheck,
+    title: 'Online-Kurse & Mitgliederbereiche',
+    description: 'Baue lesson-Pläne, Kapitel und Community-Feeds – alles in einem Editor mit Member-Only Zugriff.',
+    color: 'from-sky-500 to-cyan-400',
+    stats: [
+      { label: 'Launch ready', value: '3 Klicks' },
+      { label: 'Mitgliederfeedback', value: 'Live' }
+    ]
+  },
+  {
+    icon: FileText,
+    title: 'E-Books, PDFs & Downloads',
+    description: 'Stelle digitale Infoprodukte bereit, verteile Upsells und binde einfache Checkout-Seiten ein.',
+    color: 'from-violet-500 to-fuchsia-500',
+    stats: [
+      { label: 'Dateiformate', value: 'PDF + ePub' },
+      { label: 'Automatische Lieferung', value: 'Instant' }
+    ]
+  },
+  {
+    icon: CalendarCheck,
+    title: 'Terminbuchung & Coachings',
+    description: 'Verknüpfe Coaching-Zeiten, Zoom, Kalender-Sync und automatische Zahlungserinnerungen.',
+    color: 'from-emerald-500 to-lime-500',
+    stats: [
+      { label: 'Kalender-Sync', value: 'Google + iCloud' },
+      { label: 'Reminder', value: 'via SMS & E-Mail' }
+    ]
+  },
+  {
+    icon: Mail,
+    title: 'E-Mail-Marketing & Automationen',
+    description: 'Segmentiere Nutzer, baue Funnels auf und sende personalisierte Nachrichten mit AI-Text-Vorschlägen.',
+    color: 'from-orange-500 to-rose-500',
+    stats: [
+      { label: 'Automations', value: '5+ Flows' },
+      { label: 'Öffnungsrate', value: 'Ø 67%' }
+    ]
+  }
+];
+
 export default function ProductFeatures() {
-  const features = [
-    {
-      icon: BarChart3,
-      title: 'Compliance-Audit',
-      description: 'Detailliertes Dashboard mit Echtzeitbewertung Ihrer Website nach WCAG 2.1, DSGVO und BFSG.',
-      color: 'from-blue-500 to-cyan-500',
-      stats: [
-        { label: 'Score-Genauigkeit', value: '99%' },
-        { label: 'Prüfpunkte', value: '127' }
-      ]
-    },
-    {
-      icon: Code,
-      title: 'KI-Fix Generator',
-      description: 'Copy-Paste Code mit präziser Lokalisierung und Schritt-für-Schritt-Anleitung zur Umsetzung.',
-      color: 'from-purple-500 to-pink-500',
-      stats: [
-        { label: 'Fix-Genauigkeit', value: '94%' },
-        { label: 'Ø Umsetzungszeit', value: '12 Min' }
-      ]
-    },
-    {
-      icon: TrendingUp,
-      title: 'Score-Verlauf',
-      description: 'Verfolgen Sie Ihre Compliance-Verbesserungen über Zeit mit detailliertem Tracking und Trends.',
-      color: 'from-green-500 to-emerald-500',
-      stats: [
-        { label: 'Ø Verbesserung', value: '+47%' },
-        { label: 'Tracking', value: '24/7' }
-      ]
-    }
-  ];
-
   return (
-    <section className="bg-gray-900 text-white py-20">
+    <section id="features" className="bg-white py-20 text-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
         <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold mb-4">
-            Alles was Sie für echte Compliance brauchen
-          </h2>
-          <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-            Professionelle Tools für nachhaltigen Rechtsschutz – keine Overlay-Lösungen
+          <h2 className="text-4xl font-bold mb-4">Alle Tools, die dein Creator Business braucht</h2>
+          <p className="text-lg text-slate-600 max-w-3xl mx-auto">
+            Ein Dashboard statt zehn Insellösungen. Erstelle Inhalte, verkaufe Produkte, manage Community und E-Mail-Marketing
+            ohne deinen Workflow zu verlassen.
           </p>
         </div>
-        
-        {/* Features Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {features.map((feature, index) => (
+
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+          {features.map((feature) => (
             <div
-              key={index}
-              className="bg-gray-800 rounded-2xl p-8 border border-gray-700 hover:border-gray-600 transition-all group"
+              key={feature.title}
+              className="rounded-3xl border border-slate-100 bg-slate-50 p-8 shadow-lg transition hover:border-slate-200"
             >
-              {/* Icon */}
-              <div className={`w-16 h-16 bg-gradient-to-br ${feature.color} rounded-2xl flex items-center justify-center mb-6 transform group-hover:scale-110 transition-transform`}>
-                <feature.icon className="w-8 h-8 text-white" />
+              <div className={`inline-flex items-center justify-center rounded-2xl bg-gradient-to-br ${feature.color} p-4 text-white mb-6 shadow-xl`}>
+                <feature.icon className="h-6 w-6" />
               </div>
-              
-              {/* Content */}
-              <h3 className="text-2xl font-bold mb-3">{feature.title}</h3>
-              <p className="text-gray-400 mb-6 leading-relaxed">
-                {feature.description}
-              </p>
-              
-              {/* Stats */}
-              <div className="grid grid-cols-2 gap-4 pt-6 border-t border-gray-700">
-                {feature.stats.map((stat, statIndex) => (
-                  <div key={statIndex}>
-                    <div className={`text-2xl font-bold bg-gradient-to-r ${feature.color} bg-clip-text text-transparent`}>
-                      {stat.value}
-                    </div>
-                    <div className="text-sm text-gray-500">{stat.label}</div>
+              <h3 className="text-2xl font-semibold mb-3">{feature.title}</h3>
+              <p className="text-base text-slate-600 mb-6">{feature.description}</p>
+              <div className="grid grid-cols-2 gap-4 text-sm text-slate-500">
+                {feature.stats.map((stat) => (
+                  <div key={stat.label} className="rounded-2xl border border-slate-100 p-4 bg-white">
+                    <div className="text-lg font-semibold text-slate-900">{stat.value}</div>
+                    <div className="text-xs uppercase tracking-[0.3em] text-slate-400">{stat.label}</div>
                   </div>
                 ))}
               </div>
             </div>
           ))}
         </div>
-        
-        {/* Additional Features */}
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="flex items-start gap-4 bg-gray-800/50 rounded-xl p-6 border border-gray-700">
-            <Shield className="w-8 h-8 text-blue-400 flex-shrink-0 mt-1" />
-            <div>
-              <h4 className="font-semibold mb-2">Rechtssicher mit eRecht24</h4>
-              <p className="text-sm text-gray-400">
-                Automatische Integration von rechtssicheren Impressum- und Datenschutztexten
-              </p>
+
+        <div className="mt-16 grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="rounded-3xl border border-slate-100 bg-gradient-to-r from-cyan-500/10 to-slate-50 p-6 shadow-md">
+            <div className="flex items-center gap-3">
+              <Sparkles className="w-6 h-6 text-cyan-500" />
+              <div>
+                <p className="text-sm uppercase tracking-wide text-slate-500">Künstliche Intelligenz</p>
+                <p className="text-lg font-semibold text-slate-900">alfi AI schreibt Texte und Kampagnen</p>
+              </div>
             </div>
+            <p className="mt-4 text-sm text-slate-600">
+              Interpretation deiner Zielgruppe, Copy-Vorschläge und Upsell-Pfade auf Knopfdruck.
+            </p>
           </div>
-          
-          <div className="flex items-start gap-4 bg-gray-800/50 rounded-xl p-6 border border-gray-700">
-            <Zap className="w-8 h-8 text-yellow-400 flex-shrink-0 mt-1" />
-            <div>
-              <h4 className="font-semibold mb-2">Quick Wins priorisiert</h4>
-              <p className="text-sm text-gray-400">
-                KI identifiziert die wichtigsten Fixes mit dem besten Kosten-Nutzen-Verhältnis
-              </p>
+          <div className="rounded-3xl border border-slate-100 bg-gradient-to-r from-indigo-500/10 to-slate-50 p-6 shadow-md">
+            <div className="flex items-center gap-3">
+              <BarChart3 className="w-6 h-6 text-indigo-500" />
+              <div>
+                <p className="text-sm uppercase tracking-wide text-slate-500">Insight-Center</p>
+                <p className="text-lg font-semibold text-slate-900">Echtzeit-KPIs für Revenue & Lokale Trends</p>
+              </div>
             </div>
-          </div>
-          
-          <div className="flex items-start gap-4 bg-gray-800/50 rounded-xl p-6 border border-gray-700">
-            <FileCheck className="w-8 h-8 text-green-400 flex-shrink-0 mt-1" />
-            <div>
-              <h4 className="font-semibold mb-2">Export & Dokumentation</h4>
-              <p className="text-sm text-gray-400">
-                PDF/Excel-Export aller Analysen und Fixes für Ihre Unterlagen
-              </p>
-            </div>
+            <p className="mt-4 text-sm text-slate-600">
+              Behalte die Conversion-Rate, Wiederkaufrate und Art deiner digitalen Produkte im Blick.
+            </p>
           </div>
         </div>
       </div>
     </section>
   );
 }
-

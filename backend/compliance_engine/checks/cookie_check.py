@@ -112,10 +112,22 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None) -
                 'onetrust.onconsentchanged',  # OneTrust
                 'window.gtag && consent',  # Google Consent Mode
                 'setcookie.*consent',  # Consent-Cookie wird gesetzt
-                'localstorage.setitem.*consent'  # LocalStorage Consent
+                'localstorage.setitem.*consent',  # LocalStorage Consent
+                'complyocookiebanner',  # ✅ Complyo Cookie Banner
+                'cookie-compliance.js',  # ✅ Complyo Widget
+                'complyo_cookie_consent'  # ✅ Complyo Consent Storage
             ]):
                 has_cookie_banner = True
                 break
+        
+        # ✅ Prüfe auch auf Complyo Cookie-Banner Script-Tags
+        if not has_cookie_banner:
+            complyo_scripts = soup.find_all('script', src=True)
+            for script in complyo_scripts:
+                src = script.get('src', '').lower()
+                if 'cookie-compliance.js' in src or 'cookie-blocker.js' in src or 'complyo' in src:
+                    has_cookie_banner = True
+                    break
     
     # ✅ WICHTIG: Cookie-Banner ist IMMER Pflicht für geschäftliche Websites
     if not has_cookie_banner:
@@ -149,8 +161,8 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None) -
                        'TTDSG §25 verpflichtend für alle Websites die Cookies (außer technisch notwendige) setzen. '
                        + ('⚠️ Es wurden Tracking-Scripts gefunden - Tracking ohne Einwilligung ist illegal!' if has_tracking else ''),
             risk_euro=5000 if has_tracking else 4000,
-            recommendation='Implementieren Sie sofort einen DSGVO/TTDSG-konformen Cookie-Consent-Banner '
-                         '(z.B. eRecht24 Cookie Manager, Cookiebot, Usercentrics) mit Opt-In-Funktion.',
+            recommendation='Nutzen Sie die integrierte Complyo Cookie-Compliance-Lösung im Dashboard unter "Cookie-Compliance". '
+                         'Einfach einrichten mit automatischer Cookie-Erkennung, anpassbarem Design und Consent-Statistiken.',
             legal_basis='TTDSG §25, DSGVO Art. 7 (Einwilligung)',
             auto_fixable=True,
             is_missing=True

@@ -5,7 +5,7 @@ export const fetchCache = 'force-no-store'
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Cookie, Settings, Eye, Code, BarChart3, CheckCircle, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Cookie, Settings, Eye, Code, BarChart3, CheckCircle, AlertCircle, Globe, Lock, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,6 +15,7 @@ import CookieBannerDesigner from '@/components/cookie-compliance/CookieBannerDes
 import ServiceManager from '@/components/cookie-compliance/ServiceManager';
 import IntegrationGuide from '@/components/cookie-compliance/IntegrationGuide';
 import ConsentStatistics from '@/components/cookie-compliance/ConsentStatistics';
+import AdvancedSettings from '@/components/cookie-compliance/AdvancedSettings';
 
 export default function CookieCompliancePage() {
   const router = useRouter();
@@ -23,50 +24,72 @@ export default function CookieCompliancePage() {
   const [config, setConfig] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('design');
   
+  // ✅ NEU: 1 Website pro Account Absicherung
+  const [websiteLocked, setWebsiteLocked] = useState(false);
+  const [websiteUrl, setWebsiteUrl] = useState<string>('');
+  
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  
   useEffect(() => {
-    loadSiteIdAndConfig();
+    loadConfig();
   }, []);
   
-  const loadSiteIdAndConfig = async () => {
+  const loadConfig = async () => {
     try {
       setLoading(true);
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
       
-      // 1. Hole die Website des Users
+      // ✅ ZUERST: Prüfe ob User bereits eine Website konfiguriert hat
+      const myConfigResponse = await fetch(`${API_URL}/api/cookie-compliance/my-config`, {
+        credentials: 'include',
+      });
+      
+      if (myConfigResponse.ok) {
+        const myConfigData = await myConfigResponse.json();
+        
+        if (myConfigData.success && myConfigData.has_config && myConfigData.data) {
+          // ✅ User hat bereits eine Website - diese ist GESPERRT
+          const existingConfig = myConfigData.data;
+          
+          setSiteId(existingConfig.site_id);
+          setConfig(existingConfig);
+          setWebsiteLocked(true);
+          
+          // URL aus site_id rekonstruieren oder aus last_scan_url
+          if (existingConfig.last_scan_url) {
+            setWebsiteUrl(existingConfig.last_scan_url);
+          } else {
+            // z.B. "complyo-tech" -> "complyo.tech"
+            setWebsiteUrl(existingConfig.site_id.replace(/-/g, '.'));
+          }
+          
+          setLoading(false);
+          return; // Fertig - keine weitere Suche nötig
+        }
+      }
+      
+      // FALLBACK: Wenn keine Config, versuche Website aus /api/v2/websites
       const websiteResponse = await fetch(`${API_URL}/api/v2/websites`, {
         credentials: 'include',
       });
       
-      if (!websiteResponse.ok) {
-        console.log('Keine Websites verfügbar');
-        setLoading(false);
-        return;
-      }
-      
-      const websiteData = await websiteResponse.json();
-      if (!websiteData.success || !websiteData.websites?.length) {
-        console.log('Keine Websites konfiguriert');
-        setLoading(false);
-        return;
-      }
-      
-      // ✅ Generiere site_id aus echter Website
-      const primaryWebsite = websiteData.websites.find((w: any) => w.is_primary) || websiteData.websites[0];
-      const determinedSiteId = generateSiteIdFromUrl(primaryWebsite.url);
-      setSiteId(determinedSiteId);
-      
-      // 2. Lade Cookie-Config mit dem korrekten site_id
-      const configResponse = await fetch(`${API_URL}/api/cookie-compliance/config/${determinedSiteId}`, {
-        credentials: 'include',
-      });
-      
-      if (configResponse.ok) {
-        const data = await configResponse.json();
-        if (data.success) {
-          setConfig(data.data);
-          // Überschreibe mit site_id aus Config falls vorhanden
-          if (data.data.site_id) {
-            setSiteId(data.data.site_id);
+      if (websiteResponse.ok) {
+        const websiteData = await websiteResponse.json();
+        if (websiteData.success && websiteData.websites?.length) {
+          const primaryWebsite = websiteData.websites.find((w: any) => w.is_primary) || websiteData.websites[0];
+          const determinedSiteId = generateSiteIdFromUrl(primaryWebsite.url);
+          setSiteId(determinedSiteId);
+          setWebsiteUrl(primaryWebsite.url);
+          
+          // Lade Config für diese Website
+          const configResponse = await fetch(`${API_URL}/api/cookie-compliance/config/${determinedSiteId}`, {
+            credentials: 'include',
+          });
+          
+          if (configResponse.ok) {
+            const data = await configResponse.json();
+            if (data.success) {
+              setConfig(data.data);
+            }
           }
         }
       }
@@ -81,7 +104,6 @@ export default function CookieCompliancePage() {
     try {
       const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
       const hostname = urlObj.hostname.replace('www.', '');
-      // Wandle z.B. "example.com" in "example-com"
       return hostname.replace(/\./g, '-').toLowerCase();
     } catch {
       return 'unknown-site';
@@ -90,7 +112,6 @@ export default function CookieCompliancePage() {
   
   const saveConfig = async (newConfig: any) => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
       const response = await fetch(`${API_URL}/api/cookie-compliance/config`, {
         method: 'POST',
         headers: {
@@ -107,6 +128,8 @@ export default function CookieCompliancePage() {
         const data = await response.json();
         if (data.success) {
           setConfig(newConfig);
+          // Nach erstem Speichern ist die Website gesperrt
+          setWebsiteLocked(true);
           return true;
         }
       }
@@ -156,7 +179,16 @@ export default function CookieCompliancePage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            
+            {/* ✅ NEU: Zeige gesperrte Website */}
+            <div className="flex items-center gap-3">
+              {websiteLocked && websiteUrl && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 rounded-lg">
+                  <Globe className="w-4 h-4 text-blue-400" />
+                  <span className="text-sm text-blue-300 font-medium">{websiteUrl}</span>
+                  <Lock className="w-3 h-3 text-blue-400" />
+                </div>
+              )}
               <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium flex items-center gap-2">
                 <CheckCircle className="w-4 h-4" />
                 Aktiv
@@ -168,6 +200,21 @@ export default function CookieCompliancePage() {
       
       {/* Main Content */}
       <section aria-label="Cookie-Compliance Konfiguration" className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        {/* ✅ NEU: Hinweis 1 Website pro Account */}
+        {websiteLocked && (
+          <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center gap-3">
+            <Lock className="w-5 h-5 text-blue-400 flex-shrink-0" />
+            <div>
+              <p className="text-sm text-blue-300 font-medium">1 Website pro Account</p>
+              <p className="text-xs text-gray-400">
+                Ihr Cookie-Banner ist für <strong className="text-blue-300">{websiteUrl}</strong> konfiguriert. 
+                Diese Einstellung kann nicht geändert werden.
+              </p>
+            </div>
+          </div>
+        )}
+        
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20 hover:border-green-500/40 transition-all duration-200 hover:shadow-lg hover:shadow-green-900/20">
@@ -233,8 +280,43 @@ export default function CookieCompliancePage() {
           </Card>
         </div>
         
-        {/* Setup Alert */}
-        {(!config?.services || config.services.length === 0) && (
+        {/* ✅ NEU: Klare Meldung wenn Scan abgeschlossen aber KEINE Cookies gefunden */}
+        {config?.scan_completed && (!config?.services || config.services.length === 0) && (
+          <Card className="mb-6 bg-gradient-to-r from-green-500/20 to-green-600/10 border-green-500/30 hover:border-green-500/50 transition-all shadow-lg shadow-green-900/20">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-green-500/20 rounded-lg flex-shrink-0">
+                  <CheckCircle className="w-6 h-6 text-green-400" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-bold text-white mb-1 text-lg">✅ Kein Cookie-Banner erforderlich!</div>
+                  <div className="text-sm text-gray-300 mb-2">
+                    Unser Scan hat <strong className="text-green-400">keine Tracking-Cookies</strong> auf Ihrer Website gefunden.
+                    Ihre Website verwendet nur essenzielle Cookies, die keine Einwilligung benötigen.
+                  </div>
+                  <div className="text-xs text-gray-400 bg-gray-800/50 p-3 rounded-lg mt-3">
+                    <strong className="text-gray-300">Was bedeutet das?</strong>
+                    <ul className="list-disc list-inside mt-1 space-y-1">
+                      <li>Sie müssen keinen Cookie-Banner einbinden</li>
+                      <li>Ihre Website ist bereits DSGVO-konform bezüglich Cookies</li>
+                      <li>Falls Sie später Tracking-Tools (wie Google Analytics) hinzufügen, scannen Sie erneut</li>
+                    </ul>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => setActiveTab('services')}
+                  variant="outline"
+                  className="border-green-500/50 text-green-400 hover:bg-green-500/10"
+                >
+                  Services manuell hinzufügen
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        
+        {/* Setup Alert - NUR wenn Scan NICHT abgeschlossen oder KEINE Config */}
+        {(!config?.scan_completed && (!config?.services || config.services.length === 0)) && (
           <Card className="mb-6 bg-gradient-to-r from-orange-500/20 to-orange-600/10 border-orange-500/30 hover:border-orange-500/50 transition-all shadow-lg shadow-orange-900/20">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
@@ -244,7 +326,7 @@ export default function CookieCompliancePage() {
                 <div className="flex-1">
                   <div className="font-bold text-white mb-1">🚀 Setup erforderlich</div>
                   <div className="text-sm text-gray-300">
-                    Konfigurieren Sie Ihr Cookie-Banner und wählen Sie die Services aus, die Sie verwenden.
+                    Scannen Sie Ihre Website um Cookies zu erkennen, oder wählen Sie Services manuell aus.
                   </div>
                 </div>
                 <Button
@@ -262,7 +344,7 @@ export default function CookieCompliancePage() {
         <Card className="bg-gray-800/50 border-gray-700 backdrop-blur-sm shadow-xl">
           <CardContent className="pt-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-              <TabsList className="grid w-full grid-cols-4 bg-gray-900/50 p-1 h-auto">
+              <TabsList className="grid w-full grid-cols-5 bg-gray-900/50 p-1 h-auto">
                 <TabsTrigger 
                   value="design" 
                   className="gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white transition-all py-3"
@@ -276,6 +358,14 @@ export default function CookieCompliancePage() {
                 >
                   <Eye className="w-4 h-4" />
                   <span className="hidden sm:inline">Services</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="advanced" 
+                  className="relative gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white transition-all py-3"
+                >
+                  <Zap className="w-4 h-4" />
+                  <span className="hidden sm:inline">Erweitert</span>
+                  <span className="absolute -top-1 -right-1 px-1 py-0.5 text-[10px] rounded bg-red-500 text-white">Neu</span>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="integration" 
@@ -307,6 +397,17 @@ export default function CookieCompliancePage() {
                   onServicesChange={(services) => {
                     saveConfig({ ...config, services });
                   }}
+                  websiteUrl={websiteUrl}
+                  websiteLocked={websiteLocked}
+                  siteId={siteId}
+                />
+              </TabsContent>
+              
+              <TabsContent value="advanced">
+                <AdvancedSettings
+                  siteId={siteId}
+                  config={config}
+                  onSave={saveConfig}
                 />
               </TabsContent>
               
@@ -324,4 +425,3 @@ export default function CookieCompliancePage() {
     </main>
   );
 }
-

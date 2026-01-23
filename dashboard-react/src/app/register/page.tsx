@@ -7,7 +7,24 @@ import { Shield, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import SocialLoginButtons from '@/components/SocialLoginButtons';
 import { Logo } from '@/components/Logo';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+// Intelligente API-URL-Erkennung
+const getApiBase = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:8002';
+    }
+    if (hostname.includes('complyo.tech')) {
+      return 'https://api.complyo.tech';
+    }
+  }
+  return 'http://localhost:8002';
+};
+
+const API_BASE = getApiBase();
 
 function RegisterForm() {
     const { register } = useAuth();

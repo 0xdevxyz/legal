@@ -235,17 +235,56 @@ class RiskCalculator:
     ) -> Dict[str, Any]:
         """
         Berechnet Gesamt-Risiko für mehrere Issues
+        
+        ✅ FIX: Realistische Risiko-Berechnung
+        - Nicht alle Issues werden gleichzeitig abgemahnt
+        - Kritische Issues haben höheres Gewicht
+        - Maximales Risiko ist begrenzt (realistische Abmahnung)
         """
         total_min = 0
         total_max = 0
         critical_count = 0
+        critical_risks = []
+        warning_risks = []
+        info_risks = []
         
         for issue in issues:
             risk = await self.calculate_issue_risk(issue, market)
-            total_min += risk['risk_min']
-            total_max += risk['risk_max']
+            
+            # Gruppiere nach Severity
             if risk['severity'] == 'critical':
                 critical_count += 1
+                critical_risks.append(risk)
+            elif risk['severity'] == 'warning':
+                warning_risks.append(risk)
+            else:
+                info_risks.append(risk)
+        
+        # ✅ Realistische Berechnung:
+        # - Kritische Issues: 100% des Risikos (höchste Priorität)
+        # - Warning Issues: 50% des Risikos (werden oft zusammen abgemahnt)
+        # - Info Issues: 20% des Risikos (selten einzeln abgemahnt)
+        # - Maximum: Realistisches Maximum für eine Abmahnung (50.000€)
+        
+        critical_total_min = sum(r['risk_min'] for r in critical_risks)
+        critical_total_max = sum(r['risk_max'] for r in critical_risks)
+        
+        warning_total_min = sum(r['risk_min'] for r in warning_risks) * 0.5
+        warning_total_max = sum(r['risk_max'] for r in warning_risks) * 0.5
+        
+        info_total_min = sum(r['risk_min'] for r in info_risks) * 0.2
+        info_total_max = sum(r['risk_max'] for r in info_risks) * 0.2
+        
+        total_min = int(critical_total_min + warning_total_min + info_total_min)
+        total_max = int(critical_total_max + warning_total_max + info_total_max)
+        
+        # ✅ Begrenze auf realistische Maximalwerte
+        # Eine einzelne Abmahnung liegt typischerweise zwischen 2.000€ und 50.000€
+        # Bei mehreren Issues kann es mehrere Abmahnungen geben, aber nicht unrealistisch hoch
+        if total_max > 200000:  # Mehr als 200k€ ist unrealistisch
+            total_max = 200000
+            if total_min > 100000:
+                total_min = 100000
         
         return {
             'total_risk_min': total_min,

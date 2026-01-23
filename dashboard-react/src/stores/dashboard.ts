@@ -12,6 +12,13 @@ interface DashboardStore extends DashboardState {
   setError: (error: string | null) => void;
   updateMetrics: (metrics: Partial<DashboardState['metrics']>) => void;
 
+  // ✅ NEU: Optimierungsmodus - Eine gelockte Seite für Optimierung
+  lockedOptimizationUrl: string | null;
+  isInOptimizationMode: boolean;
+  lockForOptimization: (url: string) => void;
+  unlockOptimization: () => void;
+  setOptimizationMode: (enabled: boolean) => void;
+
   // Computed
   getCriticalIssues: () => number;
   getComplianceScore: () => number;
@@ -34,6 +41,10 @@ export const useDashboardStore = create<DashboardStore>()(
     isLoading: true, // Initial loading state
     error: null,
 
+    // ✅ NEU: Optimierungsmodus State
+    lockedOptimizationUrl: null,
+    isInOptimizationMode: false,
+
     // Actions
     setCurrentWebsite: (website) => set({ currentWebsite: website }),
 
@@ -55,6 +66,42 @@ export const useDashboardStore = create<DashboardStore>()(
     updateMetrics: (metrics) => set((state) => ({
       metrics: { ...state.metrics, ...metrics }
     })),
+
+    // ✅ NEU: Optimierungsmodus Actions
+    lockForOptimization: (url: string) => {
+      set({ 
+        lockedOptimizationUrl: url, 
+        isInOptimizationMode: true 
+      });
+      // Persist to localStorage
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('complyo_locked_optimization_url', url);
+        localStorage.setItem('complyo_optimization_mode', 'true');
+      }
+    },
+
+    unlockOptimization: () => {
+      set({ 
+        lockedOptimizationUrl: null, 
+        isInOptimizationMode: false 
+      });
+      // Remove from localStorage
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('complyo_locked_optimization_url');
+        localStorage.removeItem('complyo_optimization_mode');
+      }
+    },
+
+    setOptimizationMode: (enabled: boolean) => {
+      set({ isInOptimizationMode: enabled });
+      if (typeof localStorage !== 'undefined') {
+        if (enabled) {
+          localStorage.setItem('complyo_optimization_mode', 'true');
+        } else {
+          localStorage.removeItem('complyo_optimization_mode');
+        }
+      }
+    },
 
     // Computed values
     getCriticalIssues: () => {

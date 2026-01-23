@@ -89,7 +89,9 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
     }));
   };
   
+  // 20+ Design Presets
   const colorPresets = {
+    // Light Themes
     modern: {
       name: 'Modern Orange',
       primary_color: '#f97316',
@@ -117,6 +119,142 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
       accent_color: '#374151',
       text_color: '#111827',
       bg_color: '#ffffff',
+    },
+    nature: {
+      name: 'Nature Green',
+      primary_color: '#22c55e',
+      accent_color: '#16a34a',
+      text_color: '#14532d',
+      bg_color: '#f0fdf4',
+    },
+    sunset: {
+      name: 'Sunset Rose',
+      primary_color: '#f43f5e',
+      accent_color: '#e11d48',
+      text_color: '#1f2937',
+      bg_color: '#fff1f2',
+    },
+    ocean: {
+      name: 'Ocean Teal',
+      primary_color: '#14b8a6',
+      accent_color: '#0d9488',
+      text_color: '#134e4a',
+      bg_color: '#f0fdfa',
+    },
+    coral: {
+      name: 'Coral Warm',
+      primary_color: '#fb7185',
+      accent_color: '#f43f5e',
+      text_color: '#1f2937',
+      bg_color: '#fffbeb',
+    },
+    lavender: {
+      name: 'Lavender',
+      primary_color: '#a78bfa',
+      accent_color: '#8b5cf6',
+      text_color: '#4c1d95',
+      bg_color: '#faf5ff',
+    },
+    mint: {
+      name: 'Mint Fresh',
+      primary_color: '#34d399',
+      accent_color: '#10b981',
+      text_color: '#065f46',
+      bg_color: '#ecfdf5',
+    },
+    // Dark Themes
+    darkElegant: {
+      name: 'Dark Elegant',
+      primary_color: '#818cf8',
+      accent_color: '#6366f1',
+      text_color: '#e2e8f0',
+      bg_color: '#1e1b4b',
+    },
+    darkModern: {
+      name: 'Dark Modern',
+      primary_color: '#f97316',
+      accent_color: '#ea580c',
+      text_color: '#f3f4f6',
+      bg_color: '#18181b',
+    },
+    darkForest: {
+      name: 'Dark Forest',
+      primary_color: '#4ade80',
+      accent_color: '#22c55e',
+      text_color: '#dcfce7',
+      bg_color: '#14532d',
+    },
+    darkOcean: {
+      name: 'Dark Ocean',
+      primary_color: '#38bdf8',
+      accent_color: '#0ea5e9',
+      text_color: '#e0f2fe',
+      bg_color: '#0c4a6e',
+    },
+    darkRuby: {
+      name: 'Dark Ruby',
+      primary_color: '#fb7185',
+      accent_color: '#f43f5e',
+      text_color: '#fecdd3',
+      bg_color: '#4c0519',
+    },
+    // Corporate/Brand Themes
+    corporate: {
+      name: 'Corporate Blue',
+      primary_color: '#1d4ed8',
+      accent_color: '#1e40af',
+      text_color: '#1e3a8a',
+      bg_color: '#ffffff',
+    },
+    trust: {
+      name: 'Trust & Security',
+      primary_color: '#059669',
+      accent_color: '#047857',
+      text_color: '#064e3b',
+      bg_color: '#ffffff',
+    },
+    tech: {
+      name: 'Tech Startup',
+      primary_color: '#7c3aed',
+      accent_color: '#6d28d9',
+      text_color: '#1f2937',
+      bg_color: '#faf5ff',
+    },
+    finance: {
+      name: 'Finance',
+      primary_color: '#0891b2',
+      accent_color: '#0e7490',
+      text_color: '#164e63',
+      bg_color: '#ecfeff',
+    },
+    health: {
+      name: 'Healthcare',
+      primary_color: '#0d9488',
+      accent_color: '#0f766e',
+      text_color: '#134e4a',
+      bg_color: '#f0fdfa',
+    },
+    // Playful Themes
+    candy: {
+      name: 'Candy Pop',
+      primary_color: '#ec4899',
+      accent_color: '#db2777',
+      text_color: '#831843',
+      bg_color: '#fdf2f8',
+    },
+    sunshine: {
+      name: 'Sunshine',
+      primary_color: '#fbbf24',
+      accent_color: '#f59e0b',
+      text_color: '#78350f',
+      bg_color: '#fffbeb',
+    },
+    electric: {
+      name: 'Electric',
+      primary_color: '#06b6d4',
+      accent_color: '#0891b2',
+      text_color: '#164e63',
+      bg_color: '#ecfeff',
     },
   };
   

@@ -15,6 +15,7 @@ import {
   Loader2,
   Sparkles,
   Zap,
+  Lock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,20 +35,33 @@ interface Service {
 interface ServiceManagerProps {
   selectedServices: string[];
   onServicesChange: (services: string[]) => void;
+  websiteUrl?: string;      // ✅ NEU: Vorkonfigurierte Website-URL
+  websiteLocked?: boolean;  // ✅ NEU: URL ist gesperrt (nicht änderbar)
+  siteId?: string;          // ✅ NEU: Site-ID für den Scan
 }
 
 const ServiceManager: React.FC<ServiceManagerProps> = ({
   selectedServices,
   onServicesChange,
+  websiteUrl: initialWebsiteUrl,
+  websiteLocked = false,
+  siteId,
 }) => {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
-  const [userWebsiteUrl, setUserWebsiteUrl] = useState('');
+  // ✅ NEU: Verwende vorkonfigurierte URL wenn vorhanden
+  const [userWebsiteUrl, setUserWebsiteUrl] = useState(initialWebsiteUrl || '');
   const [scanResults, setScanResults] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [autoScanComplete, setAutoScanComplete] = useState(false);
+  
+  // ✅ NEU: URL aktualisieren wenn sie sich ändert (z.B. beim ersten Laden)
+  useEffect(() => {
+    if (initialWebsiteUrl && !userWebsiteUrl) {
+      setUserWebsiteUrl(initialWebsiteUrl);
+    }
+  }, [initialWebsiteUrl]);
   
   useEffect(() => {
     loadServicesAndWebsite();
@@ -58,7 +72,7 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
       setLoading(true);
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
       
-      // 1. Lade verfügbare Services
+      // Lade verfügbare Services
       const servicesResponse = await fetch(`${API_URL}/api/cookie-compliance/services`);
       if (servicesResponse.ok) {
         const data = await servicesResponse.json();
@@ -66,42 +80,8 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
           setServices(data.services || []);
         }
       }
-      
-      // 2. Hole User-Website URL (primäre Website)
-      try {
-        const websiteResponse = await fetch(`${API_URL}/api/v2/websites`, {
-          credentials: 'include',
-        });
-        
-        if (websiteResponse.ok) {
-          const websiteData = await websiteResponse.json();
-          console.log('Website data:', websiteData);
-          
-          if (websiteData.success && websiteData.websites?.length > 0) {
-            // Nehme die primäre Website oder die erste
-            const primaryWebsite = websiteData.websites.find((w: any) => w.is_primary) || websiteData.websites[0];
-            const url = primaryWebsite.url;
-            console.log('Using website URL:', url);
-            setUserWebsiteUrl(url);
-            
-            // 3. Starte automatischen Scan beim ersten Laden
-            if (!autoScanComplete) {
-              console.log('Starting automatic scan...');
-              setTimeout(() => {
-                scanWebsiteAutomatically(url);
-              }, 800);
-            }
-          } else {
-            console.warn('No websites found for user');
-          }
-        } else {
-          console.error('Failed to load websites:', websiteResponse.status);
-        }
-      } catch (websiteError) {
-        console.error('Error loading website:', websiteError);
-      }
     } catch (error) {
-      console.error('Error loading services and website:', error);
+      console.error('Error loading services:', error);
     } finally {
       setLoading(false);
     }
@@ -112,18 +92,19 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
     
     try {
       setScanning(true);
+      setScanResults(null);
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
       const response = await fetch(`${API_URL}/api/cookie-compliance/scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        // ✅ NEU: Sende auch die siteId mit, damit die richtige Config aktualisiert wird
+        body: JSON.stringify({ url, site_id: siteId }),
       });
       
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
           setScanResults(data);
-          setAutoScanComplete(true);
           
           // Auto-select detected services
           if (data.detected_services && data.detected_services.length > 0) {
@@ -135,15 +116,9 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
       }
     } catch (error) {
       console.error('Scan error:', error);
+      setScanResults({ success: false, error: 'Scan fehlgeschlagen' });
     } finally {
       setScanning(false);
-    }
-  };
-  
-  const rescanWebsite = () => {
-    if (userWebsiteUrl) {
-      setScanResults(null);
-      scanWebsiteAutomatically(userWebsiteUrl);
     }
   };
   
@@ -207,90 +182,138 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
       <Card className="border-orange-500/30 bg-gradient-to-br from-orange-500/10 to-orange-600/5 backdrop-blur-sm">
         <CardContent className="pt-6">
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Radio className="w-5 h-5 text-orange-400" />
-                <h4 className="font-semibold text-white">Automatischer Service-Scanner</h4>
-                <Badge variant="secondary" className="bg-orange-500 text-white text-xs">
-                  <Sparkles className="w-3 h-3 mr-1" />
-                  AI
-                </Badge>
-              </div>
-              {!scanning && userWebsiteUrl && (
-                <Button
-                  onClick={rescanWebsite}
-                  variant="outline"
-                  size="sm"
-                  className="border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
-                >
-                  <Zap className="w-4 h-4 mr-2" />
-                  Erneut scannen
-                </Button>
-              )}
+            <div className="flex items-center gap-3">
+              <Radio className="w-5 h-5 text-orange-400" />
+              <h4 className="font-semibold text-white">Website-Scanner</h4>
+              <Badge variant="secondary" className="bg-orange-500 text-white text-xs">
+                <Sparkles className="w-3 h-3 mr-1" />
+                AI
+              </Badge>
             </div>
             
-            {userWebsiteUrl && (
-              <div className="flex items-center gap-2 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
-                <div className="flex-1">
-                  <p className="text-xs text-gray-400 mb-1">Ihre Website</p>
-                  <p className="text-sm text-white font-medium truncate">{userWebsiteUrl}</p>
+            {/* ✅ NEU: Gesperrte URL-Anzeige wenn bereits konfiguriert */}
+            {websiteLocked && userWebsiteUrl ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <Lock className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-xs text-blue-300 font-medium">Ihre konfigurierte Website</p>
+                    <p className="text-sm text-white font-semibold">{userWebsiteUrl}</p>
+                  </div>
+                  <Button
+                    onClick={() => scanWebsiteAutomatically(userWebsiteUrl)}
+                    disabled={scanning}
+                    className="bg-orange-500 hover:bg-orange-600 text-white"
+                  >
+                    {scanning ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Scannt...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 mr-2" />
+                        Erneut scannen
+                      </>
+                    )}
+                  </Button>
                 </div>
+                <p className="text-xs text-gray-400">
+                  Diese Website ist fest mit Ihrem Account verknüpft und kann nicht geändert werden.
+                </p>
               </div>
+            ) : (
+              <>
+                {/* URL Eingabe - nur wenn noch keine URL konfiguriert */}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="https://ihre-website.de"
+                    value={userWebsiteUrl}
+                    onChange={(e) => setUserWebsiteUrl(e.target.value)}
+                    className="flex-1 bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                  />
+                  <Button
+                    onClick={() => userWebsiteUrl && scanWebsiteAutomatically(userWebsiteUrl)}
+                    disabled={scanning || !userWebsiteUrl}
+                    className="bg-orange-500 hover:bg-orange-600 text-white"
+                  >
+                    {scanning ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Scannt...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 mr-2" />
+                        Scannen
+                      </>
+                    )}
+                  </Button>
+                </div>
+                
+                <p className="text-xs text-gray-400">
+                  Geben Sie Ihre Website-URL ein, um automatisch alle verwendeten Cookies und Services zu erkennen.
+                </p>
+              </>
             )}
             
-            <p className="text-sm text-gray-300">
-              {scanning ? 'Analysiere Ihre Website und erkenne verwendete Cookie-Services...' : 
-               scanResults ? 'Scan abgeschlossen! Gefundene Services wurden automatisch ausgewählt.' :
-               'Website wird automatisch gescannt...'}
-            </p>
             {scanning && (
               <div className="space-y-2">
                 <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-orange-500 via-orange-400 to-orange-500 animate-[shimmer_1.5s_infinite] rounded-full"></div>
+                  <div className="h-full bg-gradient-to-r from-orange-500 via-orange-400 to-orange-500 animate-[shimmer_1.5s_infinite] rounded-full" style={{width: '100%'}}></div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 text-orange-400 animate-spin" />
-                  <p className="text-xs text-gray-400">Analysiere {userWebsiteUrl}...</p>
-                </div>
+                <p className="text-xs text-gray-400">Analysiere {userWebsiteUrl}...</p>
               </div>
             )}
+            
             {scanResults && !scanning && (
               <div className={`p-4 rounded-lg border ${
                 scanResults.total_found > 0
                   ? 'bg-green-500/10 border-green-500/30'
-                  : 'bg-blue-500/10 border-blue-500/30'
+                  : 'bg-green-500/10 border-green-500/30'
               }`}>
                 <div className="flex items-start gap-3">
                   <div className={`p-2 rounded-lg ${
-                    scanResults.total_found > 0 ? 'bg-green-500/20' : 'bg-blue-500/20'
+                    scanResults.total_found > 0 ? 'bg-green-500/20' : 'bg-green-500/20'
                   }`}>
-                    <Check className={`w-5 h-5 ${
-                      scanResults.total_found > 0 ? 'text-green-400' : 'text-blue-400'
-                    }`} />
+                    <Check className="w-5 h-5 text-green-400" />
                   </div>
                   <div className="flex-1">
-                    <p className={`font-semibold text-base mb-1 ${
-                      scanResults.total_found > 0 ? 'text-green-400' : 'text-blue-400'
-                    }`}>
-                      {scanResults.total_found > 0
-                        ? `✅ ${scanResults.total_found} Services automatisch erkannt`
-                        : 'ℹ️ Keine Cookie-Services gefunden'}
-                    </p>
-                    {scanResults.detected_services && scanResults.detected_services.length > 0 ? (
-                      <div className="mt-2">
-                        <p className="text-xs text-gray-400 mb-2">Automatisch ausgewählt:</p>
-                        <div className="flex flex-wrap gap-1.5">
+                    {scanResults.detected_services?.length > 0 ? (
+                      <>
+                        <p className="font-semibold text-sm mb-1 text-green-400">
+                          ✅ {scanResults.total_found} Services erkannt
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
                           {scanResults.detected_services.map((s: any, idx: number) => (
                             <Badge key={idx} className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
                               {s.name}
                             </Badge>
                           ))}
                         </div>
-                      </div>
+                      </>
                     ) : (
-                      <p className="text-xs text-gray-400 mt-1">
-                        Keine Cookie-Services auf Ihrer Website gefunden. Sie können Services manuell hinzufügen.
-                      </p>
+                      <>
+                        <p className="font-bold text-lg mb-2 text-green-400">
+                          ✅ Kein Cookie-Banner erforderlich!
+                        </p>
+                        <div className="text-sm text-gray-300 space-y-2">
+                          <p>
+                            Unser Scan hat <strong className="text-green-400">keine Tracking-Cookies</strong> auf Ihrer Website gefunden.
+                          </p>
+                          <div className="bg-gray-800/60 p-3 rounded-lg text-xs space-y-1 text-gray-400">
+                            <p className="font-semibold text-gray-300">Was bedeutet das?</p>
+                            <ul className="list-disc list-inside">
+                              <li>Ihre Website verwendet nur essenzielle Cookies</li>
+                              <li>Sie müssen keinen Cookie-Banner einbinden</li>
+                              <li>Falls Sie später Tracking-Tools hinzufügen, scannen Sie erneut</li>
+                            </ul>
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-3">
+                          Optional: Wählen Sie Services manuell unten aus, falls Sie doch welche verwenden möchten.
+                        </p>
+                      </>
                     )}
                   </div>
                 </div>

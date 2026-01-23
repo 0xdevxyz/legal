@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useStartAIFix, useBookExpert, useComplianceAnalysis, useLatestScan, useActiveFixJobs } from '@/hooks/useCompliance';
 import { formatRelativeTime } from '@/lib/utils';
+import { SkeletonWebsiteAnalysis } from '@/components/ui/Skeleton';
+import { ScoreAnimation, SuccessAnimation } from '@/components/ui/SuccessAnimation';
 import type { ComplianceIssue } from '@/types/api';
 import { ComplianceIssueCard } from './ComplianceIssueCard';
 import { ComplianceIssueGroup } from './ComplianceIssueGroup';
@@ -17,11 +19,14 @@ import { WidgetIntegrationCard } from '@/components/accessibility';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import TCFComplianceWidget from './TCFComplianceWidget';
 import { generateSiteId, isScanHash } from '@/lib/siteIdUtils';
+import { OptimizationModeLock } from './OptimizationModeLock';
 
 export const WebsiteAnalysis: React.FC = () => {
   const { user } = useAuth();
-  const { currentWebsite, analysisData: storedAnalysisData, setAnalysisData } = useDashboardStore();
+  const { currentWebsite, analysisData: storedAnalysisData, setAnalysisData, isInOptimizationMode, lockedOptimizationUrl } = useDashboardStore();
   const [expandedPillar, setExpandedPillar] = useState<string | null>(null);
+  const [showScoreAnimation, setShowScoreAnimation] = useState(false);
+  const [previousScore, setPreviousScore] = useState<number | null>(null);
   
   // Get plan type from user, default to 'free'
   const planType: 'free' | 'ai' | 'expert' = user?.plan_type || 'free';
@@ -140,11 +145,20 @@ export const WebsiteAnalysis: React.FC = () => {
             }).length
           : 0;
         
+        const newScore = result.data.compliance_score || 0;
+        const oldScore = useDashboardStore.getState().metrics.totalScore || 0;
+        
         updateMetrics({
-          totalScore: result.data.compliance_score || 0,
+          totalScore: newScore,
           criticalIssues: criticalCount,
           scansUsed: (useDashboardStore.getState().metrics.scansUsed || 0) + 1
         });
+        
+        // ✅ Success-Animation bei Score-Verbesserung
+        if (newScore > oldScore && newScore >= 100) {
+          setPreviousScore(oldScore);
+          setShowScoreAnimation(true);
+        }
       }
     } catch (error) {
       console.error('Rescan failed:', error);
@@ -347,13 +361,25 @@ export const WebsiteAnalysis: React.FC = () => {
         </div>
       )}
 
-      <Card className="mb-8">
+        {/* ✅ NEU: Optimierungsmodus-Übergang */}
+      {currentWebsite && analysisData && (
+        <ErrorBoundary componentName="OptimizationModeLock">
+          <OptimizationModeLock />
+        </ErrorBoundary>
+      )}
+
+    <Card className="mb-8">
         <CardHeader>
           <CardTitle className="flex items-center gap-3">
             <div className="p-2.5 bg-gradient-to-br from-sky-500/20 to-purple-500/20 rounded-xl">
               <AlertTriangle className="w-6 h-6 text-sky-400" />
             </div>
             <span>Compliance-Analyse</span>
+            {isInOptimizationMode && lockedOptimizationUrl && (
+              <Badge variant="success" className="ml-2">
+                Optimierungsmodus
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
 
@@ -395,22 +421,22 @@ export const WebsiteAnalysis: React.FC = () => {
             </div>
           )}
 
-        {/* ✅ LOADING STATE */}
+        {/* ✅ LOADING STATE mit Skeleton Screens */}
         {isActuallyLoading && (
-          <div className="text-center py-12">
-            <div className="relative mx-auto mb-6 w-16 h-16">
-              <div className="absolute inset-0 border-4 border-zinc-800 rounded-full"></div>
-              <div className="absolute inset-0 border-4 border-t-sky-500 border-r-purple-500 border-b-transparent border-l-transparent rounded-full animate-spin"></div>
-            </div>
-            <p className="text-white font-semibold text-lg mb-2">
-              {isLoadingLatestScan && !isLoading ? 'Lade letzte Scan-Ergebnisse...' : 'Daten werden geladen...'}
-            </p>
-            {currentWebsite && (
-              <p className="text-zinc-400 text-sm">
-                Analysiere: <span className="text-sky-400 font-medium">{currentWebsite.name}</span>
-              </p>
-            )}
-          </div>
+          <SkeletonWebsiteAnalysis />
+        )}
+        
+        {/* ✅ Success-Animationen */}
+        {showScoreAnimation && previousScore !== null && (
+          <ScoreAnimation
+            oldScore={previousScore}
+            newScore={complianceScore}
+            show={showScoreAnimation}
+            onComplete={() => {
+              setShowScoreAnimation(false);
+              setPreviousScore(null);
+            }}
+          />
         )}
 
         {/* ✅ AKTIVE FIX-JOBS */}

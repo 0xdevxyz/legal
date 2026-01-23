@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { 
   Check, 
   X, 
@@ -1493,7 +1494,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
   );
 
   const Footer = () => (
-    <footer className="py-12 border-t border-gray-700">
+    <footer className="py-12 border-t border-gray-700 relative z-10">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid md:grid-cols-4 gap-8">
           <div className="md:col-span-2">
@@ -1555,15 +1556,15 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
             © 2025 Complyo. Alle Rechte vorbehalten.
           </p>
           <div className="flex space-x-6 mt-4 md:mt-0">
-            <a href="#" className="text-gray-400 hover:text-white text-sm transition-colors">
+            <Link href="/impressum" className="text-gray-400 hover:text-white text-sm transition-colors">
               Impressum
-            </a>
-            <a href="#" className="text-gray-400 hover:text-white text-sm transition-colors">
+            </Link>
+            <Link href="/datenschutz" className="text-gray-400 hover:text-white text-sm transition-colors">
               Datenschutz
-            </a>
-            <a href="#" className="text-gray-400 hover:text-white text-sm transition-colors">
+            </Link>
+            <Link href="/agb" className="text-gray-400 hover:text-white text-sm transition-colors">
               AGB
-            </a>
+            </Link>
           </div>
         </div>
       </div>

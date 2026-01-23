@@ -518,7 +518,7 @@ class CookieScanner:
         """Returns current timestamp"""
         from datetime import datetime
         return datetime.now().isoformat()
-    
+
     async def scan_website_deep(self, url: str) -> Dict[str, Any]:
         """
         Führt einen Deep Scan mit Headless Browser durch

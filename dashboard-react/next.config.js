@@ -9,7 +9,9 @@ const nextConfig = {
   },
   
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech',
+    // Für lokale Entwicklung: http://localhost:8002
+    // Für Production: https://api.complyo.tech (wird über .env gesetzt)
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002',
   },
   
   async rewrites() {

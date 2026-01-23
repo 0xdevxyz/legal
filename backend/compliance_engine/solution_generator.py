@@ -246,52 +246,39 @@ class SolutionGenerator:
                 "und welche davon notwendig sind."
             ),
             how=[
-                "1. Wählen Sie eine Cookie-Consent-Lösung (z.B. Cookiebot, Usercentrics, Borlabs)",
-                "2. Registrieren Sie sich und scannen Sie Ihre Website",
-                "3. Kopieren Sie den bereitgestellten JavaScript-Code",
-                "4. Fügen Sie den Code im <head> Ihrer Website ein (siehe Beispiel)",
-                "5. Konfigurieren Sie die Cookie-Kategorien (Notwendig, Marketing, Analytics)",
-                "6. Passen Sie Design und Texte an",
-                "7. Testen Sie: Cookies dürfen erst NACH Zustimmung gesetzt werden"
+                "1. Öffnen Sie das Complyo Dashboard und gehen Sie zu 'Cookie-Compliance'",
+                "2. Scannen Sie Ihre Website automatisch nach verwendeten Cookies",
+                "3. Passen Sie Design und Texte des Cookie-Banners an",
+                "4. Kopieren Sie den bereitgestellten JavaScript-Code",
+                "5. Fügen Sie den Code im <head> Ihrer Website ein (siehe Beispiel)",
+                "6. Testen Sie: Cookies dürfen erst NACH Zustimmung gesetzt werden",
+                "7. Verfolgen Sie Opt-In-Raten in der integrierten Statistik"
             ],
-            code_example="""<!-- Cookie-Consent Integration (Beispiel Cookiebot) -->
+            code_example="""<!-- Complyo Cookie-Compliance Widget -->
 <head>
-  <!-- Cookiebot Script -->
+  <!-- Complyo Cookie-Banner Script -->
   <script 
-    id="Cookiebot" 
-    src="https://consent.cookiebot.com/uc.js" 
-    data-cbid="[IHRE-COOKIEBOT-ID]" 
-    type="text/javascript" 
+    src="https://api.complyo.tech/api/widgets/cookie-compliance.js" 
+    data-site-id="[IHRE-SITE-ID]"
     async
   ></script>
-  
-  <!-- Google Analytics mit Cookie-Consent-Check -->
-  <script 
-    data-cookieconsent="statistics" 
-    type="text/plain"
-  >
-    // GA-Code kommt hier rein - wird erst nach Consent geladen
-    (function(i,s,o,g,r,a,m){...})(window,document,'script'...);
-  </script>
 </head>
 
-<!-- Alternativer Ansatz: Eigener Banner -->
-<div id="cookie-banner" style="display:none;">
-  <p>
-    Diese Website verwendet Cookies. 
-    <a href="/datenschutz">Mehr erfahren</a>
-  </p>
-  <button onclick="acceptCookies()">Akzeptieren</button>
-  <button onclick="rejectCookies()">Ablehnen</button>
-</div>
-
-<script>
-  function acceptCookies() {
-    localStorage.setItem('cookieConsent', 'true');
-    document.getElementById('cookie-banner').style.display = 'none';
-    // Cookies aktivieren
-  }
-</script>""",
+<!-- 
+  Das Complyo Cookie-Banner wird automatisch angezeigt
+  und blockiert Tracking-Cookies bis zur Zustimmung.
+  
+  Features:
+  - DSGVO & TTDSG konform
+  - Automatische Cookie-Erkennung
+  - Content Blocker für YouTube, Google Maps, etc.
+  - 20+ Service-Vorlagen
+  - Consent-Statistiken im Dashboard
+  - WCAG 2.2 Level AA barrierefrei
+  
+  Konfiguration im Dashboard unter:
+  https://app.complyo.tech/cookie-compliance
+-->""",
             estimated_time="45-60 Minuten",
             validation_steps=[
                 "✓ Cookie-Banner erscheint beim ersten Besuch",

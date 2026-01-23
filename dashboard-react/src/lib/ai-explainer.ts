@@ -35,7 +35,7 @@ const explanations: Record<string, SimpleExplanation> = {
     simple: 'Ein Cookie-Banner fragt Besucher, ob Sie deren Surfverhalten tracken dürfen.',
     why: 'Seit 2021 (TTDSG § 25) müssen Nutzer aktiv zustimmen, bevor Tracking-Cookies gesetzt werden.',
     risk: 'Bis zu 50.000€ Bußgeld. Cookie-Banner sind heute Pflicht für fast alle Websites.',
-    fix: 'Installieren Sie ein Cookie-Consent-Tool wie Usercentrics, CookieBot oder Borlabs.',
+    fix: 'Nutzen Sie unsere integrierte Cookie-Compliance-Lösung unter "Cookie-Compliance" im Dashboard.',
     urgency: 'high',
     estimatedTime: '15 Minuten'
   },

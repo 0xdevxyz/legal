@@ -192,6 +192,15 @@
             
             // Block data-attribute elements
             this.blockDataAttributes();
+            
+            // Block inline fonts (Google Fonts in style tags)
+            this.blockInlineFonts();
+            
+            // Block inline styles with external URLs
+            this.blockInlineStyles();
+            
+            // Check for ad blockers and ensure visibility
+            this.ensureBannerVisibility();
         }
         
         blockScripts() {
@@ -378,6 +387,12 @@
                     this.unblockElement(element, data);
                 }
             });
+            
+            // Unblock inline fonts (Phase 3)
+            this.unblockFonts();
+            
+            // Unblock inline styles (Phase 3)
+            this.unblockInlineStyles();
         }
         
         unblockElement(element, data) {
@@ -594,6 +609,198 @@
             }
             
             return this.consent[category] === true;
+        }
+        
+        // ====================================================================
+        // Phase 3: Enhanced Blocking Features
+        // ====================================================================
+        
+        /**
+         * Block @font-face in inline styles (e.g., Google Fonts)
+         */
+        blockInlineFonts() {
+            const styleElements = document.querySelectorAll('style');
+            
+            styleElements.forEach(style => {
+                if (style.hasAttribute('data-complyo-font-processed')) return;
+                
+                const content = style.textContent || '';
+                const fontFaceRegex = /@font-face\s*\{[^}]*src:\s*url\(['"]?(https?:\/\/fonts\.googleapis\.com[^'")\s]+)['"]?\)[^}]*\}/gi;
+                
+                if (fontFaceRegex.test(content)) {
+                    if (!this.hasConsent('functional')) {
+                        // Store original and replace with placeholder
+                        style.setAttribute('data-complyo-original', content);
+                        style.setAttribute('data-complyo-font-blocked', 'true');
+                        
+                        // Remove font-face rules but keep other styles
+                        style.textContent = content.replace(fontFaceRegex, '/* [Complyo] Font blocked until consent */');
+                        
+                        this.blockedElements.set(style, {
+                            type: 'font',
+                            category: 'functional',
+                            original: content
+                        });
+                        
+                        console.log('[Complyo] Blocked inline Google Fonts');
+                    }
+                }
+                
+                style.setAttribute('data-complyo-font-processed', 'true');
+            });
+        }
+        
+        /**
+         * Split inline styles to block external resources while keeping layout
+         */
+        blockInlineStyles() {
+            const elementsWithStyle = document.querySelectorAll('[style*="url("]');
+            
+            elementsWithStyle.forEach(element => {
+                if (element.hasAttribute('data-complyo-style-processed')) return;
+                
+                const style = element.getAttribute('style') || '';
+                const urlRegex = /url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/gi;
+                
+                let match;
+                while ((match = urlRegex.exec(style)) !== null) {
+                    const url = match[1];
+                    const category = this.getCategoryForURL(url);
+                    
+                    if (category && !this.hasConsent(category)) {
+                        // Store original and replace URL
+                        element.setAttribute('data-complyo-original-style', style);
+                        element.setAttribute('data-complyo-style-blocked', 'true');
+                        
+                        // Replace blocked URLs with placeholder
+                        const newStyle = style.replace(
+                            new RegExp(url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+                            'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+                        );
+                        element.setAttribute('style', newStyle);
+                        
+                        this.blockedElements.set(element, {
+                            type: 'style',
+                            category: category,
+                            original: style
+                        });
+                        
+                        console.log(`[Complyo] Blocked inline style URL: ${url}`);
+                    }
+                }
+                
+                element.setAttribute('data-complyo-style-processed', 'true');
+            });
+        }
+        
+        /**
+         * Auto-play videos after consent is given
+         */
+        enableAutoplayAfterConsent(element, info) {
+            if (info.type !== 'iframe' || !info.service) return;
+            
+            const iframe = info.original;
+            if (!iframe) return;
+            
+            let src = iframe.getAttribute('data-complyo-src') || iframe.src;
+            
+            // Check if element requested autoplay
+            if (element.hasAttribute('data-complyo-autoplay') || 
+                iframe.hasAttribute('data-complyo-autoplay')) {
+                
+                // Add autoplay parameter based on service
+                if (info.service.name === 'YouTube') {
+                    src += (src.includes('?') ? '&' : '?') + 'autoplay=1&mute=1';
+                } else if (info.service.name === 'Vimeo') {
+                    src += (src.includes('?') ? '&' : '?') + 'autoplay=1&muted=1';
+                }
+                
+                console.log(`[Complyo] Auto-playing ${info.service.name} video`);
+            }
+            
+            return src;
+        }
+        
+        /**
+         * Restore blocked fonts after consent
+         */
+        unblockFonts() {
+            document.querySelectorAll('[data-complyo-font-blocked="true"]').forEach(style => {
+                const original = style.getAttribute('data-complyo-original');
+                if (original && this.hasConsent('functional')) {
+                    style.textContent = original;
+                    style.removeAttribute('data-complyo-font-blocked');
+                    console.log('[Complyo] Unblocked inline fonts');
+                }
+            });
+        }
+        
+        /**
+         * Restore blocked inline styles after consent
+         */
+        unblockInlineStyles() {
+            document.querySelectorAll('[data-complyo-style-blocked="true"]').forEach(element => {
+                const original = element.getAttribute('data-complyo-original-style');
+                const category = this.blockedElements.get(element)?.category;
+                
+                if (original && category && this.hasConsent(category)) {
+                    element.setAttribute('style', original);
+                    element.removeAttribute('data-complyo-style-blocked');
+                    console.log('[Complyo] Unblocked inline style');
+                }
+            });
+        }
+        
+        // ====================================================================
+        // Anti-AdBlocker Mechanism
+        // ====================================================================
+        
+        /**
+         * Check if the cookie banner might be blocked by ad blockers
+         * Uses obfuscated detection to avoid filter lists
+         */
+        detectAdBlocker() {
+            return new Promise((resolve) => {
+                // Method 1: Check if common ad-block targeted elements are hidden
+                const testAd = document.createElement('div');
+                testAd.innerHTML = '&nbsp;';
+                testAd.className = 'adsbox ad-banner pub_300x250';
+                testAd.style.cssText = 'position:absolute;left:-9999px;';
+                document.body.appendChild(testAd);
+                
+                setTimeout(() => {
+                    const blocked = testAd.offsetHeight === 0;
+                    document.body.removeChild(testAd);
+                    resolve(blocked);
+                }, 100);
+            });
+        }
+        
+        /**
+         * Fallback rendering if ad blocker detected
+         * Uses non-blocked class names and inline styles
+         */
+        async ensureBannerVisibility() {
+            const isBlocked = await this.detectAdBlocker();
+            
+            if (isBlocked) {
+                console.log('[Complyo] Ad blocker detected, using fallback rendering');
+                
+                // Remove common blocked class patterns
+                const banner = document.querySelector('.complyo-cookie-banner');
+                if (banner) {
+                    // Use data attributes instead of classes
+                    banner.setAttribute('data-cply-consent', 'true');
+                    
+                    // Apply critical styles inline to avoid CSS blocking
+                    banner.style.cssText += `
+                        display: block !important;
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                        pointer-events: auto !important;
+                    `;
+                }
+            }
         }
         
         // ====================================================================

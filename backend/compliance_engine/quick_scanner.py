@@ -200,10 +200,11 @@ class QuickScanner:
                 "title": "Cookie-Consent fehlt",
                 "description": "Tracking-Tools gefunden, aber kein Cookie-Consent-Banner. Nutzer müssen zustimmen, bevor Cookies gesetzt werden.",
                 "risk_euro": 50000,
-                "recommendation": "Cookie-Consent-Banner implementieren (z.B. Usercentrics, CookieBot)",
+                "recommendation": "Nutzen Sie die integrierte Complyo Cookie-Compliance-Lösung im Dashboard unter 'Cookie-Compliance'",
                 "legal_basis": "TTDSG § 25, DSGVO Art. 7",
                 "auto_fixable": True,
-                "ai_explanation": "Seit 2021 müssen Nutzer aktiv zustimmen, bevor Tracking-Cookies gesetzt werden. Ein Cookie-Banner ist Pflicht für alle Websites mit Tracking."
+                "ai_explanation": "Seit 2021 müssen Nutzer aktiv zustimmen, bevor Tracking-Cookies gesetzt werden. Complyo bietet ein vollständig DSGVO-konformes Cookie-Banner mit Consent-Management.",
+                "quick_fix_url": "/cookie-compliance"
             })
         
         return issues

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
 import {
   Shield,
   CheckCircle,
@@ -630,7 +631,7 @@ export default function ComplyoViralLanding() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 py-12 px-4 bg-white/50">
+      <footer className="border-t border-gray-200 py-12 px-4 bg-white/50 relative z-10">
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-4 gap-8 mb-12">
             {/* Logo & Description */}
@@ -656,9 +657,9 @@ export default function ComplyoViralLanding() {
             <div>
               <h4 className="font-bold text-gray-900 mb-4">Rechtliches</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="/impressum" className="text-gray-600 hover:text-blue-600 transition-colors">Impressum</a></li>
-                <li><a href="/datenschutz" className="text-gray-600 hover:text-blue-600 transition-colors">Datenschutz</a></li>
-                <li><a href="/agb" className="text-gray-600 hover:text-blue-600 transition-colors">AGB</a></li>
+                <li><Link href="/impressum" className="text-gray-600 hover:text-blue-600 transition-colors">Impressum</Link></li>
+                <li><Link href="/datenschutz" className="text-gray-600 hover:text-blue-600 transition-colors">Datenschutz</Link></li>
+                <li><Link href="/agb" className="text-gray-600 hover:text-blue-600 transition-colors">AGB</Link></li>
               </ul>
             </div>
 

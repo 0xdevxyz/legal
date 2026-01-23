@@ -10,6 +10,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useRouter } from 'next/navigation';
 import { LegalArchiveModal } from './LegalArchiveModal';
+import { SkeletonLegalNews } from '@/components/ui/Skeleton';
 
 // TypeScript Interfaces
 interface AIClassification {
@@ -388,11 +389,10 @@ export const LegalNews: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="animate-pulse space-y-3">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="h-20 bg-zinc-800/50 rounded-xl"></div>
-            ))}
-          </div>
+          <SkeletonLegalNews />
+        </CardContent>
+        <CardContent>
+          <SkeletonLegalNews />
         </CardContent>
       </Card>
     );

@@ -58,16 +58,65 @@ apiClient.interceptors.request.use(
 
 apiClient.interceptors.response.use(
  (response) => {
-
    return response;
  },
- (error) => {
+ async (error) => {
+   const originalRequest = error.config;
+   
+   // ✅ Retry bei Netzwerk-Fehlern
+   if ((error.code === 'ERR_NETWORK' || error.code === 'ERR_NETWORK_CHANGED' || error.message?.includes('fetch')) && !originalRequest._retry) {
+     originalRequest._retry = true;
+     console.log('Network error detected, retrying request...');
+     await new Promise(resolve => setTimeout(resolve, 1000));
+     return apiClient(originalRequest);
+   }
+   
+   // ✅ Token-Refresh bei 401
+   if (error.response?.status === 401 && !originalRequest._retry) {
+     originalRequest._retry = true;
+     
+     const refreshToken = localStorage.getItem('refresh_token');
+     if (refreshToken) {
+       try {
+         const refreshResponse = await apiClient.post('/api/auth/refresh', {
+           refresh_token: refreshToken
+         });
+         
+         const newToken = refreshResponse.data.access_token;
+         localStorage.setItem('access_token', newToken);
+         originalRequest.headers.Authorization = `Bearer ${newToken}`;
+         
+         return apiClient(originalRequest);
+       } catch (refreshError) {
+         // ✅ Refresh fehlgeschlagen → Logout
+         console.error('Token refresh failed in interceptor:', refreshError);
+         localStorage.removeItem('access_token');
+         localStorage.removeItem('refresh_token');
+         localStorage.removeItem('user');
+         
+         // ✅ Redirect zu Login (nur im Browser)
+         if (typeof window !== 'undefined') {
+           window.location.href = '/login';
+         }
+         
+         return Promise.reject(refreshError);
+       }
+     } else {
+       // ✅ Kein Refresh-Token → Logout
+       if (typeof window !== 'undefined') {
+         window.location.href = '/login';
+       }
+     }
+   }
+   
    console.error('💥 API Response Error:', {
      status: error.response?.status,
      statusText: error.response?.statusText,
      data: error.response?.data,
      message: error.message,
+     code: error.code,
    });
+   
    return Promise.reject(error);
  }
 );
@@ -93,19 +142,14 @@ const validateAndNormalizeUrl = (url: string): string => {
  const hasWww = trimmed.indexOf('www.') === 0;
 
  // Protokoll hinzufügen wenn nötig
+ let urlToValidate = trimmed;
  if (!hasHttp && !hasHttps) {
-   if (hasWww) {
-     return 'https://' + trimmed;
-   } else {
-     return 'https://' + trimmed;
-   }
+   urlToValidate = 'https://' + trimmed;
  }
- 
- return trimmed;
 
  // URL parsen und validieren
  try {
-   const urlObj = new URL(trimmed);
+   const urlObj = new URL(urlToValidate);
    
    // Einfache Domain-Validierung (mindestens ein Punkt)
    if (!urlObj.hostname.includes('.')) {
@@ -154,19 +198,53 @@ export const analyzeWebsite = async (url: string): Promise<ComplianceAnalysis> =
 
    if (axios.isAxiosError(error)) {
      const status = error.response?.status;
-     const message = error.response?.data?.detail || error.message;
+     const errorData = error.response?.data;
+     
+     // ✅ FIX: Parse error detail (kann String oder Object sein)
+     let message = 'Unbekannter Fehler';
+     let suggestions: string[] = [];
+     let details: string | undefined;
+     
+     if (errorData?.detail) {
+       const detail = errorData.detail;
+       
+       // Wenn detail ein Object ist (strukturierter Error)
+       if (typeof detail === 'object' && detail !== null) {
+         message = detail.message || detail.error || 'Fehler bei der Analyse';
+         suggestions = detail.suggestions || [];
+         details = detail.details || detail.error_message;
+       } else if (typeof detail === 'string') {
+         // Wenn detail ein String ist
+         message = detail;
+       }
+     } else if (errorData?.message) {
+       message = errorData.message;
+     } else if (error.message) {
+       message = error.message;
+     }
+     
+     // ✅ User-freundliche Fehlermeldung mit Suggestions
+     let userMessage = message;
+     if (suggestions.length > 0) {
+       userMessage += '\n\nVorschläge:\n' + suggestions.map(s => `• ${s}`).join('\n');
+     }
+     if (details) {
+       userMessage += `\n\nDetails: ${details}`;
+     }
 
      switch (status) {
        case 422:
-         throw new Error(`Validation Error: ${message}. Please check the URL format.`);
+         throw new Error(`Validierungsfehler: ${userMessage}`);
        case 400:
-         throw new Error(`Bad Request: ${message}`);
+         throw new Error(userMessage);
+       case 401:
+         throw new Error('Nicht autorisiert. Bitte melden Sie sich erneut an.');
        case 500:
-         throw new Error('Server Error: Please try again later.');
+         throw new Error('Server-Fehler. Bitte versuchen Sie es später erneut.');
        case 404:
-         throw new Error('API endpoint not found. Please contact support.');
+         throw new Error('API-Endpunkt nicht gefunden. Bitte kontaktieren Sie den Support.');
        default:
-         throw new Error(`API Error (${status}): ${message}`);
+         throw new Error(`API-Fehler (${status}): ${userMessage}`);
      }
    }
 

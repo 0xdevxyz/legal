@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
+import Link from 'next/link';
 import {
   Facebook,
   Twitter,
@@ -60,7 +61,7 @@ export default function FooterModern() {
   ];
 
   return (
-    <footer className="bg-gradient-to-br from-slate-900 via-gray-900 to-black text-white">
+    <footer className="bg-gradient-to-br from-slate-900 via-gray-900 to-black text-white relative z-10">
       {/* Main Footer */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-12 mb-12">
@@ -172,22 +173,17 @@ export default function FooterModern() {
           </motion.div>
 
           {/* Legal Links */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="flex items-center gap-6 text-sm text-gray-400"
-          >
-            <a href="#" className="hover:text-white transition-colors">
+          <div className="flex items-center gap-6 text-sm text-gray-400">
+            <Link href="/datenschutz" className="hover:text-white transition-colors">
               Datenschutz
-            </a>
-            <a href="#" className="hover:text-white transition-colors">
+            </Link>
+            <Link href="/impressum" className="hover:text-white transition-colors">
               Impressum
-            </a>
-            <a href="#" className="hover:text-white transition-colors">
+            </Link>
+            <Link href="/agb" className="hover:text-white transition-colors">
               AGB
-            </a>
-          </motion.div>
+            </Link>
+          </div>
         </div>
       </div>
 

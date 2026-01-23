@@ -128,9 +128,14 @@ Soll ich Ihnen zeigen, wo Sie das auf Ihrer Website einfügen?`;
 ✅ **Ablehnen-Option** genauso prominent wie "Akzeptieren"
 ✅ **Cookie-Liste** in der Datenschutzerklärung
 
-💡 **Empfohlene Tools:** Usercentrics, CookieBot, Borlabs Cookie
+🍪 **Complyo bietet eine integrierte Cookie-Compliance-Lösung!**
 
-Möchten Sie, dass ich Ihnen zeige, wie Sie ein Cookie-Banner integrieren?`;
+Gehen Sie im Dashboard zu **"Cookie-Compliance"** um:
+• Ihre Website automatisch zu scannen
+• Ein DSGVO-konformes Banner zu konfigurieren
+• Consent-Statistiken zu verfolgen
+
+Soll ich Sie direkt zur Cookie-Compliance-Einrichtung führen?`;
     }
 
     if (lowerInput.includes('hilf') || lowerInput.includes('help') || lowerInput.includes('anfang')) {

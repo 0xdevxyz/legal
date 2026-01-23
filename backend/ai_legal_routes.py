@@ -33,8 +33,35 @@ def get_db_pool():
     return main_db_pool
 
 # Helper function to extract user_id
-async def get_current_user_id(current_user: dict = Depends(get_current_user)) -> int:
-    return current_user.get("user_id")
+async def get_current_user_id(current_user: dict = Depends(get_current_user)) -> Optional[int]:
+    # ✅ FIX: verify_token() gibt JWT-Payload zurück mit "user_id" (String)
+    # Wir müssen die echte user_id aus der DB holen
+    user_id_from_token = current_user.get("id") or current_user.get("user_id")
+    
+    if not user_id_from_token:
+        return None
+    
+    # ✅ Versuche user_id zu finden (kann UUID oder String sein)
+    try:
+        from main_production import db_pool as main_db_pool
+        if main_db_pool:
+            async with main_db_pool.acquire() as conn:
+                db_user = await conn.fetchrow(
+                    "SELECT id FROM users WHERE id::text = $1 OR email = $2 LIMIT 1",
+                    str(user_id_from_token),
+                    current_user.get("email", "")
+                )
+                if db_user:
+                    # UUID zurückgeben (kann als int oder UUID sein)
+                    return db_user["id"]
+    except Exception as e:
+        logger.warning(f"Could not resolve user_id from token: {e}")
+    
+    # Fallback: Versuche user_id_from_token direkt zu verwenden
+    try:
+        return int(user_id_from_token) if isinstance(user_id_from_token, str) and user_id_from_token.isdigit() else user_id_from_token
+    except:
+        return None
 
 
 # ==================== PYDANTIC MODELS ====================
@@ -184,56 +211,121 @@ async def get_classified_updates(
             # ✅ Ermittle User-Website (letzte gescannte Website)
             user_website = None
             if user_id:
-                user_website_row = await conn.fetchrow("""
-                    SELECT url, last_scan 
-                    FROM websites 
-                    WHERE user_id = $1 
-                    ORDER BY last_scan DESC NULLS LAST
-                    LIMIT 1
-                """, user_id)
-                if user_website_row:
-                    user_website = user_website_row['url']
-                    logger.info(f"🌐 User-Website gefunden: {user_website}")
+                try:
+                    # Versuche zuerst tracked_websites (neue Tabelle)
+                    user_website_row = await conn.fetchrow("""
+                        SELECT url, last_scan_date as last_scan 
+                        FROM tracked_websites 
+                        WHERE user_id = $1 
+                        ORDER BY last_scan_date DESC NULLS LAST
+                        LIMIT 1
+                    """, user_id)
+                    if not user_website_row:
+                        # Fallback auf websites Tabelle (falls vorhanden)
+                        user_website_row = await conn.fetchrow("""
+                            SELECT url, last_scan_date as last_scan 
+                            FROM websites 
+                            WHERE user_id = $1 
+                            ORDER BY last_scan_date DESC NULLS LAST
+                            LIMIT 1
+                        """, user_id)
+                    if user_website_row:
+                        user_website = user_website_row['url']
+                        logger.info(f"🌐 User-Website gefunden: {user_website}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Konnte User-Website nicht ermitteln: {e}")
+                    user_website = None
             
             # Hole Updates mit Klassifizierung - direkte Query statt Funktion
-            # Vereinfachte Query: Wenn include_info_only=false, zeige alle Updates
+            # ✅ FIX: include_info_only bedeutet "nur Info-Updates", nicht "alle Updates"
+            # Standard: Zeige Updates mit action_required
+            # include_info_only=true: Zeige auch Updates OHNE action_required
             if include_info_only:
-                where_clause = "WHERE COALESCE(ac.action_required, false) = false"
+                where_clause = ""  # Zeige ALLE Updates (mit und ohne action_required)
             else:
-                where_clause = ""  # Zeige alle Updates
+                where_clause = "AND (lu.action_required IS NOT NULL AND lu.action_required::text != '')"  # Nur Updates mit action_required
             
-            query = f"""
-                SELECT 
-                    lu.id,
-                    lu.update_type,
-                    lu.title,
-                    lu.description,
-                    lu.severity,
-                    lu.published_date as published_at,
-                    lu.effective_date,
-                    lu.url,
-                    COALESCE(ac.action_required, (lu.action_required IS NOT NULL AND lu.action_required::text != '')) as action_required,
-                    ac.confidence,
-                    ac.impact_score,
-                    ac.primary_action_type,
-                    ac.primary_button_text,
-                    ac.primary_button_color,
-                    ac.primary_button_icon,
-                    ac.primary_action_description,
-                    ac.estimated_time,
-                    ac.reasoning,
-                    ac.user_impact,
-                    ac.consequences_if_ignored
-                FROM legal_updates lu
-                LEFT JOIN ai_classifications ac ON lu.id::text = ac.update_id
-                WHERE lu.archived = FALSE  -- ✅ Nur nicht-archivierte Updates
-                {where_clause.replace('WHERE ', 'AND ') if where_clause.startswith('WHERE') else where_clause}
-                ORDER BY 
-                    COALESCE(ac.action_required, true) DESC,
-                    COALESCE(ac.impact_score, 5.0) DESC,
-                    lu.published_date DESC
-                LIMIT $1
-            """
+            # ✅ FIX: Prüfe ob ai_classifications Tabelle existiert
+            try:
+                table_exists = await conn.fetchval("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'ai_classifications'
+                    )
+                """)
+            except:
+                table_exists = False
+            
+            if table_exists:
+                query = f"""
+                    SELECT 
+                        lu.id,
+                        lu.update_type,
+                        lu.title,
+                        lu.description,
+                        lu.severity,
+                        lu.published_date as published_at,
+                        NULL as effective_date,
+                        lu.url,
+                        COALESCE(ac.action_required, (lu.action_required IS NOT NULL AND lu.action_required::text != '')) as action_required,
+                        ac.confidence,
+                        ac.impact_score,
+                        ac.primary_action_type,
+                        ac.primary_button_text,
+                        ac.primary_button_color,
+                        ac.primary_button_icon,
+                        ac.primary_action_description,
+                        ac.estimated_time,
+                        ac.reasoning,
+                        ac.user_impact,
+                        ac.consequences_if_ignored
+                    FROM legal_updates lu
+                    LEFT JOIN ai_classifications ac ON lu.id::text = ac.update_id
+                    WHERE lu.archived = FALSE
+                    {where_clause.replace('WHERE ', 'AND ') if where_clause.startswith('WHERE') else where_clause}
+                    ORDER BY 
+                        COALESCE(ac.action_required, true) DESC,
+                        COALESCE(ac.impact_score, 5.0) DESC,
+                        lu.published_date DESC NULLS LAST
+                    LIMIT $1
+                """
+            else:
+                # Fallback: Nur legal_updates ohne AI-Klassifizierung
+                query = f"""
+                    SELECT 
+                        lu.id,
+                        lu.update_type,
+                        lu.title,
+                        lu.description,
+                        lu.severity,
+                        lu.published_date as published_at,
+                        NULL as effective_date,
+                        lu.url,
+                        (lu.action_required IS NOT NULL AND lu.action_required::text != '') as action_required,
+                        NULL as confidence,
+                        CASE 
+                            WHEN lu.severity = 'critical' THEN 9.0
+                            WHEN lu.severity = 'warning' THEN 7.0
+                            ELSE 5.0
+                        END as impact_score,
+                        NULL as primary_action_type,
+                        NULL as primary_button_text,
+                        NULL as primary_button_color,
+                        NULL as primary_button_icon,
+                        NULL as primary_action_description,
+                        NULL as estimated_time,
+                        NULL as reasoning,
+                        NULL as user_impact,
+                        NULL as consequences_if_ignored
+                    FROM legal_updates lu
+                    WHERE lu.archived = FALSE
+                    {where_clause.replace('WHERE ', 'AND ') if where_clause.startswith('WHERE') else where_clause}
+                    ORDER BY 
+                        (lu.action_required IS NOT NULL AND lu.action_required::text != '') DESC,
+                        lu.published_date DESC NULLS LAST
+                    LIMIT $1
+                """
             
             rows = await conn.fetch(query, limit)
         
@@ -260,9 +352,9 @@ async def get_classified_updates(
                 title=str(row['title'] or 'Unbekanntes Update'),
                 description=str(row['description'] or ''),
                 severity=str(row['severity'] or 'info'),
-                published_at=row['published_at'].isoformat() if row['published_at'] else datetime.now().isoformat(),
-                effective_date=row['effective_date'].isoformat() if row['effective_date'] else None,
-                url=str(row['url']) if row['url'] else None,
+                published_at=row['published_at'].isoformat() if row.get('published_at') else datetime.now().isoformat(),
+                effective_date=row['effective_date'].isoformat() if row.get('effective_date') else None,
+                url=str(row['url']) if row.get('url') else None,
                 
                 action_required=bool(row['action_required']) if row['action_required'] is not None else False,
                 confidence=str(row['confidence']) if row['confidence'] else None,
@@ -271,8 +363,8 @@ async def get_classified_updates(
                 primary_action=primary_action,
                 recommended_actions=None,  # TODO: Aus JSONB laden
                 
-                reasoning=row['reasoning'],
-                user_impact=row['user_impact'],
+                reasoning=row.get('reasoning'),
+                user_impact=row.get('user_impact'),
                 consequences_if_ignored=row.get('consequences_if_ignored'),
                 
                 classification_id=None,
@@ -287,9 +379,28 @@ async def get_classified_updates(
         logger.info(f"✅ Returned {len(updates)} classified updates (public endpoint)")
         return updates
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"❌ Error fetching classified updates: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Error fetching classified updates: {e}", exc_info=True)
+        # ✅ FIX: User-freundliche Error-Message statt Stack Trace
+        error_message = str(e) if e else "Unbekannter Fehler"
+        # ✅ Verhindere, dass sensible Daten im Error stehen
+        if "password" in error_message.lower() or "secret" in error_message.lower():
+            error_message = "Datenbank-Fehler beim Laden der Updates"
+        
+        raise HTTPException(
+            status_code=500, 
+            detail={
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": "Fehler beim Laden der Gesetzesänderungen",
+                "details": error_message,
+                "suggestions": [
+                    "Bitte versuchen Sie es später erneut",
+                    "Falls das Problem weiterhin besteht, kontaktieren Sie den Support"
+                ]
+            }
+        )
 
 
 @router.get("/updates/{update_id}/details")
@@ -497,11 +608,29 @@ async def get_archive(
         
         async with db_pool.acquire() as conn:
             # Baue Query
+            # ✅ FIX: Explizite Spaltenliste statt lu.* (effective_date existiert nicht)
             query = """
                 SELECT 
-                    lu.*,
+                    lu.id,
+                    lu.update_type,
+                    lu.title,
+                    lu.description,
+                    lu.summary,
+                    lu.content,
+                    lu.url,
+                    lu.source,
+                    lu.severity,
+                    lu.impact_level,
+                    lu.affected_areas,
+                    lu.published_date,
+                    lu.action_required,
+                    lu.is_active,
+                    lu.created_at,
+                    lu.updated_at,
+                    lu.archived,
+                    lu.archived_at,
                     ac.id as classification_id,
-                    ac.action_required,
+                    ac.action_required as ac_action_required,
                     ac.confidence,
                     ac.impact_score,
                     ac.primary_action_type,
@@ -526,13 +655,14 @@ async def get_archive(
                 query += f" AND lu.severity = ${param_count}"
                 params.append(severity)
                 param_count += 1
+                count_query += f" AND lu.severity = $1"
             
             # Count total
-            count_query = query.replace("SELECT lu.*,", "SELECT COUNT(*)")
-            count_query = count_query.split("FROM")[0] + " FROM " + "FROM ".join(count_query.split("FROM")[1:])
-            # Remove classification fields from count query
-            count_query = count_query.split("LEFT JOIN")[0]
-            total = await conn.fetchval(count_query, user_id)
+            # ✅ FIX: Erstelle separate COUNT-Query
+            count_params = []
+            if severity:
+                count_params.append(severity)
+            total = await conn.fetchval(count_query, *count_params)
             
             # Get page
             query += f" ORDER BY lu.published_date DESC LIMIT ${param_count} OFFSET ${param_count + 1}"
@@ -554,15 +684,15 @@ async def get_archive(
             
             update = ClassifiedUpdateResponse(
                 id=row['id'],
-                update_type=row['update_type'],
-                title=row['title'],
-                description=row['description'],
-                severity=row['severity'],
-                published_at=row['published_at'].isoformat(),
-                effective_date=row['effective_date'].isoformat() if row['effective_date'] else None,
-                url=row['url'],
+                update_type=str(row['update_type'] or ''),
+                title=str(row['title'] or ''),
+                description=str(row['description'] or ''),
+                severity=str(row['severity'] or 'info'),
+                published_at=row['published_date'].isoformat() if row.get('published_date') else datetime.now().isoformat(),
+                effective_date=None,  # ✅ FIX: effective_date existiert nicht in der Tabelle
+                url=str(row['url']) if row.get('url') else None,
                 
-                action_required=row['action_required'] if row['action_required'] is not None else False,
+                action_required=bool(row.get('ac_action_required') or (row.get('action_required') is not None and str(row.get('action_required')) != '')),
                 confidence=row['confidence'],
                 impact_score=float(row['impact_score']) if row['impact_score'] else None,
                 

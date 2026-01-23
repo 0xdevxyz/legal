@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, TrendingUp, Bot, Globe, RefreshCw } from 'lucide-react';
+import { Search, TrendingUp, Bot, Globe, RefreshCw, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDashboardStore } from '@/stores/dashboard';
 import { analyzeWebsite, getTrackedWebsites } from '@/lib/api';
+import { Badge } from '@/components/ui/badge';
 
 interface DomainHeroSectionProps {
   onAnalyze?: (url: string) => void;
@@ -13,7 +14,7 @@ interface DomainHeroSectionProps {
 export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
   onAnalyze
 }) => {
-  const { currentWebsite, metrics, updateMetrics, setCurrentWebsite } = useDashboardStore();
+  const { currentWebsite, metrics, updateMetrics, setCurrentWebsite, isInOptimizationMode, lockedOptimizationUrl, unlockOptimization } = useDashboardStore();
   const [url, setUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,9 +116,21 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
     setIsAnalyzing(true);
 
     try {
-      // Normalize URL
-      let normalizedUrl = urlToUse;
-      if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+      // Normalize URL - Type-safe check
+      if (typeof urlToUse !== 'string') {
+        setError('Ungültige URL');
+        setIsAnalyzing(false);
+        return;
+      }
+      
+      let normalizedUrl = String(urlToUse).trim();
+      if (!normalizedUrl) {
+        setError('Bitte geben Sie eine Domain ein');
+        setIsAnalyzing(false);
+        return;
+      }
+      
+      if (typeof normalizedUrl !== 'string' || (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://'))) {
         normalizedUrl = 'https://' + normalizedUrl;
       }
 
@@ -231,6 +244,31 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
 
             {/* Domain Input */}
             <div className="space-y-4">
+              {/* ✅ Hinweis: Optimierung ist für eine Seite gesperrt */}
+              {isInOptimizationMode && lockedOptimizationUrl && (
+                <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl">
+                  <Lock className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-semibold text-emerald-300">Optimierung aktiv für:</span>
+                      <Badge variant="success" className="text-xs">Gelockt</Badge>
+                    </div>
+                    <p className="text-xs text-zinc-400">
+                      <strong className="text-emerald-400">{lockedOptimizationUrl}</strong> — 
+                      <span className="text-zinc-500 ml-1">Alle KI-Fixes und Optimierungen werden für diese Seite personalisiert.</span>
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={unlockOptimization}
+                    className="gap-1 border-zinc-600 hover:bg-zinc-800 text-xs"
+                  >
+                    Entsperren
+                  </Button>
+                </div>
+              )}
+              
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1 relative group">
                   <Globe className="absolute left-5 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-400 group-focus-within:text-sky-400 transition-colors" />
@@ -250,7 +288,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                 </div>
                 <Button
                   size="lg"
-                  onClick={handleAnalyze}
+                  onClick={() => handleAnalyze()}
                   disabled={isAnalyzing || !url.trim()}
                   className="bg-gradient-to-r from-sky-500 to-purple-500 hover:from-sky-600 hover:to-purple-600 text-white font-semibold px-8 py-6 text-lg shadow-lg shadow-sky-500/25 hover:shadow-xl hover:shadow-sky-500/40 transition-all rounded-2xl disabled:opacity-40"
                 >

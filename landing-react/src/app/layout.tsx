@@ -30,6 +30,14 @@ export default function RootLayout({
         <meta name="theme-color" content="#0a0a0a" />
       </head>
       <body className={`${inter.className} antialiased`}>
+        {/* Cookie-Banner Script - lädt Content Blocker + Banner in einem Bundle */}
+        <Script
+          src="https://api.complyo.tech/api/widgets/cookie-compliance.js"
+          data-site-id="complyo-tech"
+          data-complyo-site-id="complyo-tech"
+          strategy="beforeInteractive"
+        />
+        
         {children}
         <Script
           src="https://api.complyo.tech/api/widgets/accessibility.js?version=6"

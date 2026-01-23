@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import Link from 'next/link';
 import { 
   Shield, 
   CheckCircle, 
@@ -508,13 +509,13 @@ export default function ComplyoHighConversionLanding({ variant, sessionId }: Com
       </main>
 
       {/* Footer */}
-      <footer role="contentinfo">
+      <footer role="contentinfo" className="relative z-10">
         <div className="bg-gray-950 py-8 text-center text-gray-500 text-sm">
           <p>© 2025 Complyo GmbH - Alle Rechte vorbehalten</p>
           <div className="flex justify-center gap-6 mt-4">
-            <a href="/impressum" className="hover:text-white">Impressum</a>
-            <a href="/datenschutz" className="hover:text-white">Datenschutz</a>
-            <a href="/agb" className="hover:text-white">AGB</a>
+            <Link href="/impressum" className="hover:text-white">Impressum</Link>
+            <Link href="/datenschutz" className="hover:text-white">Datenschutz</Link>
+            <Link href="/agb" className="hover:text-white">AGB</Link>
           </div>
         </div>
       </footer>

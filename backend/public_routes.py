@@ -452,6 +452,15 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 logger.error(f"❌ Database persistence failed: {db_error}")
                 # Don't fail the request if DB save fails
             
+            # ✅ FIX: Stelle sicher, dass issue_groups immer eine Liste ist
+            issue_groups = scan_result.get("issue_groups", [])
+            if not isinstance(issue_groups, list):
+                issue_groups = []
+            
+            grouping_stats = scan_result.get("grouping_stats", {})
+            if not isinstance(grouping_stats, dict):
+                grouping_stats = {}
+            
             response_data = AnalysisResponse(
                 success=True,
                 url=scan_result.get("url", url),
@@ -460,8 +469,8 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 issues=structured_issues,
                 positive_checks=positive_checks,
                 pillar_scores=pillar_scores,  # ✅ NEU: Säulen-Scores
-                issue_groups=scan_result.get("issue_groups", []),  # ✅ NEU: Gruppierte Issues
-                grouping_stats=scan_result.get("grouping_stats", {}),  # ✅ NEU: Gruppierungs-Statistiken
+                issue_groups=issue_groups,  # ✅ NEU: Gruppierte Issues (immer Liste)
+                grouping_stats=grouping_stats,  # ✅ NEU: Gruppierungs-Statistiken (immer Dict)
                 riskAmount=total_risk_data['total_risk_range'],
                 score=overall_compliance_score,  # ✅ Durchschnitt statt Scanner-Score
                 scan_duration_ms=scan_result.get("scan_duration_ms"),

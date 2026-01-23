@@ -291,10 +291,6 @@ async def startup_event():
     expert_service_routes.db_pool = db_pool
     print("✅ Expert service routes initialized with database pool")
     
-    # Initialize BFSG Accessibility Fix routes
-    init_accessibility_routes(db_pool, auth_service)
-    print("✅ BFSG Accessibility Fix routes initialized")
-    
     # Start Background Worker for fix-jobs
     try:
         await start_background_worker(db_pool)
@@ -350,6 +346,10 @@ async def startup_event():
     # Set global references in auth_routes
     auth_routes.auth_service = auth_service
     auth_routes.db_pool = db_pool
+    
+    # Initialize BFSG Accessibility Fix routes (after auth_service is ready)
+    init_accessibility_routes(db_pool, auth_service)
+    print("✅ BFSG Accessibility Fix routes initialized")
 
     # Initialize Firebase Admin SDK
     firebase_app = init_firebase_admin()
@@ -387,6 +387,12 @@ async def startup_event():
     import legal_news_routes
     legal_news_routes.db_pool = db_pool
     legal_news_routes.news_service = news_service
+    legal_news_routes.db_pool = db_pool
+    
+    # Initialize legal_ai_routes with db_pool
+    import legal_ai_routes
+    legal_ai_routes.db_pool = db_pool
+    print("✅ Legal AI routes initialized with database pool")
 
     # Include API routers
     app.include_router(public_router)
