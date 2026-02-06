@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Globe, CheckCircle, ArrowRight, Loader2 } from 'lucide-react';
-import { analyzeWebsite } from '@/lib/api';
+import { analyzeWebsite, saveTrackedWebsite } from '@/lib/api';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useToast } from '@/components/ui/Toast';
 import type { ComplianceIssue } from '@/types/api';
@@ -21,9 +21,11 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
   const [currentCheck, setCurrentCheck] = useState('');
   const [scanResult, setScanResult] = useState<any>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [showConfirmLock, setShowConfirmLock] = useState(false);
+  const [lockConfirmed, setLockConfirmed] = useState(false);
   
   const { showToast } = useToast();
-  const { setCurrentWebsite, setAnalysisData, updateMetrics } = useDashboardStore();
+  const { setCurrentWebsite, setAnalysisData, updateMetrics, lockForOptimization } = useDashboardStore();
 
   // Validate URL in real-time with strict validation
   useEffect(() => {
@@ -194,10 +196,33 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
     }
   };
 
-  const handleComplete = () => {
-    // Mark onboarding as completed in localStorage
-    localStorage.setItem('complyo_onboarding_completed', 'true');
-    onComplete();
+  const handleComplete = async () => {
+    try {
+      // ✅ WICHTIG: Website in der Datenbank speichern (dauerhaft verknüpft!)
+      const normalizedUrl = url.trim().replace(/^https?:\/\//, '').replace(/^www\./, '');
+      const score = scanResult?.compliance_score || 0;
+      
+      console.log('🔒 Speichere Website dauerhaft:', normalizedUrl);
+      
+      // Website in tracked_websites speichern (Backend erstellt auch cookie_banner_config)
+      await saveTrackedWebsite(normalizedUrl, score);
+      
+      // ✅ Im lokalen State als gelockt markieren
+      lockForOptimization(normalizedUrl);
+      
+      // Mark onboarding as completed in localStorage
+      localStorage.setItem('complyo_onboarding_completed', 'true');
+      
+      showToast('Website erfolgreich registriert!', 'success');
+      onComplete();
+      
+    } catch (error: any) {
+      console.error('❌ Website speichern fehlgeschlagen:', error);
+      showToast(`Fehler beim Speichern: ${error.message || 'Unbekannter Fehler'}`, 'error');
+      // Trotzdem fortfahren, falls nur das Speichern fehlschlägt
+      localStorage.setItem('complyo_onboarding_completed', 'true');
+      onComplete();
+    }
   };
 
   // Helper: Get compliance message based on score
@@ -383,6 +408,23 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
                     ✓ Gut erkannt: {url.replace(/^https?:\/\//, '')}
                   </p>
                 )}
+              </div>
+
+              {/* ⚠️ Wichtiger Hinweis vor der Registrierung */}
+              <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">⚠️</span>
+                  <div>
+                    <p className="font-semibold text-amber-800 mb-1">
+                      Wichtiger Hinweis
+                    </p>
+                    <p className="text-sm text-amber-700">
+                      Die hier eingetragene Website wird <strong>dauerhaft</strong> mit Ihrem Complyo-Konto verknüpft. 
+                      Diese Verknüpfung kann <strong>nicht selbstständig rückgängig</strong> gemacht werden. 
+                      Änderungen sind nur über ein <strong>Support-Ticket</strong> möglich.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <button
@@ -575,19 +617,74 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
                 </div>
               )}
 
-              {/* CTA */}
-              <button
-                onClick={handleComplete}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-4 rounded-xl font-semibold text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
-              >
-                <Sparkles className="w-5 h-5" />
-                Jetzt Probleme beheben
-                <ArrowRight className="w-5 h-5" />
-              </button>
+              {/* Bestätigungs-Dialog für Website-Lock */}
+              {showConfirmLock ? (
+                <div className="bg-red-50 border-2 border-red-300 rounded-xl p-5 mb-4">
+                  <div className="flex items-start gap-3 mb-4">
+                    <span className="text-3xl">🔒</span>
+                    <div>
+                      <p className="font-bold text-red-800 text-lg mb-2">
+                        Endgültige Bestätigung erforderlich
+                      </p>
+                      <p className="text-sm text-red-700 mb-3">
+                        Sie sind dabei, <strong>{url}</strong> dauerhaft mit Ihrem Complyo-Konto zu verknüpfen.
+                      </p>
+                      <ul className="text-sm text-red-700 space-y-1 mb-3">
+                        <li>• Diese Verknüpfung kann <strong>NICHT</strong> selbstständig rückgängig gemacht werden</li>
+                        <li>• Änderungen erfordern ein <strong>Support-Ticket</strong></li>
+                        <li>• Ihr Konto ist auf <strong>eine Website</strong> beschränkt</li>
+                      </ul>
+                    </div>
+                  </div>
+                  
+                  <label className="flex items-start gap-3 p-3 bg-white rounded-lg border border-red-200 cursor-pointer mb-4">
+                    <input
+                      type="checkbox"
+                      checked={lockConfirmed}
+                      onChange={(e) => setLockConfirmed(e.target.checked)}
+                      className="mt-1 w-5 h-5 rounded border-red-300 text-red-600 focus:ring-red-500"
+                    />
+                    <span className="text-sm text-gray-700">
+                      Ich verstehe, dass diese Website-Verknüpfung <strong>dauerhaft</strong> ist und nur durch den Support geändert werden kann.
+                    </span>
+                  </label>
+                  
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setShowConfirmLock(false);
+                        setLockConfirmed(false);
+                      }}
+                      className="flex-1 py-3 rounded-xl font-semibold border-2 border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      Abbrechen
+                    </button>
+                    <button
+                      onClick={handleComplete}
+                      disabled={!lockConfirmed}
+                      className="flex-1 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white py-3 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                    >
+                      🔒 Bestätigen & Fortfahren
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* CTA */}
+                  <button
+                    onClick={() => setShowConfirmLock(true)}
+                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-4 rounded-xl font-semibold text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+                  >
+                    <Sparkles className="w-5 h-5" />
+                    Jetzt Probleme beheben
+                    <ArrowRight className="w-5 h-5" />
+                  </button>
 
-              <p className="text-center text-sm text-gray-500 mt-4">
-                💡 Tiefere Analyse läuft im Hintergrund weiter...
-              </p>
+                  <p className="text-center text-sm text-gray-500 mt-4">
+                    💡 Tiefere Analyse läuft im Hintergrund weiter...
+                  </p>
+                </>
+              )}
             </div>
           );
         })()}

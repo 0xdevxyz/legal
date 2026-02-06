@@ -215,7 +215,7 @@ export const DomainLockStatus: React.FC<DomainLockStatusProps> = ({ refreshTrigg
               <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-blue-800 dark:text-blue-300">
                 <strong>Hinweis:</strong> Jede Domain beginnt mit 1 kostenlosen Fix. 
-                Für unbegrenzte Fixes upgraden Sie für 39€/Monat pro Domain.
+                Für unbegrenzte Fixes upgraden Sie für 19€/Monat pro Säule oder 49€/Monat für alle 4 Säulen.
               </div>
             </div>
           </div>

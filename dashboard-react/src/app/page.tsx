@@ -14,6 +14,8 @@ import { PlanGuard } from '@/components/guards/PlanGuard'
 import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard'
 // NEU: AI Compliance Card
 import { AIComplianceCard } from '@/components/dashboard/AIComplianceCard'
+// NEU: Kurzwahl-Leiste für gelockte Seiten
+import { OptimizationQuickNav } from '@/components/dashboard/OptimizationQuickNav'
 import { useAuth } from '@/contexts/AuthContext'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { AccessibilityWidget } from '@/components/accessibility/AccessibilityWidget'
@@ -44,6 +46,9 @@ export default function Page() {
       <ErrorBoundary componentName="Dashboard Page">
         {/* Accessibility Widget - lädt dynamisch basierend auf analysierter Website */}
         <AccessibilityWidget />
+        
+        {/* ✅ Kurzwahl-Leiste: Schneller Rückweg zur Optimierung wenn andere Seite analysiert wird */}
+        <OptimizationQuickNav />
         
         <div className="min-h-screen">
           {/* Header */}

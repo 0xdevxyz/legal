@@ -53,8 +53,8 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-complyo_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-complyo_db}
       - REDIS_HOST=redis
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - UNLIMITED_FIXES=true
-      - BYPASS_PAYMENT=true
+      - UNLIMITED_FIXES=${UNLIMITED_FIXES:-false}
+      - BYPASS_PAYMENT=${BYPASS_PAYMENT:-false}
       - ENVIRONMENT=production
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}

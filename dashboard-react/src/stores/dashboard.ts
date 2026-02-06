@@ -81,15 +81,10 @@ export const useDashboardStore = create<DashboardStore>()(
     },
 
     unlockOptimization: () => {
-      set({ 
-        lockedOptimizationUrl: null, 
-        isInOptimizationMode: false 
-      });
-      // Remove from localStorage
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem('complyo_locked_optimization_url');
-        localStorage.removeItem('complyo_optimization_mode');
-      }
+      // ⛔ DEAKTIVIERT: Website-Verknüpfung ist DAUERHAFT
+      // Änderungen nur über Support-Ticket möglich
+      console.warn('⛔ unlockOptimization ist deaktiviert. Die Website-Verknüpfung ist dauerhaft und kann nur über den Support geändert werden: support@complyo.tech');
+      // Funktion tut NICHTS mehr - keine Änderung am State oder localStorage
     },
 
     setOptimizationMode: (enabled: boolean) => {

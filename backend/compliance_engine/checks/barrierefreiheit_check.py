@@ -943,3 +943,95 @@ def _get_surrounding_text(img, soup: BeautifulSoup, max_length: int = 200) -> st
     full_text = ' '.join(surrounding)
     return full_text[:max_length] if full_text else ''
 
+
+# =============================================================================
+# Enhanced Check mit axe-core und Media
+# =============================================================================
+
+async def check_barrierefreiheit_enhanced(
+    url: str,
+    html: str = None,
+    session=None,
+    use_axe_core: bool = True,
+    check_media: bool = True
+) -> List[Dict[str, Any]]:
+    """
+    🚀 ENHANCED Barrierefreiheits-Check mit axe-core und Media-Prüfung
+    
+    Kombiniert:
+    1. Eigene Checks (barrierefreiheit_check)
+    2. axe-core für vollständige WCAG-Abdeckung
+    3. Media-Accessibility-Check (Video/Audio)
+    
+    Args:
+        url: URL der zu prüfenden Website
+        html: Optional bereits gefetchtes HTML
+        session: Optional aiohttp Session
+        use_axe_core: axe-core Scanner verwenden (erfordert Playwright)
+        check_media: Media-Elemente prüfen
+        
+    Returns:
+        Kombinierte Liste von Issues
+    """
+    logger.info(f"🔍 Enhanced Barrierefreiheits-Check für: {url}")
+    
+    all_issues = []
+    
+    # 1. Führe Standard-Check durch
+    try:
+        standard_issues = await check_barrierefreiheit_compliance_smart(url, html, session)
+        all_issues.extend(standard_issues)
+        logger.info(f"✅ Standard-Check: {len(standard_issues)} Issues")
+    except Exception as e:
+        logger.error(f"❌ Standard-Check fehlgeschlagen: {e}")
+    
+    # 2. axe-core Check (optional)
+    if use_axe_core:
+        try:
+            from ..axe_scanner import run_axe_scan
+            axe_result, axe_issues = await run_axe_scan(url)
+            
+            # Dedupliziere: Nur axe-Issues hinzufügen, die nicht schon gefunden wurden
+            existing_selectors = {issue.get('selector') for issue in all_issues if issue.get('selector')}
+            
+            for issue in axe_issues:
+                selector = issue.get('selector', '')
+                if selector and selector not in existing_selectors:
+                    all_issues.append(issue)
+                    existing_selectors.add(selector)
+            
+            logger.info(f"✅ axe-core Check: {len(axe_issues)} Issues ({axe_result.total_violations} Violations)")
+        except ImportError:
+            logger.warning("⚠️ axe-core nicht verfügbar (Playwright nicht installiert)")
+        except Exception as e:
+            logger.error(f"❌ axe-core Check fehlgeschlagen: {e}")
+    
+    # 3. Media-Accessibility-Check (optional)
+    if check_media:
+        try:
+            from .media_accessibility_check import check_media_accessibility
+            
+            # Hole HTML wenn nicht vorhanden
+            if not html:
+                import ssl
+                import certifi
+                ssl_context = ssl.create_default_context(cafile=certifi.where())
+                connector = aiohttp.TCPConnector(ssl=ssl_context)
+                async with aiohttp.ClientSession(connector=connector) as temp_session:
+                    async with temp_session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
+                        html = await response.text()
+            
+            media_issues = await check_media_accessibility(url, html)
+            all_issues.extend(media_issues)
+            logger.info(f"✅ Media-Check: {len(media_issues)} Issues")
+        except Exception as e:
+            logger.error(f"❌ Media-Check fehlgeschlagen: {e}")
+    
+    # 4. Sortiere nach Severity
+    severity_order = {'critical': 0, 'error': 1, 'warning': 2, 'info': 3}
+    all_issues.sort(key=lambda x: severity_order.get(x.get('severity', 'info'), 3))
+    
+    logger.info(f"✅ Enhanced Check abgeschlossen: {len(all_issues)} Issues insgesamt")
+    
+    return all_issues
+

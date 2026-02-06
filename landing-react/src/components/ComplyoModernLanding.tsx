@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
+import { Menu, X } from 'lucide-react';
 import ModernHero from './modern-landing/ModernHero';
 import TrustBanner from './modern-landing/TrustBanner';
 import ProblemSection from './modern-landing/ProblemSection';
@@ -26,7 +27,11 @@ import { Logo } from './Logo';
  * 
  * ✅ Barrierefreiheit: Semantisches HTML5 (header, nav, main, footer)
  */
+const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || 'https://app.complyo.tech';
+
 export default function ComplyoModernLanding() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-white">
       {/* Header mit Hero Section */}
@@ -45,14 +50,32 @@ export default function ComplyoModernLanding() {
                 <a href="#pricing" className="text-gray-700 hover:text-blue-600 transition-colors">Preise</a>
                 <a href="#faq" className="text-gray-700 hover:text-blue-600 transition-colors">FAQ</a>
                 <a 
-                  href={process.env.NODE_ENV === 'production' ? 'https://app.complyo.tech' : 'http://localhost:3001'}
+                  href={DASHBOARD_URL}
                   className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
                 >
                   Login
                 </a>
               </div>
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden p-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+                aria-label={mobileMenuOpen ? 'Menü schließen' : 'Menü öffnen'}
+                aria-expanded={mobileMenuOpen}
+              >
+                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              </button>
             </div>
           </div>
+          {mobileMenuOpen && (
+            <div className="md:hidden border-t border-gray-200 bg-white/95 backdrop-blur-md">
+              <div className="px-4 py-4 space-y-3">
+                <a href="#features" onClick={() => setMobileMenuOpen(false)} className="block text-gray-700 hover:text-blue-600 font-medium py-2">Features</a>
+                <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block text-gray-700 hover:text-blue-600 font-medium py-2">Preise</a>
+                <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="block text-gray-700 hover:text-blue-600 font-medium py-2">FAQ</a>
+                <a href={DASHBOARD_URL} className="block bg-gradient-to-r from-blue-600 to-purple-600 text-white text-center px-4 py-3 rounded-lg hover:opacity-90 transition-opacity font-medium">Login</a>
+              </div>
+            </div>
+          )}
         </nav>
         
         {/* Hero Section - Hauptbereich mit Statement */}

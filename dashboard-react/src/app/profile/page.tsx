@@ -6,6 +6,8 @@ import { Shield, User, CreditCard, Lock, Mail, Building, Save, AlertCircle, Chec
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+
 export default function ProfilePage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'profile' | 'billing' | 'password'>('profile');
@@ -34,17 +36,27 @@ export default function ProfilePage() {
     confirm_password: '',
   });
 
+  const getAuthHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+  };
+
   const handleSaveProfile = async () => {
     setIsSaving(true);
     setSuccessMessage('');
     setErrorMessage('');
 
     try {
-      // TODO: API-Call zum Speichern der Profildaten
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulation
+      const res = await fetch(`${API_BASE}/api/user/profile`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ full_name: profileData.full_name, company: profileData.company }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Fehler beim Speichern');
       setSuccessMessage('Profil erfolgreich aktualisiert!');
-    } catch (error) {
-      setErrorMessage('Fehler beim Speichern der Profildaten');
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Fehler beim Speichern der Profildaten');
     } finally {
       setIsSaving(false);
     }
@@ -56,11 +68,16 @@ export default function ProfilePage() {
     setErrorMessage('');
 
     try {
-      // TODO: API-Call zum Speichern der Rechnungsdaten
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulation
+      const res = await fetch(`${API_BASE}/api/user/billing`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(billingData),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Fehler beim Speichern');
       setSuccessMessage('Rechnungsdaten erfolgreich gespeichert!');
-    } catch (error) {
-      setErrorMessage('Fehler beim Speichern der Rechnungsdaten');
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Fehler beim Speichern der Rechnungsdaten');
     } finally {
       setIsSaving(false);
     }
@@ -68,7 +85,11 @@ export default function ProfilePage() {
 
   const handleChangePassword = async () => {
     if (passwordData.new_password !== passwordData.confirm_password) {
-      setErrorMessage('Passwörter stimmen nicht überein');
+      setErrorMessage('Passwoerter stimmen nicht ueberein');
+      return;
+    }
+    if (passwordData.new_password.length < 8) {
+      setErrorMessage('Neues Passwort muss mindestens 8 Zeichen lang sein');
       return;
     }
 
@@ -77,12 +98,20 @@ export default function ProfilePage() {
     setErrorMessage('');
 
     try {
-      // TODO: API-Call zum Ändern des Passworts
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulation
-      setSuccessMessage('Passwort erfolgreich geändert!');
+      const res = await fetch(`${API_BASE}/api/user/password`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          current_password: passwordData.current_password,
+          new_password: passwordData.new_password,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Fehler beim Aendern');
+      setSuccessMessage('Passwort erfolgreich geaendert!');
       setPasswordData({ current_password: '', new_password: '', confirm_password: '' });
-    } catch (error) {
-      setErrorMessage('Fehler beim Ändern des Passworts');
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Fehler beim Aendern des Passworts');
     } finally {
       setIsSaving(false);
     }

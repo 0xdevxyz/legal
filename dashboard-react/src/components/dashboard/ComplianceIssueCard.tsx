@@ -160,7 +160,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
     setChatMessages(newMessages);
     
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('https://api.complyo.tech/api/chat/issue-solution', {
         method: 'POST',
         headers: {
@@ -240,7 +240,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}?language=de`, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
           },
         });
 

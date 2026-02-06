@@ -746,22 +746,22 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
                 <div className="grid md:grid-cols-2 gap-4 mb-6">
                   <div className="bg-black bg-opacity-30 p-4 rounded-lg">
                     <h5 className="font-semibold mb-2 flex items-center gap-2">
-                      <span className="text-green-400">✓</span> KI Plan - 39€ netto/Monat
+                      <span className="text-green-400">✓</span> Komplett-Paket - 49€ netto/Monat
                     </h5>
                     <ul className="text-sm text-gray-300 space-y-1">
-                      <li>• 1 Website professionell compliant</li>
+                      <li>• Alle 4 Säulen inklusive</li>
                       <li>• Code-Snippets mit Anleitungen</li>
-                      <li>• 10 Exports/Monat</li>
+                      <li>• Unbegrenzte Exports</li>
                       <li>• Compliance-Dashboard</li>
                     </ul>
                   </div>
                   
                   <div className="bg-gradient-to-br from-yellow-900 to-yellow-800 bg-opacity-50 p-4 rounded-lg border border-yellow-500">
                     <h5 className="font-semibold mb-2 flex items-center gap-2">
-                      <span className="text-yellow-400">⭐</span> Expert Plan - 2.000€ + 39€/Monat
+                      <span className="text-yellow-400">⭐</span> Expertenservice - 2.990€ + 39€/Monat
                     </h5>
                     <ul className="text-sm text-gray-300 space-y-1">
-                      <li>• 1 Website vollumfänglich professionell</li>
+                      <li>• Vollständige Umsetzung durch Experten</li>
                       <li>• KI-generierte vollständige Dokumente</li>
                       <li>• Unbegrenzte Exports</li>
                       <li>• Persönlicher Compliance-Berater</li>
@@ -1007,12 +1007,12 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
             <div className="bg-white/10 backdrop-blur-md border-2 border-blue-500 p-8 rounded-2xl shadow-2xl transform hover:scale-105 transition-transform">
               <div className="text-center mb-8">
                 <div className="text-5xl mb-4">🤖</div>
-                <h3 className="text-2xl font-bold mb-2">Automatischer Schutz</h3>
+                <h3 className="text-2xl font-bold mb-2">Komplett-Paket</h3>
                 <div className="text-5xl font-bold mb-2">
-                  39€<span className="text-2xl">/Monat</span>
+                  49€<span className="text-2xl">/Monat</span>
                 </div>
                 <p className="text-gray-400 line-through text-sm">statt 8.000€ Abmahnung</p>
-                <p className="text-green-400 font-semibold mt-2">Sie sparen über 99%</p>
+                <p className="text-green-400 font-semibold mt-2">Alle 4 Säulen inklusive</p>
               </div>
               
               <div className="mb-6 text-center bg-blue-900/30 p-4 rounded-lg">
@@ -1044,7 +1044,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
                 }}
                 className="w-full bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-4 rounded-lg font-bold text-lg hover:scale-105 transition-transform shadow-lg"
               >
-                🚀 Jetzt schützen für 39€/Monat
+                🚀 Jetzt schützen für 49€/Monat
               </button>
               
               <p className="text-xs text-gray-400 mt-4 text-center">
@@ -1059,7 +1059,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
               <div className="text-5xl mb-4">👨‍💼</div>
               <h3 className="text-2xl font-bold mb-2">Persönliche Betreuung</h3>
               <div className="text-3xl font-bold mb-1">
-                2.000€ <span className="text-base">einmalig</span>
+                2.990€ <span className="text-base">einmalig</span>
               </div>
               <div className="text-2xl font-bold mb-4">
                 + 39€<span className="text-base">/Monat</span>
@@ -1297,7 +1297,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
             </div>
             <p className="text-gray-300 mb-4 italic">
               "Als Zahnarzt habe ich keine Zeit, mich um Website-Rechtskram zu kümmern. 
-              Complyo macht das einfach automatisch für mich. 39€ im Monat sind ein Witz im 
+              Complyo macht das einfach automatisch für mich. 49€ im Monat sind ein Witz im 
               Vergleich zu dem, was eine Abmahnung kosten würde. Top Service!"
             </p>
             <div className="flex text-yellow-400">
@@ -1437,7 +1437,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
               }}
               className="bg-gradient-to-r from-green-600 to-emerald-600 px-10 py-5 rounded-xl text-xl font-bold hover:scale-110 transition-transform shadow-2xl border-4 border-green-400"
             >
-              🛡️ Sofort schützen (39€/Monat)
+              🛡️ Sofort schützen (49€/Monat)
             </button>
           </div>
           
@@ -1636,10 +1636,10 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
         
         {selectedPlan === 'ki' ? (
           <>
-            <h3 className="text-2xl font-bold mb-6">🤖 KI-Automatisierung</h3>
+            <h3 className="text-2xl font-bold mb-6">🤖 Komplett-Paket</h3>
             <div className="text-center mb-6">
-              <div className="text-4xl font-bold mb-2">39€<span className="text-lg">/Monat</span></div>
-              <p className="text-gray-300">Der intelligente Weg zur Compliance</p>
+              <div className="text-4xl font-bold mb-2">49€<span className="text-lg">/Monat</span></div>
+              <p className="text-gray-300">Alle 4 Säulen - Der intelligente Weg zur Compliance</p>
             </div>
             
             <div className="space-y-4 mb-6">
@@ -1675,7 +1675,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
                 type="submit" 
                 className="w-full bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity"
               >
-                Jetzt für 39€/Monat starten
+                Jetzt für 49€/Monat starten
               </button>
             </form>
             
@@ -1685,9 +1685,9 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
           </>
         ) : (
           <>
-            <h3 className="text-2xl font-bold mb-6">👨‍💼 Experten-Service</h3>
+            <h3 className="text-2xl font-bold mb-6">👨‍💼 Expertenservice</h3>
             <div className="text-center mb-6">
-              <div className="text-3xl font-bold mb-2">2.000€ <span className="text-lg">Setup</span></div>
+              <div className="text-3xl font-bold mb-2">2.990€ <span className="text-lg">Setup</span></div>
               <div className="text-xl font-bold mb-2">+ 39€<span className="text-lg">/Monat</span></div>
               <p className="text-gray-300">Die Profi-Lösung für komplexe Fälle</p>
             </div>

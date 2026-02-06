@@ -87,31 +87,17 @@ export const Footer: React.FC = () => {
               <ul className="space-y-2">
                 <li>
                   <a
-                    href="/docs"
+                    href="https://api.complyo.tech/docs"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="text-zinc-400 hover:text-white text-sm transition-colors"
                   >
-                    Dokumentation
+                    API-Dokumentation
                   </a>
                 </li>
                 <li>
                   <a
-                    href="/api"
-                    className="text-zinc-400 hover:text-white text-sm transition-colors"
-                  >
-                    API
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="/blog"
-                    className="text-zinc-400 hover:text-white text-sm transition-colors"
-                  >
-                    Blog
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="/support"
+                    href="mailto:support@complyo.tech"
                     className="text-zinc-400 hover:text-white text-sm transition-colors"
                   >
                     Support

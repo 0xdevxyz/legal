@@ -3,86 +3,107 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
-const faqs = [
-  {
-    question: 'Ich habe noch keine Reichweite, lohnt sich alfima trotzdem?',
-    answer:
-      'Absolut. Wir zeigen dir in der alfima Academy, wie du ohne große Reichweite mit Kursen, PDFs und Mini-Events Geld verdienst. Du bekommst konkrete Launchpläne und Support beim Positionieren.'
-  },
-  {
-    question: 'Was steckt hinter der All-in-One-Plattform?',
-    answer:
-      'Landingpage, Content-Produktion, Checkout, Memberbereich, CRM, Terminbuchung, E-Mail-Marketing, Automationen und Analysen – direkt aus einem Dashboard gesteuert.'
-  },
-  {
-    question: 'Was passiert nach den ersten 14 Tagen?',
-    answer:
-      'Dein Zugang bleibt erhalten, du kannst zum Creator-Plan wechseln. Die Daten bleiben gespeichert, sodass du jederzeit reaktivieren kannst. Support & Academy laufen weiter ohne Zusatzkosten.'
-  },
-  {
-    question: 'Wie schnell kann ich ein Angebot live schalten?',
-    answer:
-      'Mit unseren Launch-Templates und Auto-Checkout-Blocks brauchst du nur wenige Stunden für deinen ersten Kurs. Coachings und Membership-Seiten sind in 2 Tagen fertig.'
-  },
-  {
-    question: 'Welche Automationen sind dabei?',
-    answer:
-      'E-Mail-Strecken, Reminder, Upsells, Payment-Reminder, Terminbuchungen inkl. Kalender-Sync und Segmentierung nach Verhalten – alles als Flow editierbar.'
-  },
-  {
-    question: 'Wie sieht der Support aus?',
-    answer:
-      'Du bekommst 1:1 Onboarding-Calls, persönlichen WhatsApp-Support sowie wöchentliche LIVE-Coachings mit dem Gründerteam. Technische Fragen beantworten wir innerhalb weniger Stunden.'
-  }
-];
-
+/**
+ * FAQAccordion - Häufig gestellte Fragen
+ */
 export default function FAQAccordion() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
+  const faqs = [
+    {
+      question: 'Ist Complyo WCAG 2.1 AA konform?',
+      answer: 'Ja, Complyo prüft Ihre Website nach allen Kriterien der WCAG 2.1 Level AA. Unser Scanner analysiert über 127 Prüfpunkte und gibt Ihnen konkrete Handlungsempfehlungen mit Code-Beispielen für jedes identifizierte Problem.'
+    },
+    {
+      question: 'Was ist der Unterschied zu Eye-Able® und anderen Overlay-Lösungen?',
+      answer: 'Im Gegensatz zu Overlay-Widgets wie Eye-Able® bietet Complyo echte Code-Fixes. Das bedeutet: Sie passen Ihren tatsächlichen Quellcode an, statt ein Widget einzubinden. Das Resultat ist nachhaltige Compliance ohne Abhängigkeit von Drittanbietern, bessere Performance und echte Barrierefreiheit statt kosmetischer Korrekturen.'
+    },
+    {
+      question: 'Wie integriere ich Complyo in meine Website?',
+      answer: 'Für die Analyse benötigen Sie keine Integration. Einfach URL eingeben und scannen. Die KI-generierten Fixes erhalten Sie als Copy-Paste Code mit genauer Lokalisierung (Datei, Zeile). Sie implementieren diese direkt in Ihrem Quellcode – ohne externe Dependencies.'
+    },
+    {
+      question: 'Was passiert nach der KI-Optimierung?',
+      answer: 'Nach Implementierung der Fixes können Sie einen neuen Scan durchführen, um Ihre Verbesserungen zu messen. Der Score-Verlauf zeigt Ihnen die Entwicklung über Zeit. Im DIY-Plan haben Sie unbegrenzte Analysen – beim Expertenservice übernehmen wir monatliche Updates für Sie.'
+    },
+    {
+      question: 'Bietet Complyo auch Workshops oder Schulungen an?',
+      answer: 'Ja, im Expertenservice bieten wir individuelle Workshops und Schulungen für Ihr Team an. Diese umfassen Einführung in WCAG 2.1, DSGVO-Best-Practices und technische Umsetzung der Fixes. Kontaktieren Sie uns für ein maßgeschneidertes Angebot.'
+    },
+    {
+      question: 'Wie aktuell sind die rechtlichen Anforderungen?',
+      answer: 'Durch unsere eRecht24-Integration sind alle rechtlichen Texte und Anforderungen immer auf dem neuesten Stand. Bei Gesetzesänderungen erhalten Sie automatische Updates (im Expertenservice) oder Benachrichtigungen (DIY-Plan) mit angepassten Lösungen.'
+    },
+    {
+      question: 'Kann ich Complyo auch für mehrere Websites nutzen?',
+      answer: 'Ja, im DIY-Plan können Sie unbegrenzt viele Websites analysieren. Allerdings haben Sie nur eine KI-Optimierung verfügbar. Für mehrere professionelle Umsetzungen empfehlen wir den Expertenservice oder kontaktieren Sie uns für ein Enterprise-Angebot.'
+    },
+    {
+      question: 'Was ist der Unterschied zwischen Analyse und KI-Optimierung?',
+      answer: 'Eine Analyse scannt Ihre Website und zeigt alle Compliance-Probleme auf. Die KI-Optimierung geht weiter: Sie generiert detaillierte, rechtssichere Lösungen mit Copy-Paste Code, Schritt-für-Schritt-Anleitungen und Priorisierung nach Wichtigkeit. Im DIY-Plan ist eine KI-Optimierung inklusive.'
+    }
+  ];
+
   return (
-    <section id="faq" className="bg-white py-20">
+    <section className="bg-gray-50 py-20" id="faq">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <p className="text-sm uppercase tracking-[0.4em] text-slate-500">FAQ</p>
-          <h2 className="text-4xl font-bold mt-4">Alles, was Creator wissen wollen</h2>
-          <p className="text-lg text-slate-500 mt-3">
-            Klar, präzise Antworten zu Preisen, Launch, Support und dem All-in-One Versprechen.
+        {/* Header */}
+        <div className="text-center mb-16">
+          <h2 className="text-4xl font-bold text-gray-900 mb-4">
+            Häufig gestellte Fragen
+          </h2>
+          <p className="text-xl text-gray-600">
+            Alles was Sie über Complyo wissen müssen
           </p>
         </div>
-
+        
+        {/* Accordion */}
         <div className="space-y-4">
           {faqs.map((faq, index) => (
-            <div key={index} className="rounded-3xl border border-slate-100 bg-slate-50 shadow-sm">
+            <div
+              key={index}
+              className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
+            >
+              {/* Question */}
               <button
                 onClick={() => setOpenIndex(openIndex === index ? null : index)}
-                className="w-full flex items-center justify-between px-6 py-5 text-left text-lg font-semibold text-slate-900 transition hover:bg-white"
+                className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors"
               >
-                <span>{faq.question}</span>
+                <span className="font-semibold text-gray-900 pr-8">
+                  {faq.question}
+                </span>
                 {openIndex === index ? (
-                  <ChevronUp className="w-5 h-5 text-slate-500" />
+                  <ChevronUp className="w-5 h-5 text-blue-600 flex-shrink-0" />
                 ) : (
-                  <ChevronDown className="w-5 h-5 text-slate-500" />
+                  <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />
                 )}
               </button>
+              
+              {/* Answer */}
               {openIndex === index && (
-                <div className="border-t border-slate-100 px-6 py-5 text-base text-slate-600">
+                <div className="px-6 pb-6 text-gray-600 leading-relaxed border-t border-gray-100 pt-4">
                   {faq.answer}
                 </div>
               )}
             </div>
           ))}
         </div>
-
+        
+        {/* Contact CTA */}
         <div className="mt-12 text-center">
-          <p className="text-sm text-slate-500 mb-3">Weitere Fragen? Wir helfen gern.</p>
+          <p className="text-gray-600 mb-4">
+            Haben Sie weitere Fragen?
+          </p>
           <a
-            href="https://alfima.io#contact"
-            className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+            href="/contact"
+            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold"
           >
-            Zum Support
+            Kontaktieren Sie uns
+            <ChevronDown className="w-4 h-4 transform -rotate-90" />
           </a>
         </div>
       </div>
     </section>
   );
 }
+

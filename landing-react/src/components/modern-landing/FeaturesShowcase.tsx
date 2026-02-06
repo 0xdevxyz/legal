@@ -67,7 +67,7 @@ export default function FeaturesShowcase() {
     {
       icon: Euro,
       title: 'Günstiger als eine Abmahnung',
-      description: 'Ab 39€/Monat. Eine einzige Abmahnung kostet mehr.',
+      description: 'Ab 19€/Monat pro Säule oder 49€/Monat für alle 4 Säulen.',
       gradient: 'from-teal-500 to-green-500',
     },
     {

@@ -14,7 +14,7 @@ export default function ExpertServiceModal() {
     phone: '',
     website: '',
     message: '',
-    service_type: '2900'  // '2900' für Expertenservice, '39' für DIY
+    service_type: '2990'  // '2990' für Expertenservice, '49' für Komplett-Paket
   });
   
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -63,7 +63,7 @@ export default function ExpertServiceModal() {
         phone: '',
         website: '',
         message: '',
-        service_type: '2900'
+        service_type: '2990'
       });
       setIsSuccess(false);
     }, 300);
@@ -116,11 +116,11 @@ export default function ExpertServiceModal() {
                   Welcher Service interessiert Sie?
                 </label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* DIY mit KI */}
+                  {/* Komplett-Paket */}
                   <div
-                    onClick={() => setFormData({...formData, service_type: '39'})}
+                    onClick={() => setFormData({...formData, service_type: '49'})}
                     className={`cursor-pointer p-4 rounded-lg border-2 transition ${
-                      formData.service_type === '39'
+                      formData.service_type === '49'
                         ? 'border-blue-500 bg-blue-500/10'
                         : 'border-gray-700 hover:border-gray-600'
                     }`}
@@ -128,13 +128,13 @@ export default function ExpertServiceModal() {
                     <div className="flex items-center gap-2 mb-2">
                       <input
                         type="radio"
-                        checked={formData.service_type === '39'}
-                        onChange={() => setFormData({...formData, service_type: '39'})}
+                        checked={formData.service_type === '49'}
+                        onChange={() => setFormData({...formData, service_type: '49'})}
                         className="w-4 h-4"
                       />
-                      <h4 className="text-white font-semibold">DIY mit KI</h4>
+                      <h4 className="text-white font-semibold">Komplett-Paket</h4>
                     </div>
-                    <p className="text-gray-400 text-sm">39€/Monat</p>
+                    <p className="text-gray-400 text-sm">49€/Monat (alle 4 Säulen)</p>
                     <p className="text-gray-500 text-xs mt-1">
                       KI-Fixes selbst umsetzen
                     </p>
@@ -142,9 +142,9 @@ export default function ExpertServiceModal() {
                   
                   {/* Expertenservice */}
                   <div
-                    onClick={() => setFormData({...formData, service_type: '2900'})}
+                    onClick={() => setFormData({...formData, service_type: '2990'})}
                     className={`cursor-pointer p-4 rounded-lg border-2 transition ${
-                      formData.service_type === '2900'
+                      formData.service_type === '2990'
                         ? 'border-purple-500 bg-purple-500/10'
                         : 'border-gray-700 hover:border-gray-600'
                     }`}
@@ -152,13 +152,13 @@ export default function ExpertServiceModal() {
                     <div className="flex items-center gap-2 mb-2">
                       <input
                         type="radio"
-                        checked={formData.service_type === '2900'}
-                        onChange={() => setFormData({...formData, service_type: '2900'})}
+                        checked={formData.service_type === '2990'}
+                        onChange={() => setFormData({...formData, service_type: '2990'})}
                         className="w-4 h-4"
                       />
                       <h4 className="text-white font-semibold">Expertenservice</h4>
                     </div>
-                    <p className="text-gray-400 text-sm">2.900€ + 29€/Monat</p>
+                    <p className="text-gray-400 text-sm">2.990€ + 39€/Monat</p>
                     <p className="text-gray-500 text-xs mt-1">
                       Wir setzen alles für Sie um
                     </p>

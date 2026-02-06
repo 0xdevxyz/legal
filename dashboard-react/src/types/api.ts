@@ -38,6 +38,57 @@ export interface PositiveCheck {
   icon: string;
 }
 
+// Issue Group structure
+export interface IssueGroup {
+  group_id: string;
+  group_type: string;
+  parent_issue?: ComplianceIssue | null;
+  sub_issues: ComplianceIssue[];
+  category: string;
+  severity: 'critical' | 'warning' | 'info';
+  solution_type: string;
+  has_unified_solution: boolean;
+  total_risk_euro: number;
+  completed_count: number;
+  total_count: number;
+  title: string;
+  description: string;
+  icon: string;
+}
+
+// Grouping statistics
+export interface GroupingStats {
+  total_issues?: number;
+  grouped_issues?: number;
+  ungrouped_issues?: number;
+  total_groups?: number;
+  grouping_rate?: number;
+}
+
+// TCF (Transparency & Consent Framework) data
+export interface TCFData {
+  has_tcf?: boolean;
+  tcf_version?: string | null;
+  cmp_id?: number | null;
+  cmp_name?: string | null;
+  tc_string_found?: boolean;
+  tc_string?: string;
+  vendor_count?: number;
+  detected_vendors?: Array<{
+    vendor_id: string;
+    vendor_name: string;
+    detected_from?: string;
+    requires_consent?: boolean;
+    purposes?: Array<{
+      id: number;
+      name: string;
+      legal_basis: string;
+    }>;
+  }>;
+  issues?: ComplianceIssue[];
+  error?: string;
+}
+
 // Updated type for the v2 analysis response
 export interface ComplianceAnalysis {
   scan_id: string; // Added scan_id
@@ -54,6 +105,11 @@ export interface ComplianceAnalysis {
   has_accessibility_widget?: boolean; // ✅ NEU: Widget-Status vom Scanner
   recommendations: string[];
   next_steps: any[]; // Can be typed more strictly if needed
+  issue_groups?: IssueGroup[]; // ✅ NEU: Gruppierte Issues
+  grouping_stats?: GroupingStats; // ✅ NEU: Gruppierungs-Statistiken
+  ungrouped_issues?: ComplianceIssue[]; // ✅ NEU: Einzelne, nicht gruppierte Issues
+  site_id?: string; // ✅ NEU: Site-ID
+  tcf_data?: TCFData; // ✅ NEU: TCF 2.2 Compliance Data
 }
 
 // The old Finding interface is no longer needed for the new endpoint

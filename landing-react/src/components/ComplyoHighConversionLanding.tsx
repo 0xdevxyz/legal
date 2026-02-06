@@ -13,7 +13,9 @@ import {
   TrendingUp,
   Users,
   ChevronDown,
-  Play
+  Play,
+  Menu,
+  X
 } from 'lucide-react';
 import WebsiteScanner from './landing/WebsiteScanner';
 import { Logo } from './Logo';
@@ -33,8 +35,10 @@ export default function ComplyoHighConversionLanding({ variant, sessionId }: Com
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || 'https://app.complyo.tech';
 
   const handleAnalyze = async () => {
     if (!websiteUrl) return;
@@ -63,14 +67,31 @@ export default function ComplyoHighConversionLanding({ variant, sessionId }: Com
                 <a href="#pricing" className="text-gray-300 hover:text-white transition-colors">Preise</a>
                 <a href="#faq" className="text-gray-300 hover:text-white transition-colors">FAQ</a>
                 <a 
-                  href={process.env.NODE_ENV === 'production' ? 'https://app.complyo.tech' : 'http://localhost:3001'}
+                  href={DASHBOARD_URL}
                   className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
                 >
                   Login
                 </a>
               </div>
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden p-2 rounded-lg text-gray-300 hover:bg-gray-800 transition-colors"
+                aria-label={mobileMenuOpen ? 'Menü schließen' : 'Menü öffnen'}
+                aria-expanded={mobileMenuOpen}
+              >
+                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              </button>
             </div>
           </div>
+          {mobileMenuOpen && (
+            <div className="md:hidden border-t border-gray-800 bg-gray-950">
+              <div className="px-6 py-4 space-y-3">
+                <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block text-gray-300 hover:text-white font-medium py-2">Preise</a>
+                <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="block text-gray-300 hover:text-white font-medium py-2">FAQ</a>
+                <a href={DASHBOARD_URL} className="block bg-green-600 text-white text-center px-4 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium">Login</a>
+              </div>
+            </div>
+          )}
         </nav>
         
         {/* Top Banner - Scarcity */}
@@ -314,8 +335,8 @@ export default function ComplyoHighConversionLanding({ variant, sessionId }: Com
             </h2>
 
             <div className="text-6xl md:text-7xl font-black text-green-400 mb-6">
-              NUR 39€
-              <span className="text-2xl text-gray-400">/Monat</span>
+              NUR 19€
+              <span className="text-2xl text-gray-400">/Säule/Monat</span>
             </div>
 
             <p className="text-xl text-gray-400 mb-8">
@@ -331,9 +352,9 @@ export default function ComplyoHighConversionLanding({ variant, sessionId }: Com
                 ⭐ BELIEBTESTER PLAN
               </div>
               
-              <h3 className="text-3xl font-black mb-4 mt-6">KI Plan</h3>
+              <h3 className="text-3xl font-black mb-4 mt-6">Komplett-Paket</h3>
               <div className="text-5xl font-black mb-6">
-                39€
+                49€
                 <span className="text-lg text-gray-400">/Monat</span>
               </div>
 

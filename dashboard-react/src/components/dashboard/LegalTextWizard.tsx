@@ -71,7 +71,7 @@ export const LegalTextWizard: React.FC<LegalTextWizardProps> = ({
     
     try {
       // Call eRecht24 API to generate personalized legal text
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v2/legal/generate`, {
         method: 'POST',
         headers: {

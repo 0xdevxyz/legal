@@ -190,9 +190,12 @@ export default function LoginPage() {
                 </form>
                 
                 <div className="mt-6 text-center">
-                    <a href="#" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
-                        Passwort vergessen?
-                    </a>
+                    <span className="text-sm text-gray-500">
+                        Passwort vergessen? Kontaktieren Sie uns unter{' '}
+                        <a href="mailto:support@complyo.tech" className="text-blue-400 hover:text-blue-300 transition-colors">
+                            support@complyo.tech
+                        </a>
+                    </span>
                 </div>
                 
                 <div className="mt-4 text-center text-gray-400 text-sm">

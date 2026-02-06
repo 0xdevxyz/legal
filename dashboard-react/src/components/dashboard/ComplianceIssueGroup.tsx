@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Info, Sparkles, Download, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Info, Sparkles, Download, Loader2, FileText, X } from 'lucide-react';
 import { ComplianceIssueCard } from './ComplianceIssueCard';
 import { UnifiedFixButton } from './UnifiedFixButton';
 import { useToast } from '@/components/ui/Toast';
+import { LegalDocumentGenerator } from '@/components/legal/LegalDocumentGenerator';
+import { Button } from '@/components/ui/button';
 
 interface IssueGroup {
   group_id: string;
@@ -42,6 +44,15 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [isFixingAll, setIsFixingAll] = useState(false);
+  const [showLegalWizard, setShowLegalWizard] = useState<'impressum' | 'datenschutz' | null>(null);
+
+  // ✅ Prüfe ob es sich um Impressum/Datenschutz handelt
+  const isLegalTextGroup = group.category === 'datenschutz' || 
+                           group.category === 'impressum' ||
+                           group.title.toLowerCase().includes('datenschutz') ||
+                           group.title.toLowerCase().includes('impressum');
+  
+  const legalDocumentType = group.title.toLowerCase().includes('impressum') ? 'impressum' : 'datenschutz';
 
   // Severity-basierte Farben
   const severityColors = {
@@ -67,12 +78,12 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
 
   const colors = severityColors[group.severity as keyof typeof severityColors] || severityColors.info;
 
-  // Severity-Icons
-  const SeverityIcon = {
+  const severityIconMap: Record<string, typeof AlertCircle> = {
     critical: AlertCircle,
     warning: AlertCircle,
     info: Info
-  }[group.severity as keyof typeof SeverityIcon] || Info;
+  };
+  const SeverityIcon = severityIconMap[group.severity] || Info;
 
   // Fortschritt berechnen
   const progress = group.total_count > 0 
@@ -112,7 +123,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
         const response = await fetch(`${API_URL}${endpoint}?language=de`, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
           },
         });
 
@@ -144,7 +155,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
         const response = await fetch(`${API_URL}/api/fixes/batch`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
@@ -283,35 +294,58 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
           </div>
         )}
 
-        {/* ✅ Unified Solution Button - JETZT FUNKTIONAL */}
-        {(group.has_unified_solution || group.total_count > 1) && (
+        {/* ✅ Für Impressum/Datenschutz: Spezieller Wizard statt "Alle beheben" */}
+        {isLegalTextGroup ? (
           <div className="mt-4 space-y-3">
-            {/* Zusammenfassung was behoben wird */}
-            <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-              <p className="text-sm text-purple-200">
-                <Sparkles className="w-4 h-4 inline mr-1" />
-                <strong>Gemeinsame Lösung:</strong> Behebt alle {group.total_count} Probleme in dieser Kategorie mit einem Klick.
-                {group.category === 'datenschutz' && (
-                  <span className="block mt-1 text-xs text-purple-300">
-                    → Generiert eine vollständige Datenschutzerklärung nach aktuellen Anforderungen
-                  </span>
-                )}
-                {group.category === 'impressum' && (
-                  <span className="block mt-1 text-xs text-purple-300">
-                    → Generiert ein rechtssicheres Impressum mit allen Pflichtangaben
-                  </span>
-                )}
-              </p>
+            {/* Info-Box */}
+            <div className="p-4 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-lg">
+              <div className="flex items-start gap-3">
+                <FileText className="w-5 h-5 text-blue-400 mt-0.5" />
+                <div>
+                  <p className="text-sm text-white font-medium mb-1">
+                    {legalDocumentType === 'impressum' ? 'Impressum erstellen' : 'Datenschutzerklärung erstellen'}
+                  </p>
+                  <p className="text-xs text-zinc-400">
+                    Unser Assistent führt Sie durch alle notwendigen Angaben und erstellt 
+                    {legalDocumentType === 'impressum' 
+                      ? ' ein rechtssicheres Impressum nach § 5 TMG' 
+                      : ' eine DSGVO-konforme Datenschutzerklärung'
+                    } basierend auf Ihrer Website.
+                  </p>
+                </div>
+              </div>
             </div>
             
-            <UnifiedFixButton
-              issueTitle={group.title}
-              isGroup={true}
-              onFix={handleFixAllIssues}
-              disabled={isFixingAll}
-              isLoading={isFixingAll}
-            />
+            {/* Wizard-Button */}
+            <Button
+              onClick={() => setShowLegalWizard(legalDocumentType)}
+              className="w-full gap-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-3"
+              size="lg"
+            >
+              <FileText className="w-5 h-5" />
+              {legalDocumentType === 'impressum' ? 'Impressum Generator starten' : 'Datenschutz Generator starten'}
+            </Button>
           </div>
+        ) : (
+          /* ✅ Für andere Kategorien: Standard-Fix-Button */
+          (group.has_unified_solution || group.total_count > 1) && (
+            <div className="mt-4 space-y-3">
+              <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                <p className="text-sm text-purple-200">
+                  <Sparkles className="w-4 h-4 inline mr-1" />
+                  <strong>Gemeinsame Lösung:</strong> Behebt alle {group.total_count} Probleme in dieser Kategorie.
+                </p>
+              </div>
+              
+              <UnifiedFixButton
+                issueTitle={group.title}
+                isGroup={true}
+                onFix={handleFixAllIssues}
+                disabled={isFixingAll}
+                isLoading={isFixingAll}
+              />
+            </div>
+          )
         )}
       </div>
 
@@ -375,6 +409,46 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Legal Document Generator Modal/Overlay */}
+      {showLegalWizard && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => setShowLegalWizard(null)}
+          />
+          
+          {/* Modal Content */}
+          <div className="relative min-h-screen flex items-start justify-center p-4 pt-10 pb-20">
+            <div className="relative w-full max-w-4xl bg-zinc-950 rounded-2xl shadow-2xl border border-zinc-800">
+              {/* Close Button */}
+              <button
+                onClick={() => setShowLegalWizard(null)}
+                className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors z-10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              {/* Wizard Content */}
+              <div className="p-6">
+                <LegalDocumentGenerator
+                  documentType={showLegalWizard}
+                  onComplete={(data) => {
+                    setShowLegalWizard(null);
+                    showToast(
+                      `✅ ${showLegalWizard === 'impressum' ? 'Impressum' : 'Datenschutzerklärung'} erfolgreich erstellt!`,
+                      'success',
+                      5000
+                    );
+                  }}
+                  onBack={() => setShowLegalWizard(null)}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}

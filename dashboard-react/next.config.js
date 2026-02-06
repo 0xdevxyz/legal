@@ -2,10 +2,10 @@
 const nextConfig = {
   output: 'standalone',
   typescript: {
-    ignoreBuildErrors: true, // TypeScript-Fehler während des Builds ignorieren
+    ignoreBuildErrors: false,
   },
   eslint: {
-    ignoreDuringBuilds: true, // ESLint während des Builds ignorieren
+    ignoreDuringBuilds: false,
   },
   
   env: {

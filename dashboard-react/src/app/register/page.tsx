@@ -75,8 +75,8 @@ function RegisterForm() {
         }
     };
     
-    const planPrice = plan === 'expert' ? '2.000€ + 39€/Monat' : '39€/Monat';
-    const planName = plan === 'expert' ? 'Expert Plan' : 'KI Plan';
+    const planPrice = plan === 'expert' ? '2.990€ + 39€/Monat' : '49€/Monat';
+    const planName = plan === 'expert' ? 'Expertenservice' : 'Komplett-Paket';
     
     return (
         <main role="main" aria-label="Registrierung" className="min-h-screen flex items-center justify-center bg-gray-900 px-4">

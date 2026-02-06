@@ -34,12 +34,22 @@ export default function CookieCompliancePage() {
     loadConfig();
   }, []);
   
+  // ✅ Helper für authentifizierte API-Calls
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token');
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
+  };
+  
   const loadConfig = async () => {
     try {
       setLoading(true);
       
       // ✅ ZUERST: Prüfe ob User bereits eine Website konfiguriert hat
       const myConfigResponse = await fetch(`${API_URL}/api/cookie-compliance/my-config`, {
+        headers: getAuthHeaders(),
         credentials: 'include',
       });
       
@@ -65,10 +75,17 @@ export default function CookieCompliancePage() {
           setLoading(false);
           return; // Fertig - keine weitere Suche nötig
         }
+        
+        // ✅ Wenn keine Config aber registered_site_id vorhanden
+        if (myConfigData.registered_site_id) {
+          setSiteId(myConfigData.registered_site_id);
+          setWebsiteUrl(myConfigData.registered_site_id.replace(/-/g, '.'));
+        }
       }
       
       // FALLBACK: Wenn keine Config, versuche Website aus /api/v2/websites
       const websiteResponse = await fetch(`${API_URL}/api/v2/websites`, {
+        headers: getAuthHeaders(),
         credentials: 'include',
       });
       
@@ -82,6 +99,7 @@ export default function CookieCompliancePage() {
           
           // Lade Config für diese Website
           const configResponse = await fetch(`${API_URL}/api/cookie-compliance/config/${determinedSiteId}`, {
+            headers: getAuthHeaders(),
             credentials: 'include',
           });
           
@@ -114,9 +132,7 @@ export default function CookieCompliancePage() {
     try {
       const response = await fetch(`${API_URL}/api/cookie-compliance/config`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify({
           ...newConfig,

@@ -419,10 +419,10 @@ export default function ComplyoViralLanding() {
 
               <div className="mb-8">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-5xl font-black text-gray-900">39€</span>
+                  <span className="text-5xl font-black text-gray-900">49€</span>
                   <span className="text-gray-500">/Monat</span>
                 </div>
-                <p className="text-sm text-gray-400 mt-2">zzgl. MwSt.</p>
+                <p className="text-sm text-gray-400 mt-2">zzgl. MwSt. • Alle 4 Säulen</p>
               </div>
 
               <ul className="space-y-4 mb-8">
@@ -478,14 +478,14 @@ export default function ComplyoViralLanding() {
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 mb-3">
                   <div className="text-sm text-white/70 mb-1">Einmalig</div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-black">2.900€</span>
+                    <span className="text-4xl font-black">2.990€</span>
                     <span className="text-white/70">netto</span>
                   </div>
                 </div>
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
                   <div className="text-sm text-white/70 mb-1">Danach laufend</div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold">29€</span>
+                    <span className="text-3xl font-bold">39€</span>
                     <span className="text-white/70">/Monat</span>
                   </div>
                 </div>

@@ -7,9 +7,10 @@ import ComplyoHighConversionLanding from '../components/ComplyoHighConversionLan
 import ProfessionalLanding from '../components/ProfessionalLanding';
 import ComplyoModernLanding from '../components/ComplyoModernLanding';
 import ComplyoViralLanding from '../components/ComplyoViralLanding';
+import AlfimaLanding from '../components/AlfimaLanding';
 import { useABTestTracking } from '../hooks/useABTestTracking';
 
-type Variant = 'professional' | 'original' | 'high-conversion' | 'modern' | 'viral';
+type Variant = 'professional' | 'original' | 'high-conversion' | 'modern' | 'viral' | 'alfima';
 
 function ABTestContent() {
   const [variant, setVariant] = useState<Variant | null>(null);
@@ -24,7 +25,7 @@ function ABTestContent() {
         const forceVariant = searchParams.get('variant');
 
         // Force-Modus: Nutzer kann Variante per URL-Parameter wählen
-        if (forceVariant === 'professional' || forceVariant === 'original' || forceVariant === 'high-conversion' || forceVariant === 'modern' || forceVariant === 'viral') {
+        if (forceVariant === 'professional' || forceVariant === 'original' || forceVariant === 'high-conversion' || forceVariant === 'modern' || forceVariant === 'viral' || forceVariant === 'alfima') {
           console.log(`🔧 Force-Modus: ${forceVariant}`);
           setVariant(forceVariant);
           const sessionId = await trackVariantAssignment(forceVariant, 'forced');
@@ -35,7 +36,7 @@ function ABTestContent() {
 
           // Returning User: Zeige gespeicherte Variante
           if (storedVariant && storedSessionId &&
-              (storedVariant === 'professional' || storedVariant === 'original' || storedVariant === 'high-conversion' || storedVariant === 'modern' || storedVariant === 'viral')) {
+              (storedVariant === 'professional' || storedVariant === 'original' || storedVariant === 'high-conversion' || storedVariant === 'modern' || storedVariant === 'viral' || storedVariant === 'alfima')) {
             console.log(`🔄 Returning User: ${storedVariant}`);
             setVariant(storedVariant as Variant);
             setSessionId(storedSessionId);
@@ -88,7 +89,9 @@ function ABTestContent() {
   }
 
   // Render entsprechende Variante
-  if (variant === 'viral') {
+  if (variant === 'alfima') {
+    return <AlfimaLanding />;
+  } else if (variant === 'viral') {
     return <ComplyoViralLanding />;
   } else if (variant === 'modern') {
     return <ComplyoModernLanding />;

@@ -1,0 +1,20 @@
+COMPLYO COMPLIANCE WORDPRESS PLUGIN - INSTALLATION
+
+1. ZIP-Datei erstellen:
+   cd /opt/projects/saas-project-2/wordpress-plugin
+   zip -r complyo-compliance.zip complyo-compliance/
+
+2. Installation in WordPress:
+   - Gehen Sie zu Plugins → Installieren
+   - Laden Sie complyo-compliance.zip hoch
+   - Aktivieren Sie das Plugin
+   - Gehen Sie zu Einstellungen → Complyo Compliance
+
+3. Konfiguration:
+   - Site-ID wird automatisch aus Ihrer Domain generiert
+   - Cookie-Banner und Accessibility-Widget können einzeln aktiviert/deaktiviert werden
+   - Cookie-Banner-Konfiguration erfolgt über app.complyo.tech
+
+4. Support:
+   - support@complyo.tech
+   - https://complyo.tech

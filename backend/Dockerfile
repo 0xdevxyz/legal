@@ -1,7 +1,8 @@
 FROM python:3.11-slim
 
-# Installiere curl für Health Checks
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
 
 WORKDIR /app
 
@@ -10,12 +11,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Ensure public directory exists for static files
-RUN mkdir -p /app/public
+RUN mkdir -p /app/public && chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8002
 
-# Health Check hinzufügen
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8002/health || exit 1
 

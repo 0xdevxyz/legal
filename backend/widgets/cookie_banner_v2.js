@@ -715,6 +715,12 @@
                 console.log('[Complyo] Kein Consent - zeige Banner');
                 this.render();
             }
+            
+            // ✅ Setup Footer-Links und andere Einstellungs-Trigger
+            // Wird immer aufgerufen, wenn Services konfiguriert sind
+            setTimeout(() => {
+                this.setupSettingsLinks();
+            }, 500);
         }
         
         // ====================================================================
@@ -2919,6 +2925,53 @@
             if (button) button.remove();
         }
         
+        /**
+         * Aktiviert automatisch alle Links mit data-complyo-settings
+         * und fügt einen Footer-Link hinzu, falls keiner existiert
+         */
+        setupSettingsLinks() {
+            // Aktiviere alle existierenden Links mit data-complyo-settings
+            document.querySelectorAll('[data-complyo-settings], [href="#cookie-settings"], [href="#datenschutz-einstellungen"]').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.openSettings();
+                });
+                link.style.cursor = 'pointer';
+            });
+            
+            // Suche nach Footer und füge Link hinzu, falls nicht vorhanden
+            const footer = document.querySelector('footer') || document.querySelector('[class*="footer"]');
+            if (footer && !footer.querySelector('[data-complyo-settings]')) {
+                // Prüfe, ob bereits ein Cookie-Link existiert
+                const existingLink = footer.querySelector('a[href*="cookie"], a[href*="datenschutz"]');
+                
+                if (!existingLink) {
+                    // Füge einen neuen Link hinzu
+                    const settingsLink = document.createElement('a');
+                    settingsLink.href = '#';
+                    settingsLink.textContent = 'Cookie-Einstellungen';
+                    settingsLink.setAttribute('data-complyo-settings', 'true');
+                    settingsLink.style.cssText = 'color: inherit; text-decoration: underline; cursor: pointer; margin-left: 1em;';
+                    settingsLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        this.openSettings();
+                    });
+                    
+                    // Finde einen passenden Container im Footer
+                    const linkContainer = footer.querySelector('ul, nav, div[class*="links"]') || footer;
+                    if (linkContainer.tagName === 'UL') {
+                        const li = document.createElement('li');
+                        li.appendChild(settingsLink);
+                        linkContainer.appendChild(li);
+                    } else {
+                        linkContainer.appendChild(settingsLink);
+                    }
+                    
+                    console.log('[Complyo] Cookie-Einstellungen Link im Footer hinzugefügt');
+                }
+            }
+        }
+        
         // ====================================================================
         // Age Verification (Jugendschutz Art. 8 DSGVO)
         // ====================================================================
@@ -3029,45 +3082,45 @@
             const currentYear = new Date().getFullYear();
             const maxYear = currentYear - minAge;
             
-            modal.innerHTML = \`
+            modal.innerHTML = `
                 <div style="font-size: 48px; margin-bottom: 20px;">🔒</div>
-                <h2 style="margin: 0 0 16px 0; font-size: 24px; font-weight: 700; color: \${textColor || '#1f2937'};">
+                <h2 style="margin: 0 0 16px 0; font-size: 24px; font-weight: 700; color: ${textColor || '#1f2937'};">
                     Altersverifikation
                 </h2>
-                <p style="margin: 0 0 24px 0; font-size: 15px; color: \${textColor || '#6b7280'}; line-height: 1.6;">
-                    Um fortzufahren, bestaetigen Sie bitte, dass Sie mindestens <strong>\${minAge} Jahre</strong> alt sind.
-                    <br><small style="opacity: 0.7;">(Gemaess Art. 8 DSGVO)</small>
+                <p style="margin: 0 0 24px 0; font-size: 15px; color: ${textColor || '#6b7280'}; line-height: 1.6;">
+                    Um fortzufahren, bestätigen Sie bitte, dass Sie mindestens <strong>${minAge} Jahre</strong> alt sind.
+                    <br><small style="opacity: 0.7;">(Gemäß Art. 8 DSGVO)</small>
                 </p>
                 
                 <div style="margin-bottom: 24px;">
-                    <label style="display: block; font-size: 14px; font-weight: 500; color: \${textColor || '#374151'}; margin-bottom: 8px;">
+                    <label style="display: block; font-size: 14px; font-weight: 500; color: ${textColor || '#374151'}; margin-bottom: 8px;">
                         Geburtsjahr eingeben:
                     </label>
                     <input 
                         type="number" 
                         id="complyo-birth-year" 
                         min="1920" 
-                        max="\${currentYear}" 
-                        placeholder="\${maxYear}"
+                        max="${currentYear}" 
+                        placeholder="${maxYear}"
                         style="width: 100%; padding: 14px; font-size: 18px; border: 2px solid #e5e7eb; border-radius: 12px; text-align: center; outline: none; transition: border-color 0.2s;"
-                        onfocus="this.style.borderColor='\${primaryColor}'"
+                        onfocus="this.style.borderColor='${primaryColor}'"
                         onblur="this.style.borderColor='#e5e7eb'"
                     >
                 </div>
                 
                 <button 
                     id="complyo-age-confirm" 
-                    style="width: 100%; padding: 16px; background: \${primaryColor}; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-bottom: 12px;"
-                    onmouseover="this.style.background='\${accentColor}'; this.style.transform='translateY(-2px)';"
-                    onmouseout="this.style.background='\${primaryColor}'; this.style.transform='translateY(0)';"
+                    style="width: 100%; padding: 16px; background: ${primaryColor}; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-bottom: 12px;"
+                    onmouseover="this.style.background='${accentColor}'; this.style.transform='translateY(-2px)';"
+                    onmouseout="this.style.background='${primaryColor}'; this.style.transform='translateY(0)';"
                 >
-                    Bestaetigen
+                    Bestätigen
                 </button>
                 
                 <p style="margin: 0; font-size: 12px; color: #9ca3af;">
-                    Diese Angabe wird lokal gespeichert und nicht an Server uebertragen.
+                    Diese Angabe wird lokal gespeichert und nicht an Server übertragen.
                 </p>
-            \`;
+            `;
             
             document.body.appendChild(backdrop);
             document.body.appendChild(modal);
@@ -3105,17 +3158,17 @@
                     }, 300);
                 } else {
                     // Zu jung
-                    modal.innerHTML = \`
+                    modal.innerHTML = `
                         <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
                         <h2 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 700; color: #ef4444;">
-                            Zugriff nicht moeglich
+                            Zugriff nicht möglich
                         </h2>
-                        <p style="margin: 0; font-size: 15px; color: \${textColor || '#6b7280'}; line-height: 1.6;">
-                            Diese Website erfordert ein Mindestalter von <strong>\${minAge} Jahren</strong>.
+                        <p style="margin: 0; font-size: 15px; color: ${textColor || '#6b7280'}; line-height: 1.6;">
+                            Diese Website erfordert ein Mindestalter von <strong>${minAge} Jahren</strong>.
                             <br><br>
                             Bitte wende dich an einen Erziehungsberechtigten.
                         </p>
-                    \`;
+                    `;
                     this.saveAgeVerification(false, birthYear);
                 }
             });

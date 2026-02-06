@@ -477,6 +477,8 @@ export interface TrackedWebsite {
   url: string;
   last_score: number;
   last_scan_date: string;
+  last_scan?: string;
+  compliance_score?: number;
   scan_count: number;
   is_primary: boolean;
 }

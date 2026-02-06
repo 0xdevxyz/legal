@@ -29,7 +29,7 @@ export const FixAuditLog: React.FC = () => {
     try {
       const response = await fetch('/api/v2/audit/log', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
         }
       });
 

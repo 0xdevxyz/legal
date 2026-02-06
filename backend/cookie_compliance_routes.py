@@ -4,6 +4,7 @@ API endpoints for Cookie-Consent-Management
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
 import asyncpg
@@ -11,12 +12,98 @@ import hashlib
 import uuid
 from datetime import datetime, date, timedelta
 import json
+import logging
 from cookie_scanner_service import cookie_scanner
 
-router = APIRouter()
+logger = logging.getLogger(__name__)
 
-# Global database pool (set by main.py)
+router = APIRouter()
+security = HTTPBearer(auto_error=False)  # auto_error=False für optionale Auth
+
+# Global database pool and auth service (set by main.py)
 db_pool = None
+auth_service = None  # Wird von main_production.py gesetzt
+
+# ============================================================================
+# Authentication Helpers
+# ============================================================================
+
+async def get_current_user_optional(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Optional[Dict[str, Any]]:
+    """Verify JWT token and return user data (optional - returns None if no auth)"""
+    if not credentials:
+        return None
+    
+    try:
+        if not auth_service:
+            logger.warning("Auth service not configured")
+            return None
+            
+        token = credentials.credentials
+        user_data = auth_service.verify_token(token)
+        
+        if not user_data:
+            return None
+        
+        logger.info(f"User authenticated: {user_data.get('user_id') or user_data.get('id')}")
+        return user_data
+    except Exception as e:
+        logger.error(f"Authentication failed: {e}")
+        return None
+
+async def get_current_user_required(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
+    """Verify JWT token and return user data (required - raises 401 if no auth)"""
+    user = await get_current_user_optional(credentials)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user
+
+async def get_user_id_from_token(user: Dict[str, Any]) -> Any:
+    """Extract user_id from token and verify in database"""
+    user_id_from_token = user.get("id") or user.get("user_id")
+    
+    if not user_id_from_token:
+        logger.error(f"No user_id in token: {user}")
+        raise HTTPException(status_code=403, detail="User ID not found in token")
+    
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database not available")
+    
+    async with db_pool.acquire() as conn:
+        db_user = await conn.fetchrow(
+            "SELECT id FROM users WHERE id::text = $1 OR email = $2 LIMIT 1",
+            str(user_id_from_token),
+            user.get("email", "")
+        )
+        
+        if not db_user:
+            logger.error(f"User not found in database for token: {user_id_from_token}")
+            raise HTTPException(status_code=403, detail="User not found in database")
+        
+        return db_user["id"]
+
+async def get_user_website_site_id(user_id: Any) -> Optional[str]:
+    """Get the site_id for the user's primary website"""
+    if not db_pool:
+        return None
+    
+    async with db_pool.acquire() as conn:
+        # Hole die primäre Website des Users
+        website = await conn.fetchrow("""
+            SELECT url FROM tracked_websites 
+            WHERE user_id = $1 AND is_primary = TRUE
+            LIMIT 1
+        """, user_id)
+        
+        if website:
+            # Generiere site_id aus URL
+            from urllib.parse import urlparse
+            parsed = urlparse(website['url'])
+            hostname = parsed.netloc or parsed.path
+            hostname = hostname.replace('www.', '')
+            site_id = hostname.replace('.', '-').lower()
+            return site_id
+        
+        return None
 
 # ============================================================================
 # Pydantic Models
@@ -242,6 +329,7 @@ async def log_consent(
 @router.get("/api/cookie-compliance/my-config")
 async def get_my_config(
     request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
@@ -255,8 +343,12 @@ async def get_my_config(
     - data: bestehende Config oder null
     """
     try:
-        # TODO: Get user_id from session/auth
-        user_id = 1  # Replace with actual user from session
+        # Authentifizierung
+        user = await get_current_user_required(credentials)
+        user_id = await get_user_id_from_token(user)
+        
+        # Hole auch die site_id der registrierten Website
+        registered_site_id = await get_user_website_site_id(user_id)
         
         query = """
             SELECT 
@@ -277,12 +369,83 @@ async def get_my_config(
         row = await db_pool.fetchrow(query, user_id)
         
         if not row:
-            return {
-                "success": True,
-                "has_config": False,
-                "data": None,
-                "message": "Keine Konfiguration gefunden - Onboarding erforderlich"
-            }
+            # ✅ Wenn registered_site_id existiert, erstelle automatisch eine Config
+            if registered_site_id:
+                logger.info(f"Creating default config for site_id: {registered_site_id}")
+                
+                # Hole die Website-URL
+                website_url = await db_pool.fetchval("""
+                    SELECT url FROM tracked_websites 
+                    WHERE user_id = $1 AND is_primary = TRUE
+                    LIMIT 1
+                """, user_id)
+                
+                default_texts = {
+                    "de": {
+                        "title": "Datenschutz-Präferenz",
+                        "description": "Wir benötigen Ihre Einwilligung, bevor Sie unsere Website weiter besuchen können.\n\nWenn Sie unter 16 Jahre alt sind und Ihre Einwilligung zu optionalen Services geben möchten, müssen Sie Ihre Erziehungsberechtigten um Erlaubnis bitten.\n\nWir verwenden Cookies und andere Technologien auf unserer Website. Einige von ihnen sind essenziell, während andere uns helfen, diese Website und Ihre Erfahrung zu verbessern.",
+                        "accept_all": "Alle akzeptieren",
+                        "reject_all": "Nur essenzielle Cookies akzeptieren",
+                        "accept_selected": "Speichern",
+                        "settings": "Individuelle Datenschutzeinstellungen",
+                        "necessary": "Essenziell",
+                        "necessaryDesc": "Essenzielle Services ermöglichen grundlegende Funktionen.",
+                        "functional": "Funktional",
+                        "functionalDesc": "Funktionale Cookies speichern Ihre Präferenzen.",
+                        "analytics": "Statistiken",
+                        "analyticsDesc": "Statistik-Cookies helfen uns zu verstehen, wie Besucher interagieren.",
+                        "marketing": "Externe Medien",
+                        "marketingDesc": "Inhalte von Videoplattformen und Social-Media werden standardmäßig blockiert.",
+                        "privacy_link": "Datenschutzerklärung",
+                        "imprint_link": "Impressum"
+                    }
+                }
+                
+                # Erstelle die Config
+                await db_pool.execute("""
+                    INSERT INTO cookie_banner_configs (
+                        site_id, user_id, layout, primary_color, accent_color,
+                        text_color, bg_color, button_style, position, width_mode,
+                        texts, services, show_on_pages, geo_restriction,
+                        auto_block_scripts, respect_dnt, cookie_lifetime_days,
+                        show_branding, is_active, last_scan_url
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+                    ON CONFLICT (site_id) DO NOTHING
+                """,
+                    registered_site_id,
+                    user_id,
+                    'box_modal',
+                    '#7c3aed',
+                    '#8b5cf6',
+                    '#333333',
+                    '#ffffff',
+                    'rounded',
+                    'center',
+                    'boxed',
+                    json.dumps(default_texts),
+                    json.dumps([]),
+                    json.dumps({"all": True, "exclude": []}),
+                    json.dumps({"enabled": False, "countries": []}),
+                    True,
+                    True,
+                    365,
+                    True,
+                    True,
+                    website_url
+                )
+                
+                # Lade die neu erstellte Config
+                row = await db_pool.fetchrow(query, user_id)
+            
+            if not row:
+                return {
+                    "success": True,
+                    "has_config": False,
+                    "data": None,
+                    "registered_site_id": registered_site_id,
+                    "message": "Keine Konfiguration gefunden - bitte zuerst eine Website registrieren"
+                }
         
         config = dict(row)
         
@@ -307,6 +470,7 @@ async def get_my_config(
             "success": True,
             "has_config": True,
             "data": config,
+            "registered_site_id": registered_site_id,  # Site-ID der registrierten Website
             "message": "Konfiguration gefunden - 1 Website bereits registriert"
         }
         
@@ -442,6 +606,7 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
 async def create_or_update_config(
     config: BannerConfig,
     request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
@@ -450,9 +615,17 @@ async def create_or_update_config(
     Requires authentication (user_id from session)
     """
     try:
-        # TODO: Get user_id from session/auth
-        # For now, use placeholder
-        user_id = 1  # Replace with actual user from session
+        # Authentifizierung
+        user = await get_current_user_required(credentials)
+        user_id = await get_user_id_from_token(user)
+        
+        # Prüfe, ob die site_id zur registrierten Website des Users gehört
+        registered_site_id = await get_user_website_site_id(user_id)
+        
+        if registered_site_id and config.site_id != registered_site_id:
+            logger.warning(f"User {user_id} tried to configure site_id '{config.site_id}' but registered site is '{registered_site_id}'")
+            # Verwende die registrierte site_id statt der übergebenen
+            config.site_id = registered_site_id
         
         # Check if config exists
         check_query = "SELECT id FROM cookie_banner_configs WHERE site_id = $1"
@@ -553,12 +726,27 @@ async def create_or_update_config(
 async def update_config_partial(
     site_id: str,
     updates: BannerConfigUpdate,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
     Partially update banner configuration
+    
+    Requires authentication - validates that site_id belongs to user
     """
     try:
+        # Authentifizierung
+        user = await get_current_user_required(credentials)
+        user_id = await get_user_id_from_token(user)
+        
+        # Prüfe, ob die site_id zur registrierten Website des Users gehört
+        registered_site_id = await get_user_website_site_id(user_id)
+        
+        if registered_site_id and site_id != registered_site_id:
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Site {site_id} does not belong to this user"
+            )
         # Build dynamic update query
         update_fields = []
         values = [site_id]

@@ -83,8 +83,8 @@ export const StripePaywallModal: React.FC<PaywallModalProps> = ({
         <div className="px-8 pb-6">
           <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl p-6 mb-6">
             <div className="text-center text-white mb-4">
-              <div className="text-4xl font-bold mb-1">39€</div>
-              <div className="text-sm opacity-90">pro Monat</div>
+              <div className="text-4xl font-bold mb-1">49€</div>
+              <div className="text-sm opacity-90">pro Monat • Alle 4 Säulen</div>
             </div>
 
             <ul className="space-y-3 text-white text-sm">
@@ -118,7 +118,7 @@ export const StripePaywallModal: React.FC<PaywallModalProps> = ({
           {/* Info Box - Domain Lock */}
           <div className="mb-4 p-3 bg-blue-500/20 border border-blue-500 rounded-lg text-blue-300 text-xs">
             ℹ️ <strong>Hinweis:</strong> Dieses Abo gilt nur für die aktuell analysierte Domain. 
-            Für weitere Domains benötigen Sie separate Subscriptions (je 39€/Monat).
+            Einzelne Säulen ab 19€/Monat oder alle 4 Säulen für 49€/Monat.
           </div>
 
           {/* Error Message */}

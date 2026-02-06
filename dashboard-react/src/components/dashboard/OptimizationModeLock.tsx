@@ -1,21 +1,21 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Lock, Unlock, Globe, ArrowRight, AlertTriangle, CheckCircle, Sparkles, Zap, Info } from 'lucide-react';
+import { Lock, Globe, ArrowRight, AlertTriangle, CheckCircle, Sparkles, Zap, Info, Loader2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useRouter } from 'next/navigation';
+import { getTrackedWebsites } from '@/lib/api';
 
 interface OptimizationModeLockProps {
   onLock?: (url: string) => void;
-  onUnlock?: () => void;
+  // onUnlock entfernt - Website-Verknüpfung ist DAUERHAFT
 }
 
 export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
-  onLock,
-  onUnlock
+  onLock
 }) => {
   const router = useRouter();
   const { 
@@ -24,10 +24,13 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
     lockedOptimizationUrl,
     isInOptimizationMode,
     lockForOptimization,
-    unlockOptimization
+    setCurrentWebsite,
+    updateMetrics
+    // unlockOptimization entfernt - NICHT mehr verfügbar
   } = useDashboardStore();
   
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isLoadingBack, setIsLoadingBack] = useState(false);
 
   // Restore from localStorage on mount
   useEffect(() => {
@@ -52,13 +55,8 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
     }
   };
 
-  const handleUnlock = () => {
-    unlockOptimization();
-    
-    if (onUnlock) {
-      onUnlock();
-    }
-  };
+  // ⛔ handleUnlock ENTFERNT - Website-Verknüpfung ist DAUERHAFT
+  // Änderungen nur über Support-Ticket: support@complyo.tech
 
   // Prüfe ob aktuelle Website die gelockte ist
   const isCurrentSiteLocked = isInOptimizationMode && 
@@ -73,7 +71,53 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
     return null;
   }
 
+  // ✅ Funktion: Zurück zur Optimierung - Lädt gespeicherte Daten, KEINE neue Analyse
+  const handleBackToOptimization = async () => {
+    if (!lockedOptimizationUrl) return;
+    
+    setIsLoadingBack(true);
+    
+    try {
+      // Lade gespeicherte Website-Daten vom Backend
+      const websites = await getTrackedWebsites();
+      
+      // Finde die gelockte Website
+      const lockedWebsite = websites.find(w => 
+        w.url === lockedOptimizationUrl ||
+        w.url.includes(lockedOptimizationUrl) ||
+        lockedOptimizationUrl.includes(w.url)
+      );
+      
+      if (lockedWebsite) {
+        // ✅ Setze die gespeicherten Daten direkt in den Store
+        setCurrentWebsite({
+          id: String(lockedWebsite.id),
+          url: lockedWebsite.url,
+          name: lockedWebsite.url,
+          lastScan: lockedWebsite.last_scan_date || new Date().toISOString(),
+          complianceScore: lockedWebsite.last_score || 0,
+          status: 'completed' as const
+        });
+        
+        updateMetrics({
+          totalScore: lockedWebsite.last_score || 0,
+          websites: websites.length
+        });
+      }
+      
+      // Navigiere zur Hauptseite (ohne URL-Parameter = zeigt gespeicherte Daten)
+      router.push('/');
+    } catch (error) {
+      console.error('Fehler beim Laden der Website-Daten:', error);
+      // Fallback: Navigiere trotzdem zur Hauptseite
+      router.push('/');
+    } finally {
+      setIsLoadingBack(false);
+    }
+  };
+
   // Bereits im Optimierungsmodus und andere Seite wird angezeigt
+  // → Info-Meldung mit prominentem "Zurück zur Optimierung" Button
   if (isInOptimizationMode && lockedOptimizationUrl && !isCurrentSiteLocked) {
     return (
       <Card className="mb-6 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30">
@@ -94,21 +138,58 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
                   Sie analysieren: <strong className="text-white">{currentWebsite.url}</strong>
                 </p>
                 <p className="text-xs text-zinc-500 mt-1">
-                  Optimierungen sind nur für <strong className="text-emerald-400">{lockedOptimizationUrl}</strong> verfügbar.
+                  Optimierungen sind nur für Ihre registrierte Website verfügbar.
                 </p>
               </div>
             </div>
             
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleUnlock}
-                className="gap-2 border-zinc-600 hover:bg-zinc-800"
-              >
-                <Unlock className="w-4 h-4" />
-                Entsperren & wechseln
-              </Button>
+            {/* ✅ PROMINENTER "Zurück zur Optimierung" Button */}
+            <Button
+              onClick={handleBackToOptimization}
+              disabled={isLoadingBack}
+              className="gap-2 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white font-semibold shadow-lg shadow-emerald-500/25 disabled:opacity-70"
+              size="lg"
+            >
+              {isLoadingBack ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <ArrowRight className="w-5 h-5 rotate-180" />
+              )}
+              {isLoadingBack ? 'Lädt Daten...' : 'Zurück zur Optimierung'}
+            </Button>
+          </div>
+          
+          {/* ✅ Kurzwahl-Leiste */}
+          <div className="mt-4 pt-4 border-t border-amber-500/20">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-emerald-400" />
+                <span className="text-sm text-zinc-400">
+                  Ihre Seite: <strong className="text-emerald-400">{lockedOptimizationUrl}</strong>
+                </span>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  className="gap-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                  onClick={handleBackToOptimization}
+                  disabled={isLoadingBack}
+                >
+                  {isLoadingBack ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                  KI-Optimierung
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  className="gap-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                  onClick={() => router.push('/cookie-compliance')}
+                >
+                  <Zap className="w-3 h-3" />
+                  Cookies
+                </Button>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -128,10 +209,10 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-lg font-bold text-white">Optimierungsmodus aktiv</h3>
+                  <h3 className="text-lg font-bold text-white">Website dauerhaft verknüpft</h3>
                   <Badge variant="success" className="text-xs">
                     <CheckCircle className="w-3 h-3 mr-1" />
-                    Gelockt
+                    Aktiv
                   </Badge>
                 </div>
                 <p className="text-sm text-zinc-400">
@@ -143,16 +224,17 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
               </div>
             </div>
             
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleUnlock}
-                className="gap-2 border-zinc-600 hover:bg-zinc-800"
+            {/* Kein Entsperren-Button mehr - Hinweis auf Support */}
+            <div className="text-right">
+              <p className="text-xs text-zinc-500">
+                Änderungen nur via Support
+              </p>
+              <a 
+                href="mailto:support@complyo.tech?subject=Website-Änderung"
+                className="text-xs text-blue-400 hover:text-blue-300 underline"
               >
-                <Unlock className="w-4 h-4" />
-                Entsperren
-              </Button>
+                support@complyo.tech
+              </a>
             </div>
           </div>
           
@@ -217,13 +299,13 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
         ) : (
           <div className="space-y-4">
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-amber-500/20 rounded-lg flex-shrink-0">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              <div className="p-2 bg-red-500/20 rounded-lg flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
               </div>
               <div>
-                <h3 className="font-bold text-white mb-1">Seite für Optimierung sperren?</h3>
+                <h3 className="font-bold text-white mb-1">Seite dauerhaft verknüpfen?</h3>
                 <p className="text-sm text-zinc-300 mb-3">
-                  Wenn Sie <strong className="text-blue-400">{currentWebsite.url}</strong> für die Optimierung sperren:
+                  Wenn Sie <strong className="text-blue-400">{currentWebsite.url}</strong> als Ihre Website registrieren:
                 </p>
                 <ul className="text-sm text-zinc-400 space-y-2 mb-4">
                   <li className="flex items-center gap-2">
@@ -242,11 +324,18 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
                     <Info className="w-4 h-4 text-blue-400 flex-shrink-0" />
                     Analysen anderer Seiten sind weiterhin möglich
                   </li>
-                  <li className="flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                    Optimierungen für andere Seiten erst nach Entsperren
-                  </li>
                 </ul>
+                
+                {/* Wichtiger Warnhinweis */}
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mt-3">
+                  <p className="text-sm text-red-300 font-semibold mb-1">
+                    ⚠️ Diese Entscheidung ist dauerhaft!
+                  </p>
+                  <p className="text-xs text-red-300/80">
+                    Die Verknüpfung kann <strong>nicht selbstständig</strong> rückgängig gemacht werden. 
+                    Änderungen sind nur über ein <strong>Support-Ticket</strong> möglich.
+                  </p>
+                </div>
               </div>
             </div>
             
@@ -259,10 +348,10 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
               </Button>
               <Button
                 onClick={handleLock}
-                className="gap-2 bg-emerald-500 hover:bg-emerald-600"
+                className="gap-2 bg-red-500 hover:bg-red-600"
               >
                 <Lock className="w-4 h-4" />
-                Seite sperren & optimieren
+                Verstanden & bestätigen
               </Button>
             </div>
           </div>

@@ -16,6 +16,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="de" className="scroll-smooth">
       <head>
+        <link rel="icon" type="image/png" href="/favicon-dark.png" media="(prefers-color-scheme: dark)" />
+        <link rel="icon" type="image/png" href="/favicon-light.png" media="(prefers-color-scheme: light)" />
+        <link rel="apple-touch-icon" href="/favicon-dark.png" />
         <script
           dangerouslySetInnerHTML={{
             __html: `

@@ -98,6 +98,9 @@ from erecht24_routes_v2 import router as erecht24_v2_router
 # BFSG Accessibility Fix Pipeline - Anfängerfreundliche Fix-Generierung
 from accessibility_fix_routes import accessibility_fix_router, init_routes as init_accessibility_routes
 
+# Git Integration - Automatische PRs für Accessibility-Fixes
+from git_routes import git_router, init_git_routes
+
 # Models for new endpoints
 class AnalyzeRequest(BaseModel):
     url: str
@@ -350,6 +353,10 @@ async def startup_event():
     # Initialize BFSG Accessibility Fix routes (after auth_service is ready)
     init_accessibility_routes(db_pool, auth_service)
     print("✅ BFSG Accessibility Fix routes initialized")
+    
+    # Initialize Git Integration routes
+    init_git_routes(db_pool, auth_service)
+    print("✅ Git Integration routes initialized")
 
     # Initialize Firebase Admin SDK
     firebase_app = init_firebase_admin()
@@ -424,6 +431,7 @@ async def startup_event():
     app.include_router(legal_change_router)  # Legal Change Monitoring (auto-detect law changes)
     app.include_router(ai_legal_router)  # AI Legal System - NEW
     app.include_router(accessibility_fix_router)  # BFSG Accessibility Fix Pipeline - NEW
+    app.include_router(git_router)  # Git Integration - Automatic PRs - NEW
     
     # Initialize Legal Update Integration
     from compliance_engine.legal_update_integration import init_legal_update_integration
@@ -456,6 +464,7 @@ async def startup_event():
     # Set global references for cookie_compliance_routes
     import cookie_compliance_routes
     cookie_compliance_routes.db_pool = db_pool
+    cookie_compliance_routes.auth_service = auth_service  # ✅ Auth-Service hinzugefügt
     
     # Set global references for ab_test_routes
     import ab_test_routes

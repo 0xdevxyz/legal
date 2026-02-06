@@ -198,10 +198,85 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                     WHERE user_id = $1
                 """, user_id)
                 
+                # ✅ NEU: Erstelle automatisch eine Cookie-Banner-Konfiguration
+                try:
+                    from urllib.parse import urlparse
+                    import json
+                    
+                    # Generate site_id from URL
+                    parsed_url = urlparse(data.url if data.url.startswith('http') else f'https://{data.url}')
+                    hostname = parsed_url.netloc or parsed_url.path
+                    hostname = hostname.replace('www.', '')
+                    site_id = hostname.replace('.', '-').lower()
+                    
+                    # Prüfe ob bereits eine Config existiert
+                    existing_config = await conn.fetchrow(
+                        "SELECT id FROM cookie_banner_configs WHERE site_id = $1",
+                        site_id
+                    )
+                    
+                    if not existing_config:
+                        # Erstelle Default-Cookie-Banner-Konfiguration
+                        default_texts = {
+                            "de": {
+                                "title": "Datenschutz-Präferenz",
+                                "description": "Wir benötigen Ihre Einwilligung, bevor Sie unsere Website weiter besuchen können.\n\nWenn Sie unter 16 Jahre alt sind und Ihre Einwilligung zu optionalen Services geben möchten, müssen Sie Ihre Erziehungsberechtigten um Erlaubnis bitten.\n\nWir verwenden Cookies und andere Technologien auf unserer Website. Einige von ihnen sind essenziell, während andere uns helfen, diese Website und Ihre Erfahrung zu verbessern.",
+                                "accept_all": "Alle akzeptieren",
+                                "reject_all": "Nur essenzielle Cookies akzeptieren",
+                                "accept_selected": "Speichern",
+                                "settings": "Individuelle Datenschutzeinstellungen",
+                                "necessary": "Essenziell",
+                                "necessaryDesc": "Essenzielle Services ermöglichen grundlegende Funktionen.",
+                                "functional": "Funktional",
+                                "functionalDesc": "Funktionale Cookies speichern Ihre Präferenzen.",
+                                "analytics": "Statistiken",
+                                "analyticsDesc": "Statistik-Cookies helfen uns zu verstehen, wie Besucher interagieren.",
+                                "marketing": "Externe Medien",
+                                "marketingDesc": "Inhalte von Videoplattformen und Social-Media werden standardmäßig blockiert.",
+                                "privacy_link": "Datenschutzerklärung",
+                                "imprint_link": "Impressum"
+                            }
+                        }
+                        
+                        await conn.execute("""
+                            INSERT INTO cookie_banner_configs (
+                                site_id, user_id, layout, primary_color, accent_color,
+                                text_color, bg_color, button_style, position, width_mode,
+                                texts, services, show_on_pages, geo_restriction,
+                                auto_block_scripts, respect_dnt, cookie_lifetime_days,
+                                show_branding, is_active, last_scan_url
+                            )
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+                        """,
+                            site_id,
+                            user_id,
+                            'box_modal',  # Default Layout
+                            '#7c3aed',    # Primary Color (Violet)
+                            '#8b5cf6',    # Accent Color
+                            '#333333',    # Text Color
+                            '#ffffff',    # Background Color
+                            'rounded',    # Button Style
+                            'center',     # Position
+                            'boxed',      # Width Mode
+                            json.dumps(default_texts),
+                            json.dumps([]),  # Services - leer, wird durch Scan gefüllt
+                            json.dumps({"all": True, "exclude": []}),
+                            json.dumps({"enabled": False, "countries": []}),
+                            True,         # Auto-block scripts
+                            True,         # Respect DNT
+                            365,          # Cookie lifetime
+                            True,         # Show branding
+                            True,         # Is active
+                            data.url      # Last scan URL
+                        )
+                        logger.info(f"✅ Cookie-Banner-Config erstellt für site_id: {site_id}")
+                except Exception as e:
+                    logger.warning(f"Cookie-Banner-Config konnte nicht erstellt werden: {e}")
+                    # Nicht kritisch - kann später manuell erstellt werden
+                
                 # Create eRecht24 project for new website
                 try:
                     from erecht24_service import erecht24_service
-                    from urllib.parse import urlparse
                     
                     # Extract domain from URL
                     parsed_url = urlparse(data.url)
@@ -269,7 +344,7 @@ async def delete_website(website_id: int, user=Depends(get_current_user)):
             if website["is_primary"]:
                 raise HTTPException(
                     status_code=403,
-                    detail="Cannot delete primary website"
+                    detail="Die primäre Website kann nicht gelöscht werden. Diese Verknüpfung ist dauerhaft. Bitte kontaktieren Sie den Support unter support@complyo.tech für Änderungen."
                 )
             
             # Delete website

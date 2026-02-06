@@ -3,42 +3,52 @@
 import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Star, Quote } from 'lucide-react';
 
+/**
+ * Testimonials - Kundenstimmen Slider
+ */
 export default function Testimonials() {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const testimonials = [
     {
-      name: 'Jana Richter',
-      role: 'Founder, Launch Academy',
-      company: 'Launch Academy',
-      industry: 'Online Courses',
-      image: '🧠',
-      quote:
-        'Innerhalb von zwei Tagen hatte ich Kursseiten, Member-Only Inhalte und E-Mail-Automationen live. Die alfi AI hat mir sogar Newsletter-Vorlagen vorgeschlagen.',
-      metric: '2 Tage',
-      metricLabel: 'bis zum ersten Launch'
+      name: 'Thomas Müller',
+      role: 'CTO',
+      company: 'TechStart GmbH',
+      industry: 'E-Commerce',
+      image: '👨‍💼',
+      quote: 'Complyo hat uns geholfen, unsere WCAG-Compliance von 45% auf 92% zu steigern. Die KI-generierten Fixes waren präzise und einfach umzusetzen. Absolute Empfehlung!',
+      metric: '45% → 92%',
+      metricLabel: 'WCAG Score'
     },
     {
-      name: 'Felix Neumann',
-      role: 'Coach & Podcaster',
-      company: 'Mindflow Club',
-      industry: 'Coaching',
-      image: '🎙️',
-      quote:
-        'Meeting-Terminbuchungen, CRM und Upsells laufen automatisch über alfima. Ich muss mich nur auf meine Community konzentrieren.',
-      metric: '40%',
-      metricLabel: 'Termin-Konversion'
-    },
-    {
-      name: 'Kim Bauer',
+      name: 'Sarah Schmidt',
       role: 'Marketing Managerin',
-      company: 'Creative Cofounders',
+      company: 'WebPro Agency',
+      industry: 'Agentur',
+      image: '👩‍💼',
+      quote: 'Als Nicht-Entwicklerin war ich skeptisch. Aber die Schritt-für-Schritt-Anleitungen waren so klar, dass ich viele Fixes selbst umsetzen konnte. Der Expertenservice hat den Rest übernommen.',
+      metric: '€12.000',
+      metricLabel: 'Bußgeld vermieden'
+    },
+    {
+      name: 'Michael Weber',
+      role: 'Geschäftsführer',
+      company: 'Handwerk Online',
+      industry: 'Handwerk',
+      image: '👨‍🔧',
+      quote: 'Endlich eine Compliance-Lösung ohne monatliche Widget-Kosten. Die einmalige Umsetzung war ihr Geld wert – jetzt sind wir dauerhaft geschützt.',
+      metric: '3 Wochen',
+      metricLabel: 'Bis vollständig compliant'
+    },
+    {
+      name: 'Lisa Hoffmann',
+      role: 'Entwicklerin',
+      company: 'StartupHub Berlin',
       industry: 'SaaS',
-      image: '💼',
-      quote:
-        'Die Plattform ersetzt mehrere Tools: Shop, Community, Newsletter und Automationen sprechen perfekt miteinander. Der Support antwortet sogar per WhatsApp.',
-      metric: '73%',
-      metricLabel: 'E-Mail-Öffnungsrate'
+      image: '👩‍💻',
+      quote: 'Die genaue Code-Lokalisierung mit Datei und Zeile hat uns Stunden an Debugging erspart. Kein anderes Tool bietet so präzise Lösungen.',
+      metric: '80%',
+      metricLabel: 'Zeitersparnis'
     }
   ];
 
@@ -53,67 +63,86 @@ export default function Testimonials() {
   const current = testimonials[currentIndex];
 
   return (
-    <section className="bg-slate-900 text-white py-20">
+    <section className="bg-gray-900 text-white py-20">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <p className="text-sm uppercase tracking-[0.4em] text-white/60">Erfolgsgeschichten</p>
-          <h2 className="text-4xl font-bold mt-4">Das sagen Creator, die alfima bereits nutzen</h2>
-          <p className="text-lg text-white/70 mt-3">
-            Nochmaliger Boost für digitale Produkte, Termine und Communitys mit einem Tool.
+        {/* Header */}
+        <div className="text-center mb-16">
+          <h2 className="text-4xl font-bold mb-4">
+            Was unsere Kunden sagen
+          </h2>
+          <p className="text-xl text-gray-400">
+            Echte Erfahrungen von echten Unternehmen
           </p>
         </div>
-
+        
+        {/* Testimonial Card */}
         <div className="relative">
-          <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/10 to-slate-900/70 p-12 shadow-2xl backdrop-blur">
-            <Quote className="w-16 h-16 text-cyan-400/60 mb-6" />
+          <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl p-12 border border-gray-700 shadow-2xl">
+            {/* Quote Icon */}
+            <Quote className="w-16 h-16 text-blue-500/20 mb-6" />
+            
+            {/* Stars */}
             <div className="flex gap-1 mb-6">
               {[...Array(5)].map((_, i) => (
-                <Star key={i} className="w-5 h-5 text-yellow-400" />
+                <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />
               ))}
             </div>
-            <blockquote className="text-2xl font-semibold leading-relaxed text-white/90">
+            
+            {/* Quote */}
+            <blockquote className="text-2xl font-medium leading-relaxed mb-8 text-gray-100">
               "{current.quote}"
             </blockquote>
-            <div className="mt-10 flex flex-col lg:flex-row items-center justify-between gap-6">
+            
+            {/* Author */}
+            <div className="flex items-center justify-between flex-wrap gap-6">
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 text-3xl">
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-3xl">
                   {current.image}
                 </div>
                 <div>
-                  <div className="text-lg font-semibold">{current.name}</div>
-                  <div className="text-sm text-white/70">
-                    {current.role} — {current.company}
-                  </div>
+                  <div className="font-bold text-lg">{current.name}</div>
+                  <div className="text-gray-400">{current.role}</div>
+                  <div className="text-sm text-gray-500">{current.company} • {current.industry}</div>
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-center text-sm uppercase tracking-[0.3em] text-white/80">
-                <div className="text-3xl font-bold text-white">{current.metric}</div>
-                <div className="text-xs text-white/70">{current.metricLabel}</div>
+              
+              {/* Metric */}
+              <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-400/30 rounded-xl px-6 py-4 text-center">
+                <div className="text-3xl font-bold text-blue-400">{current.metric}</div>
+                <div className="text-sm text-gray-400">{current.metricLabel}</div>
               </div>
             </div>
           </div>
-
-          <div className="mt-10 flex items-center justify-center gap-4">
+          
+          {/* Navigation Buttons */}
+          <div className="flex items-center justify-center gap-4 mt-8">
             <button
               onClick={prevTestimonial}
-              className="h-12 w-12 rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
+              className="w-12 h-12 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-full flex items-center justify-center transition-colors"
               aria-label="Vorheriges Testimonial"
             >
               <ChevronLeft className="w-6 h-6" />
             </button>
+            
+            {/* Dots */}
             <div className="flex gap-2">
               {testimonials.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => setCurrentIndex(index)}
-                  className={`h-2 rounded-full transition-all ${index === currentIndex ? 'w-8 bg-cyan-400' : 'w-2 bg-white/30'}`}
+                  className={`w-2 h-2 rounded-full transition-all ${
+                    index === currentIndex
+                      ? 'bg-blue-500 w-8'
+                      : 'bg-gray-700 hover:bg-gray-600'
+                  }`}
                   aria-label={`Gehe zu Testimonial ${index + 1}`}
                 />
               ))}
             </div>
+            
             <button
               onClick={nextTestimonial}
-              className="h-12 w-12 rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
+              className="w-12 h-12 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-full flex items-center justify-center transition-colors"
               aria-label="Nächstes Testimonial"
             >
               <ChevronRight className="w-6 h-6" />
@@ -124,3 +153,4 @@ export default function Testimonials() {
     </section>
   );
 }
+

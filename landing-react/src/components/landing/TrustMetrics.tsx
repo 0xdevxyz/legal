@@ -1,60 +1,69 @@
 'use client';
 
 import React from 'react';
-import { Users, TrendingUp, Shield, Sparkles } from 'lucide-react';
+import { Users, TrendingUp, Shield } from 'lucide-react';
 
-const metrics = [
-  {
-    icon: Users,
-    value: '1.000+',
-    label: 'Creator & Coaches',
-    description: 'bauen digitale Produkte mit alfima',
-    color: 'from-cyan-400 to-blue-500'
-  },
-  {
-    icon: TrendingUp,
-    value: '15 Mio €',
-    label: 'Innenumsatz',
-    description: 'verzeichnet von unserer Creator-Community',
-    color: 'from-emerald-500 to-teal-500'
-  },
-  {
-    icon: Shield,
-    value: '14 Tage',
-    label: 'kostenfrei testen',
-    description: 'inkl. Onboarding, Academy & WhatsApp Support',
-    color: 'from-violet-500 to-fuchsia-500'
-  }
-];
-
+/**
+ * TrustMetrics - Vertrauenszahlen und Erfolgsmetriken
+ */
 export default function TrustMetrics() {
+  const metrics = [
+    {
+      icon: Users,
+      value: '2.500+',
+      label: 'Websites geschützt',
+      description: 'Vertrauen uns bei ihrer Compliance',
+      color: 'from-blue-500 to-cyan-500'
+    },
+    {
+      icon: TrendingUp,
+      value: '+47%',
+      label: 'Durchschnittlicher Score-Anstieg',
+      description: 'Nach erster KI-Optimierung',
+      color: 'from-green-500 to-emerald-500'
+    },
+    {
+      icon: Shield,
+      value: '€250.000+',
+      label: 'Bußgeld vermieden',
+      description: 'Durch proaktive Compliance-Prüfung',
+      color: 'from-purple-500 to-pink-500'
+    }
+  ];
+
   return (
     <section className="bg-white py-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {metrics.map((metric) => (
+          {metrics.map((metric, index) => (
             <div
-              key={metric.label}
-              className="text-center rounded-3xl border border-slate-100 bg-slate-50 p-8 shadow-lg"
+              key={index}
+              className="text-center group"
             >
-              <div className={`inline-flex w-20 h-20 items-center justify-center rounded-2xl bg-gradient-to-br ${metric.color} text-white mb-6 shadow-2xl`}>
-                <metric.icon className="w-10 h-10" />
+              {/* Icon */}
+              <div className={`inline-flex w-20 h-20 bg-gradient-to-br ${metric.color} rounded-2xl items-center justify-center mb-6 transform group-hover:scale-110 transition-transform shadow-lg`}>
+                <metric.icon className="w-10 h-10 text-white" />
               </div>
-
+              
+              {/* Value */}
               <div className={`text-5xl font-bold bg-gradient-to-r ${metric.color} bg-clip-text text-transparent mb-2`}>
                 {metric.value}
               </div>
-
-              <div className="text-xl font-semibold text-slate-900 mb-2">{metric.label}</div>
-              <p className="text-sm text-slate-500">{metric.description}</p>
+              
+              {/* Label */}
+              <div className="text-xl font-semibold text-gray-900 mb-2">
+                {metric.label}
+              </div>
+              
+              {/* Description */}
+              <div className="text-gray-600">
+                {metric.description}
+              </div>
             </div>
           ))}
-        </div>
-        <div className="mt-12 text-center text-sm uppercase tracking-[0.4em] text-slate-400 flex items-center justify-center gap-2">
-          <Sparkles className="w-4 h-4 text-slate-400" />
-          Alles aus einer Hand – kein Tool-Chaos
         </div>
       </div>
     </section>
   );
 }
+

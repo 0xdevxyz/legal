@@ -14,7 +14,7 @@ interface DomainHeroSectionProps {
 export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
   onAnalyze
 }) => {
-  const { currentWebsite, metrics, updateMetrics, setCurrentWebsite, isInOptimizationMode, lockedOptimizationUrl, unlockOptimization } = useDashboardStore();
+  const { currentWebsite, metrics, updateMetrics, setCurrentWebsite, isInOptimizationMode, lockedOptimizationUrl } = useDashboardStore();
   const [url, setUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +65,10 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
     
     checkAutoTrigger();
   }, []);
+
+  // ✅ HINWEIS: Auto-Analyse wurde entfernt.
+  // "Zurück zur Optimierung" lädt jetzt gespeicherte Daten direkt in den Store
+  // statt eine neue Analyse zu starten. Siehe OptimizationQuickNav.tsx und OptimizationModeLock.tsx
 
   // ✅ Load saved website on mount (nur wenn noch keine Website im Store ist)
   useEffect(() => {
@@ -244,28 +248,30 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
 
             {/* Domain Input */}
             <div className="space-y-4">
-              {/* ✅ Hinweis: Optimierung ist für eine Seite gesperrt */}
+              {/* ✅ Hinweis: Website ist dauerhaft verknüpft - KEIN Entsperren möglich */}
               {isInOptimizationMode && lockedOptimizationUrl && (
                 <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl">
                   <Lock className="w-5 h-5 text-emerald-400 flex-shrink-0" />
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-semibold text-emerald-300">Optimierung aktiv für:</span>
-                      <Badge variant="success" className="text-xs">Gelockt</Badge>
+                      <span className="text-sm font-semibold text-emerald-300">Ihre registrierte Website:</span>
+                      <Badge variant="success" className="text-xs">Dauerhaft verknüpft</Badge>
                     </div>
                     <p className="text-xs text-zinc-400">
                       <strong className="text-emerald-400">{lockedOptimizationUrl}</strong> — 
-                      <span className="text-zinc-500 ml-1">Alle KI-Fixes und Optimierungen werden für diese Seite personalisiert.</span>
+                      <span className="text-zinc-500 ml-1">Alle KI-Fixes und Optimierungen sind für diese Seite personalisiert.</span>
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={unlockOptimization}
-                    className="gap-1 border-zinc-600 hover:bg-zinc-800 text-xs"
-                  >
-                    Entsperren
-                  </Button>
+                  {/* Kein Entsperren-Button - nur Support-Hinweis */}
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-[10px] text-zinc-500">Änderung nur via</p>
+                    <a 
+                      href="mailto:support@complyo.tech?subject=Website-Änderung"
+                      className="text-xs text-blue-400 hover:text-blue-300"
+                    >
+                      Support
+                    </a>
+                  </div>
                 </div>
               )}
               

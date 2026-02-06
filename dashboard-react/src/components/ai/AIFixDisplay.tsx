@@ -455,7 +455,7 @@ const TextFixDisplay: React.FC<{
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-gray-600" />
           <span className="font-semibold text-gray-900">
-            {fixData.text_type?.charAt(0).toUpperCase() + fixData.text_type?.slice(1)}
+            {(fixData.text_type ?? '').charAt(0).toUpperCase() + (fixData.text_type ?? '').slice(1)}
           </span>
         </div>
         <div className="flex gap-2">
