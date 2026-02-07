@@ -169,8 +169,9 @@ export default function ComplyoViralLanding() {
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+      {/* Header with Navigation */}
+      <header>
+        <nav role="navigation" aria-label="Hauptnavigation" className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         isScrolled ? 'bg-white/90 backdrop-blur-xl shadow-sm border-b border-gray-100' : 'bg-transparent'
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -197,10 +198,13 @@ export default function ComplyoViralLanding() {
             </div>
           </div>
         </div>
-      </nav>
+        </nav>
+      </header>
 
-      {/* Hero Section */}
-      <section className="relative pt-32 pb-20 px-4">
+      {/* Main Content */}
+      <main role="main">
+        {/* Hero Section */}
+        <section className="relative pt-32 pb-20 px-4">
         <div className="max-w-6xl mx-auto text-center relative z-10">
           {/* Badge */}
           <motion.div
@@ -443,7 +447,7 @@ export default function ComplyoViralLanding() {
               </ul>
 
               <a
-                href={process.env.NODE_ENV === 'production' ? 'https://app.complyo.tech/register?plan=diy' : 'http://localhost:3001/register?plan=diy'}
+                href={process.env.NODE_ENV === 'production' ? 'https://app.complyo.tech/register?plan=complete' : 'http://localhost:3001/register?plan=complete'}
                 className="block w-full text-center bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg"
               >
                 Jetzt starten
@@ -629,9 +633,10 @@ export default function ComplyoViralLanding() {
           </motion.div>
         </div>
       </section>
+      </main>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 py-12 px-4 bg-white/50 relative z-10">
+      <footer role="contentinfo" className="border-t border-gray-200 py-12 px-4 bg-white/50 relative z-10">
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-4 gap-8 mb-12">
             {/* Logo & Description */}

@@ -39,6 +39,7 @@ security = HTTPBearer()
 # Global references (set in main_production.py)
 db_pool = None
 auth_service = None
+db_service = None  # Für Modul-Checks
 
 # Service Instances
 patch_generator = AccessibilityPatchGenerator()
@@ -142,6 +143,27 @@ async def get_optional_user(
         return None
 
 
+async def require_accessibility_module(user: Dict[str, Any]) -> bool:
+    """
+    Check if user has access to the accessibility module.
+    Raises 403 if not granted.
+    """
+    if not db_service:
+        logger.warning("Database service not configured for module checks")
+        return True
+    
+    user_id = str(user.get("id") or user.get("user_id"))
+    has_module = await db_service.check_user_module(user_id, 'accessibility')
+    
+    if not has_module:
+        raise HTTPException(
+            status_code=403, 
+            detail="Modul 'Barrierefreiheit' nicht gebucht. Bitte upgraden Sie Ihren Plan."
+        )
+    
+    return True
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -154,12 +176,17 @@ async def analyze_issues(
     """
     Kategorisiert rohe Scanner-Issues und ordnet sie Features zu.
     
+    Requires 'accessibility' module to be active.
+    
     Dies ist der erste Schritt im Fix-Wizard:
     1. Nimmt rohe Issues vom Scanner
     2. Ordnet sie Feature-IDs zu (ALT_TEXT, CONTRAST, etc.)
     3. Bestimmt Schwierigkeit und Fix-Typ
     4. Erstellt Zusammenfassung für Dashboard
     """
+    # Modul-Check: User muss Barrierefreiheit-Modul gebucht haben
+    await require_accessibility_module(user)
+    
     logger.info(f"🔍 Analyzing {len(request.issues)} issues for {request.site_url}")
     
     try:
@@ -200,12 +227,17 @@ async def generate_fixes(
     """
     Generiert Fixes für die analysierten Issues.
     
+    Requires 'accessibility' module to be active.
+    
     Dies ist der zweite Schritt im Fix-Wizard:
     1. Nimmt strukturierte Issues
     2. Generiert Widget-Fixes (sofort)
     3. Generiert Code-Patches via LLM
     4. Erstellt manuelle Anleitungen
     """
+    # Modul-Check: User muss Barrierefreiheit-Modul gebucht haben
+    await require_accessibility_module(user)
+    
     import time
     start_time = time.time()
     
@@ -423,10 +455,11 @@ async def save_fix_package_to_db(user_id: str, site_url: str, fix_package: Dict[
 # Init Functions
 # =============================================================================
 
-def init_routes(pool, auth_svc):
+def init_routes(pool, auth_svc, database_service=None):
     """Initialize route dependencies"""
-    global db_pool, auth_service
+    global db_pool, auth_service, db_service
     db_pool = pool
     auth_service = auth_svc
+    db_service = database_service
     logger.info("✅ Accessibility fix routes initialized")
 

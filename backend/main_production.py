@@ -92,6 +92,11 @@ from ai_legal_classifier import init_ai_classifier
 from ai_feedback_learning import init_feedback_learning
 from ai_legal_routes import router as ai_legal_router
 
+# Legal News Notification System - NEW
+from legal_notification_service import init_legal_notification_service
+from legal_notification_routes import router as legal_notification_router
+from eulex_service import init_eulex_service
+
 # NEW V2 API Routes - Enhanced AI Fix Engine & eRecht24 Integration (Full Version)
 from erecht24_routes_v2 import router as erecht24_v2_router
 
@@ -100,6 +105,9 @@ from accessibility_fix_routes import accessibility_fix_router, init_routes as in
 
 # Git Integration - Automatische PRs für Accessibility-Fixes
 from git_routes import git_router, init_git_routes
+
+# Alt-Text AI Generation - KI-generierte Alt-Texte für Bilder
+from alt_text_routes import router as alt_text_router
 
 # Models for new endpoints
 class AnalyzeRequest(BaseModel):
@@ -351,7 +359,7 @@ async def startup_event():
     auth_routes.db_pool = db_pool
     
     # Initialize BFSG Accessibility Fix routes (after auth_service is ready)
-    init_accessibility_routes(db_pool, auth_service)
+    init_accessibility_routes(db_pool, auth_service, db_service)
     print("✅ BFSG Accessibility Fix routes initialized")
     
     # Initialize Git Integration routes
@@ -430,8 +438,16 @@ async def startup_event():
     
     app.include_router(legal_change_router)  # Legal Change Monitoring (auto-detect law changes)
     app.include_router(ai_legal_router)  # AI Legal System - NEW
+    app.include_router(legal_notification_router)  # Legal News Notifications - NEW
     app.include_router(accessibility_fix_router)  # BFSG Accessibility Fix Pipeline - NEW
     app.include_router(git_router)  # Git Integration - Automatic PRs - NEW
+    app.include_router(alt_text_router)  # Alt-Text AI Generation - NEW
+    
+    # Initialize Alt-Text routes
+    import alt_text_routes
+    alt_text_routes.db_pool = db_pool
+    alt_text_routes.auth_service = auth_service
+    logger.info("✅ Alt-Text AI routes initialized")
     
     # Initialize Legal Update Integration
     from compliance_engine.legal_update_integration import init_legal_update_integration
@@ -457,6 +473,14 @@ async def startup_event():
     init_feedback_learning(db_service)
     logger.info("📚 AI Feedback Learning initialized")
     
+    # Initialize Legal Notification Service - NEW
+    init_legal_notification_service(db_pool)
+    logger.info("📧 Legal Notification Service initialized")
+    
+    # Initialize EU-Lex Service - NEW
+    init_eulex_service(db_pool)
+    logger.info("🇪🇺 EU-Lex Service initialized")
+    
     # Set global references for user_routes
     user_routes.db_pool = db_pool
     user_routes.auth_service = auth_service
@@ -465,6 +489,7 @@ async def startup_event():
     import cookie_compliance_routes
     cookie_compliance_routes.db_pool = db_pool
     cookie_compliance_routes.auth_service = auth_service  # ✅ Auth-Service hinzugefügt
+    cookie_compliance_routes.db_service = db_service  # ✅ DB-Service für Modul-Checks
     
     # Set global references for ab_test_routes
     import ab_test_routes
@@ -517,6 +542,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token"
         )
+    if "user_id" not in payload and "id" in payload:
+        payload["user_id"] = payload["id"]
     return payload
 
 # API Routes
@@ -878,7 +905,6 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
         if scan_result.get("error"):
             raise HTTPException(status_code=400, detail=scan_result["error_message"])
 
-        # Save the detailed scan result to the database
         async with db_pool.acquire() as connection:
             scan_id = f"scan_{current_user['user_id']}_{int(datetime.datetime.now().timestamp())}"
             await connection.execute(
@@ -897,10 +923,37 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
                 scan_result["critical_issues"],
                 scan_result["warning_issues"],
                 scan_result["total_issues"],
-                json.dumps(scan_result, default=str)  # Store full scan result as JSONB
+                json.dumps(scan_result, default=str)
             )
-            # Get the id of the new scan to return it
             new_scan = await connection.fetchrow("SELECT id, scan_id FROM scan_history WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", current_user["user_id"])
+            
+            tracked_site = await connection.fetchrow(
+                "SELECT id FROM tracked_websites WHERE user_id = $1 AND url = $2",
+                current_user["user_id"], scan_result["url"]
+            )
+            
+            if tracked_site:
+                pillar_scores = {
+                    "accessibility": scan_result.get("accessibility_score", 0),
+                    "gdpr": scan_result.get("gdpr_score", 0),
+                    "legal": scan_result.get("legal_score", 0),
+                    "cookies": scan_result.get("cookie_score", 0),
+                    "critical_issues": scan_result.get("critical_issues", 0)
+                }
+                await connection.execute(
+                    """
+                    INSERT INTO score_history (website_id, user_id, overall_score, pillar_scores, scan_date)
+                    VALUES ($1, $2, $3, $4, NOW())
+                    """,
+                    tracked_site["id"],
+                    current_user["user_id"],
+                    scan_result["compliance_score"],
+                    json.dumps(pillar_scores)
+                )
+                await connection.execute(
+                    "UPDATE tracked_websites SET last_score = $1, last_scan_date = NOW(), scan_count = scan_count + 1 WHERE id = $2",
+                    scan_result["compliance_score"], tracked_site["id"]
+                )
 
         return {
             "success": True,
@@ -1298,8 +1351,6 @@ async def get_active_fix_jobs(current_user: dict = Depends(get_current_user)):
 @app.get("/api/v2/reports/{scan_id}/download")
 async def download_report(scan_id: str, current_user: dict = Depends(get_current_user)):
     try:
-        # 1. Fetch the scan results from the database
-        # ✅ FIX: Verwende scan_history statt scan_results
         async with db_pool.acquire() as connection:
             scan_result = await connection.fetchrow(
                 "SELECT * FROM scan_history WHERE scan_id = $1 AND user_id = $2",

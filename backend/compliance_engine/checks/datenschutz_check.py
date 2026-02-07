@@ -2,7 +2,7 @@
 Datenschutz Check (DSGVO)
 Prüft Datenschutzerklärung-Compliance
 
-✨ UPGRADED: Nutzt Deep-Content-Analyzer für echte Seitenanalyse
+✨ UPGRADED: Nutzt Browser-Rendering für JavaScript-Websites (React, Vue, Next.js)
 """
 
 from bs4 import BeautifulSoup
@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from dataclasses import dataclass, asdict
 import re
 import logging
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,78 @@ class DatenschutzIssue:
     recommendation: str
     legal_basis: str
     auto_fixable: bool = False
-    is_missing: bool = False  # True wenn komplettes Element fehlt (nicht nur Unterpunkt)
+    is_missing: bool = False
+
+
+def _find_datenschutz_links(soup: BeautifulSoup) -> List:
+    """
+    Verbesserte Suche nach Datenschutz-Links
+    Findet auch Links in modernen JS-Frameworks (React, Vue, Next.js)
+    """
+    all_links = []
+    keywords_href = ['datenschutz', 'privacy', 'dsgvo', 'gdpr', 'data-protection']
+    keywords_text = ['datenschutz', 'privacy policy', 'dsgvo', 'datenschutzerklärung', 'data protection']
+    
+    for a_tag in soup.find_all('a', href=True):
+        href = a_tag.get('href', '').lower()
+        link_text = a_tag.get_text(strip=True).lower()
+        aria_label = (a_tag.get('aria-label') or '').lower()
+        title = (a_tag.get('title') or '').lower()
+        
+        if any(kw in href for kw in keywords_href):
+            all_links.append(a_tag)
+        elif any(kw in link_text for kw in keywords_text):
+            all_links.append(a_tag)
+        elif any(kw in aria_label for kw in keywords_text):
+            all_links.append(a_tag)
+        elif any(kw in title for kw in keywords_text):
+            all_links.append(a_tag)
+    
+    return all_links
+
+
+async def check_datenschutz_compliance_smart(url: str, html: str = None, session=None) -> List[Dict[str, Any]]:
+    """
+    SMART Datenschutz-Check mit Browser-Rendering für JS-Websites
+    
+    Erkennt automatisch Client-Side-Rendering (React, Vue, Next.js)
+    und rendert die Seite vollständig im Browser.
+    """
+    from ..browser_renderer import smart_fetch_html, detect_client_rendering
+    
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+        logger.info(f"✅ URL normalized to: {url}")
+    
+    logger.info(f"🔍 Smart Datenschutz-Check für: {url}")
+    
+    try:
+        if html is None:
+            import ssl
+            import certifi
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(connector=connector) as temp_session:
+                async with temp_session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
+                    html = await response.text()
+        
+        needs_browser, reason = detect_client_rendering(html)
+        
+        if needs_browser:
+            logger.info(f"🌐 Browser needed for Datenschutz check: {reason}")
+            html, metadata = await smart_fetch_html(url, html)
+            logger.info(f"✅ Browser rendering completed: {metadata.get('rendering_type', 'unknown')}")
+        else:
+            logger.info(f"⚡ Server-rendered detected, using simple HTML for Datenschutz check")
+        
+        soup = BeautifulSoup(html, 'html.parser')
+        return await check_datenschutz_compliance(url, soup, session)
+        
+    except Exception as e:
+        logger.error(f"❌ Smart Datenschutz check failed: {e}")
+        soup = BeautifulSoup(html if html else "", 'html.parser')
+        return await check_datenschutz_compliance(url, soup, session)
+
 
 async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=None) -> List[Dict[str, Any]]:
     """
@@ -34,21 +106,11 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
     """
     issues = []
     
-    # Suche Datenschutz-Link
-    datenschutz_patterns = [
-        r'datenschutz',
-        r'privacy\s+policy',
-        r'data\s+protection',
-        r'dsgvo'
-    ]
+    datenschutz_links = _find_datenschutz_links(soup)
     
-    datenschutz_links = []
-    for pattern in datenschutz_patterns:
-        links = soup.find_all('a', text=re.compile(pattern, re.I))
-        datenschutz_links.extend(links)
-        
-        href_links = soup.find_all('a', href=re.compile(pattern, re.I))
-        datenschutz_links.extend(href_links)
+    logger.info(f"🔍 Datenschutz-Links gefunden: {len(datenschutz_links)}")
+    for link in datenschutz_links[:3]:
+        logger.info(f"   → {link.get('href', 'N/A')}: {link.get_text(strip=True)[:50]}")
     
     if not datenschutz_links:
         # ✅ HAUPTELEMENT FEHLT: Generiere alle Sub-Issues mit is_missing=True

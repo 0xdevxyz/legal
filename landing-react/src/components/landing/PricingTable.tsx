@@ -3,6 +3,16 @@
 import React from 'react';
 import { Check, Sparkles, Crown, ArrowRight, Shield, FileText, Eye, BarChart3 } from 'lucide-react';
 
+const getAppUrl = (path: string) => {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `http://localhost:3000${path}`;
+    }
+  }
+  return `https://app.complyo.tech${path}`;
+};
+
 /**
  * PricingTable - Flexibles 4-Säulen-Modell
  * Einzelne Säule: 19€/Monat
@@ -85,7 +95,7 @@ export default function PricingTable() {
             
             {/* CTA */}
             <a
-              href="/register?plan=single"
+              href={getAppUrl('/register?plan=single')}
               className="block w-full text-center bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold px-8 py-4 rounded-xl transition-all"
             >
               Modul wählen
@@ -155,7 +165,7 @@ export default function PricingTable() {
             
             {/* CTA */}
             <a
-              href="/register?plan=complete"
+              href={getAppUrl('/register?plan=complete')}
               className="block w-full text-center bg-white hover:bg-gray-100 text-gray-900 font-bold px-8 py-4 rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
             >
               Jetzt starten

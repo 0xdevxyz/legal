@@ -3,6 +3,16 @@
 import React from 'react';
 import { Shield, Zap, Building2, Crown, Check, FileText, Eye, BarChart3 } from 'lucide-react';
 
+const getAppUrl = (path: string) => {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `http://localhost:3000${path}`;
+    }
+  }
+  return `https://app.complyo.tech${path}`;
+};
+
 /**
  * PricingTable - Flexibles 4-Säulen-Modell
  * Einzelne Säule: 19€/Monat
@@ -62,7 +72,7 @@ export default function PricingTable() {
               <li>✅ E-Mail Support</li>
             </ul>
             <a
-              href="https://app.complyo.tech/register?plan=single"
+              href={getAppUrl('/register?plan=single')}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100"
             >
               Modul wählen
@@ -104,7 +114,7 @@ export default function PricingTable() {
               <li>✅ API-Zugang</li>
             </ul>
             <a
-              href="https://app.complyo.tech/register?plan=complete"
+              href={getAppUrl('/register?plan=complete')}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-cyan-600"
             >
               Jetzt starten

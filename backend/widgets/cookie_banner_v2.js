@@ -1765,6 +1765,7 @@
         }
         
         saveCustom(selections) {
+            console.log('[Complyo] saveCustom called with:', selections);
             const consent = {
                 necessary: true,
                 functional: selections.functional || false,
@@ -1773,6 +1774,8 @@
                 services: selections.services || [],
                 timestamp: new Date().toISOString()
             };
+            
+            console.log('[Complyo] Saving consent:', consent);
             
             // Track A/B test result
             if (this.abTest) {
@@ -2836,17 +2839,29 @@
             }
             
             // Footer buttons
-            modal.querySelector('#cps-save').addEventListener('click', () => {
-                this.saveCustom(this.categorySelections);
-            });
+            const saveBtn = modal.querySelector('#cps-save');
+            const acceptAllBtn = modal.querySelector('#cps-accept-all');
+            const rejectAllBtn = modal.querySelector('#cps-reject-all');
             
-            modal.querySelector('#cps-accept-all').addEventListener('click', () => {
-                this.acceptAll();
-            });
+            if (saveBtn) {
+                saveBtn.addEventListener('click', () => {
+                    this.saveCustom(this.categorySelections);
+                });
+            } else {
+                console.error('[Complyo] Save button not found in modal');
+            }
             
-            modal.querySelector('#cps-reject-all').addEventListener('click', () => {
-                this.rejectAll();
-            });
+            if (acceptAllBtn) {
+                acceptAllBtn.addEventListener('click', () => {
+                    this.acceptAll();
+                });
+            }
+            
+            if (rejectAllBtn) {
+                rejectAllBtn.addEventListener('click', () => {
+                    this.rejectAll();
+                });
+            }
             
             // Close on backdrop click
             backdrop.addEventListener('click', () => this.closeSettings());

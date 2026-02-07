@@ -14,6 +14,7 @@ from datetime import datetime, date, timedelta
 import json
 import logging
 from cookie_scanner_service import cookie_scanner
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ security = HTTPBearer(auto_error=False)  # auto_error=False für optionale Auth
 # Global database pool and auth service (set by main.py)
 db_pool = None
 auth_service = None  # Wird von main_production.py gesetzt
+db_service = None  # Wird von main_production.py gesetzt für Modul-Checks
 
 # ============================================================================
 # Authentication Helpers
@@ -56,6 +58,33 @@ async def get_current_user_required(credentials: HTTPAuthorizationCredentials = 
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
     return user
+
+async def require_module(user: Dict[str, Any], module_id: str) -> bool:
+    """
+    Check if user has access to a specific module.
+    Raises 403 if module not granted.
+    """
+    if not db_service:
+        logger.warning("Database service not configured for module checks")
+        return True
+    
+    user_id = str(user.get("id") or user.get("user_id"))
+    has_module = await db_service.check_user_module(user_id, module_id)
+    
+    if not has_module:
+        module_names = {
+            'cookie': 'Cookie & DSGVO',
+            'accessibility': 'Barrierefreiheit',
+            'legal_texts': 'Rechtliche Texte',
+            'monitoring': 'Monitoring & Scan'
+        }
+        module_name = module_names.get(module_id, module_id)
+        raise HTTPException(
+            status_code=403, 
+            detail=f"Modul '{module_name}' nicht gebucht. Bitte upgraden Sie Ihren Plan."
+        )
+    
+    return True
 
 async def get_user_id_from_token(user: Dict[str, Any]) -> Any:
     """Extract user_id from token and verify in database"""
@@ -613,11 +642,15 @@ async def create_or_update_config(
     Create or update cookie banner configuration
     
     Requires authentication (user_id from session)
+    Requires 'cookie' module to be active
     """
     try:
         # Authentifizierung
         user = await get_current_user_required(credentials)
         user_id = await get_user_id_from_token(user)
+        
+        # Modul-Check: User muss Cookie-Modul gebucht haben
+        await require_module(user, 'cookie')
         
         # Prüfe, ob die site_id zur registrierten Website des Users gehört
         registered_site_id = await get_user_website_site_id(user_id)
@@ -733,11 +766,15 @@ async def update_config_partial(
     Partially update banner configuration
     
     Requires authentication - validates that site_id belongs to user
+    Requires 'cookie' module to be active
     """
     try:
         # Authentifizierung
         user = await get_current_user_required(credentials)
         user_id = await get_user_id_from_token(user)
+        
+        # Modul-Check: User muss Cookie-Modul gebucht haben
+        await require_module(user, 'cookie')
         
         # Prüfe, ob die site_id zur registrierten Website des Users gehört
         registered_site_id = await get_user_website_site_id(user_id)

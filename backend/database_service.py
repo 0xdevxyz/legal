@@ -684,5 +684,118 @@ class DatabaseService:
             logger.error(f"Error getting user addons: {e}")
             return []
 
+    # ==================== USER MODULES METHODS ====================
+    
+    async def check_user_module(self, user_id: str, module_id: str) -> bool:
+        """
+        Check if user has access to a specific module (cookie, accessibility, etc.)
+        """
+        if self.use_fallback:
+            return True
+        
+        try:
+            async with self.get_connection() as conn:
+                query = """
+                    SELECT 1 FROM user_modules 
+                    WHERE user_id = $1 AND module_id = $2 
+                    AND status = 'active'
+                    AND (expires_at IS NULL OR expires_at > NOW())
+                """
+                result = await conn.fetchrow(query, user_id, module_id)
+                return result is not None
+        
+        except Exception as e:
+            logger.error(f"Error checking user module: {e}")
+            return False
+    
+    async def get_user_modules(self, user_id: str) -> List[str]:
+        """
+        Get list of active module IDs for a user
+        """
+        if self.use_fallback:
+            return ['cookie', 'accessibility', 'legal_texts', 'monitoring']
+        
+        try:
+            async with self.get_connection() as conn:
+                query = """
+                    SELECT module_id FROM user_modules 
+                    WHERE user_id = $1 
+                    AND status = 'active'
+                    AND (expires_at IS NULL OR expires_at > NOW())
+                """
+                rows = await conn.fetch(query, user_id)
+                return [row['module_id'] for row in rows]
+        
+        except Exception as e:
+            logger.error(f"Error getting user modules: {e}")
+            return []
+    
+    async def grant_user_module(
+        self, 
+        user_id: str, 
+        module_id: str,
+        stripe_subscription_id: Optional[str] = None
+    ) -> bool:
+        """
+        Grant a module to a user
+        """
+        if self.use_fallback:
+            return True
+        
+        try:
+            async with self.get_connection() as conn:
+                query = """
+                    INSERT INTO user_modules (user_id, module_id, stripe_subscription_id, status)
+                    VALUES ($1, $2, $3, 'active')
+                    ON CONFLICT (user_id, module_id) 
+                    DO UPDATE SET 
+                        status = 'active',
+                        stripe_subscription_id = COALESCE(EXCLUDED.stripe_subscription_id, user_modules.stripe_subscription_id),
+                        enabled_at = NOW(),
+                        cancelled_at = NULL,
+                        expires_at = NULL,
+                        updated_at = NOW()
+                """
+                await conn.execute(query, user_id, module_id, stripe_subscription_id)
+                logger.info(f"Granted module {module_id} to user {user_id}")
+                return True
+        
+        except Exception as e:
+            logger.error(f"Error granting user module: {e}")
+            return False
+    
+    async def grant_all_modules(self, user_id: str, stripe_subscription_id: Optional[str] = None) -> bool:
+        """
+        Grant all modules to a user (for complete package)
+        """
+        modules = ['cookie', 'accessibility', 'legal_texts', 'monitoring']
+        success = True
+        for module_id in modules:
+            if not await self.grant_user_module(user_id, module_id, stripe_subscription_id):
+                success = False
+        return success
+    
+    async def revoke_user_module(self, user_id: str, module_id: str) -> bool:
+        """
+        Revoke a module from a user
+        """
+        if self.use_fallback:
+            return True
+        
+        try:
+            async with self.get_connection() as conn:
+                query = """
+                    UPDATE user_modules 
+                    SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW()
+                    WHERE user_id = $1 AND module_id = $2
+                """
+                await conn.execute(query, user_id, module_id)
+                logger.info(f"Revoked module {module_id} from user {user_id}")
+                return True
+        
+        except Exception as e:
+            logger.error(f"Error revoking user module: {e}")
+            return False
+
 # Global database service instance
 db_service = DatabaseService()

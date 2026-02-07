@@ -4,6 +4,16 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Check, Sparkles, ArrowRight } from 'lucide-react';
 
+const getAppUrl = (path: string) => {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `http://localhost:3000${path}`;
+    }
+  }
+  return `https://app.complyo.tech${path}`;
+};
+
 /**
  * PricingModern - Moderne Pricing-Sektion
  * Conversion-optimiert mit klaren Preisen und Benefits
@@ -26,6 +36,7 @@ export default function PricingModern() {
       ],
       popular: false,
       cta: 'Modul wählen',
+      href: getAppUrl('/register?plan=single'),
       gradient: 'from-blue-50 to-cyan-50',
       borderColor: 'border-blue-200',
     },
@@ -47,6 +58,7 @@ export default function PricingModern() {
       ],
       popular: true,
       cta: 'Jetzt starten',
+      href: getAppUrl('/register?plan=complete'),
       gradient: 'from-purple-50 to-pink-50',
       borderColor: 'border-purple-300',
       badge: 'Am beliebtesten',
@@ -68,6 +80,7 @@ export default function PricingModern() {
       ],
       popular: false,
       cta: 'Beratung anfragen',
+      href: getAppUrl('/register?plan=expert'),
       gradient: 'from-indigo-50 to-purple-50',
       borderColor: 'border-indigo-200',
     },
@@ -152,7 +165,8 @@ export default function PricingModern() {
               </ul>
 
               {/* CTA */}
-              <motion.button
+              <motion.a
+                href={plan.href}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 className={`w-full py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
@@ -163,7 +177,7 @@ export default function PricingModern() {
               >
                 {plan.cta}
                 <ArrowRight className="w-5 h-5" />
-              </motion.button>
+              </motion.a>
             </motion.div>
           ))}
         </div>

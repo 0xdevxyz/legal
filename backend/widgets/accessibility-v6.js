@@ -625,7 +625,9 @@
         </div>
       `;
       
-      document.body.appendChild(container);
+      // Widget an <html> anhängen statt <body>, damit body.style.filter das Widget nicht beeinflusst
+      // (CSS filter auf parent erstellt neuen containing block für position:fixed)
+      document.documentElement.appendChild(container);
       this.container = container;
       
       this.setupEventListeners();
@@ -1060,98 +1062,42 @@
     
     applyColorFilters() {
       const body = document.body;
-      let bodyFilters = [];
-      let widgetFilters = [];
+      const html = document.documentElement;
       
       // Kontrast-Klasse
       if (this.features.contrast) {
-        bodyFilters.push('contrast(1.5)');
         body.classList.add('complyo-high-contrast');
       } else {
         body.classList.remove('complyo-high-contrast');
       }
       
-      // Farben invertieren - Widget MUSS AUCH invertiert werden!
+      // Farben invertieren
       if (this.features.invertColors) {
-        bodyFilters.push('invert(1)');
-        widgetFilters.push('invert(1)'); // Widget auch invertieren für Lesbarkeit
         body.classList.add('complyo-invert-colors');
       } else {
         body.classList.remove('complyo-invert-colors');
       }
       
-      // Graustufen - Widget NICHT grau machen (bleibt farbig)
+      // Graustufen
       if (this.features.grayscale) {
-        bodyFilters.push('grayscale(1)');
         body.classList.add('complyo-grayscale');
       } else {
         body.classList.remove('complyo-grayscale');
       }
       
-      // Filter anwenden
-      if (bodyFilters.length > 0) {
-        body.style.filter = bodyFilters.join(' ');
-      } else {
-        body.style.filter = 'none';
-      }
-      
-      // Widget-Filter separat anwenden
-      this.ensureWidgetVisibility(widgetFilters);
+      // WICHTIG: Filter NICHT auf body.style setzen!
+      // Stattdessen CSS-Klassen nutzen die den Filter auf body > * anwenden
+      // Das Widget hängt an <html>, nicht an <body>, also wird es nicht beeinflusst
+      body.style.filter = '';
     }
     
     ensureWidgetVisibility(additionalFilters = []) {
-      // MAXIMUM PRIORITY: Widget MUSS IMMER sichtbar bleiben
+      // Widget ist jetzt an <html> angehängt, braucht keine spezielle Behandlung mehr
       const widget = document.getElementById('complyo-a11y-widget');
       if (!widget) return;
       
-      // Widget in komplett isolierten Kontext setzen
-      widget.style.setProperty('isolation', 'isolate', 'important');
-      widget.style.setProperty('opacity', '1', 'important');
-      widget.style.setProperty('visibility', 'visible', 'important');
-      widget.style.setProperty('z-index', '999999', 'important');
-      widget.style.setProperty('pointer-events', 'auto', 'important');
-      
-      // Filter basierend auf aktiven Features
-      if (additionalFilters.length > 0) {
-        widget.style.setProperty('filter', additionalFilters.join(' '), 'important');
-        widget.style.setProperty('-webkit-filter', additionalFilters.join(' '), 'important');
-      } else {
-        widget.style.setProperty('filter', 'none', 'important');
-        widget.style.setProperty('-webkit-filter', 'none', 'important');
-      }
-      
-      // Button explizit sichtbar halten
-      const btn = widget.querySelector('.complyo-toggle-btn');
-      if (btn) {
-        btn.style.setProperty('opacity', '1', 'important');
-        btn.style.setProperty('visibility', 'visible', 'important');
-        btn.style.setProperty('pointer-events', 'auto', 'important');
-        if (additionalFilters.length > 0) {
-          btn.style.setProperty('filter', additionalFilters.join(' '), 'important');
-        } else {
-          btn.style.setProperty('filter', 'none', 'important');
-        }
-      }
-      
-      // Panel explizit sichtbar halten
-      const panel = widget.querySelector('.complyo-panel');
-      if (panel) {
-        panel.style.setProperty('opacity', '1', 'important');
-        panel.style.setProperty('visibility', 'visible', 'important');
-        panel.style.setProperty('pointer-events', 'auto', 'important');
-        if (additionalFilters.length > 0) {
-          panel.style.setProperty('filter', additionalFilters.join(' '), 'important');
-        } else {
-          panel.style.setProperty('filter', 'none', 'important');
-        }
-      }
-      
-      // Alle Kinder des Widgets auch sichtbar halten
-      const allElements = widget.querySelectorAll('*');
-      allElements.forEach(el => {
-        el.style.setProperty('opacity', '', ''); // Opacity inheritance respektieren
-        el.style.setProperty('visibility', '', ''); // Visibility inheritance respektieren
-      });
+      // Sicherstellen dass Widget keine Filter vom Body erbt
+      widget.style.setProperty('filter', 'none', 'important');
     }
     
     applyBionicReading() {
@@ -1435,6 +1381,9 @@
       panel.hidden = !this.isOpen;
       toggleBtn.setAttribute('aria-expanded', this.isOpen);
       
+      // Toggle-Button verstecken wenn Panel offen
+      toggleBtn.style.display = this.isOpen ? 'none' : 'flex';
+      
       if (this.isOpen) {
         this.trackAnalytics('widget_open', true);
       }
@@ -1447,6 +1396,8 @@
       
       panel.hidden = true;
       toggleBtn.setAttribute('aria-expanded', 'false');
+      // Toggle-Button wieder anzeigen
+      toggleBtn.style.display = 'flex';
     }
     
     loadPreferences() {
@@ -1471,11 +1422,23 @@
     
     async loadAndApplyAltTexts() {
       try {
-        const response = await fetch(`${API_BASE}/api/accessibility/alt-text-fixes?site_id=${this.config.siteId}`);
+        const response = await fetch(`${API_BASE}/api/accessibility/alt-text-fixes?site_id=${this.config.siteId}&approved_only=true`);
         if (!response.ok) return;
         const data = await response.json();
-        if (data.success && data.fixes) {
-          console.log(`✅ ${data.fixes.length} Alt-Texte geladen`);
+        if (data.success && data.fixes && data.fixes.length > 0) {
+          let applied = 0;
+          data.fixes.forEach(fix => {
+            const img = document.querySelector(`img[src="${fix.image_url}"]`) || 
+                        document.querySelector(`img[src*="${fix.image_url.split('/').pop()}"]`);
+            if (img && !img.alt) {
+              img.alt = fix.alt_text;
+              img.setAttribute('data-complyo-alt', 'true');
+              applied++;
+            }
+          });
+          if (applied > 0) {
+            console.log(`✅ Complyo: ${applied} Alt-Texte angewendet`);
+          }
         }
       } catch (e) {
         console.warn('Alt-Text-Fixes konnten nicht geladen werden:', e);
@@ -1538,9 +1501,9 @@
         
         /* ===== PANEL ===== */
         .complyo-panel {
-          position: fixed;
-          bottom: 20px;
-          right: 20px;
+          position: fixed !important;
+          bottom: 20px !important;
+          right: 20px !important;
           width: 520px;
           max-height: calc(100vh - 40px);
           background: white;
@@ -1551,6 +1514,8 @@
           flex-direction: column;
           transform-origin: bottom right;
           animation: scaleIn 0.2s ease-out;
+          z-index: 2147483647 !important;
+          font-size: 16px !important;
         }
         
         @keyframes scaleIn {
@@ -2200,8 +2165,64 @@
         }
         
         /* ===== FEATURE STYLES ===== */
+        
+        /* Filter-Features via CSS-Klassen (nicht via style.filter) */
+        /* Widget hängt an <html>, Body-Filter betreffen es nicht */
+        body.complyo-high-contrast {
+          filter: contrast(1.5);
+        }
+        
+        body.complyo-invert-colors {
+          filter: invert(1);
+        }
+        
+        body.complyo-grayscale {
+          filter: grayscale(1);
+        }
+        
+        /* Kombinationen */
+        body.complyo-high-contrast.complyo-invert-colors {
+          filter: contrast(1.5) invert(1);
+        }
+        
+        body.complyo-high-contrast.complyo-grayscale {
+          filter: contrast(1.5) grayscale(1);
+        }
+        
+        body.complyo-invert-colors.complyo-grayscale {
+          filter: invert(1) grayscale(1);
+        }
+        
+        body.complyo-high-contrast.complyo-invert-colors.complyo-grayscale {
+          filter: contrast(1.5) invert(1) grayscale(1);
+        }
+        
         body.complyo-scaled-text *:not(#complyo-a11y-widget):not(#complyo-a11y-widget *) {
           font-size: calc(1em * var(--complyo-font-scale, 1)) !important;
+        }
+        
+        /* Widget NIEMALS durch body-Styles beeinflussen */
+        #complyo-a11y-widget,
+        #complyo-a11y-widget *,
+        .complyo-panel,
+        .complyo-panel * {
+          font-size: revert !important;
+          line-height: normal !important;
+          letter-spacing: normal !important;
+          word-spacing: normal !important;
+          text-align: left !important;
+        }
+        
+        #complyo-a11y-widget .complyo-panel {
+          font-size: 16px !important;
+        }
+        
+        #complyo-a11y-widget .complyo-tile-label {
+          font-size: 11px !important;
+        }
+        
+        #complyo-a11y-widget .complyo-panel-header h3 {
+          font-size: 16px !important;
         }
         
         body.complyo-night-mode {

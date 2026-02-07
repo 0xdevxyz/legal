@@ -351,6 +351,26 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
     if accessibility_ids:
         return None
     
+    # NEU: Suche nach Floating-Buttons (typisch für Accessibility-Widgets)
+    # Diese haben oft: fixed position, aria-label mit "Barrierefreiheit" oder "Accessibility"
+    floating_buttons = soup.find_all(
+        'button',
+        attrs={'aria-label': re.compile(r'barrierefreiheit|accessibility|a11y', re.I)}
+    )
+    if floating_buttons:
+        return None
+    
+    # NEU: Suche nach Buttons mit Settings-Icons (Complyo Widget Pattern)
+    # Unser Widget hat: Settings Icon + aria-label "Barrierefreiheits-Einstellungen"
+    setting_buttons = soup.find_all(
+        'button',
+        class_=re.compile(r'fixed|floating|accessibility', re.I)
+    )
+    for btn in setting_buttons:
+        aria = btn.get('aria-label', '').lower()
+        if 'barrierefreiheit' in aria or 'accessibility' in aria or 'einstellung' in aria:
+            return None
+    
     # Kein Widget gefunden - HAUPTELEMENT FEHLT
     return BarrierefreiheitIssue(
         category='barrierefreiheit',

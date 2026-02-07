@@ -21,10 +21,12 @@ logger = logging.getLogger(__name__)
 # Import modulare Checks
 from compliance_engine.checks import (
     check_impressum_compliance,
+    check_impressum_compliance_smart,
     check_datenschutz_compliance,
+    check_datenschutz_compliance_smart,
     check_cookie_compliance,
     check_barrierefreiheit_compliance,
-    check_barrierefreiheit_compliance_smart  # ✨ NEU: Browser-basiert
+    check_barrierefreiheit_compliance_smart
 )
 
 # Import Legal Update Integration
@@ -123,13 +125,21 @@ class ComplianceScanner:
             for issue_dict in barriere_issues:
                 issues.append(ComplianceIssue(**issue_dict))
             
-            # Impressum (TMG)
-            impressum_issues = await check_impressum_compliance(url, soup, self.session)
+            # Impressum (TMG) - mit Browser-Rendering für JS-Seiten
+            impressum_issues = await check_impressum_compliance_smart(
+                url,
+                html=main_page['content'],
+                session=self.session
+            )
             for issue_dict in impressum_issues:
                 issues.append(ComplianceIssue(**issue_dict))
             
-            # Datenschutz (DSGVO)
-            datenschutz_issues = await check_datenschutz_compliance(url, soup, self.session)
+            # Datenschutz (DSGVO) - mit Browser-Rendering für JS-Seiten
+            datenschutz_issues = await check_datenschutz_compliance_smart(
+                url,
+                html=main_page['content'],
+                session=self.session
+            )
             for issue_dict in datenschutz_issues:
                 issues.append(ComplianceIssue(**issue_dict))
             
@@ -494,22 +504,6 @@ class ComplianceScanner:
     async def _check_contact_data(self, base_url: str, soup: BeautifulSoup) -> List[ComplianceIssue]:
         """Check for required contact information"""
         issues = []
-        
-        # This would be expanded with more sophisticated contact data detection
-        text = soup.get_text()
-        
-        # Basic email detection
-        if not re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', text):
-            issues.append(ComplianceIssue(
-                category="Kontaktdaten",
-                severity="warning", 
-                title="Keine E-Mail-Adresse gefunden",
-                description="Es wurde keine E-Mail-Adresse für Kontaktaufnahme gefunden",
-                risk_euro=500,
-                legal_basis="TMG § 5",
-                recommendation="Fügen Sie eine E-Mail-Adresse für Anfragen hinzu"
-            ))
-        
         return issues
     
     async def _check_social_media_plugins(self, base_url: str, soup: BeautifulSoup) -> List[ComplianceIssue]:

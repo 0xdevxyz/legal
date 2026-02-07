@@ -473,10 +473,10 @@ export const getFixHistory = async (): Promise<FixHistory> => {
 // ✅ Website Management API Calls
 
 export interface TrackedWebsite {
-  id: number;
+  id: string | number;
   url: string;
   last_score: number;
-  last_scan_date: string;
+  last_scan_date: string | null;
   last_scan?: string;
   compliance_score?: number;
   scan_count: number;
@@ -515,7 +515,7 @@ export const saveTrackedWebsite = async (url: string, score: number): Promise<Tr
   }
 };
 
-export const deleteTrackedWebsite = async (websiteId: number): Promise<void> => {
+export const deleteTrackedWebsite = async (websiteId: string | number): Promise<void> => {
   try {
 
     await apiClient.delete(`/api/v2/websites/${websiteId}`);

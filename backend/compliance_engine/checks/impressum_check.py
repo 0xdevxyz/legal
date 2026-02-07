@@ -2,7 +2,7 @@
 Impressum Check (TMG §5)
 Prüft Impressum-Compliance
 
-✨ UPGRADED: Nutzt Deep-Content-Analyzer für echte Seitenanalyse
+✨ UPGRADED: Nutzt Browser-Rendering für JavaScript-Websites (React, Vue, Next.js)
 """
 
 from bs4 import BeautifulSoup
@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from dataclasses import dataclass, asdict
 import re
 import logging
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,75 @@ class ImpressumIssue:
     auto_fixable: bool = False
     is_missing: bool = False  # True wenn komplettes Element fehlt (nicht nur Unterpunkt)
 
+
+def _find_impressum_links(soup: BeautifulSoup) -> List:
+    """
+    Verbesserte Suche nach Impressum-Links
+    Findet auch Links in modernen JS-Frameworks (React, Vue, Next.js)
+    """
+    all_links = []
+    
+    for a_tag in soup.find_all('a', href=True):
+        href = a_tag.get('href', '').lower()
+        link_text = a_tag.get_text(strip=True).lower()
+        aria_label = (a_tag.get('aria-label') or '').lower()
+        title = (a_tag.get('title') or '').lower()
+        
+        if any(kw in href for kw in ['impressum', 'imprint', 'legal-notice', 'legal_notice']):
+            all_links.append(a_tag)
+        elif any(kw in link_text for kw in ['impressum', 'imprint', 'legal notice', 'rechtliche hinweise']):
+            all_links.append(a_tag)
+        elif any(kw in aria_label for kw in ['impressum', 'imprint']):
+            all_links.append(a_tag)
+        elif any(kw in title for kw in ['impressum', 'imprint']):
+            all_links.append(a_tag)
+    
+    return all_links
+
+
+async def check_impressum_compliance_smart(url: str, html: str = None, session=None) -> List[Dict[str, Any]]:
+    """
+    SMART Impressum-Check mit Browser-Rendering für JS-Websites
+    
+    Erkennt automatisch Client-Side-Rendering (React, Vue, Next.js)
+    und rendert die Seite vollständig im Browser.
+    """
+    from ..browser_renderer import smart_fetch_html, detect_client_rendering
+    
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+        logger.info(f"✅ URL normalized to: {url}")
+    
+    logger.info(f"🔍 Smart Impressum-Check für: {url}")
+    
+    try:
+        if html is None:
+            import ssl
+            import certifi
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(connector=connector) as temp_session:
+                async with temp_session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
+                    html = await response.text()
+        
+        needs_browser, reason = detect_client_rendering(html)
+        
+        if needs_browser:
+            logger.info(f"🌐 Browser needed for Impressum check: {reason}")
+            html, metadata = await smart_fetch_html(url, html)
+            logger.info(f"✅ Browser rendering completed: {metadata.get('rendering_type', 'unknown')}")
+        else:
+            logger.info(f"⚡ Server-rendered detected, using simple HTML for Impressum check")
+        
+        soup = BeautifulSoup(html, 'html.parser')
+        return await check_impressum_compliance(url, soup, session)
+        
+    except Exception as e:
+        logger.error(f"❌ Smart Impressum check failed: {e}")
+        soup = BeautifulSoup(html if html else "", 'html.parser')
+        return await check_impressum_compliance(url, soup, session)
+
+
 async def check_impressum_compliance(url: str, soup: BeautifulSoup, session=None) -> List[Dict[str, Any]]:
     """
     Prüft Impressum-Compliance
@@ -34,11 +104,11 @@ async def check_impressum_compliance(url: str, soup: BeautifulSoup, session=None
     """
     issues = []
     
-    # Suche Impressum-Link
-    impressum_links = soup.find_all('a', text=re.compile(r'impressum|imprint|legal\s+notice', re.I))
-    footer_links = soup.find_all('a', href=re.compile(r'impressum|imprint|legal', re.I))
+    all_impressum_links = _find_impressum_links(soup)
     
-    all_impressum_links = impressum_links + footer_links
+    logger.info(f"🔍 Impressum-Links gefunden: {len(all_impressum_links)}")
+    for link in all_impressum_links[:3]:
+        logger.info(f"   → {link.get('href', 'N/A')}: {link.get_text(strip=True)[:50]}")
     
     if not all_impressum_links:
         # ✅ HAUPTELEMENT FEHLT: Generiere alle Sub-Issues mit is_missing=True

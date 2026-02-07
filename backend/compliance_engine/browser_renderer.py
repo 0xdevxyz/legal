@@ -245,12 +245,17 @@ def detect_client_rendering(html: str) -> Tuple[bool, str]:
     if 'BAILOUT_TO_CLIENT_SIDE_RENDERING' in html:
         return (True, 'Next.js client-side rendering detected')
     
-    # 2. Check: Leerer Root
+    # 2. NEU: Next.js immer mit Browser (wegen Hydration-Issues)
+    # Next.js kann SSR haben aber trotzdem dynamische Inhalte per Hydration laden
+    if soup.find(id='__next') or soup.find(id='__NEXT_DATA__') or '__next' in html:
+        return (True, 'Next.js detected - using browser for full hydration')
+    
+    # 3. Check: Leerer Root
     root = soup.find(id='root') or soup.find(id='app')
     if root and len(root.get_text(strip=True)) < 50:
         return (True, 'Empty root element (likely React/Vue SPA)')
     
-    # 3. Check: Framework-Indikatoren ohne Content
+    # 4. Check: Framework-Indikatoren ohne Content
     body = soup.find('body')
     if body:
         body_text = body.get_text(strip=True)
@@ -264,7 +269,7 @@ def detect_client_rendering(html: str) -> Tuple[bool, str]:
             if soup.find(attrs={'ng-version': True}):
                 return (True, 'Angular SPA detected')
     
-    # 4. Check: Kein semantisches HTML
+    # 5. Check: Kein semantisches HTML
     has_header = soup.find('header') is not None
     has_main = soup.find('main') is not None
     has_nav = soup.find('nav') is not None
@@ -275,7 +280,7 @@ def detect_client_rendering(html: str) -> Tuple[bool, str]:
         if len(scripts) > 8:
             return (True, 'Many scripts but no semantic HTML (likely CSR)')
     
-    # 5. Check: Bekannte SPA-Builder
+    # 6. Check: Bekannte SPA-Builder
     if 'webpack' in html.lower() or 'vite' in html.lower():
         content_length = len(soup.get_text(strip=True))
         if content_length < 500:
@@ -324,16 +329,22 @@ async def smart_fetch_html(url: str, simple_html: str = None) -> Tuple[str, Dict
     # 3. Wenn Browser nötig, nutze ihn
     if needs_browser:
         logger.info(f"🌐 Browser needed: {reason}")
-        async with BrowserRenderer() as renderer:
-            result = await renderer.render_page(url)
-            
-            if result['success']:
-                metadata.update(result['metadata'])
-                return result['html'], metadata
-            else:
-                # Fallback auf simple HTML
-                logger.warning(f"Browser rendering failed, using simple HTML")
-                return simple_html, metadata
+        try:
+            async with BrowserRenderer() as renderer:
+                result = await renderer.render_page(url)
+                
+                if result['success']:
+                    metadata.update(result['metadata'])
+                    return result['html'], metadata
+                else:
+                    logger.warning(f"Browser rendering failed, using simple HTML")
+                    metadata['browser_error'] = 'render_failed'
+                    return simple_html, metadata
+        except Exception as e:
+            logger.warning(f"⚠️ Browser not available: {e}, using simple HTML fallback")
+            metadata['browser_error'] = str(e)
+            metadata['used_browser'] = False
+            return simple_html, metadata
     
     # 4. Server-rendered, nutze simple HTML
     logger.info(f"⚡ Server-rendered, using simple fetch")

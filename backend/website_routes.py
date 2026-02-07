@@ -6,8 +6,9 @@ Handles tracked websites with persistence and limits
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
+from uuid import UUID
 import traceback
 import logging
 
@@ -26,10 +27,10 @@ class WebsiteCreate(BaseModel):
     score: int
 
 class TrackedWebsite(BaseModel):
-    id: int
+    id: Union[str, int, UUID]
     url: str
     last_score: int
-    last_scan_date: str
+    last_scan_date: Optional[str] = None
     scan_count: int
     is_primary: bool
 
@@ -108,7 +109,7 @@ async def get_websites(user=Depends(get_current_user)):
             
             websites = [
                 {
-                    "id": row["id"],
+                    "id": str(row["id"]),
                     "url": row["url"],
                     "last_score": int(row["last_score"]) if row["last_score"] is not None else 0,
                     "last_scan_date": row["last_scan_date"].isoformat() if row["last_scan_date"] else None,
@@ -306,8 +307,8 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
             
             return {
                 "success": True,
-                "website":                 {
-                    "id": website["id"],
+                "website": {
+                    "id": str(website["id"]),
                     "url": website["url"],
                     "last_score": int(website["last_score"]) if website["last_score"] is not None else 0,
                     "last_scan_date": website["last_scan_date"].isoformat() if website["last_scan_date"] else None,
@@ -324,11 +325,18 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Failed to save website: {str(e)}")
 
 @router.delete("/{website_id}")
-async def delete_website(website_id: int, user=Depends(get_current_user)):
+async def delete_website(website_id: str, user=Depends(get_current_user)):
     """Delete a tracked website"""
     try:
         # ✅ FIX: Verwende Helper-Funktion für user_id
         user_id = await get_user_id_from_token(user)
+        
+        # Convert website_id to UUID
+        try:
+            from uuid import UUID as UUIDType
+            website_uuid = UUIDType(website_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid website ID format")
         
         async with db_pool.acquire() as conn:
             # Check if website exists and belongs to user
@@ -336,7 +344,7 @@ async def delete_website(website_id: int, user=Depends(get_current_user)):
                 SELECT id, is_primary
                 FROM tracked_websites
                 WHERE id = $1 AND user_id = $2
-            """, website_id, user_id)
+            """, website_uuid, user_id)
             
             if not website:
                 raise HTTPException(status_code=404, detail="Website not found")
@@ -351,7 +359,7 @@ async def delete_website(website_id: int, user=Depends(get_current_user)):
             await conn.execute("""
                 DELETE FROM tracked_websites
                 WHERE id = $1
-            """, website_id)
+            """, website_uuid)
             
             # Update user_limits.websites_count
             await conn.execute("""
@@ -371,7 +379,7 @@ async def delete_website(website_id: int, user=Depends(get_current_user)):
 
 @router.get("/{website_id}/last-scan")
 async def get_last_scan(
-    website_id: int,
+    website_id: str,
     user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Get last scan for a website"""
@@ -379,12 +387,19 @@ async def get_last_scan(
         # ✅ FIX: Verwende Helper-Funktion für user_id
         user_id = await get_user_id_from_token(user)
         
+        # Convert website_id to UUID
+        try:
+            from uuid import UUID as UUIDType
+            website_uuid = UUIDType(website_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid website ID format")
+        
         async with db_pool.acquire() as conn:
             # Verify website belongs to user
             website = await conn.fetchrow("""
                 SELECT id FROM tracked_websites
                 WHERE id = $1 AND user_id = $2
-            """, website_id, user_id)
+            """, website_uuid, user_id)
             
             if not website:
                 raise HTTPException(status_code=404, detail="Website not found")
@@ -397,7 +412,7 @@ async def get_last_scan(
                 WHERE website_id = $1
                 ORDER BY scan_timestamp DESC
                 LIMIT 1
-            """, website_id)
+            """, website_uuid)
             
             if not scan:
                 raise HTTPException(status_code=404, detail="No scan history found")
@@ -424,7 +439,7 @@ async def get_last_scan(
 
 @router.get("/{website_id}/score-history")
 async def get_score_history(
-    website_id: int,
+    website_id: str,
     days: int = 30,
     user=Depends(get_current_user)
 ):
@@ -439,41 +454,69 @@ async def get_score_history(
         List of score history entries
     """
     try:
-        # ✅ FIX: Verwende Helper-Funktion für user_id
         user_id = await get_user_id_from_token(user)
         
+        try:
+            from uuid import UUID as UUIDType
+            website_uuid = UUIDType(website_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid website ID format")
+        
         async with db_pool.acquire() as conn:
-            # Verify website belongs to user
             website = await conn.fetchrow("""
-                SELECT id FROM tracked_websites
+                SELECT id, url FROM tracked_websites
                 WHERE id = $1 AND user_id = $2
-            """, website_id, user_id)
+            """, website_uuid, user_id)
             
             if not website:
                 raise HTTPException(status_code=404, detail="Website not found")
             
-            # Get score history
             history = await conn.fetch("""
                 SELECT 
-                    created_at as date,
-                    compliance_score as score,
-                    critical_issues_count,
-                    scan_type
+                    scan_date as date,
+                    overall_score as score,
+                    pillar_scores,
+                    id
                 FROM score_history
-                WHERE website_id = $1
-                  AND created_at >= NOW() - ($2 || ' days')::INTERVAL
-                ORDER BY created_at ASC
-            """, website_id, days)
+                WHERE website_id = $1 AND user_id = $2
+                  AND scan_date >= NOW() - ($3 || ' days')::INTERVAL
+                ORDER BY scan_date ASC
+            """, website_uuid, user_id, days)
             
-            return [
-                {
-                    "date": entry["date"].isoformat(),
-                    "score": entry["score"],
-                    "critical_count": entry["critical_issues_count"],
-                    "scan_type": entry["scan_type"]
-                }
-                for entry in history
-            ]
+            if not history:
+                history = await conn.fetch("""
+                    SELECT 
+                        COALESCE(scan_date, scan_timestamp, created_at) as date,
+                        COALESCE(overall_score, compliance_score)::int as score,
+                        critical_issues as critical_count,
+                        scan_data
+                    FROM scan_history
+                    WHERE (website_id = $1 OR url = $2) AND user_id = $3
+                      AND COALESCE(scan_date, scan_timestamp, created_at) >= NOW() - ($4 || ' days')::INTERVAL
+                    ORDER BY COALESCE(scan_date, scan_timestamp, created_at) ASC
+                """, website_uuid, website["url"], user_id, days)
+                
+                return [
+                    {
+                        "date": entry["date"].isoformat() if entry["date"] else None,
+                        "score": int(entry["score"]) if entry["score"] else 0,
+                        "critical_count": entry["critical_count"] or 0,
+                        "scan_type": "scan"
+                    }
+                    for entry in history
+                ]
+            
+            result = []
+            for entry in history:
+                pillar_scores = entry["pillar_scores"] or {}
+                critical_count = pillar_scores.get("critical_issues", 0) if isinstance(pillar_scores, dict) else 0
+                result.append({
+                    "date": entry["date"].isoformat() if entry["date"] else None,
+                    "score": entry["score"] or 0,
+                    "critical_count": critical_count,
+                    "scan_type": "scored"
+                })
+            return result
             
     except HTTPException:
         raise
