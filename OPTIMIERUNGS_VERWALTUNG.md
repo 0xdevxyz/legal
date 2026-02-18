@@ -32,8 +32,8 @@
 | 🔴 Critical | 3 | 3 | 0 |
 | 🟠 High | 8 | 8 | 0 |
 | 🟡 Medium | 15 | 11 | 4 |
-| 🟢 Low | 17 | 13 | 4 |
-| **Total** | **43** | **39** | **4** |
+| 🟢 Low | 17 | 17 | 0 |
+| **Total** | **43** | **43** | **0** |
 
 ---
 
@@ -850,7 +850,7 @@ pip install pre-commit
 ---
 
 ### LOW-011: Changelog.md pflegen
-**Status:** 🟢 Offen (via Git-History abgedeckt)  
+**Status:** ✅ Behoben (2026-02-18) – CHANGELOG.md erstellt  
 **Kategorie:** Documentation
 
 **Format:** Keep a Changelog
@@ -860,7 +860,7 @@ pip install pre-commit
 ---
 
 ### LOW-012: Contributor Guidelines
-**Status:** 🟢 Offen (intern, kein Open-Source-Projekt)  
+**Status:** ✅ Behoben (2026-02-18) – CONTRIBUTING.md erstellt  
 **Kategorie:** Documentation
 
 **Dateien:**
@@ -909,7 +909,7 @@ pip install pre-commit
 ---
 
 ### LOW-016: Dark Mode für Landing Page
-**Status:** 🟢 Offen (UI-Feature, separates Ticket)  
+**Status:** ✅ Behoben (2026-02-18) – tailwind darkMode=class + CSS-Variablen + prefers-color-scheme  
 **Kategorie:** UX
 
 **Zeitaufwand:** 4 Stunden
@@ -917,7 +917,7 @@ pip install pre-commit
 ---
 
 ### LOW-017: Onboarding-Tutorial verbessern
-**Status:** 🟢 Offen (UX-Feature, separates Ticket)  
+**Status:** ✅ Behoben (2026-02-18) – Welcome-Intro Step 0, Skip-Button, Schritt-Indikatoren  
 **Kategorie:** UX
 
 **Ideen:**
