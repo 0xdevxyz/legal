@@ -66,7 +66,7 @@ async def init_user_limits(user_id: int, plan_type: str):
 
 @router.post("/register", response_model=TokenResponse)
 @limiter.limit("3/hour")
-async def register(request_obj: Request, request: RegisterRequest):
+async def register(request: Request, body: RegisterRequest):
     """Register a new user"""
     if auth_service is None:
         logger.error("Auth service not initialized")
@@ -84,7 +84,7 @@ async def register(request_obj: Request, request: RegisterRequest):
     
     try:
         # Check if email exists
-        existing = await auth_service.get_user_by_email(request.email)
+        existing = await auth_service.get_user_by_email(body.email)
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -93,14 +93,14 @@ async def register(request_obj: Request, request: RegisterRequest):
         
         # Create user
         user = await auth_service.register_user(
-            request.email,
-            request.password,
-            request.full_name,
-            request.company
+            body.email,
+            body.password,
+            body.full_name,
+            body.company
         )
         
         # Initialize user_limits
-        await init_user_limits(user['id'], request.plan)
+        await init_user_limits(user['id'], body.plan)
         
         # Create tokens
         access_token = auth_service.create_access_token(user['id'])
@@ -112,7 +112,7 @@ async def register(request_obj: Request, request: RegisterRequest):
             "refresh_token": refresh_token,
             "token_type": "bearer",
             "user": {
-                "id": user['id'],
+                "id": str(user['id']),
                 "email": user['email'],
                 "full_name": user['full_name'],
                 "company": user.get('company')
@@ -150,7 +150,7 @@ async def register(request_obj: Request, request: RegisterRequest):
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
-async def login(request_obj: Request, request: LoginRequest):
+async def login(request: Request, body: LoginRequest):
     """Login user"""
     if auth_service is None:
         logger.error("Auth service not initialized")
@@ -160,7 +160,7 @@ async def login(request_obj: Request, request: LoginRequest):
         )
     
     try:
-        user = await auth_service.authenticate(request.email, request.password)
+        user = await auth_service.authenticate(body.email, body.password)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -177,7 +177,7 @@ async def login(request_obj: Request, request: LoginRequest):
             "refresh_token": refresh_token,
             "token_type": "bearer",
             "user": {
-                "id": user['id'],
+                "id": str(user['id']),
                 "email": user['email'],
                 "full_name": user['full_name'],
                 "company": user.get('company')
@@ -204,9 +204,9 @@ async def login(request_obj: Request, request: LoginRequest):
 
 @router.post("/refresh")
 @limiter.limit("10/minute")
-async def refresh_token(request_obj: Request, request: RefreshRequest):
+async def refresh_token(request: Request, body: RefreshRequest):
     """Refresh access token"""
-    new_access_token = await auth_service.refresh_access_token(request.refresh_token)
+    new_access_token = await auth_service.refresh_access_token(body.refresh_token)
     if not new_access_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -448,7 +448,7 @@ async def firebase_verify(request: FirebaseTokenRequest):
             "refresh_token": refresh_token,
             "token_type": "bearer",
             "user": {
-                "id": user['id'],
+                "id": str(user['id']),
                 "email": user['email'],
                 "full_name": user['full_name'],
                 "company": user.get('company')
