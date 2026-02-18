@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Globe, CheckCircle, ArrowRight, Loader2 } from 'lucide-react';
+import { Sparkles, Globe, CheckCircle, ArrowRight, Loader2, Shield, Zap, FileCheck, X } from 'lucide-react';
 import { analyzeWebsite, saveTrackedWebsite } from '@/lib/api';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useToast } from '@/components/ui/Toast';
@@ -12,7 +12,7 @@ interface OnboardingWizardProps {
 }
 
 export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(0);
   const [url, setUrl] = useState('');
   const [urlValid, setUrlValid] = useState(false);
   const [urlError, setUrlError] = useState('');
@@ -362,9 +362,88 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
   return (
     <div className="fixed inset-0 z-50 bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center p-4">
       <div className="max-w-2xl w-full">
+
+        {/* Step 0: Welcome Intro */}
+        {step === 0 && (
+          <div className="bg-white rounded-2xl shadow-2xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <button
+              onClick={onComplete}
+              className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Onboarding überspringen"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center justify-center mb-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center">
+                <Sparkles className="w-8 h-8 text-white" />
+              </div>
+            </div>
+
+            <h1 className="text-3xl font-bold text-gray-900 text-center mb-3">
+              Willkommen bei Complyo! 👋
+            </h1>
+            <p className="text-gray-500 text-center mb-8">
+              In 3 Schritten zu einer rechtssicheren Website
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+              <div className="flex flex-col items-center text-center p-4 bg-blue-50 rounded-xl">
+                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mb-3">
+                  <Globe className="w-5 h-5 text-blue-600" />
+                </div>
+                <p className="font-semibold text-gray-800 text-sm">1. Website eingeben</p>
+                <p className="text-xs text-gray-500 mt-1">Domain eintragen – fertig</p>
+              </div>
+              <div className="flex flex-col items-center text-center p-4 bg-purple-50 rounded-xl">
+                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mb-3">
+                  <Zap className="w-5 h-5 text-purple-600" />
+                </div>
+                <p className="font-semibold text-gray-800 text-sm">2. KI analysiert</p>
+                <p className="text-xs text-gray-500 mt-1">DSGVO, Cookies, Impressum</p>
+              </div>
+              <div className="flex flex-col items-center text-center p-4 bg-green-50 rounded-xl">
+                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mb-3">
+                  <FileCheck className="w-5 h-5 text-green-600" />
+                </div>
+                <p className="font-semibold text-gray-800 text-sm">3. Ergebnisse & Fixes</p>
+                <p className="text-xs text-gray-500 mt-1">Konkrete Lösungsvorschläge</p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-4 mb-6 flex items-start gap-3">
+              <Shield className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+              <p className="text-sm text-gray-600">
+                Die Analyse dauert <strong>10–20 Sekunden</strong> und prüft Ihre Website auf DSGVO, TTDSG, Impressumspflicht und BFSG-Barrierefreiheit.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setStep(1)}
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-4 rounded-xl font-semibold text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+            >
+              Jetzt starten
+              <ArrowRight className="w-5 h-5" />
+            </button>
+
+            <button
+              onClick={onComplete}
+              className="w-full mt-3 py-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Überspringen – ich kenne Complyo bereits
+            </button>
+          </div>
+        )}
+
         {/* Step 1: Welcome & URL Input */}
         {step === 1 && (
           <div className="bg-white rounded-2xl shadow-2xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Step indicator */}
+            <div className="flex items-center justify-center gap-2 mb-6">
+              {[1,2,3].map(s => (
+                <div key={s} className={`h-2 rounded-full transition-all duration-300 ${s === 1 ? 'w-8 bg-blue-600' : 'w-4 bg-gray-200'}`} />
+              ))}
+            </div>
             <div className="flex items-center justify-center mb-6">
               <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center">
                 <Sparkles className="w-8 h-8 text-white" />
@@ -449,6 +528,11 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
         {/* Step 2: Scanning */}
         {step === 2 && (
           <div className="bg-white rounded-2xl shadow-2xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex items-center justify-center gap-2 mb-6">
+              {[1,2,3].map(s => (
+                <div key={s} className={`h-2 rounded-full transition-all duration-300 ${s <= 2 ? 'w-8 bg-blue-600' : 'w-4 bg-gray-200'}`} />
+              ))}
+            </div>
             {/* ✅ FIX: Error-Anzeige wenn Scan fehlgeschlagen */}
             {scanError && (
               <div className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-xl">
@@ -546,6 +630,11 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
 
           return (
             <div className="bg-white rounded-2xl shadow-2xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-center gap-2 mb-6">
+                {[1,2,3].map(s => (
+                  <div key={s} className="h-2 w-8 rounded-full bg-blue-600" />
+                ))}
+              </div>
               <div className="flex items-center justify-center mb-6">
                 <div className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold ${complianceMsg.bgColor} ${complianceMsg.color}`}>
                   {scanResult.compliance_score}

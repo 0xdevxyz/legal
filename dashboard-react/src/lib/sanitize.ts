@@ -14,7 +14,7 @@ const ALLOWED_CONFIG: Config = {
 
 export function sanitizeHtml(dirty: string): string {
   if (typeof window === 'undefined') return dirty;
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  /* eslint-disable-next-line */
   const DOMPurify = require('dompurify');
   return DOMPurify.sanitize(dirty, ALLOWED_CONFIG) as string;
 }

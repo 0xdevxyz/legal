@@ -45,6 +45,7 @@ export default function RootLayout({
   return (
     <html lang="de" className="scroll-smooth">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{if(window.matchMedia('(prefers-color-scheme: dark)').matches){document.documentElement.classList.add('dark')}}catch(e){}})()` }} />
         <link rel="icon" type="image/png" href="/favicon-dark.png" media="(prefers-color-scheme: dark)" />
         <link rel="icon" type="image/png" href="/favicon-light.png" media="(prefers-color-scheme: light)" />
         <link rel="apple-touch-icon" href="/favicon-dark.png" />
