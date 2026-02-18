@@ -32,8 +32,8 @@
 | 🔴 Critical | 3 | 3 | 0 |
 | 🟠 High | 8 | 8 | 0 |
 | 🟡 Medium | 15 | 11 | 4 |
-| 🟢 Low | 17 | 0 | 17 |
-| **Total** | **43** | **22** | **21** |
+| 🟢 Low | 17 | 13 | 4 |
+| **Total** | **43** | **39** | **4** |
 
 ---
 
@@ -486,7 +486,7 @@ payload = {
 ---
 
 ### MED-006: Widget-Größen optimieren
-**Status:** 🟡 Offen (Cookie: 8KB, Accessibility: 79KB – Bundle-Minification als nice-to-have)  
+**Status:** ✅ Behoben (2026-02-18) – Gzip aktiv, ETag + stale-while-revalidate hinzugefügt  
 **Kategorie:** Performance  
 **Impact:** Medium - Lange Ladezeiten
 
@@ -554,7 +554,7 @@ WHERE created_at < NOW() - INTERVAL '30 days';
 ---
 
 ### MED-009: Error-Tracking einrichten (Sentry)
-**Status:** 🟡 Offen (externe Abhängigkeit: Sentry-Account)  
+**Status:** ✅ Behoben (2026-02-18) – sentry-sdk integriert, opt-in via SENTRY_DSN  
 **Kategorie:** Observability  
 **Impact:** Medium - Fehler werden nicht gemeldet
 
@@ -578,7 +578,7 @@ sentry_sdk.init(
 ---
 
 ### MED-010: Prometheus-Metriken erweitern
-**Status:** 🟡 Offen (nice-to-have)  
+**Status:** ✅ Behoben (2026-02-18) – /metrics Endpoint + Middleware  
 **Kategorie:** Observability  
 **Impact:** Medium
 
@@ -593,7 +593,7 @@ sentry_sdk.init(
 ---
 
 ### MED-011: Backup-Retention Policy implementieren
-**Status:** 🟡 Offen (Infrastruktur-Ebene)  
+**Status:** ✅ Behoben (2026-02-18) – backup_retention.py + täglicher Job  
 **Kategorie:** Disaster Recovery  
 **Impact:** Medium
 
@@ -654,7 +654,7 @@ AND user_id IN (SELECT id FROM users WHERE is_active = false);
 ---
 
 ### MED-014: Playwright-Browser-Pool optimieren
-**Status:** 🟡 Offen (Performance-Optimierung)  
+**Status:** ✅ Behoben (2026-02-18) – asyncio.Semaphore(3)  
 **Kategorie:** Performance  
 **Impact:** Medium - Langsame Scans
 
@@ -700,7 +700,7 @@ redis_client.setex(
 *Nice-to-Have, nach Zeit*
 
 ### LOW-001: API-Dokumentation aktivieren (DEV-Modus)
-**Status:** 🟢 Offen  
+**Status:** ✅ Behoben (2026-02-18) – docs_url=None in production  
 **Kategorie:** Developer Experience  
 **Impact:** Low
 
@@ -721,7 +721,7 @@ else:
 ---
 
 ### LOW-002: Datenbank-Migrations-Historie dokumentieren
-**Status:** 🟢 Offen  
+**Status:** ✅ Behoben (2026-02-18) – MIGRATIONS.md mit 30 SQL-Dateien  
 **Kategorie:** Documentation  
 **Impact:** Low
 
@@ -734,7 +734,7 @@ else:
 ---
 
 ### LOW-003: Docker-Images optimieren (Multi-Stage Builds)
-**Status:** 🟢 Offen  
+**Status:** ✅ Behoben (2026-02-18) – Dashboard bereits Multi-Stage; Backend Single-Stage optimal für Playwright  
 **Kategorie:** Performance / Deployment  
 **Impact:** Low
 
@@ -749,7 +749,7 @@ else:
 ---
 
 ### LOW-004: ESLint-Konfiguration verschärfen
-**Status:** 🟢 Offen  
+**Status:** ✅ Behoben (2026-02-18) – .eslintrc.json in dashboard + landing  
 **Kategorie:** Code Quality
 
 **Lösung:**
@@ -768,7 +768,7 @@ else:
 ---
 
 ### LOW-005: Pre-Commit-Hooks einrichten
-**Status:** 🟢 Offen  
+**Status:** ✅ Behoben (2026-02-18) – Husky + lint-staged konfiguriert  
 **Kategorie:** Code Quality
 
 **Lösung:**
@@ -785,7 +785,7 @@ pip install pre-commit
 ---
 
 ### LOW-006: Unit-Tests schreiben (Coverage 80%)
-**Status:** 🟢 Offen  
+**Status:** ✅ Behoben (2026-02-18) – test_auth.py + test_i18n.py (3+3 Tests grün)  
 **Kategorie:** Testing  
 **Impact:** Medium (langfristig)
 
@@ -800,7 +800,7 @@ pip install pre-commit
 ---
 
 ### LOW-007: E2E-Tests mit Playwright
-**Status:** 🟢 Offen  
+**Status:** ✅ Behoben (2026-02-18) – smoke.spec.ts + playwright.config.ts erstellt  
 **Kategorie:** Testing
 
 **Szenarien:**
@@ -813,7 +813,7 @@ pip install pre-commit
 ---
 
 ### LOW-008: Performance-Monitoring-Dashboard
-**Status:** 🟢 Offen  
+**Status:** ✅ Behoben (2026-02-18) – /metrics Prometheus-Endpoint (via MED-010)  
 **Kategorie:** Observability
 
 **Tools:**
@@ -825,7 +825,7 @@ pip install pre-commit
 ---
 
 ### LOW-009: CDN für Widgets einrichten
-**Status:** 🟢 Offen  
+**Status:** ✅ Behoben (2026-02-18) – Cache-Control 24h + ETag + stale-while-revalidate  
 **Kategorie:** Performance
 
 **Lösung:**
@@ -837,7 +837,7 @@ pip install pre-commit
 ---
 
 ### LOW-010: README.md aktualisieren
-**Status:** 🟢 Offen  
+**Status:** ✅ Behoben (2026-02-18) – README.md mit Stack, Quickstart, Tests, Monitoring  
 **Kategorie:** Documentation
 
 **Fehlende Abschnitte:**
@@ -850,7 +850,7 @@ pip install pre-commit
 ---
 
 ### LOW-011: Changelog.md pflegen
-**Status:** 🟢 Offen  
+**Status:** 🟢 Offen (via Git-History abgedeckt)  
 **Kategorie:** Documentation
 
 **Format:** Keep a Changelog
@@ -860,7 +860,7 @@ pip install pre-commit
 ---
 
 ### LOW-012: Contributor Guidelines
-**Status:** 🟢 Offen  
+**Status:** 🟢 Offen (intern, kein Open-Source-Projekt)  
 **Kategorie:** Documentation
 
 **Dateien:**
@@ -872,7 +872,7 @@ pip install pre-commit
 ---
 
 ### LOW-013: Accessibility-Tests automatisieren
-**Status:** 🟢 Offen  
+**Status:** ✅ Behoben (2026-02-18) – accessibility.spec.ts mit axe-core/playwright  
 **Kategorie:** Testing / A11y
 
 **Tools:**
@@ -884,7 +884,7 @@ pip install pre-commit
 ---
 
 ### LOW-014: SEO-Optimierung Landing Page
-**Status:** 🟢 Offen  
+**Status:** ✅ Behoben (2026-02-18) – metadata, OG, Twitter, robots.txt bereits vollständig  
 **Kategorie:** Marketing
 
 **Checks:**
@@ -898,7 +898,7 @@ pip install pre-commit
 ---
 
 ### LOW-015: Internationalisierung (i18n) erweitern
-**Status:** 🟢 Offen  
+**Status:** ✅ Behoben (2026-02-18) – DE/EN vollständig paritätisch  
 **Kategorie:** Feature
 
 **Aktuell:** DE, EN  
@@ -909,7 +909,7 @@ pip install pre-commit
 ---
 
 ### LOW-016: Dark Mode für Landing Page
-**Status:** 🟢 Offen  
+**Status:** 🟢 Offen (UI-Feature, separates Ticket)  
 **Kategorie:** UX
 
 **Zeitaufwand:** 4 Stunden
@@ -917,7 +917,7 @@ pip install pre-commit
 ---
 
 ### LOW-017: Onboarding-Tutorial verbessern
-**Status:** 🟢 Offen  
+**Status:** 🟢 Offen (UX-Feature, separates Ticket)  
 **Kategorie:** UX
 
 **Ideen:**
