@@ -72,6 +72,10 @@ class I18nService:
             logger.warning(f"Translation error for '{key}': {e}")
             return key
     
+    def translate(self, language: str, key: str, **kwargs) -> str:
+        """Alias for get_translation with (language, key) argument order"""
+        return self.get_translation(key, language, **kwargs)
+
     def detect_language_from_url(self, url: str) -> str:
         """Detect language from URL"""
         if url and ".de" in url:

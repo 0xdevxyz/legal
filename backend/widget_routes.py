@@ -10,6 +10,9 @@ from typing import Dict, Any, Optional
 import os
 from datetime import datetime
 import time
+import gzip
+import io
+import hashlib
 import asyncpg
 from accessibility_templates import AccessibilityTemplates
 from accessibility_patch_generator import AccessibilityPatchGenerator
@@ -46,7 +49,7 @@ class WidgetAnalyticsRequest(BaseModel):
 
 
 @router.get("/api/widgets/cookie-consent.js")
-async def serve_cookie_consent_widget():
+async def serve_cookie_consent_widget(request: Request):
     """
     Serve the Cookie Consent Widget JavaScript (Legacy v1)
     """
@@ -59,19 +62,32 @@ async def serve_cookie_consent_widget():
     with open(widget_path, 'r', encoding='utf-8') as f:
         content = f.read()
     
-    # Return as JavaScript with correct MIME type
+    headers = {
+        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=3600',
+        'Access-Control-Allow-Origin': '*',
+        'ETag': f'"{hashlib.md5(content.encode()).hexdigest()}"',
+        'Vary': 'Accept-Encoding',
+    }
+
+    accept_encoding = request.headers.get('Accept-Encoding', '')
+    if 'gzip' in accept_encoding:
+        compressed = gzip.compress(content.encode('utf-8'))
+        headers['Content-Encoding'] = 'gzip'
+        return Response(
+            content=compressed,
+            media_type='application/javascript',
+            headers=headers,
+        )
+
     return Response(
         content=content,
         media_type='application/javascript',
-        headers={
-            'Cache-Control': 'public, max-age=3600',
-            'Access-Control-Allow-Origin': '*'
-        }
+        headers=headers,
     )
 
 @router.get("/api/widgets/privacy-manager.js")
 @router.get("/api/widgets/cookie-compliance.js")  # Legacy support
-async def serve_cookie_compliance_widget(site_id: Optional[str] = None):
+async def serve_cookie_compliance_widget(request: Request, site_id: Optional[str] = None):
     """
     Serve the complete Cookie Compliance Widget (v2)
     
@@ -115,15 +131,28 @@ async def serve_cookie_compliance_widget(site_id: Optional[str] = None):
 """
         
         # Return combined widget
+        headers = {
+            'Cache-Control': 'public, max-age=86400, stale-while-revalidate=3600',
+            'Access-Control-Allow-Origin': '*',
+            'X-Complyo-Version': '2.0.0',
+            'ETag': f'"{hashlib.md5(combined_code.encode()).hexdigest()}"',
+            'Vary': 'Accept-Encoding',
+        }
+
+        accept_encoding = request.headers.get('Accept-Encoding', '')
+        if 'gzip' in accept_encoding:
+            compressed = gzip.compress(combined_code.encode('utf-8'))
+            headers['Content-Encoding'] = 'gzip'
+            return Response(
+                content=compressed,
+                media_type='application/javascript',
+                headers=headers,
+            )
+
         return Response(
             content=combined_code,
             media_type='application/javascript',
-            headers={
-                'Cache-Control': 'public, max-age=300',  # 5 Minuten Cache
-                'Access-Control-Allow-Origin': '*',
-                'X-Complyo-Version': '2.0.0',
-                'ETag': '2.0.0-service-selection'  # Cache-Busting
-            }
+            headers=headers,
         )
         
     except Exception as e:
@@ -132,7 +161,7 @@ async def serve_cookie_compliance_widget(site_id: Optional[str] = None):
 
 
 @router.get("/api/widgets/accessibility.js")
-async def serve_accessibility_widget(version: str = "6"):
+async def serve_accessibility_widget(request: Request, version: str = "6"):
     """
     Serve the Accessibility Widget JavaScript
     
@@ -157,14 +186,28 @@ async def serve_accessibility_widget(version: str = "6"):
         content = f.read()
     
     # Return as JavaScript with correct MIME type
+    headers = {
+        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=3600',
+        'Access-Control-Allow-Origin': '*',
+        'X-Complyo-Widget-Version': '6.1.0',
+        'ETag': f'"{hashlib.md5(content.encode()).hexdigest()}"',
+        'Vary': 'Accept-Encoding',
+    }
+
+    accept_encoding = request.headers.get('Accept-Encoding', '')
+    if 'gzip' in accept_encoding:
+        compressed = gzip.compress(content.encode('utf-8'))
+        headers['Content-Encoding'] = 'gzip'
+        return Response(
+            content=compressed,
+            media_type='application/javascript',
+            headers=headers,
+        )
+
     return Response(
         content=content,
         media_type='application/javascript',
-        headers={
-            'Cache-Control': 'public, max-age=60',  # 60 Sekunden Cache für schnelle Updates
-            'Access-Control-Allow-Origin': '*',
-            'X-Complyo-Widget-Version': '6.1.0'
-        }
+        headers=headers,
     )
 
 

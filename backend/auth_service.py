@@ -2,12 +2,15 @@ import os
 import bcrypt
 import jwt
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 import asyncpg
 import logging
 
 logger = logging.getLogger(__name__)
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 class AuthService:
     def __init__(self, db_pool: asyncpg.Pool):
@@ -91,8 +94,8 @@ class AuthService:
         """Create JWT access token"""
         payload = {
             "user_id": str(user_id),
-            "exp": datetime.utcnow() + timedelta(minutes=self.access_token_expire),
-            "iat": datetime.utcnow(),
+            "exp": _utcnow() + timedelta(minutes=self.access_token_expire),
+            "iat": _utcnow(),
             "iss": self.jwt_issuer,
             "aud": self.jwt_audience,
             "type": "access"

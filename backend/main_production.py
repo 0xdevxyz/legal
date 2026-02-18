@@ -13,9 +13,23 @@ import hashlib
 import jwt
 import datetime
 import os
+import time as _time
 import asyncpg
 import json
 import logging
+
+import sentry_sdk as _sentry_sdk
+_sentry_dsn = os.getenv("SENTRY_DSN")
+if _sentry_dsn:
+    _sentry_sdk.init(
+        dsn=_sentry_dsn,
+        traces_sample_rate=0.1,
+        environment=os.getenv("ENVIRONMENT", "production"),
+    )
+
+from prometheus_client import Counter as _PCounter, Histogram as _PHistogram, generate_latest as _prom_generate, CONTENT_TYPE_LATEST as _PROM_CT
+_http_requests_total = _PCounter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+_http_request_duration = _PHistogram("http_request_duration_seconds", "HTTP request duration", ["method", "endpoint"])
 from compliance_engine.scanner import ComplianceScanner
 from compliance_engine.fixer import AIComplianceFixer
 from compliance_engine.workflow_engine import workflow_engine, UserSkillLevel
@@ -31,6 +45,15 @@ from fastapi.responses import StreamingResponse
 import io
 from payment.stripe_service import StripeService
 import stripe
+
+import sentry_sdk
+_sentry_dsn = os.getenv("SENTRY_DSN")
+if _sentry_dsn:
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        traces_sample_rate=0.1,
+        environment=os.getenv("ENVIRONMENT", "production"),
+    )
 
 # Import API Routers
 from lead_routes import lead_router
@@ -143,10 +166,15 @@ class CreateCheckoutSessionRequest(BaseModel):
     cancel_url: str
 
 # Initialize FastAPI app
+ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
+_docs_url = "/docs" if ENVIRONMENT != "production" else None
+_redoc_url = "/redoc" if ENVIRONMENT != "production" else None
 app = FastAPI(
     title="Complyo API",
     description="KI-gestützte Website-Compliance-Plattform",
-    version="2.2.0"
+    version="2.2.0",
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
 )
 
 # Static files für CMP-Adapter
@@ -194,6 +222,16 @@ async def add_request_id(request: Request, call_next):
     request.state.request_id = request_id
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
+    return response
+
+@app.middleware("http")
+async def prometheus_middleware(request: Request, call_next):
+    start = _time.monotonic()
+    response = await call_next(request)
+    duration = _time.monotonic() - start
+    endpoint = request.url.path
+    _http_requests_total.labels(method=request.method, endpoint=endpoint, status=str(response.status_code)).inc()
+    _http_request_duration.labels(method=request.method, endpoint=endpoint).observe(duration)
     return response
 
 # Security
@@ -546,6 +584,17 @@ async def startup_event():
                         "DELETE FROM users WHERE is_active = FALSE AND updated_at < NOW() - INTERVAL '2 years' RETURNING COUNT(*)"
                     )
                     logger.info(f"GDPR cleanup: removed {expired_sessions or 0} expired sessions, {old_inactive or 0} inactive accounts")
+                    # Retention cleanup (MED-011)
+                    deleted_consent = await conn.fetchval(
+                        "DELETE FROM cookie_consent_logs WHERE timestamp < NOW() - INTERVAL '1 year' RETURNING COUNT(*)"
+                    )
+                    deleted_ai_logs = await conn.fetchval(
+                        "DELETE FROM ai_call_logs WHERE created_at < NOW() - INTERVAL '90 days' RETURNING COUNT(*)"
+                    )
+                    deleted_verif = await conn.fetchval(
+                        "DELETE FROM email_verifications WHERE expires_at < NOW() RETURNING COUNT(*)"
+                    )
+                    logger.info(f"Retention cleanup: consent_logs={deleted_consent or 0}, ai_logs={deleted_ai_logs or 0}, email_verif={deleted_verif or 0}")
                 await asyncio.sleep(24 * 60 * 60)
             except asyncio.CancelledError:
                 break
@@ -663,6 +712,17 @@ async def health_check():
         "checks": checks,
         "timestamp": datetime.datetime.now().isoformat()
     }
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics_endpoint(request: Request):
+    _metrics_token = os.getenv("METRICS_TOKEN")
+    if _metrics_token:
+        auth = request.headers.get("Authorization", "")
+        if auth != f"Bearer {_metrics_token}":
+            raise HTTPException(status_code=401, detail="Unauthorized")
+    from fastapi.responses import Response as _Resp
+    return _Resp(content=_prom_generate(), media_type=_PROM_CT)
 
 
 # ==================== NEU: ENHANCED SCAN API ====================

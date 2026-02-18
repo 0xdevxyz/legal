@@ -71,6 +71,8 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SENDER_EMAIL=${SENDER_EMAIL:-noreply@complyo.tech}
       - SENDER_NAME=${SENDER_NAME:-Complyo Compliance}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - METRICS_TOKEN=${METRICS_TOKEN:-}
       - VIRTUAL_HOST=api.complyo.tech
       - LETSENCRYPT_HOST=api.complyo.tech
       - LETSENCRYPT_EMAIL=admin@complyo.tech

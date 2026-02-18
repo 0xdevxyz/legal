@@ -19,6 +19,8 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
+_browser_semaphore = asyncio.Semaphore(3)
+
 
 class BrowserRenderer:
     """
@@ -72,78 +74,69 @@ class BrowserRenderer:
         """
         if not self.browser:
             raise RuntimeError("Browser not initialized. Use async context manager.")
-        
-        page = None
-        try:
-            logger.info(f"🌐 Rendering page: {url}")
-            
-            page = await self.browser.new_page()
-            
-            # Setze User-Agent
-            await page.set_extra_http_headers({
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Complyo-Scanner/2.0'
-            })
-            
-            # Navigiere zur Seite
-            start_time = asyncio.get_event_loop().time()
-            
+
+        async with _browser_semaphore:
+            page = None
             try:
-                response = await page.goto(url, wait_until=wait_for, timeout=timeout)
-                
-                if not response:
-                    return self._create_error_response(url, "No response from server")
-                
-                # Warte auf JavaScript-Rendering
-                # Gib React/Vue/Angular Zeit zum Rendern
-                await asyncio.sleep(2)
-                
-                # Warte auf häufige Framework-Indikatoren
+                logger.info(f"🌐 Rendering page: {url}")
+
+                page = await self.browser.new_page()
+
+                await page.set_extra_http_headers({
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Complyo-Scanner/2.0'
+                })
+
+                start_time = asyncio.get_event_loop().time()
+
                 try:
-                    # React Root
-                    await page.wait_for_selector('#root, #app, [data-reactroot], main, header', timeout=5000)
-                except:
-                    pass  # Kein Problem, weitermachen
-                
+                    response = await page.goto(url, wait_until=wait_for, timeout=timeout)
+
+                    if not response:
+                        return self._create_error_response(url, "No response from server")
+
+                    await asyncio.sleep(2)
+
+                    try:
+                        await page.wait_for_selector('#root, #app, [data-reactroot], main, header', timeout=5000)
+                    except:
+                        pass
+
+                except Exception as e:
+                    logger.warning(f"Navigation timeout/error: {e}, trying to get content anyway")
+                    await asyncio.sleep(3)
+
+                html = await page.content()
+
+                end_time = asyncio.get_event_loop().time()
+                render_time = round((end_time - start_time) * 1000, 2)
+
+                rendering_info = await self._analyze_rendering(page, html)
+
+                metadata = {
+                    'url': url,
+                    'render_time_ms': render_time,
+                    'status_code': response.status if response else None,
+                    'final_url': page.url,
+                    'title': await page.title(),
+                    **rendering_info
+                }
+
+                logger.info(f"✅ Rendered successfully in {render_time}ms ({rendering_info['rendering_type']})")
+
+                return {
+                    'html': html,
+                    'success': True,
+                    'rendering_type': rendering_info['rendering_type'],
+                    'metadata': metadata
+                }
+
             except Exception as e:
-                logger.warning(f"Navigation timeout/error: {e}, trying to get content anyway")
-                # Versuche trotzdem HTML zu bekommen
-                await asyncio.sleep(3)
-            
-            # Hole vollständig gerendertes HTML
-            html = await page.content()
-            
-            end_time = asyncio.get_event_loop().time()
-            render_time = round((end_time - start_time) * 1000, 2)  # ms
-            
-            # Analysiere Rendering-Typ
-            rendering_info = await self._analyze_rendering(page, html)
-            
-            # Sammle Metadaten
-            metadata = {
-                'url': url,
-                'render_time_ms': render_time,
-                'status_code': response.status if response else None,
-                'final_url': page.url,  # Nach Redirects
-                'title': await page.title(),
-                **rendering_info
-            }
-            
-            logger.info(f"✅ Rendered successfully in {render_time}ms ({rendering_info['rendering_type']})")
-            
-            return {
-                'html': html,
-                'success': True,
-                'rendering_type': rendering_info['rendering_type'],
-                'metadata': metadata
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Browser rendering failed for {url}: {e}")
-            return self._create_error_response(url, str(e))
-            
-        finally:
-            if page:
-                await page.close()
+                logger.error(f"❌ Browser rendering failed for {url}: {e}")
+                return self._create_error_response(url, str(e))
+
+            finally:
+                if page:
+                    await page.close()
     
     async def _analyze_rendering(self, page: Page, html: str) -> Dict[str, Any]:
         """
