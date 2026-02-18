@@ -46,6 +46,7 @@ interface RegisterData {
     full_name: string;
     company?: string;
     plan: string;
+    modules?: string[];
 }
 
 interface AuthContextType {

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, ArrowRight, ArrowLeft, Copy, Download, AlertCircle, Building, Mail, Phone, MapPin, User, Globe } from 'lucide-react';
+import { sanitizeHtml } from '@/lib/sanitize';
 
 interface LegalTextWizardProps {
   fixType: 'impressum' | 'datenschutz' | 'agb' | 'widerruf';
@@ -499,7 +500,7 @@ Erstellt mit Complyo - Ihrer Compliance-Plattform</em></small></p>`;
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 max-h-96 overflow-y-auto">
               <div 
                 className="prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: finalContent }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(finalContent || '') }}
               />
             </div>
 

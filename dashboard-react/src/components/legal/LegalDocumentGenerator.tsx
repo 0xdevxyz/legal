@@ -10,6 +10,7 @@ import {
   Loader2, Info, ExternalLink
 } from 'lucide-react';
 import { useDashboardStore } from '@/stores/dashboard';
+import { sanitizeHtml } from '@/lib/sanitize';
 
 interface LegalDocumentGeneratorProps {
   documentType: 'impressum' | 'datenschutz';
@@ -802,7 +803,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
           <CardContent className="space-y-6 pt-6">
             {/* Preview */}
             <div className="bg-white rounded-lg p-6 max-h-80 overflow-y-auto">
-              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: finalContent }} />
+              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeHtml(finalContent || '') }} />
             </div>
 
             {/* Action Buttons */}

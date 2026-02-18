@@ -128,11 +128,14 @@ export default function ExpertServiceModal() {
                     <div className="flex items-center gap-2 mb-2">
                       <input
                         type="radio"
+                        id="service-komplett"
+                        name="service_type"
                         checked={formData.service_type === '49'}
                         onChange={() => setFormData({...formData, service_type: '49'})}
                         className="w-4 h-4"
+                        aria-label="Komplett-Paket für 49 Euro pro Monat auswählen"
                       />
-                      <h4 className="text-white font-semibold">Komplett-Paket</h4>
+                      <label htmlFor="service-komplett" className="text-white font-semibold cursor-pointer">Komplett-Paket</label>
                     </div>
                     <p className="text-gray-400 text-sm">49€/Monat (alle 4 Säulen)</p>
                     <p className="text-gray-500 text-xs mt-1">
@@ -152,11 +155,14 @@ export default function ExpertServiceModal() {
                     <div className="flex items-center gap-2 mb-2">
                       <input
                         type="radio"
+                        id="service-expert"
+                        name="service_type"
                         checked={formData.service_type === '2990'}
                         onChange={() => setFormData({...formData, service_type: '2990'})}
                         className="w-4 h-4"
+                        aria-label="Expertenservice für 2990 Euro plus 39 Euro pro Monat auswählen"
                       />
-                      <h4 className="text-white font-semibold">Expertenservice</h4>
+                      <label htmlFor="service-expert" className="text-white font-semibold cursor-pointer">Expertenservice</label>
                     </div>
                     <p className="text-gray-400 text-sm">2.990€ + 39€/Monat</p>
                     <p className="text-gray-500 text-xs mt-1">
@@ -170,11 +176,12 @@ export default function ExpertServiceModal() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Name */}
                 <div>
-                  <label className="block text-white font-semibold mb-2">
+                  <label htmlFor="expert-name" className="block text-white font-semibold mb-2">
                     Name *
                   </label>
                   <input
                     type="text"
+                    id="expert-name"
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({...formData, name: e.target.value})}
@@ -185,11 +192,12 @@ export default function ExpertServiceModal() {
                 
                 {/* Email */}
                 <div>
-                  <label className="block text-white font-semibold mb-2">
+                  <label htmlFor="expert-email" className="block text-white font-semibold mb-2">
                     E-Mail *
                   </label>
                   <input
                     type="email"
+                    id="expert-email"
                     required
                     value={formData.email}
                     onChange={(e) => setFormData({...formData, email: e.target.value})}
@@ -200,11 +208,12 @@ export default function ExpertServiceModal() {
                 
                 {/* Phone */}
                 <div>
-                  <label className="block text-white font-semibold mb-2">
+                  <label htmlFor="expert-phone" className="block text-white font-semibold mb-2">
                     Telefon (optional)
                   </label>
                   <input
                     type="tel"
+                    id="expert-phone"
                     value={formData.phone}
                     onChange={(e) => setFormData({...formData, phone: e.target.value})}
                     className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg border border-gray-700 focus:border-blue-500 focus:outline-none"
@@ -214,11 +223,12 @@ export default function ExpertServiceModal() {
                 
                 {/* Website */}
                 <div>
-                  <label className="block text-white font-semibold mb-2">
+                  <label htmlFor="expert-website" className="block text-white font-semibold mb-2">
                     Website-URL *
                   </label>
                   <input
                     type="url"
+                    id="expert-website"
                     required
                     value={formData.website}
                     onChange={(e) => setFormData({...formData, website: e.target.value})}
@@ -229,10 +239,11 @@ export default function ExpertServiceModal() {
                 
                 {/* Message */}
                 <div>
-                  <label className="block text-white font-semibold mb-2">
+                  <label htmlFor="expert-message" className="block text-white font-semibold mb-2">
                     Ihre Nachricht
                   </label>
                   <textarea
+                    id="expert-message"
                     value={formData.message}
                     onChange={(e) => setFormData({...formData, message: e.target.value})}
                     rows={4}

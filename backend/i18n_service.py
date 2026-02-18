@@ -15,6 +15,7 @@ class SupportedLanguages(Enum):
 
 class I18nService:
     def __init__(self):
+        self.supported_languages = ["de", "en"]
         self.translations = {
             "de": {
                 "email_verification_subject": "Bestätigen Sie Ihre E-Mail-Adresse - Complyo",
@@ -76,6 +77,10 @@ class I18nService:
         if url and ".de" in url:
             return "de"
         return "en"
+    
+    def get_supported_languages(self) -> list:
+        """Get list of supported languages"""
+        return self.supported_languages
 
 # Global i18n service instance
 i18n_service = I18nService()

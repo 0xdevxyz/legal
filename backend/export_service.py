@@ -50,11 +50,11 @@ class ExportService:
                     """
                     SELECT 
                         gf.*,
-                        ul.plan_type,
-                        ul.exports_this_month,
-                        ul.exports_max
+                        COALESCE(ul.plan_type, 'expert') as plan_type,
+                        COALESCE(ul.exports_this_month, 0) as exports_this_month,
+                        COALESCE(ul.exports_max, 999) as exports_max
                     FROM generated_fixes gf
-                    JOIN user_limits ul ON gf.user_id = ul.user_id
+                    LEFT JOIN user_limits ul ON gf.user_id = ul.user_id
                     WHERE gf.id = $1 AND gf.user_id = $2
                     """,
                     fix_id,

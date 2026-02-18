@@ -2,15 +2,19 @@
 AI Compliance Routes - EU AI Act API Endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import uuid
+import io
 
 from auth_service import AuthService
 from ai_act_analyzer import ai_act_analyzer, AISystem, RiskClassification, ComplianceResult
+from ai_compliance_notification_service import ai_compliance_notification_service
+from file_storage_service import file_storage
 from database_service import db_service
 
 router = APIRouter(prefix="/api/ai", tags=["AI Compliance"])
@@ -642,4 +646,791 @@ async def get_ai_compliance_stats(
         "average_compliance_score": round(float(avg_compliance), 1) if avg_compliance else 0,
         "scans_last_30_days": recent_scans
     }
+
+# ==================== DOCUMENTATION GENERATION ====================
+
+class GenerateDocRequest(BaseModel):
+    document_type: str = Field(..., description="Type: risk_assessment, technical_documentation, conformity_declaration")
+
+@router.post("/systems/{system_id}/documentation/generate")
+async def generate_documentation(
+    system_id: str,
+    request: GenerateDocRequest,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Generiere AI Act Dokumentation für ein KI-System
+    """
+    
+    check_query = """
+        SELECT id, name, description, vendor, purpose, domain, risk_category, 
+               risk_reasoning, confidence_score, compliance_score
+        FROM ai_systems 
+        WHERE id = $1 AND user_id = $2
+    """
+    system = await db_service.pool.fetchrow(check_query, uuid.UUID(system_id), user_id)
+    
+    if not system:
+        raise HTTPException(status_code=404, detail="KI-System nicht gefunden")
+    
+    ai_system_data = {
+        "id": str(system['id']),
+        "name": system['name'],
+        "description": system['description'],
+        "vendor": system['vendor'],
+        "purpose": system['purpose'],
+        "domain": system['domain']
+    }
+    
+    classification_data = {
+        "risk_category": system['risk_category'] or 'minimal',
+        "reasoning": system['risk_reasoning'] or '',
+        "confidence": system['confidence_score'] or 0.5,
+        "relevant_articles": [],
+        "key_concerns": []
+    }
+    
+    if system['risk_category'] == 'high':
+        classification_data['relevant_articles'] = [
+            "Art. 6 - Klassifizierungsregeln für Hochrisiko-Systeme",
+            "Art. 9 - Risikomanagementsystem", 
+            "Art. 10 - Daten und Daten-Governance",
+            "Art. 11 - Technische Dokumentation",
+            "Art. 12 - Aufzeichnungspflichten",
+            "Art. 13 - Transparenz und Informationspflichten",
+            "Art. 14 - Menschliche Aufsicht",
+            "Art. 15 - Genauigkeit, Robustheit und Cybersicherheit"
+        ]
+    elif system['risk_category'] == 'limited':
+        classification_data['relevant_articles'] = [
+            "Art. 52 - Transparenzpflichten für bestimmte KI-Systeme"
+        ]
+    elif system['risk_category'] == 'prohibited':
+        classification_data['relevant_articles'] = [
+            "Art. 5 - Verbotene Praktiken im Bereich der künstlichen Intelligenz"
+        ]
+    
+    valid_types = ['risk_assessment', 'technical_documentation', 'conformity_declaration']
+    if request.document_type not in valid_types:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Ungültiger Dokumenttyp. Erlaubt: {', '.join(valid_types)}"
+        )
+    
+    try:
+        from ai_act_doc_generator import ai_act_doc_generator
+        if request.document_type == 'risk_assessment':
+            html_content = ai_act_doc_generator.generate_risk_assessment_report(
+                ai_system_data, 
+                classification_data
+            )
+            title = f"Risk Assessment Report - {system['name']}"
+        elif request.document_type == 'technical_documentation':
+            html_content = ai_act_doc_generator.generate_technical_documentation_template(ai_system_data)
+            title = f"Technische Dokumentation - {system['name']}"
+        else:
+            html_content = ai_act_doc_generator.generate_conformity_declaration(ai_system_data)
+            title = f"EU-Konformitätserklärung - {system['name']}"
+        
+        doc_id = uuid.uuid4()
+        import json
+        content_json = json.dumps({"html": html_content})
+        insert_query = """
+            INSERT INTO ai_documentation (id, ai_system_id, document_type, title, content, status, version, created_at)
+            VALUES ($1, $2, $3, $4, $5::jsonb, 'generated', '1.0', NOW())
+            RETURNING id, created_at
+        """
+        result = await db_service.pool.fetchrow(
+            insert_query,
+            doc_id,
+            uuid.UUID(system_id),
+            request.document_type,
+            title,
+            content_json
+        )
+        
+        return {
+            "success": True,
+            "document": {
+                "id": str(result['id']),
+                "document_type": request.document_type,
+                "title": title,
+                "status": "generated",
+                "version": "1.0",
+                "created_at": result['created_at'].isoformat()
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Dokumentgenerierung fehlgeschlagen: {str(e)}"
+        )
+
+@router.get("/documentation/{doc_id}/download")
+async def download_documentation(
+    doc_id: str,
+    format: str = "html",
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Download generierte Dokumentation als HTML oder PDF
+    """
+    
+    doc_query = """
+        SELECT d.*, s.user_id 
+        FROM ai_documentation d
+        JOIN ai_systems s ON d.ai_system_id = s.id
+        WHERE d.id = $1 AND s.user_id = $2
+    """
+    doc = await db_service.pool.fetchrow(doc_query, uuid.UUID(doc_id), user_id)
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokument nicht gefunden")
+    
+    content_data = doc['content']
+    if isinstance(content_data, dict):
+        html_content = content_data.get('html', '')
+    elif isinstance(content_data, str):
+        import json
+        try:
+            parsed = json.loads(content_data)
+            html_content = parsed.get('html', content_data)
+        except:
+            html_content = content_data
+    else:
+        html_content = str(content_data)
+    
+    filename_base = doc['title'].replace(' ', '_').replace('/', '-')
+    
+    if format == "pdf":
+        try:
+            import pdfkit
+            pdf_bytes = pdfkit.from_string(html_content, False, options={
+                'encoding': 'UTF-8',
+                'page-size': 'A4',
+                'margin-top': '20mm',
+                'margin-right': '20mm',
+                'margin-bottom': '20mm',
+                'margin-left': '20mm'
+            })
+            
+            return StreamingResponse(
+                io.BytesIO(pdf_bytes),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename={filename_base}.pdf"
+                }
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"PDF-Generierung fehlgeschlagen: {str(e)}. Versuchen Sie HTML-Export."
+            )
+    else:
+        return StreamingResponse(
+            io.BytesIO(html_content.encode('utf-8')),
+            media_type="text/html",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename_base}.html"
+            }
+        )
+
+@router.get("/systems/{system_id}/documentation/list")
+async def list_system_documentation(
+    system_id: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Liste alle generierten Dokumente für ein KI-System
+    """
+    
+    check_query = "SELECT id FROM ai_systems WHERE id = $1 AND user_id = $2"
+    system = await db_service.pool.fetchrow(check_query, uuid.UUID(system_id), user_id)
+    
+    if not system:
+        raise HTTPException(status_code=404, detail="KI-System nicht gefunden")
+    
+    docs_query = """
+        SELECT id, document_type, title, status, version, created_at, updated_at
+        FROM ai_documentation 
+        WHERE ai_system_id = $1 
+        ORDER BY created_at DESC
+    """
+    docs = await db_service.pool.fetch(docs_query, uuid.UUID(system_id))
+    
+    return {
+        "documents": [
+            {
+                "id": str(doc['id']),
+                "document_type": doc['document_type'],
+                "title": doc['title'],
+                "status": doc['status'],
+                "version": doc['version'],
+                "created_at": doc['created_at'].isoformat() if doc['created_at'] else None,
+                "updated_at": doc['updated_at'].isoformat() if doc['updated_at'] else None
+            }
+            for doc in docs
+        ]
+    }
+
+# ==================== DOCUMENT UPLOAD ====================
+
+@router.post("/systems/{system_id}/documentation/upload")
+async def upload_documentation(
+    system_id: str,
+    file: UploadFile = File(...),
+    document_type: str = Form(...),
+    title: str = Form(None),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Upload eines Dokuments für ein KI-System
+    """
+    
+    check_query = "SELECT id, name FROM ai_systems WHERE id = $1 AND user_id = $2"
+    system = await db_service.pool.fetchrow(check_query, uuid.UUID(system_id), user_id)
+    
+    if not system:
+        raise HTTPException(status_code=404, detail="KI-System nicht gefunden")
+    
+    file_content = await file.read()
+    file_size = len(file_content)
+    
+    is_valid, error_msg = file_storage.validate_file(
+        file.filename,
+        file.content_type,
+        file_size
+    )
+    
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
+    
+    try:
+        file_info = await file_storage.save_file(
+            user_id=user_id,
+            file_content=file_content,
+            original_filename=file.filename,
+            system_id=system_id
+        )
+        
+        existing_query = """
+            SELECT id, version FROM ai_documentation 
+            WHERE ai_system_id = $1 AND document_type = $2
+            ORDER BY version DESC LIMIT 1
+        """
+        existing_doc = await db_service.pool.fetchrow(
+            existing_query, 
+            uuid.UUID(system_id), 
+            document_type
+        )
+        
+        new_version = 1
+        if existing_doc:
+            new_version = (existing_doc['version'] or 0) + 1
+        
+        doc_title = title or f"{document_type.replace('_', ' ').title()} - {system['name']}"
+        
+        doc_id = uuid.uuid4()
+        import json
+        content_json = json.dumps({
+            "type": "uploaded",
+            "file_path": file_info['relative_path'],
+            "original_filename": file_info['original_filename'],
+            "file_size": file_info['file_size'],
+            "content_type": file_info['content_type'],
+            "file_hash": file_info['file_hash']
+        })
+        
+        insert_query = """
+            INSERT INTO ai_documentation 
+            (id, ai_system_id, document_type, title, content, file_url, status, version, created_at)
+            VALUES ($1, $2, $3, $4, $5::jsonb, $6, 'uploaded', $7, NOW())
+            RETURNING id, created_at
+        """
+        result = await db_service.pool.fetchrow(
+            insert_query,
+            doc_id,
+            uuid.UUID(system_id),
+            document_type,
+            doc_title,
+            content_json,
+            file_info['relative_path'],
+            new_version
+        )
+        
+        return {
+            "success": True,
+            "document": {
+                "id": str(result['id']),
+                "document_type": document_type,
+                "title": doc_title,
+                "status": "uploaded",
+                "version": str(new_version),
+                "filename": file_info['original_filename'],
+                "file_size": file_info['file_size'],
+                "created_at": result['created_at'].isoformat()
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Upload fehlgeschlagen: {str(e)}"
+        )
+
+@router.get("/documentation/file/{file_path:path}")
+async def download_uploaded_file(
+    file_path: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Download einer hochgeladenen Datei
+    """
+    
+    doc_query = """
+        SELECT d.*, s.user_id 
+        FROM ai_documentation d
+        JOIN ai_systems s ON d.ai_system_id = s.id
+        WHERE d.file_url = $1 AND s.user_id = $2
+    """
+    doc = await db_service.pool.fetchrow(doc_query, file_path, user_id)
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="Datei nicht gefunden oder kein Zugriff")
+    
+    file_content = await file_storage.get_file(file_path)
+    
+    if not file_content:
+        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
+    
+    content_data = doc['content']
+    if isinstance(content_data, dict):
+        content_type = content_data.get('content_type', 'application/octet-stream')
+        original_filename = content_data.get('original_filename', 'document')
+    else:
+        import json
+        try:
+            parsed = json.loads(content_data) if isinstance(content_data, str) else {}
+            content_type = parsed.get('content_type', 'application/octet-stream')
+            original_filename = parsed.get('original_filename', 'document')
+        except:
+            content_type = 'application/octet-stream'
+            original_filename = 'document'
+    
+    return StreamingResponse(
+        io.BytesIO(file_content),
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f"attachment; filename={original_filename}"
+        }
+    )
+
+@router.delete("/documentation/{doc_id}")
+async def delete_documentation(
+    doc_id: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Lösche ein Dokument
+    """
+    
+    doc_query = """
+        SELECT d.*, s.user_id 
+        FROM ai_documentation d
+        JOIN ai_systems s ON d.ai_system_id = s.id
+        WHERE d.id = $1 AND s.user_id = $2
+    """
+    doc = await db_service.pool.fetchrow(doc_query, uuid.UUID(doc_id), user_id)
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokument nicht gefunden")
+    
+    if doc['file_url']:
+        await file_storage.delete_file(doc['file_url'])
+    
+    delete_query = "DELETE FROM ai_documentation WHERE id = $1"
+    await db_service.pool.execute(delete_query, uuid.UUID(doc_id))
+    
+    return {"success": True, "message": "Dokument gelöscht"}
+
+@router.get("/documentation/{doc_id}/versions")
+async def get_document_versions(
+    doc_id: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Hole alle Versionen eines Dokuments
+    """
+    
+    doc_query = """
+        SELECT d.document_type, d.ai_system_id, s.user_id 
+        FROM ai_documentation d
+        JOIN ai_systems s ON d.ai_system_id = s.id
+        WHERE d.id = $1 AND s.user_id = $2
+    """
+    doc = await db_service.pool.fetchrow(doc_query, uuid.UUID(doc_id), user_id)
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokument nicht gefunden")
+    
+    versions_query = """
+        SELECT id, title, status, version, created_at, updated_at
+        FROM ai_documentation
+        WHERE ai_system_id = $1 AND document_type = $2
+        ORDER BY version DESC
+    """
+    versions = await db_service.pool.fetch(
+        versions_query, 
+        doc['ai_system_id'], 
+        doc['document_type']
+    )
+    
+    return {
+        "versions": [
+            {
+                "id": str(v['id']),
+                "title": v['title'],
+                "status": v['status'],
+                "version": v['version'],
+                "created_at": v['created_at'].isoformat() if v['created_at'] else None,
+                "updated_at": v['updated_at'].isoformat() if v['updated_at'] else None
+            }
+            for v in versions
+        ]
+    }
+
+# ==================== NOTIFICATIONS ====================
+
+@router.get("/notifications")
+async def get_notifications(
+    unread_only: bool = False,
+    limit: int = 50,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Hole alle Benachrichtigungen für den User
+    """
+    
+    query = """
+        SELECT id, ai_system_id, notification_type, severity, title, message, 
+               metadata, is_read, created_at
+        FROM ai_compliance_notifications
+        WHERE user_id = $1
+    """
+    
+    if unread_only:
+        query += " AND is_read = FALSE"
+    
+    query += " ORDER BY created_at DESC LIMIT $2"
+    
+    notifications = await db_service.pool.fetch(query, user_id, limit)
+    
+    return {
+        "notifications": [
+            {
+                "id": str(n['id']),
+                "ai_system_id": str(n['ai_system_id']) if n['ai_system_id'] else None,
+                "type": n['notification_type'],
+                "severity": n['severity'],
+                "title": n['title'],
+                "message": n['message'],
+                "metadata": n['metadata'] if isinstance(n['metadata'], dict) else {},
+                "is_read": n['is_read'],
+                "created_at": n['created_at'].isoformat() if n['created_at'] else None
+            }
+            for n in notifications
+        ],
+        "unread_count": sum(1 for n in notifications if not n['is_read'])
+    }
+
+@router.put("/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Markiere Benachrichtigung als gelesen
+    """
+    
+    query = """
+        UPDATE ai_compliance_notifications 
+        SET is_read = TRUE, read_at = NOW()
+        WHERE id = $1 AND user_id = $2
+        RETURNING id
+    """
+    result = await db_service.pool.fetchrow(query, uuid.UUID(notification_id), user_id)
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Benachrichtigung nicht gefunden")
+    
+    return {"success": True}
+
+@router.put("/notifications/read-all")
+async def mark_all_notifications_read(
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Markiere alle Benachrichtigungen als gelesen
+    """
+    
+    query = """
+        UPDATE ai_compliance_notifications 
+        SET is_read = TRUE, read_at = NOW()
+        WHERE user_id = $1 AND is_read = FALSE
+    """
+    await db_service.pool.execute(query, user_id)
+    
+    return {"success": True}
+
+# ==================== ALERT SETTINGS ====================
+
+class AlertSettingsUpdate(BaseModel):
+    email_on_compliance_drop: Optional[bool] = None
+    email_on_high_risk: Optional[bool] = None
+    email_on_scan_reminder: Optional[bool] = None
+    email_on_scan_completed: Optional[bool] = None
+    compliance_drop_threshold: Optional[int] = None
+    scan_reminder_days: Optional[int] = None
+    inapp_notifications: Optional[bool] = None
+
+@router.get("/settings/alerts")
+async def get_alert_settings(
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Hole Alert-Einstellungen des Users
+    """
+    
+    query = """
+        SELECT * FROM ai_compliance_alert_settings WHERE user_id = $1
+    """
+    settings = await db_service.pool.fetchrow(query, user_id)
+    
+    if not settings:
+        return {
+            "email_on_compliance_drop": True,
+            "email_on_high_risk": True,
+            "email_on_scan_reminder": True,
+            "email_on_scan_completed": False,
+            "compliance_drop_threshold": 10,
+            "scan_reminder_days": 30,
+            "inapp_notifications": True
+        }
+    
+    return {
+        "email_on_compliance_drop": settings['email_on_compliance_drop'],
+        "email_on_high_risk": settings['email_on_high_risk'],
+        "email_on_scan_reminder": settings['email_on_scan_reminder'],
+        "email_on_scan_completed": settings['email_on_scan_completed'],
+        "compliance_drop_threshold": settings['compliance_drop_threshold'],
+        "scan_reminder_days": settings['scan_reminder_days'],
+        "inapp_notifications": settings['inapp_notifications']
+    }
+
+@router.put("/settings/alerts")
+async def update_alert_settings(
+    settings: AlertSettingsUpdate,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Aktualisiere Alert-Einstellungen
+    """
+    
+    existing = await db_service.pool.fetchrow(
+        "SELECT id FROM ai_compliance_alert_settings WHERE user_id = $1",
+        user_id
+    )
+    
+    if existing:
+        updates = []
+        values = [user_id]
+        idx = 2
+        
+        for field, value in settings.dict(exclude_unset=True).items():
+            if value is not None:
+                updates.append(f"{field} = ${idx}")
+                values.append(value)
+                idx += 1
+        
+        if updates:
+            query = f"""
+                UPDATE ai_compliance_alert_settings 
+                SET {', '.join(updates)}, updated_at = NOW()
+                WHERE user_id = $1
+            """
+            await db_service.pool.execute(query, *values)
+    else:
+        data = settings.dict(exclude_unset=True)
+        query = """
+            INSERT INTO ai_compliance_alert_settings (id, user_id, email_on_compliance_drop, 
+                email_on_high_risk, email_on_scan_reminder, email_on_scan_completed,
+                compliance_drop_threshold, scan_reminder_days, inapp_notifications)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        """
+        await db_service.pool.execute(
+            query,
+            uuid.uuid4(),
+            user_id,
+            data.get('email_on_compliance_drop', True),
+            data.get('email_on_high_risk', True),
+            data.get('email_on_scan_reminder', True),
+            data.get('email_on_scan_completed', False),
+            data.get('compliance_drop_threshold', 10),
+            data.get('scan_reminder_days', 30),
+            data.get('inapp_notifications', True)
+        )
+    
+    return {"success": True}
+
+# ==================== SCHEDULED SCANS ====================
+
+class ScheduledScanCreate(BaseModel):
+    schedule_type: str = Field(..., description="daily, weekly, monthly")
+    schedule_day: Optional[int] = None
+    schedule_hour: int = 9
+
+@router.post("/systems/{system_id}/schedule")
+async def create_scheduled_scan(
+    system_id: str,
+    schedule: ScheduledScanCreate,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Erstelle einen geplanten Scan für ein KI-System
+    """
+    
+    check_query = "SELECT id FROM ai_systems WHERE id = $1 AND user_id = $2"
+    system = await db_service.pool.fetchrow(check_query, uuid.UUID(system_id), user_id)
+    
+    if not system:
+        raise HTTPException(status_code=404, detail="KI-System nicht gefunden")
+    
+    if schedule.schedule_type not in ['daily', 'weekly', 'monthly']:
+        raise HTTPException(status_code=400, detail="Ungültiger schedule_type")
+    
+    now = datetime.utcnow()
+    next_run = now.replace(hour=schedule.schedule_hour, minute=0, second=0, microsecond=0)
+    
+    if next_run <= now:
+        next_run += timedelta(days=1)
+    
+    if schedule.schedule_type == 'weekly' and schedule.schedule_day is not None:
+        days_until = (schedule.schedule_day - next_run.weekday()) % 7
+        if days_until == 0 and next_run <= now:
+            days_until = 7
+        next_run += timedelta(days=days_until)
+    elif schedule.schedule_type == 'monthly' and schedule.schedule_day is not None:
+        next_run = next_run.replace(day=min(schedule.schedule_day, 28))
+        if next_run <= now:
+            if next_run.month == 12:
+                next_run = next_run.replace(year=next_run.year + 1, month=1)
+            else:
+                next_run = next_run.replace(month=next_run.month + 1)
+    
+    existing = await db_service.pool.fetchrow(
+        "SELECT id FROM ai_scheduled_scans WHERE ai_system_id = $1",
+        uuid.UUID(system_id)
+    )
+    
+    if existing:
+        query = """
+            UPDATE ai_scheduled_scans 
+            SET schedule_type = $1, schedule_day = $2, schedule_hour = $3, 
+                next_run_at = $4, is_active = TRUE, updated_at = NOW()
+            WHERE ai_system_id = $5
+            RETURNING id
+        """
+        result = await db_service.pool.fetchrow(
+            query,
+            schedule.schedule_type,
+            schedule.schedule_day,
+            schedule.schedule_hour,
+            next_run,
+            uuid.UUID(system_id)
+        )
+    else:
+        query = """
+            INSERT INTO ai_scheduled_scans (id, user_id, ai_system_id, schedule_type, 
+                schedule_day, schedule_hour, next_run_at, is_active)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
+            RETURNING id
+        """
+        result = await db_service.pool.fetchrow(
+            query,
+            uuid.uuid4(),
+            user_id,
+            uuid.UUID(system_id),
+            schedule.schedule_type,
+            schedule.schedule_day,
+            schedule.schedule_hour,
+            next_run
+        )
+    
+    return {
+        "success": True,
+        "schedule": {
+            "id": str(result['id']),
+            "schedule_type": schedule.schedule_type,
+            "schedule_day": schedule.schedule_day,
+            "schedule_hour": schedule.schedule_hour,
+            "next_run_at": next_run.isoformat()
+        }
+    }
+
+@router.get("/systems/{system_id}/schedule")
+async def get_scheduled_scan(
+    system_id: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Hole geplanten Scan für ein KI-System
+    """
+    
+    query = """
+        SELECT s.* FROM ai_scheduled_scans s
+        JOIN ai_systems sys ON s.ai_system_id = sys.id
+        WHERE s.ai_system_id = $1 AND sys.user_id = $2
+    """
+    schedule = await db_service.pool.fetchrow(query, uuid.UUID(system_id), user_id)
+    
+    if not schedule:
+        return {"schedule": None}
+    
+    return {
+        "schedule": {
+            "id": str(schedule['id']),
+            "schedule_type": schedule['schedule_type'],
+            "schedule_day": schedule['schedule_day'],
+            "schedule_hour": schedule['schedule_hour'],
+            "is_active": schedule['is_active'],
+            "last_run_at": schedule['last_run_at'].isoformat() if schedule['last_run_at'] else None,
+            "next_run_at": schedule['next_run_at'].isoformat() if schedule['next_run_at'] else None
+        }
+    }
+
+@router.delete("/systems/{system_id}/schedule")
+async def delete_scheduled_scan(
+    system_id: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Lösche geplanten Scan
+    """
+    
+    query = """
+        UPDATE ai_scheduled_scans s
+        SET is_active = FALSE, updated_at = NOW()
+        FROM ai_systems sys
+        WHERE s.ai_system_id = sys.id 
+        AND s.ai_system_id = $1 
+        AND sys.user_id = $2
+        RETURNING s.id
+    """
+    result = await db_service.pool.fetchrow(query, uuid.UUID(system_id), user_id)
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Geplanter Scan nicht gefunden")
+    
+    return {"success": True}
 

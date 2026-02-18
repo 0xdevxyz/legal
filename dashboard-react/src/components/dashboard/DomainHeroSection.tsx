@@ -278,8 +278,10 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1 relative group">
                   <Globe className="absolute left-5 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-400 group-focus-within:text-sky-400 transition-colors" />
+                  <label htmlFor="website-url-input" className="sr-only">Website-URL eingeben</label>
                   <input
                     type="text"
+                    id="website-url-input"
                     value={url}
                     onChange={(e) => {
                       setUrl(e.target.value);
@@ -288,6 +290,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                     }}
                     onKeyPress={(e) => e.key === 'Enter' && handleAnalyze()}
                     placeholder="ihre-domain.de eingeben"
+                    aria-label="Website-URL zur Compliance-Analyse eingeben"
                     className="w-full pl-14 pr-5 py-4 bg-zinc-900/50 backdrop-blur-sm border-2 border-zinc-700/50 rounded-2xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/50 text-lg transition-all"
                     disabled={isAnalyzing}
                   />

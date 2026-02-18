@@ -100,6 +100,7 @@ class AnalysisResponse(BaseModel):
     pillar_scores: Optional[List[PillarScore]] = []  # NEW: Säulen-Scores
     issue_groups: Optional[List[Dict[str, Any]]] = []  # ✅ NEU: Gruppierte Issues
     grouping_stats: Optional[Dict[str, Any]] = {}  # ✅ NEU: Gruppierungs-Statistiken
+    has_accessibility_widget: Optional[bool] = False  # ✅ NEU: Widget-Status
     riskAmount: str
     score: int
     scan_duration_ms: Optional[int] = None
@@ -1015,6 +1016,7 @@ async def _generate_mock_analysis(url: str, risk_calculator) -> AnalysisResponse
         compliance_score=score,
         estimated_risk_euro=total_risk_data['total_risk_range'],
         issues=structured_issues,
+        has_accessibility_widget=scan_result.get('has_accessibility_widget', False),
         riskAmount=total_risk_data['total_risk_range'],
         score=score,
         scan_duration_ms=scan_duration,

@@ -1662,6 +1662,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
                 name="email"
                 placeholder="Ihre E-Mail-Adresse" 
                 required 
+                aria-label="E-Mail-Adresse für KI-Lösung"
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
               />
               <input 
@@ -1669,6 +1670,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
                 name="website"
                 placeholder="Ihre Website-URL" 
                 required
+                aria-label="Website-URL für KI-Lösung"
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
               />
               <button 
@@ -1712,6 +1714,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
                 name="company"
                 placeholder="Firmenname" 
                 required
+                aria-label="Firmenname"
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
               />
               <input 
@@ -1719,6 +1722,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
                 name="email"
                 placeholder="Ihre E-Mail-Adresse" 
                 required 
+                aria-label="E-Mail-Adresse für Expertenservice"
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
               />
               <input 
@@ -1726,6 +1730,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
                 name="phone"
                 placeholder="Telefonnummer" 
                 required
+                aria-label="Telefonnummer"
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
               />
               <textarea 
@@ -1733,6 +1738,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
                 placeholder="Beschreiben Sie Ihre Anforderungen..." 
                 required
                 rows={4}
+                aria-label="Anforderungsbeschreibung"
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400 resize-none"
               />
               <button 

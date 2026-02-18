@@ -129,11 +129,14 @@ export const LegalArchiveModal: React.FC<Props> = ({ isOpen, onClose }) => {
             {/* Search */}
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <label htmlFor="legal-archive-search" className="sr-only">Rechtsänderungen durchsuchen</label>
               <input
                 type="text"
+                id="legal-archive-search"
                 placeholder="Suche nach Titel oder Beschreibung..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                aria-label="Rechtsänderungen nach Titel oder Beschreibung durchsuchen"
                 className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500 text-sm"
               />
             </div>

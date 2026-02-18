@@ -125,11 +125,14 @@ export default function GDPRDataManagement() {
               E-Mail-Adresse eingeben
             </h2>
             <div className="flex flex-col sm:flex-row gap-4">
+              <label htmlFor="gdpr-email" className="sr-only">E-Mail-Adresse für DSGVO-Anfrage</label>
               <input
+                id="gdpr-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="ihre.email@beispiel.de"
+                aria-label="E-Mail-Adresse für DSGVO-Anfrage"
                 className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={loading}
               />

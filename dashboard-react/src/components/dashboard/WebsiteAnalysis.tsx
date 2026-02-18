@@ -5,6 +5,7 @@ import { Globe, RefreshCw, AlertTriangle, AlertCircle, CheckCircle, Bot, Downloa
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useStartAIFix, useBookExpert, useComplianceAnalysis, useLatestScan, useActiveFixJobs } from '@/hooks/useCompliance';
 import { formatRelativeTime } from '@/lib/utils';
@@ -23,6 +24,7 @@ import { OptimizationModeLock } from './OptimizationModeLock';
 
 export const WebsiteAnalysis: React.FC = () => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { currentWebsite, analysisData: storedAnalysisData, setAnalysisData, isInOptimizationMode, lockedOptimizationUrl } = useDashboardStore();
   const [expandedPillar, setExpandedPillar] = useState<string | null>(null);
   const [showScoreAnimation, setShowScoreAnimation] = useState(false);
@@ -127,6 +129,14 @@ export const WebsiteAnalysis: React.FC = () => {
     }
 
     try {
+      // Cache komplett leeren vor dem Rescan
+      const { setAnalysisData } = useDashboardStore.getState();
+      setAnalysisData(undefined as any);
+      
+      // React Query Cache für diese URL invalidieren
+      await queryClient.invalidateQueries({ queryKey: ['compliance-analysis', currentWebsite.url] });
+      await queryClient.invalidateQueries({ queryKey: ['latest-scan'] });
+      
       const result = await refetch();
       
       // Update Dashboard Store mit den Ergebnissen
@@ -346,9 +356,38 @@ export const WebsiteAnalysis: React.FC = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
+                onClick={async () => {
                   if (analysisData && analysisData.scan_id) {
-                    window.open(`/api/v2/reports/${analysisData.scan_id}/download`, '_blank');
+                    const token = localStorage.getItem('access_token');
+                    const apiBaseUrl = typeof window !== 'undefined' && window.location.hostname.includes('complyo.tech')
+                      ? 'https://api.complyo.tech'
+                      : 'http://localhost:8002';
+                    const downloadUrl = `${apiBaseUrl}/api/v2/reports/${analysisData.scan_id}/download`;
+                    
+                    try {
+                      const response = await fetch(downloadUrl, {
+                        headers: {
+                          'Authorization': `Bearer ${token}`
+                        }
+                      });
+                      
+                      if (response.ok) {
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `complyo-report-${analysisData.scan_id}.pdf`;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                      } else {
+                        alert('PDF-Download fehlgeschlagen. Bitte versuchen Sie es erneut.');
+                      }
+                    } catch (error) {
+                      console.error('PDF download error:', error);
+                      alert('PDF-Download fehlgeschlagen. Bitte versuchen Sie es erneut.');
+                    }
                   }
                 }}
                 disabled={!analysisData || !analysisData.scan_id}

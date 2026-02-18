@@ -310,23 +310,40 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
         for pattern in widget_patterns:
             if re.search(pattern, src, re.I):
                 return None  # Widget gefunden, kein Issue
+        
+        # NEU: Complyo-spezifische Attribute prüfen
+        if script.get('data-site-id') or script.get('data-auto-fix'):
+            return None  # Complyo Widget erkannt
+    
+    # NEU: Suche nach Scripts mit Complyo-spezifischen Attributen (auch ohne src)
+    all_scripts = soup.find_all('script')
+    for script in all_scripts:
+        if script.get('data-site-id') and ('complyo' in str(script).lower() or 'accessibility' in str(script).lower()):
+            return None  # Complyo Widget erkannt
     
     # NEU: Suche in Preload-Links (für Next.js, React etc.)
     # Modern frameworks nutzen <link rel="preload" as="script">
-    preload_links = soup.find_all('link', rel='preload', attrs={'as': 'script'})
+    preload_links = soup.find_all('link', rel='preload')
     for link in preload_links:
         href = link.get('href', '').lower()
         for pattern in widget_patterns:
             if re.search(pattern, href, re.I):
                 return None  # Widget gefunden (via preload), kein Issue
     
-    # NEU: Suche in normalen Link-Tags (manchmal wird das Widget so geladen)
-    link_tags = soup.find_all('link', href=True)
-    for link in link_tags:
+    # NEU: Suche in allen Link-Tags nach Widget-URLs
+    all_links = soup.find_all('link', href=True)
+    for link in all_links:
         href = link.get('href', '').lower()
+        if 'accessibility' in href and 'complyo' in href:
+            return None  # Complyo Accessibility Widget gefunden
         for pattern in widget_patterns:
             if re.search(pattern, href, re.I):
                 return None  # Widget gefunden, kein Issue
+    
+    # NEU: Suche im gesamten HTML nach Complyo Widget-URLs
+    html_text = str(soup).lower()
+    if 'api.complyo.tech/api/widgets/accessibility' in html_text:
+        return None  # Complyo Widget URL im HTML gefunden
     
     # Suche in Script-Content
     script_contents = soup.find_all('script', src=False)

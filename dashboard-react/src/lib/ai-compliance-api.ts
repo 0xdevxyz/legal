@@ -214,6 +214,198 @@ export const cancelAddon = async (addonKey: string): Promise<{
   return response.data;
 };
 
+// ==================== DOCUMENTATION GENERATION ====================
+
+export type DocumentType = 'risk_assessment' | 'technical_documentation' | 'conformity_declaration';
+
+export interface GeneratedDocument {
+  id: string;
+  document_type: DocumentType;
+  title: string;
+  status: string;
+  version: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export const generateDocumentation = async (
+  systemId: string,
+  documentType: DocumentType
+): Promise<{ success: boolean; document: GeneratedDocument }> => {
+  const response = await aiApiClient.post(`/api/ai/systems/${systemId}/documentation/generate`, {
+    document_type: documentType
+  });
+  return response.data;
+};
+
+export const listSystemDocuments = async (
+  systemId: string
+): Promise<{ documents: GeneratedDocument[] }> => {
+  const response = await aiApiClient.get(`/api/ai/systems/${systemId}/documentation/list`);
+  return response.data;
+};
+
+export const downloadDocumentation = async (
+  docId: string,
+  format: 'html' | 'pdf' = 'html'
+): Promise<Blob> => {
+  const response = await aiApiClient.get(`/api/ai/documentation/${docId}/download`, {
+    params: { format },
+    responseType: 'blob'
+  });
+  return response.data;
+};
+
+export const getDocumentTypeLabel = (type: DocumentType): string => {
+  switch (type) {
+    case 'risk_assessment':
+      return 'Risk Assessment Report';
+    case 'technical_documentation':
+      return 'Technische Dokumentation';
+    case 'conformity_declaration':
+      return 'EU-Konformitätserklärung';
+    default:
+      return type;
+  }
+};
+
+// ==================== DOCUMENT UPLOAD ====================
+
+export interface UploadedDocument extends GeneratedDocument {
+  filename?: string;
+  file_size?: number;
+}
+
+export const uploadDocumentation = async (
+  systemId: string,
+  file: File,
+  documentType: string,
+  title?: string
+): Promise<{ success: boolean; document: UploadedDocument }> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('document_type', documentType);
+  if (title) {
+    formData.append('title', title);
+  }
+  
+  const response = await aiApiClient.post(
+    `/api/ai/systems/${systemId}/documentation/upload`,
+    formData,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    }
+  );
+  return response.data;
+};
+
+export const deleteDocumentation = async (docId: string): Promise<{ success: boolean }> => {
+  const response = await aiApiClient.delete(`/api/ai/documentation/${docId}`);
+  return response.data;
+};
+
+export const getDocumentVersions = async (
+  docId: string
+): Promise<{ versions: GeneratedDocument[] }> => {
+  const response = await aiApiClient.get(`/api/ai/documentation/${docId}/versions`);
+  return response.data;
+};
+
+export const downloadUploadedFile = async (filePath: string): Promise<Blob> => {
+  const response = await aiApiClient.get(`/api/ai/documentation/file/${filePath}`, {
+    responseType: 'blob'
+  });
+  return response.data;
+};
+
+// ==================== NOTIFICATIONS ====================
+
+export interface AINotification {
+  id: string;
+  ai_system_id: string | null;
+  type: string;
+  severity: 'info' | 'warning' | 'critical';
+  title: string;
+  message: string;
+  metadata: Record<string, any>;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface AlertSettings {
+  email_on_compliance_drop: boolean;
+  email_on_high_risk: boolean;
+  email_on_scan_reminder: boolean;
+  email_on_scan_completed: boolean;
+  compliance_drop_threshold: number;
+  scan_reminder_days: number;
+  inapp_notifications: boolean;
+}
+
+export const getNotifications = async (
+  unreadOnly: boolean = false,
+  limit: number = 50
+): Promise<{ notifications: AINotification[]; unread_count: number }> => {
+  const response = await aiApiClient.get('/api/ai/notifications', {
+    params: { unread_only: unreadOnly, limit }
+  });
+  return response.data;
+};
+
+export const markNotificationRead = async (notificationId: string): Promise<void> => {
+  await aiApiClient.put(`/api/ai/notifications/${notificationId}/read`);
+};
+
+export const markAllNotificationsRead = async (): Promise<void> => {
+  await aiApiClient.put('/api/ai/notifications/read-all');
+};
+
+export const getAlertSettings = async (): Promise<AlertSettings> => {
+  const response = await aiApiClient.get('/api/ai/settings/alerts');
+  return response.data;
+};
+
+export const updateAlertSettings = async (settings: Partial<AlertSettings>): Promise<void> => {
+  await aiApiClient.put('/api/ai/settings/alerts', settings);
+};
+
+// ==================== SCHEDULED SCANS ====================
+
+export interface ScheduledScan {
+  id: string;
+  schedule_type: 'daily' | 'weekly' | 'monthly';
+  schedule_day: number | null;
+  schedule_hour: number;
+  is_active: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+}
+
+export const createScheduledScan = async (
+  systemId: string,
+  scheduleType: 'daily' | 'weekly' | 'monthly',
+  scheduleDay?: number,
+  scheduleHour: number = 9
+): Promise<{ success: boolean; schedule: ScheduledScan }> => {
+  const response = await aiApiClient.post(`/api/ai/systems/${systemId}/schedule`, {
+    schedule_type: scheduleType,
+    schedule_day: scheduleDay,
+    schedule_hour: scheduleHour
+  });
+  return response.data;
+};
+
+export const getScheduledScan = async (systemId: string): Promise<{ schedule: ScheduledScan | null }> => {
+  const response = await aiApiClient.get(`/api/ai/systems/${systemId}/schedule`);
+  return response.data;
+};
+
+export const deleteScheduledScan = async (systemId: string): Promise<void> => {
+  await aiApiClient.delete(`/api/ai/systems/${systemId}/schedule`);
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 export const getRiskCategoryColor = (category: string): string => {

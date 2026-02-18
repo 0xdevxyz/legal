@@ -242,13 +242,9 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
           <div className="mt-4 pt-4 border-t border-emerald-500/20">
             <p className="text-xs text-zinc-400 mb-3">Schnelle Optimierungs-Aktionen:</p>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="secondary" className="gap-2">
-                <Sparkles className="w-3 h-3" />
-                KI-Optimierung starten
-              </Button>
               <Button 
                 size="sm" 
-                variant="ghost" 
+                variant="secondary" 
                 className="gap-2"
                 onClick={() => router.push('/cookie-compliance')}
               >

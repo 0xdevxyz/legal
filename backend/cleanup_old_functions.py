@@ -3,7 +3,9 @@ import asyncio
 import asyncpg
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://complyo_user:ComplYo2025SecurePass@localhost:5432/complyo_db")
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required!")
 
 async def cleanup():
 

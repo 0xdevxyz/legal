@@ -20,6 +20,7 @@ import {
   Star
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import { sanitizeHtml } from '@/lib/sanitize';
 
 // ============================================================================
 // Types
@@ -487,7 +488,7 @@ const TextFixDisplay: React.FC<{
         <div className="border border-gray-200 rounded-lg p-6 bg-white">
           <div 
             className="prose prose-sm max-w-none"
-            dangerouslySetInnerHTML={{ __html: fixData.text_content || '' }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(fixData.text_content || '') }}
           />
         </div>
       ) : (

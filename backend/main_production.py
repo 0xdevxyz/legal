@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
+import asyncio
 from typing import Optional, Dict, Any, List
 from dataclasses import asdict
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -162,23 +163,38 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS Configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://complyo.tech",
-        "https://www.complyo.tech",
-        "https://app.complyo.tech",
-        "http://app.complyo.tech",
+ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
+_cors_origins = [
+    "https://complyo.tech",
+    "https://www.complyo.tech",
+    "https://app.complyo.tech",
+]
+if ENVIRONMENT != "production":
+    _cors_origins += [
         "http://localhost:3000",
         "http://localhost:3001",
-        "http://localhost:3002",  # Dashboard Dev-Server
+        "http://localhost:3002",
         "http://localhost:3003",
-    ],
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
-    expose_headers=["*"]
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    expose_headers=["X-Request-ID"]
 )
+
+# Request-ID Middleware (MON-003)
+import uuid as _uuid
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = str(_uuid.uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 # Security
 security = HTTPBearer()
@@ -499,6 +515,47 @@ async def startup_event():
     import ai_legal_routes
     ai_legal_routes.db_pool = db_pool
     
+    # Start daily AI cache cleanup background task
+    async def _daily_ai_cache_cleanup():
+        while True:
+            try:
+                await asyncio.sleep(24 * 60 * 60)
+                async with db_pool.acquire() as conn:
+                    deleted = await conn.fetchval(
+                        "DELETE FROM ai_solution_cache WHERE generation_date < NOW() - INTERVAL '30 days' RETURNING COUNT(*)"
+                    )
+                    logger.info(f"AI cache cleanup: removed {deleted or 0} entries older than 30 days")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"AI cache cleanup error: {e}")
+
+    asyncio.create_task(_daily_ai_cache_cleanup())
+    logger.info("✅ Daily AI cache cleanup task scheduled (30-day retention)")
+
+    # GDPR: daily cleanup of expired sessions and inactive accounts
+    async def _daily_gdpr_cleanup():
+        await asyncio.sleep(60)
+        while True:
+            try:
+                async with db_pool.acquire() as conn:
+                    expired_sessions = await conn.fetchval(
+                        "DELETE FROM user_sessions WHERE expires_at < NOW() RETURNING COUNT(*)"
+                    )
+                    old_inactive = await conn.fetchval(
+                        "DELETE FROM users WHERE is_active = FALSE AND updated_at < NOW() - INTERVAL '2 years' RETURNING COUNT(*)"
+                    )
+                    logger.info(f"GDPR cleanup: removed {expired_sessions or 0} expired sessions, {old_inactive or 0} inactive accounts")
+                await asyncio.sleep(24 * 60 * 60)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"GDPR cleanup error: {e}")
+                await asyncio.sleep(24 * 60 * 60)
+
+    asyncio.create_task(_daily_gdpr_cleanup())
+    logger.info("✅ Daily GDPR cleanup task scheduled")
+
     print("✅ All routers initialized successfully")
 
 @app.on_event("shutdown")
@@ -563,11 +620,47 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    db_status = "connected" if db_pool else "disconnected"
+    import time
+    checks = {}
+
+    # Database
+    db_start = time.monotonic()
+    try:
+        if db_pool:
+            async with db_pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            checks["database"] = {"status": "up", "latency_ms": round((time.monotonic() - db_start) * 1000, 2)}
+        else:
+            checks["database"] = {"status": "down", "latency_ms": None}
+    except Exception as e:
+        checks["database"] = {"status": "error", "error": str(e)}
+
+    # Redis
+    redis_start = time.monotonic()
+    try:
+        import redis as _redis
+        _r = _redis.Redis(
+            host=os.getenv("REDIS_HOST", "shared-redis"),
+            port=int(os.getenv("REDIS_PORT", 6379)),
+            password=os.getenv("REDIS_PASSWORD"),
+            socket_connect_timeout=1
+        )
+        _r.ping()
+        checks["redis"] = {"status": "up", "latency_ms": round((time.monotonic() - redis_start) * 1000, 2)}
+    except Exception:
+        checks["redis"] = {"status": "down"}
+
+    # OpenRouter API key present
+    checks["openrouter"] = {"status": "configured" if os.getenv("OPENROUTER_API_KEY") else "missing"}
+
+    # Stripe
+    checks["stripe"] = {"status": "configured" if os.getenv("STRIPE_SECRET_KEY") else "missing"}
+
+    overall = "healthy" if checks["database"]["status"] == "up" else "degraded"
     return {
-        "status": "healthy",
+        "status": overall,
         "service": "complyo-backend",
-        "database": db_status,
+        "checks": checks,
         "timestamp": datetime.datetime.now().isoformat()
     }
 

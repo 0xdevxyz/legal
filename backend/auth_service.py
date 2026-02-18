@@ -15,6 +15,8 @@ class AuthService:
         self.jwt_secret = os.getenv("JWT_SECRET")
         if not self.jwt_secret:
             raise RuntimeError("❌ CRITICAL: JWT_SECRET environment variable is required!")
+        self.jwt_issuer = os.getenv("FRONTEND_URL", "https://complyo.tech")
+        self.jwt_audience = "complyo-api"
         self.access_token_expire = 7 * 24 * 60  # 7 Tage = 10080 Minuten
         self.refresh_token_expire = 30 * 24 * 60  # 30 days
     
@@ -88,9 +90,11 @@ class AuthService:
     def create_access_token(self, user_id) -> str:
         """Create JWT access token"""
         payload = {
-            "user_id": str(user_id),  # Convert UUID to string
+            "user_id": str(user_id),
             "exp": datetime.utcnow() + timedelta(minutes=self.access_token_expire),
             "iat": datetime.utcnow(),
+            "iss": self.jwt_issuer,
+            "aud": self.jwt_audience,
             "type": "access"
         }
         return jwt.encode(payload, self.jwt_secret, algorithm="HS256")
@@ -115,7 +119,7 @@ class AuthService:
     def verify_token(self, token: str) -> Optional[Dict]:
         """Verify and decode JWT token"""
         try:
-            payload = jwt.decode(token, self.jwt_secret, algorithms=["HS256"])
+            payload = jwt.decode(token, self.jwt_secret, algorithms=["HS256"], audience=self.jwt_audience, issuer=self.jwt_issuer)
             return payload
         except jwt.ExpiredSignatureError:
             logger.warning("Token expired")

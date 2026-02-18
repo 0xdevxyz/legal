@@ -381,16 +381,18 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="onboarding-website-url" className="block text-sm font-medium text-gray-700 mb-2">
                   Welche Website möchten Sie prüfen?
                 </label>
                 <div className="relative">
                   <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
+                    id="onboarding-website-url"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     placeholder="beispiel-website.de"
+                    aria-label="Website-URL für Compliance-Prüfung eingeben"
                     className="w-full pl-12 pr-4 py-4 border-2 border-gray-300 rounded-xl focus:border-blue-600 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-lg text-gray-900"
                     onKeyPress={(e) => e.key === 'Enter' && urlValid && handleScan()}
                   />

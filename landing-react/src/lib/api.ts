@@ -90,7 +90,8 @@ export const complianceApi = {
     // Normalisiere URL vor dem API-Call
     const normalizedUrl = normalizeUrl(url);
     console.log('🔗 Landing API - Original:', url, '→ Normalized:', normalizedUrl);
-    const response = await api.post<ComplianceAnalysis>('/api/analyze', { url: normalizedUrl });
+    // ✅ FIX: Verwende /api/analyze-preview für Landing-Seite (keine Auth erforderlich)
+    const response = await api.post<ComplianceAnalysis>('/api/analyze-preview', { url: normalizedUrl });
     return response.data;
   },
 

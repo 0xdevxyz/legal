@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, Copy, FileText, Download } from 'lucide-react';
+import { sanitizeHtml } from '@/lib/sanitize';
 
 interface TextFixStepProps {
   fixData: {
@@ -56,7 +57,7 @@ export const TextFixStep: React.FC<TextFixStepProps> = ({ fixData, onComplete })
         <div className="bg-white border border-gray-200 rounded-lg p-6 max-h-80 overflow-y-auto">
           <div 
             className="prose prose-sm max-w-none"
-            dangerouslySetInnerHTML={{ __html: fixData.text_content }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(fixData.text_content || '') }}
           />
         </div>
         

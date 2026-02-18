@@ -141,3 +141,4 @@ docker-compose*.yml
    ssl-certs/
    *.key
    *.pem
+.env

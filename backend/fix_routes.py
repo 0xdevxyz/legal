@@ -304,18 +304,8 @@ async def export_fix(
         
         logger.info(f"Exporting fix {request.fix_id} for user {user_id} in format {request.export_format}")
         
-        # Für Expert Plan: Kein Limit
-        if plan_type == 'expert':
-            return {
-                'success': True,
-                'exported_at': datetime.now().isoformat(),
-                'format': request.export_format,
-                'message': 'Expert Plan: Unlimited exports'
-            }
-        
-        # Für AI Plan: Export mit Limit-Check
+        # Nutze export_service für alle Pläne
         try:
-            # Nutze globale Referenz (gesetzt in main_production.py startup)
             if not export_service:
                 raise HTTPException(
                     status_code=500,

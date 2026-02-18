@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Check, X, ChevronRight, ChevronLeft, Loader2, AlertCircle } from 'lucide-react';
+import { sanitizeHtml } from '@/lib/sanitize';
 
 interface Fix {
   fix_id: string;
@@ -277,7 +278,7 @@ const TextFixDisplay: React.FC<{ fix: Fix }> = ({ fix }) => {
           </button>
         </div>
         <div className="bg-white border border-gray-300 rounded p-4 max-h-96 overflow-y-auto">
-          <div dangerouslySetInnerHTML={{ __html: fix.text?.content || fix.content }} />
+          <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(fix.text?.content || fix.content || '') }} />
         </div>
         <div className="mt-2 text-xs text-gray-500">
           {fix.branding || 'Erstellt von Complyo'}

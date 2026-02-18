@@ -316,12 +316,15 @@ Stellen Sie mir eine spezifische Frage oder sagen Sie "Hilfe", um zu sehen, wo i
       {/* Input */}
       <div className="p-4 border-t border-gray-200 bg-white">
         <div className="flex gap-2">
+          <label htmlFor="ai-assistant-input" className="sr-only">Nachricht an KI-Assistent</label>
           <input
             type="text"
+            id="ai-assistant-input"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Fragen Sie mich etwas..."
+            aria-label="Nachricht an KI-Assistent eingeben"
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           <button

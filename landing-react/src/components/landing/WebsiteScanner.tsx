@@ -324,11 +324,14 @@ export default function WebsiteScanner() {
         <div className="max-w-3xl mx-auto mb-12">
           <form onSubmit={handleScan} className="relative">
             <div className="flex flex-col sm:flex-row gap-3">
+              <label htmlFor="website-scanner-input" className="sr-only">Website-URL für Compliance-Check</label>
               <input
                 type="text"
+                id="website-scanner-input"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="ihre-website.de"
+                aria-label="Website-URL für kostenlosen Compliance-Check eingeben"
                 className="flex-1 px-6 py-4 rounded-xl border-2 border-gray-600 bg-gray-800 text-white focus:border-blue-500 focus:ring-4 focus:ring-blue-900 outline-none text-lg placeholder-gray-400"
                 required
               />

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LegalTextWizard } from './LegalTextWizard';
 import { ClientOnlyPortal } from '../ClientOnlyPortal';
+import { sanitizeHtml } from '@/lib/sanitize';
 
 interface FixResultModalProps {
   isOpen: boolean;
@@ -201,7 +202,7 @@ export const FixResultModal: React.FC<FixResultModalProps> = ({ isOpen, onClose,
               <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-lg overflow-y-auto max-h-96">
                 <div 
                   className="prose prose-sm dark:prose-invert max-w-none"
-                  dangerouslySetInnerHTML={{ __html: fixResult.content }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(fixResult.content || '') }}
                 />
               </div>
             )}

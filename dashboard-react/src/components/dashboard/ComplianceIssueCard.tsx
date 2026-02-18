@@ -507,12 +507,15 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                 
                 {/* Chat-Input */}
                 <div className="flex gap-2">
+                  <label htmlFor="compliance-chat-input" className="sr-only">Frage zur Umsetzung</label>
                   <input
                     type="text"
+                    id="compliance-chat-input"
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleSendChatMessage()}
                     placeholder="z.B. 'Wie implementiere ich das in React?'"
+                    aria-label="Frage zur Compliance-Umsetzung eingeben"
                     className="flex-1 px-4 py-2 border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                     disabled={isChatLoading}
                   />

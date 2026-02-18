@@ -1,17 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import logging
 import secrets
 import os
 from datetime import datetime, timedelta
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 security = HTTPBearer()
+limiter = Limiter(key_func=get_remote_address)
 
 # Global reference to services (will be set in main_production.py)
 auth_service = None
@@ -62,7 +65,8 @@ async def init_user_limits(user_id: int, plan_type: str):
             logger.info(f"User limits initialized for user {user_id} with plan {plan_type}")
 
 @router.post("/register", response_model=TokenResponse)
-async def register(request: RegisterRequest):
+@limiter.limit("3/hour")
+async def register(request_obj: Request, request: RegisterRequest):
     """Register a new user"""
     if auth_service is None:
         logger.error("Auth service not initialized")
@@ -102,7 +106,8 @@ async def register(request: RegisterRequest):
         access_token = auth_service.create_access_token(user['id'])
         refresh_token = await auth_service.create_refresh_token(user['id'])
         
-        return {
+        is_secure = os.getenv("ENVIRONMENT", "production") == "production"
+        response = JSONResponse({
             "access_token": access_token,
             "refresh_token": refresh_token,
             "token_type": "bearer",
@@ -112,7 +117,17 @@ async def register(request: RegisterRequest):
                 "full_name": user['full_name'],
                 "company": user.get('company')
             }
-        }
+        })
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=is_secure,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 30,
+            path="/api/auth"
+        )
+        return response
     except HTTPException:
         raise
     except Exception as e:
@@ -134,7 +149,8 @@ async def register(request: RegisterRequest):
         )
 
 @router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest):
+@limiter.limit("5/minute")
+async def login(request_obj: Request, request: LoginRequest):
     """Login user"""
     if auth_service is None:
         logger.error("Auth service not initialized")
@@ -155,7 +171,8 @@ async def login(request: LoginRequest):
         access_token = auth_service.create_access_token(user['id'])
         refresh_token = await auth_service.create_refresh_token(user['id'])
         
-        return {
+        is_secure = os.getenv("ENVIRONMENT", "production") == "production"
+        response = JSONResponse({
             "access_token": access_token,
             "refresh_token": refresh_token,
             "token_type": "bearer",
@@ -165,7 +182,17 @@ async def login(request: LoginRequest):
                 "full_name": user['full_name'],
                 "company": user.get('company')
             }
-        }
+        })
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=is_secure,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 30,
+            path="/api/auth"
+        )
+        return response
     except HTTPException:
         raise
     except Exception as e:
@@ -176,7 +203,8 @@ async def login(request: LoginRequest):
         )
 
 @router.post("/refresh")
-async def refresh_token(request: RefreshRequest):
+@limiter.limit("10/minute")
+async def refresh_token(request_obj: Request, request: RefreshRequest):
     """Refresh access token"""
     new_access_token = await auth_service.refresh_access_token(request.refresh_token)
     if not new_access_token:

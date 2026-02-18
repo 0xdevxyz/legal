@@ -455,14 +455,17 @@ class ComplianceScanner:
             ))
         
         # Check for form labels
-        inputs_without_labels = soup.find_all('input', {'type': ['text', 'email', 'password']})
+        inputs_without_labels = soup.find_all('input', {'type': ['text', 'email', 'password', 'tel', 'url', 'search', 'number']})
         unlabeled_inputs = []
         for inp in inputs_without_labels:
             input_id = inp.get('id')
             aria_label = inp.get('aria-label')
+            aria_labelledby = inp.get('aria-labelledby')
+            title = inp.get('title')
+            placeholder = inp.get('placeholder')
             associated_label = soup.find('label', {'for': input_id}) if input_id else None
             
-            if not (aria_label or associated_label):
+            if not (aria_label or aria_labelledby or title or placeholder or associated_label):
                 unlabeled_inputs.append(inp)
         
         if unlabeled_inputs:

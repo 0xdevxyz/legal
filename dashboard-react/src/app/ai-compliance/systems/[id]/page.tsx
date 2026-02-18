@@ -2,14 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ArrowLeft, RefreshCw, FileText, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
+import { ArrowLeft, RefreshCw, FileText, AlertTriangle, CheckCircle2, Clock, Download, Plus, Loader2, Trash2, Upload } from 'lucide-react';
 import AIRiskBadge from '@/components/ai-compliance/AIRiskBadge';
 import ComplianceProgress from '@/components/ai-compliance/ComplianceProgress';
+import DocumentUpload from '@/components/ai-compliance/DocumentUpload';
 import {
   getAISystem,
   getSystemScans,
   scanAISystem,
-  getSystemDocumentation
+  getSystemDocumentation,
+  generateDocumentation,
+  listSystemDocuments,
+  downloadDocumentation,
+  deleteDocumentation,
+  downloadUploadedFile,
+  getDocumentTypeLabel,
+  type DocumentType,
+  type GeneratedDocument
 } from '@/lib/ai-compliance-api';
 import type { AISystem, ComplianceScan } from '@/types/ai-compliance';
 
@@ -21,8 +30,11 @@ export default function AISystemDetailPage() {
   const [system, setSystem] = useState<AISystem | null>(null);
   const [scans, setScans] = useState<ComplianceScan[]>([]);
   const [documentation, setDocumentation] = useState<any>(null);
+  const [generatedDocs, setGeneratedDocs] = useState<GeneratedDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+  const [generating, setGenerating] = useState<DocumentType | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'scans' | 'documentation'>('overview');
   
   useEffect(() => {
@@ -33,15 +45,17 @@ export default function AISystemDetailPage() {
     try {
       setLoading(true);
       
-      const [systemData, scansData, docsData] = await Promise.all([
+      const [systemData, scansData, docsData, generatedDocsData] = await Promise.all([
         getAISystem(systemId),
         getSystemScans(systemId, 10),
-        getSystemDocumentation(systemId)
+        getSystemDocumentation(systemId),
+        listSystemDocuments(systemId).catch(() => ({ documents: [] }))
       ]);
       
       setSystem(systemData);
       setScans(scansData);
       setDocumentation(docsData);
+      setGeneratedDocs(generatedDocsData.documents || []);
     } catch (err: any) {
       console.error('Error loading system:', err);
       alert('Fehler beim Laden: ' + (err.response?.data?.detail || err.message));
@@ -60,6 +74,55 @@ export default function AISystemDetailPage() {
       alert('Fehler beim Scannen: ' + (err.response?.data?.detail || err.message));
     } finally {
       setScanning(false);
+    }
+  };
+  
+  const handleGenerateDoc = async (docType: DocumentType) => {
+    try {
+      setGenerating(docType);
+      const result = await generateDocumentation(systemId, docType);
+      if (result.success) {
+        setGeneratedDocs(prev => [result.document, ...prev]);
+        alert('Dokument erfolgreich generiert!');
+      }
+    } catch (err: any) {
+      console.error('Error generating doc:', err);
+      alert('Fehler beim Generieren: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setGenerating(null);
+    }
+  };
+  
+  const handleDownloadDoc = async (docId: string, format: 'html' | 'pdf', title: string) => {
+    try {
+      setDownloading(docId);
+      const blob = await downloadDocumentation(docId, format);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${title.replace(/\s+/g, '_')}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      console.error('Error downloading doc:', err);
+      alert('Fehler beim Download: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setDownloading(null);
+    }
+  };
+  
+  const handleDeleteDoc = async (docId: string, title: string) => {
+    if (!confirm(`Dokument "${title}" wirklich löschen?`)) return;
+    
+    try {
+      await deleteDocumentation(docId);
+      setGeneratedDocs(prev => prev.filter(d => d.id !== docId));
+      await loadSystemData();
+    } catch (err: any) {
+      console.error('Error deleting doc:', err);
+      alert('Fehler beim Löschen: ' + (err.response?.data?.detail || err.message));
     }
   };
   
@@ -324,8 +387,108 @@ export default function AISystemDetailPage() {
             {/* Documentation Tab */}
             {activeTab === 'documentation' && documentation && (
               <div className="space-y-6">
+                {/* Upload Section */}
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Dokumentation</h3>
+                  <DocumentUpload systemId={systemId} onUploadComplete={loadSystemData} />
+                </div>
+                
+                {/* Generate New Documents Section */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Erforderliche Dokumentation</h3>
+                  <h4 className="text-md font-medium text-gray-300 mb-4">Dokument automatisch generieren</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {(['risk_assessment', 'technical_documentation', 'conformity_declaration'] as DocumentType[]).map((docType) => (
+                      <button
+                        key={docType}
+                        onClick={() => handleGenerateDoc(docType)}
+                        disabled={generating !== null}
+                        className="bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg p-4 text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div className="flex items-center gap-3 mb-2">
+                          {generating === docType ? (
+                            <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
+                          ) : (
+                            <Plus className="w-5 h-5 text-purple-400" />
+                          )}
+                          <span className="font-medium">{getDocumentTypeLabel(docType)}</span>
+                        </div>
+                        <p className="text-sm text-gray-400">
+                          {docType === 'risk_assessment' && 'Risk Assessment Report nach Art. 9 AI Act'}
+                          {docType === 'technical_documentation' && 'Technische Dokumentation nach Art. 11 AI Act'}
+                          {docType === 'conformity_declaration' && 'EU-Konformitätserklärung nach Art. 47 AI Act'}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Generated Documents List */}
+                {generatedDocs.length > 0 && (
+                  <div>
+                    <h4 className="text-md font-medium text-gray-300 mb-4">Alle Dokumente ({generatedDocs.length})</h4>
+                    <div className="space-y-3">
+                      {generatedDocs.map((doc) => (
+                        <div key={doc.id} className="bg-gray-700 rounded-lg p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <FileText className="w-5 h-5 text-purple-400" />
+                              <div>
+                                <div className="font-medium flex items-center gap-2">
+                                  {doc.title}
+                                  <span className={`text-xs px-2 py-0.5 rounded ${
+                                    doc.status === 'uploaded' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'
+                                  }`}>
+                                    {doc.status === 'uploaded' ? 'Hochgeladen' : 'Generiert'}
+                                  </span>
+                                </div>
+                                <div className="text-sm text-gray-400">
+                                  Version {doc.version} • {new Date(doc.created_at).toLocaleDateString('de-DE')}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleDownloadDoc(doc.id, 'html', doc.title)}
+                                disabled={downloading === doc.id}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-gray-600 hover:bg-gray-500 rounded text-sm transition-colors disabled:opacity-50"
+                              >
+                                {downloading === doc.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Download className="w-4 h-4" />
+                                )}
+                                HTML
+                              </button>
+                              <button
+                                onClick={() => handleDownloadDoc(doc.id, 'pdf', doc.title)}
+                                disabled={downloading === doc.id}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-sm transition-colors disabled:opacity-50"
+                              >
+                                {downloading === doc.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Download className="w-4 h-4" />
+                                )}
+                                PDF
+                              </button>
+                              <button
+                                onClick={() => handleDeleteDoc(doc.id, doc.title)}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-sm transition-colors"
+                                title="Löschen"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Required Documentation */}
+                <div>
+                  <h4 className="text-md font-medium text-gray-300 mb-4">Erforderliche Dokumentation laut AI Act</h4>
                   <div className="space-y-3">
                     {documentation.required?.map((doc: any, idx: number) => (
                       <div key={idx} className="bg-gray-700 rounded-lg p-4">
@@ -342,9 +505,6 @@ export default function AISystemDetailPage() {
                             </div>
                             <p className="text-sm text-gray-400">{doc.description}</p>
                           </div>
-                          <button className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-sm transition-colors">
-                            Erstellen
-                          </button>
                         </div>
                       </div>
                     ))}
@@ -353,7 +513,7 @@ export default function AISystemDetailPage() {
                 
                 {documentation.existing && documentation.existing.length > 0 && (
                   <div>
-                    <h3 className="text-lg font-semibold mb-4">Vorhandene Dokumente</h3>
+                    <h3 className="text-lg font-semibold mb-4">Hochgeladene Dokumente</h3>
                     <div className="space-y-2">
                       {documentation.existing.map((doc: any) => (
                         <div key={doc.id} className="bg-gray-700 rounded-lg p-3 flex items-center justify-between">
