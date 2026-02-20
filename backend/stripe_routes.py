@@ -29,8 +29,8 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_...")
 
 # Stripe Price IDs (müssen in Stripe Dashboard erstellt werden)
 STRIPE_PRICES = {
-    "pro_monthly": os.getenv("STRIPE_PRICE_PRO_MONTHLY", "price_XXXXX"),
-    "pro_yearly": os.getenv("STRIPE_PRICE_PRO_YEARLY", "price_YYYYY"),
+    "pro_monthly": os.getenv("STRIPE_PRICE_PRO_MONTHLY", None),
+    "pro_yearly": os.getenv("STRIPE_PRICE_PRO_YEARLY", None),
 }
 
 logger.info(f"🔧 Payment System - DEV_MODE: {DEV_MODE}, BYPASS_PAYMENT: {BYPASS_PAYMENT}")
