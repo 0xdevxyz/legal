@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 """
 Legal AI Routes - Gesetzesänderungen mit KI-Klassifizierung
 """
