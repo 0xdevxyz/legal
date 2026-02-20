@@ -203,7 +203,7 @@ async def subscribe_to_addon(
     
     # Get user email for Stripe
     # Note: You should fetch user email from database
-    user_email = f"user_{user_id}@complyo.tech"  # Placeholder
+    user_email = current_user.email  # Placeholder
     
     # Determine limits based on user plan
     user_plan = data.user_plan or "professional"
@@ -263,7 +263,7 @@ async def purchase_onetime_addon(
     addon = ONETIME_ADDONS[addon_key]
     
     # Get user email
-    user_email = f"user_{user_id}@complyo.tech"  # Placeholder
+    user_email = current_user.email  # Placeholder
     
     # Create Stripe checkout session for one-time payment
     try:
