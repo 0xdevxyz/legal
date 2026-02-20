@@ -47,13 +47,13 @@ from payment.stripe_service import StripeService
 import stripe
 
 import sentry_sdk
-_sentry_dsn = os.getenv("SENTRY_DSN")
-if _sentry_dsn:
-    sentry_sdk.init(
-        dsn=_sentry_dsn,
-        traces_sample_rate=0.1,
-        environment=os.getenv("ENVIRONMENT", "production"),
-    )
+# [DUPLICATE-REMOVED] _sentry_dsn = os.getenv("SENTRY_DSN")
+# [DUPLICATE-REMOVED] if _sentry_dsn:
+# [DUPLICATE-REMOVED]     sentry_sdk.init(
+# [DUPLICATE-REMOVED]         dsn=_sentry_dsn,
+# [DUPLICATE-REMOVED]         traces_sample_rate=0.1,
+# [DUPLICATE-REMOVED]         environment=os.getenv("ENVIRONMENT", "production"),
+# [DUPLICATE-REMOVED]     )
 
 # Import API Routers
 from lead_routes import lead_router
