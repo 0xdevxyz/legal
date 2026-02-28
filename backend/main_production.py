@@ -10,6 +10,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import hashlib
+import bcrypt as _bcrypt
 import jwt
 import datetime
 import os
@@ -630,7 +631,11 @@ def create_jwt_token(user_data: dict) -> str:
 
 def verify_jwt_token(token: str) -> Optional[dict]:
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(
+            token, JWT_SECRET, algorithms=[JWT_ALGORITHM],
+            audience="complyo-api",
+            issuer=os.getenv("FRONTEND_URL", "https://complyo.tech")
+        )
         return payload
     except jwt.ExpiredSignatureError:
         return None
@@ -638,7 +643,12 @@ def verify_jwt_token(token: str) -> Optional[dict]:
         return None
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash password with bcrypt (cost factor 12). Replaces insecure SHA-256."""
+    return _bcrypt.hashpw(password.encode('utf-8'), _bcrypt.gensalt(rounds=12)).decode('utf-8')
+
+def verify_password(plain: str, hashed: str) -> bool:
+    """Verify bcrypt password hash."""
+    return _bcrypt.checkpw(plain.encode('utf-8'), hashed.encode('utf-8'))
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     token = credentials.credentials
@@ -729,7 +739,7 @@ async def metrics_endpoint(request: Request):
 
 @app.post("/api/v2/analyze/complete")
 @limiter.limit("30/minute")
-async def complete_analysis(analyze_request: AnalyzeRequest, request: Request):
+async def complete_analysis(analyze_request: AnalyzeRequest, request: Request, current_user: dict = Depends(get_current_user)):
     """
     Enhanced comprehensive website analysis with deep scanning and context extraction
     """
@@ -794,7 +804,7 @@ async def complete_analysis(analyze_request: AnalyzeRequest, request: Request):
 
 @app.post("/api/v2/fixes/execute")
 @limiter.limit("10/minute")
-async def execute_fix(execute_request: ExecuteFixRequest, request: Request):
+async def execute_fix(execute_request: ExecuteFixRequest, request: Request, current_user: dict = Depends(get_current_user)):
     """
     Generate complete fix content (code/text/widget/guide)
     """
@@ -827,7 +837,7 @@ async def execute_fix(execute_request: ExecuteFixRequest, request: Request):
 
 @app.post("/api/v2/fixes/validate")
 @limiter.limit("20/minute")
-async def validate_fix_live(validate_request: ValidateFixRequest, request: Request):
+async def validate_fix_live(validate_request: ValidateFixRequest, request: Request, current_user: dict = Depends(get_current_user)):
     """
     Validate if a fix has been implemented correctly via targeted re-scan
     """

@@ -7,16 +7,20 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import logging
+import os
 from database_service import db_service
 
 logger = logging.getLogger(__name__)
 
 admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-# Simple admin authentication (in production, use proper auth)
+_ADMIN_API_KEY = os.getenv("ADMIN_API_KEY")
+
 def verify_admin_access(api_key: str = Query(..., alias="api_key")):
-    """Simple API key verification for admin access"""
-    if api_key != "admin_complyo_2025":  # In production, use proper authentication
+    """Admin API key verification — key must be set via ADMIN_API_KEY env var."""
+    if not _ADMIN_API_KEY:
+        raise HTTPException(status_code=503, detail="Admin access not configured")
+    if api_key != _ADMIN_API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized admin access")
     return True
 

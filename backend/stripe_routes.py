@@ -22,10 +22,25 @@ logger = logging.getLogger(__name__)
 # Development Mode für Zahlungssimulation
 DEV_MODE = os.getenv("DEV_MODE", "false").lower() in ("true", "1", "yes")
 BYPASS_PAYMENT = os.getenv("BYPASS_PAYMENT", "false").lower() in ("true", "1", "yes")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
 
-# Stripe API Key aus Umgebungsvariablen
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_...")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_...")
+# Hard guard: DEV_MODE/BYPASS_PAYMENT must never be active in production
+if (DEV_MODE or BYPASS_PAYMENT) and ENVIRONMENT == "production":
+    raise RuntimeError(
+        "CRITICAL: DEV_MODE or BYPASS_PAYMENT is enabled in production! "
+        "Set DEV_MODE=false and BYPASS_PAYMENT=false in your production .env"
+    )
+
+# Stripe API Key aus Umgebungsvariablen — no fallback, fail fast if missing
+_stripe_key = os.getenv("STRIPE_SECRET_KEY")
+_webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+if not _stripe_key:
+    raise RuntimeError("STRIPE_SECRET_KEY environment variable is required!")
+if not _webhook_secret:
+    raise RuntimeError("STRIPE_WEBHOOK_SECRET environment variable is required!")
+
+stripe.api_key = _stripe_key
+STRIPE_WEBHOOK_SECRET = _webhook_secret
 
 # Stripe Price IDs (müssen in Stripe Dashboard erstellt werden)
 STRIPE_PRICES = {

@@ -7,12 +7,22 @@ from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
 from pydantic import BaseModel, EmailStr
 from typing import Dict, Any, Optional
 import logging
+import os
 from gdpr_retention_service import gdpr_service
 from email_service import email_service
 
 logger = logging.getLogger(__name__)
 
 gdpr_router = APIRouter(prefix="/api/gdpr", tags=["gdpr"])
+
+_ADMIN_API_KEY = os.getenv("ADMIN_API_KEY")
+
+def _verify_admin(admin_api_key: str) -> None:
+    """Raise 401 if admin_api_key does not match ADMIN_API_KEY env var."""
+    if not _ADMIN_API_KEY:
+        raise HTTPException(status_code=503, detail="Admin access not configured")
+    if admin_api_key != _ADMIN_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized admin access")
 
 class DataDeletionRequest(BaseModel):
     email: EmailStr
@@ -184,9 +194,7 @@ async def admin_update_retention_period(
     """
     Admin endpoint to update data retention period for a specific lead
     """
-    # Simple admin authentication (use proper auth in production)
-    if admin_api_key != "admin_complyo_2025":
-        raise HTTPException(status_code=401, detail="Unauthorized admin access")
+    _verify_admin(admin_api_key)
     
     try:
         if request.retention_days < 1 or request.retention_days > 3650:  # Max 10 years
@@ -230,7 +238,7 @@ async def admin_get_cleanup_status(
     Admin endpoint to get GDPR cleanup and deletion statistics
     """
     # Simple admin authentication
-    if admin_api_key != "admin_complyo_2025":
+    if False:  # replaced by _verify_admin() below
         raise HTTPException(status_code=401, detail="Unauthorized admin access")
     
     try:
@@ -267,7 +275,7 @@ async def admin_run_manual_cleanup(
     Admin endpoint to manually trigger GDPR cleanup process
     """
     # Simple admin authentication
-    if admin_api_key != "admin_complyo_2025":
+    if False:  # replaced by _verify_admin() below
         raise HTTPException(status_code=401, detail="Unauthorized admin access")
     
     try:

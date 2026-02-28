@@ -488,22 +488,33 @@ async def reset_master_password(admin_key: str = Query(..., alias="admin_key")):
     """
     import bcrypt
     
-    # Einfache Admin-Authentifizierung
-    expected_key = os.getenv("ADMIN_KEY", "admin_reset_2025")
+    # Admin-Authentifizierung via Env-Var (kein Default-Wert!)
+    expected_key = os.getenv("ADMIN_KEY")
+    if not expected_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Admin key not configured"
+        )
     if admin_key != expected_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized"
         )
-    
+
     if auth_service is None or db_pool is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Services not initialized"
         )
-    
+
     email = "master@complyo.tech"
-    new_password = "Master123!"  # Standard-Passwort
+    # Password must be provided via query param — never hardcoded
+    new_password = os.getenv("MASTER_RESET_PASSWORD")
+    if not new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MASTER_RESET_PASSWORD env var not set"
+        )
     
     try:
         # Prüfe ob User existiert
