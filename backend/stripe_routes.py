@@ -46,6 +46,15 @@ STRIPE_WEBHOOK_SECRET = _webhook_secret
 STRIPE_PRICES = {
     "pro_monthly": os.getenv("STRIPE_PRICE_PRO_MONTHLY", None),
     "pro_yearly": os.getenv("STRIPE_PRICE_PRO_YEARLY", None),
+    "agency_monthly": os.getenv("STRIPE_PRICE_AGENCY_MONTHLY", None),
+    "agency_yearly": os.getenv("STRIPE_PRICE_AGENCY_YEARLY", None),
+}
+
+# Websites-Limit je Plan (für user_limits nach Checkout)
+PLAN_WEBSITES_MAX = {
+    "agency": 25,
+    "pro": 999,
+    "expert": 999,
 }
 
 logger.info(f"🔧 Payment System - DEV_MODE: {DEV_MODE}, BYPASS_PAYMENT: {BYPASS_PAYMENT}")
@@ -95,19 +104,19 @@ async def create_checkout_session(
             mock_customer_id = f"cus_dev_{uuid.uuid4().hex[:24]}"
             
             # Upgrade User direkt in der Datenbank
+            _websites_max = PLAN_WEBSITES_MAX.get(request.plan, 999)
             async with db_service.pool.acquire() as conn:
-                # Update user_limits zu PRO
                 await conn.execute(
                     """
                     UPDATE user_limits
-                    SET 
+                    SET
                         plan_type = $1,
                         fixes_limit = 999999,
-                        websites_max = 999,
+                        websites_max = $3,
                         exports_max = 999
                     WHERE user_id = $2
                     """,
-                    request.plan, user_id
+                    request.plan, user_id, _websites_max
                 )
                 
                 # Unlock Domain falls vorhanden
@@ -310,21 +319,22 @@ async def handle_checkout_completed(session):
             logger.error("No user_id in checkout session metadata")
             return
         
+        websites_max = PLAN_WEBSITES_MAX.get(plan, 999)
+
         async with db_service.pool.acquire() as conn:
-            # Update user_limits zu PRO
             await conn.execute(
                 """
                 UPDATE user_limits
-                SET 
+                SET
                     plan_type = $1,
                     fixes_limit = 999999,
-                    websites_max = 999,
+                    websites_max = $3,
                     exports_max = 999
                 WHERE user_id = $2
                 """,
-                plan, user_id
+                plan, user_id, websites_max
             )
-            
+
             # Unlock Domain falls vorhanden
             if domain:
                 logger.info(f"Unlocking domain {domain} for user {user_id}")

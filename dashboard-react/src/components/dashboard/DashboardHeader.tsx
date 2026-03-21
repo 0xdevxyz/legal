@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { Shield, LogOut, User, Sparkles, ChevronDown, Settings, CreditCard, Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/Logo';
+import { SiteSwitcher } from '@/components/dashboard/SiteSwitcher';
 
 export const DashboardHeader: React.FC = () => {
   const { user, logout } = useAuth();
@@ -23,8 +24,11 @@ export const DashboardHeader: React.FC = () => {
     <header className="glass-strong sticky top-0 z-50">
       <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
-          {/* Logo */}
-          <Logo size="lg" onClick={() => router.push('/')} />
+          {/* Logo + Site Switcher */}
+          <div className="flex items-center gap-4">
+            <Logo size="lg" onClick={() => router.push('/')} />
+            <SiteSwitcher />
+          </div>
 
           {/* User Info & Actions */}
           <div className="flex items-center gap-4">

@@ -676,9 +676,9 @@ async def create_or_update_config(
                     cookie_lifetime_days = $16, show_branding = $17,
                     custom_logo_url = $18, updated_at = NOW()
                 WHERE site_id = $1
-                RETURNING id
+                RETURNING id, revision
             """
-            
+
             result = await db_pool.fetchrow(
                 update_query,
                 config.site_id,
@@ -700,7 +700,7 @@ async def create_or_update_config(
                 config.show_branding,
                 config.custom_logo_url
             )
-            
+
             return {
                 "success": True,
                 "message": "Configuration updated",
@@ -718,7 +718,7 @@ async def create_or_update_config(
                     show_branding, custom_logo_url
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-                RETURNING id
+                RETURNING id, revision
             """
             
             result = await db_pool.fetchrow(
@@ -1177,12 +1177,12 @@ async def scan_website(
                 # Update existierende Config mit gefundenen Services
                 await db_pool.execute("""
                     UPDATE cookie_banner_configs SET
-                        services = $2::text[],
+                        services = $2::jsonb,
                         scan_completed_at = NOW(),
                         last_scan_url = $3,
                         updated_at = NOW()
                     WHERE site_id = $1
-                """, site_id, service_keys_found, url)
+                """, site_id, json.dumps(service_keys_found), url)
                 config_updated = True
                 print(f"[Scan] ✅ Config updated for {site_id} with {len(service_keys_found)} services")
             else:
@@ -1190,8 +1190,8 @@ async def scan_website(
                 await db_pool.execute("""
                     INSERT INTO cookie_banner_configs (
                         site_id, services, scan_completed_at, last_scan_url, is_active
-                    ) VALUES ($1, $2::text[], NOW(), $3, true)
-                """, site_id, service_keys_found, url)
+                    ) VALUES ($1, $2::jsonb, NOW(), $3, true)
+                """, site_id, json.dumps(service_keys_found), url)
                 config_updated = True
                 print(f"[Scan] ✅ New config created for {site_id} with {len(service_keys_found)} services")
         

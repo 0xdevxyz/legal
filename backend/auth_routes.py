@@ -318,12 +318,12 @@ async def google_oauth_callback(code: str, state: str):
         access_token = auth_service.create_access_token(user['id'])
         refresh_token = await auth_service.create_refresh_token(user['id'])
         
-        # Redirect to frontend with tokens (via URL hash for security)
+        # Redirect to frontend — tokens via URL fragment (never visible in server logs or Referer headers)
         frontend_url = "https://app.complyo.tech"
         return RedirectResponse(
-            url=f"{frontend_url}/auth/callback?access_token={access_token}&refresh_token={refresh_token}"
+            url=f"{frontend_url}/auth/callback#access_token={access_token}&refresh_token={refresh_token}"
         )
-    
+
     except Exception as e:
         logger.error(f"Google OAuth error: {e}")
         raise HTTPException(500, f"Google OAuth failed: {str(e)}")
@@ -386,12 +386,12 @@ async def apple_oauth_callback(code: str, state: str):
         access_token = auth_service.create_access_token(user['id'])
         refresh_token = await auth_service.create_refresh_token(user['id'])
         
-        # Redirect to frontend with tokens
+        # Redirect to frontend — tokens via URL fragment (never visible in server logs or Referer headers)
         frontend_url = "https://app.complyo.tech"
         return RedirectResponse(
-            url=f"{frontend_url}/auth/callback?access_token={access_token}&refresh_token={refresh_token}"
+            url=f"{frontend_url}/auth/callback#access_token={access_token}&refresh_token={refresh_token}"
         )
-    
+
     except Exception as e:
         logger.error(f"Apple OAuth error: {e}")
         raise HTTPException(500, f"Apple OAuth failed: {str(e)}")
@@ -479,12 +479,13 @@ async def auth_health():
     }
 
 @router.post("/admin/reset-master-password")
-async def reset_master_password(admin_key: str = Query(..., alias="admin_key")):
+@limiter.limit("3/hour")
+async def reset_master_password(request: Request, admin_key: str = Query(..., alias="admin_key")):
     """
     Admin Endpoint: Setzt das Passwort für master@complyo.tech zurück
-    
+
     Query Parameter:
-    - admin_key: Admin-Schlüssel (default: "admin_reset_2025")
+    - admin_key: Admin-Schlüssel (muss als ADMIN_KEY env var gesetzt sein)
     """
     import bcrypt
     
@@ -535,34 +536,30 @@ async def reset_master_password(admin_key: str = Query(..., alias="admin_key")):
             logger.info(f"Master user created: {email}")
             return {
                 "success": True,
-                "message": "Master user created",
+                "message": "Master user created — password set from MASTER_RESET_PASSWORD env var",
                 "email": email,
-                "password": new_password,
-                "warning": "Please change password after first login"
             }
         else:
             # Passwort zurücksetzen
             password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-            
+
             async with db_pool.acquire() as conn:
                 await conn.execute(
                     """
-                    UPDATE users 
-                    SET hashed_password = $1, 
-                        is_active = TRUE, 
+                    UPDATE users
+                    SET hashed_password = $1,
+                        is_active = TRUE,
                         is_verified = TRUE
                     WHERE email = $2
                     """,
                     password_hash, email
                 )
-            
+
             logger.info(f"Master user password reset: {email}")
             return {
                 "success": True,
-                "message": "Password reset successfully",
+                "message": "Password reset successfully — new password is in MASTER_RESET_PASSWORD env var",
                 "email": email,
-                "password": new_password,
-                "warning": "Please change password after first login"
             }
             
     except Exception as e:

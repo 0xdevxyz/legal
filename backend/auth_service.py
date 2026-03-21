@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 import asyncpg
 import logging
+from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +34,44 @@ class AuthService:
             return dict(user) if user else None
     
     async def get_user_by_id(self, user_id: int) -> Optional[Dict]:
-        """Get user by ID"""
+        """Get user by ID including plan_type and active_modules"""
         async with self.db_pool.acquire() as conn:
             user = await conn.fetchrow(
-                "SELECT id, email, full_name, is_active, is_verified, created_at FROM users WHERE id = $1",
+                "SELECT id, email, full_name, company, is_active, is_verified, created_at FROM users WHERE id = $1",
                 user_id
             )
-            return dict(user) if user else None
+            if not user:
+                return None
+
+            result = dict(user)
+
+            # plan_type + plan_limits aus user_limits
+            limits = await conn.fetchrow(
+                "SELECT plan_type, websites_max, exports_max FROM user_limits WHERE user_id = $1",
+                user_id
+            )
+            if limits:
+                result['plan_type'] = limits['plan_type']
+                result['plan_limits'] = {
+                    'websites_max': limits['websites_max'],
+                    'exports_max':  limits['exports_max'],
+                }
+            else:
+                result['plan_type'] = 'free'
+                result['plan_limits'] = {'websites_max': 1, 'exports_max': 10}
+
+            # aktive Module
+            modules = await conn.fetch(
+                """
+                SELECT module_id FROM user_modules
+                WHERE user_id = $1 AND status = 'active'
+                  AND (expires_at IS NULL OR expires_at > NOW())
+                """,
+                user_id
+            )
+            result['active_modules'] = [r['module_id'] for r in modules]
+
+            return result
     
     async def register_user(self, email: str, password: str, full_name: str, company: str = None) -> Dict:
         """Register a new user"""
@@ -51,13 +83,23 @@ class AuthService:
             async with self.db_pool.acquire() as conn:
                 user = await conn.fetchrow(
                     """
-                    INSERT INTO users (email, hashed_password, full_name, company_name)
+                    INSERT INTO users (email, password_hash, full_name, company)
                     VALUES ($1, $2, $3, $4)
-                    RETURNING id, email, full_name, company_name, created_at
+                    RETURNING id, email, full_name, company, created_at
                     """,
                     email, password_hash, full_name, company
                 )
-            
+
+                # Grant all modules to new users by default
+                try:
+                    await conn.execute("""
+                        INSERT INTO user_modules (user_id, module_id, status)
+                        SELECT $1, id, 'active' FROM modules WHERE is_active = true
+                        ON CONFLICT (user_id, module_id) DO NOTHING
+                    """, user['id'])
+                except Exception as module_err:
+                    logger.warning(f"Could not grant modules to new user: {module_err}")
+
             logger.info(f"User registered: {email}")
             return dict(user)
         except asyncpg.UniqueViolationError:
@@ -80,14 +122,14 @@ class AuthService:
             return None
         
         # Verify password
-        if not bcrypt.checkpw(password.encode('utf-8'), user['hashed_password'].encode('utf-8')):
+        if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
             logger.warning(f"Authentication failed: Invalid password for {email}")
             return None
-        
+
         logger.info(f"User authenticated: {email}")
-        # Return user without hashed_password
+        # Return user without password_hash
         user_dict = dict(user)
-        del user_dict['hashed_password']
+        del user_dict['password_hash']
         return user_dict
     
     def create_access_token(self, user_id) -> str:
@@ -105,7 +147,7 @@ class AuthService:
     async def create_refresh_token(self, user_id) -> str:
         """Create and store refresh token"""
         token = secrets.token_urlsafe(64)
-        user_id = str(user_id)  # Convert UUID to string
+        user_id = int(user_id)
         expires_at = datetime.utcnow() + timedelta(minutes=self.refresh_token_expire)
         
         async with self.db_pool.acquire() as conn:
@@ -174,9 +216,3 @@ class AuthService:
             )
         logger.info(f"Cleaned up expired sessions: {result}")
 
-
-async def require_admin(current_user = Depends(get_current_user)):
-    """Dependency: Nur Admin-User erlaubt"""
-    if not getattr(current_user, 'is_admin', False) and getattr(current_user, 'role', '') != 'admin':
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return current_user

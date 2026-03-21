@@ -35,12 +35,14 @@ import jwt
 
 class Settings:
     """Application settings loaded from environment."""
-    
+
     def __init__(self):
         self.database_url = os.getenv("DATABASE_URL")
         self.redis_url = os.getenv("REDIS_URL", "redis://redis:6379")
         self.jwt_secret = os.getenv("JWT_SECRET")
         self.jwt_algorithm = "HS256"
+        self.jwt_audience = "complyo-api"
+        self.jwt_issuer = os.getenv("FRONTEND_URL", "https://complyo.tech")
         self.environment = os.getenv("ENVIRONMENT", "production")
         self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
         
@@ -161,7 +163,9 @@ async def get_current_user(
         payload = jwt.decode(
             credentials.credentials,
             settings.jwt_secret,
-            algorithms=[settings.jwt_algorithm]
+            algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
         )
         return payload
     except jwt.ExpiredSignatureError:
@@ -200,7 +204,9 @@ async def get_current_user_optional(
         payload = jwt.decode(
             credentials.credentials,
             settings.jwt_secret,
-            algorithms=[settings.jwt_algorithm]
+            algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
         )
         return payload
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):

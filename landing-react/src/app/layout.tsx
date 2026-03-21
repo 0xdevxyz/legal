@@ -58,7 +58,7 @@ export default function RootLayout({
           src="https://api.complyo.tech/api/widgets/cookie-compliance.js"
           data-site-id="complyo-tech"
           data-complyo-site-id="complyo-tech"
-          strategy="beforeInteractive"
+          strategy="afterInteractive"
         />
         
         {children}

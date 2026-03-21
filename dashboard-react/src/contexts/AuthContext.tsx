@@ -29,7 +29,8 @@ interface User {
     email: string;
     full_name: string;
     company?: string;
-    plan_type?: 'free' | 'ai' | 'expert';
+    plan_type?: 'free' | 'single' | 'complete' | 'expert' | 'ai' | 'agency';
+    active_modules?: string[];
     plan_limits?: {
         websites_max: number;
         exports_max: number;

@@ -585,7 +585,8 @@
             this.config.widthMode = serverConfig.width_mode || this.config.widthMode;
             this.config.showBranding = serverConfig.show_branding !== false;
             this.config.services = serverConfig.services || [];
-            
+            this.config.isActiveFromServer = serverConfig.is_active === true;
+
             // Phase 6 features
             this.config.bannerless_mode = serverConfig.bannerless_mode || false;
             this.config.age_verification_enabled = serverConfig.age_verification_enabled || false;
@@ -675,9 +676,9 @@
             
             console.log('[Complyo] Konfigurierte Services:', configuredServices);
             
-            // Wenn KEINE Services konfiguriert sind → KEIN Banner nötig!
-            // Das ist korrekt: Wenn keine Tracking-Cookies, braucht man keinen Banner
-            if (!hasTrackingServices) {
+            // Wenn KEINE Services konfiguriert sind UND keine explizite Server-Aktivierung → KEIN Banner nötig!
+            // Das ist korrekt: Wenn keine Tracking-Cookies und nicht via Dashboard aktiviert, braucht man keinen Banner
+            if (!hasTrackingServices && !this.config.isActiveFromServer) {
                 console.log('[Complyo] ✅ Keine Tracking-Services konfiguriert - kein Banner erforderlich');
                 console.log('[Complyo] ℹ️ Ihre Website verwendet nur essenzielle Cookies');
                 // Setze automatisch "nur notwendige" Cookies als Consent

@@ -2,6 +2,7 @@ export const runtime = 'nodejs'
 import type { Metadata } from 'next'
 import Link from 'next/link';
 import './globals.css'
+import Script from 'next/script'
 import Providers from './providers'  // <— WICHTIG: Provider einbinden
 import { AIAssistant } from '@/components/ai/AIAssistant'
 
@@ -39,6 +40,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="min-h-screen text-white dark:text-white light:text-gray-900 antialiased">
+        {/* Cookie-Banner - DSGVO-konform, lädt nach Interaktivität */}
+        <Script
+          src="https://api.complyo.tech/api/widgets/cookie-compliance.js"
+          data-site-id="complyo-tech"
+          data-complyo-site-id="complyo-tech"
+          strategy="afterInteractive"
+        />
         <Providers>
           {children}
           <AIAssistant />
