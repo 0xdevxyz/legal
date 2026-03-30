@@ -15,31 +15,11 @@ import type {
   AIActRequirement,
   RiskCategoryInfo
 } from '@/types/ai-compliance';
-
-// API Base URL Configuration
-const getApiBaseURL = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:8002';
-    }
-    
-    if (hostname.includes('complyo.tech')) {
-      return 'https://api.complyo.tech';
-    }
-  }
-  
-  return 'http://localhost:8002';
-};
+import { getApiBaseUrl } from '@/lib/api-utils';
 
 // Create axios instance for AI Compliance API
 const aiApiClient = axios.create({
-  baseURL: getApiBaseURL(),
+  baseURL: getApiBaseUrl(),
   timeout: 60000, // 60 seconds for AI analysis
   withCredentials: true,
   headers: {

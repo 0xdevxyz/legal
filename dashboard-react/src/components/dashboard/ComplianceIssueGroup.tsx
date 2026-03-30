@@ -104,7 +104,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
     setIsFixingAll(true);
     
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
       
       // Prüfe ob es sich um Datenschutz/Impressum handelt - dann eRecht24 nutzen
       const isLegalText = group.category === 'datenschutz' || 

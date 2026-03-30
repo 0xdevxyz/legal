@@ -13,8 +13,8 @@ const getApiBase = () => {
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return 'http://localhost:8002';
     }
-    if (hostname.includes('complyo.tech')) {
-      return 'https://api.complyo.tech';
+    if (hostname.includes('complyo.tech') || hostname.includes('complyo.de')) {
+      return 'https://api.complyo.de';
     }
   }
   

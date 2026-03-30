@@ -6,24 +6,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Shield, CheckCircle, Loader2, AlertCircle, Eye, FileText, BarChart3, Crown } from 'lucide-react';
 import SocialLoginButtons from '@/components/SocialLoginButtons';
 import { Logo } from '@/components/Logo';
+import { getApiBaseUrl } from '@/lib/api-utils';
 
-const getApiBase = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:8002';
-    }
-    if (hostname.includes('complyo.tech')) {
-      return 'https://api.complyo.tech';
-    }
-  }
-  return 'http://localhost:8002';
-};
-
-const API_BASE = getApiBase();
+const API_BASE = getApiBaseUrl();
 
 const MODULES = [
     { id: 'cookie', name: 'Cookie & DSGVO', icon: Shield, description: 'Cookie-Banner, Consent-Management' },

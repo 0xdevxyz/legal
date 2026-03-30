@@ -18,6 +18,7 @@ import logging
 import json
 
 from auth_routes import get_current_user
+from dependencies import require_admin
 from database_service import DatabaseService
 
 logger = logging.getLogger(__name__)
@@ -221,11 +222,11 @@ async def get_classified_updates(
                         LIMIT 1
                     """, user_id)
                     if not user_website_row:
-                        # Fallback auf websites Tabelle (falls vorhanden)
+                        # Fallback auf tracked_websites Tabelle
                         user_website_row = await conn.fetchrow("""
-                            SELECT url, last_scan_date as last_scan 
-                            FROM websites 
-                            WHERE user_id = $1 
+                            SELECT url, last_scan_date as last_scan
+                            FROM tracked_websites
+                            WHERE user_id = $1
                             ORDER BY last_scan_date DESC NULLS LAST
                             LIMIT 1
                         """, user_id)
@@ -754,12 +755,10 @@ async def get_stats(user_id: int = Depends(get_current_user_id)):
 @router.get("/learning/insights")
 async def get_learning_insights(
     days: int = Query(30, ge=1, le=365),
-    user_id: int = Depends(get_current_user_id)
+    admin: dict = Depends(require_admin)
 ):
     """
     Holt Learning Insights (nur für Admins)
-    
-    TODO: Admin-Check einbauen
     """
     try:
         from ai_feedback_learning import get_feedback_learning
@@ -796,11 +795,9 @@ async def get_learning_insights(
 
 
 @router.get("/learning/suggestions")
-async def get_optimization_suggestions(user_id: int = Depends(get_current_user_id)):
+async def get_optimization_suggestions(admin: dict = Depends(require_admin)):
     """
     Holt Optimierungs-Vorschläge aus dem Learning-System (nur für Admins)
-    
-    TODO: Admin-Check einbauen
     """
     try:
         from ai_feedback_learning import get_feedback_learning

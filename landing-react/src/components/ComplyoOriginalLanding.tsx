@@ -87,7 +87,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
     company: ''
   });
   
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
   const [faqs, setFaqs] = useState<FAQ[]>([
     {
       id: 1,
@@ -1657,18 +1657,22 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
             </div>
             
             <form onSubmit={(e) => handlePurchase(e, 'ki')} className="space-y-4">
-              <input 
-                type="email" 
+              <label htmlFor="ki-email" className="sr-only">E-Mail-Adresse für KI-Lösung</label>
+              <input
+                id="ki-email"
+                type="email"
                 name="email"
-                placeholder="Ihre E-Mail-Adresse" 
-                required 
+                placeholder="Ihre E-Mail-Adresse"
+                required
                 aria-label="E-Mail-Adresse für KI-Lösung"
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
               />
-              <input 
-                type="url" 
+              <label htmlFor="ki-website" className="sr-only">Website-URL für KI-Lösung</label>
+              <input
+                id="ki-website"
+                type="url"
                 name="website"
-                placeholder="Ihre Website-URL" 
+                placeholder="Ihre Website-URL"
                 required
                 aria-label="Website-URL für KI-Lösung"
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
@@ -1709,33 +1713,41 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
             </div>
             
             <form onSubmit={(e) => handlePurchase(e, 'expert')} className="space-y-4">
-              <input 
-                type="text" 
+              <label htmlFor="expert-company" className="sr-only">Firmenname</label>
+              <input
+                id="expert-company"
+                type="text"
                 name="company"
-                placeholder="Firmenname" 
+                placeholder="Firmenname"
                 required
                 aria-label="Firmenname"
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
               />
-              <input 
-                type="email" 
+              <label htmlFor="expert-email" className="sr-only">E-Mail-Adresse für Expertenservice</label>
+              <input
+                id="expert-email"
+                type="email"
                 name="email"
-                placeholder="Ihre E-Mail-Adresse" 
-                required 
+                placeholder="Ihre E-Mail-Adresse"
+                required
                 aria-label="E-Mail-Adresse für Expertenservice"
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
               />
-              <input 
-                type="tel" 
+              <label htmlFor="expert-phone" className="sr-only">Telefonnummer</label>
+              <input
+                id="expert-phone"
+                type="tel"
                 name="phone"
-                placeholder="Telefonnummer" 
+                placeholder="Telefonnummer"
                 required
                 aria-label="Telefonnummer"
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
               />
-              <textarea 
+              <label htmlFor="expert-requirements" className="sr-only">Anforderungsbeschreibung</label>
+              <textarea
+                id="expert-requirements"
                 name="requirements"
-                placeholder="Beschreiben Sie Ihre Anforderungen..." 
+                placeholder="Beschreiben Sie Ihre Anforderungen..."
                 required
                 rows={4}
                 aria-label="Anforderungsbeschreibung"

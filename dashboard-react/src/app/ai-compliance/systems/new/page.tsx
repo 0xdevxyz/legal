@@ -130,10 +130,11 @@ export default function NewAISystemPage() {
             
             {/* Name */}
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label htmlFor="ai-system-name" className="block text-sm font-medium mb-2">
                 Name des KI-Systems <span className="text-red-400">*</span>
               </label>
               <input
+                id="ai-system-name"
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -142,13 +143,14 @@ export default function NewAISystemPage() {
                 required
               />
             </div>
-            
+
             {/* Description */}
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label htmlFor="ai-system-description" className="block text-sm font-medium mb-2">
                 Beschreibung <span className="text-red-400">*</span>
               </label>
               <textarea
+                id="ai-system-description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -157,13 +159,14 @@ export default function NewAISystemPage() {
                 required
               />
             </div>
-            
+
             {/* Purpose */}
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label htmlFor="ai-system-purpose" className="block text-sm font-medium mb-2">
                 Verwendungszweck <span className="text-red-400">*</span>
               </label>
               <textarea
+                id="ai-system-purpose"
                 value={formData.purpose}
                 onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -172,13 +175,14 @@ export default function NewAISystemPage() {
                 required
               />
             </div>
-            
+
             {/* Vendor */}
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label htmlFor="ai-system-vendor" className="block text-sm font-medium mb-2">
                 Anbieter/Hersteller
               </label>
               <input
+                id="ai-system-vendor"
                 type="text"
                 value={formData.vendor}
                 onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
@@ -186,13 +190,14 @@ export default function NewAISystemPage() {
                 placeholder="z.B. OpenAI, Google, Microsoft"
               />
             </div>
-            
+
             {/* Domain */}
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label htmlFor="ai-system-domain" className="block text-sm font-medium mb-2">
                 Einsatzbereich
               </label>
               <select
+                id="ai-system-domain"
                 value={formData.domain}
                 onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -203,13 +208,14 @@ export default function NewAISystemPage() {
                 ))}
               </select>
             </div>
-            
+
             {/* Deployment Date */}
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label htmlFor="ai-system-deployment-date" className="block text-sm font-medium mb-2">
                 Deployment-Datum
               </label>
               <input
+                id="ai-system-deployment-date"
                 type="date"
                 value={formData.deployment_date}
                 onChange={(e) => setFormData({ ...formData, deployment_date: e.target.value })}

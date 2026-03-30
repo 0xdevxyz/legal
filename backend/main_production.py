@@ -73,6 +73,7 @@ import website_routes  # Website management routes
 import stripe_routes  # NEW: Freemium Stripe integration
 import user_routes  # User profile & domain locks
 from database_service import db_service
+from dependencies import get_current_user
 from email_service import email_service
 from erecht24_rechtstexte_service import erecht24_rechtstexte_service, LegalTextType
 from news_service import NewsService
@@ -197,6 +198,9 @@ _cors_origins = [
     "https://complyo.tech",
     "https://www.complyo.tech",
     "https://app.complyo.tech",
+    "https://complyo.de",
+    "https://www.complyo.de",
+    "https://app.complyo.de",
 ]
 if ENVIRONMENT != "production":
     _cors_origins += [
@@ -386,10 +390,11 @@ async def startup_event():
             
             if should_fetch:
                 result = await news_service.fetch_all_feeds()
-                if result['success'] and result['new_articles_count'] > 0:
-                    print(f"✅ Fetched {result['new_articles_count']} new articles")
+                new_count = result.get('new_items', result.get('new_articles_count', 0))
+                if result.get('errors') and not new_count:
+                    print(f"⚠️ News fetch had errors: {result['errors']}")
                 else:
-                    print(f"⚠️ News fetch failed (keeping old news): {result.get('error', 'Unknown error')}")
+                    print(f"✅ Fetched {new_count} new articles from {result.get('processed', 0)} feeds")
     
     except Exception as e:
         print(f"⚠️ News fetch failed (keeping old news): {e}")
@@ -458,11 +463,6 @@ async def startup_event():
     legal_news_routes.db_pool = db_pool
     legal_news_routes.news_service = news_service
     legal_news_routes.db_pool = db_pool
-    
-    # Initialize legal_ai_routes with db_pool
-    import legal_ai_routes
-    legal_ai_routes.db_pool = db_pool
-    print("✅ Legal AI routes initialized with database pool")
 
     # Include API routers
     app.include_router(public_router)
@@ -621,27 +621,6 @@ async def shutdown_event():
     await db_service.close()
 
 # Utility Functions
-def create_jwt_token(user_data: dict) -> str:
-    payload = {
-        "user_id": user_data["id"],
-        "email": user_data["email"],
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=7)
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-
-def verify_jwt_token(token: str) -> Optional[dict]:
-    try:
-        payload = jwt.decode(
-            token, JWT_SECRET, algorithms=[JWT_ALGORITHM],
-            audience="complyo-api",
-            issuer=os.getenv("FRONTEND_URL", "https://complyo.tech")
-        )
-        return payload
-    except jwt.ExpiredSignatureError:
-        return None
-    except jwt.InvalidTokenError:
-        return None
-
 def hash_password(password: str) -> str:
     """Hash password with bcrypt (cost factor 12). Replaces insecure SHA-256."""
     return _bcrypt.hashpw(password.encode('utf-8'), _bcrypt.gensalt(rounds=12)).decode('utf-8')
@@ -649,18 +628,6 @@ def hash_password(password: str) -> str:
 def verify_password(plain: str, hashed: str) -> bool:
     """Verify bcrypt password hash."""
     return _bcrypt.checkpw(plain.encode('utf-8'), hashed.encode('utf-8'))
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    token = credentials.credentials
-    payload = verify_jwt_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token"
-        )
-    if "user_id" not in payload and "id" in payload:
-        payload["user_id"] = payload["id"]
-    return payload
 
 # API Routes
 @app.get("/")
@@ -1262,7 +1229,7 @@ async def get_latest_scan(current_user: dict = Depends(get_current_user)):
                 ORDER BY scan_timestamp DESC
                 LIMIT 1
                 """,
-                current_user["user_id"]
+                int(current_user["user_id"])
             )
             
             if not scan:
@@ -1485,7 +1452,7 @@ async def get_active_fix_jobs(current_user: dict = Depends(get_current_user)):
                   )
                 ORDER BY created_at DESC
                 """,
-                current_user["user_id"]
+                int(current_user["user_id"])
             )
             
             jobs_list = []

@@ -64,7 +64,7 @@ const CookieCompliancePage: React.FC = () => {
   // Step 2: Services
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
   
   // Generate site ID from URL
   const generateSiteId = (url: string): string => {

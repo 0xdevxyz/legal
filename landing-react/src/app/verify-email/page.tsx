@@ -19,7 +19,7 @@ const EmailVerificationContent: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   
   const token = searchParams.get('token');
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
   useEffect(() => {
     const verifyEmail = async () => {

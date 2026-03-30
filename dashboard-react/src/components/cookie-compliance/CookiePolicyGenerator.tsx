@@ -21,7 +21,7 @@ export default function CookiePolicyGenerator({ siteId, config }: CookiePolicyGe
   const [copied, setCopied] = useState(false);
   const [language, setLanguage] = useState('de');
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
   const generatePolicy = async () => {
     setLoading(true);

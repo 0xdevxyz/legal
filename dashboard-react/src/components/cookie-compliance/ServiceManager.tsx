@@ -70,7 +70,7 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
   const loadServicesAndWebsite = async () => {
     try {
       setLoading(true);
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
       
       // Lade verfügbare Services
       const servicesResponse = await fetch(`${API_URL}/api/cookie-compliance/services`);
@@ -93,7 +93,7 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
     try {
       setScanning(true);
       setScanResults(null);
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
       const response = await fetch(`${API_URL}/api/cookie-compliance/scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

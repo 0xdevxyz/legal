@@ -25,7 +25,7 @@ export default function ConsentModeSettings({ siteId, config, onSave }: ConsentM
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
   const handleSave = async () => {
     setSaving(true);

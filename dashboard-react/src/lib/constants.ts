@@ -1,23 +1,11 @@
+import { getApiBaseUrl } from '@/lib/api-utils';
+
 export const APP_CONFIG = {
   name: 'Complyo Dashboard',
   version: '2.0.0',
   description: 'KI-gestützte Website-Compliance für Deutschland',
   api: {
-    baseUrl: (() => {
-      if (process.env.NEXT_PUBLIC_API_URL) {
-        return process.env.NEXT_PUBLIC_API_URL;
-      }
-      if (typeof window !== 'undefined') {
-        const hostname = window.location.hostname;
-        if (hostname === 'localhost' || hostname === '127.0.0.1') {
-          return 'http://localhost:8002';
-        }
-        if (hostname.includes('complyo.tech')) {
-          return 'https://api.complyo.tech';
-        }
-      }
-      return 'http://localhost:8002';
-    })(),
+    baseUrl: getApiBaseUrl(),
     timeout: 30000
   },
   dashboard: {

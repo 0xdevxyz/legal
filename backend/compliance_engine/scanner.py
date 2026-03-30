@@ -28,6 +28,7 @@ from compliance_engine.checks import (
     check_barrierefreiheit_compliance,
     check_barrierefreiheit_compliance_smart
 )
+from compliance_engine.browser_renderer import smart_fetch_html, detect_client_rendering
 
 # Import Legal Update Integration
 from compliance_engine.legal_update_integration import legal_update_integration
@@ -75,7 +76,7 @@ class ComplianceScanner:
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         self.session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=30),
+            timeout=aiohttp.ClientTimeout(total=55),
             connector=connector,
             headers={
                 'User-Agent': 'Complyo-Scanner/2.0 (Compliance Bot; +https://complyo.tech/scanner)'
@@ -106,68 +107,63 @@ class ComplianceScanner:
                 return self._create_error_response(url, "Website nicht erreichbar")
             
             soup = BeautifulSoup(main_page['content'], 'html.parser')
-            
-            # Run all compliance checks (using modular check system)
-            # Barrierefreiheit (BFSG) - Höchste Priorität
-            # ✨ NEU: Nutzt Browser-Rendering für moderne JS-Websites
-            barriere_issues = await check_barrierefreiheit_compliance_smart(
-                url, 
-                html=main_page['content'], 
-                session=self.session
+
+            # Render once if browser is needed, share HTML across all checks
+            rendered_html = main_page['content']
+            if detect_client_rendering(main_page['content'])[0]:
+                logger.info("🌐 Browser rendering needed — fetching once for all checks")
+                rendered_html, _ = await smart_fetch_html(url, main_page['content'])
+                logger.info("✅ Single browser render complete")
+                soup = BeautifulSoup(rendered_html, 'html.parser')
+
+            # Run all compliance checks in parallel using pre-rendered soup
+            # barrierefreiheit: no session = single-page only (avoids multi-page scan)
+            barriere_task = check_barrierefreiheit_compliance(url, soup, None)
+            impressum_task = check_impressum_compliance(url, soup, self.session)
+            datenschutz_task = check_datenschutz_compliance(url, soup, self.session)
+            cookie_task = check_cookie_compliance(url, soup, self.session)
+            ssl_task = self._check_ssl_security(url)
+            contact_task = self._check_contact_data(url, soup)
+            social_task = self._check_social_media_plugins(url, soup)
+
+            results = await asyncio.gather(
+                barriere_task, impressum_task, datenschutz_task, cookie_task,
+                ssl_task, contact_task, social_task,
+                return_exceptions=True
             )
-            
-            # ✅ NEU: Prüfe ob Accessibility-Widget gefunden wurde
+
+            barriere_issues, impressum_issues, datenschutz_issues, cookie_issues, \
+                ssl_issues, contact_issues, social_issues = results
+
+            for check_issues in [barriere_issues, impressum_issues, datenschutz_issues,
+                                  cookie_issues, ssl_issues, contact_issues, social_issues]:
+                if isinstance(check_issues, Exception):
+                    logger.warning(f"Check failed (non-critical): {check_issues}")
+                    continue
+                for issue_dict in check_issues:
+                    if isinstance(issue_dict, ComplianceIssue):
+                        issues.append(issue_dict)
+                    else:
+                        issues.append(ComplianceIssue(**issue_dict))
+
+            # ✅ Prüfe ob Accessibility-Widget gefunden wurde
             has_accessibility_widget = not any(
-                issue.get('title') == 'Kein Barrierefreiheits-Tool/Widget gefunden' 
-                for issue in barriere_issues
+                (issue.title if isinstance(issue, ComplianceIssue) else issue.get('title')) == 'Kein Barrierefreiheits-Tool/Widget gefunden'
+                for issue in (barriere_issues if not isinstance(barriere_issues, Exception) else [])
             )
-            
-            for issue_dict in barriere_issues:
-                issues.append(ComplianceIssue(**issue_dict))
-            
-            # Impressum (TMG) - mit Browser-Rendering für JS-Seiten
-            impressum_issues = await check_impressum_compliance_smart(
-                url,
-                html=main_page['content'],
-                session=self.session
-            )
-            for issue_dict in impressum_issues:
-                issues.append(ComplianceIssue(**issue_dict))
-            
-            # Datenschutz (DSGVO) - mit Browser-Rendering für JS-Seiten
-            datenschutz_issues = await check_datenschutz_compliance_smart(
-                url,
-                html=main_page['content'],
-                session=self.session
-            )
-            for issue_dict in datenschutz_issues:
-                issues.append(ComplianceIssue(**issue_dict))
-            
-            # Cookie-Compliance (TTDSG) - inkludiert TCF 2.2 Check
-            cookie_issues = await check_cookie_compliance(url, soup, self.session)
-            for issue_dict in cookie_issues:
-                issues.append(ComplianceIssue(**issue_dict))
-            
+
             # ✅ TCF 2.2: Vendor Analysis (optional, additional data)
             tcf_data = {}
             if TCF_AVAILABLE:
                 try:
                     tcf_data = await check_tcf_compliance(url, soup, main_page['content'])
-                    
-                    # Vendor Detection
                     detected_vendors = await tcf_vendor_analyzer.analyze_vendors_on_page(soup, main_page['content'])
                     tcf_data["detected_vendors"] = detected_vendors
                     tcf_data["vendor_count"] = len(detected_vendors)
-                    
                     logger.info(f"✅ TCF 2.2 Check completed: {tcf_data.get('cmp_name', 'No CMP')}, {len(detected_vendors)} vendors")
                 except Exception as e:
                     logger.warning(f"⚠️ TCF analysis failed: {e}")
                     tcf_data = {"has_tcf": False, "error": str(e)}
-            
-            # Legacy checks (still useful)
-            issues.extend(await self._check_ssl_security(url))
-            issues.extend(await self._check_contact_data(url, soup))
-            issues.extend(await self._check_social_media_plugins(url, soup))
             
             # ✅ HYBRIDANSATZ: Anreicherung mit eRecht24-Beschreibungen
             issues = await self._enrich_with_erecht24_descriptions(issues)

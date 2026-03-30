@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 
 /**
@@ -10,13 +10,14 @@ import { useAuth } from '@/contexts/AuthContext';
  */
 function AuthCallbackContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { login } = useAuth();
 
   useEffect(() => {
     const handleCallback = async () => {
-      const accessToken = searchParams?.get('access_token');
-      const refreshToken = searchParams?.get('refresh_token');
+      const hash = window.location.hash.slice(1);
+      const params = new URLSearchParams(hash);
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
 
       if (accessToken && refreshToken) {
         // Store tokens
@@ -25,7 +26,7 @@ function AuthCallbackContent() {
 
         // Get user info
         try {
-          const response = await fetch('https://api.complyo.tech/api/auth/me', {
+          const response = await fetch('https://api.complyo.de/api/auth/me', {
             headers: {
               'Authorization': `Bearer ${accessToken}`
             }
@@ -50,7 +51,7 @@ function AuthCallbackContent() {
     };
 
     handleCallback();
-  }, [searchParams, router]);
+  }, [router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900">
@@ -64,13 +65,7 @@ function AuthCallbackContent() {
 
 export default function AuthCallbackPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    }>
-      <AuthCallbackContent />
-    </Suspense>
+    <AuthCallbackContent />
   );
 }
 

@@ -26,7 +26,10 @@ async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depend
 
 # Stripe Configuration
 stripe.api_key = os.getenv("STRIPE_API_KEY", "")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET_ADDONS", "")
+_addon_webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET_ADDONS", "")
+if not _addon_webhook_secret:
+    raise RuntimeError("STRIPE_WEBHOOK_SECRET_ADDONS environment variable is required!")
+STRIPE_WEBHOOK_SECRET = _addon_webhook_secret
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.complyo.tech")
 
 # ==================== PRICING CONFIGURATION ====================
@@ -431,22 +434,59 @@ async def handle_addon_checkout_completed(session):
 
 async def handle_addon_subscription_updated(subscription):
     """Handle add-on subscription updates"""
-    # TODO: Update add-on status if needed
-    logger.info(f"Add-on subscription updated: {subscription['id']}")
+    subscription_id = subscription['id']
+    status = subscription.get('status', 'unknown')
+    try:
+        async with db_service.get_connection() as conn:
+            await conn.execute(
+                """
+                UPDATE user_addons
+                SET status = $1
+                WHERE stripe_subscription_id = $2
+                """,
+                status,
+                subscription_id
+            )
+        logger.info(f"Add-on subscription updated: {subscription_id} → {status}")
+    except Exception as e:
+        logger.error(f"Error updating add-on subscription {subscription_id}: {e}")
 
 async def handle_addon_subscription_cancelled(subscription):
     """Handle add-on subscription cancellation"""
     subscription_id = subscription['id']
-    
-    # Find and cancel the add-on in database
-    # Note: This requires querying by stripe_subscription_id
-    logger.info(f"Add-on subscription cancelled: {subscription_id}")
-    # TODO: Implement cancellation by stripe_subscription_id
+    try:
+        async with db_service.get_connection() as conn:
+            await conn.execute(
+                """
+                UPDATE user_addons
+                SET status = 'cancelled', cancelled_at = NOW()
+                WHERE stripe_subscription_id = $1
+                """,
+                subscription_id
+            )
+        logger.info(f"Add-on subscription cancelled: {subscription_id}")
+    except Exception as e:
+        logger.error(f"Error cancelling add-on subscription {subscription_id}: {e}")
 
 async def handle_addon_payment_failed(invoice):
     """Handle failed add-on payment"""
-    logger.warning(f"Add-on payment failed: {invoice['id']}")
-    # TODO: Send notification to user
+    subscription_id = invoice.get('subscription')
+    if not subscription_id:
+        logger.warning(f"Add-on payment_failed invoice {invoice['id']} has no subscription")
+        return
+    try:
+        async with db_service.get_connection() as conn:
+            await conn.execute(
+                """
+                UPDATE user_addons
+                SET status = 'past_due'
+                WHERE stripe_subscription_id = $1
+                """,
+                subscription_id
+            )
+        logger.warning(f"Add-on payment failed for subscription {subscription_id} — status set to past_due")
+    except Exception as e:
+        logger.error(f"Error handling payment_failed for subscription {subscription_id}: {e}")
 
 async def handle_addon_payment_succeeded(invoice):
     """Handle successful add-on payment"""

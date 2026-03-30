@@ -61,7 +61,7 @@ const AdminDashboard: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
   const ADMIN_API_KEY = 'admin_complyo_2025';
 
   useEffect(() => {

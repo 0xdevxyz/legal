@@ -29,7 +29,7 @@ interface IntegrationGuideProps {
 const IntegrationGuide: React.FC<IntegrationGuideProps> = ({ siteId, config }) => {
   const [copied, setCopied] = useState(false);
   
-  const API_BASE = 'https://api.complyo.tech';
+  const API_BASE = 'https://api.complyo.de';
   
   const scriptCode = `<!-- Complyo Cookie Compliance & Auto-Blocking -->
 <!-- Step 1: Cookie Blocker (lädt ZUERST, blockiert Scripts) -->

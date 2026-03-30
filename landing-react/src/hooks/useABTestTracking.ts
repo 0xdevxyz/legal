@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 
-const API_BASE = 'https://api.complyo.tech';
+const API_BASE = 'https://api.complyo.de';
 
 export interface ABTestEvent {
   event: string;

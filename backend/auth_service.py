@@ -90,16 +90,6 @@ class AuthService:
                     email, password_hash, full_name, company
                 )
 
-                # Grant all modules to new users by default
-                try:
-                    await conn.execute("""
-                        INSERT INTO user_modules (user_id, module_id, status)
-                        SELECT $1, id, 'active' FROM modules WHERE is_active = true
-                        ON CONFLICT (user_id, module_id) DO NOTHING
-                    """, user['id'])
-                except Exception as module_err:
-                    logger.warning(f"Could not grant modules to new user: {module_err}")
-
             logger.info(f"User registered: {email}")
             return dict(user)
         except asyncpg.UniqueViolationError:
@@ -148,7 +138,7 @@ class AuthService:
         """Create and store refresh token"""
         token = secrets.token_urlsafe(64)
         user_id = int(user_id)
-        expires_at = datetime.utcnow() + timedelta(minutes=self.refresh_token_expire)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=self.refresh_token_expire)
         
         async with self.db_pool.acquire() as conn:
             await conn.execute(
@@ -188,7 +178,7 @@ class AuthService:
             return None
         
         # Check if token is expired
-        if session['expires_at'] < datetime.utcnow():
+        if session['expires_at'] < datetime.now(timezone.utc):
             # Delete expired token
             async with self.db_pool.acquire() as conn:
                 await conn.execute(

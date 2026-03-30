@@ -16,7 +16,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
   const loadAnalytics = async () => {
     try {

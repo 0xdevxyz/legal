@@ -56,7 +56,7 @@ class BrowserRenderer:
             await self.playwright.stop()
         logger.info("🔒 Browser closed")
     
-    async def render_page(self, url: str, wait_for: str = 'networkidle', timeout: int = 30000) -> Dict[str, Any]:
+    async def render_page(self, url: str, wait_for: str = 'domcontentloaded', timeout: int = 15000) -> Dict[str, Any]:
         """
         Rendert Seite vollständig im Browser
         

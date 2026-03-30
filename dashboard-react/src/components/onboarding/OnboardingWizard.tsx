@@ -105,6 +105,18 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
     setIsScanning(true);
     setStep(2);
     setScanProgress(0);
+    setScanError(null);
+
+    // Normalize URL
+    let normalizedUrl = url.trim();
+    if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+      normalizedUrl = 'https://' + normalizedUrl;
+    }
+    const urlObj = new URL(normalizedUrl);
+    const domain = urlObj.hostname;
+
+    // Start API call and animation in parallel
+    const apiPromise = analyzeWebsite(domain);
 
     // Simulate progress with realistic checks
     const checks = [
@@ -124,19 +136,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
     }
 
     try {
-      // ✅ Reset error state
-      setScanError(null);
-      
-      // Normalize URL
-      let normalizedUrl = url.trim();
-      if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
-        normalizedUrl = 'https://' + normalizedUrl;
-      }
-      const urlObj = new URL(normalizedUrl);
-      const domain = urlObj.hostname;
-
-      // Use quick scan endpoint
-      const result = await analyzeWebsite(domain);
+      const result = await apiPromise;
       
       setScanProgress(100);
       setCurrentCheck('Analyse abgeschlossen!');

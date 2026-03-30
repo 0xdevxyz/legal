@@ -65,7 +65,7 @@ export const CookieBannerLoader: React.FC = () => {
     function loadScriptsManually() {
       // Lade Cookie-Blocker zuerst
       const blockerScript = document.createElement('script');
-      blockerScript.src = 'https://api.complyo.tech/public/cookie-blocker.js';
+      blockerScript.src = 'https://api.complyo.de/public/cookie-blocker.js';
       blockerScript.setAttribute('data-site-id', 'complyo-tech');
       blockerScript.async = false;
       blockerScript.onload = () => {
@@ -73,7 +73,7 @@ export const CookieBannerLoader: React.FC = () => {
         
         // Dann lade Cookie-Banner
         const bannerScript = document.createElement('script');
-        bannerScript.src = 'https://api.complyo.tech/api/widgets/cookie-compliance.js';
+        bannerScript.src = 'https://api.complyo.de/api/widgets/cookie-compliance.js';
         bannerScript.setAttribute('data-site-id', 'complyo-tech');
         bannerScript.setAttribute('data-complyo-site-id', 'complyo-tech');
         bannerScript.async = false;

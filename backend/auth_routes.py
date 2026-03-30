@@ -242,9 +242,9 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Ungültiger Token"
         )
-    
+
     # Get user from database
-    user = await auth_service.get_user_by_id(user_id)
+    user = await auth_service.get_user_by_id(int(user_id))
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

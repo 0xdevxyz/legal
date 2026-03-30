@@ -37,7 +37,7 @@ export default function ComplyoHighConversionLanding({ variant, sessionId }: Com
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
   const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || 'https://app.complyo.tech';
 
   const handleAnalyze = async () => {

@@ -9,9 +9,6 @@ import { useAuth } from '@/contexts/AuthContext';
 export function SiteSwitcher() {
   const { sites, activeSite, setActiveSite, isLoading, refresh } = useActiveSite();
   const { user } = useAuth();
-
-  // Nur für Agentur-User sichtbar
-  if (user?.plan_type !== 'agency') return null;
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newUrl, setNewUrl] = useState('');
@@ -31,6 +28,9 @@ export function SiteSwitcher() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // Nur für Agentur-User sichtbar
+  if (user?.plan_type !== 'agency') return null;
 
   const displayUrl = activeSite
     ? activeSite.url.replace(/^https?:\/\//, '').replace(/\/$/, '')
@@ -124,7 +124,9 @@ export function SiteSwitcher() {
               </button>
             ) : (
               <div className="p-3 space-y-2">
+                <label htmlFor="site-switcher-url" className="sr-only">Website-URL</label>
                 <input
+                  id="site-switcher-url"
                   autoFocus
                   type="url"
                   placeholder="https://beispiel.de"

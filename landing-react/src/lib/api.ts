@@ -2,7 +2,7 @@ import axios from 'axios';
 import { ComplianceAnalysis, ApiResponse } from '@/types/api';
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

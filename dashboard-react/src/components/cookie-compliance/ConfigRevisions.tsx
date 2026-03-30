@@ -32,7 +32,7 @@ export default function ConfigRevisions({ siteId, config, onImport }: ConfigRevi
   const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
   useEffect(() => {
     loadRevisions();

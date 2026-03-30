@@ -6,7 +6,7 @@ import { Shield, User, CreditCard, Lock, Mail, Building, Save, AlertCircle, Chec
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -191,11 +191,12 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="profile-email" className="block text-sm font-medium mb-2 text-gray-300">
                   <Mail className="w-4 h-4 inline mr-2" />
                   E-Mail
                 </label>
                 <input
+                  id="profile-email"
                   type="email"
                   value={profileData.email}
                   onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
@@ -204,11 +205,12 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="profile-full-name" className="block text-sm font-medium mb-2 text-gray-300">
                   <User className="w-4 h-4 inline mr-2" />
                   Vollständiger Name
                 </label>
                 <input
+                  id="profile-full-name"
                   type="text"
                   value={profileData.full_name}
                   onChange={(e) => setProfileData({ ...profileData, full_name: e.target.value })}
@@ -217,11 +219,12 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="profile-company" className="block text-sm font-medium mb-2 text-gray-300">
                   <Building className="w-4 h-4 inline mr-2" />
                   Firma (optional)
                 </label>
                 <input
+                  id="profile-company"
                   type="text"
                   value={profileData.company}
                   onChange={(e) => setProfileData({ ...profileData, company: e.target.value })}
@@ -252,10 +255,11 @@ export default function ProfilePage() {
               </p>
 
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="billing-company-name" className="block text-sm font-medium mb-2 text-gray-300">
                   Firmenname *
                 </label>
                 <input
+                  id="billing-company-name"
                   type="text"
                   value={billingData.company_name}
                   onChange={(e) => setBillingData({ ...billingData, company_name: e.target.value })}
@@ -265,10 +269,11 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="billing-vat-id" className="block text-sm font-medium mb-2 text-gray-300">
                   USt-IdNr. (optional)
                 </label>
                 <input
+                  id="billing-vat-id"
                   type="text"
                   value={billingData.vat_id}
                   onChange={(e) => setBillingData({ ...billingData, vat_id: e.target.value })}
@@ -278,10 +283,11 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="billing-street" className="block text-sm font-medium mb-2 text-gray-300">
                   Straße & Hausnummer *
                 </label>
                 <input
+                  id="billing-street"
                   type="text"
                   value={billingData.street}
                   onChange={(e) => setBillingData({ ...billingData, street: e.target.value })}
@@ -293,10 +299,11 @@ export default function ProfilePage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-300">
+                  <label htmlFor="billing-postal-code" className="block text-sm font-medium mb-2 text-gray-300">
                     PLZ *
                   </label>
                   <input
+                    id="billing-postal-code"
                     type="text"
                     value={billingData.postal_code}
                     onChange={(e) => setBillingData({ ...billingData, postal_code: e.target.value })}
@@ -307,10 +314,11 @@ export default function ProfilePage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-300">
+                  <label htmlFor="billing-city" className="block text-sm font-medium mb-2 text-gray-300">
                     Stadt *
                   </label>
                   <input
+                    id="billing-city"
                     type="text"
                     value={billingData.city}
                     onChange={(e) => setBillingData({ ...billingData, city: e.target.value })}
@@ -322,10 +330,11 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="billing-country" className="block text-sm font-medium mb-2 text-gray-300">
                   Land *
                 </label>
                 <select
+                  id="billing-country"
                   value={billingData.country}
                   onChange={(e) => setBillingData({ ...billingData, country: e.target.value })}
                   className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
@@ -355,10 +364,11 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="password-current" className="block text-sm font-medium mb-2 text-gray-300">
                   Aktuelles Passwort
                 </label>
                 <input
+                  id="password-current"
                   type="password"
                   value={passwordData.current_password}
                   onChange={(e) => setPasswordData({ ...passwordData, current_password: e.target.value })}
@@ -367,10 +377,11 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="password-new" className="block text-sm font-medium mb-2 text-gray-300">
                   Neues Passwort
                 </label>
                 <input
+                  id="password-new"
                   type="password"
                   value={passwordData.new_password}
                   onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
@@ -380,10 +391,11 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="password-confirm" className="block text-sm font-medium mb-2 text-gray-300">
                   Passwort bestätigen
                 </label>
                 <input
+                  id="password-confirm"
                   type="password"
                   value={passwordData.confirm_password}
                   onChange={(e) => setPasswordData({ ...passwordData, confirm_password: e.target.value })}

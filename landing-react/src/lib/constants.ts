@@ -3,7 +3,7 @@ export const APP_CONFIG = {
   version: '2.0.0',
   description: 'KI-gestützte Website-Compliance für Deutschland',
   api: {
-    baseUrl: process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech',
+    baseUrl: process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de',
     timeout: 30000
   },
   dashboard: {

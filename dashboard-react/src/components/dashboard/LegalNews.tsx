@@ -198,7 +198,7 @@ export const LegalNews: React.FC = () => {
     }
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
       const timeToAction = startTime ? Math.floor((Date.now() - startTime) / 1000) : null;
       
       await fetch(`${API_URL}/api/legal-ai/feedback`, {
@@ -251,7 +251,7 @@ export const LegalNews: React.FC = () => {
     setLoadError(null);
     
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
       // ✅ Lade ALLE Updates (include_info_only=true), damit auch News ohne action_required sichtbar sind
       const response = await fetch(`${API_URL}/api/legal-ai/updates?limit=10&include_info_only=true`, {
@@ -297,7 +297,7 @@ export const LegalNews: React.FC = () => {
 
   const fetchRSSNews = async () => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
       const response = await fetch(`${API_URL}/api/legal/news?limit=6`, {
         headers: {

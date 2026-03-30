@@ -23,8 +23,8 @@ export function getApiBaseUrl(): string {
     }
     
     // Production Domain → Production API
-    if (hostname.includes('complyo.tech')) {
-      return 'https://api.complyo.tech';
+    if (hostname.includes('complyo.tech') || hostname.includes('complyo.de')) {
+      return 'https://api.complyo.de';
     }
   }
   

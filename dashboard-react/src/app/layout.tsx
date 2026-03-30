@@ -42,7 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen text-white dark:text-white light:text-gray-900 antialiased">
         {/* Cookie-Banner - DSGVO-konform, lädt nach Interaktivität */}
         <Script
-          src="https://api.complyo.tech/api/widgets/cookie-compliance.js"
+          src="https://api.complyo.de/api/widgets/cookie-compliance.js"
           data-site-id="complyo-tech"
           data-complyo-site-id="complyo-tech"
           strategy="afterInteractive"

@@ -103,7 +103,7 @@ const ABTestManager: React.FC<ABTestManagerProps> = ({ siteId, currentConfig }) 
     variantBValue: '#10b981',
   });
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
   useEffect(() => {
     loadTests();

@@ -31,7 +31,7 @@ export default function LegalChangeWidget() {
 
   const loadSummary = async () => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
       const response = await fetch(`${API_URL}/api/legal-changes/dashboard/summary`, {
         credentials: 'include',
       });

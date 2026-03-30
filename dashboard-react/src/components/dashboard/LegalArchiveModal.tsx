@@ -44,7 +44,7 @@ export const LegalArchiveModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const loadArchive = async () => {
     setIsLoading(true);
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
       
       let url = `${API_URL}/api/legal-ai/archive?page=${page}&page_size=20`;
       if (filterSeverity) {

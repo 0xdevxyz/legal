@@ -5,10 +5,11 @@ export const fetchCache = 'force-no-store'
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Cookie, Settings, Eye, Code, BarChart3, CheckCircle, AlertCircle, Globe, Lock, Zap } from 'lucide-react';
+import { ArrowLeft, Cookie, Settings, Eye, Code, BarChart3, CheckCircle, AlertCircle, Globe, Lock, Zap, ShieldCheck, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Import Cookie Compliance Components
 import CookieBannerDesigner from '@/components/cookie-compliance/CookieBannerDesigner';
@@ -19,6 +20,7 @@ import AdvancedSettings from '@/components/cookie-compliance/AdvancedSettings';
 
 export default function CookieCompliancePage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [siteId, setSiteId] = useState<string>('');
   const [config, setConfig] = useState<any>(null);
@@ -28,7 +30,7 @@ export default function CookieCompliancePage() {
   const [websiteLocked, setWebsiteLocked] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState<string>('');
   
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
   
   useEffect(() => {
     loadConfig();
@@ -167,7 +169,65 @@ export default function CookieCompliancePage() {
       </main>
     );
   }
-  
+
+  // Paywall: Cookie-Modul erforderlich
+  const hasCookieModule = user?.active_modules?.includes('cookie');
+  if (!hasCookieModule) {
+    return (
+      <main role="main" className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4">
+        <div className="max-w-lg w-full text-center">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-orange-500/20 rounded-full mb-6">
+            <Lock className="w-10 h-10 text-orange-400" />
+          </div>
+          <h1 className="text-2xl font-bold mb-3">Cookie & DSGVO Modul</h1>
+          <p className="text-gray-400 mb-8">
+            Um den Cookie-Banner zu konfigurieren und auf Ihrer Website einzubinden, benötigen Sie das
+            <strong className="text-white"> Cookie & DSGVO Modul</strong>.
+          </p>
+          <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6 mb-8 text-left space-y-3">
+            <div className="flex items-center gap-3 text-sm text-gray-300">
+              <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+              <span>DSGVO- & TTDSG-konformes Cookie-Banner</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm text-gray-300">
+              <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+              <span>Automatisches Script-Blocking vor Zustimmung</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm text-gray-300">
+              <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+              <span>1 Domain – inkl. Einbinde-Code & Integration</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm text-gray-300">
+              <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+              <span>Consent-Statistiken & Google Consent Mode v2</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm text-gray-300">
+              <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+              <span>35+ Services (Google Analytics, Facebook Pixel, …)</span>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button
+              onClick={() => router.push('/subscription')}
+              className="bg-orange-500 hover:bg-orange-600 text-white font-semibold gap-2"
+            >
+              <CreditCard className="w-4 h-4" />
+              Jetzt freischalten
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => router.push('/')}
+              className="border-gray-600 text-gray-300 hover:bg-gray-800 gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Zurück zum Dashboard
+            </Button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main role="main" aria-label="Cookie-Compliance Management" className="min-h-screen bg-gray-900 text-white">
       {/* Header */}

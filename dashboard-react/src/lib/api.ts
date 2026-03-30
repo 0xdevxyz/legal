@@ -1,35 +1,10 @@
 import axios, { AxiosResponse } from 'axios';
 import type { ComplianceAnalysis, FixResult, UserLimits, FixHistory } from '@/types/api';
-
-// ✅ API Client Configuration - Dynamische URL zur Runtime
-const getApiBaseURL = () => {
-  // 1. Wenn Umgebungsvariable gesetzt ist, diese verwenden
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  
-  // 2. Für Browser: Intelligente URL-Erkennung
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    
-    // Localhost → lokaler Backend
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:8002';
-    }
-    
-    // Production Domain → API-Subdomain
-    if (hostname.includes('complyo.tech')) {
-      return 'https://api.complyo.tech';
-    }
-  }
-  
-  // 3. Fallback für Server-Side Rendering
-  return 'http://localhost:8002';
-};
+import { getApiBaseUrl } from '@/lib/api-utils';
 
 const apiClient = axios.create({
- baseURL: getApiBaseURL(),
- timeout: 30000,
+ baseURL: getApiBaseUrl(),
+ timeout: 60000,
  withCredentials: true,
  headers: {
    'Content-Type': 'application/json',

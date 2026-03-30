@@ -30,7 +30,7 @@ export const AccessibilityWidget: React.FC = () => {
 
     // Erstelle neues Script-Tag
     const script = document.createElement('script');
-    script.src = 'https://api.complyo.tech/api/widgets/accessibility.js';
+    script.src = 'https://api.complyo.de/api/widgets/accessibility.js';
     script.setAttribute('data-site-id', siteId);
     script.setAttribute('data-auto-fix', 'true');
     script.setAttribute('data-show-toolbar', 'true');

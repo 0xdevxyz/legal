@@ -134,11 +134,23 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
         # Get risk calculator from app state
         from main_production import db_pool, risk_calculator
         
-        # Perform compliance scan using the real scanner
+        # Perform compliance scan and crawl in parallel
         try:
+            crawler = WebsiteCrawler(timeout=10)
             async with ComplianceScanner() as scanner:
-                scan_result = await scanner.scan_website(url)
+                scan_result, website_structure = await asyncio.gather(
+                    scanner.scan_website(url),
+                    crawler.crawl_website(url),
+                    return_exceptions=True
+                )
             
+            if isinstance(scan_result, Exception):
+                raise scan_result
+            
+            if isinstance(website_structure, Exception):
+                logger.warning(f"Crawler failed (non-critical): {website_structure}")
+                website_structure = {}
+
             if scan_result.get("error"):
                 # ❌ NO MOCK DATA! Return clear error to user
                 error_message = scan_result.get('error_message', 'Website konnte nicht gescannt werden')
@@ -159,12 +171,7 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                     }
                 )
             
-            # Crawl website structure for AI fix generation
-            crawler = WebsiteCrawler()
-            website_structure = await crawler.crawl_website(url)
-            
             # Store website structure for later AI fix generation
-            # This will be used by fix_generator.py
             scan_result['website_structure'] = website_structure
             
             # Convert string issues to structured objects
@@ -332,28 +339,24 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             from main_production import db_pool
             try:
                 async with db_pool.acquire() as conn:
-                    # Convert user_id to UUID if it's a string
-                    import uuid
-                    if isinstance(user_id, str):
-                        user_id_uuid = uuid.UUID(user_id)
-                    else:
-                        user_id_uuid = user_id
-                    
+                    # Ensure user_id is integer
+                    user_id_int = int(user_id)
+
                     # 1. Check if website exists, if not create it
                     website = await conn.fetchrow(
-                        "SELECT id FROM websites WHERE user_id = $1::uuid AND url = $2",
-                        str(user_id_uuid), scan_result.get("url", url)
+                        "SELECT id FROM tracked_websites WHERE user_id = $1 AND url = $2",
+                        user_id_int, scan_result.get("url", url)
                     )
-                    
+
                     if not website:
                         # Create new website
                         website_id = await conn.fetchval(
                             """
-                            INSERT INTO websites (user_id, url, name, last_scan, compliance_score, status)
-                            VALUES ($1::uuid, $2, $3, NOW(), $4, 'active')
+                            INSERT INTO tracked_websites (user_id, url, name, last_scan_date, last_score, status)
+                            VALUES ($1, $2, $3, NOW(), $4, 'active')
                             RETURNING id
                             """,
-                            str(user_id_uuid),
+                            user_id_int,
                             scan_result.get("url", url),
                             scan_result.get("url", url).replace('https://', '').replace('http://', ''),
                             overall_compliance_score
@@ -364,8 +367,8 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         website_id = website['id']
                         await conn.execute(
                             """
-                            UPDATE websites
-                            SET last_scan = NOW(), compliance_score = $1, status = 'active', scan_count = COALESCE(scan_count, 0) + 1
+                            UPDATE tracked_websites
+                            SET last_scan_date = NOW(), last_score = $1, status = 'active', scan_count = COALESCE(scan_count, 0) + 1
                             WHERE id = $2
                             """,
                             overall_compliance_score,
@@ -374,17 +377,17 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         logger.info(f"✅ Updated website ID {website_id}")
                     
                     # 2. Save scan to scan_history
-                    scan_id = f"scan_{user_id_uuid}_{int(datetime.now().timestamp())}"  # ✅ Generiere eindeutige scan_id
+                    scan_id = f"scan_{user_id_int}_{int(datetime.now().timestamp())}"
                     await conn.execute(
                         """
                         INSERT INTO scan_history (
                             scan_id, user_id, website_id, url, website_name, scan_timestamp,
                             scan_data, compliance_score, total_risk_euro, critical_issues,
                             warning_issues, total_issues, scan_duration_ms
-                        ) VALUES ($1, $2::uuid, $3, $4, $5, NOW(), $6, $7, $8, $9, $10, $11, $12)
+                        ) VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7, $8, $9, $10, $11, $12)
                         """,
-                        scan_id,  # ✅ scan_id als erstes Argument
-                        str(user_id_uuid),
+                        scan_id,
+                        user_id_int,
                         website_id,
                         scan_result.get("url", url),
                         scan_result.get("url", url).replace('https://', '').replace('http://', ''),

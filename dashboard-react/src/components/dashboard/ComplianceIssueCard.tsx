@@ -161,7 +161,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
     
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('https://api.complyo.tech/api/chat/issue-solution', {
+      const response = await fetch('https://api.complyo.de/api/chat/issue-solution', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

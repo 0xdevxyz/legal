@@ -55,7 +55,7 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`}>
         {/* Cookie-Banner Script - lädt Content Blocker + Banner in einem Bundle */}
         <Script
-          src="https://api.complyo.tech/api/widgets/cookie-compliance.js"
+          src="https://api.complyo.de/api/widgets/cookie-compliance.js"
           data-site-id="complyo-tech"
           data-complyo-site-id="complyo-tech"
           strategy="afterInteractive"
@@ -63,7 +63,7 @@ export default function RootLayout({
         
         {children}
         <Script
-          src="https://api.complyo.tech/api/widgets/accessibility.js?version=6"
+          src="https://api.complyo.de/api/widgets/accessibility.js?version=6"
           data-site-id="scan-91778ad450e1"
           data-auto-fix="true"
           data-show-toolbar="true"

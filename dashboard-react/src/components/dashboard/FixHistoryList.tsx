@@ -34,7 +34,7 @@ export function FixHistoryList() {
   const loadFixHistory = async () => {
     try {
       const token = localStorage.getItem('access_token')
-      const response = await fetch('https://api.complyo.tech/api/v2/fixes/history', {
+      const response = await fetch('https://api.complyo.de/api/v2/fixes/history', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -54,7 +54,7 @@ export function FixHistoryList() {
   const handleExport = async (fixId: number, format: 'html' | 'pdf') => {
     try {
       const token = localStorage.getItem('access_token')
-      const response = await fetch('https://api.complyo.tech/api/v2/fixes/export', {
+      const response = await fetch('https://api.complyo.de/api/v2/fixes/export', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

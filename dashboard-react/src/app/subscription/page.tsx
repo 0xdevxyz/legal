@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Shield, Eye, FileText, BarChart3, CreditCard, ExternalLink, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
 const MODULE_META: Record<string, { label: string; Icon: React.FC<{ className?: string }> }> = {
   cookie:        { label: 'Cookie & DSGVO',   Icon: ({ className }) => <Shield className={className} /> },

@@ -35,7 +35,7 @@ export const WidgetIntegrationCard: React.FC<WidgetIntegrationCardProps> = ({
   const [activeTab, setActiveTab] = useState('html');
 
   const widgetCode = `<script 
-  src="https://api.complyo.tech/api/widgets/accessibility.js" 
+  src="https://api.complyo.de/api/widgets/accessibility.js" 
   data-site-id="${siteId}"
   data-auto-fix="true"
   data-show-toolbar="true">
@@ -49,7 +49,7 @@ add_action('wp_footer', 'complyo_accessibility_widget');
 function complyo_accessibility_widget() {
   ?>
   <script 
-    src="https://api.complyo.tech/api/widgets/accessibility.js" 
+    src="https://api.complyo.de/api/widgets/accessibility.js" 
     data-site-id="${siteId}"
     data-auto-fix="true"
     data-show-toolbar="true">

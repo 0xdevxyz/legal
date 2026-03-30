@@ -50,7 +50,7 @@ interface NotificationStats {
   action_required: number;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
 export default function LegalActionWidget() {
   const [notifications, setNotifications] = useState<LegalNotification[]>([]);

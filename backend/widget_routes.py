@@ -132,7 +132,7 @@ async def serve_cookie_compliance_widget(request: Request, site_id: Optional[str
         
         # Return combined widget
         headers = {
-            'Cache-Control': 'public, max-age=86400, stale-while-revalidate=3600',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Access-Control-Allow-Origin': '*',
             'X-Complyo-Version': '2.0.0',
             'ETag': f'"{hashlib.md5(combined_code.encode()).hexdigest()}"',
@@ -350,7 +350,7 @@ async def get_widget_snippet(widget_type: str, site_id: str):
     """
     Get HTML snippet to embed widget
     """
-    base_url = "https://api.complyo.tech"
+    base_url = "https://api.complyo.de"
     
     snippets = {
         "cookie-consent": f'<script src="{base_url}/api/widgets/cookie-consent.js" data-site-id="{site_id}"></script>',

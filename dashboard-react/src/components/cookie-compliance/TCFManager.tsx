@@ -38,7 +38,7 @@ export default function TCFManager({ siteId, config, onSave }: TCFManagerProps) 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
   useEffect(() => {
     loadVendors();

@@ -10,11 +10,11 @@ from datetime import datetime
 import json
 
 from auth_routes import get_current_user
-from database_service import DatabaseService
+from dependencies import require_admin
+from database_service import db_service
 from legal_change_monitor import legal_monitor, LegalArea, ChangeSeverity
 
 router = APIRouter(prefix="/api/legal-changes", tags=["Legal Changes"])
-db_service = DatabaseService()
 
 # Helper function to extract user_id from current_user
 async def get_current_user_id(current_user: dict = Depends(get_current_user)) -> int:
@@ -355,14 +355,12 @@ async def apply_compliance_fix(
 @router.post("/monitor/run")
 async def trigger_legal_monitoring(
     background_tasks: BackgroundTasks,
-    user_id: int = Depends(get_current_user_id)
+    admin: dict = Depends(require_admin)
 ):
     """
     Triggere manuell eine Überprüfung auf neue Gesetzesänderungen
     (Admin only)
     """
-    # TODO: Admin-Check einbauen
-    
     if not legal_monitor:
         raise HTTPException(
             status_code=503,

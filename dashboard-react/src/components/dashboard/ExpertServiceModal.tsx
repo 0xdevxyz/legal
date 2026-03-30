@@ -26,7 +26,7 @@ export default function ExpertServiceModal() {
     
     try {
       // TODO: API-Endpunkt für Kontaktanfrage
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
       const response = await fetch(`${API_URL}/api/v2/contact/expert-service`, {
         method: 'POST',
         headers: {

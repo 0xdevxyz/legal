@@ -46,7 +46,7 @@ export default function IntegrationsSection() {
             </h3>
             <pre className="bg-black/30 text-green-400 p-4 rounded-lg overflow-x-auto">
               <code>{`<script
-  src="https://api.complyo.tech/api/widgets/accessibility.js"
+  src="https://api.complyo.de/api/widgets/accessibility.js"
   data-site-id="IHR-SITE-ID"
   data-auto-fix="true"
 ></script>`}</code>

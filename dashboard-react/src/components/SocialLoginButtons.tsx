@@ -3,25 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { firebaseAuth, isFirebaseEnabled } from '@/lib/firebase';
+import { getApiBaseUrl } from '@/lib/api-utils';
 
-// Intelligente API-URL-Erkennung
-const getApiBase = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:8002';
-    }
-    if (hostname.includes('complyo.tech')) {
-      return 'https://api.complyo.tech';
-    }
-  }
-  return 'http://localhost:8002';
-};
-
-const API_BASE = getApiBase();
+const API_BASE = getApiBaseUrl();
 
 interface SocialLoginButtonsProps {
   plan?: string;

@@ -15,7 +15,7 @@ export const CookieComplianceWidget: React.FC = () => {
 
   const integrationCode = `<!-- Complyo Cookie-Compliance Widget -->
 <script 
-  src="https://api.complyo.tech/api/widgets/cookie-compliance.js" 
+  src="https://api.complyo.de/api/widgets/cookie-compliance.js" 
   data-site-id="${siteId}"
   async
 ></script>`;
@@ -35,15 +35,26 @@ export const CookieComplianceWidget: React.FC = () => {
     }
   };
 
+  const getAuthHeaders = () => {
+    const token = typeof window !== 'undefined'
+      ? (localStorage.getItem('token') || localStorage.getItem('access_token'))
+      : null;
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
+  };
+
   const loadSiteIdAndStats = async () => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
       
       let determinedSiteId: string | null = null;
       
       // 1. Hole Website-Info für echten site_id
       try {
         const websiteResponse = await fetch(`${API_URL}/api/v2/websites`, {
+          headers: getAuthHeaders(),
           credentials: 'include',
         });
         

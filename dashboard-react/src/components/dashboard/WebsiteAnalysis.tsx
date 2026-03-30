@@ -31,7 +31,8 @@ export const WebsiteAnalysis: React.FC = () => {
   const [previousScore, setPreviousScore] = useState<number | null>(null);
   
   // Get plan type from user, default to 'free'
-  const planType: 'free' | 'ai' | 'expert' = user?.plan_type || 'free';
+  const rawPlanType = user?.plan_type || 'free';
+  const planType: 'free' | 'ai' | 'expert' = (['free','ai','expert'].includes(rawPlanType) ? rawPlanType : 'free') as 'free' | 'ai' | 'expert';
   
   // ✅ PERSISTENCE: Lade letzte Scan-Ergebnisse beim Mount
   const { data: latestScanData, isLoading: isLoadingLatestScan } = useLatestScan();
@@ -360,7 +361,7 @@ export const WebsiteAnalysis: React.FC = () => {
                   if (analysisData && analysisData.scan_id) {
                     const token = localStorage.getItem('access_token');
                     const apiBaseUrl = typeof window !== 'undefined' && window.location.hostname.includes('complyo.tech')
-                      ? 'https://api.complyo.tech'
+                      ? 'https://api.complyo.de'
                       : 'http://localhost:8002';
                     const downloadUrl = `${apiBaseUrl}/api/v2/reports/${analysisData.scan_id}/download`;
                     

@@ -25,7 +25,7 @@
     // ========================================================================
     
     const VERSION = '2.0.0';
-    const API_BASE = 'https://api.complyo.tech';
+    const API_BASE = 'https://api.complyo.de';
     const CONSENT_STORAGE_KEY = 'complyo_cookie_consent';
     const CONSENT_DATE_KEY = 'complyo_consent_date';
     const VISITOR_ID_KEY = 'complyo_visitor_id';

@@ -58,7 +58,7 @@ export const PatchDownloadCard: React.FC<PatchDownloadCardProps> = ({
     setDownloadUrl(null);
 
     try {
-      const API_BASE = process.env.REACT_APP_API_BASE || 'https://api.complyo.tech';
+      const API_BASE = process.env.REACT_APP_API_BASE || 'https://api.complyo.de';
       
       const response = await fetch(
         `${API_BASE}/api/accessibility/patches/generate?site_id=${siteId}`,

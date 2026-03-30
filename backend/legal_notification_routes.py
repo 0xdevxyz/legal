@@ -9,11 +9,10 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from auth_routes import get_current_user
-from database_service import DatabaseService
+from database_service import db_service
 from legal_notification_service import legal_notification_service, init_legal_notification_service
 
 router = APIRouter(prefix="/api/legal-notifications", tags=["Legal Notifications"])
-db_service = DatabaseService()
 
 
 class NotificationSettingsUpdate(BaseModel):
