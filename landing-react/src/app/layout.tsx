@@ -6,15 +6,15 @@ import Script from 'next/script'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Complyo - Website Compliance & Abmahnschutz',
-  description: 'Von abmahngefaehrdet zu rechtssicher in 24 Stunden. DSGVO, TTDSG, Barrierefreiheit - KI-gestuetzte Compliance-Loesung.',
-  keywords: 'DSGVO, TTDSG, Website Compliance, Abmahnschutz, Barrierefreiheit, Cookie Banner',
+  title: 'Complyo - Website Compliance & Rechtssicherheit',
+  description: 'Von nicht-konform zu rechtssicher in 24 Stunden. DSGVO, TTDSG, Barrierefreiheit - KI-gestuetzte Compliance-Loesung.',
+  keywords: 'DSGVO, TTDSG, Website Compliance, Rechtssicherheit, Barrierefreiheit, Cookie Banner',
   authors: [{ name: 'Complyo Team' }],
   robots: 'index, follow',
   metadataBase: new URL('https://complyo.tech'),
   openGraph: {
-    title: 'Complyo - Website Compliance & Abmahnschutz',
-    description: 'Von abmahngefaehrdet zu rechtssicher in 24 Stunden. DSGVO, TTDSG, Barrierefreiheit - KI-gestuetzte Compliance-Loesung fuer Ihr Unternehmen.',
+    title: 'Complyo - Website Compliance & Rechtssicherheit',
+    description: 'Von nicht-konform zu rechtssicher in 24 Stunden. DSGVO, TTDSG, Barrierefreiheit - KI-gestuetzte Compliance-Loesung fuer Ihr Unternehmen.',
     url: 'https://complyo.tech',
     siteName: 'Complyo',
     locale: 'de_DE',
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary',
-    title: 'Complyo - Website Compliance & Abmahnschutz',
+    title: 'Complyo - Website Compliance & Rechtssicherheit',
     description: 'DSGVO, TTDSG & Barrierefreiheit - KI-gestuetzte Compliance-Loesung.',
     images: ['/logo-dark.png'],
   },

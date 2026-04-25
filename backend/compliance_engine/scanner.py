@@ -26,7 +26,10 @@ from compliance_engine.checks import (
     check_datenschutz_compliance_smart,
     check_cookie_compliance,
     check_barrierefreiheit_compliance,
-    check_barrierefreiheit_compliance_smart
+    check_barrierefreiheit_compliance_smart,
+    check_agb_compliance,
+    check_shop_compliance,
+    check_uwg_compliance,
 )
 from compliance_engine.browser_renderer import smart_fetch_html, detect_client_rendering
 
@@ -44,6 +47,9 @@ try:
 except ImportError:
     TCF_AVAILABLE = False
     logger.warning("⚠️ TCF 2.2 module not available")
+
+# Import centralized Score Calculator (✅ FIX: Einzige Source of Truth)
+from compliance_engine.score_calculator import ScoreCalculator
 
 @dataclass
 class ComplianceIssue:
@@ -107,6 +113,7 @@ class ComplianceScanner:
                 return self._create_error_response(url, "Website nicht erreichbar")
             
             soup = BeautifulSoup(main_page['content'], 'html.parser')
+            main_page_headers = main_page.get('headers', {})
 
             # Render once if browser is needed, share HTML across all checks
             rendered_html = main_page['content']
@@ -122,21 +129,27 @@ class ComplianceScanner:
             impressum_task = check_impressum_compliance(url, soup, self.session)
             datenschutz_task = check_datenschutz_compliance(url, soup, self.session)
             cookie_task = check_cookie_compliance(url, soup, self.session)
-            ssl_task = self._check_ssl_security(url)
+            agb_task = check_agb_compliance(url, soup, self.session)
+            shop_task = check_shop_compliance(url, soup, self.session)
+            uwg_task = check_uwg_compliance(url, soup, self.session)
+            ssl_task = self._check_ssl_security(url, main_page_headers)
             contact_task = self._check_contact_data(url, soup)
             social_task = self._check_social_media_plugins(url, soup)
 
             results = await asyncio.gather(
                 barriere_task, impressum_task, datenschutz_task, cookie_task,
+                agb_task, shop_task, uwg_task,
                 ssl_task, contact_task, social_task,
                 return_exceptions=True
             )
 
             barriere_issues, impressum_issues, datenschutz_issues, cookie_issues, \
+                agb_issues, shop_issues, uwg_issues, \
                 ssl_issues, contact_issues, social_issues = results
 
             for check_issues in [barriere_issues, impressum_issues, datenschutz_issues,
-                                  cookie_issues, ssl_issues, contact_issues, social_issues]:
+                                  cookie_issues, agb_issues, shop_issues, uwg_issues,
+                                  ssl_issues, contact_issues, social_issues]:
                 if isinstance(check_issues, Exception):
                     logger.warning(f"Check failed (non-critical): {check_issues}")
                     continue
@@ -168,19 +181,13 @@ class ComplianceScanner:
             # ✅ HYBRIDANSATZ: Anreicherung mit eRecht24-Beschreibungen
             issues = await self._enrich_with_erecht24_descriptions(issues)
             
-            # Calculate overall compliance score and risk
+            # ✅ FIX: Nutze zentrale Score-Calculator Funktion (keine mehrfachen Formeln!)
+            compliance_score = ScoreCalculator.calculate_compliance_score(issues)
+            
+            # Calculate overall risk
             total_risk_euro = sum(issue.risk_euro for issue in issues)
             critical_issues = len([i for i in issues if i.severity == "critical"])
             warning_issues = len([i for i in issues if i.severity == "warning"])
-            
-            # Score calculation (0-100)
-            max_possible_issues = 15  # Rough estimate of maximum issues
-            compliance_score = max(0, 100 - (critical_issues * 20 + warning_issues * 5))
-            
-            # ✅ TCF 2.2 Bonus: +5 Punkte für vollständige TCF Implementation
-            if tcf_data.get("has_tcf") and tcf_data.get("tc_string_found") and len(tcf_data.get("issues", [])) == 0:
-                compliance_score = min(100, compliance_score + 5)
-                logger.info(f"✅ TCF 2.2 Bonus: +5 points (TCF fully compliant)")
             
             # End timing
             end_time = datetime.now()
@@ -199,7 +206,8 @@ class ComplianceScanner:
                 "recommendations": self._generate_recommendations(issues),
                 "next_steps": self._generate_next_steps(issues),
                 "has_accessibility_widget": has_accessibility_widget,  # ✅ Widget-Status
-                "tcf_data": tcf_data  # ✅ NEU: TCF 2.2 Data
+                "tcf_data": tcf_data,  # ✅ NEU: TCF 2.2 Data
+                "score_breakdown": ScoreCalculator.get_score_breakdown(issues)  # ✅ Debugging
             }
             
             # 🆕 LEGAL UPDATE INTEGRATION: Anwendung aktueller Gesetzesänderungen
@@ -243,287 +251,247 @@ class ComplianceScanner:
         except Exception:
             return None
     
-    async def _check_impressum(self, base_url: str, soup: BeautifulSoup) -> List[ComplianceIssue]:
-        """Check for legal notice (Impressum) compliance"""
+    async def _check_ssl_security(self, url: str, response_headers: dict = None) -> List[ComplianceIssue]:
+        """SSL/TLS-Sicherheitsprüfung — HTTPS, Redirect und Zertifikats-Grundprüfung"""
         issues = []
-        
-        # Look for Impressum links
-        impressum_links = soup.find_all('a', text=re.compile(r'impressum|imprint|rechtliche hinweise', re.I))
-        
-        if not impressum_links:
-            # Check for footer links that might be impressum
-            footer_links = soup.find_all('a', href=re.compile(r'impressum|imprint|legal', re.I))
-            impressum_links.extend(footer_links)
-        
-        if not impressum_links:
+
+        parsed = urlparse(url)
+        is_https = parsed.scheme == 'https'
+
+        if not is_https:
             issues.append(ComplianceIssue(
-                category="Impressum",
-                severity="critical",
-                title="Kein Impressum gefunden",
-                description="Es wurde kein Link zum Impressum gefunden. Dies ist gesetzlich verpflichtend.",
-                risk_euro=3000,
-                legal_basis="§ 5 TMG (Telemediengesetz)",
-                recommendation="Fügen Sie ein vollständiges Impressum mit allen Pflichtangaben hinzu",
-                auto_fixable=True
-            ))
-        else:
-            # Check impressum content
-            impressum_url = urljoin(base_url, impressum_links[0].get('href', ''))
-            impressum_page = await self._fetch_page(impressum_url)
-            
-            if impressum_page:
-                issues.extend(await self._validate_impressum_content(impressum_page['content']))
-            else:
-                issues.append(ComplianceIssue(
-                    category="Impressum", 
-                    severity="critical",
-                    title="Impressum nicht erreichbar",
-                    description="Der Link zum Impressum führt zu einer nicht erreichbaren Seite",
-                    risk_euro=2500,
-                    legal_basis="§ 5 TMG",
-                    recommendation="Stellen Sie sicher, dass das Impressum über einen funktionierenden Link erreichbar ist"
-                ))
-        
-        return issues
-    
-    async def _validate_impressum_content(self, content: str) -> List[ComplianceIssue]:
-        """Validate impressum content for required information"""
-        issues = []
-        soup = BeautifulSoup(content, 'html.parser')
-        text = soup.get_text().lower()
-        
-        required_elements = {
-            "name": r'(name|firma|gesellschaft|unternehmen)',
-            "address": r'(straße|str\.|adresse|anschrift)',
-            "city": r'(\d{5}\s*[a-zäöüß]+|[a-zäöüß]+\s*\d{5})',
-            "contact": r'(telefon|tel\.|e-mail|email|kontakt)',
-            "registration": r'(handelsregister|hr[ab]|registergericht|ust-id|umsatzsteuer-identifikationsnummer)'
-        }
-        
-        for element, pattern in required_elements.items():
-            if not re.search(pattern, text, re.I):
-                issues.append(ComplianceIssue(
-                    category="Impressum",
-                    severity="warning",
-                    title=f"Fehlende Angabe: {element}",
-                    description=f"Im Impressum fehlt die Angabe zu: {element}",
-                    risk_euro=1500,
-                    legal_basis="§ 5 TMG",
-                    recommendation=f"Ergänzen Sie die fehlende Angabe zu {element} im Impressum",
-                    auto_fixable=True
-                ))
-        
-        return issues
-    
-    async def _check_privacy_policy(self, base_url: str, soup: BeautifulSoup) -> List[ComplianceIssue]:
-        """Check for privacy policy (Datenschutzerklärung) compliance"""
-        issues = []
-        
-        # Look for privacy policy links
-        privacy_links = soup.find_all('a', text=re.compile(r'datenschutz|privacy|datenschutzerklärung', re.I))
-        
-        if not privacy_links:
-            footer_links = soup.find_all('a', href=re.compile(r'datenschutz|privacy|dsgvo', re.I))
-            privacy_links.extend(footer_links)
-        
-        if not privacy_links:
-            issues.append(ComplianceIssue(
-                category="Datenschutz",
-                severity="critical", 
-                title="Keine Datenschutzerklärung gefunden",
-                description="Es wurde keine Datenschutzerklärung gefunden. Dies ist DSGVO-Pflicht.",
+                category='security',
+                severity='critical',
+                title='Keine HTTPS-Verschlüsselung',
+                description=(
+                    'Die Website wird über unverschlüsseltes HTTP ausgeliefert. '
+                    'Alle übertragenen Daten (inkl. Formulareingaben) sind im Klartext lesbar. '
+                    'HTTPS ist nach DSGVO Art. 32 (technische Sicherheitsmaßnahmen) verpflichtend.'
+                ),
                 risk_euro=5000,
-                legal_basis="Art. 13, 14 DSGVO",
-                recommendation="Erstellen Sie eine vollständige Datenschutzerklärung gemäß DSGVO",
-                auto_fixable=True
+                legal_basis='DSGVO Art. 32',
+                recommendation=(
+                    'Aktivieren Sie HTTPS mit einem gültigen TLS-Zertifikat (z.B. kostenlos via Let\'s Encrypt). '
+                    'Richten Sie eine automatische HTTP→HTTPS-Weiterleitung ein.'
+                ),
             ))
-        else:
-            # Check privacy policy content
-            privacy_url = urljoin(base_url, privacy_links[0].get('href', ''))
-            privacy_page = await self._fetch_page(privacy_url)
-            
-            if privacy_page:
-                issues.extend(await self._validate_privacy_content(privacy_page['content']))
-        
-        return issues
-    
-    async def _validate_privacy_content(self, content: str) -> List[ComplianceIssue]:
-        """Validate privacy policy content for GDPR compliance"""
-        issues = []
-        soup = BeautifulSoup(content, 'html.parser')
-        text = soup.get_text().lower()
-        
-        required_gdpr_elements = {
-            "controller_info": r'(verantwortlicher|controller|datenverarbeitung)',
-            "legal_basis": r'(rechtsgrundlage|legal basis|artikel 6)',
-            "data_categories": r'(welche daten|art der daten|kategorien)',
-            "retention": r'(speicherdauer|aufbewahrung|löschung)',
-            "rights": r'(betroffenenrechte|auskunft|löschung|widerspruch)',
-            "dpo": r'(datenschutzbeauftragte|data protection officer|dpo)'
-        }
-        
-        for element, pattern in required_gdpr_elements.items():
-            if not re.search(pattern, text, re.I):
-                issues.append(ComplianceIssue(
-                    category="Datenschutz",
-                    severity="warning",
-                    title=f"DSGVO-Element fehlt: {element}",
-                    description=f"Die Datenschutzerklärung sollte Informationen zu '{element}' enthalten",
-                    risk_euro=2000,
-                    legal_basis="DSGVO Art. 13, 14",
-                    recommendation=f"Ergänzen Sie Informationen zu {element} in der Datenschutzerklärung",
-                    auto_fixable=True
-                ))
-        
-        return issues
-    
-    async def _check_cookie_compliance(self, base_url: str, soup: BeautifulSoup) -> List[ComplianceIssue]:
-        """Check for cookie banner and consent compliance"""
-        issues = []
-        
-        # Check for cookie banner
-        cookie_banner_selectors = [
-            '[class*="cookie"]', '[id*="cookie"]', '[class*="consent"]', 
-            '[id*="consent"]', '[class*="gdpr"]', '[id*="gdpr"]'
-        ]
-        
-        has_cookie_banner = False
-        for selector in cookie_banner_selectors:
-            if soup.select(selector):
-                has_cookie_banner = True
-                break
-        
-        if not has_cookie_banner:
-            issues.append(ComplianceIssue(
-                category="Cookie-Compliance",
-                severity="critical",
-                title="Kein Cookie-Banner gefunden",
-                description="Es wurde kein Cookie-Consent-Banner gefunden",
-                risk_euro=4000,
-                legal_basis="TTDSG § 25, DSGVO Art. 7",
-                recommendation="Implementieren Sie einen DSGVO-konformen Cookie-Banner",
-                auto_fixable=True
-            ))
-        
-        # Check for tracking scripts without consent
-        tracking_scripts = soup.find_all('script')
-        problematic_trackers = []
-        
-        for script in tracking_scripts:
-            src = script.get('src', '')
-            content = script.string or ''
-            
-            # Common tracking services
-            if any(tracker in src.lower() or tracker in content.lower() for tracker in 
-                   ['google-analytics', 'gtag', 'facebook', 'fbq', 'doubleclick']):
-                problematic_trackers.append(script)
-        
-        if problematic_trackers and not has_cookie_banner:
-            issues.append(ComplianceIssue(
-                category="Cookie-Compliance",
-                severity="critical",
-                title="Tracking ohne Einwilligung",
-                description=f"{len(problematic_trackers)} Tracking-Skripte ohne Cookie-Consent erkannt",
-                risk_euro=3000,
-                legal_basis="TTDSG § 25",
-                recommendation="Tracking-Skripte nur nach expliziter Nutzereinwilligung laden",
-                auto_fixable=True
-            ))
-        
-        return issues
-    
-    async def _check_accessibility(self, base_url: str, soup: BeautifulSoup) -> List[ComplianceIssue]:
-        """Check basic accessibility compliance (WCAG 2.1 AA)"""
-        issues = []
-        
-        # Check for alt attributes on images
-        images_without_alt = soup.find_all('img', alt=False)
-        if images_without_alt:
-            issues.append(ComplianceIssue(
-                category="Barrierefreiheit",
-                severity="warning",
-                title="Bilder ohne Alt-Text",
-                description=f"{len(images_without_alt)} Bilder haben keinen Alt-Text für Screenreader",
-                risk_euro=1000,
-                legal_basis="WCAG 2.1 AA, BITV 2.0",
-                recommendation="Fügen Sie beschreibende Alt-Texte für alle Bilder hinzu",
-                auto_fixable=True
-            ))
-        
-        # Check for form labels
-        inputs_without_labels = soup.find_all('input', {'type': ['text', 'email', 'password', 'tel', 'url', 'search', 'number']})
-        unlabeled_inputs = []
-        for inp in inputs_without_labels:
-            input_id = inp.get('id')
-            aria_label = inp.get('aria-label')
-            aria_labelledby = inp.get('aria-labelledby')
-            title = inp.get('title')
-            placeholder = inp.get('placeholder')
-            associated_label = soup.find('label', {'for': input_id}) if input_id else None
-            
-            if not (aria_label or aria_labelledby or title or placeholder or associated_label):
-                unlabeled_inputs.append(inp)
-        
-        if unlabeled_inputs:
-            issues.append(ComplianceIssue(
-                category="Barrierefreiheit",
-                severity="warning",
-                title="Formulare ohne Labels",
-                description=f"{len(unlabeled_inputs)} Eingabefelder haben keine beschreibenden Labels",
-                risk_euro=800,
-                legal_basis="WCAG 2.1 AA",
-                recommendation="Fügen Sie Labels oder aria-label für alle Eingabefelder hinzu",
-                auto_fixable=True
-            ))
-        
-        # Check color contrast (simplified check)
-        if not soup.find_all(attrs={'style': re.compile(r'color\s*:', re.I)}):
-            # This is a very basic check - in production, you'd use tools like axe-core
+            return issues
+
+        # HTTPS: prüfe ob HTTP-Version auf HTTPS weiterleitet
+        http_url = url.replace('https://', 'http://', 1)
+        try:
+            ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+            connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+            async with aiohttp.ClientSession(connector=connector) as tmp:
+                async with tmp.get(
+                    http_url,
+                    timeout=aiohttp.ClientTimeout(total=8),
+                    allow_redirects=False
+                ) as resp:
+                    if resp.status not in (301, 302, 307, 308):
+                        issues.append(ComplianceIssue(
+                            category='security',
+                            severity='warning',
+                            title='Kein HTTP→HTTPS Redirect',
+                            description=(
+                                f'Die HTTP-Version der Website ({http_url}) leitet nicht automatisch '
+                                f'auf HTTPS weiter (Status: {resp.status}). Nutzer die http:// '
+                                f'eingeben landen auf der unverschlüsselten Version.'
+                            ),
+                            risk_euro=1000,
+                            legal_basis='DSGVO Art. 32, BSI IT-Grundschutz',
+                            recommendation=(
+                                'Konfigurieren Sie einen permanenten 301-Redirect von HTTP auf HTTPS '
+                                'auf Webserver- oder CDN-Ebene.'
+                            ),
+                        ))
+        except Exception:
             pass
-        
+
+        # Prüfe ob Mixed Content wahrscheinlich vorkommt (http:// in Script/Link-src)
+        try:
+            async with self.session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status == 200:
+                    html = await resp.text()
+                    mixed_count = len(re.findall(r'src=["\']http://|href=["\']http://', html))
+                    if mixed_count > 0:
+                        issues.append(ComplianceIssue(
+                            category='security',
+                            severity='warning',
+                            title=f'Mixed Content erkannt ({mixed_count} unsichere Ressourcen)',
+                            description=(
+                                f'{mixed_count} Ressourcen werden über HTTP statt HTTPS geladen. '
+                                'Mixed Content untergräbt die HTTPS-Verschlüsselung und wird von '
+                                'modernen Browsern blockiert.'
+                            ),
+                            risk_euro=500,
+                            legal_basis='DSGVO Art. 32',
+                            recommendation='Ersetzen Sie alle http://-URLs in Scripts, Stylesheets und Bildern durch https://.',
+                        ))
+        except Exception:
+            pass
+
+        # Check HTTP security headers
+        if response_headers:
+            headers_lower = {k.lower(): v for k, v in response_headers.items()}
+
+            if 'strict-transport-security' not in headers_lower:
+                issues.append(ComplianceIssue(
+                    category='security',
+                    severity='warning',
+                    title='HSTS-Header fehlt (Strict-Transport-Security)',
+                    description=(
+                        'Der HTTP-Header "Strict-Transport-Security" (HSTS) ist nicht gesetzt. '
+                        'HSTS weist Browser an, die Website ausschließlich über HTTPS zu laden '
+                        'und verhindert SSL-Stripping-Angriffe.'
+                    ),
+                    risk_euro=500,
+                    legal_basis='DSGVO Art. 32, BSI IT-Grundschutz TLS.1',
+                    recommendation='Setzen Sie den Header: Strict-Transport-Security: max-age=31536000; includeSubDomains',
+                ))
+
+            if 'content-security-policy' not in headers_lower:
+                issues.append(ComplianceIssue(
+                    category='security',
+                    severity='warning',
+                    title='Content-Security-Policy-Header fehlt',
+                    description=(
+                        'Der Content-Security-Policy (CSP) Header ist nicht gesetzt. '
+                        'CSP verhindert Cross-Site-Scripting (XSS) und andere Injection-Angriffe.'
+                    ),
+                    risk_euro=500,
+                    legal_basis='DSGVO Art. 32, OWASP Top 10',
+                    recommendation='Implementieren Sie eine Content-Security-Policy, die nur vertrauenswürdige Quellen erlaubt.',
+                ))
+
+            if 'x-content-type-options' not in headers_lower:
+                issues.append(ComplianceIssue(
+                    category='security',
+                    severity='info',
+                    title='X-Content-Type-Options-Header fehlt',
+                    description='Der X-Content-Type-Options: nosniff Header fehlt. Er verhindert MIME-Type-Sniffing durch Browser.',
+                    risk_euro=0,
+                    legal_basis='DSGVO Art. 32, BSI IT-Grundschutz',
+                    recommendation='Setzen Sie: X-Content-Type-Options: nosniff',
+                ))
+
+            if 'x-frame-options' not in headers_lower and 'content-security-policy' not in headers_lower:
+                issues.append(ComplianceIssue(
+                    category='security',
+                    severity='warning',
+                    title='Clickjacking-Schutz fehlt (X-Frame-Options)',
+                    description=(
+                        'Weder X-Frame-Options noch frame-ancestors in CSP sind gesetzt. '
+                        'Die Seite könnte in einem iframe eingebettet und für Clickjacking-Angriffe missbraucht werden.'
+                    ),
+                    risk_euro=500,
+                    legal_basis='DSGVO Art. 32, OWASP Top 10',
+                    recommendation='Setzen Sie: X-Frame-Options: SAMEORIGIN oder frame-ancestors in der CSP.',
+                ))
+
         return issues
-    
-    async def _check_ssl_security(self, url: str) -> List[ComplianceIssue]:
-        """Check SSL/TLS security"""
-        issues = []
-        
-        if not url.startswith('https://'):
-            issues.append(ComplianceIssue(
-                category="Sicherheit",
-                severity="critical",
-                title="Keine SSL-Verschlüsselung",
-                description="Die Website verwendet keine HTTPS-Verschlüsselung",
-                risk_euro=2000,
-                legal_basis="DSGVO Art. 32",
-                recommendation="Implementieren Sie SSL/TLS-Verschlüsselung (HTTPS)"
-            ))
-        
-        return issues
-    
+
     async def _check_contact_data(self, base_url: str, soup: BeautifulSoup) -> List[ComplianceIssue]:
-        """Check for required contact information"""
+        """
+        Prüft ob Kontaktdaten erreichbar sind.
+        Ergänzt den Impressum-Check — sucht nach einer dedizierten Kontaktseite
+        und grundlegenden Kontaktmöglichkeiten (Email/Formular/Telefon).
+        """
         issues = []
+        html_lower = str(soup).lower()
+
+        # Kontakt-Link auf der Hauptseite vorhanden?
+        contact_link_patterns = [
+            '/kontakt', '/contact', '/kontaktformular', '/contact-us',
+            '/support', '/hilfe', '/help',
+        ]
+        contact_link_texts = [
+            'kontakt', 'contact', 'kontaktieren', 'schreiben sie uns',
+            'write to us', 'get in touch', 'support',
+        ]
+
+        has_contact_link = False
+        for a_tag in soup.find_all('a', href=True):
+            href = a_tag.get('href', '').lower()
+            text = a_tag.get_text(strip=True).lower()
+            if any(p in href for p in contact_link_patterns):
+                has_contact_link = True
+                break
+            if any(t in text for t in contact_link_texts):
+                has_contact_link = True
+                break
+
+        # Email-Adresse direkt sichtbar?
+        has_email = bool(re.search(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', html_lower))
+
+        # Kontaktformular vorhanden?
+        has_form = bool(soup.find('form'))
+
+        if not has_contact_link and not has_email and not has_form:
+            issues.append(ComplianceIssue(
+                category='contact',
+                severity='warning',
+                title='Kein Kontaktweg erkennbar',
+                description=(
+                    'Auf der Website ist keine Email-Adresse, kein Kontaktformular und kein '
+                    'Kontakt-Link auffindbar. Nutzer und Behörden müssen eine einfache '
+                    'Kontaktmöglichkeit vorfinden (u.a. für DSGVO-Anfragen wie Auskunft/Löschung).'
+                ),
+                risk_euro=1000,
+                legal_basis='DSGVO Art. 12 Abs. 1 (Transparenz), DDG §5 Abs. 1 Nr. 2',
+                recommendation=(
+                    'Fügen Sie mindestens eine Email-Adresse oder ein Kontaktformular hinzu. '
+                    'Eine dedizierte /kontakt Seite ist Best Practice.'
+                ),
+            ))
+
         return issues
     
     async def _check_social_media_plugins(self, base_url: str, soup: BeautifulSoup) -> List[ComplianceIssue]:
-        """Check for problematic social media plugins"""
+        """
+        Prüft auf eingebettete Social-Media-Plugins die ohne Consent Daten übertragen.
+        Erkennt sowohl iframe-Embeds als auch script-basierte Einbindungen.
+        """
         issues = []
-        
-        # Check for direct Facebook/Twitter embeds without consent
-        social_embeds = soup.find_all(['iframe', 'script'], 
-                                    src=re.compile(r'(facebook|twitter|youtube|instagram)', re.I))
-        
-        if social_embeds:
+
+        social_patterns = {
+            'Facebook': [r'facebook\.com/plugins', r'connect\.facebook\.net', r'facebook\.com/tr'],
+            'Twitter/X': [r'platform\.twitter\.com', r'syndication\.twitter\.com'],
+            'YouTube': [r'youtube\.com/embed', r'youtube-nocookie\.com', r'ytimg\.com'],
+            'Instagram': [r'instagram\.com/embed', r'cdninstagram\.com'],
+            'LinkedIn': [r'platform\.linkedin\.com', r'snap\.licdn\.com'],
+            'TikTok': [r'tiktok\.com/embed', r'analytics\.tiktok\.com'],
+            'Pinterest': [r'assets\.pinterest\.com', r'pinterest\.com/v3'],
+        }
+
+        found_platforms = []
+        for platform, patterns in social_patterns.items():
+            for element in soup.find_all(['iframe', 'script', 'img'], src=True):
+                src = element.get('src', '').lower()
+                if any(re.search(p, src, re.I) for p in patterns):
+                    if platform not in found_platforms:
+                        found_platforms.append(platform)
+                    break
+
+        if found_platforms:
             issues.append(ComplianceIssue(
-                category="Social Media",
-                severity="warning",
-                title="Social Media Plugins ohne Einwilligung",
-                description=f"{len(social_embeds)} Social Media Plugins gefunden, die Daten übertragen könnten",
-                risk_euro=1500,
-                legal_basis="DSGVO Art. 6",
-                recommendation="Implementieren Sie Zwei-Klick-Lösung für Social Media Plugins"
+                category='social_media',
+                severity='warning',
+                title=f'Social-Media-Inhalte ohne Consent ({", ".join(found_platforms)})',
+                description=(
+                    f'Folgende Social-Media-Inhalte werden direkt eingebettet: {", ".join(found_platforms)}. '
+                    f'Dabei werden beim Laden der Seite automatisch Daten an die jeweiligen Anbieter '
+                    f'übertragen — auch ohne Nutzerinteraktion und ohne Einwilligung.'
+                ),
+                risk_euro=2000,
+                legal_basis='DSGVO Art. 6 Abs. 1, EuGH C-40/17 (Fashion ID)',
+                recommendation=(
+                    'Nutzen Sie die Zwei-Klick-Lösung oder laden Sie Social-Media-Inhalte erst '
+                    'nach expliziter Einwilligung. Alternativ: eingebettete Inhalte durch '
+                    'datenschutzfreundliche Alternativen ersetzen (z.B. youtube-nocookie.com).'
+                ),
             ))
-        
+
         return issues
     
     def _generate_recommendations(self, issues: List[ComplianceIssue]) -> List[str]:

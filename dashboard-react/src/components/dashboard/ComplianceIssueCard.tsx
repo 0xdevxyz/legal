@@ -3,13 +3,13 @@
 import React, { useState } from 'react';
 import { ComplianceIssue, FixResult } from '@/types/api';
 import { generateFix } from '@/lib/api';
-import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie } from 'lucide-react';
+import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie, Lock, Image as ImageIcon, Pencil } from 'lucide-react';
 import { StripePaywallModal } from './StripePaywallModal';
 import { ConfirmFixModal } from './ConfirmFixModal';
 import { FixModal } from './FixModal';
 import { useToast } from '@/components/ui/Toast';
 import { AIFixPreview, AIFixPreviewMini } from '@/components/ai/AIFixPreview';
-import { AIFixDisplay } from '@/components/ai/AIFixDisplay'; // NEW: Enhanced Fix Display
+import { AIFixDisplay } from '@/components/ai/AIFixDisplay';
 import { useCreateFixJob } from '@/hooks/useCompliance';
 import { UnifiedFixButton } from './UnifiedFixButton';
 import { useRouter } from 'next/navigation';
@@ -91,12 +91,13 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   const createFixJob = useCreateFixJob();
   const { isInOptimizationMode, lockedOptimizationUrl } = useDashboardStore();
   
-  // Prüfe ob Optimierung erlaubt ist (nur für gelockte Seite oder wenn kein Lock aktiv)
-  const canOptimize = !isInOptimizationMode || 
-    (lockedOptimizationUrl && websiteUrl && 
-     (websiteUrl === lockedOptimizationUrl || 
-      websiteUrl.includes(lockedOptimizationUrl) ||
-      lockedOptimizationUrl.includes(websiteUrl)));
+  // KI-Fix immer verfügbar — Lock-Status nur als Hinweis, nicht als Blockade
+  const canOptimize = true;
+  const isOtherSiteLocked = isInOptimizationMode && 
+    lockedOptimizationUrl && websiteUrl && 
+    websiteUrl !== lockedOptimizationUrl && 
+    !websiteUrl.includes(lockedOptimizationUrl) &&
+    !lockedOptimizationUrl.includes(websiteUrl);
   const [isFixing, setIsFixing] = useState(false);
   const [generatedFix, setGeneratedFix] = useState<FixResult | null>(null);
   const [showFixModal, setShowFixModal] = useState(false);
@@ -105,12 +106,8 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   const [fixLimitInfo, setFixLimitInfo] = useState<{ fixes_used: number; fixes_limit: number } | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showAIPreview, setShowAIPreview] = useState(false);
-  
-  // 💬 Chat-State für KI-Rückfragen
-  const [showChat, setShowChat] = useState(false);
-  const [chatMessages, setChatMessages] = useState<Array<{ role: string; content: string }>>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [altTextValue, setAltTextValue] = useState(issue.suggested_alt || '');
+  const [altTextSaved, setAltTextSaved] = useState(false);
   
   const domain = websiteUrl ? extractDomain(websiteUrl) : undefined;
 
@@ -144,55 +141,6 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       showToast('Code kopiert!', 'success');
     } catch {
       showToast('Kopieren fehlgeschlagen', 'error');
-    }
-  };
-
-  // 💬 Chat-Funktion für KI-Rückfragen
-  const handleSendChatMessage = async () => {
-    if (!chatInput.trim() || isChatLoading) return;
-    
-    const userMessage = chatInput.trim();
-    setChatInput('');
-    setIsChatLoading(true);
-    
-    // Füge User-Message zum Chat hinzu
-    const newMessages = [...chatMessages, { role: 'user', content: userMessage }];
-    setChatMessages(newMessages);
-    
-    try {
-      const token = localStorage.getItem('access_token');
-      const response = await fetch('https://api.complyo.de/api/chat/issue-solution', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          website_url: websiteUrl || 'unknown',
-          issue_title: issue.title,
-          issue_description: issue.description,
-          ai_solution: (issue as any).ai_solution || null,
-          user_question: userMessage,
-          chat_history: chatMessages
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Chat-Anfrage fehlgeschlagen');
-      }
-      
-      const data = await response.json();
-      
-      // Füge AI-Response zum Chat hinzu
-      setChatMessages([...newMessages, { role: 'assistant', content: data.response }]);
-      showToast('Antwort erhalten!', 'success');
-    } catch (error) {
-      console.error('Chat-Fehler:', error);
-      showToast('Fehler beim Chat. Bitte versuchen Sie es erneut.', 'error');
-      // Entferne letzte User-Message bei Fehler
-      setChatMessages(chatMessages);
-    } finally {
-      setIsChatLoading(false);
     }
   };
 
@@ -439,102 +387,119 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       {/* Beschreibung */}
       <p className="text-gray-700 mb-4 leading-relaxed">{issue.description}</p>
 
+      {/* Alt-Text Editor — nur für Bilder ohne Alt-Text */}
+      {issue.image_src && (
+        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2 bg-blue-100 border-b border-blue-200">
+            <ImageIcon className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-semibold text-blue-800">Betroffenes Bild</span>
+          </div>
+          <div className="p-4 flex gap-4 flex-col sm:flex-row">
+            {/* Bildvorschau */}
+            <div className="flex-shrink-0">
+              <img
+                src={issue.screenshot_url || issue.image_src}
+                alt="Vorschau des betroffenen Bildes"
+                className="w-32 h-32 object-cover rounded-lg border border-blue-200 bg-white"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+              <p className="text-xs text-blue-600 mt-1 truncate max-w-[8rem]" title={issue.image_src}>
+                {issue.image_src.split('/').pop()}
+              </p>
+            </div>
+
+            {/* Alt-Text Eingabe */}
+            <div className="flex-1 space-y-2">
+              {issue.suggested_alt && (
+                <div className="flex items-start gap-2 p-2 bg-white rounded-lg border border-blue-200">
+                  <Sparkles className="w-4 h-4 text-purple-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-purple-700 mb-0.5">KI-Vorschlag</p>
+                    <p className="text-sm text-gray-700 italic">„{issue.suggested_alt}"</p>
+                    <button
+                      onClick={() => setAltTextValue(issue.suggested_alt!)}
+                      className="text-xs text-purple-600 hover:text-purple-800 font-medium mt-1"
+                    >
+                      Vorschlag übernehmen
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  <Pencil className="w-3 h-3 inline mr-1" />
+                  Alt-Text eingeben oder anpassen
+                </label>
+                <textarea
+                  value={altTextValue}
+                  onChange={(e) => { setAltTextValue(e.target.value); setAltTextSaved(false); }}
+                  placeholder="Beschreibung des Bildinhalts…"
+                  rows={2}
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    if (!altTextValue.trim()) return;
+                    try {
+                      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/accessibility/alt-text`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                        },
+                        body: JSON.stringify({
+                          image_src: issue.image_src,
+                          alt_text: altTextValue.trim(),
+                          fix_code: `<img src="${issue.image_src}" alt="${altTextValue.trim()}" />`,
+                        }),
+                      });
+                      setAltTextSaved(true);
+                      showToast('Alt-Text gespeichert!', 'success');
+                    } catch {
+                      showToast('Speichern fehlgeschlagen', 'error');
+                    }
+                  }}
+                  disabled={!altTextValue.trim() || altTextSaved}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded-lg transition-colors"
+                >
+                  {altTextSaved ? <Check className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                  {altTextSaved ? 'Gespeichert' : 'Alt-Text speichern'}
+                </button>
+                {issue.fix_code && (
+                  <button
+                    onClick={() => handleCopyCode(issue.fix_code!)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    HTML kopieren
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ✅ KI-Lösung - Individuell generiert (wenn vorhanden) */}
       {(issue as any).ai_solution && (
-        <>
-          <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-5 border-2 border-blue-200 mb-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-2xl">🤖</span>
-              <h4 className="font-bold text-gray-800">KI-Analyse & Lösung</h4>
-              <span className="ml-auto px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded-full">
-                Individuell für Ihre Website
-              </span>
-            </div>
-            
-            <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-4 border border-blue-100">
-              {(issue as any).ai_solution}
-            </div>
+        <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-5 border-2 border-blue-200 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-2xl">🤖</span>
+            <h4 className="font-bold text-gray-800">KI-Analyse & Lösung</h4>
+            <span className="ml-auto px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded-full">
+              Individuell für Ihre Website
+            </span>
           </div>
-          
-          {/* 💬 KI-Chat für Rückfragen */}
-          <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-lg p-4 border-2 border-purple-200 mb-4">
-            <button
-              onClick={() => setShowChat(!showChat)}
-              className="flex items-center gap-2 w-full text-left font-semibold text-gray-800 hover:text-purple-600 transition-colors"
-            >
-              <span className="text-xl">💬</span>
-              <span>Fragen Sie die KI zur Umsetzung</span>
-              <span className="ml-auto text-xs bg-purple-600 text-white px-2 py-1 rounded-full">
-                {showChat ? 'Schließen' : 'Öffnen'}
-              </span>
-            </button>
-            
-            {showChat && (
-              <div className="mt-4">
-                {/* Chat-Messages */}
-                {chatMessages.length > 0 && (
-                  <div className="space-y-3 mb-4 max-h-96 overflow-y-auto bg-white rounded-lg p-3 border border-purple-100">
-                    {chatMessages.map((msg, idx) => (
-                      <div
-                        key={idx}
-                        className={`${
-                          msg.role === 'user' 
-                            ? 'bg-blue-100 ml-8 text-right' 
-                            : 'bg-gray-100 mr-8 text-left'
-                        } rounded-lg p-3`}
-                      >
-                        <div className="text-xs font-semibold mb-1 text-gray-600">
-                          {msg.role === 'user' ? '👤 Sie' : '🤖 KI-Assistent'}
-                        </div>
-                        <div className="text-sm text-gray-800 whitespace-pre-wrap">
-                          {msg.content}
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {isChatLoading && (
-                      <div className="bg-gray-100 mr-8 rounded-lg p-3 animate-pulse">
-                        <div className="text-xs font-semibold mb-1 text-gray-600">
-                          🤖 KI-Assistent
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          Tippt...
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Chat-Input */}
-                <div className="flex gap-2">
-                  <label htmlFor="compliance-chat-input" className="sr-only">Frage zur Umsetzung</label>
-                  <input
-                    type="text"
-                    id="compliance-chat-input"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendChatMessage()}
-                    placeholder="z.B. 'Wie implementiere ich das in React?'"
-                    aria-label="Frage zur Compliance-Umsetzung eingeben"
-                    className="flex-1 px-4 py-2 border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    disabled={isChatLoading}
-                  />
-                  <button
-                    onClick={handleSendChatMessage}
-                    disabled={!chatInput.trim() || isChatLoading}
-                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors"
-                  >
-                    {isChatLoading ? '...' : 'Senden'}
-                  </button>
-                </div>
-                
-                <p className="text-xs text-gray-500 mt-2">
-                  💡 Stellen Sie spezifische Fragen zur Umsetzung, Code-Beispielen oder Ihrem Tech-Stack
-                </p>
-              </div>
-            )}
+          <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-4 border border-blue-100">
+            {(issue as any).ai_solution}
           </div>
-        </>
+        </div>
       )}
 
       {/* Lösung - IMMER SICHTBAR, mit spezifischen Handlungsanweisungen */}
@@ -568,7 +533,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                 <li>Achten Sie darauf, alle Pflichtangaben (Name, Adresse, E-Mail) korrekt einzutragen</li>
               </ol>
               <p className="text-xs text-purple-600 mt-2">
-                💡 Das generierte Impressum erfüllt alle TMG-Anforderungen!
+                💡 Das generierte Impressum erfüllt alle DDG-Anforderungen!
               </p>
             </div>
           )}
@@ -668,28 +633,29 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         </div>
       )}
 
-      {/* AI-Fix Section - Prominent und interaktiv - ALLE NUTZER (auch Free!) */}
+      {/* AI-Fix Section */}
       {issue.auto_fixable && (planType === 'free' || planType === 'ai' || planType === 'expert') && (
         <div className="mt-4 space-y-3">
-          {/* ✅ Warnung wenn Optimierung nicht für diese Seite erlaubt */}
-          {!canOptimize && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <div className="flex items-center gap-2 text-amber-800">
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <span className="text-sm font-medium">
-                  Optimierung nur für gelockte Seite verfügbar
-                </span>
-              </div>
-              <p className="text-xs text-amber-700 mt-1 ml-6">
-                KI-Fixes sind nur für <strong>{lockedOptimizationUrl}</strong> personalisiert. 
-                Diese Analyse dient nur zur Information.
-              </p>
+          {/* Plan-Hinweis für Free-Nutzer — BEVOR sie klicken */}
+          {planType === 'free' && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-zinc-100 border border-zinc-300 rounded-lg">
+              <Lock className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+              <span className="text-xs text-zinc-600">
+                KI-Fix erfordert <strong>AI Plan</strong> — Klick zeigt Upgrade-Optionen
+              </span>
+            </div>
+          )}
+
+          {/* Hinweis wenn andere Seite gelockt ist — aber Fix trotzdem möglich */}
+          {isOtherSiteLocked && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-zinc-100 border border-zinc-300 rounded-lg mb-2">
+              <span className="text-xs text-zinc-600">
+                Hinweis: Ihre KI-Fixes sind personalisiert für <strong>{lockedOptimizationUrl}</strong>. Der Fix gilt für die analysierte Seite.
+              </span>
             </div>
           )}
           
-          {canOptimize && !showAIPreview ? (
+          {!showAIPreview ? (
             <div className="flex items-center gap-3">
               <UnifiedFixButton
                 issueTitle={issue.title}
@@ -702,27 +668,11 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                 Lassen Sie die KI eine Lösung generieren
               </span>
             </div>
-          ) : canOptimize && showAIPreview ? (
+          ) : (
             <AIFixPreview
               issue={issue}
               onGenerateFull={handleStartFixClick}
             />
-          ) : null}
-          
-          {/* Mini alternative for less prominent placement */}
-          {canOptimize && !showAIPreview && issue.severity === 'critical' && (
-            <div className="p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
-              <p className="text-sm text-gray-700 mb-2">
-                💡 <strong>KI-Tipp:</strong> Dieses Problem lässt sich schnell beheben
-              </p>
-              <button
-                onClick={() => setShowAIPreview(true)}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-              >
-                Vorschau anzeigen
-                <Sparkles className="w-3 h-3" />
-              </button>
-            </div>
           )}
         </div>
       )}

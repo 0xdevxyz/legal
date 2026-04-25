@@ -12,6 +12,9 @@ import json
 import re
 from enum import Enum
 
+# ✅ FIX: Import centralized Score Calculator
+from compliance_engine.score_calculator import ScoreCalculator
+
 logger = logging.getLogger(__name__)
 
 class UserExpertiseLevel(Enum):
@@ -454,14 +457,11 @@ class AIComplianceEngine:
         return {"csp_header": False, "hsts_header": True}
 
     def _calculate_overall_score(self, issues: List[ComplianceIssue]) -> float:
-        """Berechnet Overall Compliance Score"""
-        if not issues:
-            return 100.0
-        
-        total_risk = sum(issue.legal_risk_score for issue in issues)
-        max_risk = len(issues) * 1.0
-        
-        return max(0, 100 - (total_risk / max_risk * 100))
+        """
+        ✅ FIX: Nutze zentrale ScoreCalculator Funktion
+        Verhindert mehrfache inkompatible Formeln
+        """
+        return float(ScoreCalculator.calculate_compliance_score(issues))
 
     def _get_priority_actions(self, issues: List[ComplianceIssue]) -> List[str]:
         """Bestimmt prioritäre Aktionen"""

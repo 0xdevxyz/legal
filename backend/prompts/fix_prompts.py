@@ -337,6 +337,150 @@ AUSGABEFORMAT (JSON):
 ANTWORTE NUR MIT DEM JSON, KEIN ZUSÄTZLICHER TEXT.
 """
 
+UWG_FIX_PROMPT = """
+Du bist ein Experte für deutsches Wettbewerbsrecht (UWG). Erstelle eine konkrete Schritt-für-Schritt-Anleitung.
+
+WEBSITE-STRUKTUR:
+{website_structure}
+
+PROBLEM:
+{issue_description}
+
+WICHTIG:
+- CMS: {cms_type}
+- Sprache: Deutsch
+
+DEINE AUFGABE:
+Erstelle eine praxistaugliche Anleitung zur UWG-konformen Gestaltung:
+- §5b: Bewertungstransparenz (Verifizierungs-Hinweis)
+- §5/5a: Entfernung oder Korrektur von Dringlichkeitsmustern (Dark Patterns)
+- Gütezeichen: korrekte Verlinkung und Aktualität
+
+AUSGABEFORMAT (JSON):
+{{
+  "steps": ["Schritt 1...", "Schritt 2..."],
+  "code": "HTML/Text-Snippet falls anwendbar",
+  "placement": "Wo auf der Website umsetzen",
+  "test_instructions": ["Wie prüfen?"],
+  "troubleshooting": ["Häufige Fehler"],
+  "legal_note": "Kurze Erklärung der Rechtsgrundlage",
+  "transparency_note": "Warum manuelle Prüfung empfohlen ist",
+  "estimated_time": "5-15 Minuten",
+  "difficulty": "Einfach"
+}}
+
+ANTWORTE NUR MIT DEM JSON, KEIN ZUSÄTZLICHER TEXT.
+"""
+
+PREISANGABEN_FIX_PROMPT = """
+Du bist ein Experte für deutsches Preisrecht (PAngV). Erstelle eine konkrete Anleitung.
+
+WEBSITE-STRUKTUR:
+{website_structure}
+
+PROBLEM:
+{issue_description}
+
+WICHTIG:
+- CMS: {cms_type}
+- Geschäftsmodell: {business_type}
+
+DEINE AUFGABE:
+Erstelle eine praxistaugliche Anleitung für PAngV-konforme Preisangaben:
+- §3: MwSt.-Hinweis bei allen Preisen (Bruttopreise)
+- §3: Versandkostenhinweis
+- §4: Grundpreisangabe bei Mengenware (pro kg/l/100g)
+- §11: 30-Tage-Referenzpreis bei Preisreduzierungen (Omnibus-Richtlinie)
+
+AUSGABEFORMAT (JSON):
+{{
+  "steps": ["Schritt 1...", "Schritt 2..."],
+  "code": "HTML-Snippet für korrekte Preisdarstellung",
+  "placement": "Wo umsetzen (Produktseite, Warenkorb, Checkout)",
+  "test_instructions": ["Wie prüfen?"],
+  "troubleshooting": ["Häufige Fehler im jeweiligen CMS"],
+  "legal_note": "Kurze Erklärung PAngV §3/§4/§11",
+  "transparency_note": "Hinweis dass Preishistorie serverseitig gespeichert werden muss",
+  "estimated_time": "30-60 Minuten",
+  "difficulty": "Mittel"
+}}
+
+ANTWORTE NUR MIT DEM JSON, KEIN ZUSÄTZLICHER TEXT.
+"""
+
+SECURITY_FIX_PROMPT = """
+Du bist ein Webserver-Sicherheitsexperte. Erstelle eine konkrete technische Anleitung.
+
+WEBSITE-STRUKTUR:
+{website_structure}
+
+PROBLEM:
+{issue_description}
+
+WICHTIG:
+- CMS: {cms_type}
+- Technologie-Stack: {technology_stack}
+
+DEINE AUFGABE:
+Erstelle eine technische Anleitung zur Behebung des Sicherheitsproblems:
+- HTTP Security Headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options)
+- HTTPS/TLS-Konfiguration
+- Mixed Content Behebung
+
+Gib konkrete Konfigurationsbeispiele für Apache (.htaccess), Nginx und CDNs (Cloudflare, Vercel).
+
+AUSGABEFORMAT (JSON):
+{{
+  "steps": ["Schritt 1...", "Schritt 2..."],
+  "code": "Konfigurationssnippet (Apache/.htaccess oder Nginx)",
+  "placement": "Welche Konfigurationsdatei",
+  "test_instructions": ["Browser DevTools → Network → Response Headers prüfen"],
+  "troubleshooting": ["Häufige Fehler bei Apache/Nginx/Cloudflare"],
+  "legal_note": "DSGVO Art. 32 — technische Sicherheitsmaßnahmen",
+  "transparency_note": "Serverneustarts ggf. erforderlich",
+  "estimated_time": "10-30 Minuten",
+  "difficulty": "Mittel bis Fortgeschritten"
+}}
+
+ANTWORTE NUR MIT DEM JSON, KEIN ZUSÄTZLICHER TEXT.
+"""
+
+AVV_FIX_PROMPT = """
+Du bist ein DSGVO-Experte für Auftragsverarbeitung. Erstelle eine konkrete Anleitung.
+
+WEBSITE-STRUKTUR:
+{website_structure}
+
+PROBLEM:
+{issue_description}
+
+WICHTIG:
+- CMS: {cms_type}
+- Erkannte US-Dienste: {tracking_services}
+
+DEINE AUFGABE:
+Erstelle eine Anleitung zur DSGVO Art. 44 ff. konformen Einbindung von Drittlandsdiensten:
+1. Welche AVVs/DPAs müssen abgeschlossen werden (mit Links zu den Anbietern)
+2. Wie die Datenschutzerklärung zu ergänzen ist (SCCs / EU-US DPF Hinweis)
+3. Wie Betroffenenrechte bei US-Diensten gewährleistet werden
+
+AUSGABEFORMAT (JSON):
+{{
+  "steps": ["Schritt 1...", "Schritt 2..."],
+  "code": "HTML-Textbausteine für Datenschutzerklärung",
+  "placement": "Datenschutzerklärung — Abschnitt Drittlandtransfer",
+  "test_instructions": ["Wie Vollständigkeit prüfen"],
+  "troubleshooting": ["Häufige Fehler"],
+  "avv_links": {{"Google": "...", "Meta": "..."}},
+  "legal_note": "DSGVO Art. 44 ff., EU-US Data Privacy Framework",
+  "transparency_note": "Individuelle Rechtsberatung empfohlen bei komplexen Verarbeitungen",
+  "estimated_time": "60-120 Minuten",
+  "difficulty": "Fortgeschritten"
+}}
+
+ANTWORTE NUR MIT DEM JSON, KEIN ZUSÄTZLICHER TEXT.
+"""
+
 # Mapping: Kategorie → Prompt Template
 PROMPT_TEMPLATES = {
     'impressum': IMPRESSUM_FIX_PROMPT,
@@ -346,8 +490,15 @@ PROMPT_TEMPLATES = {
     'barrierefreiheit': BARRIEREFREIHEIT_FIX_PROMPT,
     'accessibility': BARRIEREFREIHEIT_FIX_PROMPT,
     'agb': AGB_FIX_PROMPT,
+    'shop': AGB_FIX_PROMPT,
     'widerrufsbelehrung': WIDERRUFSBELEHRUNG_FIX_PROMPT,
     'widerruf': WIDERRUFSBELEHRUNG_FIX_PROMPT,
+    'uwg': UWG_FIX_PROMPT,
+    'preisangaben': PREISANGABEN_FIX_PROMPT,
+    'security': SECURITY_FIX_PROMPT,
+    'avv': AVV_FIX_PROMPT,
+    'social_media': UWG_FIX_PROMPT,
+    'contact': IMPRESSUM_FIX_PROMPT,
 }
 
 def get_prompt_for_category(category: str) -> str:

@@ -1,14 +1,16 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { TrendingUp, Globe, AlertTriangle, BarChart3, Sparkles } from 'lucide-react';
+import { TrendingUp, Globe, AlertTriangle, BarChart3, Sparkles, ArrowRight } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useDashboardMetrics } from '@/hooks/useMetrics';
+import { useRouter } from 'next/navigation';
 
 export const MetricsCards: React.FC = () => {
   const { updateMetrics } = useDashboardStore();
   const { metrics: apiMetrics, isLoading } = useDashboardMetrics();
+  const router = useRouter();
   
   // Update store when API data arrives
   useEffect(() => {
@@ -104,21 +106,32 @@ export const MetricsCards: React.FC = () => {
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
       {metricCards.map((metric, index) => {
         const IconComponent = metric.icon;
+        const isAILimitReached = metric.title === 'KI-Optimierungen' && aiFixesUsed >= aiFixesMax;
         
         return (
           <Card key={index} hover className="relative overflow-hidden">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-gray-400 text-sm mb-1">{metric.title}</p>
                 <p className="text-3xl font-bold text-white mb-1">{metric.value}</p>
-                <p className={`text-sm ${
-                  metric.changeType === 'positive' ? 'text-green-400' :
-                  metric.changeType === 'negative' ? 'text-red-400' : 'text-gray-400'
-                }`}>
-                  {metric.change}
-                </p>
+                {isAILimitReached ? (
+                  <button
+                    onClick={() => router.push('/subscription')}
+                    className="flex items-center gap-1 text-sm text-purple-400 hover:text-purple-300 transition-colors font-medium"
+                  >
+                    Upgrade für mehr
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                ) : (
+                  <p className={`text-sm ${
+                    metric.changeType === 'positive' ? 'text-green-400' :
+                    metric.changeType === 'negative' ? 'text-red-400' : 'text-gray-400'
+                  }`}>
+                    {metric.change}
+                  </p>
+                )}
               </div>
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${metric.bgColor}`}>
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${metric.bgColor}`}>
                 <IconComponent className={`h-6 w-6 ${metric.color}`} />
               </div>
             </div>

@@ -17,17 +17,21 @@ export interface ComplianceIssue {
   severity: 'critical' | 'warning' | 'info';
   title: string;
   description: string;
-  risk_euro?: number; // Keep for backward compatibility
+  risk_euro?: number;
   risk_euro_min: number;
   risk_euro_max: number;
   risk_range: string;
-  recommendation?: string; // Keep for backward compatibility
+  recommendation?: string;
   legal_basis: string;
   location: IssueLocation;
   solution: IssueSolution;
   auto_fixable: boolean;
   is_missing?: boolean;
   ai_explanation?: string;
+  image_src?: string;
+  suggested_alt?: string;
+  screenshot_url?: string;
+  fix_code?: string;
 }
 
 // Positive Check

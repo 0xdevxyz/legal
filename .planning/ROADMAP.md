@@ -1,68 +1,71 @@
-# Roadmap: Complyo Security Hardening & Critical Fixes
+# Roadmap: Technical Debt & Feature Completeness
 
 ## Overview
 
-Dieser Milestone behebt kritische Sicherheitslücken und Revenue-Bugs die vor weiterem Featurebau geschlossen werden müssen. Phase 1 beseitigt die gravierendsten Auth-Lücken (Token-Exposure im Browser-Log, unauthentifizierte Produktions-Endpoints, Timezone-Bug). Phase 2 härtet die Stripe-Integration und schließt die Lücke bei Abo-Kündigungen. Phase 3 räumt den Tech-Debt auf der diese Bugs erst ermöglicht hat.
+Dieser Milestone schließt die letzten offenen Auth-Lücken, persistiert Analytics-Daten in der Datenbank und vervollständigt zwei konkrete Features (Email-Benachrichtigung + Cookie-Settings-Modal). Alle Items stammen aus `docs/TECHNICAL_DEBT.md` (Critical/High/Medium).
 
 ## Phases
 
-- [ ] **Phase 1: Auth Security** — OAuth-Token-Exposure schließen, Auth-Stub entfernen, Admin-Endpoints sichern, Timezone-Bug fixen
-- [ ] **Phase 2: Stripe Hardening** — Webhook-Secret guard, Add-on Cancellation/Updated/PaymentFailed implementieren
-- [ ] **Phase 3: Tech Debt Consolidation** — Doppeltes JWT entfernen, legal_ai_routes.py löschen, API-URL-Duplikate konsolidieren
+- [x] **Phase 1: Auth-Debt** — Letzte ungesicherte Endpoints in widget_routes.py absichern
+- [x] **Phase 2: DB-Integration** — 5 Stellen die Daten nur loggen auf echte DB-Persistenz umstellen
+- [x] **Phase 3: Feature-Vervollständigung** — Email-Service + Cookie-Settings-Modal implementiert
 
 ## Phase Details
 
-### Phase 1: Auth Security
-**Goal**: Alle aktiven Auth-Sicherheitslücken schließen — kein unauthentifizierter Produktions-Endpoint, keine Token in Server-Logs, kein Timezone-Mismatch bei Session-Expiry
+### Phase 1: Auth-Debt
+**Goal**: Alle noch ungesicherten Endpoints geben 401 ohne gültigen JWT zurück; kein Hardcode user_id mehr
 **Depends on**: Nothing (first phase)
-**Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04
+**Requirements**: AUTH-10, AUTH-11
 **Success Criteria** (what must be TRUE):
-  1. OAuth-Callback-URL enthält keine Token in der Query-String — `?access_token=` erscheint nicht in Server-Logs oder Browser-History
-  2. Alle `/api/legal-ai/*` Endpoints geben 401 zurück wenn kein gültiger JWT-Token mitgeschickt wird
-  3. Admin-only Endpoints geben 403 zurück für normale authentifizierte User
-  4. Expired Refresh-Tokens werden konsistent abgelehnt unabhängig von PostgreSQL-Timezone-Konfiguration
-**Plans**: 4 plans
+  1. `POST /api/accessibility/patches/generate` gibt 401 ohne Bearer Token zurück
+  2. `user_id=1` Hardcode in `generate_accessibility_patches` entfernt — user_id kommt aus JWT
+  3. Alle bestehenden geschützten Endpoints in `cookie_compliance_routes.py` geben weiterhin korrekt 401 zurück
+**Plans**: 2 plans
 
 Plans:
-- [x] 01-01: OAuth URL-Fragment fix — Backend redirect auf `#access_token=...`, Frontend liest aus `window.location.hash`
-- [x] 01-02: legal_ai_routes.py Auth-Stub ersetzen — `get_current_user` Stub durch echten Depends aus `dependencies.py`
-- [x] 01-03: `require_admin` auf alle Admin-Endpoints anwenden — `ai_legal_routes.py:762`, `ai_legal_routes.py:803`, `legal_change_routes.py:363`
-- [x] 01-04: datetime.utcnow() Bug fixen — `auth_service.py:141` und `auth_service.py:181` auf `datetime.now(timezone.utc)` umstellen
+- [x] 01-01: `widget_routes.py` — `get_current_user` aus `dependencies.py` einbinden, `user_id=1` Hardcode entfernen, `db_pool: asyncpg.Pool = Depends(lambda: None)` auf echten Pool umstellen
+- [x] 01-02: `cookie_compliance_routes.py` — Auth-Flow verifiziert: alle Endpoints die `get_current_user_required` verwenden geben korrekt 401 zurück
 
-### Phase 2: Stripe Hardening
-**Goal**: Stripe Webhook-Integration ist sicher und vollständig — kein silent pass bei fehlendem Secret, keine unbezahlten Subscriptions die aktiv bleiben
+### Phase 2: DB-Integration
+**Goal**: Widget-Events, Feedback und Config werden in der Datenbank persistiert statt nur geloggt
 **Depends on**: Phase 1
-**Requirements**: AUTH-05, STRIPE-01, STRIPE-02, STRIPE-03
+**Requirements**: DB-01, DB-02, DB-03, DB-04, DB-05
 **Success Criteria** (what must be TRUE):
-  1. Backend-Start schlägt mit `RuntimeError` fehl wenn `STRIPE_WEBHOOK_SECRET_ADDONS` nicht gesetzt ist
-  2. Nach `customer.subscription.deleted` Event wird der Add-on-Zugang in der Datenbank sofort entzogen
-  3. `customer.subscription.updated` und `invoice.payment_failed` Events werden verarbeitet und der Subscription-Status in der DB aktualisiert
-**Plans**: 3 plans
+  1. `/api/widgets/track` INSERT landet in `widget_events` Tabelle (Migration falls nötig)
+  2. `_check_upsell_opportunity` führt echte COUNT-Abfrage auf `widget_usage_stats` durch
+  3. `/api/widgets/config/{site_id}` lädt Config aus DB mit Default-Fallback
+  4. Feedback in `ai_legal_routes.py` wird in DB gespeichert
+  5. `/sites/{site_id}/widget-feedback` in `public_routes.py` persistiert in DB
+  6. Kein Endpoint bricht bei DB-Fehler — alle Analytics-Pfade haben silent-fail
+**Plans**: 5 plans
 
 Plans:
-- [x] 02-01: Webhook Secret Guard in `addon_payment_routes.py` — `RuntimeError` bei leerem `STRIPE_WEBHOOK_SECRET_ADDONS` wie in `stripe_routes.py:38-40`
-- [x] 02-02: Add-on Subscription Cancellation implementieren — `handle_addon_subscription_cancelled` entzieht DB-Zugang per `stripe_subscription_id`
-- [x] 02-03: Add-on Subscription Updated + Payment Failed implementieren — `handle_addon_subscription_updated` und `handle_addon_payment_failed` Handler mit DB-Updates
+- [x] 02-01: `widget_routes.py:215` — `track_widget_event` DB-INSERT aktivieren + Migration `create_widget_events.sql`
+- [x] 02-02: `widget_routes.py:306` — `_check_upsell_opportunity` echte DB-Abfrage auf `widget_usage_stats`
+- [x] 02-03: `widget_routes.py:326` — `get_widget_config` aus `cookie_banner_configs` DB laden mit Default-Fallback
+- [x] 02-04: `ai_legal_routes.py:173` — Feedback INSERT in `legal_update_feedback` Tabelle (bereits via `ai_feedback_learning` implementiert, verifiziert)
+- [x] 02-05: `public_routes.py:1388` — `widget_feedback` INSERT in `widget_events` analog zu 02-01
 
-### Phase 3: Tech Debt Consolidation
-**Goal**: Dead Code und Duplikate entfernt — eine einzige JWT-Implementierung, kein unmountetes Auth-Stub-Modul, eine API-Base-URL-Quelle
+### Phase 3: Feature-Vervollständigung
+**Goal**: Email-Notifications für Expert-Anfragen funktionieren; Cookie-Settings-Modal ist bedienbar
 **Depends on**: Phase 2
-**Requirements**: DEBT-01, DEBT-02, DEBT-03
+**Requirements**: FEAT-01, FEAT-02
 **Success Criteria** (what must be TRUE):
-  1. `main_production.py` enthält keine standalone `create_jwt_token` / `verify_jwt_token` / `get_current_user` Funktionen mehr
-  2. `legal_ai_routes.py` existiert nicht mehr und ist aus `main_production.py` ausgehängt
-  3. API Base URL wird in `dashboard-react` aus einer einzigen Quelle (`lib/api-utils.ts`) importiert — kein `getApiBaseURL()` Duplikat in den anderen 5 Dateien
-**Plans**: 3 plans
+  1. Expert-Anfrage löst 2 Emails aus: Kunden-Bestätigung + Team-Notification (via `email_service._send_email`)
+  2. Email-Versand-Fehler bricht die Expert-Anfrage nicht ab (bestehender try/except bleibt)
+  3. Cookie-Settings-Modal öffnet sich wenn User auf Settings-Button klickt
+  4. Modal zeigt Kategorien mit Toggles; Speichern-Button ruft Consent-Update auf
+  5. Modal-Stil konsistent mit bestehendem Banner
+**Plans**: 2 plans
 
 Plans:
-- [x] 03-01: Duplikate JWT-Helpers aus `main_production.py:628-667` entfernen — alle Auth-Pfade routen durch `AuthService` / `dependencies.py`
-- [x] 03-02: `legal_ai_routes.py` löschen und aus `main_production.py` aushängen (Import + Router-Include entfernen)
-- [x] 03-03: API Base URL konsolidieren — `getApiBaseUrl()` nur in `lib/api-utils.ts`, alle 5 Duplikat-Dateien importieren daraus
+- [x] 03-01: `expert_service_routes.py:271` — `EmailService` importieren, `_send_email` für Kunde + Team aufrufen
+- [x] 03-02: `widgets/cookie_consent.js:214` — Settings-Modal implementieren mit Kategorien-Toggles und Consent-Persistierung
 
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Auth Security | 4/4 | Complete | 2026-03-29 |
-| 2. Stripe Hardening | 3/3 | Complete | 2026-03-29 |
-| 3. Tech Debt Consolidation | 3/3 | Complete | 2026-03-29 |
+| 1. Auth-Debt | 2/2 | Complete | 2026-04-21 |
+| 2. DB-Integration | 5/5 | Complete | 2026-04-21 |
+| 3. Feature-Vervollständigung | 2/2 | Complete | 2026-04-21 |

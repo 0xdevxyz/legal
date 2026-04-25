@@ -1,75 +1,55 @@
-# Requirements: Complyo Security Hardening & Critical Fixes
+# Requirements: Technical Debt & Feature Completeness
 
-**Defined:** 2026-03-29
-**Core Value:** Kunden müssen darauf vertrauen können, dass ihre Daten sicher sind und Subscriptions korrekt verwaltet werden.
+## AUTH-10: cookie_compliance_routes.py — ungesicherte Endpoints absichern
 
-## v1 Requirements
+**Problem:** Mehrere Endpoints prüfen Auth nicht konsequent oder verwenden lokale Helfer statt `dependencies.py`.
+**Fix:** Wo `get_current_user_required` (lokale Implementierung) verwendet wird, sicherstellen dass 401 zurückgegeben wird ohne JWT. Kein Refactor auf `dependencies.get_current_user` nötig — lokale Implementierung ist korrekt.
+**Akzeptanzkriterium:** Alle geschützten Endpoints geben 401 ohne gültigen Bearer Token.
 
-### Authentication & Security
+## AUTH-11: widget_routes.py — generate-patches Endpoint absichern
 
-- [ ] **AUTH-01**: OAuth-Tokens werden via URL-Fragment übertragen (`#access_token=...`), nicht via Query-String
-- [ ] **AUTH-02**: `/api/legal-ai/*` Endpoints nutzen echte JWT-Authentifizierung (kein Fake-User-Stub)
-- [ ] **AUTH-03**: Alle Admin-Endpoints sind mit `Depends(require_admin)` aus `backend/dependencies.py` geschützt
-- [ ] **AUTH-04**: Refresh-Token-Expiry-Vergleich nutzt `datetime.now(timezone.utc)` konsistent (kein Timezone-Mismatch)
-- [ ] **AUTH-05**: Stripe Add-on Webhook Secret schlägt bei fehlendem Env-Var mit RuntimeError fehl (kein silent pass)
+**Problem:** `generate_accessibility_patches` verwendet `db_pool: asyncpg.Pool = Depends(lambda: None)` und hat `user_id: int = Depends(get_current_user_id)` auskommentiert.
+**Fix:** `get_current_user` aus `dependencies.py` importieren und als Dependency einbinden. `user_id` aus `current_user["user_id"]` lesen statt Hardcode `1`.
+**Akzeptanzkriterium:** Endpoint gibt 401 ohne JWT; `user_id=1` Hardcode entfernt.
 
-### Stripe & Payments
+## DB-01: Widget-Tracking-Events persistieren
 
-- [ ] **STRIPE-01**: Add-on Subscription Cancellation entzieht Datenbankzugang sofort nach Stripe-Event
-- [ ] **STRIPE-02**: Add-on Subscription Update und Payment-Failed Handler sind implementiert
-- [ ] **STRIPE-03**: Stripe Webhook Secret Guard in `addon_payment_routes.py` entspricht dem in `stripe_routes.py`
+**Problem:** `/api/widgets/track` loggt nur via print, kein DB-Insert.
+**Fix:** INSERT in `widget_events` Tabelle via `db_pool` (falls vorhanden). Migration anlegen falls Tabelle nicht existiert.
+**Akzeptanzkriterium:** Events landen in DB; Endpoint schlägt nicht fehl wenn DB nicht verfügbar (silent fail).
 
-### Tech Debt (Blocking)
+## DB-02: Upsell-Check mit echter DB-Abfrage
 
-- [ ] **DEBT-01**: Duplicate JWT-Funktionen in `main_production.py` (Zeilen 628-667) entfernt — nur noch `AuthService`
-- [ ] **DEBT-02**: `legal_ai_routes.py` entfernt und aus `main_production.py` ausgehängt
-- [ ] **DEBT-03**: API Base URL auf eine einzige Quelle konsolidiert (aktuell 6 Duplikate im Dashboard)
+**Problem:** `_check_upsell_opportunity` enthält nur auskommentierten Code + `pass`.
+**Fix:** Auskommentierten Code aktivieren — COUNT aus `widget_usage_stats` WHERE `site_id=$1` AND `timestamp > NOW() - INTERVAL '30 days'`.
+**Akzeptanzkriterium:** Funktion führt echte DB-Abfrage durch; silent fail bei DB-Fehler.
 
-## v2 Requirements
+## DB-03: Widget-Config aus DB laden
 
-### Testing
+**Problem:** `/api/widgets/config/{site_id}` gibt immer Hard-coded Default-Config zurück.
+**Fix:** Versuch, Config aus `cookie_banner_configs` Tabelle zu laden (nach site_id). Fallback auf Default wenn nicht gefunden.
+**Akzeptanzkriterium:** Existierende Site-Config wird aus DB geladen; Default-Fallback bleibt.
 
-- **TEST-01**: Backend-Route-Tests für Auth-Flows
-- **TEST-02**: Stripe Webhook Integration Tests
-- **TEST-03**: Frontend Unit Tests für Auth-Context
+## DB-04: ML-Feedback in DB speichern
 
-### Performance
+**Problem:** `ai_legal_routes.py` Feedback-Endpoint (ca. Zeile 173) speichert nichts.
+**Fix:** INSERT Feedback-Daten in `legal_update_feedback` oder äquivalente Tabelle via `db_pool`.
+**Akzeptanzkriterium:** Feedback landet in DB; Endpoint bleibt funktionsfähig auch ohne DB.
 
-- **PERF-01**: `db_pool = None` Global-Pattern durch `Depends(get_db)` ersetzen (15+ Dateien)
-- **PERF-02**: Background Worker auf `FOR UPDATE SKIP LOCKED` umstellen
-- **PERF-03**: `SELECT *` durch explizite Spalten ersetzen (40+ Stellen)
+## DB-05: Widget-Feedback in public_routes persistieren
 
-## Out of Scope
+**Problem:** `/sites/{site_id}/widget-feedback` in `public_routes.py` loggt nur, kein DB-Insert.
+**Fix:** INSERT in `widget_events` Tabelle analog zu DB-01.
+**Akzeptanzkriterium:** Feedback-Events in DB; silent fail bei Fehler.
 
-| Feature | Reason |
-|---------|--------|
-| Neue Features | Erst nach Security-Milestone |
-| WordPress Plugin Änderungen | Eigener Scope, nicht kritisch |
-| Landing Page Änderungen | Nicht sicherheitsrelevant |
-| AI Document Generator TODO-Fixes | Feature-Work, nicht Security |
-| Logging (print → logger) | Tech Debt, niedrige Priorität |
+## FEAT-01: Email-Service Integration in expert_service_routes
 
-## Traceability
+**Problem:** `_send_expert_request_email` loggt nur, ruft `email_service` nicht auf.
+**Fix:** `EmailService` importieren, `_send_email` für Kunden-Bestätigung und Team-Notification aufrufen. Bestehende Log-Inhalte als Email-Body verwenden.
+**Akzeptanzkriterium:** Bei Expert-Anfrage werden 2 Emails verschickt (oder geloggt bei SMTP-Fehler); Anfrage schlägt nicht fehl wenn Email-Versand scheitert.
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| AUTH-01 | Phase 1 | Pending |
-| AUTH-02 | Phase 1 | Pending |
-| AUTH-03 | Phase 1 | Pending |
-| AUTH-04 | Phase 1 | Pending |
-| AUTH-05 | Phase 2 | Pending |
-| STRIPE-01 | Phase 2 | Pending |
-| STRIPE-02 | Phase 2 | Pending |
-| STRIPE-03 | Phase 2 | Pending |
-| DEBT-01 | Phase 3 | Pending |
-| DEBT-02 | Phase 3 | Pending |
-| DEBT-03 | Phase 3 | Pending |
+## FEAT-02: Cookie-Settings-Modal
 
-**Coverage:**
-- v1 requirements: 11 total
-- Mapped to phases: 11
-- Unmapped: 0 ✓
-
----
-*Requirements defined: 2026-03-29*
-*Last updated: 2026-03-29 after initialization*
+**Problem:** Cookie-Settings-Modal in `widgets/cookie_consent.js` ist nicht implementiert (TODO bei ca. Zeile 214).
+**Fix:** Modal-Logik implementieren — Kategorien anzeigen (Notwendig, Funktional, Analytik, Marketing), Toggle pro Kategorie, Speichern-Button der Consent-Update auslöst.
+**Akzeptanzkriterium:** Modal öffnet sich via Settings-Button; Änderungen werden in Consent-Log gespeichert; UI konsistent mit bestehendem Banner-Stil.

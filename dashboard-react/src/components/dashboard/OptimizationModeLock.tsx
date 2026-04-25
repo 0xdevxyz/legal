@@ -11,11 +11,12 @@ import { getTrackedWebsites } from '@/lib/api';
 
 interface OptimizationModeLockProps {
   onLock?: (url: string) => void;
-  // onUnlock entfernt - Website-Verknüpfung ist DAUERHAFT
+  hasInteracted?: boolean;
 }
 
 export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
-  onLock
+  onLock,
+  hasInteracted = false
 }) => {
   const router = useRouter();
   const { 
@@ -258,7 +259,11 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
     );
   }
 
-  // Noch nicht im Optimierungsmodus - Übergangs-Prompt anzeigen
+  // Noch nicht im Optimierungsmodus - erst nach Pillar-Interaktion anzeigen
+  if (!hasInteracted) {
+    return null;
+  }
+
   return (
     <Card className="mb-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-blue-500/30">
       <CardContent className="pt-6">
@@ -323,11 +328,11 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
                 </ul>
                 
                 {/* Wichtiger Warnhinweis */}
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mt-3">
-                  <p className="text-sm text-red-300 font-semibold mb-1">
-                    ⚠️ Diese Entscheidung ist dauerhaft!
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mt-3">
+                  <p className="text-sm text-amber-300 font-semibold mb-1">
+                    Wichtiger Hinweis
                   </p>
-                  <p className="text-xs text-red-300/80">
+                  <p className="text-xs text-amber-300/80">
                     Die Verknüpfung kann <strong>nicht selbstständig</strong> rückgängig gemacht werden. 
                     Änderungen sind nur über ein <strong>Support-Ticket</strong> möglich.
                   </p>
@@ -344,7 +349,7 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
               </Button>
               <Button
                 onClick={handleLock}
-                className="gap-2 bg-red-500 hover:bg-red-600"
+                className="gap-2 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
               >
                 <Lock className="w-4 h-4" />
                 Verstanden & bestätigen

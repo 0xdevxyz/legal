@@ -30,6 +30,7 @@ interface User {
     full_name: string;
     company?: string;
     plan_type?: 'free' | 'single' | 'complete' | 'expert' | 'ai' | 'agency';
+    onboarding_completed?: boolean;
     active_modules?: string[];
     plan_limits?: {
         websites_max: number;
@@ -146,21 +147,43 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [accessToken]);
     
     useEffect(() => {
-        // Load from localStorage on mount
-        const token = localStorage.getItem('access_token');
-        const userData = localStorage.getItem('user');
-        if (token && userData) {
-            try {
-                setAccessToken(token);
-                setUser(JSON.parse(userData));
-            } catch (e) {
-                console.error('Error parsing user data:', e);
-                localStorage.removeItem('access_token');
-                localStorage.removeItem('refresh_token');
-                localStorage.removeItem('user');
+        const restoreSession = async () => {
+            const token = localStorage.getItem('access_token');
+            const userData = localStorage.getItem('user');
+            if (token && userData) {
+                try {
+                    setAccessToken(token);
+                    setUser(JSON.parse(userData));
+                    setIsLoading(false);
+                    return;
+                } catch (e) {
+                    localStorage.removeItem('access_token');
+                    localStorage.removeItem('refresh_token');
+                    localStorage.removeItem('user');
+                }
             }
-        }
-        setIsLoading(false);
+            // localStorage leer (z.B. nach Cache-Leerung) → HttpOnly Cookie als Fallback
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/refresh-cookie`, {
+                    method: 'POST',
+                    credentials: 'include',
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setAccessToken(data.access_token);
+                    setUser(data.user);
+                    localStorage.setItem('access_token', data.access_token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    if (typeof document !== 'undefined') {
+                        document.cookie = `access_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax; Secure`;
+                    }
+                }
+            } catch (_) {
+                // Kein Cookie vorhanden oder abgelaufen → kein Login, normal
+            }
+            setIsLoading(false);
+        };
+        restoreSession();
     }, []);
     
     const login = async (email: string, password: string) => {

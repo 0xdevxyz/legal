@@ -91,9 +91,9 @@ export default function ProductFeatures() {
           <div className="flex items-start gap-4 bg-gray-800/50 rounded-xl p-6 border border-gray-700">
             <Shield className="w-8 h-8 text-blue-400 flex-shrink-0 mt-1" />
             <div>
-              <h4 className="font-semibold mb-2">Rechtssicher mit eRecht24</h4>
+              <h4 className="font-semibold mb-2">KI-gestützte Rechtstexte</h4>
               <p className="text-sm text-gray-400">
-                Automatische Integration von rechtssicheren Impressum- und Datenschutztexten
+                Automatische Generierung von rechtssicheren Impressum- und Datenschutztexten durch KI
               </p>
             </div>
           </div>

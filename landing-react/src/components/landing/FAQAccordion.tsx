@@ -32,7 +32,7 @@ export default function FAQAccordion() {
     },
     {
       question: 'Wie aktuell sind die rechtlichen Anforderungen?',
-      answer: 'Durch unsere eRecht24-Integration sind alle rechtlichen Texte und Anforderungen immer auf dem neuesten Stand. Bei Gesetzesänderungen erhalten Sie automatische Updates (im Expertenservice) oder Benachrichtigungen (DIY-Plan) mit angepassten Lösungen.'
+      answer: 'Unser KI-System überwacht kontinuierlich relevante Gesetzgebung und Behörden-Meldungen (BfDI, EDPB, LfDI u.a.). Bei Gesetzesänderungen erhalten Sie automatische Updates (im Expertenservice) oder Benachrichtigungen (DIY-Plan) mit angepassten Lösungen.'
     },
     {
       question: 'Kann ich Complyo auch für mehrere Websites nutzen?',

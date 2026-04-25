@@ -1,8 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Brain, Shield, FileText, TrendingUp, ArrowRight, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { useRouter } from 'next/navigation';
+import { getAIComplianceStats } from '@/lib/ai-compliance-api';
+import type { AIComplianceStats } from '@/types/ai-compliance';
 
 interface AIComplianceCardProps {
   user?: {
@@ -11,38 +14,21 @@ interface AIComplianceCardProps {
   };
 }
 
-interface AIStats {
-  total_systems?: number;
-  avg_score?: number;
-  high_risk_count?: number;
-  last_scan?: string;
-}
-
 export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
+  const router = useRouter();
   const hasAddon = user?.addons?.includes('comploai_guard');
-  
-  // Mock stats for demo - would come from API in production
-  const aiStats: AIStats = {
-    total_systems: 3,
-    avg_score: 78,
-    high_risk_count: 1,
-    last_scan: '2 Tage'
-  };
+  const [aiStats, setAiStats] = useState<AIComplianceStats | null>(null);
 
-  const handleActivate = () => {
-    // Navigate to AI Compliance activation
-    window.location.href = '/ai-compliance/upgrade';
-  };
-
-  const handleViewDashboard = () => {
-    window.location.href = '/ai-compliance';
-  };
+  useEffect(() => {
+    if (!hasAddon) return;
+    getAIComplianceStats()
+      .then(setAiStats)
+      .catch(() => setAiStats(null));
+  }, [hasAddon]);
 
   if (hasAddon) {
-    // User has AI Compliance Add-on - show compact stats sidebar
     return (
       <div className="glass-strong rounded-2xl p-5 sticky top-24 space-y-4">
-        {/* Header */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-gradient-to-br from-purple-500/20 to-indigo-500/20 rounded-lg">
@@ -58,33 +44,34 @@ export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
           </div>
         </div>
 
-        {/* Compact Stats */}
         <div className="space-y-3">
           <div className="glass-card p-3 rounded-xl">
-            <div className="text-2xl font-bold text-white">{aiStats.total_systems}</div>
+            <div className="text-2xl font-bold text-white">
+              {aiStats ? aiStats.total_systems : '—'}
+            </div>
             <div className="text-xs text-zinc-400">AI-Systeme</div>
           </div>
           <div className="glass-card p-3 rounded-xl">
-            <div className="text-2xl font-bold text-purple-400">{aiStats.avg_score}%</div>
+            <div className="text-2xl font-bold text-purple-400">
+              {aiStats ? `${aiStats.average_compliance_score}%` : '—'}
+            </div>
             <div className="text-xs text-zinc-400">Compliance</div>
           </div>
         </div>
 
-        {/* High Risk Alert - Compact */}
-        {aiStats.high_risk_count && aiStats.high_risk_count > 0 && (
+        {aiStats && (aiStats.risk_distribution?.['high'] ?? 0) > 0 && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
             <div className="flex items-center gap-2">
               <Shield className="w-4 h-4 text-red-400" />
               <span className="text-xs font-medium text-red-300">
-                {aiStats.high_risk_count} Hochrisiko-System{aiStats.high_risk_count > 1 ? 'e' : ''}
+                {aiStats.risk_distribution['high']} Hochrisiko-System{aiStats.risk_distribution['high'] > 1 ? 'e' : ''}
               </span>
             </div>
           </div>
         )}
 
-        {/* Compact Action Button */}
         <button
-          onClick={handleViewDashboard}
+          onClick={() => router.push('/ai-compliance')}
           className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all text-sm shadow-lg"
         >
           Übersicht
@@ -94,10 +81,8 @@ export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
     );
   }
 
-  // User doesn't have AI Compliance - show compact upgrade prompt
   return (
     <div className="glass-strong rounded-2xl p-5 sticky top-24 hover:glass-effect transition-all">
-      {/* Compact Header */}
       <div className="flex items-center gap-2 mb-4">
         <div className="p-2 bg-gradient-to-br from-purple-500/20 to-indigo-500/20 rounded-lg">
           <Brain className="w-5 h-5 text-purple-400" />
@@ -111,7 +96,6 @@ export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
         </div>
       </div>
 
-      {/* Compact Features */}
       <div className="space-y-2.5 mb-4">
         <div className="flex items-start gap-2">
           <Shield className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
@@ -138,31 +122,27 @@ export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
         </div>
       </div>
 
-      {/* Compact Pricing */}
       <div className="flex items-baseline gap-1.5 mb-4">
         <div className="text-2xl font-bold text-white">99€</div>
         <div className="text-zinc-500 text-sm">/Monat</div>
       </div>
 
-      {/* Compact CTA Button */}
       <button
-        onClick={handleActivate}
+        onClick={() => router.push('/ai-compliance/upgrade')}
         className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all text-sm"
       >
         <Sparkles className="w-4 h-4" />
         Add-on jetzt aktivieren
       </button>
 
-      {/* Info Link */}
       <div className="mt-3 text-center">
-        <a
-          href="/ai-compliance"
-          className="text-sm text-purple-600 hover:text-purple-700 font-medium underline"
+        <button
+          onClick={() => router.push('/ai-compliance')}
+          className="text-sm text-purple-400 hover:text-purple-300 font-medium underline"
         >
           Mehr über AI Compliance erfahren →
-        </a>
+        </button>
       </div>
     </div>
   );
 };
-

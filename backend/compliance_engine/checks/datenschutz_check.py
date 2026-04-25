@@ -33,8 +33,17 @@ def _find_datenschutz_links(soup: BeautifulSoup) -> List:
     Findet auch Links in modernen JS-Frameworks (React, Vue, Next.js)
     """
     all_links = []
-    keywords_href = ['datenschutz', 'privacy', 'dsgvo', 'gdpr', 'data-protection']
-    keywords_text = ['datenschutz', 'privacy policy', 'dsgvo', 'datenschutzerklärung', 'data protection']
+    keywords_href = [
+        'datenschutz', 'privacy', 'dsgvo', 'gdpr', 'data-protection',
+        'data_protection', 'privacy-notice', 'privacy_notice', 'privacy-policy',
+        'privacy_policy', 'cookie-policy', 'cookie_policy', 'datenschutzhinweis',
+        'datenschutzrichtlinie',
+    ]
+    keywords_text = [
+        'datenschutz', 'privacy policy', 'dsgvo', 'datenschutzerklärung',
+        'data protection', 'privacy notice', 'cookie-richtlinie', 'datenschutzhinweise',
+        'datenschutzrichtlinie',
+    ]
     
     for a_tag in soup.find_all('a', href=True):
         href = a_tag.get('href', '').lower()
@@ -97,11 +106,51 @@ async def check_datenschutz_compliance_smart(url: str, html: str = None, session
         return await check_datenschutz_compliance(url, soup, session)
 
 
+async def _check_datenschutz_url_exists(base_url: str, session=None) -> bool:
+    """
+    Prüft direkt bekannte Datenschutz-Pfade per HTTP-Request.
+    Fallback für clientseitig gerenderte Seiten (Next.js, React SPA).
+    """
+    from urllib.parse import urlparse
+    import ssl
+    import certifi
+
+    parsed = urlparse(base_url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+
+    candidate_paths = [
+        '/datenschutz', '/datenschutzerklaerung', '/privacy', '/privacy-policy',
+        '/dsgvo', '/data-protection', '/datenschutz-erklaerung'
+    ]
+
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+    for path in candidate_paths:
+        candidate_url = base + path
+        try:
+            if session:
+                async with session.get(candidate_url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
+                    if resp.status == 200:
+                        logger.info(f"✅ Datenschutz-URL direkt gefunden: {candidate_url}")
+                        return True
+            else:
+                connector = aiohttp.TCPConnector(ssl=ssl_context)
+                async with aiohttp.ClientSession(connector=connector) as tmp:
+                    async with tmp.get(candidate_url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
+                        if resp.status == 200:
+                            logger.info(f"✅ Datenschutz-URL direkt gefunden: {candidate_url}")
+                            return True
+        except Exception:
+            continue
+
+    return False
+
+
 async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=None) -> List[Dict[str, Any]]:
     """
     Prüft Datenschutzerklärung-Compliance
     
-    1. Datenschutz-Link vorhanden
+    1. Datenschutz-Link vorhanden (im gerenderten HTML oder als direkt erreichbare URL)
     2. Datenschutzerklärung-Inhalte (wenn erreichbar)
     """
     issues = []
@@ -113,6 +162,10 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
         logger.info(f"   → {link.get('href', 'N/A')}: {link.get_text(strip=True)[:50]}")
     
     if not datenschutz_links:
+        datenschutz_url_exists = await _check_datenschutz_url_exists(url, session)
+        if datenschutz_url_exists:
+            logger.info("✅ Datenschutz per Direkt-URL-Check gefunden — kein Issue")
+            return issues
         # ✅ HAUPTELEMENT FEHLT: Generiere alle Sub-Issues mit is_missing=True
         issues.append(asdict(DatenschutzIssue(
             category='datenschutz',
@@ -321,5 +374,96 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
         except ImportError:
             logger.warning("⚠️ HybridValidator nicht verfügbar - überspringe Deep-Analyse")
     
+    # Google Fonts extern geladen = DSGVO-Verstoß (LG München I, Az. 3 O 17493/20)
+    html_text = str(soup).lower()
+    if re.search(r'fonts\.googleapis\.com|fonts\.gstatic\.com', html_text):
+        issues.append(asdict(DatenschutzIssue(
+            category='datenschutz',
+            severity='critical',
+            title='Google Fonts extern geladen — DSGVO-Verstoß',
+            description=(
+                'Google Fonts wird von externen Google-Servern geladen (fonts.googleapis.com). '
+                'Dabei wird die IP-Adresse des Nutzers ohne Einwilligung an Google (USA) übertragen. '
+                'Das LG München I (Az. 3 O 17493/20) hat dies als DSGVO-Verstoß eingestuft '
+                'und Schadensersatz von 100€ pro Nutzer zugesprochen.'
+            ),
+            risk_euro=5000,
+            recommendation=(
+                'Laden Sie Google Fonts lokal (self-hosted) statt von Google-Servern. '
+                'Fonts herunterladen unter: https://google-webfonts-helper.herokuapp.com/ '
+                'und auf dem eigenen Webserver einbinden.'
+            ),
+            legal_basis='DSGVO Art. 6 Abs. 1, Art. 44 ff. (Drittlandtransfer), LG München I Az. 3 O 17493/20',
+            auto_fixable=False,
+            is_missing=False,
+        )))
+
+    # US-Drittanbieter ohne erkennbare Rechtsgrundlage in Datenschutzerklärung
+    us_services = {
+        'Google Analytics / GTM': r'google-analytics\.com|googletagmanager\.com',
+        'Meta Pixel': r'connect\.facebook\.net|facebook\.com/tr',
+        'HubSpot': r'js\.hs-scripts\.com|hubspot\.com',
+        'Hotjar': r'static\.hotjar\.com',
+        'Intercom': r'widget\.intercom\.io',
+        'Salesforce': r'salesforce\.com/analytics',
+        'Stripe': r'js\.stripe\.com',
+    }
+    found_us_services = []
+    for name, pattern in us_services.items():
+        if re.search(pattern, html_text, re.I):
+            found_us_services.append(name)
+
+    if found_us_services:
+        # Prüfe ob US-Dienste in der Datenschutzerklärung erwähnt werden
+        # (Heuristik: Prüfe ob Schlüsselwörter wie 'standardvertragsklauseln', 'dsgvo-e.u.s.a.', 'dpf' vorhanden)
+        has_transfer_basis = bool(re.search(
+            r'standardvertragsklausel|standard contractual clause|scc|data privacy framework|dpf|'
+            r'angemessenheitsbeschluss|adequacy decision',
+            html_text, re.I
+        ))
+        has_privacy_shield_only = bool(re.search(r'privacy.shield', html_text, re.I)) and not has_transfer_basis
+        if not has_transfer_basis:
+            if has_privacy_shield_only:
+                issues.append(asdict(DatenschutzIssue(
+                    category='avv',
+                    severity='critical',
+                    title=f'Privacy Shield als Transferbasis ungültig (Schrems II)',
+                    description=(
+                        f'Die Datenschutzerklärung verweist noch auf das Privacy Shield als Rechtsgrundlage '
+                        f'für US-Datentransfers. Das Privacy Shield wurde am 16.07.2020 durch den EuGH '
+                        f'(Schrems II, C-311/18) für ungültig erklärt. Folgende US-Dienste wurden erkannt: '
+                        f'{", ".join(found_us_services)}.'
+                    ),
+                    risk_euro=5000,
+                    recommendation=(
+                        'Ersetzen Sie den Privacy-Shield-Verweis durch aktuelle Rechtsgrundlagen: '
+                        'Standardvertragsklauseln (SCCs, aktualisiert 04.06.2021) oder das '
+                        'EU-US Data Privacy Framework (DPF, gültig seit 10.07.2023).'
+                    ),
+                    legal_basis='DSGVO Art. 44 ff., EuGH C-311/18 (Schrems II), Art. 13 Abs. 1 lit. f',
+                    auto_fixable=False,
+                    is_missing=False,
+                )))
+            else:
+                issues.append(asdict(DatenschutzIssue(
+                    category='avv',
+                    severity='warning',
+                    title=f'US-Dienste ohne Drittland-Rechtsgrundlage in DS ({", ".join(found_us_services[:3])})',
+                    description=(
+                        f'Folgende US-Dienste wurden auf der Seite erkannt: {", ".join(found_us_services)}. '
+                        f'In der Datenschutzerklärung fehlt ein erkennbarer Hinweis auf die Rechtsgrundlage '
+                        f'für den Datentransfer in die USA (Standardvertragsklauseln, EU-US Data Privacy Framework).'
+                    ),
+                    risk_euro=3000,
+                    recommendation=(
+                        'Ergänzen Sie die Datenschutzerklärung um: (1) Nennung jedes US-Dienstes, '
+                        '(2) Rechtsgrundlage für den Drittlandtransfer (SCCs oder EU-US DPF), '
+                        '(3) Link zu den Garantien des Anbieters.'
+                    ),
+                    legal_basis='DSGVO Art. 44 ff., Art. 13 Abs. 1 lit. f',
+                    auto_fixable=False,
+                    is_missing=False,
+                )))
+
     return issues
 

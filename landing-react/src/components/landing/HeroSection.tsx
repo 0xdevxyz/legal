@@ -49,7 +49,7 @@ export default function HeroSection() {
             <div className="flex flex-col sm:flex-row gap-4 mb-8 text-sm">
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                <span className="text-gray-300">Rechtssicher mit eRecht24</span>
+                <span className="text-gray-300">KI-gestützte Rechtstexte</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />

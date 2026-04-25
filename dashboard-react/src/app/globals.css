@@ -344,18 +344,18 @@
     --card-border: 240 3.7% 15.9%;
     --glass-bg: rgba(255, 255, 255, 0.03);
     --glass-border: rgba(255, 255, 255, 0.08);
-    --gradient-mesh: linear-gradient(135deg, #0c0a09 0%, #18181b 35%, #0c0a09 100%);
+    --gradient-mesh: linear-gradient(135deg, #09090b 0%, #18181b 35%, #09090b 100%);
   }
 
   .light {
-    /* Light Theme - Professional Clean Design wie UserWay */
+    /* Light Theme - Professional Clean Design */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card-bg: 0 0% 100%;
     --card-border: 240 5.9% 90%;
     --glass-bg: rgba(255, 255, 255, 1);
-    --glass-border: rgba(0, 0, 0, 0.08);
-    --gradient-mesh: #f8f9fa;
+    --glass-border: rgba(0, 0, 0, 0.07);
+    --gradient-mesh: #f1f5f9;
   }
 
   * {
@@ -363,20 +363,21 @@
     padding: 0;
     margin: 0;
   }
-  
+
   body {
     @apply antialiased;
     min-height: 100vh;
     transition: background 0.3s ease, color 0.3s ease;
   }
-  
+
   .light body {
-    background: #f8f9fa !important;
+    background: linear-gradient(160deg, #f8fafc 0%, #eef2ff 40%, #f1f5f9 100%) !important;
+    background-attachment: fixed !important;
     color: #111827 !important;
   }
-  
+
   .dark body {
-    background: linear-gradient(135deg, #0c0a09 0%, #18181b 35%, #0c0a09 100%) !important;
+    background: linear-gradient(135deg, #09090b 0%, #18181b 40%, #09090b 100%) !important;
     background-attachment: fixed !important;
     color: white !important;
   }
@@ -394,33 +395,51 @@
     @apply bg-white/[0.03] dark:bg-white/[0.03] backdrop-blur-xl border border-white/[0.08] dark:border-white/[0.08];
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.18), inset 0 1px 2px 0 rgba(255, 255, 255, 0.05);
   }
-  
+
   .light .glass-effect {
-    @apply bg-white border-gray-200/30;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    @apply bg-white border-gray-200/60;
+    box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.06), 0 1px 2px 0 rgba(0, 0, 0, 0.04);
     border-radius: 12px;
   }
-  
+
+  /* Dark Mode: deutlicherer Kontrast Karte vs Hintergrund */
   .glass-card {
-    @apply bg-zinc-900/50 dark:bg-zinc-900/50 backdrop-blur-md border border-zinc-800/50 dark:border-zinc-800/50;
-    box-shadow: 0 8px 24px 0 rgba(0, 0, 0, 0.2), inset 0 1px 1px 0 rgba(255, 255, 255, 0.03);
+    @apply bg-zinc-900/80 dark:bg-zinc-900/80 backdrop-blur-md border border-zinc-800/70 dark:border-zinc-800/70;
+    box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.25), inset 0 1px 1px 0 rgba(255, 255, 255, 0.04);
   }
-  
+
   .light .glass-card {
-    @apply bg-white border-gray-200/30;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
-    border-radius: 12px;
+    @apply bg-white border-gray-200/70;
+    box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.06), 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+    border-radius: 14px;
   }
-  
+
   .glass-strong {
-    @apply bg-zinc-800/60 dark:bg-zinc-800/60 backdrop-blur-xl border border-zinc-700/60 dark:border-zinc-700/60;
-    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.3), inset 0 1px 2px 0 rgba(255, 255, 255, 0.08);
+    @apply bg-zinc-900/90 dark:bg-zinc-900/90 backdrop-blur-xl border border-zinc-800/80 dark:border-zinc-800/80;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35), inset 0 1px 2px 0 rgba(255, 255, 255, 0.06);
   }
-  
+
   .light .glass-strong {
-    @apply bg-white border-gray-200/30;
-    box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.06);
-    border-radius: 12px;
+    @apply bg-white/95 border-gray-200/80;
+    box-shadow: 0 4px 24px 0 rgba(0, 0, 0, 0.07), 0 1px 4px 0 rgba(0, 0, 0, 0.05);
+    border-radius: 16px;
+  }
+
+  /* Light Mode Header: volle Breite, klare Trennung vom Content */
+  .light header.glass-strong {
+    background: rgba(255, 255, 255, 0.94) !important;
+    backdrop-filter: blur(20px) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-top: none !important;
+    border-radius: 0 !important;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06) !important;
+  }
+
+  /* Score Circle Track - sichtbar in Light Mode */
+  .light .score-circle-track {
+    stroke: rgba(0, 0, 0, 0.08) !important;
   }
   
   /* Moderne Animationen */
@@ -482,13 +501,13 @@
 
   /* Theme-aware backgrounds */
   .bg-theme-card {
-    @apply bg-zinc-900/50 dark:bg-zinc-900/50;
+    @apply bg-zinc-900/80 dark:bg-zinc-900/80;
   }
 
   .light .bg-theme-card {
     @apply bg-white;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
-    border-radius: 12px;
+    box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.06), 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+    border-radius: 14px;
   }
 
   .bg-theme-hover {
@@ -496,8 +515,34 @@
   }
 
   .light .bg-theme-hover {
-    @apply hover:bg-gray-50/80;
+    @apply hover:bg-gray-50;
   }
+}
+
+/* Dark Mode: Page-Hintergrund mit subtiler Tiefe */
+.dark .min-h-screen {
+  position: relative;
+}
+
+.dark .min-h-screen::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(14, 165, 233, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(168, 85, 247, 0.04) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Light Mode: gleicher subtiler Accent-Gradient */
+.light .min-h-screen {
+  position: relative;
+}
+
+.light .min-h-screen > * {
+  position: relative;
+  z-index: 1;
 }
 
 @keyframes fadeIn {

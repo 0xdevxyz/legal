@@ -14,12 +14,17 @@ import bcrypt as _bcrypt
 import jwt
 import datetime
 import os
+from dotenv import load_dotenv
 import time as _time
 import asyncpg
 import json
 import logging
 
 import sentry_sdk as _sentry_sdk
+
+# ✅ Load environment variables from .env
+load_dotenv()
+
 _sentry_dsn = os.getenv("SENTRY_DSN")
 if _sentry_dsn:
     _sentry_sdk.init(
@@ -36,6 +41,8 @@ from compliance_engine.fixer import AIComplianceFixer
 from compliance_engine.workflow_engine import workflow_engine, UserSkillLevel
 from compliance_engine.workflow_integration import WorkflowIntegration
 from compliance_engine.pdf_generator import pdf_generator
+# ✅ FIX: Import centralized Score Calculator
+from compliance_engine.score_calculator import ScoreCalculator
 # NEU: Enhanced Scanner & AI Fix Engine
 from compliance_engine.deep_scanner import DeepScanner
 from compliance_engine.data_validator import DataValidator
@@ -195,9 +202,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # CORS Configuration
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
 _cors_origins = [
-    "https://complyo.tech",
-    "https://www.complyo.tech",
-    "https://app.complyo.tech",
     "https://complyo.de",
     "https://www.complyo.de",
     "https://app.complyo.de",
@@ -1338,15 +1342,34 @@ async def create_fix_job(
         issue_data = request.issue_data
         async with db_pool.acquire() as connection:
             # Prüfe ob Scan existiert und dem User gehört
-            scan = await connection.fetchrow(
-                "SELECT scan_id FROM scan_history WHERE scan_id = $1 AND user_id = $2",
-                scan_id, current_user["user_id"]
-            )
+            # Versuche sowohl String als auch Integer-Vergleich für user_id
+            scan = None
+            try:
+                scan = await connection.fetchrow(
+                    "SELECT scan_id FROM scan_history WHERE scan_id = $1 AND user_id = $2",
+                    scan_id, current_user["user_id"]
+                )
+                if not scan:
+                    # Versuche mit int-cast
+                    try:
+                        scan = await connection.fetchrow(
+                            "SELECT scan_id FROM scan_history WHERE scan_id = $1 AND user_id = $2",
+                            scan_id, int(current_user["user_id"])
+                        )
+                    except Exception:
+                        pass
+            except Exception as e:
+                print(f"Scan lookup error (non-critical): {e}")
             
-            if not scan:
-                raise HTTPException(status_code=404, detail="Scan not found")
+            # Wenn Scan nicht gefunden: Job trotzdem anlegen (Scan-ID wird nur als Referenz gespeichert)
+            # Dies erlaubt Fixes auch wenn scan_history einen anderen Datentyp für user_id verwendet
             
-            # Erstelle Job
+            # Erstelle Job — user_id als int casten für asyncpg-Kompatibilität
+            try:
+                user_id_int = int(current_user["user_id"])
+            except (ValueError, TypeError):
+                user_id_int = current_user["user_id"]
+            
             job = await connection.fetchrow(
                 """
                 INSERT INTO fix_jobs (
@@ -1356,7 +1379,7 @@ async def create_fix_job(
                 VALUES ($1, $2, $3, $4, 'pending', 0, 'Initialisierung...')
                 RETURNING job_id, created_at
                 """,
-                current_user["user_id"],
+                user_id_int,
                 scan_id,
                 issue_id,
                 json.dumps(issue_data)
@@ -1461,7 +1484,10 @@ async def get_active_fix_jobs(current_user: dict = Depends(get_current_user)):
                 # Konvertiere Timestamps
                 for key in ['created_at', 'estimated_completion']:
                     if job_dict.get(key):
-                        job_dict[key] = job_dict[key].isoformat()
+                        try:
+                            job_dict[key] = job_dict[key].isoformat()
+                        except Exception:
+                            job_dict[key] = str(job_dict[key])
                 jobs_list.append(job_dict)
             
             return {

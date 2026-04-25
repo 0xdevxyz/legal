@@ -10,6 +10,9 @@ from .barrierefreiheit_check import (
     check_barrierefreiheit_compliance,
     check_barrierefreiheit_compliance_smart
 )
+from .agb_check import check_agb_compliance
+from .shop_check import check_shop_compliance, detect_shop
+from .uwg_check import check_uwg_compliance
 
 __all__ = [
     'check_impressum_compliance',
@@ -18,6 +21,10 @@ __all__ = [
     'check_datenschutz_compliance_smart',
     'check_cookie_compliance',
     'check_barrierefreiheit_compliance',
-    'check_barrierefreiheit_compliance_smart'
+    'check_barrierefreiheit_compliance_smart',
+    'check_agb_compliance',
+    'check_shop_compliance',
+    'detect_shop',
+    'check_uwg_compliance',
 ]
 

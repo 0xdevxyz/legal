@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, TrendingUp, Bot, Globe, RefreshCw, Lock } from 'lucide-react';
+import { Search, TrendingUp, Bot, Globe, RefreshCw, Lock, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDashboardStore } from '@/stores/dashboard';
 import { analyzeWebsite, getTrackedWebsites } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/components/ui/Toast';
 
 interface DomainHeroSectionProps {
   onAnalyze?: (url: string) => void;
@@ -15,9 +16,11 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
   onAnalyze
 }) => {
   const { currentWebsite, metrics, updateMetrics, setCurrentWebsite, isInOptimizationMode, lockedOptimizationUrl } = useDashboardStore();
+  const { showToast } = useToast();
   const [url, setUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoTriggerInfo, setAutoTriggerInfo] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<{
     message: string;
     details?: string;
@@ -39,22 +42,13 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
       const focus = params.get('focus');
       
       if (triggerScan === 'true') {
-        console.log('🔍 Auto-Trigger Scan von Legal Update:', {
-          legalUpdateId,
-          legalContext,
-          focus
-        });
+        const parts: string[] = ['Website-Scan vorbereitet.'];
+        if (legalContext) parts.push(`Wegen Gesetzesänderung: "${decodeURIComponent(legalContext)}"`);
+        if (focus) parts.push(`Fokus: ${focus}`);
+        setAutoTriggerInfo(parts.join(' — '));
         
-        // Zeige Hinweis
-        const contextMsg = legalContext ? `\n\nWegen Gesetzesänderung: "${decodeURIComponent(legalContext)}"` : '';
-        const focusMsg = focus ? `\n\nFokus: ${focus}` : '';
-        
-        alert(`🔍 Website-Scan wird vorbereitet...${contextMsg}${focusMsg}\n\nBitte geben Sie Ihre Website-URL ein und starten Sie den Scan.`);
-        
-        // URL-Parameter entfernen (damit nicht bei jedem Reload getriggert wird)
         window.history.replaceState({}, document.title, window.location.pathname);
         
-        // Scroll zur URL-Eingabe
         const urlInput = document.querySelector('input[type="text"]') as HTMLInputElement;
         if (urlInput) {
           urlInput.focus();
@@ -79,10 +73,36 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
         return;
       }
       
+      // 1. Versuche localStorage zu laden (nach Refresh)
+      if (typeof localStorage !== 'undefined') {
+        const savedWebsite = localStorage.getItem('complyo_current_website');
+        const savedAnalysis = localStorage.getItem('complyo_last_analysis');
+        
+        if (savedWebsite) {
+          try {
+            const website = JSON.parse(savedWebsite);
+            const analysisData = savedAnalysis ? JSON.parse(savedAnalysis) : null;
+            
+            console.log('✅ Lade Website aus localStorage nach Refresh:', website.url);
+            setCurrentWebsite(website);
+            
+            if (analysisData) {
+              const { setAnalysisData } = useDashboardStore.getState();
+              setAnalysisData(analysisData);
+              console.log('✅ Lade Analysedaten aus localStorage');
+            }
+            return; // Early exit — keine API-Abfrage nötig
+          } catch (e) {
+            console.error('localStorage parse error:', e);
+          }
+        }
+      }
+      
+      // 2. Fallback: API abfragen
       try {
         const websites = await getTrackedWebsites();
         if (websites && websites.length > 0) {
-          const latestWebsite = websites[0]; // Get most recent website
+          const latestWebsite = websites.find(w => w.is_primary) ?? websites[0];
           console.log('✅ Lade gespeicherte Website:', latestWebsite.url);
           setCurrentWebsite({
             id: String(latestWebsite.id),
@@ -236,13 +256,13 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
         <div className="relative grid lg:grid-cols-2 gap-10 items-center">
           {/* Left: Domain Input & Info */}
           <div className="space-y-6">
-            <h1 className="text-4xl lg:text-5xl font-bold text-white mb-6 leading-tight tracking-tight">
+            <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-6 leading-tight tracking-tight">
               Website-Compliance
               <span className="block mt-2 bg-gradient-to-r from-sky-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
                 auf 100% optimieren
               </span>
             </h1>
-            <p className="text-lg text-zinc-300 leading-relaxed">
+            <p className="text-lg text-gray-600 dark:text-zinc-300 leading-relaxed">
               KI-gestützte Analyse & automatische Optimierung für DSGVO, BFSG & TTDSG
             </p>
 
@@ -276,6 +296,20 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
               )}
               
               <div className="flex flex-col sm:flex-row gap-3">
+                {autoTriggerInfo && (
+                  <div className="w-full flex items-start gap-2 bg-sky-500/10 border border-sky-500/30 rounded-xl px-4 py-3 mb-1">
+                    <Info className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-sky-300">{autoTriggerInfo}</p>
+                    <button
+                      onClick={() => setAutoTriggerInfo(null)}
+                      className="ml-auto text-zinc-500 hover:text-zinc-300 flex-shrink-0"
+                      aria-label="Hinweis schließen"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+                <div className="flex flex-col sm:flex-row gap-3 w-full">
                 <div className="flex-1 relative group">
                   <Globe className="absolute left-5 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-400 group-focus-within:text-sky-400 transition-colors" />
                   <label htmlFor="website-url-input" className="sr-only">Website-URL eingeben</label>
@@ -291,7 +325,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                     onKeyPress={(e) => e.key === 'Enter' && handleAnalyze()}
                     placeholder="ihre-domain.de eingeben"
                     aria-label="Website-URL zur Compliance-Analyse eingeben"
-                    className="w-full pl-14 pr-5 py-4 bg-zinc-900/50 backdrop-blur-sm border-2 border-zinc-700/50 rounded-2xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/50 text-lg transition-all"
+                    className="w-full pl-14 pr-5 py-4 bg-white dark:bg-zinc-900/50 backdrop-blur-sm border-2 border-gray-200 dark:border-zinc-700/50 rounded-2xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/50 text-lg transition-all shadow-sm dark:shadow-none"
                     disabled={isAnalyzing}
                   />
                 </div>
@@ -313,6 +347,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                     </>
                   )}
                 </Button>
+              </div>
               </div>
 
               {/* Error Message */}
@@ -365,8 +400,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                         <Globe className="w-5 h-5 text-sky-400" />
                       </div>
                       <div>
-                        <p className="text-xs text-zinc-400 mb-0.5">Aktuell analysiert</p>
-                        <p className="text-sm font-semibold text-white">{currentWebsite.name}</p>
+                        <p className="text-xs text-gray-500 dark:text-zinc-400 mb-0.5">Aktuell analysiert</p>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">{currentWebsite.name}</p>
                       </div>
                     </div>
                     <Button
@@ -405,6 +440,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                         stroke="rgba(255,255,255,0.05)"
                         strokeWidth="20"
                         fill="none"
+                        className="score-circle-track"
                       />
                       {/* Progress Circle */}
                       <circle
@@ -428,22 +464,22 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
 
                     {/* Score Number */}
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <div className="text-xs text-zinc-500 uppercase tracking-wider mb-2">
+                      <div className="text-xs text-gray-500 dark:text-zinc-500 uppercase tracking-wider mb-2">
                         {currentWebsite.url}
                       </div>
                       <div className={`text-7xl font-black ${getScoreColor(score)} tracking-tight`}>
                         {score}
                       </div>
-                      <div className="text-2xl text-zinc-400 font-light">/100</div>
-                      <div className="text-sm text-zinc-500 mt-1 font-medium">Compliance-Score</div>
+                      <div className="text-2xl text-gray-400 dark:text-zinc-400 font-light">/100</div>
+                      <div className="text-sm text-gray-500 dark:text-zinc-500 mt-1 font-medium">Compliance-Score</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Score Info Text */}
                 {score < 100 ? (
-                  <p className="text-sm text-zinc-400 mt-5 text-center">
-                    Noch <strong className="text-white font-semibold">{100 - score} Punkte</strong> bis zum Abmahnschutz
+                  <p className="text-sm text-gray-500 dark:text-zinc-400 mt-5 text-center">
+                    Noch <strong className="text-gray-900 dark:text-white font-semibold">{100 - score} Punkte</strong> bis zum Abmahnschutz
                   </p>
                 ) : (
                   <div className="flex items-center gap-2 text-green-400 mt-5">
@@ -461,14 +497,14 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                   <div className="absolute inset-12 bg-gradient-to-br from-sky-500/5 to-purple-500/5 rounded-full animate-pulse delay-150"></div>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="p-6 bg-zinc-900/50 rounded-full backdrop-blur-sm">
-                      <Globe className="w-20 h-20 text-zinc-600" />
+                      <Globe className="w-20 h-20 text-gray-300 dark:text-zinc-600" />
                     </div>
                   </div>
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-3">
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
                   Bereit für Ihre erste Analyse?
                 </h3>
-                <p className="text-zinc-400 text-sm">
+                <p className="text-gray-500 dark:text-zinc-400 text-sm">
                   Geben Sie oben eine Domain ein, um zu starten
                 </p>
               </div>
@@ -483,8 +519,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
               <TrendingUp className="w-6 h-6 text-green-400" />
             </div>
             <div>
-              <h4 className="text-white font-semibold text-sm">KI-gestützt</h4>
-              <p className="text-xs text-zinc-400 mt-0.5">Automatische Optimierung</p>
+              <h4 className="text-gray-900 dark:text-white font-semibold text-sm">KI-gestützt</h4>
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">Automatische Optimierung</p>
             </div>
           </div>
           <div className="flex items-center gap-4 p-4 rounded-2xl glass-card hover:glass-strong transition-all group">
@@ -492,8 +528,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
               <Globe className="w-6 h-6 text-sky-400" />
             </div>
             <div>
-              <h4 className="text-white font-semibold text-sm">20+ Prüfpunkte</h4>
-              <p className="text-xs text-zinc-400 mt-0.5">DSGVO, BFSG, TTDSG</p>
+              <h4 className="text-gray-900 dark:text-white font-semibold text-sm">20+ Prüfpunkte</h4>
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">DSGVO, BFSG, TTDSG</p>
             </div>
           </div>
           <div className="flex items-center gap-4 p-4 rounded-2xl glass-card hover:glass-strong transition-all group">
@@ -501,8 +537,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
               <Bot className="w-6 h-6 text-purple-400" />
             </div>
             <div>
-              <h4 className="text-white font-semibold text-sm">Abmahnschutz</h4>
-              <p className="text-xs text-zinc-400 mt-0.5">Bei 100% Compliance</p>
+              <h4 className="text-gray-900 dark:text-white font-semibold text-sm">Abmahnschutz</h4>
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">Bei 100% Compliance</p>
             </div>
           </div>
         </div>

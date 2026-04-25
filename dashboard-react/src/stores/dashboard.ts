@@ -16,6 +16,7 @@ interface DashboardStore extends DashboardState {
   lockedOptimizationUrl: string | null;
   isInOptimizationMode: boolean;
   lockForOptimization: (url: string) => void;
+  restoreLockFromPrimary: (primaryUrl: string) => void;
   unlockOptimization: () => void;
   setOptimizationMode: (enabled: boolean) => void;
 
@@ -46,16 +47,26 @@ export const useDashboardStore = create<DashboardStore>()(
     isInOptimizationMode: false,
 
     // Actions
-    setCurrentWebsite: (website) => set({ currentWebsite: website }),
-
-    setAnalysisData: (data) => set({
-      analysisData: data,
-      metrics: {
-        ...get().metrics,
-        totalScore: data.compliance_score,
-        criticalIssues: data.critical_issues
+    setCurrentWebsite: (website) => {
+      if (typeof localStorage !== 'undefined' && website) {
+        localStorage.setItem('complyo_current_website', JSON.stringify(website));
       }
-    }),
+      return set({ currentWebsite: website });
+    },
+
+    setAnalysisData: (data) => {
+      if (typeof localStorage !== 'undefined' && data) {
+        localStorage.setItem('complyo_last_analysis', JSON.stringify(data));
+      }
+      return set({
+        analysisData: data,
+        metrics: {
+          ...get().metrics,
+          totalScore: data?.compliance_score || 0,
+          criticalIssues: data?.critical_issues || 0
+        }
+      });
+    },
 
     setLegalNews: (news) => set({ legalNews: news }),
 
@@ -73,10 +84,23 @@ export const useDashboardStore = create<DashboardStore>()(
         lockedOptimizationUrl: url, 
         isInOptimizationMode: true 
       });
-      // Persist to localStorage
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem('complyo_locked_optimization_url', url);
         localStorage.setItem('complyo_optimization_mode', 'true');
+      }
+    },
+
+    restoreLockFromPrimary: (primaryUrl: string) => {
+      const stored = typeof localStorage !== 'undefined'
+        ? localStorage.getItem('complyo_locked_optimization_url')
+        : null;
+      const url = stored || primaryUrl;
+      if (url) {
+        set({ lockedOptimizationUrl: url, isInOptimizationMode: true });
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('complyo_locked_optimization_url', url);
+          localStorage.setItem('complyo_optimization_mode', 'true');
+        }
       }
     },
 

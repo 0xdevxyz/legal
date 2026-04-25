@@ -5,6 +5,7 @@ import { Sparkles, Globe, CheckCircle, ArrowRight, Loader2, Shield, Zap, FileChe
 import { analyzeWebsite, saveTrackedWebsite } from '@/lib/api';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useToast } from '@/components/ui/Toast';
+import { useAuth } from '@/contexts/AuthContext';
 import type { ComplianceIssue } from '@/types/api';
 
 interface OnboardingWizardProps {
@@ -25,6 +26,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
   const [lockConfirmed, setLockConfirmed] = useState(false);
   
   const { showToast } = useToast();
+  const { accessToken } = useAuth();
   const { setCurrentWebsite, setAnalysisData, updateMetrics, lockForOptimization } = useDashboardStore();
 
   // Validate URL in real-time with strict validation
@@ -198,28 +200,27 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
 
   const handleComplete = async () => {
     try {
-      // ✅ WICHTIG: Website in der Datenbank speichern (dauerhaft verknüpft!)
       const normalizedUrl = url.trim().replace(/^https?:\/\//, '').replace(/^www\./, '');
       const score = scanResult?.compliance_score || 0;
       
-      console.log('🔒 Speichere Website dauerhaft:', normalizedUrl);
-      
-      // Website in tracked_websites speichern (Backend erstellt auch cookie_banner_config)
       await saveTrackedWebsite(normalizedUrl, score);
-      
-      // ✅ Im lokalen State als gelockt markieren
       lockForOptimization(normalizedUrl);
-      
-      // Mark onboarding as completed in localStorage
+
+      // DB-Flag setzen (überlebt Cache-Leerung)
+      if (accessToken) {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de'}/api/auth/complete-onboarding`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+      }
+
       localStorage.setItem('complyo_onboarding_completed', 'true');
-      
       showToast('Website erfolgreich registriert!', 'success');
       onComplete();
       
     } catch (error: any) {
       console.error('❌ Website speichern fehlgeschlagen:', error);
       showToast(`Fehler beim Speichern: ${error.message || 'Unbekannter Fehler'}`, 'error');
-      // Trotzdem fortfahren, falls nur das Speichern fehlschlägt
       localStorage.setItem('complyo_onboarding_completed', 'true');
       onComplete();
     }

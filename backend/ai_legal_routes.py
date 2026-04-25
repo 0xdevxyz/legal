@@ -145,6 +145,15 @@ async def auto_archive_old_updates(conn, max_active: int = 6):
         Anzahl archivierter Updates
     """
     try:
+        col_exists = await conn.fetchval("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.columns
+                WHERE table_name = 'legal_updates' AND column_name = 'archived'
+            )
+        """)
+        if not col_exists:
+            return 0
+
         # Zähle aktive Updates
         count = await conn.fetchval(
             "SELECT COUNT(*) FROM legal_updates WHERE archived = FALSE"
@@ -163,7 +172,7 @@ async def auto_archive_old_updates(conn, max_active: int = 6):
             WHERE id IN (
                 SELECT id FROM legal_updates 
                 WHERE archived = FALSE
-                ORDER BY published_date ASC
+                ORDER BY published_at ASC
                 LIMIT $1
             )
             RETURNING id, title
@@ -188,6 +197,7 @@ async def auto_archive_old_updates(conn, max_active: int = 6):
 async def get_classified_updates(
     limit: int = Query(6, ge=1, le=50),
     include_info_only: bool = Query(False),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     user_id: Optional[int] = Depends(get_current_user_id)
 ):
     """
@@ -266,8 +276,8 @@ async def get_classified_updates(
                         lu.title,
                         lu.description,
                         lu.severity,
-                        lu.published_date as published_at,
-                        NULL as effective_date,
+                        lu.published_at,
+                        lu.effective_date,
                         lu.url,
                         COALESCE(ac.action_required, (lu.action_required IS NOT NULL AND lu.action_required::text != '')) as action_required,
                         ac.confidence,
@@ -283,12 +293,12 @@ async def get_classified_updates(
                         ac.consequences_if_ignored
                     FROM legal_updates lu
                     LEFT JOIN ai_classifications ac ON lu.id::text = ac.update_id
-                    WHERE lu.archived = FALSE
+                    WHERE 1=1
                     {where_clause.replace('WHERE ', 'AND ') if where_clause.startswith('WHERE') else where_clause}
                     ORDER BY 
                         COALESCE(ac.action_required, true) DESC,
                         COALESCE(ac.impact_score, 5.0) DESC,
-                        lu.published_date DESC NULLS LAST
+                        lu.published_at DESC NULLS LAST
                     LIMIT $1
                 """
             else:
@@ -300,8 +310,8 @@ async def get_classified_updates(
                         lu.title,
                         lu.description,
                         lu.severity,
-                        lu.published_date as published_at,
-                        NULL as effective_date,
+                        lu.published_at,
+                        lu.effective_date,
                         lu.url,
                         (lu.action_required IS NOT NULL AND lu.action_required::text != '') as action_required,
                         NULL as confidence,
@@ -320,15 +330,33 @@ async def get_classified_updates(
                         NULL as user_impact,
                         NULL as consequences_if_ignored
                     FROM legal_updates lu
-                    WHERE lu.archived = FALSE
+                    WHERE 1=1
                     {where_clause.replace('WHERE ', 'AND ') if where_clause.startswith('WHERE') else where_clause}
                     ORDER BY 
                         (lu.action_required IS NOT NULL AND lu.action_required::text != '') DESC,
-                        lu.published_date DESC NULLS LAST
+                        lu.published_at DESC NULLS LAST
                     LIMIT $1
                 """
             
             rows = await conn.fetch(query, limit)
+        
+        # ✅ AUTO-KLASSIFIZIERUNG: Starte KI im Hintergrund für unklass. Updates
+        for row in rows:
+            if not row['primary_action_type']:
+                background_tasks.add_task(
+                    _classify_update_background,
+                    row['id'],
+                    {
+                        'id': row['id'],
+                        'update_type': row['update_type'],
+                        'title': row['title'],
+                        'description': row['description'],
+                        'severity': row['severity'],
+                        'published_at': row['published_at'].isoformat() if row['published_at'] else None,
+                        'url': row['url'],
+                    },
+                    user_id
+                )
         
         updates = []
         for row in rows:
@@ -616,20 +644,12 @@ async def get_archive(
                     lu.update_type,
                     lu.title,
                     lu.description,
-                    lu.summary,
-                    lu.content,
                     lu.url,
                     lu.source,
                     lu.severity,
-                    lu.impact_level,
-                    lu.affected_areas,
-                    lu.published_date,
+                    lu.published_at,
                     lu.action_required,
-                    lu.is_active,
                     lu.created_at,
-                    lu.updated_at,
-                    lu.archived,
-                    lu.archived_at,
                     ac.id as classification_id,
                     ac.action_required as ac_action_required,
                     ac.confidence,
@@ -643,9 +663,9 @@ async def get_archive(
                     ac.classified_at
                 FROM legal_updates lu
                 LEFT JOIN ai_classifications ac ON lu.id::text = ac.update_id
-                WHERE lu.published_date < (
-                    SELECT published_date FROM legal_updates
-                    ORDER BY published_date DESC
+                WHERE lu.published_at < (
+                    SELECT published_at FROM legal_updates
+                    ORDER BY published_at DESC
                     LIMIT 1 OFFSET 5
                 )
             """
@@ -666,7 +686,7 @@ async def get_archive(
             total = await conn.fetchval(count_query, *count_params)
             
             # Get page
-            query += f" ORDER BY lu.published_date DESC LIMIT ${param_count} OFFSET ${param_count + 1}"
+            query += f" ORDER BY lu.published_at DESC LIMIT ${param_count} OFFSET ${param_count + 1}"
             params.extend([page_size, offset])
             
             rows = await conn.fetch(query, *params)
@@ -689,7 +709,7 @@ async def get_archive(
                 title=str(row['title'] or ''),
                 description=str(row['description'] or ''),
                 severity=str(row['severity'] or 'info'),
-                published_at=row['published_date'].isoformat() if row.get('published_date') else datetime.now().isoformat(),
+                published_at=row['published_at'].isoformat() if row.get('published_at') else datetime.now().isoformat(),
                 effective_date=None,  # ✅ FIX: effective_date existiert nicht in der Tabelle
                 url=str(row['url']) if row.get('url') else None,
                 

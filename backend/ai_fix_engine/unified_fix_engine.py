@@ -397,8 +397,8 @@ class UnifiedFixEngine:
         title = issue.get("title", "").lower()
         
         # TEXT: Legal texts
-        if any(keyword in category or keyword in title for keyword in 
-               ["impressum", "datenschutz", "agb", "widerruf", "legal", "rechtstext"]):
+        if any(keyword in category or keyword in title for keyword in
+               ["impressum", "datenschutz", "agb", "widerruf", "legal", "rechtstext", "shop"]):
             return "text"
         
         # WIDGET: Cookie or Accessibility widgets
@@ -410,16 +410,19 @@ class UnifiedFixEngine:
             # Otherwise code fix
             return "code"
         
-        # CODE: Technical implementations
-        if any(keyword in category or keyword in title for keyword in 
-               ["wcag", "alt", "aria", "meta", "html", "css"]):
+        # CODE: Technical/security implementations
+        if any(keyword in category or keyword in title for keyword in
+               ["wcag", "alt", "aria", "meta", "html", "css", "security", "hsts", "csp",
+                "header", "ssl", "https", "mixed content", "clickjacking"]):
             return "code"
-        
-        # GUIDE: Complex/strategic topics
-        if any(keyword in category or keyword in title for keyword in 
-               ["strategie", "konzept", "prozess", "compliance"]):
+
+        # GUIDE: Legal/strategic topics
+        if any(keyword in category or keyword in title for keyword in
+               ["strategie", "konzept", "prozess", "compliance", "uwg", "preisangaben",
+                "pangv", "preis", "bewertung", "dringlichkeit", "siegel", "avv",
+                "drittland", "standardvertragsklausel"]):
             return "guide"
-        
+
         # Default: guide (safest option)
         return "guide"
     
@@ -437,15 +440,20 @@ class UnifiedFixEngine:
             return self.prompt_builder.build_code_fix_prompt(issue, context, user_skill)
         
         elif fix_type == "text":
-            # Determine text type from issue
             title_lower = issue.get("title", "").lower()
-            if "impressum" in title_lower:
+            category_lower = issue.get("category", "").lower()
+            if "impressum" in title_lower or "impressum" in category_lower:
                 text_type = "impressum"
-            elif "datenschutz" in title_lower or "privacy" in title_lower:
+            elif "datenschutz" in title_lower or "privacy" in title_lower or "datenschutz" in category_lower:
                 text_type = "datenschutz"
+            elif "agb" in title_lower or "agb" in category_lower or "allgemeine geschäftsbedingungen" in title_lower:
+                text_type = "agb"
+            elif "widerruf" in title_lower or "widerruf" in category_lower or "cancellation" in title_lower:
+                text_type = "widerrufsbelehrung"
+            elif "shop" in category_lower or "preis" in title_lower or "widerrufsbelehrung" in title_lower:
+                text_type = "agb"
             else:
                 text_type = "generic"
-            
             return self.prompt_builder.build_legal_text_prompt(issue, context, text_type)
         
         elif fix_type == "widget":

@@ -94,16 +94,18 @@ class BrowserRenderer:
                     if not response:
                         return self._create_error_response(url, "No response from server")
 
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(3)
 
                     try:
-                        await page.wait_for_selector('#root, #app, [data-reactroot], main, header', timeout=5000)
+                        await page.wait_for_selector('footer, #root, #app, [data-reactroot], main, header', timeout=6000)
                     except:
                         pass
 
+                    await asyncio.sleep(2)
+
                 except Exception as e:
                     logger.warning(f"Navigation timeout/error: {e}, trying to get content anyway")
-                    await asyncio.sleep(3)
+                    await asyncio.sleep(4)
 
                 html = await page.content()
 

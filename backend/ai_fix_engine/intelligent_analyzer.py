@@ -17,7 +17,7 @@ class IntelligentAnalyzer:
     def __init__(self):
         self.api_key = os.getenv("OPENROUTER_API_KEY", "")
         self.api_url = "https://openrouter.ai/api/v1/chat/completions"
-        self.model = "anthropic/claude-3.5-sonnet"
+        self.model = "moonshotai/kimi-k2.5"
     
     async def analyze_and_generate_fixes(self, scan_result: Dict[str, Any]) -> List[Dict[str, Any]]:
         """

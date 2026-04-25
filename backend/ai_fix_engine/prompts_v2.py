@@ -22,9 +22,9 @@ class FixType(Enum):
 
 class AIModel(Enum):
     """Unterstützte AI-Modelle"""
-    CLAUDE_SONNET = "anthropic/claude-3.5-sonnet"
-    GPT4 = "openai/gpt-4"
-    GPT4_TURBO = "openai/gpt-4-turbo-preview"
+    CLAUDE_SONNET = "moonshotai/kimi-k2.5"
+    GPT4 = "moonshotai/kimi-k2.5"
+    GPT4_TURBO = "moonshotai/kimi-k2.5"
 
 
 # =============================================================================
@@ -208,70 +208,80 @@ class PromptBuilder:
         issue_title = issue.get("title", "Problem")
         issue_description = issue.get("description", "")
         issue_category = issue.get("category", "general")
-        
+        recommendation = issue.get("recommendation", "")
+
         tech_stack = context.get("technology", {})
         cms = ", ".join(tech_stack.get("cms", [])) or "Unbekannt"
         frameworks = ", ".join(tech_stack.get("frameworks", [])) or "Keine"
-        
+        analytics = ", ".join(tech_stack.get("analytics", [])) or "Keine"
+
+        tracking = context.get("tracking_services", [])
+        tracking_text = ", ".join(tracking) if tracking else "Keine erkannt"
+
+        all_issues = context.get("all_issues", [])
+        other_issues = [i for i in all_issues if i.get("title") != issue_title]
+        other_issues_text = "\n".join(
+            f"  - [{i.get('severity','?').upper()}] {i.get('title','')}" for i in other_issues[:8]
+        ) or "  - Keine weiteren"
+
+        skill_instructions = {
+            "beginner": "Der User ist kein Entwickler. Erkläre jeden Schritt in einfacher Sprache, vermeide Fachbegriffe ohne Erklärung, und beschreibe genau WO er klicken oder tippen muss.",
+            "intermediate": "Der User kennt HTML/CSS-Grundlagen. Technische Begriffe sind ok, aber erkläre das Warum.",
+            "advanced": "Konzise technische Anleitung für einen Entwickler. Keine Basics erklären."
+        }
+
         prompt = f"""Du bist ein Experte für Web-Compliance und modernes Frontend-Development.
 
-**AUFGABE:** Generiere einen CODE-FIX für folgendes Compliance-Problem.
+**WEBSITE:** {context.get("url", "N/A")}
+**CMS / Framework:** {cms} / {frameworks}
+**Analytics / Tracking auf der Website:** {analytics} | {tracking_text}
+**User-Level:** {user_skill} — {skill_instructions.get(user_skill, "")}
 
-**PROBLEM:**
+**ZU BEHEBENES PROBLEM:**
 - Titel: {issue_title}
-- Beschreibung: {issue_description}
 - Kategorie: {issue_category}
+- Beschreibung: {issue_description}
+- Empfehlung des Scanners: {recommendation}
 
-**WEBSITE-KONTEXT:**
-- URL: {context.get("url", "N/A")}
-- CMS: {cms}
-- Framework: {frameworks}
-- User-Level: {user_skill}
+**WEITERE OFFENE ISSUES DIESER WEBSITE (zur Orientierung):**
+{other_issues_text}
 
-**ANFORDERUNGEN:**
-1. Der Code MUSS syntaktisch korrekt und direkt einsetzbar sein
-2. Verwende moderne Best Practices (ES6+, Semantic HTML, WCAG 2.1)
-3. Code MUSS für das erkannte CMS/Framework optimiert sein
-4. Füge aussagekräftige Kommentare hinzu
-5. Gib KLARE Integrations-Anweisungen
+**DEINE AUFGABE:**
+Generiere einen vollständigen, sofort einsetzbaren Code-Fix für das genannte Problem.
+- Berücksichtige das erkannte CMS ({cms}): Gib CMS-spezifische Hinweise (WordPress → Appearance > Theme Editor, Shopify → Theme Code, etc.)
+- Der Code muss produktionsreif und syntaktisch korrekt sein
+- Kein Platzhalter-Code — echter, funktionierender Code
+- Erkläre in `integration.instructions` präzise: welche Datei, welche Stelle, was genau einfügen
 
-**OUTPUT-FORMAT (strikt einhalten!):**
+**OUTPUT-FORMAT (strikt JSON, kein Zusatztext):**
 
 ```json
 {{
   "fix_id": "{issue.get('id', 'unknown')}",
-  "title": "Kurzer, prägnanter Titel des Fixes",
-  "description": "Was wird gefixt und warum",
-  "code": "DER KOMPLETTE, FERTIGE CODE HIER",
+  "title": "Prägnanter Titel des Fixes",
+  "description": "Was wird gefixt, warum ist es wichtig",
+  "code": "VOLLSTÄNDIGER, PRODUKTIONSREIFER CODE",
   "language": "html|css|javascript|php",
-  "before_code": "Optional: Alter Code falls ersetzt wird",
-  "after_code": "Optional: Neuer Code für Diff-Ansicht",
+  "before_code": "Alter Code-Zustand (falls ersetzt)",
+  "after_code": "Neuer Code-Zustand (für Diff-Ansicht)",
   "integration": {{
-    "file": "Ziel-Datei (z.B. 'index.html', 'style.css')",
+    "file": "Ziel-Datei (z.B. 'header.php' bei WordPress, 'theme.liquid' bei Shopify)",
     "line_number": null,
-    "instructions": "Schritt-für-Schritt wo und wie einfügen",
-    "where": "Kurze Ortsbeschreibung (z.B. 'vor </body>')"
+    "instructions": "1. Öffne ...\\n2. Suche nach ...\\n3. Füge direkt VOR/NACH ... ein",
+    "where": "Kurze Ortsbeschreibung (z.B. 'vor dem schließenden </head>-Tag')"
   }},
-  "explanation": "Technische Erklärung was der Code macht",
+  "explanation": "Technische Erklärung: was der Code macht und warum es das Problem behebt",
   "estimated_time": "5-10 Minuten",
   "priority": "medium|high|critical",
   "tags": ["html", "accessibility", "wcag"]
 }}
-```
-
-**WICHTIG:**
-- Ausgabe NUR das JSON, keine zusätzlichen Texte
-- Code darf KEINE Platzhalter wie [HIER EINFÜGEN] enthalten
-- Bei fehlenden Infos: Realistische Beispiele verwenden
-- Code MUSS produktionsreif sein
-
-Generiere jetzt den Fix:"""
+```"""
 
         return {
             "prompt": prompt,
             "model": AIModel.CLAUDE_SONNET.value,
             "temperature": 0.2,
-            "max_tokens": 2500,
+            "max_tokens": 3000,
             "schema": CODE_FIX_SCHEMA
         }
     
@@ -289,136 +299,212 @@ Generiere jetzt den Fix:"""
         address = company.get("address") or "[ADRESSE]"
         email = company.get("email") or "[EMAIL]"
         phone = company.get("phone") or "[TELEFON]"
-        
-        cookies = context.get("cookies", [])
-        cookie_names = [c.get("name", "Unknown") for c in cookies[:10]]
+
+        site_url = context.get("url", "N/A")
+        cms = ", ".join(context.get("technology", {}).get("cms", [])) or "Unbekannt"
+
+        cookies = context.get("detected_cookies", context.get("cookies", []))
+        cookie_names = [c.get("name", c) if isinstance(c, dict) else str(c) for c in cookies[:15]]
+
         analytics = context.get("technology", {}).get("analytics", [])
-        
+        tracking = context.get("tracking_services", [])
+        all_services = list(set(analytics + tracking))
+
+        issue_description = issue.get("description", "")
+        issue_title = issue.get("title", "")
+        scanner_findings = issue.get("recommendation", "")
+
         text_type_lower = text_type.lower()
-        
+
         if text_type_lower == "impressum":
-            prompt = f"""Du bist ein Fachanwalt für IT-Recht und Experte für deutsches Telemediengesetz (TMG).
+            prompt = f"""Du bist ein Fachanwalt für IT-Recht, spezialisiert auf deutsches Digitale-Dienste-Gesetz (DDG).
 
-**AUFGABE:** Erstelle ein VOLLSTÄNDIGES, RECHTSSICHERES Impressum nach § 5 TMG.
+**WEBSITE:** {site_url}
+**CMS:** {cms}
+**Erkanntes Problem:** {issue_title} — {issue_description}
+**Scanner-Hinweis:** {scanner_findings}
 
-**FIRMENDATEN:**
+**VORLIEGENDE FIRMENDATEN (aus Website-Scan):**
 - Firmenname: {company_name}
 - Adresse: {address}
 - E-Mail: {email}
 - Telefon: {phone}
 
-**ANFORDERUNGEN (TMG § 5):**
-1. Name und Anschrift des Unternehmens
-2. Kontaktdaten (E-Mail, Telefon)
-3. Vertretungsberechtigte Person(en)
-4. Handelsregister/Vereinsregister (falls zutreffend)
-5. Umsatzsteuer-ID (falls vorhanden)
-6. Aufsichtsbehörde (bei erlaubnispflichtigen Tätigkeiten)
-7. Berufsbezeichnung und Kammer (bei reglementierten Berufen)
+**AUFGABE:**
+Erstelle ein VOLLSTÄNDIGES, RECHTSSICHERES Impressum nach § 5 DDG (seit 14.05.2024 gilt das DDG, nicht mehr TMG).
+Verwende die oben gefundenen echten Firmendaten direkt. Für fehlende Pflichtangaben: Platzhalter in [ECKIGEN KLAMMERN].
 
-**OUTPUT-FORMAT:**
+**PFLICHTANGABEN (§ 5 DDG):**
+1. Name & vollständige Anschrift (kein Postfach)
+2. Schnelle elektronische Kontaktmöglichkeit (E-Mail)
+3. Telefon ODER weiteres elektronisches Kommunikationsmittel
+4. Vertretungsberechtigte Person(en) bei juristischen Personen
+5. Handelsregister + HRB-Nummer (falls GmbH/AG/UG)
+6. Umsatzsteuer-ID oder Wirtschafts-ID (falls vorhanden)
+7. Aufsichtsbehörde (bei erlaubnispflichtigen Tätigkeiten)
+
+**OUTPUT-FORMAT (strikt JSON, kein Zusatztext):**
 
 ```json
 {{
   "fix_id": "{issue.get('id', 'impressum_fix')}",
-  "title": "Rechtssicheres Impressum nach § 5 TMG",
-  "description": "Vollständiges Impressum mit allen Pflichtangaben",
-  "text_content": "DER KOMPLETTE HTML-TEXT DES IMPRESSUMS",
+  "title": "Rechtssicheres Impressum nach § 5 DDG",
+  "description": "Vollständiges Impressum mit allen Pflichtangaben gemäß § 5 DDG (2024)",
+  "text_content": "VOLLSTÄNDIGER HTML-TEXT DES IMPRESSUMS — mit echten Firmendaten",
   "text_type": "impressum",
   "format": "html",
-  "placeholders": ["[REGISTERGERICHT]", "[HRB-NUMMER]", "[UST-ID]"],
+  "placeholders": ["Liste der noch zu ergänzenden Felder, z.B. [REGISTERGERICHT]"],
   "integration": {{
     "filename": "impressum.html",
-    "instructions": "1. Datei impressum.html erstellen\\n2. Text einfügen\\n3. Im Footer verlinken: <a href='/impressum.html'>Impressum</a>\\n4. Platzhalter durch echte Daten ersetzen"
+    "instructions": "CMS-spezifische Schritt-für-Schritt-Anleitung für {cms}"
   }},
   "estimated_time": "5 Minuten",
-  "legal_references": ["§ 5 TMG", "§ 55 RStV"]
+  "legal_references": ["§ 5 DDG", "§ 18 Abs. 2 MStV"]
 }}
-```
-
-**WICHTIG:**
-- Text MUSS in HTML formatiert sein (mit <h1>, <p>, <strong> Tags)
-- Verwende die ECHTEN Firmendaten, nicht nur Platzhalter
-- Für fehlende Daten: Platzhalter in [ECKIGEN KLAMMERN]
-- Text MUSS rechtlich aktuell sein (2025)
-- Füge Disclaimer hinzu: "Erstellt mit Complyo.tech"
-
-Erstelle jetzt das Impressum:"""
+```"""
 
         elif text_type_lower == "datenschutz":
-            cookie_list = "\n".join([f"- {name}" for name in cookie_names]) if cookie_names else "Keine Cookies erkannt"
-            analytics_list = "\n".join([f"- {tool}" for tool in analytics]) if analytics else "Keine Analytics erkannt"
-            
-            prompt = f"""Du bist ein Datenschutzbeauftragter und DSGVO-Experte.
+            cookie_list = "\n".join([f"  - {name}" for name in cookie_names]) if cookie_names else "  - Keine Cookies erkannt"
+            services_list = "\n".join([f"  - {s}" for s in all_services]) if all_services else "  - Keine externen Dienste erkannt"
 
-**AUFGABE:** Erstelle eine VOLLSTÄNDIGE, DSGVO-KONFORME Datenschutzerklärung.
+            prompt = f"""Du bist ein zertifizierter Datenschutzbeauftragter und DSGVO-Experte.
 
-**WEBSITE-DATEN:**
-- URL: {context.get("url", "N/A")}
-- Firma: {company_name}
-- Kontakt: {email}
+**WEBSITE:** {site_url}
+**CMS:** {cms}
+**Erkanntes Problem:** {issue_title} — {issue_description}
+**Scanner-Hinweis:** {scanner_findings}
 
-**ERKANNTE DATENVERARBEITUNG:**
+**FIRMENDATEN:**
+- Name: {company_name}
+- E-Mail (Datenschutzanfragen): {email}
+
+**AUF DER WEBSITE ERKANNTE DIENSTE & COOKIES:**
 Cookies:
 {cookie_list}
 
-Analytics/Tracking:
-{analytics_list}
+Externe Dienste / Tracking:
+{services_list}
 
-**DSGVO-PFLICHTANGABEN (Art. 13, 14):**
-1. Name und Kontakt des Verantwortlichen
-2. Zwecke und Rechtsgrundlagen der Verarbeitung
-3. Betroffenenrechte (Auskunft, Löschung, Widerspruch, etc.)
-4. Dauer der Speicherung
-5. Empfänger der Daten
-6. Drittlandtransfer (falls zutreffend)
-7. Widerrufsrecht
-8. Beschwerderecht bei Aufsichtsbehörde
+**AUFGABE:**
+Erstelle eine VOLLSTÄNDIGE, INDIVIDUELL ANGEPASSTE DSGVO-Datenschutzerklärung.
+- Erwähne JEDEN erkannten Dienst mit Anbieter, Zweck, Rechtsgrundlage und Speicherdauer
+- Für US-Dienste (Google, Meta, etc.): EU-US Data Privacy Framework oder SCCs erwähnen
+- Sprache: Deutsch, klar verständlich für Laien
 
-**SPEZIELLE ABSCHNITTE:**
-- Server-Log-Dateien
-- Kontaktformular
-- Cookies und Tracking (basierend auf erkannten Cookies)
-- SSL/TLS-Verschlüsselung
-- Hosting-Dienstleister
+**DSGVO-PFLICHTANGABEN (Art. 13 DSGVO):**
+1. Verantwortlicher + Kontakt
+2. Zwecke & Rechtsgrundlagen (Art. 6 DSGVO)
+3. Empfänger & Drittlandtransfer
+4. Speicherdauer
+5. Betroffenenrechte (Art. 15–22 DSGVO): Auskunft, Löschung, Widerspruch, Portabilität
+6. Beschwerderecht bei Aufsichtsbehörde
+7. Abschnitt je erkanntem Dienst
 
-**OUTPUT-FORMAT:**
+**OUTPUT-FORMAT (strikt JSON, kein Zusatztext):**
 
 ```json
 {{
   "fix_id": "{issue.get('id', 'datenschutz_fix')}",
-  "title": "DSGVO-konforme Datenschutzerklärung",
-  "description": "Vollständige Datenschutzerklärung mit allen Pflichtangaben",
-  "text_content": "DER KOMPLETTE HTML-TEXT DER DATENSCHUTZERKLÄRUNG",
+  "title": "Individuelle DSGVO-Datenschutzerklärung für {site_url}",
+  "description": "Vollständige, auf die Website zugeschnittene Datenschutzerklärung",
+  "text_content": "VOLLSTÄNDIGER HTML-TEXT — jeden erkannten Dienst einzeln behandeln",
   "text_type": "datenschutz",
   "format": "html",
-  "placeholders": ["[HOSTING-ANBIETER]", "[DATENSCHUTZBEAUFTRAGTER]"],
+  "placeholders": ["Liste der noch zu ergänzenden Felder"],
   "integration": {{
     "filename": "datenschutz.html",
-    "instructions": "1. Datei datenschutz.html erstellen\\n2. Text einfügen\\n3. Im Footer verlinken\\n4. Auf JEDER Seite erreichbar machen\\n5. Bei Änderungen aktualisieren"
+    "instructions": "CMS-spezifische Anleitung für {cms}: Wo einfügen, wie verlinken"
+  }},
+  "estimated_time": "10-15 Minuten",
+  "legal_references": ["Art. 13 DSGVO", "Art. 6 DSGVO", "§ 25 TTDSG"]
+}}
+```"""
+
+        elif text_type_lower == "agb":
+            prompt = f"""Du bist ein E-Commerce-Rechtsexperte, spezialisiert auf BGB §§ 305 ff. (AGB-Recht).
+
+**WEBSITE:** {site_url}
+**CMS / Shop-System:** {cms}
+**Erkanntes Problem:** {issue_title} — {issue_description}
+**Scanner-Hinweis:** {scanner_findings}
+
+**FIRMENDATEN:**
+- Name: {company_name}
+- Adresse: {address}
+- E-Mail: {email}
+
+**AUFGABE:**
+Erstelle VOLLSTÄNDIGE, RECHTSSICHERE AGB für einen Online-Shop/Dienstleister.
+Berücksichtige: Widerrufsrecht (BGB § 355), Gewährleistung, Haftung, Gerichtsstand.
+Keine unzulässigen Klauseln nach AGB-Recht (BGB §§ 307–309).
+
+**OUTPUT-FORMAT (strikt JSON, kein Zusatztext):**
+
+```json
+{{
+  "fix_id": "{issue.get('id', 'agb_fix')}",
+  "title": "Rechtssichere AGB nach BGB §§ 305 ff.",
+  "description": "Vollständige AGB für {site_url}",
+  "text_content": "VOLLSTÄNDIGER HTML-TEXT DER AGB — mindestens §§ 1-8",
+  "text_type": "agb",
+  "format": "html",
+  "placeholders": ["Liste der anzupassenden Felder"],
+  "integration": {{
+    "filename": "agb.html",
+    "instructions": "1. Seite /agb erstellen\\n2. Im Footer verlinken\\n3. Im Checkout als Pflicht-Checkbox einbinden (Zustimmung vor Kauf)\\n4. CMS-spezifisch: {cms}"
+  }},
+  "estimated_time": "15-20 Minuten",
+  "legal_references": ["BGB §§ 305-310", "BGB § 355", "EGBGB Art. 246a"]
+}}
+```"""
+
+        elif text_type_lower == "widerrufsbelehrung":
+            prompt = f"""Du bist ein E-Commerce-Rechtsexperte für Verbraucherrecht.
+
+**WEBSITE:** {site_url}
+**CMS:** {cms}
+**Erkanntes Problem:** {issue_title} — {issue_description}
+
+**FIRMENDATEN:**
+- Name: {company_name}
+- Adresse: {address}
+- E-Mail: {email}
+
+**AUFGABE:**
+Erstelle eine GESETZESKONFORME WIDERRUFSBELEHRUNG nach BGB §§ 355, 356 + EGBGB Anlage 1 (amtliches Muster).
+Inkl. Muster-Widerrufsformular.
+
+**OUTPUT-FORMAT (strikt JSON, kein Zusatztext):**
+
+```json
+{{
+  "fix_id": "{issue.get('id', 'widerruf_fix')}",
+  "title": "Widerrufsbelehrung nach BGB § 355 (amtliches Muster)",
+  "description": "Gesetzeskonforme Widerrufsbelehrung inkl. Widerrufsformular",
+  "text_content": "VOLLSTÄNDIGER HTML-TEXT inkl. Formular",
+  "text_type": "widerruf",
+  "format": "html",
+  "placeholders": ["[FIRMENNAME]", "[ADRESSE]", "[EMAIL]"],
+  "integration": {{
+    "filename": "widerrufsbelehrung.html",
+    "instructions": "1. Seite /widerrufsbelehrung erstellen\\n2. Im Footer verlinken\\n3. In Bestellbestätigung per E-Mail mitsenden\\n4. CMS: {cms}"
   }},
   "estimated_time": "10 Minuten",
-  "legal_references": ["Art. 13 DSGVO", "Art. 15 DSGVO", "§ 25 TTDSG"]
+  "legal_references": ["BGB § 355", "BGB § 356", "EGBGB Art. 246a Anlage 1"]
 }}
-```
-
-**WICHTIG:**
-- Text MUSS alle erkannten Cookies/Tracking-Tools erwähnen
-- Konkrete Rechtsgrundlagen nennen (Art. 6 Abs. 1 lit. a/b/f DSGVO)
-- Speicherfristen konkret angeben (z.B. "7 Tage", "bis Widerruf")
-- Betroffenenrechte VOLLSTÄNDIG auflisten
-- Kontaktdaten für Datenschutzanfragen angeben
-
-Erstelle jetzt die Datenschutzerklärung:"""
+```"""
 
         else:
-            prompt = f"""Erstelle rechtssicheren Text für: {text_type}"""
-        
+            prompt = f"""Erstelle einen rechtssicheren deutschen Compliance-Text für die Website {site_url}.
+Problem: {issue_title} — {issue_description}
+Texttyp: {text_type}
+Antworte NUR mit dem JSON im TEXT_FIX_SCHEMA-Format."""
+
         return {
             "prompt": prompt,
             "model": AIModel.CLAUDE_SONNET.value,
-            "temperature": 0.1,  # Sehr niedrig für rechtliche Texte
-            "max_tokens": 4000,
+            "temperature": 0.1,
+            "max_tokens": 4500,
             "schema": TEXT_FIX_SCHEMA
         }
     
@@ -552,76 +638,85 @@ Generiere die Widget-Integration:"""
         issue_title = issue.get("title", "Problem")
         issue_description = issue.get("description", "")
         recommendation = issue.get("recommendation", "")
-        
+        category = issue.get("category", "")
+        legal_basis = issue.get("legal_basis", "")
+
+        site_url = context.get("url", "N/A")
+        cms = ", ".join(context.get("technology", {}).get("cms", [])) or "Unbekannt"
+        analytics = ", ".join(context.get("technology", {}).get("analytics", [])) or "Keine"
+        tracking = context.get("tracking_services", [])
+        tracking_text = ", ".join(tracking) if tracking else "Keine"
+
+        all_issues = context.get("all_issues", [])
+        related = [i for i in all_issues if i.get("category") == category and i.get("title") != issue_title]
+        related_text = "\n".join(f"  - {i.get('title')}" for i in related[:5]) or "  - Keine weiteren in dieser Kategorie"
+
         skill_instructions = {
-            "beginner": "Erkläre JEDEN Schritt detailliert. Verwende Screenshots-Beschreibungen. Keine Fachbegriffe ohne Erklärung.",
-            "intermediate": "Gib klare Anweisungen mit technischen Details. User kennt HTML/CSS Basics.",
-            "advanced": "Konzise technische Anleitung. User ist Web-Developer."
+            "beginner": "Schreibe für jemanden ohne Technikkenntnisse. Erkläre jeden Fachbegriff. Beschreibe genau welche Menüs/Buttons zu klicken sind. Einfache Sprache.",
+            "intermediate": "Grundlegende Web-Kenntnisse vorhanden. Technische Begriffe ok, aber erkläre das Warum und Was. Konkrete Handlungsanweisungen.",
+            "advanced": "Erfahrener Entwickler. Konzise Anleitung, nur das Wesentliche, mit exakten Konfigurationsdetails."
         }
-        
-        prompt = f"""Du bist ein technischer Autor und Web-Compliance-Experte.
 
-**AUFGABE:** Erstelle eine SCHRITT-FÜR-SCHRITT-ANLEITUNG zur Behebung eines Compliance-Problems.
+        prompt = f"""Du bist ein Web-Compliance-Experte und technischer Autor.
 
-**PROBLEM:**
+**WEBSITE:** {site_url}
+**CMS:** {cms}
+**Analytics/Tracking:** {analytics} | {tracking_text}
+**User-Level:** {user_skill} — {skill_instructions.get(user_skill, "")}
+
+**ZU BEHEBENDES PROBLEM:**
 - Titel: {issue_title}
+- Kategorie: {category}
 - Beschreibung: {issue_description}
 - Empfehlung: {recommendation}
+- Rechtsgrundlage: {legal_basis or "Siehe Beschreibung"}
 
-**USER-LEVEL:** {user_skill}
-**ANPASSUNG:** {skill_instructions.get(user_skill, "")}
+**WEITERE OFFENE ISSUES IN DIESER KATEGORIE:**
+{related_text}
 
-**WEBSITE-KONTEXT:**
-- URL: {context.get("url", "N/A")}
-- CMS: {", ".join(context.get("technology", {}).get("cms", [])) or "Unbekannt"}
+**DEINE AUFGABE:**
+Erstelle eine INDIVIDUELLE, KONKRETE Schritt-für-Schritt-Anleitung für genau dieses Problem auf genau dieser Website.
 
-**ANFORDERUNGEN:**
-1. Minimum 3 Schritte, klar nummeriert
-2. Jeder Schritt mit Titel und Beschreibung
-3. Code-Beispiele wo sinnvoll
-4. Validierungs-Hinweise (wie prüfen ob erfolgreich?)
-5. Realistische Zeitschätzung
+WICHTIG:
+- Beziehe dich auf das erkannte CMS ({cms}) — gib den genauen Pfad im Admin-Panel an
+- Wenn Analytics/Tracking erkannt: Diese in der Anleitung konkret erwähnen
+- Mindestens 3, maximal 8 Schritte
+- Jeder Schritt: konkreter Titel + klare Beschreibung + wie man prüft ob er erfolgreich war
+- Code-Beispiele wo sinnvoll (bereit zum Kopieren)
+- Am Ende: Wie testen, ob das Problem wirklich behoben ist?
 
-**OUTPUT-FORMAT:**
+**OUTPUT-FORMAT (strikt JSON, kein Zusatztext):**
 
 ```json
 {{
   "fix_id": "{issue.get('id', 'guide_fix')}",
-  "title": "Anleitung: {issue_title}",
-  "description": "Schritt-für-Schritt zur Compliance",
+  "title": "Schritt-für-Schritt: {issue_title} beheben",
+  "description": "Individuelle Anleitung für {site_url} — {cms}",
   "steps": [
     {{
       "step_number": 1,
-      "title": "Schritt-Titel",
-      "description": "Detaillierte Beschreibung was zu tun ist",
-      "code_example": "Optional: Code-Snippet",
+      "title": "Prägnanter Schritt-Titel",
+      "description": "Genaue Beschreibung was zu tun ist — wo klicken, was eingeben, was beachten",
+      "code_example": "Optional: fertiger Code-Schnipsel zum Kopieren",
       "screenshot_url": null,
-      "validation": "Wie prüfen ob dieser Schritt erfolgreich war"
+      "validation": "So erkennst du, dass dieser Schritt erfolgreich war"
     }}
   ],
   "difficulty": "beginner|intermediate|advanced",
-  "estimated_time": "10-15 Minuten",
+  "estimated_time": "X-Y Minuten",
   "resources": {{
     "documentation_links": ["https://..."],
     "video_tutorials": [],
-    "tools_needed": ["Text-Editor", "FTP-Client"]
+    "tools_needed": ["z.B. Texteditor, FTP-Client, Browser-DevTools"]
   }}
 }}
-```
+```"""
 
-**WICHTIG:**
-- Schritte MÜSSEN umsetzbar und spezifisch sein
-- Code-Beispiele MÜSSEN funktionieren
-- Validation MUSS konkret sein (nicht "prüfen Sie")
-- Bei CMS-spezifischen Anleitungen: CMS-Namen verwenden
-
-Erstelle jetzt die Anleitung:"""
-        
         return {
             "prompt": prompt,
             "model": AIModel.CLAUDE_SONNET.value,
             "temperature": 0.3,
-            "max_tokens": 3000,
+            "max_tokens": 3500,
             "schema": GUIDE_FIX_SCHEMA
         }
     

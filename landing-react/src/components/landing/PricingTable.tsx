@@ -155,7 +155,7 @@ export default function PricingTable() {
               </li>
               <li className="flex items-start gap-3">
                 <Check className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                <span className="text-white/90 text-sm"><strong>eRecht24</strong> Integration</span>
+                <span className="text-white/90 text-sm"><strong>KI-generierte</strong> Rechtstexte</span>
               </li>
               <li className="flex items-start gap-3">
                 <Check className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />

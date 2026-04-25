@@ -12,10 +12,9 @@ import { LegalNews } from '@/components/dashboard/LegalNews'
 import { CookieComplianceWidget } from '@/components/dashboard/CookieComplianceWidget'
 import { PlanGuard } from '@/components/guards/PlanGuard'
 import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard'
-// NEU: AI Compliance Card
 import { AIComplianceCard } from '@/components/dashboard/AIComplianceCard'
-// NEU: Kurzwahl-Leiste für gelockte Seiten
 import { OptimizationQuickNav } from '@/components/dashboard/OptimizationQuickNav'
+import OptimizationBanner from '@/components/dashboard/OptimizationBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { AccessibilityWidget } from '@/components/accessibility/AccessibilityWidget'
@@ -27,11 +26,17 @@ export default function Page() {
 
   useEffect(() => {
     setIsClient(true);
+    // Primär: DB-Flag via user-Objekt (überlebt Cache-Leerung)
+    if (user?.onboarding_completed) {
+      setShowOnboarding(false);
+      return;
+    }
+    // Fallback: localStorage (schnell, kein API-Call nötig)
     const hasCompleted = localStorage.getItem('complyo_onboarding_completed');
     if (!hasCompleted) {
       setShowOnboarding(true);
     }
-  }, []);
+  }, [user]);
 
   if (!isClient) {
     return null; // Prevent hydration mismatch
@@ -59,6 +64,13 @@ export default function Page() {
             {/* Hero Section: Domain Input + Score + KI-CTA */}
             <section aria-label="Website-Analyse">
               <DomainHeroSection />
+            </section>
+            
+            {/* KI-Optimierungen Banner */}
+            <section aria-label="KI-Optimierungen" className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+              <ErrorBoundary componentName="OptimizationBanner">
+                <OptimizationBanner />
+              </ErrorBoundary>
             </section>
             
             {/* Main Content Grid */}

@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import logging
+from email_service import email_service
 
 logger = logging.getLogger(__name__)
 
@@ -263,54 +264,60 @@ async def _send_expert_request_email(
 ):
     """
     Sendet Email-Benachrichtigungen für Expert-Service-Anfragen
-    
+
     Sendet 2 Emails:
     1. Bestätigung an Kunden
     2. Notification an Team
     """
-    # TODO: Integrate with email_service
-    # Für jetzt: Nur logging
-    
-    logger.info(f"""
-    📧 EMAIL BENACHRICHTIGUNGEN:
-    
-    === AN KUNDE ({contact_email}) ===
-    Betreff: Ihre Expertservice-Anfrage {request_id}
-    
-    Hallo {contact_name},
-    
-    vielen Dank für Ihre Anfrage zum Complyo Expertservice!
-    
-    **Ihre Anfrage:**
-    - Request-ID: {request_id}
-    - Website: {site_url}
-    - Service: {service_type}
-    - Geschätzter Preis: €{estimated_price:,.2f} (netto)
-    
-    **Nächste Schritte:**
-    1. Wir prüfen Ihre Website im Detail
-    2. Sie erhalten ein individuelles Angebot
-    3. Nach Ihrer Freigabe setzen wir alles um (48h)
-    
-    Wir melden uns innerhalb von 24 Stunden bei Ihnen!
-    
-    Mit freundlichen Grüßen
-    Ihr Complyo Team
-    
-    === AN TEAM (support@complyo.tech) ===
-    Betreff: Neue Expertservice-Anfrage: {request_id}
-    
-    🚨 NEUE ANFRAGE:
-    
-    Request-ID: {request_id}
-    Website: {site_url}
-    Kontakt: {contact_name} ({contact_email})
-    Service: {service_type}
-    Preis: €{estimated_price:,.2f}
-    
-    👉 Dashboard: https://app.complyo.tech/admin/expert-requests/{request_id}
-    """)
-    
-    # In production: Use email_service.send_email(...)
-    pass
+    customer_text = (
+        f"Hallo {contact_name},\n\n"
+        f"vielen Dank für Ihre Anfrage zum Complyo Expertservice!\n\n"
+        f"Ihre Anfrage:\n"
+        f"- Request-ID: {request_id}\n"
+        f"- Website: {site_url}\n"
+        f"- Service: {service_type}\n"
+        f"- Geschätzter Preis: €{estimated_price:,.2f} (netto)\n\n"
+        f"Nächste Schritte:\n"
+        f"1. Wir prüfen Ihre Website im Detail\n"
+        f"2. Sie erhalten ein individuelles Angebot\n"
+        f"3. Nach Ihrer Freigabe setzen wir alles um (48h)\n\n"
+        f"Wir melden uns innerhalb von 24 Stunden bei Ihnen!\n\n"
+        f"Mit freundlichen Grüßen\nIhr Complyo Team"
+    )
+    customer_html = customer_text.replace("\n", "<br>")
+
+    team_text = (
+        f"NEUE ANFRAGE:\n\n"
+        f"Request-ID: {request_id}\n"
+        f"Website: {site_url}\n"
+        f"Kontakt: {contact_name} ({contact_email})\n"
+        f"Service: {service_type}\n"
+        f"Preis: €{estimated_price:,.2f}\n\n"
+        f"Dashboard: https://app.complyo.tech/admin/expert-requests/{request_id}"
+    )
+    team_html = team_text.replace("\n", "<br>")
+
+    team_email = "support@complyo.tech"
+
+    try:
+        email_service._send_email(
+            to_email=contact_email,
+            subject=f"Ihre Expertservice-Anfrage {request_id}",
+            html_body=customer_html,
+            text_body=customer_text,
+        )
+        logger.info(f"Kunden-Email gesendet an {contact_email} für Anfrage {request_id}")
+    except Exception as e:
+        logger.error(f"Kunden-Email fehlgeschlagen ({contact_email}): {e}")
+
+    try:
+        email_service._send_email(
+            to_email=team_email,
+            subject=f"Neue Expertservice-Anfrage: {request_id}",
+            html_body=team_html,
+            text_body=team_text,
+        )
+        logger.info(f"Team-Email gesendet für Anfrage {request_id}")
+    except Exception as e:
+        logger.error(f"Team-Email fehlgeschlagen: {e}")
 

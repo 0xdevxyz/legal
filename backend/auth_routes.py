@@ -115,7 +115,8 @@ async def register(request: Request, body: RegisterRequest):
                 "id": str(user['id']),
                 "email": user['email'],
                 "full_name": user['full_name'],
-                "company": user.get('company')
+                "company": user.get('company'),
+                "onboarding_completed": False
             }
         })
         response.set_cookie(
@@ -170,7 +171,12 @@ async def login(request: Request, body: LoginRequest):
         # Create tokens
         access_token = auth_service.create_access_token(user['id'])
         refresh_token = await auth_service.create_refresh_token(user['id'])
-        
+
+        async with auth_service.db_pool.acquire() as conn:
+            onboarding_completed = await conn.fetchval(
+                "SELECT onboarding_completed FROM users WHERE id = $1", user['id']
+            ) or False
+
         is_secure = os.getenv("ENVIRONMENT", "production") == "production"
         response = JSONResponse({
             "access_token": access_token,
@@ -180,7 +186,8 @@ async def login(request: Request, body: LoginRequest):
                 "id": str(user['id']),
                 "email": user['email'],
                 "full_name": user['full_name'],
-                "company": user.get('company')
+                "company": user.get('company'),
+                "onboarding_completed": onboarding_completed
             }
         })
         response.set_cookie(
@@ -218,11 +225,63 @@ async def refresh_token(request: Request, body: RefreshRequest):
         "token_type": "bearer"
     }
 
+@router.post("/refresh-cookie")
+@limiter.limit("10/minute")
+async def refresh_token_from_cookie(request: Request):
+    """Refresh access token using HttpOnly cookie (survives localStorage clear)"""
+    refresh_token_value = request.cookies.get("refresh_token")
+    if not refresh_token_value:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No refresh token cookie"
+        )
+    new_access_token = await auth_service.refresh_access_token(refresh_token_value)
+    if not new_access_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token"
+        )
+    payload = auth_service.verify_token(new_access_token)
+    user_id = int(payload.get("sub"))
+    async with auth_service.db_pool.acquire() as conn:
+        user = await conn.fetchrow(
+            "SELECT id, email, full_name, company, plan_type, onboarding_completed FROM users WHERE id = $1",
+            user_id
+        )
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return {
+        "access_token": new_access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user["id"]),
+            "email": user["email"],
+            "full_name": user["full_name"],
+            "company": user.get("company"),
+            "plan_type": user.get("plan_type", "free"),
+            "onboarding_completed": user.get("onboarding_completed") or False
+        }
+    }
+
 @router.post("/logout")
 async def logout(request: RefreshRequest):
     """Logout user (revoke refresh token)"""
     await auth_service.revoke_refresh_token(request.refresh_token)
     return {"message": "Logged out successfully"}
+
+@router.post("/complete-onboarding")
+async def complete_onboarding(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Mark onboarding as completed for the current user"""
+    token = credentials.credentials
+    payload = auth_service.verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    user_id = int(payload.get("sub"))
+    async with auth_service.db_pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE users SET onboarding_completed = TRUE WHERE id = $1", user_id
+        )
+    return {"onboarding_completed": True}
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Dependency to get current user from JWT token"""

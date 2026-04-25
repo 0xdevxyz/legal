@@ -18,7 +18,7 @@ export default function BenefitsGrid() {
     {
       icon: Scale,
       title: 'Rechtssicher',
-      description: 'Mit eRecht24-API Integration für garantiert aktuelle und rechtskonforme Texte.',
+      description: 'KI-generierte Rechtstexte auf Basis aktueller Gesetzgebung – stets aktuell ohne Drittanbieter-Abhängigkeit.',
       color: 'text-blue-500',
       bgColor: 'bg-blue-500/10'
     },
@@ -38,7 +38,7 @@ export default function BenefitsGrid() {
     },
     {
       icon: Shield,
-      title: 'Abmahn-Schutz',
+      title: 'Risikoschutz',
       description: 'Vermeiden Sie teure Bußgelder bis 50.000€ durch proaktive Compliance-Prüfung.',
       color: 'text-red-500',
       bgColor: 'bg-red-500/10'

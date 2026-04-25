@@ -12,10 +12,13 @@ import json
 import os
 import asyncio
 import aiohttp
+import ipaddress
+import socket
 from datetime import datetime
 from compliance_engine.scanner import ComplianceScanner
 from compliance_engine.priority_engine import priority_engine
 from compliance_engine.solution_generator import solution_generator
+from ai_review_engine import run_ai_review_pass
 from compliance_engine.cookie_analyzer import cookie_analyzer
 from website_crawler import WebsiteCrawler
 from auth_routes import get_current_user
@@ -45,18 +48,6 @@ def set_db_pool(pool):
 
 class AnalyzeRequest(BaseModel):
     url: str  # Akzeptiert URLs mit oder ohne Protokoll
-
-class ChatMessage(BaseModel):
-    role: str  # "user" oder "assistant"
-    content: str
-
-class IssueChatRequest(BaseModel):
-    website_url: str
-    issue_title: str
-    issue_description: str
-    ai_solution: Optional[str] = None
-    user_question: str
-    chat_history: List[ChatMessage] = []
 
 class IssueLocation(BaseModel):
     area: str
@@ -130,6 +121,27 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             logger.info(f"✅ URL normalized to: {url}")
         
         logger.info(f"Analysis request for: {url} (User: {user_id})")
+
+        # ✅ Vorab-Prüfung: Ist die Domain überhaupt erreichbar?
+        parsed_host = url.split("//")[-1].split("/")[0].split(":")[0]
+        try:
+            resolved_ip = socket.gethostbyname(parsed_host)
+            ip_obj = ipaddress.ip_address(resolved_ip)
+            if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
+                raise HTTPException(status_code=400, detail={
+                    "error": "INVALID_DOMAIN",
+                    "message": f"Die Domain '{parsed_host}' ist keine öffentlich erreichbare Website.",
+                    "suggestions": ["Geben Sie eine echte, öffentlich zugängliche Domain ein (z.B. 'meineshop.de')"]
+                })
+        except socket.gaierror:
+            raise HTTPException(status_code=400, detail={
+                "error": "DOMAIN_NOT_FOUND",
+                "message": f"Die Domain '{parsed_host}' existiert nicht oder ist nicht erreichbar.",
+                "suggestions": [
+                    "Prüfen Sie ob die Domain korrekt geschrieben ist",
+                    "Stellen Sie sicher, dass die Website online ist"
+                ]
+            })
         
         # Get risk calculator from app state
         from main_production import db_pool, risk_calculator
@@ -290,42 +302,25 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 scan_result.get("compliance_score", 50)
             )
             
-            # ✅ NEU: Generiere individuelle KI-Lösungen (ERHÖHTER TIMEOUT für Reasoning Model)
+            # ✅ AI Review Pass: Prüft und verfeinert ALLE Issues + generiert individuelle Lösungen
             if OPENROUTER_API_KEY and len(structured_issues) > 0:
-                logger.info(f"🤖 Generiere KI-Lösungen für erste 5 Critical Issues...")
-                
-                # Priorisiere Critical Issues
-                critical_issues = [i for i in structured_issues if i.severity == 'critical'][:5]
-                if not critical_issues:
-                    critical_issues = structured_issues[:5]
-                
-                ai_tasks = []
-                for issue in critical_issues:
-                    ai_tasks.append(_generate_ai_solution(
-                        issue_title=issue.title,
-                        issue_description=issue.description,
-                        category=issue.category,
-                        url=url
-                    ))
-                
-                # Parallel KI-Lösungen generieren mit LÄNGEREM Timeout (für kimi-k2-thinking)
+                logger.info(f"🤖 AI Review Pass: {len(structured_issues)} Issues werden geprüft...")
                 try:
-                    ai_solutions = await asyncio.wait_for(
-                        asyncio.gather(*ai_tasks, return_exceptions=True),
-                        timeout=20.0  # 20 Sekunden für Reasoning Model
+                    structured_issues = await run_ai_review_pass(
+                        issues=structured_issues,
+                        scan_result={
+                            "url": url,
+                            "tech_stack": scan_result.get("tech_stack", {}),
+                            "tracking_services": scan_result.get("tracking_services", []),
+                            "detected_cookies": scan_result.get("detected_cookies", []),
+                        },
+                        max_reviews=20,
+                        max_solutions=15,
                     )
-                    
-                    # Füge KI-Lösungen zu Issues hinzu
-                    for idx, issue in enumerate(critical_issues):
-                        if idx < len(ai_solutions) and ai_solutions[idx] and not isinstance(ai_solutions[idx], Exception):
-                            issue.ai_solution = ai_solutions[idx]
-                    
-                    successful = sum(1 for s in ai_solutions if s and not isinstance(s, Exception))
-                    logger.info(f"✅ {successful}/{len(critical_issues)} KI-Lösungen generiert")
-                except asyncio.TimeoutError:
-                    logger.warning("⚠️ KI-Generierung Timeout - Scan wird trotzdem zurückgegeben")
+                except Exception as e:
+                    logger.warning(f"⚠️ AI Review Pass Fehler (nicht kritisch): {e}")
             else:
-                logger.info("ℹ️ KI-Lösungen übersprungen (kein API Key)")
+                logger.info("ℹ️ AI Review Pass übersprungen (kein API Key)")
             
             # ✅ NEU: Berechne Säulen-Scores nach Backend-Logik
             pillar_scores = _calculate_pillar_scores(structured_issues)
@@ -521,9 +516,11 @@ def _calculate_pillar_scores(issues: List[ComplianceIssue]) -> List[PillarScore]
     # Säulen-Mapping (Backend-Logik)
     pillar_mapping = {
         'accessibility': ['barrierefreiheit', 'kontraste', 'tastaturbedienung'],
-        'gdpr': ['datenschutz', 'tracking', 'datenverarbeitung'],
-        'legal': ['impressum', 'agb', 'widerrufsbelehrung', 'contact'],
-        'cookies': ['cookies']
+        'gdpr':          ['datenschutz', 'tracking', 'datenverarbeitung', 'avv'],
+        'legal':         ['impressum', 'agb', 'contact', 'uwg'],
+        'cookies':       ['cookies'],
+        'security':      ['security'],
+        'shop':          ['shop', 'widerrufsbelehrung', 'preisangaben'],
     }
     
     pillar_scores = []
@@ -589,6 +586,12 @@ def _determine_issue_area(category: str) -> str:
         'urheberrecht': 'Content/Bilder',
         'markenrecht': 'Content/Logos',
         'preisangaben': 'Produktseiten',
+        'uwg': 'Content/Werbung',
+        'preisangaben': 'Produktseiten/Shop',
+        'shop': 'Online-Shop',
+        'widerrufsbelehrung': 'Online-Shop',
+        'avv': 'Datenschutz',
+        'security': 'HTTP-Header/Server',
     }
     return area_mapping.get(category, 'Unbekannter Bereich')
 
@@ -771,110 +774,714 @@ Antworte auf Deutsch, maximal 300 Wörter."""
         return None
 
 def _generate_solution_for_issue(category: str, title: str = '', description: str = '') -> IssueSolution:
-    """Generiert issue-spezifische Lösungsvorschläge"""
+    """Generiert issue-spezifische Lösungsvorschläge basierend auf Kategorie UND konkretem Titel"""
     
-    # ✅ Spezielle Lösungen für Barrierefreiheit basierend auf Issue-Titel
-    if category == 'barrierefreiheit':
-        title_lower = title.lower()
-        
-        # H1-Überschrift fehlt
-        if 'h1' in title_lower or 'überschrift' in title_lower:
+    title_lower = title.lower()
+    desc_lower = description.lower()
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # SECURITY-HEADERS (hsts, csp, x-frame, etc.)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if category == 'security' or 'security' in title_lower:
+        # HSTS
+        if 'hsts' in title_lower or 'strict-transport' in title_lower:
             return IssueSolution(
-                code_snippet='<h1>Hauptüberschrift der Seite</h1>',
+                code_snippet='''# Apache (.htaccess):
+<IfModule mod_headers.c>
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+</IfModule>
+
+# Nginx (server{} Block):
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+
+# WordPress (wp-config.php):
+// HSTS wird durch den Webserver gesetzt, nicht WordPress''',
                 steps=[
-                    '1. Fügen Sie eine aussagekräftige H1-Überschrift am Seitenanfang ein',
-                    '2. Die H1 sollte das Hauptthema der Seite beschreiben',
-                    '3. Verwenden Sie nur eine H1 pro Seite',
-                    '4. Weitere Überschriften hierarchisch strukturieren (H2, H3, etc.)'
+                    '1. Öffnen Sie Ihre Webserver-Konfiguration (.htaccess für Apache oder nginx.conf)',
+                    '2. Fügen Sie den HSTS-Header in den jeweiligen Abschnitt ein (siehe Code oben)',
+                    '3. Bei Cloudflare/CDN: Aktivieren Sie HSTS unter SSL/TLS → Edge Certificates → HSTS',
+                    '4. Testen Sie mit: https://securityheaders.com — "Strict-Transport-Security" muss grün sein',
+                    '5. Wichtig: Stellen Sie sicher, dass Ihre Website vollständig via HTTPS erreichbar ist, bevor Sie HSTS aktivieren'
+                ]
+            )
+        
+        # CSP
+        if 'csp' in title_lower or 'content-security-policy' in title_lower:
+            return IssueSolution(
+                code_snippet='''# Apache (.htaccess):
+<IfModule mod_headers.c>
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://trusted-cdn.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https://fonts.googleapis.com; connect-src 'self'; frame-ancestors 'none'"
+</IfModule>
+
+# Nginx:
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; frame-ancestors 'none'" always;''',
+                steps=[
+                    '1. Analysieren Sie Ihre Website: Welche externen Ressourcen (Fonts, Scripts, CDN) werden geladen?',
+                    '2. Beginnen Sie mit einem Report-Only Header: Content-Security-Policy-Report-Only um zu testen',
+                    '3. Passen Sie den CSP-Header an Ihre Website an (erlaubte Domains eintragen)',
+                    '4. Aktivieren Sie den Header in .htaccess (Apache) oder nginx.conf',
+                    '5. Testen Sie mit https://csp-evaluator.withgoogle.com und Browser-DevTools → Console',
+                    '6. Bei WordPress: Plugin "WP Content Security Policy" vereinfacht die Konfiguration'
+                ]
+            )
+        
+        # X-Frame-Options
+        if 'x-frame' in title_lower or 'frame' in title_lower or 'clickjacking' in title_lower:
+            return IssueSolution(
+                code_snippet='''# Apache (.htaccess):
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+</IfModule>
+
+# Nginx:
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;''',
+                steps=[
+                    '1. Öffnen Sie die .htaccess Datei im Root-Verzeichnis Ihrer Website',
+                    '2. Fügen Sie den Code-Block innerhalb des <IfModule mod_headers.c> Blocks ein',
+                    '3. Speichern und testen Sie mit https://securityheaders.com',
+                    '4. Überprüfen Sie, ob Ihre Website noch korrekt in iFrames dargestellt werden muss (selten)',
+                    '5. Bei Nginx: Fügen Sie die add_header Zeilen in den server{} Block ein'
+                ]
+            )
+        
+        # Alle Security-Header auf einmal
+        return IssueSolution(
+            code_snippet='''# Vollständige Security-Headers (.htaccess):
+<IfModule mod_headers.c>
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com"
+</IfModule>''',
+            steps=[
+                '1. Öffnen Sie die .htaccess im Root-Verzeichnis Ihrer Website (oder FTP/cPanel Dateimanager)',
+                '2. Kopieren Sie den gesamten Code-Block und fügen Sie ihn am Ende der .htaccess ein',
+                '3. Passen Sie den CSP an Ihre verwendeten Dienste an (Google Fonts, Analytics, etc.)',
+                '4. Speichern und prüfen Sie mit https://securityheaders.com — alle Header müssen grün sein',
+                '5. Bei Nginx: Übersetzen Sie die Header-Zeilen in add_header Direktiven im server{} Block'
+            ]
+        )
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # UWG (Bewertungen, Irreführung, Dark Patterns)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if category == 'uwg' or 'uwg' in title_lower:
+        # Kundenbewertungen ohne Verifikation
+        if 'bewertung' in title_lower or 'verifikation' in title_lower or 'disclosure' in title_lower or '35b' in title_lower:
+            return IssueSolution(
+                code_snippet='''<!-- Bewertungs-Disclosure nach §35b UWG -->
+<div class="reviews-section">
+  <div class="reviews-disclosure" style="background:#f8f9fa; border:1px solid #dee2e6; padding:12px 16px; border-radius:6px; margin-bottom:16px; font-size:0.875rem; color:#495057;">
+    <strong>Bewertungshinweis:</strong> Alle Bewertungen stammen von verifizierten Käufern, 
+    die das Produkt über unseren Shop erworben haben. 
+    Wir prüfen Echtheit durch Bestellabgleich. 
+    <a href="/bewertungsrichtlinie" style="color:#0066cc;">Mehr zu unserem Bewertungsverfahren</a>
+  </div>
+  <!-- Ihre bestehenden Bewertungen hier -->
+</div>''',
+                steps=[
+                    '1. Fügen Sie direkt oberhalb Ihrer Bewertungssektion den Disclosure-Text ein',
+                    '2. Erstellen Sie eine Seite /bewertungsrichtlinie mit Ihrem Prüfverfahren',
+                    '3. Beschreiben Sie konkret: Wie werden Bewertungen verifiziert? (z.B. Bestellnummer-Abgleich)',
+                    '4. Wenn Sie Trustpilot/Google verwenden: Linken Sie auf deren Verifizierungsseite',
+                    '5. Entfernen Sie alle künstlichen Countdowns oder Lagerbestands-Anzeigen die nicht real sind',
+                    '6. Rechtslage: §35b UWG seit Mai 2022 — Bußgeld bis 50.000€'
+                ]
+            )
+        
+        # Irreführende Werbung / Dringlichkeit
+        if 'irreführ' in title_lower or 'dringlichkeit' in title_lower or 'countdown' in title_lower:
+            return IssueSolution(
+                code_snippet='''<!-- ENTFERNEN: Statische/gefälschte Countdown-Timer -->
+<!-- <div class="countdown">Nur noch 2:34 Minuten!</div> -->
+
+<!-- ERSETZEN durch echte serverseitige Logik (falls Angebot wirklich endet): -->
+<div class="offer-end" data-end-time="{{ offer_end_timestamp }}">
+  Angebot endet: <span class="real-end-date">{{ formatted_date }}</span>
+</div>
+
+<!-- Lagerbestand: Nur anzeigen wenn real und dynamisch -->
+<div class="stock-info">
+  <!-- Nur wenn tatsächlich < 10 Stück vorhanden: -->
+  <span class="stock-warning">Nur noch {{ real_stock_count }} auf Lager</span>
+</div>''',
+                steps=[
+                    '1. Entfernen Sie alle statischen Countdown-Timer, die sich nicht wirklich ändern',
+                    '2. Lagerbestand-Anzeigen müssen dem echten Lagerbestand entsprechen — statische "Nur noch 3!" Angaben entfernen',
+                    '3. Rabattpreise müssen dem günstigsten Preis der letzten 30 Tage entsprechen (§11 PAngV)',
+                    '4. Kaufdruck-Elemente ("5 Personen schauen sich das gerade an") entfernen wenn nicht real',
+                    '5. Siegel und Auszeichnungen nur anzeigen wenn aktuell und mit Prüfbericht verlinkbar'
+                ]
+            )
+        
+        return IssueSolution(
+            code_snippet='''<!-- UWG-Compliance: Bewertungs-Disclosure -->
+<p class="reviews-note" style="font-size:0.8rem; color:#666; margin-top:8px;">
+  * Nur verifizierte Käufer können Bewertungen abgeben. 
+  <a href="/bewertungsrichtlinie">Mehr Infos</a>
+</p>''',
+            steps=[
+                '1. Prüfen Sie alle Bewertungen: Sind diese von verifizierten Käufern? (§35b UWG)',
+                '2. Erstellen Sie eine Bewertungsrichtlinie-Seite und verlinken Sie diese bei Bewertungen',
+                '3. Entfernen Sie gefälschte Dringlichkeitselemente (statische Countdowns, erfundene Lagerbestände)',
+                '4. Bezahlte Inhalte/Kooperationen mit "Anzeige" oder "Gesponsert" kennzeichnen',
+                '5. Günstigsten Preis der letzten 30 Tage bei Rabattaktionen anzeigen'
+            ]
+        )
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # PREISANGABEN (PAngV)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if category == 'preisangaben' or 'preis' in title_lower or 'pangv' in title_lower or 'mwst' in title_lower or 'versand' in title_lower:
+        if 'grundpreis' in title_lower:
+            return IssueSolution(
+                code_snippet='''<!-- Grundpreisangabe nach §4 PAngV -->
+<div class="product-price">
+  <span class="price">3,49 €</span>
+  <span class="base-price" style="font-size:0.85rem; color:#555;">
+    (= 6,98 € / 100 g)
+  </span>
+  <span class="tax-shipping" style="font-size:0.8rem; color:#777;">
+    inkl. MwSt. | zzgl. <a href="/versand">Versandkosten</a>
+  </span>
+</div>''',
+                steps=[
+                    '1. Berechnen Sie den Grundpreis: Produktpreis ÷ Menge × Bezugsgröße (100g, 100ml, 1l, etc.)',
+                    '2. Zeigen Sie den Grundpreis direkt neben dem Verkaufspreis an',
+                    '3. Schriftgröße: Grundpreis muss gut lesbar sein (mind. 75% der Produktpreis-Schriftgröße)',
+                    '4. Gilt für alle Waren nach Gewicht, Volumen, Länge, Fläche',
+                    '5. Bei WooCommerce: Plugin "WooCommerce Unit Measurements" oder "German Market" nutzen'
+                ]
+            )
+        return IssueSolution(
+            code_snippet='''<!-- Korrektes Preis-HTML nach PAngV -->
+<div class="product-price">
+  <strong class="price">29,99 €</strong>
+  <small class="tax-info"> inkl. MwSt.</small>
+  <small class="shipping">
+    zzgl. <a href="/versandkosten">Versandkosten</a>
+  </small>
+</div>
+
+<!-- Bei Rabatten: 30-Tage-Tiefstpreis anzeigen (§11 PAngV) -->
+<div class="price-discount">
+  <del class="was-price">39,99 €</del>
+  <strong class="now-price">29,99 €</strong>
+  <small class="reference-price">
+    Bester Preis letzte 30 Tage: 34,99 €
+  </small>
+</div>''',
+            steps=[
+                '1. Fügen Sie bei jedem Preis "inkl. MwSt." hinzu (§3 PAngV Pflicht)',
+                '2. Verlinken Sie "zzgl. Versandkosten" auf eine eigene Versandkostenseite',
+                '3. Bei Mengenware (kg/l/m): Grundpreis direkt neben dem Preis anzeigen (§4 PAngV)',
+                '4. Bei Rabattpreisen: Den günstigsten Preis der letzten 30 Tage als Referenz angeben (§11 PAngV)',
+                '5. Prüfen Sie alle Produktseiten — auch im Warenkorb und der Bestellübersicht'
+            ]
+        )
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # AGB
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if category == 'agb' or 'agb' in title_lower or 'allgemeine geschäft' in title_lower:
+        return IssueSolution(
+            code_snippet='''<!-- AGB: Footer-Link -->
+<footer>
+  <nav>
+    <a href="/agb">AGB</a>
+    <a href="/widerrufsbelehrung">Widerruf</a>
+    <a href="/impressum">Impressum</a>
+    <a href="/datenschutz">Datenschutz</a>
+  </nav>
+</footer>
+
+<!-- Checkout: AGB-Checkbox (Pflicht) -->
+<form>
+  <label>
+    <input type="checkbox" name="agb_accepted" required>
+    Ich akzeptiere die <a href="/agb" target="_blank">AGB</a>
+    und die <a href="/widerrufsbelehrung" target="_blank">Widerrufsbelehrung</a>
+  </label>
+</form>''',
+            steps=[
+                '1. Erstellen Sie eine /agb Seite mit Ihren vollständigen AGB',
+                '2. Verlinken Sie die AGB im Footer und im Bestellprozess',
+                '3. Im Checkout: Pflicht-Checkbox "Ich akzeptiere die AGB" einbauen',
+                '4. Senden Sie AGB per E-Mail mit jeder Bestellbestätigung mit',
+                '5. Lassen Sie die AGB von einem Rechtsanwalt prüfen (Abmahnschutz)'
+            ]
+        )
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # WIDERRUFSBELEHRUNG
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if category == 'widerruf' or category == 'widerrufsbelehrung' or 'widerruf' in title_lower:
+        return IssueSolution(
+            code_snippet='''<!-- Widerrufsbelehrung: Footer-Link -->
+<a href="/widerrufsbelehrung">Widerrufsrecht & Muster-Widerrufsformular</a>
+
+<!-- Widerrufsbelehrung Seite /widerrufsbelehrung -->
+<h1>Widerrufsbelehrung</h1>
+<p><strong>Widerrufsrecht:</strong> Sie haben das Recht, binnen 14 Tagen 
+ohne Angabe von Gründen diesen Vertrag zu widerrufen.</p>
+<p>Widerruf per E-Mail an: <a href="mailto:widerruf@ihrshop.de">widerruf@ihrshop.de</a></p>
+<h2>Muster-Widerrufsformular</h2>
+<p>An [Firma, Adresse, E-Mail]:<br>
+Ich widerrufe meinen Vertrag vom [Datum].<br>
+Name / Datum / Unterschrift</p>''',
+            steps=[
+                '1. Erstellen Sie eine Seite /widerrufsbelehrung mit der gesetzlichen Muster-Belehrung',
+                '2. Verlinken Sie die Seite im Footer und in Bestellbestätigungs-E-Mails',
+                '3. Fügen Sie das Muster-Widerrufsformular als ausfüllbares Formular oder PDF ein',
+                '4. Senden Sie die Widerrufsbelehrung automatisch mit jeder Bestellbestätigung',
+                '5. Bei digitalen Produkten: Hinweis auf Erlöschen des Widerrufsrechts bei sofortigem Download'
+            ]
+        )
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # AVV (Auftragsverarbeitungsvertrag)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if category == 'avv' or 'avv' in title_lower or 'auftragsverarbeit' in title_lower or 'datenverarbeit' in title_lower:
+        return IssueSolution(
+            code_snippet='''<!-- Datenschutzerklärung: Auftragsverarbeiter nennen -->
+<h2>Auftragsverarbeitung</h2>
+<p>Für folgende Dienste haben wir einen Auftragsverarbeitungsvertrag (AVV) gemäß 
+Art. 28 DSGVO abgeschlossen:</p>
+<ul>
+  <li><strong>Google Analytics 4:</strong> AVV abgeschlossen, 
+      <a href="https://myaccount.google.com/data-and-privacy">Google Data Processing Terms</a></li>
+  <li><strong>Mailchimp:</strong> AVV abgeschlossen,
+      <a href="https://mailchimp.com/legal/data-processing-addendum/">Mailchimp DPA</a></li>
+  <!-- Weitere Dienste hier ergänzen -->
+</ul>''',
+            steps=[
+                '1. Google Analytics/GTM: AVV abschließen unter myaccount.google.com → Datenschutz → Datenverarbeitungsbedingungen',
+                '2. Meta/Facebook Pixel: DPA unter facebook.com/legal/terms/dataprocessing abschließen',
+                '3. E-Mail-Dienste (Mailchimp, Klaviyo etc.): DPA in den Account-Einstellungen aktivieren',
+                '4. Hosting-Anbieter: AVV-Vorlage beim Anbieter anfordern (meist im Kundenportal)',
+                '5. Dokumentieren Sie alle AVVs in Ihrer Datenschutzerklärung und im Verarbeitungsverzeichnis'
+            ]
+        )
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # BARRIEREFREIHEIT (BFSG/WCAG)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if category == 'barrierefreiheit':
+        # H1-Überschrift fehlt
+        if 'h1' in title_lower or 'überschrift' in title_lower or 'heading' in title_lower:
+            return IssueSolution(
+                code_snippet='''<!-- H1 in den <head> Bereich der Seite einfügen -->
+<main>
+  <h1>Ihr Seitenthema hier — z.B. "Herzlich Willkommen bei [Firmenname]"</h1>
+  <!-- Weitere Inhalte -->
+</main>
+
+<!-- Hierarchie: Nur EINE H1 pro Seite, dann H2, H3... -->
+<h1>Hauptüberschrift</h1>
+  <h2>Unterabschnitt 1</h2>
+    <h3>Detail</h3>
+  <h2>Unterabschnitt 2</h2>''',
+                steps=[
+                    '1. Fügen Sie eine H1-Überschrift als erste Überschrift im <main> Element ein',
+                    '2. Die H1 muss das Hauptthema der Seite präzise beschreiben',
+                    '3. Verwenden Sie auf jeder Seite genau eine H1',
+                    '4. Weitere Überschriften hierarchisch strukturieren (H2 → H3 → H4)',
+                    '5. Bei CMS (WordPress/Shopware): Prüfen Sie den Seiteneditor — Titel = H1',
+                    '6. Testen mit: Browser DevTools → Accessibility Tab → Headings'
                 ]
             )
         
         # Semantische HTML-Elemente fehlen
-        if 'semantisch' in title_lower or 'html5' in title_lower or 'html-elemente' in title_lower:
+        if 'semantisch' in title_lower or 'html5' in title_lower or 'landmark' in title_lower:
             return IssueSolution(
-                code_snippet='''<!-- Beispiel-Struktur mit semantischen HTML5-Elementen -->
-<header>
-    <nav><!-- Navigation --></nav>
+                code_snippet='''<!-- Semantische Struktur: Ersetzen Sie divs durch semantische Elemente -->
+<header role="banner">
+  <nav aria-label="Hauptnavigation">
+    <ul>
+      <li><a href="/">Startseite</a></li>
+      <li><a href="/produkte">Produkte</a></li>
+      <li><a href="/kontakt">Kontakt</a></li>
+    </ul>
+  </nav>
 </header>
-<main>
-    <article><!-- Hauptinhalt --></article>
+
+<main id="main-content">
+  <a href="#main-content" class="skip-link">Zum Inhalt springen</a>
+  <h1>Seitenüberschrift</h1>
+  <article>
+    <h2>Artikel-Überschrift</h2>
+  </article>
 </main>
-<footer><!-- Footer-Bereich --></footer>''',
+
+<footer role="contentinfo">
+  <nav aria-label="Footer-Navigation"><!-- Links --></nav>
+</footer>''',
                 steps=[
-                    '1. Ersetzen Sie <div>-Container durch semantische Elemente: <header>, <nav>, <main>, <footer>',
-                    '2. Nutzen Sie <article> für eigenständige Inhalte und <section> für thematische Gruppierungen',
-                    '3. Verwenden Sie <aside> für ergänzende Inhalte (Sidebars)',
-                    '4. Testen Sie die Struktur mit einem Screenreader (z.B. NVDA oder VoiceOver)'
+                    '1. Ersetzen Sie <div id="header"> durch <header role="banner">',
+                    '2. Ersetzen Sie <div id="nav"> durch <nav aria-label="Hauptnavigation">',
+                    '3. Ersetzen Sie <div id="content"> durch <main id="main-content">',
+                    '4. Ersetzen Sie <div id="footer"> durch <footer role="contentinfo">',
+                    '5. Fügen Sie einen Skip-Link als erstes Element in <main> ein',
+                    '6. Testen mit NVDA (Windows) oder VoiceOver (Mac/iPhone)'
                 ]
             )
         
         # Alt-Texte fehlen
-        if 'alt' in title_lower or 'bild' in title_lower:
+        if 'alt' in title_lower or 'bild' in title_lower or 'img' in title_lower:
             return IssueSolution(
-                code_snippet='<img src="logo.png" alt="Firmenname Logo - Zurück zur Startseite">',
+                code_snippet='''<!-- Bilder mit Alt-Text: Beschreibend und aussagekräftig -->
+<img src="produkt-sneaker-blau.jpg" 
+     alt="Blauer Nike Sneaker Air Max 270, Größe 42, Seitenansicht">
+
+<!-- Dekorative Bilder: Leeres alt="" damit Screenreader ignoriert -->
+<img src="trennlinie.png" alt="" role="presentation">
+
+<!-- Verlinktes Bild: Alt-Text beschreibt das Ziel -->
+<a href="/">
+  <img src="logo.png" alt="Firmenname - Zurück zur Startseite">
+</a>
+
+<!-- Komplexe Grafiken: Zusätzliche Beschreibung -->
+<figure>
+  <img src="diagramm.png" alt="Umsatzentwicklung 2024">
+  <figcaption>Umsatz stieg von 100k€ (Jan) auf 180k€ (Dez) — +80% Wachstum</figcaption>
+</figure>''',
                 steps=[
-                    '1. Fügen Sie jedem <img>-Tag ein alt-Attribut hinzu',
-                    '2. Beschreiben Sie den Inhalt und Zweck des Bildes präzise',
-                    '3. Dekorative Bilder: Leeres alt-Attribut verwenden (alt="")',
-                    '4. Prüfen Sie alle Bilder auf der gesamten Website'
+                    '1. Fügen Sie jedem <img> ein alt-Attribut hinzu — leer ("") für dekorative Bilder',
+                    '2. Alt-Texte beschreiben: Was zeigt das Bild? Was ist der Zweck?',
+                    '3. Für Produktbilder: Produktname + Farbe + relevante Details',
+                    '4. Für Icons/Buttons: Das Ziel/die Funktion beschreiben (z.B. alt="Warenkorb öffnen")',
+                    '5. Bei WordPress: Alle Bilder in der Mediathek → Alt-Text Feld ausfüllen',
+                    '6. Bulk-Fix: Browser-Plugin "alt-text-tester" zeigt alle fehlenden Alt-Texte'
                 ]
             )
         
         # Kontraste
-        if 'kontrast' in title_lower or 'farb' in title_lower:
+        if 'kontrast' in title_lower or 'farb' in title_lower or 'color' in title_lower:
             return IssueSolution(
-                code_snippet='''/* Beispiel mit ausreichendem Kontrast */
-.text {
-    color: #1a1a1a;        /* Dunkler Text */
-    background: #ffffff;    /* Heller Hintergrund */
-    /* Kontrast-Verhältnis: 15:1 ✓ */
+                code_snippet='''/* CSS: Ausreichende Farbkontraste (WCAG 2.1 Level AA) */
+
+/* Normaler Text: Mindest-Kontrast 4.5:1 */
+.body-text {
+  color: #333333;        /* #333 auf Weiß = 12.6:1 ✓ */
+  background: #ffffff;
+}
+
+/* Großer Text (>18pt): Mindest-Kontrast 3:1 */
+.heading-large {
+  color: #555555;        /* #555 auf Weiß = 7.5:1 ✓ */
+  background: #ffffff;
+}
+
+/* FALSCH: Grauer Text auf weißem Hintergrund */
+/* color: #999999;  →  nur 2.85:1 — NICHT WCAG-konform! */
+
+/* RICHTIG: Mindestens #767676 für normalen Text auf Weiß */
+.muted-text {
+  color: #767676;        /* = 4.54:1 — gerade noch WCAG AA ✓ */
 }''',
                 steps=[
-                    '1. Prüfen Sie Farbkontraste mit einem Tool (z.B. WebAIM Contrast Checker)',
-                    '2. Mindestanforderung: 4.5:1 für normalen Text, 3:1 für großen Text (>18pt)',
-                    '3. Passen Sie Farben an, um ausreichenden Kontrast zu erreichen',
-                    '4. Testen Sie auch Hover- und Focus-Zustände'
+                    '1. Prüfen Sie alle Text-/Hintergrundfarben mit: https://webaim.org/resources/contrastchecker/',
+                    '2. Normaler Text braucht min. 4.5:1 Kontrast, großer Text (>18pt/14pt fett) min. 3:1',
+                    '3. Häufige Problemstelle: Hellgrauer Text (#999, #aaa) auf weiß — anpassen auf min. #767676',
+                    '4. Buttons und Links: Auch Hover/Focus-Zustand prüfen',
+                    '5. CSS-Farben anpassen und erneut mit Contrast-Checker verifizieren',
+                    '6. Browser-Extension "WAVE" zeigt Kontrast-Fehler direkt auf Ihrer Website'
                 ]
             )
         
         # Tastatur-Navigation
-        if 'tastatur' in title_lower or 'keyboard' in title_lower or 'focus' in title_lower:
+        if 'tastatur' in title_lower or 'keyboard' in title_lower or 'focus' in title_lower or 'tab' in title_lower:
             return IssueSolution(
-                code_snippet='''<button tabindex="0" aria-label="Menü öffnen">
-    Menu
-</button>
-
-<style>
-button:focus {
-    outline: 3px solid #4a90e2;
-    outline-offset: 2px;
+                code_snippet='''/* CSS: Sichtbare Focus-Indikatoren (WCAG 2.1 §2.4.7) */
+:focus-visible {
+  outline: 3px solid #005fcc;
+  outline-offset: 3px;
+  border-radius: 3px;
 }
-</style>''',
+
+/* Skip-Link für Tastatur-Nutzer */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 16px;
+  background: #005fcc;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 0 0 4px 4px;
+  font-weight: 600;
+  z-index: 9999;
+  transition: top 0.1s;
+}
+.skip-link:focus {
+  top: 0;
+}
+
+/* HTML: Skip-Link als erstes Element im <body> */
+/* <a href="#main-content" class="skip-link">Zum Hauptinhalt springen</a> */''',
                 steps=[
-                    '1. Stellen Sie sicher, dass alle interaktiven Elemente per Tab-Taste erreichbar sind',
-                    '2. Fügen Sie sichtbare Focus-Indikatoren hinzu (outline, border, etc.)',
-                    '3. Verwenden Sie tabindex="0" für fokussierbare custom Elemente',
-                    '4. Testen Sie die Navigation komplett per Tastatur (ohne Maus)'
+                    '1. Fügen Sie den CSS-Code für :focus-visible in Ihre globale CSS-Datei ein',
+                    '2. Entfernen Sie keinesfalls "outline: none" oder "outline: 0" aus Ihrem CSS',
+                    '3. Fügen Sie den Skip-Link als erstes Element im <body> ein',
+                    '4. Testen: Tab-Taste drücken — jedes fokussierte Element muss sichtbar hervorgehoben sein',
+                    '5. Prüfen Sie: Können Sie alle Funktionen (Navigation, Formulare, Buttons) nur per Tastatur erreichen?'
                 ]
             )
         
         # ARIA-Labels
-        if 'aria' in title_lower or 'label' in title_lower:
+        if 'aria' in title_lower or 'label' in title_lower or 'role' in title_lower:
             return IssueSolution(
-                code_snippet='''<button aria-label="Schließen">
-    <svg><!-- X Icon --></svg>
+                code_snippet='''<!-- ARIA-Labels für Screenreader-Zugänglichkeit -->
+
+<!-- Buttons ohne sichtbaren Text: aria-label hinzufügen -->
+<button aria-label="Produkt in den Warenkorb legen">
+  <svg aria-hidden="true"><!-- Warenkorb-Icon --></svg>
 </button>
 
-<nav aria-label="Hauptnavigation">
-    <!-- Navigation Items -->
-</nav>''',
+<!-- Navigationen benennen -->
+<nav aria-label="Hauptnavigation"><!-- ... --></nav>
+<nav aria-label="Breadcrumb" aria-current="page"><!-- ... --></nav>
+
+<!-- Formulare: Labels für alle Eingabefelder -->
+<label for="email">E-Mail-Adresse *</label>
+<input type="email" id="email" name="email" 
+       aria-required="true" 
+       aria-describedby="email-hint">
+<p id="email-hint">Format: name@beispiel.de</p>
+
+<!-- Modals/Dialoge -->
+<div role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <h2 id="modal-title">Bestätigung</h2>
+</div>''',
                 steps=[
-                    '1. Fügen Sie aria-label zu Buttons ohne Text-Inhalt hinzu',
-                    '2. Verwenden Sie aria-labelledby bei komplexeren Elementen',
-                    '3. Nutzen Sie role-Attribute für custom Komponenten',
-                    '4. Validieren Sie mit dem WAVE Browser Extension'
+                    '1. Alle Buttons mit nur Icons/SVGs brauchen ein aria-label das die Funktion beschreibt',
+                    '2. Navigationen mit aria-label benennen (Hauptnavigation, Breadcrumb, Footer-Navigation)',
+                    '3. Jedes Formularfeld braucht ein zugehöriges <label> mit for-Attribut',
+                    '4. Alle Icons in Buttons: aria-hidden="true" damit Screenreader sie ignoriert',
+                    '5. Testen: Browser-Plugin WAVE oder Axe DevTools zeigt alle ARIA-Fehler an'
                 ]
             )
+        
+        # Fehlender Sprachcode
+        if 'sprach' in title_lower or 'lang' in title_lower or 'html lang' in title_lower:
+            return IssueSolution(
+                code_snippet='''<!-- HTML lang-Attribut im <html> Tag setzen -->
+<!DOCTYPE html>
+<html lang="de">  <!-- Deutsch -->
+<!-- oder: lang="en" (Englisch), lang="fr" (Französisch) etc. -->
+<head>
+  <!-- ... -->
+</head>
+
+<!-- Bei mehrsprachigen Inhalten: lang lokal überschreiben -->
+<p>Das ist auf Deutsch.</p>
+<p lang="en">This is in English.</p>''',
+                steps=[
+                    '1. Öffnen Sie Ihre HTML-Vorlage / Template-Datei',
+                    '2. Setzen Sie im <html> Tag das lang-Attribut: <html lang="de">',
+                    '3. Bei WordPress: Theme-Einstellungen → Sprache, oder in der header.php',
+                    '4. Bei anderssprachigen Textpassagen: lang-Attribut am betreffenden Element setzen',
+                    '5. Testen: HTML-Validator auf https://validator.w3.org prüft das lang-Attribut'
+                ]
+            )
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # DATENSCHUTZ / DSGVO
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if category == 'datenschutz' or 'datenschutz' in title_lower or 'dsgvo' in title_lower or 'gdpr' in title_lower:
+        if 'google analytics' in title_lower or 'tracking' in title_lower or 'pixel' in title_lower:
+            return IssueSolution(
+                code_snippet='''<!-- Google Analytics 4: Nur nach Einwilligung laden -->
+<!-- FALSCH: Direkt im <head> laden -->
+<!-- <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXX"></script> -->
+
+<!-- RICHTIG: Erst nach Cookie-Consent laden -->
+<script>
+  // Wird vom Cookie-Consent-Banner aufgerufen wenn Nutzer zustimmt
+  function loadGoogleAnalytics() {
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = 'https://www.googletagmanager.com/gtag/js?id=G-IHRE-ID';
+    document.head.appendChild(script);
+    
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-IHRE-ID', {
+      'anonymize_ip': true,  // IP-Anonymisierung aktivieren
+      'storage': 'none'      // Kein Storage ohne Einwilligung
+    });
+  }
+</script>''',
+                steps=[
+                    '1. Entfernen Sie den direkten Google Analytics / GTM Script-Tag aus dem <head>',
+                    '2. Laden Sie GA/GTM nur nach expliziter Einwilligung im Cookie-Banner',
+                    '3. In Google Analytics: IP-Anonymisierung aktivieren (Analytics → Admin → Datenstrom → Tagging-Einstellungen)',
+                    '4. AVV mit Google abschließen: myaccount.google.com → Datenschutz → Datenverarbeitung',
+                    '5. Datenschutzerklärung: Google Analytics mit Rechtsgrundlage (Einwilligung Art. 6 Abs. 1a DSGVO) dokumentieren'
+                ]
+            )
+        
+        return IssueSolution(
+            code_snippet='''<!-- Datenschutzerklärung Footer-Link -->
+<footer>
+  <a href="/datenschutz" rel="privacy-policy">Datenschutzerklärung</a>
+</footer>''',
+            steps=[
+                '1. Erstellen Sie eine Datenschutzerklärung-Seite unter /datenschutz',
+                '2. Dokumentieren Sie alle Datenverarbeitungen: Hosting, Analytics, Kontaktformular, E-Mail',
+                '3. Verlinken Sie die Datenschutzerklärung im Footer jeder Seite',
+                '4. Nutzen Sie den Complyo Datenschutz-Generator für eine DSGVO-konforme Vorlage',
+                '5. Aktualisieren Sie die Erklärung bei neuen Diensten (z.B. neues Plugin, Social-Media-Integration)'
+            ]
+        )
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # IMPRESSUM
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if category == 'impressum' or 'impressum' in title_lower:
+        return IssueSolution(
+            code_snippet='''<!-- Impressum Footer-Link (Pflicht auf jeder Seite) -->
+<footer>
+  <nav aria-label="Rechtliche Links">
+    <a href="/impressum" rel="legal">Impressum</a>
+    <a href="/datenschutz" rel="privacy-policy">Datenschutz</a>
+  </nav>
+</footer>
+
+<!-- Impressum-Seite /impressum (Pflichtangaben §5 TMG / §18 MStV) -->
+<h1>Impressum</h1>
+<h2>Angaben gemäß § 5 TMG</h2>
+<address>
+  Ihr Firmenname GmbH<br>
+  Musterstraße 1<br>
+  12345 Musterstadt<br>
+  <br>
+  E-Mail: <a href="mailto:kontakt@ihreshop.de">kontakt@ihreshop.de</a><br>
+  Tel: +49 123 456789
+</address>
+<h2>Handelsregister</h2>
+<p>HRB 12345, Amtsgericht Musterstadt</p>
+<h2>Umsatzsteuer-ID</h2>
+<p>DE123456789</p>''',
+            steps=[
+                '1. Erstellen Sie eine Seite unter /impressum',
+                '2. Pflichtangaben: Name + Anschrift + E-Mail + Telefon (§5 TMG)',
+                '3. Bei GmbH/AG: Handelsregisternummer + Amtsgericht + Geschäftsführer angeben',
+                '4. Verlinken Sie das Impressum im Footer von jeder Seite (max. 2 Klicks)',
+                '5. Nutzen Sie den Complyo Impressum-Generator für alle Pflichtangaben'
+            ]
+        )
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # COOKIES / CONSENT
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if category == 'cookies' or 'cookie' in title_lower or 'consent' in title_lower or 'ttdsg' in title_lower:
+        if 'third-party' in title_lower or 'drittanbieter' in title_lower or 'social' in title_lower or 'embed' in title_lower:
+            return IssueSolution(
+                code_snippet='''<!-- Zwei-Klick-Lösung für YouTube-Embeds -->
+<div class="embed-placeholder" data-src="https://www.youtube-nocookie.com/embed/VIDEO_ID">
+  <div style="background:#000; color:#fff; padding:40px; text-align:center; border-radius:8px;">
+    <p>YouTube-Video<br><small>Durch Klick werden Daten an YouTube übertragen</small></p>
+    <button onclick="loadEmbed(this)" 
+            style="background:#ff0000; color:white; border:none; padding:12px 24px; cursor:pointer; border-radius:4px;">
+      Video laden (Datenschutzhinweis beachten)
+    </button>
+  </div>
+</div>
+
+<script>
+function loadEmbed(btn) {
+  const container = btn.closest('.embed-placeholder');
+  const src = container.dataset.src;
+  container.innerHTML = '<iframe src="' + src + '" allowfullscreen width="100%" height="400" loading="lazy"></iframe>';
+}
+</script>''',
+                steps=[
+                    '1. Ersetzen Sie direkte YouTube/Vimeo-Embeds durch Platzhalter mit Klick-Freigabe',
+                    '2. Verwenden Sie youtube-nocookie.com statt youtube.com für datenschutzfreundlichere Embeds',
+                    '3. Social-Media-Buttons: Shariff-Lösung verwenden statt direkte Facebook/Twitter Buttons',
+                    '4. Bei WordPress: Plugin "DSGVO Video-Einbettung" oder "Borlabs Cookie" nutzen',
+                    '5. Datenschutzerklärung: Eingebettete Inhalte und Drittzugriffe dokumentieren'
+                ]
+            )
+        
+        return IssueSolution(
+            code_snippet='''<!-- Cookie-Banner Integration (Complyo) -->
+<script>
+  // Option A: Complyo Cookie-Banner nutzen (im AI-Plan enthalten)
+  // Gehen Sie zu: App → Cookie-Compliance → Banner konfigurieren
+  
+  // Option B: Minimaler eigener Cookie-Banner
+  if (!localStorage.getItem('cookie_consent')) {
+    document.addEventListener('DOMContentLoaded', function() {
+      const banner = document.createElement('div');
+      banner.innerHTML = `
+        <div style="position:fixed;bottom:0;left:0;right:0;background:#1a1a1a;color:#fff;padding:16px 24px;z-index:99999;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+          <p style="margin:0;font-size:14px;">
+            Diese Website verwendet Cookies für Analytics und Funktionalität. 
+            <a href="/datenschutz" style="color:#60a5fa;">Mehr erfahren</a>
+          </p>
+          <div style="display:flex;gap:8px;">
+            <button onclick="setCookieConsent('rejected')" style="padding:8px 16px;border:1px solid #555;background:transparent;color:#fff;cursor:pointer;border-radius:4px;">Ablehnen</button>
+            <button onclick="setCookieConsent('accepted')" style="padding:8px 16px;background:#2563eb;border:none;color:#fff;cursor:pointer;border-radius:4px;font-weight:600;">Akzeptieren</button>
+          </div>
+        </div>`;
+      document.body.appendChild(banner);
+    });
+  }
+  
+  function setCookieConsent(value) {
+    localStorage.setItem('cookie_consent', value);
+    document.querySelector('[style*="position:fixed;bottom:0"]').remove();
+    if (value === 'accepted') { /* Tracking laden */ }
+  }
+</script>''',
+            steps=[
+                '1. Empfehlung: Nutzen Sie die integrierte Complyo Cookie-Lösung (App → Cookie-Compliance)',
+                '2. Der Banner muss VOR dem Laden von Tracking-Cookies erscheinen',
+                '3. Tracking-Scripts (GA, Meta Pixel) dürfen NUR nach Einwilligung geladen werden',
+                '4. Opt-out muss genauso einfach sein wie Opt-in (gleiche Anzahl Klicks)',
+                '5. Jährlich re-consent einholen oder bei wesentlichen Änderungen',
+                '6. Dokumentieren Sie alle gesetzten Cookies in der Datenschutzerklärung'
+            ]
+        )
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # SSL / HTTPS
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if 'ssl' in title_lower or 'https' in title_lower or 'tls' in title_lower or 'verschlüssel' in title_lower:
+        return IssueSolution(
+            code_snippet='''# HTTP → HTTPS Redirect (.htaccess):
+RewriteEngine On
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+# Nginx:
+server {
+    listen 80;
+    server_name ihredomain.de www.ihredomain.de;
+    return 301 https://$server_name$request_uri;
+}
+
+# www → non-www Redirect (optional):
+RewriteCond %{HTTP_HOST} ^www\.(.*)$ [NC]
+RewriteRule ^(.*)$ https://%1/$1 [R=301,L]''',
+            steps=[
+                '1. Stellen Sie sicher, dass ein SSL-Zertifikat installiert ist (kostenlos bei Let\'s Encrypt)',
+                '2. Bei Hosting-Anbieter: SSL-Zertifikat im Control Panel aktivieren (meist 1-Klick)',
+                '3. Fügen Sie den HTTP→HTTPS Redirect in die .htaccess (Apache) oder nginx.conf ein',
+                '4. Aktualisieren Sie alle internen Links von http:// auf https:// oder relative Pfade',
+                '5. Testen Sie mit: https://www.ssllabs.com/ssltest/ — Ziel ist Grade A'
+            ]
+        )
     
     # Fallback für andere Kategorien
     return _generate_solution(category)
@@ -883,39 +1490,93 @@ def _generate_solution(category: str) -> IssueSolution:
     """Generiert Lösungsvorschläge basierend auf Kategorie"""
     solutions = {
         'impressum': IssueSolution(
-            code_snippet='<a href="/impressum" rel="legal">Impressum</a>',
+            code_snippet='<footer>\n  <a href="/impressum" rel="legal">Impressum</a>\n  <a href="/datenschutz" rel="privacy-policy">Datenschutz</a>\n</footer>',
             steps=[
-                '1. Erstelle eine Impressum-Seite unter /impressum',
-                '2. Füge alle Pflichtangaben hinzu (§5 TMG)',
-                '3. Verlinke das Impressum im Footer',
-                '4. Stelle sicher, dass es von jeder Seite aus erreichbar ist'
+                '1. Erstelle eine Impressum-Seite unter /impressum mit allen Pflichtangaben (§5 TMG)',
+                '2. Pflichtangaben: Firmenname, Adresse, E-Mail, Telefon — bei GmbH/AG auch Handelsregisternummer',
+                '3. Verlinke das Impressum im Footer jeder Seite (max. 2 Klicks erreichbar)',
+                '4. Nutze den Complyo Impressum-Generator für eine rechtssichere Vorlage'
             ]
         ),
         'datenschutz': IssueSolution(
-            code_snippet='<a href="/datenschutz" rel="privacy-policy">Datenschutzerklärung</a>',
+            code_snippet='<footer>\n  <a href="/datenschutz" rel="privacy-policy">Datenschutzerklärung</a>\n</footer>',
             steps=[
                 '1. Erstelle eine Datenschutzseite unter /datenschutz',
-                '2. Dokumentiere alle Datenverarbeitungen (DSGVO Art. 13-14)',
-                '3. Verlinke die Datenschutzerklärung im Footer',
-                '4. Aktualisiere sie bei Änderungen'
+                '2. Dokumentiere alle Datenverarbeitungen: Hosting, Analytics, Cookies, Kontaktformular',
+                '3. Verlinke die Datenschutzerklärung im Footer jeder Seite',
+                '4. Nutze den Complyo Datenschutz-Generator für eine DSGVO-konforme Vorlage'
             ]
         ),
         'cookies': IssueSolution(
-            code_snippet='<!-- Cookie-Consent-Banner Integration -->\n<script src="cookie-consent.js"></script>',
+            code_snippet='<!-- Complyo Cookie-Banner: App → Cookie-Compliance → Banner konfigurieren -->\n<!-- Alternativ: Eigenen Banner vor Tracking-Scripts einbinden -->',
             steps=[
-                '1. Implementiere einen Cookie-Consent-Banner',
-                '2. Blockiere Tracking-Cookies bis zur Einwilligung',
-                '3. Biete Opt-out-Möglichkeit an',
-                '4. Dokumentiere in der Datenschutzerklärung'
+                '1. Nutze die integrierte Complyo Cookie-Lösung: App → Cookie-Compliance',
+                '2. Cookie-Banner muss vor dem Laden von Tracking-Cookies erscheinen',
+                '3. Tracking-Scripts (GA, Meta Pixel) erst nach Einwilligung laden',
+                '4. Opt-out genauso einfach wie Opt-in gestalten'
             ]
         ),
         'barrierefreiheit': IssueSolution(
-            code_snippet='<button aria-label="Menü öffnen" role="button" tabindex="0">Menu</button>',
+            code_snippet='<!-- WCAG 2.1 Basis -->\n<img src="bild.jpg" alt="Beschreibung des Bildinhalts">\n<button aria-label="Menü öffnen">Menu</button>\n<a href="#main" class="skip-link">Zum Inhalt springen</a>',
             steps=[
-                '1. Füge Alt-Texte zu allen Bildern hinzu',
-                '2. Stelle ausreichende Farbkontraste sicher (WCAG 2.1)',
-                '3. Aktiviere Tastaturbedienung für alle interaktiven Elemente',
-                '4. Teste mit Screenreader'
+                '1. Alt-Texte: Füge jedem <img> ein aussagekräftiges alt-Attribut hinzu',
+                '2. Kontraste: Mind. 4.5:1 für Text — prüfen auf webaim.org/resources/contrastchecker',
+                '3. Tastatur: Alle interaktiven Elemente per Tab erreichbar, :focus-visible CSS hinzufügen',
+                '4. Testen mit WAVE Browser Extension oder axe DevTools'
+            ]
+        ),
+        'security': IssueSolution(
+            code_snippet='# Apache .htaccess:\n<IfModule mod_headers.c>\n    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"\n    Header always set X-Content-Type-Options "nosniff"\n    Header always set X-Frame-Options "SAMEORIGIN"\n</IfModule>',
+            steps=[
+                '1. Füge Security-Header in die .htaccess (Apache) oder nginx.conf ein',
+                '2. Aktiviere HTTPS mit kostenlosem Let\'s Encrypt SSL-Zertifikat',
+                '3. Teste alle Header mit: https://securityheaders.com',
+                '4. Bei Cloudflare: Security-Header unter Rules → Transform Rules konfigurieren'
+            ]
+        ),
+        'uwg': IssueSolution(
+            code_snippet='<!-- Bewertungs-Disclosure nach §35b UWG -->\n<p class="reviews-note">\n  * Alle Bewertungen stammen von verifizierten Käufern.\n  <a href="/bewertungsrichtlinie">Mehr erfahren</a>\n</p>',
+            steps=[
+                '1. Bewertungshinweis direkt bei Bewertungen einfügen (§35b UWG)',
+                '2. Seite /bewertungsrichtlinie mit Prüfverfahren erstellen',
+                '3. Statische Countdowns und erfundene Lagerbestands-Anzeigen entfernen',
+                '4. Günstigsten Preis der letzten 30 Tage bei Rabatten anzeigen (§11 PAngV)'
+            ]
+        ),
+        'preisangaben': IssueSolution(
+            code_snippet='<!-- Preis nach PAngV -->\n<span class="price">29,99 €</span>\n<small> inkl. MwSt. | zzgl. <a href="/versand">Versandkosten</a></small>',
+            steps=[
+                '1. Bei jedem Preis "inkl. MwSt." ergänzen (§3 PAngV)',
+                '2. Versandkosten als Link zu einer Versandkostenseite verlinken',
+                '3. Bei Mengenware: Grundpreis direkt neben dem Preis anzeigen (§4 PAngV)',
+                '4. Bei Rabatten: Günstigsten Preis der letzten 30 Tage als Referenz angeben (§11 PAngV)'
+            ]
+        ),
+        'agb': IssueSolution(
+            code_snippet='<footer>\n  <a href="/agb">AGB</a>\n  <a href="/widerrufsbelehrung">Widerruf</a>\n</footer>',
+            steps=[
+                '1. AGB-Seite unter /agb erstellen und im Footer verlinken',
+                '2. Im Checkout: Pflicht-Checkbox "Ich akzeptiere die AGB" einbauen',
+                '3. AGB per E-Mail mit jeder Bestellbestätigung mitsenden',
+                '4. AGB von einem Rechtsanwalt prüfen lassen (Abmahnschutz)'
+            ]
+        ),
+        'widerruf': IssueSolution(
+            code_snippet='<footer>\n  <a href="/widerrufsbelehrung">Widerrufsrecht</a>\n</footer>',
+            steps=[
+                '1. Widerrufsbelehrung-Seite unter /widerrufsbelehrung erstellen',
+                '2. Muster-Widerrufsformular als Bestandteil einbinden (BGB Anlage 2)',
+                '3. Widerrufsbelehrung mit jeder Bestellbestätigung per E-Mail senden',
+                '4. 14-tägige Widerrufsfrist korrekt kommunizieren'
+            ]
+        ),
+        'widerrufsbelehrung': IssueSolution(
+            code_snippet='<footer>\n  <a href="/widerrufsbelehrung">Widerrufsrecht</a>\n</footer>',
+            steps=[
+                '1. Widerrufsbelehrung-Seite unter /widerrufsbelehrung erstellen',
+                '2. Muster-Widerrufsformular als Bestandteil einbinden (BGB Anlage 2)',
+                '3. Widerrufsbelehrung mit jeder Bestellbestätigung per E-Mail senden',
+                '4. 14-tägige Widerrufsfrist korrekt kommunizieren'
             ]
         ),
     }
@@ -923,12 +1584,12 @@ def _generate_solution(category: str) -> IssueSolution:
     return solutions.get(
         category,
         IssueSolution(
-            code_snippet='<!-- Siehe Dokumentation für Details -->',
+            code_snippet=f'<!-- Fix für: {category} -->\n<!-- Spezifische Lösung wird basierend auf Ihrer Website-Analyse generiert -->',
             steps=[
-                '1. Prüfe die rechtliche Grundlage',
-                '2. Implementiere die erforderlichen Änderungen',
-                '3. Dokumentiere die Umsetzung',
-                '4. Teste die Implementierung'
+                f'1. Analysieren Sie die spezifischen Anforderungen für "{category}"',
+                '2. Klicken Sie auf "KI-Fix generieren" für eine auf Ihre Website zugeschnittene Lösung',
+                '3. Implementieren Sie die empfohlenen Änderungen',
+                '4. Führen Sie einen erneuten Scan durch, um die Behebung zu bestätigen'
             ]
         )
     )
@@ -1112,13 +1773,23 @@ async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict
         'rechtstexte': {
             'label': 'Rechtstexte',
             'icon': '📄',
-            'categories': ['impressum', 'agb', 'widerrufsbelehrung', 'contact']
+            'categories': ['impressum', 'agb', 'contact', 'uwg']
+        },
+        'shop': {
+            'label': 'Shop-Compliance',
+            'icon': '🛒',
+            'categories': ['shop', 'widerrufsbelehrung', 'preisangaben']
         },
         'dsgvo': {
             'label': 'DSGVO',
             'icon': '🔒',
-            'categories': ['datenschutz', 'tracking', 'datenverarbeitung']
-        }
+            'categories': ['datenschutz', 'tracking', 'datenverarbeitung', 'avv']
+        },
+        'sicherheit': {
+            'label': 'Sicherheit',
+            'icon': '🔐',
+            'categories': ['security']
+        },
     }
     
     # Weitere Kategorien
@@ -1398,15 +2069,25 @@ async def widget_feedback(
     """
     try:
         logger.info(f"Widget feedback from {site_id}: {feedback.get('event')}")
-        
-        # Speichere in Analytics-Tabelle (TODO)
-        # await store_widget_analytics(site_id, feedback)
-        
+
+        from main_production import db_pool as main_db_pool
+        if main_db_pool:
+            async with main_db_pool.acquire() as conn:
+                await conn.execute(
+                    """INSERT INTO widget_events
+                       (site_id, widget_type, event_name, event_data)
+                       VALUES ($1, $2, $3, $4)""",
+                    site_id,
+                    "widget-feedback",
+                    feedback.get("event", "feedback"),
+                    json.dumps(feedback),
+                )
+
         return {
             "success": True,
             "message": "Feedback received"
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to process widget feedback: {e}")
         return {
@@ -1504,115 +2185,5 @@ async def download_code_package(
         raise HTTPException(status_code=500, detail="Failed to generate package")
 
 
-@public_router.post("/chat/issue-solution")
-async def chat_with_ai_about_issue(
-    request: IssueChatRequest,
-    http_request: Request,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Chat-Endpoint für Rückfragen zu KI-generierten Lösungen
-    
-    Ermöglicht es Nutzern, spezifische Fragen zur Implementierung
-    der vorgeschlagenen Lösung zu stellen.
-    """
-    try:
-        if not OPENROUTER_API_KEY:
-            raise HTTPException(
-                status_code=503,
-                detail="KI-Chat ist momentan nicht verfügbar. Bitte kontaktieren Sie den Support."
-            )
-        
-        logger.info(f"💬 Chat-Anfrage: {request.user_question[:50]}... für Issue: {request.issue_title[:50]}")
-        
-        # Baue Kontext für KI auf
-        context_prompt = f"""Du bist ein Experte für Website-Compliance und unterstützt bei der Implementierung von Lösungen.
-
-**KONTEXT:**
-Website: {request.website_url}
-Problem: {request.issue_title}
-Details: {request.issue_description}
-"""
-        
-        if request.ai_solution:
-            context_prompt += f"\n**Bereits vorgeschlagene Lösung:**\n{request.ai_solution}\n"
-        
-        context_prompt += f"""
-**AUFGABE:**
-Beantworte die folgende Frage des Nutzers präzise und praxisnah.
-Gib konkrete Code-Beispiele, wenn relevant.
-Bleibe im Kontext der Website {request.website_url} und des Problems "{request.issue_title}".
-
-**NUTZER-FRAGE:**
-{request.user_question}
-
-Antworte auf Deutsch, maximal 250 Wörter."""
-
-        # Erstelle Nachrichten-Array mit Chat-History
-        messages = []
-        
-        # Füge Chat-History hinzu (falls vorhanden)
-        for msg in request.chat_history:
-            messages.append({
-                "role": msg.role,
-                "content": msg.content
-            })
-        
-        # Füge aktuelle Frage hinzu
-        messages.append({
-            "role": "user",
-            "content": context_prompt
-        })
-        
-        # Rufe OpenRouter API auf
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://complyo.tech",
-                    "X-Title": "Complyo Compliance Scanner - Chat Support"
-                },
-                json={
-                    "model": "moonshotai/kimi-k2-thinking",
-                    "messages": messages,
-                    "max_tokens": 700,
-                    "temperature": 0.7
-                },
-                timeout=aiohttp.ClientTimeout(total=20)
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    ai_response = data.get('choices', [{}])[0].get('message', {}).get('content', '')
-                    
-                    if not ai_response:
-                        raise HTTPException(
-                            status_code=500,
-                            detail="KI konnte keine Antwort generieren"
-                        )
-                    
-                    logger.info(f"✅ Chat-Antwort generiert ({len(ai_response)} Zeichen)")
-                    
-                    return {
-                        "success": True,
-                        "response": ai_response,
-                        "timestamp": datetime.now().isoformat()
-                    }
-                else:
-                    error_text = await response.text()
-                    logger.error(f"❌ OpenRouter API Error: {response.status} - {error_text}")
-                    raise HTTPException(
-                        status_code=503,
-                        detail="KI-Service vorübergehend nicht verfügbar"
-                    )
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Chat-Fehler: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Ein Fehler ist beim Chat aufgetreten"
-        )
+ 
 

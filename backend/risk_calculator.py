@@ -6,13 +6,23 @@ Berechnet Abmahnrisiken basierend auf der Risk-Matrix
 import asyncpg
 from typing import Dict, Any, Optional
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
 class RiskCalculator:
-    def __init__(self, db_pool: asyncpg.Pool):
+    def __init__(self, db_pool: asyncpg.Pool, cache_ttl_seconds: int = 300):
+        """
+        Initialize RiskCalculator with TTL cache support
+        
+        Args:
+            db_pool: asyncpg connection pool
+            cache_ttl_seconds: Cache Time-To-Live in seconds (default: 5 minutes)
+        """
         self.db_pool = db_pool
-        self._cache = {}  # Simple in-memory cache
+        self._cache = {}  # Key → value
+        self._cache_ts = {}  # Key → timestamp
+        self.cache_ttl = cache_ttl_seconds
     
     async def calculate_issue_risk(
         self, 
@@ -63,12 +73,27 @@ class RiskCalculator:
         category: str, 
         market: str
     ) -> Optional[Dict[str, Any]]:
-        """Holt Risiko-Daten aus der Datenbank"""
-        cache_key = f"{category}_{market}"
+        """
+        Holt Risiko-Daten aus der Datenbank mit TTL-basiertem Cache
         
-        # Check Cache
+        ✅ FIX: Cache-Invalidation verhindert veraltete Daten
+        """
+        cache_key = f"{category}_{market}"
+        current_time = time.time()
+        
+        # Check Cache + TTL
         if cache_key in self._cache:
-            return self._cache[cache_key]
+            cached_ts = self._cache_ts.get(cache_key, 0)
+            time_since_cache = current_time - cached_ts
+            
+            if time_since_cache < self.cache_ttl:
+                logger.debug(f"Cache hit (fresh): {cache_key} (age: {time_since_cache:.1f}s)")
+                return self._cache[cache_key]
+            else:
+                logger.debug(f"Cache expired: {cache_key} (age: {time_since_cache:.1f}s > {self.cache_ttl}s)")
+                # Cache ist abgelaufen, hole neue Daten
+                del self._cache[cache_key]
+                del self._cache_ts[cache_key]
         
         try:
             async with self.db_pool.acquire() as conn:
@@ -91,6 +116,8 @@ class RiskCalculator:
                 if risk:
                     risk_dict = dict(risk)
                     self._cache[cache_key] = risk_dict
+                    self._cache_ts[cache_key] = current_time
+                    logger.debug(f"Cache miss: {cache_key} - fetched from DB")
                     return risk_dict
                 
                 return None
@@ -98,6 +125,31 @@ class RiskCalculator:
         except Exception as e:
             logger.error(f"Database error getting risk for {category}: {e}")
             return None
+    
+    def clear_cache(self):
+        """
+        Leere Cache (z.B. nach Datenbankupdate)
+        """
+        self._cache.clear()
+        self._cache_ts.clear()
+        logger.info("Risk cache cleared")
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """
+        Gebe Cache-Statistiken zurück (für Debugging)
+        """
+        return {
+            "cached_items": len(self._cache),
+            "cache_ttl_seconds": self.cache_ttl,
+            "entries": [
+                {
+                    "key": key,
+                    "age_seconds": time.time() - self._cache_ts[key],
+                    "ttl_remaining": max(0, self.cache_ttl - (time.time() - self._cache_ts[key]))
+                }
+                for key in self._cache.keys()
+            ]
+        }
     
     def _categorize_issue(self, issue_text: str) -> str:
         """

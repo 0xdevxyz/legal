@@ -35,7 +35,21 @@
             'matomo.org',
             'matomo.js',
             'piwik.js',
-            'hotjar.com'
+            'hotjar.com',
+            'clarity.ms',
+            'bat.bing.com',
+            'scorecardresearch.com',
+            'quantserve.com',
+            'statcounter.com',
+            'mixpanel.com',
+            'segment.io',
+            'segment.com',
+            'amplitude.com',
+            'heap.io',
+            'fullstory.com',
+            'logrocket.com',
+            'mouseflow.com',
+            'smartlook.com'
         ],
         marketing: [
             'facebook.com',
@@ -51,7 +65,26 @@
             'instagram.com',
             'twitter.com',
             'x.com',
-            'platform.twitter.com'
+            'platform.twitter.com',
+            'linkedin.com',
+            'ads.linkedin.com',
+            'pinterest.com',
+            'ct.pinterest.com',
+            'reddit.com',
+            'redd.it',
+            'criteo.com',
+            'criteo.net',
+            'adform.net',
+            'appnexus.com',
+            'outbrain.com',
+            'taboola.com',
+            'zemanta.com',
+            'mediaplex.com',
+            'tradedoubler.com',
+            'awin1.com',
+            'shareasale.com',
+            'impact.com',
+            'tiktok.com'
         ],
         functional: [
             'google.com/maps',
@@ -60,7 +93,16 @@
             'widget.intercom.io',
             'zdassets.com',
             'zendesk.com',
-            'fonts.googleapis.com'
+            'fonts.googleapis.com',
+            'freshchat.com',
+            'freshdesk.com',
+            'tawk.to',
+            'livechatinc.com',
+            'crisp.chat',
+            'drift.com',
+            'hubspot.com',
+            'hs-scripts.com',
+            'hs-analytics.net'
         ]
     };
     

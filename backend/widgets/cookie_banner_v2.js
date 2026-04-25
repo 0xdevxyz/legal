@@ -140,7 +140,7 @@
             this.siteId = this.getSiteIdFromScript();
             this.config = { ...DEFAULT_CONFIG, ...config };
             this.consent = this.loadConsent();
-            this.visitorId = this.getOrCreateVisitorId();
+            this.visitorId = null; // Set only after consent is given
             this.modalOpen = false;
             this.settingsOpen = false;
             this.serviceDetails = {}; // Store service information
@@ -186,98 +186,23 @@
             });
         }
         
-        /**
-         * Generates a privacy-friendly browser fingerprint
-         * 
-         * This is NOT a tracking fingerprint - it's a pseudonymized device identifier
-         * used for consent documentation (GDPR requirement).
-         * 
-         * We only use non-identifying characteristics:
-         * - Language
-         * - Screen resolution
-         * - Timezone offset
-         * - Hardware concurrency
-         * - Platform type
-         * 
-         * This creates a hash that is:
-         * - Consistent across sessions (same device = same hash)
-         * - Not unique enough for cross-site tracking
-         * - Privacy-compliant as per GDPR guidelines
-         */
-        generateFingerprint() {
-            try {
-                const components = [
-                    // Language
-                    navigator.language || 'unknown',
-                    
-                    // Screen characteristics (not exact dimensions for privacy)
-                    Math.round(screen.width / 100) * 100 + 'x' + Math.round(screen.height / 100) * 100,
-                    screen.colorDepth || 24,
-                    
-                    // Timezone
-                    new Date().getTimezoneOffset(),
-                    
-                    // Hardware (rough category, not exact)
-                    navigator.hardwareConcurrency ? 
-                        (navigator.hardwareConcurrency <= 2 ? 'low' : 
-                         navigator.hardwareConcurrency <= 4 ? 'medium' : 'high') : 'unknown',
-                    
-                    // Platform type (generic, not specific)
-                    navigator.platform ? navigator.platform.split(' ')[0] : 'unknown',
-                    
-                    // Touch capability
-                    'ontouchstart' in window || navigator.maxTouchPoints > 0 ? 'touch' : 'no-touch',
-                    
-                    // Cookie support
-                    navigator.cookieEnabled ? 'cookies' : 'no-cookies',
-                ];
-                
-                // Create hash from components
-                const data = components.join('|');
-                return this.hashString(data);
-                
-            } catch (error) {
-                console.warn('[Complyo] Fingerprint generation failed:', error);
-                return null;
-            }
-        }
-        
-        /**
-         * Simple string hash function (FNV-1a inspired)
-         * Not cryptographic, but sufficient for fingerprinting
-         */
-        hashString(str) {
-            let hash = 2166136261; // FNV offset basis
-            for (let i = 0; i < str.length; i++) {
-                hash ^= str.charCodeAt(i);
-                hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-            }
-            // Convert to hex string
-            return ('00000000' + (hash >>> 0).toString(16)).slice(-8) + 
-                   ('00000000' + ((hash >>> 0) ^ 0x9e3779b9).toString(16)).slice(-8);
-        }
-        
-        /**
-         * Gets the device fingerprint (cached for performance)
-         */
-        getDeviceFingerprint() {
-            if (!this._deviceFingerprint) {
-                this._deviceFingerprint = this.generateFingerprint();
-            }
-            return this._deviceFingerprint;
-        }
-        
         async init() {
-            // ✅ Initialize Google Consent Mode v2 FIRST (before any Google scripts load)
-            // This MUST happen before gtag.js or analytics.js loads
+            // Initialize Google Consent Mode v2 FIRST (before any Google scripts load)
             this.initGoogleConsentMode();
+
+            // Initialize IAB TCF 2.2 stub if enabled via data-tcf attribute
+            const script = document.currentScript ||
+                           document.querySelector('script[data-site-id]') ||
+                           document.querySelector('script[src*="cookie-compliance.js"]');
+            if (script && script.getAttribute('data-tcf') === 'true') {
+                this.initTCF();
+            }
             
             // Check Do Not Track
             if (this.config.respectDNT && this.isDNTEnabled()) {
-                console.log('[Complyo] Do Not Track detected. Banner not shown.');
-                // Still update consent mode for DNT users
+                console.log('[Complyo] Do Not Track detected. Enforcing denied defaults, banner still shown.');
                 this.updateGoogleConsentMode({ necessary: true, functional: false, analytics: false, marketing: false });
-                return;
+                // DNT does not replace a valid consent decision - fall through to show banner
             }
             
             // Load configuration from server if site_id exists
@@ -475,8 +400,12 @@
         
         async checkABTest() {
             try {
+                // Use a non-persistent session token for A/B assignment (no localStorage before consent)
+                if (!this._sessionToken) {
+                    this._sessionToken = this.generateUUID();
+                }
                 const response = await fetch(
-                    `${API_BASE}/api/ab-tests/assign/${this.siteId}/${this.visitorId}`
+                    `${API_BASE}/api/ab-tests/assign/${this.siteId}/${this._sessionToken}`
                 );
                 
                 if (response.ok) {
@@ -586,6 +515,7 @@
             this.config.showBranding = serverConfig.show_branding !== false;
             this.config.services = serverConfig.services || [];
             this.config.isActiveFromServer = serverConfig.is_active === true;
+            this.configHash = serverConfig.config_hash || null;
 
             // Phase 6 features
             this.config.bannerless_mode = serverConfig.bannerless_mode || false;
@@ -735,13 +665,19 @@
                     const consent = JSON.parse(stored);
                     const consentDate = localStorage.getItem(CONSENT_DATE_KEY);
                     
-                    // Check if consent is expired
-                    if (consentDate) {
-                        const daysElapsed = (Date.now() - new Date(consentDate).getTime()) / (1000 * 60 * 60 * 24);
-                        if (daysElapsed > this.config.cookieLifetimeDays) {
-                            console.log('[Complyo] Consent expired. Requesting new consent.');
-                            return null;
-                        }
+                    // If no date is stored (legacy data), treat as expired
+                    if (!consentDate) {
+                        console.log('[Complyo] Consent has no date (legacy). Requesting new consent.');
+                        localStorage.removeItem(CONSENT_STORAGE_KEY);
+                        return null;
+                    }
+                    
+                    const daysElapsed = (Date.now() - new Date(consentDate).getTime()) / (1000 * 60 * 60 * 24);
+                    if (daysElapsed > this.config.cookieLifetimeDays) {
+                        console.log('[Complyo] Consent expired. Requesting new consent.');
+                        localStorage.removeItem(CONSENT_STORAGE_KEY);
+                        localStorage.removeItem(CONSENT_DATE_KEY);
+                        return null;
                     }
                     
                     return consent;
@@ -753,25 +689,47 @@
         }
         
         saveConsent(consent) {
-            localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(consent));
-            localStorage.setItem(CONSENT_DATE_KEY, new Date().toISOString());
-            this.consent = consent;
+            const consentRecord = {
+                ...consent,
+                configHash: this.configHash || null,
+                timestamp: new Date().toISOString(),
+                version: VERSION
+            };
+            localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(consentRecord));
+            localStorage.setItem(CONSENT_DATE_KEY, consentRecord.timestamp);
+            this.consent = consentRecord;
             
             // Log to server
-            this.logConsentToServer(consent);
+            this.logConsentToServer(consentRecord);
             
             // Apply consent
-            this.applyConsent(consent);
+            this.applyConsent(consentRecord);
             
             // Trigger event for content blocker
-            this.triggerConsentEvent(consent);
+            this.triggerConsentEvent(consentRecord);
+            
+            // Append to local consent history
+            this._appendConsentHistory(consentRecord);
+        }
+        
+        _appendConsentHistory(consentRecord) {
+            try {
+                const historyKey = 'complyo_consent_history';
+                const existing = JSON.parse(localStorage.getItem(historyKey) || '[]');
+                existing.push(consentRecord);
+                localStorage.setItem(historyKey, JSON.stringify(existing));
+            } catch (e) {
+                console.warn('[Complyo] Could not write consent history:', e);
+            }
         }
         
         async logConsentToServer(consent) {
             try {
-                // Get device fingerprint for pseudonymized tracking
-                const deviceFingerprint = this.getDeviceFingerprint();
-                
+                // Only now (after consent decision) create/retrieve the visitor ID
+                if (!this.visitorId) {
+                    this.visitorId = this.getOrCreateVisitorId();
+                }
+
                 await fetch(`${API_BASE}/api/cookie-compliance/consent`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -787,8 +745,10 @@
                         services_accepted: consent.services || [],
                         language: navigator.language.split('-')[0],
                         banner_shown: true,
-                        // Privacy-friendly device fingerprint (alternative to IP hash)
-                        device_fingerprint: deviceFingerprint
+                        user_agent: navigator.userAgent,
+                        widget_version: VERSION,
+                        config_hash: consent.configHash || null,
+                        timestamp: consent.timestamp || new Date().toISOString()
                     })
                 });
             } catch (error) {
@@ -879,6 +839,170 @@
             }
         }
         
+        /**
+         * ========================================================================
+         * IAB TCF 2.2 Stub
+         * ========================================================================
+         * Implements the __tcfapi interface required by IAB TCF 2.2.
+         * This stub allows IAB-registered vendors to read the consent state.
+         * Full CMP certification requires registration with IAB Europe —
+         * this stub provides the API surface; the TC string is minimal/non-personalized
+         * until a certified TC string generator is integrated.
+         *
+         * Supported commands: ping, getTCData, addEventListener, removeEventListener
+         */
+        initTCF() {
+            const self = this;
+
+            if (typeof window.__tcfapi === 'function') {
+                return;
+            }
+
+            const TCF_VERSION    = 2;
+            const CMP_ID         = 0;
+            const CMP_VERSION    = 1;
+            const SPEC_VERSION   = 2;
+            const GDPR_APPLIES   = true;
+
+            const listeners = new Map();
+            let   listenerId = 1;
+
+            const buildTCData = (consent) => {
+                const now = Math.floor(Date.now() / 1000);
+                return {
+                    tcfPolicyVersion: SPEC_VERSION,
+                    cmpId:            CMP_ID,
+                    cmpVersion:       CMP_VERSION,
+                    gdprApplies:      GDPR_APPLIES,
+                    eventStatus:      consent ? 'useractioncomplete' : 'cmpuishown',
+                    cmpStatus:        'loaded',
+                    listenerId:       null,
+                    isServiceSpecific: true,
+                    useNonStandardStacks: false,
+                    publisherCC:      'DE',
+                    purposeOneTreatment: false,
+                    created:          now,
+                    lastUpdated:      now,
+                    tcString:         '',
+                    purpose: {
+                        consents: {
+                            1: !!(consent && consent.necessary),
+                            2: !!(consent && consent.analytics),
+                            3: !!(consent && consent.analytics),
+                            4: !!(consent && consent.marketing),
+                            5: !!(consent && consent.marketing),
+                            6: !!(consent && consent.functional),
+                            7: !!(consent && consent.functional),
+                            8: !!(consent && consent.marketing),
+                            9: !!(consent && consent.marketing),
+                            10: !!(consent && consent.marketing)
+                        },
+                        legitimateInterests: {}
+                    },
+                    vendor: {
+                        consents: {},
+                        legitimateInterests: {}
+                    },
+                    specialFeatureOptins: {}
+                };
+            };
+
+            window.__tcfapi = (command, version, callback, parameter) => {
+                if (typeof callback !== 'function') return;
+
+                switch (command) {
+                    case 'ping':
+                        callback({
+                            gdprApplies:    GDPR_APPLIES,
+                            cmpLoaded:      true,
+                            cmpStatus:      'loaded',
+                            displayStatus:  self.consent ? 'hidden' : 'visible',
+                            apiVersion:     String(TCF_VERSION),
+                            cmpVersion:     CMP_VERSION,
+                            cmpId:          CMP_ID,
+                            gvlVersion:     3,
+                            tcfPolicyVersion: SPEC_VERSION
+                        }, true);
+                        break;
+
+                    case 'getTCData':
+                        callback(buildTCData(self.consent), true);
+                        break;
+
+                    case 'addEventListener': {
+                        const id = listenerId++;
+                        listeners.set(id, callback);
+                        const tcData = buildTCData(self.consent);
+                        tcData.listenerId = id;
+                        callback(tcData, true);
+                        break;
+                    }
+
+                    case 'removeEventListener': {
+                        const removed = listeners.delete(parameter);
+                        callback({ success: removed }, removed);
+                        break;
+                    }
+
+                    default:
+                        callback(null, false);
+                }
+            };
+
+            window.__tcfapi.queue = window.__tcfapi.queue || [];
+
+            // Notify all registered listeners when consent changes
+            window.addEventListener('complyoConsent', (e) => {
+                const tcData = buildTCData(e.detail);
+                tcData.eventStatus = 'useractioncomplete';
+                listeners.forEach((cb, id) => {
+                    tcData.listenerId = id;
+                    cb(tcData, true);
+                });
+            });
+
+            // Process any queued calls that arrived before __tcfapi was ready
+            if (Array.isArray(window.__tcfapiQueue)) {
+                window.__tcfapiQueue.forEach((args) => {
+                    window.__tcfapi(...args);
+                });
+                window.__tcfapiQueue = [];
+            }
+
+            // Dispatch locator frame for IAB vendor detection
+            if (!window.frames.__tcfapiLocator) {
+                try {
+                    const iframe = document.createElement('iframe');
+                    iframe.name  = '__tcfapiLocator';
+                    iframe.style.cssText = 'display:none;width:0;height:0;border:0;';
+                    document.body.appendChild(iframe);
+                } catch(e) {}
+            }
+
+            window.addEventListener('message', (evt) => {
+                let data;
+                try {
+                    data = typeof evt.data === 'string' ? JSON.parse(evt.data) : evt.data;
+                } catch(e) { return; }
+
+                if (!data || !data.__tcfapiCall) return;
+
+                const call = data.__tcfapiCall;
+                window.__tcfapi(call.command, call.version, (retValue, success) => {
+                    const returnMsg = {
+                        __tcfapiReturn: {
+                            returnValue: retValue,
+                            success:     success,
+                            callId:      call.callId
+                        }
+                    };
+                    evt.source.postMessage(JSON.stringify(returnMsg), '*');
+                }, call.parameter);
+            });
+
+            console.log('[Complyo] IAB TCF 2.2 stub initialized');
+        }
+
         /**
          * ========================================================================
          * Google Tag Manager Integration
@@ -1711,11 +1835,7 @@
             const settingsBtn = banner.querySelector('#complyo-settings');
             settingsBtn.addEventListener('click', () => this.openSettings());
             
-            // Backdrop click (close modal)
-            const backdrop = banner.querySelector('#complyo-backdrop');
-            if (backdrop) {
-                backdrop.addEventListener('click', () => this.acceptAll());
-            }
+            // Backdrop click — intentionally no action (EDPB dark pattern guideline)
         }
         
         // ====================================================================
@@ -2268,11 +2388,11 @@
                     background: ${accentColor};
                 }
                 .cps-btn-reject {
-                    background: #dc2626;
+                    background: #6b7280;
                     color: white;
                 }
                 .cps-btn-reject:hover {
-                    background: #b91c1c;
+                    background: #4b5563;
                 }
                 
                 /* Responsive */

@@ -598,6 +598,155 @@ window.addEventListener('load', function() {
             }
         }
         
+        snippets['agb'] = {
+            'type': 'text',
+            'format': 'html',
+            'code': """<h1>Allgemeine Geschäftsbedingungen (AGB)</h1>
+<h2>§1 Geltungsbereich</h2>
+<p>Diese AGB gelten für alle Verträge zwischen [Firmenname] und dem Kunden.</p>
+<h2>§2 Vertragsschluss</h2>
+<p>Der Vertrag kommt durch Bestätigung der Bestellung zustande.</p>
+<h2>§3 Preise und Zahlung</h2>
+<p>Alle Preise verstehen sich inkl. der gesetzlichen MwSt.</p>
+<h2>§4 Widerrufsrecht</h2>
+<p>Verbrauchern steht ein 14-tägiges Widerrufsrecht gemäß gesonderter Widerrufsbelehrung zu.</p>
+<h2>§5 Gewährleistung</h2>
+<p>Es gelten die gesetzlichen Gewährleistungsrechte nach BGB.</p>
+<h2>§6 Haftungsbeschränkung</h2>
+<p>Für leichte Fahrlässigkeit haftet [Firmenname] nur bei Verletzung wesentlicher Vertragspflichten.</p>
+<h2>§7 Gerichtsstand</h2>
+<p>Gerichtsstand ist [Ort des Unternehmens], soweit gesetzlich zulässig.</p>
+<p><em>Stand: [Datum]</em></p>""",
+            'steps': [
+                '1. Erstellen Sie eine neue Seite /agb auf Ihrer Website',
+                '2. Fügen Sie diesen AGB-Text ein und ersetzen Sie alle [Platzhalter]',
+                '3. Verlinken Sie die AGB im Footer und im Bestellprozess (Checkbox "AGB akzeptieren")',
+                '4. Lassen Sie den Text von einem Rechtsanwalt prüfen'
+            ],
+            'legal_note': 'BGB §305 ff. Platzhalter in [ ] durch Ihre Daten ersetzen.'
+        }
+        snippets['widerrufsbelehrung'] = {
+            'type': 'text',
+            'format': 'html',
+            'code': """<h1>Widerrufsbelehrung</h1>
+<p><strong>Widerrufsrecht:</strong> Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen.</p>
+<p>Die Widerrufsfrist beträgt vierzehn Tage ab Warenerhalt.</p>
+<p>Um das Widerrufsrecht auszuüben, informieren Sie uns per E-Mail: [E-Mail-Adresse]</p>
+<h2>Folgen des Widerrufs</h2>
+<p>Wir erstatten alle Zahlungen binnen vierzehn Tagen nach Eingang des Widerrufs.</p>
+<h2>Muster-Widerrufsformular</h2>
+<p>An [Firma, Adresse, E-Mail]:<br>
+Ich widerrufe den Vertrag über: [Beschreibung]<br>
+Bestellt am: _____ Erhalten am: _____<br>
+Name: _____ Datum: _____</p>""",
+            'steps': [
+                '1. Erstellen Sie eine Seite /widerrufsbelehrung',
+                '2. Fügen Sie den Text ein und ersetzen Sie [Platzhalter]',
+                '3. Verlinken Sie im Footer und in Bestellbestätigungs-E-Mails',
+                '4. Senden Sie die Belehrung bei jedem Kauf automatisch mit'
+            ],
+            'legal_note': 'BGB §355 ff., EGBGB Anlage 1. Gilt nur für B2C-Verkäufe.'
+        }
+        snippets['widerruf'] = snippets['widerrufsbelehrung']
+        snippets['security'] = {
+            'type': 'code_snippet',
+            'format': 'apache',
+            'code': """# Apache .htaccess — HTTP Security Headers
+<IfModule mod_headers.c>
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+</IfModule>
+
+# Nginx — in server{} Block:
+# add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+# add_header X-Content-Type-Options "nosniff" always;
+# add_header X-Frame-Options "SAMEORIGIN" always;""",
+            'steps': [
+                '1. Fügen Sie den Apache-Block in .htaccess oder httpd.conf ein',
+                '2. Für Nginx: Kommentierte Zeilen in den server{}-Block kopieren',
+                '3. Für Cloudflare: Transform Rules unter Rules > Transform Rules > Modify Response Header',
+                '4. Testen mit: https://securityheaders.com oder Browser DevTools > Network > Response Headers'
+            ],
+            'legal_note': 'DSGVO Art. 32 — technische Sicherheitsmaßnahmen.'
+        }
+        snippets['uwg'] = {
+            'type': 'guide',
+            'format': 'text',
+            'code': '',
+            'steps': [
+                '1. Bewertungen: Hinweis "Verifizierte Käuferbewertungen" oder Hinweis auf Prüfverfahren ergänzen',
+                '2. Dringlichkeit: Countdowns und Lagerbestands-Anzeigen auf faktische Richtigkeit prüfen — statische Angaben entfernen',
+                '3. Siegel: Jedes Gütesiegel mit aktuellem Prüfbericht verlinken, Ablaufdaten prüfen',
+                '4. Werbung kennzeichnen: Bezahlte Inhalte mit "Anzeige" / "Gesponsert" markieren'
+            ],
+            'legal_note': 'UWG §5 (Irreführung), §5b (Bewertungstransparenz), Anhang Nr. 7/8 (Dark Patterns).'
+        }
+        snippets['preisangaben'] = {
+            'type': 'guide',
+            'format': 'text',
+            'code': """<!-- Beispiel: Korrektes Preis-HTML -->
+<div class="product-price">
+  <span class="price">29,99 €</span>
+  <span class="tax-info">inkl. MwSt.</span>
+  <span class="shipping-info">zzgl. <a href="/versandkosten">Versandkosten</a></span>
+  <span class="base-price">Grundpreis: 5,99 € / 100g</span>
+</div>
+<!-- Bei Rabatt: -->
+<div class="price-discount">
+  <del class="old-price">39,99 €</del>
+  <span class="new-price">29,99 €</span>
+  <small>Günstigster Preis der letzten 30 Tage: 34,99 €</small>
+</div>""",
+            'steps': [
+                '1. MwSt.: Bei allen Preisen "inkl. MwSt." ergänzen (§3 PAngV)',
+                '2. Versand: "zzgl. Versandkosten" mit Link zu Versandkostenseite (§3 PAngV)',
+                '3. Grundpreis: Bei Mengenware (kg/l) Grundpreis direkt neben Preis anzeigen (§4 PAngV)',
+                '4. Rabatte: 30-Tage-Tiefstpreis als Referenz anzeigen — Preishistorie serverseitig speichern (§11 PAngV)'
+            ],
+            'legal_note': 'PAngV §3 (MwSt./Versand), §4 (Grundpreis), §11 (30-Tage-Referenzpreis).'
+        }
+        snippets['avv'] = {
+            'type': 'guide',
+            'format': 'text',
+            'code': '',
+            'steps': [
+                '1. Google Analytics/GTM: AVV abschließen unter myaccount.google.com/data-and-privacy',
+                '2. Meta/Facebook: DPA unter facebook.com/legal/terms/dataprocessing',
+                '3. Datenschutzerklärung: US-Dienste mit Rechtsgrundlage (SCC oder EU-US DPF) nennen',
+                '4. DPF-Prüfung: Unter privacyshield.gov/ps/active-participants prüfen ob Anbieter zertifiziert ist'
+            ],
+            'legal_note': 'DSGVO Art. 44 ff. (Drittlandtransfer), EU-US Data Privacy Framework (Juli 2023).'
+        }
+        snippets['social_media'] = {
+            'type': 'code_snippet',
+            'format': 'html',
+            'code': """<!-- Zwei-Klick-Lösung für Social Media Embeds -->
+<div class="social-embed-placeholder" data-platform="youtube" data-video-id="VIDEO_ID">
+  <img src="thumbnail.jpg" alt="Video-Vorschau">
+  <button onclick="loadEmbed(this)">
+    YouTube-Video laden (Datenschutzhinweis: Daten werden an YouTube übertragen)
+  </button>
+</div>
+<script>
+function loadEmbed(btn) {
+  const container = btn.parentElement;
+  const platform = container.dataset.platform;
+  const id = container.dataset.videoId;
+  container.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${id}" allowfullscreen></iframe>`;
+}
+</script>""",
+            'steps': [
+                '1. Direkte YouTube/Social-Embeds durch Platzhalter mit Klick-Freigabe ersetzen',
+                '2. Für YouTube: youtube-nocookie.com statt youtube.com verwenden',
+                '3. Zwei-Klick-Plugins für WordPress: z.B. Shariff Wrapper oder Borlabs Cookie',
+                '4. Datenschutzerklärung: Embedded Social Media als Verarbeitungszweck ergänzen'
+            ],
+            'legal_note': 'DSGVO Art. 6, EuGH C-40/17 (Fashion ID) — gemeinsame Verantwortlichkeit.'
+        }
+
         return snippets.get(
             category,
             {

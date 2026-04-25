@@ -211,8 +211,189 @@
     }
     
     openSettings() {
-      // TODO: Open detailed cookie settings modal
-      alert('Cookie-Einstellungen werden in Kürze verfügbar sein.');
+      this._renderSettingsModal();
+    }
+
+    _getCategoryState() {
+      const consent = this.loadConsent();
+      return {
+        necessary: true,
+        functional: consent === 'all' || consent === 'functional',
+        analytics: consent === 'all' || consent === 'analytics',
+        marketing: consent === 'all',
+      };
+    }
+
+    _renderSettingsModal() {
+      const existing = document.getElementById('complyo-settings-modal');
+      if (existing) existing.remove();
+
+      const state = this._getCategoryState();
+      const p = this.config.primaryColor;
+
+      const categories = [
+        {
+          id: 'necessary',
+          label: 'Notwendig',
+          desc: 'Diese Cookies sind für den Betrieb der Website erforderlich und können nicht deaktiviert werden.',
+          locked: true,
+        },
+        {
+          id: 'functional',
+          label: 'Funktional',
+          desc: 'Ermöglichen erweiterte Funktionen wie gespeicherte Einstellungen und Sprachpräferenzen.',
+          locked: false,
+        },
+        {
+          id: 'analytics',
+          label: 'Analytik',
+          desc: 'Helfen uns zu verstehen, wie Besucher die Website nutzen (z.B. Google Analytics).',
+          locked: false,
+        },
+        {
+          id: 'marketing',
+          label: 'Marketing',
+          desc: 'Werden verwendet, um Ihnen relevante Werbung zu zeigen.',
+          locked: false,
+        },
+      ];
+
+      const modal = document.createElement('div');
+      modal.id = 'complyo-settings-modal';
+
+      const rows = categories.map(cat => {
+        const checked = state[cat.id] ? 'checked' : '';
+        const disabled = cat.locked ? 'disabled' : '';
+        return `
+          <div class="complyo-cat-row">
+            <div class="complyo-cat-info">
+              <div class="complyo-cat-label">${cat.label}${cat.locked ? ' <span class="complyo-cat-badge">Immer aktiv</span>' : ''}</div>
+              <div class="complyo-cat-desc">${cat.desc}</div>
+            </div>
+            <label class="complyo-toggle ${cat.locked ? 'complyo-toggle-locked' : ''}">
+              <input type="checkbox" id="complyo-cat-${cat.id}" ${checked} ${disabled}>
+              <span class="complyo-slider"></span>
+            </label>
+          </div>`;
+      }).join('');
+
+      modal.innerHTML = `
+        <style>
+          #complyo-settings-modal {
+            position: fixed; inset: 0; z-index: 1000000;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.5);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            animation: complyo-fadein 0.2s ease;
+          }
+          @keyframes complyo-fadein { from { opacity:0 } to { opacity:1 } }
+          .complyo-modal-box {
+            background: white; border-radius: 12px;
+            width: 100%; max-width: 520px; max-height: 90vh;
+            overflow-y: auto; padding: 28px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin: 16px;
+          }
+          .complyo-modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 20px;
+          }
+          .complyo-modal-title {
+            font-size: 20px; font-weight: 700; color: #111;
+          }
+          .complyo-modal-close {
+            background: none; border: none; cursor: pointer;
+            font-size: 22px; color: #9ca3af; line-height: 1;
+          }
+          .complyo-modal-close:hover { color: #374151; }
+          .complyo-modal-intro {
+            font-size: 14px; color: #6b7280; margin-bottom: 20px; line-height: 1.6;
+          }
+          .complyo-cat-row {
+            display: flex; align-items: flex-start; justify-content: space-between;
+            gap: 16px; padding: 16px 0; border-bottom: 1px solid #f3f4f6;
+          }
+          .complyo-cat-row:last-child { border-bottom: none; }
+          .complyo-cat-info { flex: 1; }
+          .complyo-cat-label {
+            font-size: 15px; font-weight: 600; color: #111; margin-bottom: 4px;
+          }
+          .complyo-cat-badge {
+            font-size: 11px; font-weight: 500; color: ${p};
+            background: ${p}1a; padding: 2px 6px; border-radius: 4px; margin-left: 6px;
+          }
+          .complyo-cat-desc { font-size: 13px; color: #6b7280; line-height: 1.5; }
+          .complyo-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+          .complyo-toggle input { opacity: 0; width: 0; height: 0; }
+          .complyo-slider {
+            position: absolute; inset: 0; cursor: pointer;
+            background: #d1d5db; border-radius: 24px; transition: 0.2s;
+          }
+          .complyo-slider:before {
+            content: ""; position: absolute;
+            width: 18px; height: 18px; left: 3px; bottom: 3px;
+            background: white; border-radius: 50%; transition: 0.2s;
+          }
+          .complyo-toggle input:checked + .complyo-slider { background: ${p}; }
+          .complyo-toggle input:checked + .complyo-slider:before { transform: translateX(20px); }
+          .complyo-toggle-locked .complyo-slider { cursor: not-allowed; opacity: 0.7; }
+          .complyo-modal-actions {
+            display: flex; gap: 10px; margin-top: 24px; flex-wrap: wrap;
+          }
+          .complyo-modal-btn {
+            padding: 10px 20px; border: none; border-radius: 6px;
+            font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1;
+          }
+          .complyo-modal-btn-save {
+            background: ${p}; color: white;
+          }
+          .complyo-modal-btn-save:hover { filter: brightness(1.1); }
+          .complyo-modal-btn-all {
+            background: #f3f4f6; color: #374151;
+          }
+          .complyo-modal-btn-all:hover { background: #e5e7eb; }
+        </style>
+        <div class="complyo-modal-box">
+          <div class="complyo-modal-header">
+            <div class="complyo-modal-title">Cookie-Einstellungen</div>
+            <button class="complyo-modal-close" id="complyo-modal-close" aria-label="Schließen">&times;</button>
+          </div>
+          <div class="complyo-modal-intro">
+            Wählen Sie, welche Cookies Sie zulassen möchten. Notwendige Cookies sind immer aktiv.
+          </div>
+          <div class="complyo-categories">${rows}</div>
+          <div class="complyo-modal-actions">
+            <button class="complyo-modal-btn complyo-modal-btn-all" id="complyo-modal-accept-all">Alle akzeptieren</button>
+            <button class="complyo-modal-btn complyo-modal-btn-save" id="complyo-modal-save">Auswahl speichern</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      modal.querySelector('#complyo-modal-close').addEventListener('click', () => modal.remove());
+      modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+      modal.querySelector('#complyo-modal-accept-all').addEventListener('click', () => {
+        this.acceptAll();
+        modal.remove();
+      });
+
+      modal.querySelector('#complyo-modal-save').addEventListener('click', () => {
+        const active = ['necessary'];
+        ['functional', 'analytics', 'marketing'].forEach(id => {
+          if (modal.querySelector(`#complyo-cat-${id}`).checked) active.push(id);
+        });
+        const level = active.includes('marketing') ? 'all'
+          : active.includes('analytics') ? 'analytics'
+          : active.includes('functional') ? 'functional'
+          : 'necessary';
+        this.saveConsent(level);
+        this.hideBanner();
+        this.enableCookies(active);
+        this.trackEvent('consent_settings_saved');
+        modal.remove();
+      });
     }
     
     hideBanner() {

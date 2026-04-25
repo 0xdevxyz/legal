@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Globe, RefreshCw, AlertTriangle, AlertCircle, CheckCircle, Bot, Download, Eye, Shield, FileText, Cookie, ChevronDown } from 'lucide-react';
+import React, { useState, useRef, useEffect as useEffectAlias } from 'react';
+import { Globe, RefreshCw, AlertTriangle, AlertCircle, CheckCircle, Bot, Download, Eye, Shield, FileText, Cookie, ChevronDown, ListChecks } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useQueryClient } from '@tanstack/react-query';
@@ -21,14 +22,19 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import TCFComplianceWidget from './TCFComplianceWidget';
 import { generateSiteId, isScanHash } from '@/lib/siteIdUtils';
 import { OptimizationModeLock } from './OptimizationModeLock';
+import { ComplianceWizard } from './ComplianceWizard';
+import QuickWins from './QuickWins';
 
 export const WebsiteAnalysis: React.FC = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const { currentWebsite, analysisData: storedAnalysisData, setAnalysisData, isInOptimizationMode, lockedOptimizationUrl } = useDashboardStore();
   const [expandedPillar, setExpandedPillar] = useState<string | null>(null);
   const [showScoreAnimation, setShowScoreAnimation] = useState(false);
   const [previousScore, setPreviousScore] = useState<number | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
+  const pillarRefs = useRef<Record<string, HTMLDivElement | null>>({});
   
   // Get plan type from user, default to 'free'
   const rawPlanType = user?.plan_type || 'free';
@@ -187,6 +193,16 @@ export const WebsiteAnalysis: React.FC = () => {
     bookExpert.mutate(issueId);
   };
 
+  const handleNavigateToPillar = (pillarId: string) => {
+    setExpandedPillar(pillarId);
+    setTimeout(() => {
+      const el = pillarRefs.current[pillarId];
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
   // ✅ Echte API-Daten verwenden und Issues konvertieren
   const rawIssues = analysisData?.issues || [];
   
@@ -321,6 +337,22 @@ export const WebsiteAnalysis: React.FC = () => {
     };
   });
 
+  // Auto-expand: Säule mit den meisten Critical Issues beim ersten Laden öffnen
+  useEffectAlias(() => {
+    if (!analysisData || expandedPillar !== null) return;
+    const mostCritical = groupedIssues
+      .filter(p => p.issues.length > 0)
+      .sort((a, b) => {
+        const aCrit = a.issues.filter(i => i.severity === 'critical').length;
+        const bCrit = b.issues.filter(i => i.severity === 'critical').length;
+        if (bCrit !== aCrit) return bCrit - aCrit;
+        return b.issues.length - a.issues.length;
+      })[0];
+    if (mostCritical) {
+      setExpandedPillar(mostCritical.id);
+    }
+  }, [analysisData]);
+
   return (
     <div className="space-y-6">
       {/* ✅ PROMINENTER WEBSITE-BANNER - IMMER SICHTBAR */}
@@ -383,11 +415,10 @@ export const WebsiteAnalysis: React.FC = () => {
                         window.URL.revokeObjectURL(url);
                         document.body.removeChild(a);
                       } else {
-                        alert('PDF-Download fehlgeschlagen. Bitte versuchen Sie es erneut.');
+                        showToast('PDF-Download fehlgeschlagen. Bitte versuchen Sie es erneut.', 'error');
                       }
                     } catch (error) {
-                      console.error('PDF download error:', error);
-                      alert('PDF-Download fehlgeschlagen. Bitte versuchen Sie es erneut.');
+                      showToast('PDF-Download fehlgeschlagen. Bitte versuchen Sie es erneut.', 'error');
                     }
                   }
                 }}
@@ -404,7 +435,7 @@ export const WebsiteAnalysis: React.FC = () => {
         {/* ✅ NEU: Optimierungsmodus-Übergang */}
       {currentWebsite && analysisData && (
         <ErrorBoundary componentName="OptimizationModeLock">
-          <OptimizationModeLock />
+          <OptimizationModeLock hasInteracted={expandedPillar !== null} />
         </ErrorBoundary>
       )}
 
@@ -420,46 +451,21 @@ export const WebsiteAnalysis: React.FC = () => {
                 Optimierungsmodus
               </Badge>
             )}
+            {!isActuallyLoading && findings.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="ml-auto gap-2"
+                onClick={() => setShowWizard(true)}
+              >
+                <ListChecks className="w-4 h-4" />
+                Schritt-für-Schritt beheben
+              </Button>
+            )}
           </CardTitle>
         </CardHeader>
 
         <CardContent>
-          {/* ✅ METRIKEN ÜBERSICHT */}
-          {currentWebsite && (
-            <div className="glass-card rounded-xl p-6 mb-6 border border-zinc-700/50">
-              {/* Website-Anzeige */}
-              <div className="mb-4 pb-4 border-b border-zinc-800">
-                <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Analysierte Website</div>
-                <div className="text-lg font-semibold text-white flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-indigo-400" />
-                  {currentWebsite.url}
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                  <div className="text-xs text-zinc-400 mb-2 font-semibold uppercase tracking-wider">Compliance-Score</div>
-                  <div className={`text-3xl font-bold ${complianceScore >= 80 ? 'text-green-400' : complianceScore >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>
-                    {complianceScore}<span className="text-lg text-zinc-500">/100</span>
-                  </div>
-                </div>
-                
-                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                  <div className="text-xs text-zinc-400 mb-2 font-semibold uppercase tracking-wider">Geschätztes Risiko</div>
-                  <div className="text-3xl font-bold text-red-400">
-                    {typeof totalRisk === 'string' ? totalRisk : new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(totalRisk)}
-                  </div>
-                </div>
-                
-                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                  <div className="text-xs text-zinc-400 mb-2 font-semibold uppercase tracking-wider">Gefundene Issues</div>
-                  <div className="text-3xl font-bold text-orange-400">
-                    {findings.length}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
         {/* ✅ LOADING STATE mit Skeleton Screens */}
         {isActuallyLoading && (
@@ -489,10 +495,17 @@ export const WebsiteAnalysis: React.FC = () => {
         {/* ✅ 4-SÄULEN COMPLIANCE-ANALYSE */}
         {!isActuallyLoading && findings.length > 0 && (
           <div>
-            <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-              <span className="w-1 h-6 bg-gradient-to-b from-sky-500 to-purple-500 rounded-full"></span>
-              Compliance-Analyse nach Kategorien
-            </h3>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <span className="w-1 h-6 bg-gradient-to-b from-sky-500 to-purple-500 rounded-full"></span>
+                Compliance-Analyse nach Kategorien
+              </h3>
+            </div>
+
+            {/* Quick Wins — direkte Navigation zu Säulen */}
+            <div className="mb-6">
+              <QuickWins issues={findings} onNavigateToPillar={handleNavigateToPillar} />
+            </div>
             
             {/* Akkordion-Karten mit Score */}
             <div className="space-y-4">
@@ -502,15 +515,14 @@ export const WebsiteAnalysis: React.FC = () => {
                 const criticalCount = pillar.issues.filter(i => i.severity === 'critical').length;
                 const isExpanded = expandedPillar === pillar.id;
                 
-                // ✅ CRITICAL FIX: Überspringe Pillars ohne Icon (Error #130 Prevention!)
                 if (!Icon) {
-                  console.error('🔴 Pillar ohne Icon gefunden:', pillar.id, pillar);
                   return null;
                 }
                 
                 return (
                   <div 
-                    key={pillar.id} 
+                    key={pillar.id}
+                    ref={(el) => { pillarRefs.current[pillar.id] = el; }}
                     className="glass-card rounded-2xl overflow-hidden border border-zinc-800/50 hover:border-zinc-700/70 transition-all"
                   >
                     {/* Header - Klickbar */}
@@ -710,6 +722,20 @@ export const WebsiteAnalysis: React.FC = () => {
         )}
       </CardContent>
     </Card>
+
+    {showWizard && (
+      <ErrorBoundary componentName="ComplianceWizard">
+        <ComplianceWizard
+          issues={findings}
+          groups={(analysisData as any)?.issue_groups || []}
+          planType={planType}
+          websiteUrl={analysisData?.url}
+          scanId={analysisData?.scan_id}
+          onClose={() => setShowWizard(false)}
+          onComplete={() => setShowWizard(false)}
+        />
+      </ErrorBoundary>
+    )}
     </div>
   );
 };

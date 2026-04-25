@@ -180,7 +180,7 @@ async def check_tcf_compliance(url: str, soup: BeautifulSoup, page_content: str 
                 risk_euro=0,
                 recommendation=f'Erwägen Sie die Aktivierung von TCF 2.2 in {cmp_name}, wenn Sie mit '
                              f'Werbenetzwerken arbeiten oder programmatic advertising nutzen.',
-                legal_basis='DSGVO Art. 7, ePrivacy Directive',
+                legal_basis='DSGVO Art. 7, TDDDG §25',
                 auto_fixable=False
             )))
     else:

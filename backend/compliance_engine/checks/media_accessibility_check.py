@@ -53,7 +53,7 @@ class MediaElement:
 class MediaAccessibilityIssue:
     """Ein Media-Barrierefreiheits-Problem"""
     category: str = "media_accessibility"
-    severity: str = "error"
+    severity: str = "warning"
     title: str = ""
     description: str = ""
     wcag_criteria: List[str] = field(default_factory=list)
@@ -242,7 +242,7 @@ class MediaAccessibilityChecker:
                     title="Audio ohne Transkript",
                     description="Der Audioinhalt hat kein Transkript. "
                                "Gehörlose Nutzer können den Inhalt nicht verstehen.",
-                    severity="error",
+                    severity="warning",
                     wcag_criteria=["1.2.1"],
                     legal_basis="WCAG 2.1 Level A (1.2.1), BFSG §12",
                     recommendation="Stellen Sie ein vollständiges Transkript bereit und verlinken Sie es beim Audio-Player.",
@@ -332,7 +332,7 @@ class MediaAccessibilityChecker:
                     title="Video mit Autoplay ohne Stummschaltung",
                     description="Das Video startet automatisch mit Ton. "
                                "Dies kann Screenreader-Nutzer stören und ist unerwartet für alle Nutzer.",
-                    severity="error",
+                    severity="warning",
                     wcag_criteria=["1.4.2"],
                     legal_basis="WCAG 2.1 Level A (1.4.2), BFSG §12",
                     recommendation="Entfernen Sie autoplay oder fügen Sie muted hinzu: <video autoplay muted>",

@@ -296,7 +296,7 @@ AUSGABE als JSON:
             ai_result = await engine.ai_client.call_ai(
                 prompt=prompt,
                 system_message="Du bist ein WCAG-Experte für Barrierefreiheit und generierst präzise Alt-Texte.",
-                model="anthropic/claude-3.5-sonnet",
+                model="moonshotai/kimi-k2.5",
                 temperature=0.3
             )
             

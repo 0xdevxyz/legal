@@ -129,103 +129,87 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
     widget_issue = await _check_accessibility_widget(soup)
     if widget_issue:
         issues.append(widget_issue)
-        
-        # ✅ HAUPTELEMENT FEHLT: Wenn kein Widget vorhanden, generiere alle WCAG-Kriterien als fehlend
-        # Alle kritischen WCAG 2.1 Level A/AA Kriterien als fehlend markieren
-        issues.append(BarrierefreiheitIssue(
-            category='barrierefreiheit',
-            severity='critical',
-            title='WCAG 1.1.1: Text-Alternativen fehlen',
-            description='Es fehlen vermutlich Text-Alternativen (Alt-Texte) für nicht-textuelle Inhalte wie Bilder, '
-                       'Grafiken und Icons. Dies verhindert die Nutzung durch Screenreader.',
-            risk_euro=2000,
-            recommendation='Fügen Sie beschreibende Alt-Texte für alle Bilder und Grafiken hinzu.',
-            legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
-            auto_fixable=False,
-            is_missing=True
-        ))
-        
-        issues.append(BarrierefreiheitIssue(
-            category='barrierefreiheit',
-            severity='critical',
-            title='WCAG 1.4.3: Kontrast-Verhältnis nicht ausreichend',
-            description='Die Kontrast-Verhältnisse zwischen Text und Hintergrund erfüllen vermutlich nicht das erforderliche '
-                       'Minimum von 4.5:1 (normaler Text) bzw. 3:1 (großer Text).',
-            risk_euro=2000,
-            recommendation='Stellen Sie ausreichende Kontraste sicher (mindestens 4.5:1 für normalen Text).',
-            legal_basis='WCAG 2.1 Level AA (1.4.3), BFSG §12',
-            auto_fixable=False,
-            is_missing=True
-        ))
-        
-        issues.append(BarrierefreiheitIssue(
-            category='barrierefreiheit',
-            severity='critical',
-            title='WCAG 2.1.1: Tastaturbedienung nicht vollständig',
-            description='Die Website ist vermutlich nicht vollständig per Tastatur bedienbar. Alle Funktionen müssen '
-                       'ohne Maus zugänglich sein.',
-            risk_euro=2500,
-            recommendation='Stellen Sie sicher, dass alle interaktiven Elemente per Tastatur erreichbar und bedienbar sind.',
-            legal_basis='WCAG 2.1 Level A (2.1.1), BFSG §12',
-            auto_fixable=False,
-            is_missing=True
-        ))
-        
-        issues.append(BarrierefreiheitIssue(
-            category='barrierefreiheit',
-            severity='critical',
-            title='WCAG 2.4.7: Focus-Sichtbarkeit nicht gewährleistet',
-            description='Der Tastaturfokus ist vermutlich nicht durchgängig sichtbar. Nutzer müssen erkennen können, '
-                       'welches Element aktuell den Fokus hat.',
-            risk_euro=1500,
-            recommendation='Fügen Sie deutliche visuelle Fokus-Indikatoren für alle interaktiven Elemente hinzu.',
-            legal_basis='WCAG 2.1 Level AA (2.4.7), BFSG §12',
-            auto_fixable=False,
-            is_missing=True
-        ))
-        
-        issues.append(BarrierefreiheitIssue(
-            category='barrierefreiheit',
-            severity='warning',
-            title='WCAG 4.1.2: ARIA-Labels und Rollen fehlen',
-            description='Es fehlen vermutlich ARIA-Labels und semantische Rollen für interaktive Komponenten. '
-                       'Dies erschwert die Nutzung mit assistiven Technologien.',
-            risk_euro=1500,
-            recommendation='Fügen Sie ARIA-Labels, Rollen und Properties für alle interaktiven Elemente hinzu.',
-            legal_basis='WCAG 2.1 Level A (4.1.2), BFSG §12',
-            auto_fixable=False,
-            is_missing=True
-        ))
-        
-        issues.append(BarrierefreiheitIssue(
-            category='barrierefreiheit',
-            severity='warning',
-            title='WCAG 1.3.1: Semantisches HTML nicht genutzt',
-            description='Die Website nutzt vermutlich kein semantisches HTML5 (header, nav, main, aside, footer). '
-                       'Dies erschwert die Navigation mit Screenreadern.',
-            risk_euro=1000,
-            recommendation='Verwenden Sie semantische HTML5-Elemente zur Strukturierung der Seite.',
-            legal_basis='WCAG 2.1 Level A (1.3.1), BFSG §12',
-            auto_fixable=False,
-            is_missing=True
-        ))
+
+        # Nur konkret prüfbare WCAG-Kriterien direkt am vorliegenden HTML auswerten
+        # (keine pauschalen "vermutlich fehlt"-Issues)
+
+        # WCAG 1.1.1: Bilder ohne Alt-Text — pro Bild ein eigenes Issue mit KI-Vorschlag
+        alt_issues = await _check_alt_texts_enhanced(url, soup, session)
+        issues.extend(alt_issues)
+
+        # WCAG 3.1.1: Sprache nicht gesetzt
+        html_tag = soup.find('html')
+        if not html_tag or not html_tag.get('lang'):
+            issues.append(BarrierefreiheitIssue(
+                category='barrierefreiheit',
+                severity='critical',
+                title='WCAG 3.1.1: Sprache der Seite nicht angegeben (lang-Attribut fehlt)',
+                description='Das <html>-Tag hat kein lang-Attribut. Screenreader können die Sprache '
+                           'nicht korrekt erkennen.',
+                risk_euro=1000,
+                recommendation='Fügen Sie lang="de" (oder die jeweilige Sprache) zum <html>-Tag hinzu.',
+                legal_basis='WCAG 2.1 Level A (3.1.1), BFSG §12',
+                auto_fixable=True,
+                is_missing=False
+            ))
+
+        # WCAG 4.1.2: Inputs ohne Label
+        inputs_without_label = []
+        for inp in soup.find_all(['input', 'select', 'textarea']):
+            inp_id = inp.get('id')
+            inp_type = inp.get('type', '').lower()
+            if inp_type in ('hidden', 'submit', 'button', 'reset'):
+                continue
+            has_label = (
+                inp.get('aria-label') or
+                inp.get('aria-labelledby') or
+                inp.get('title') or
+                (inp_id and soup.find('label', attrs={'for': inp_id}))
+            )
+            if not has_label:
+                inputs_without_label.append(inp)
+        if inputs_without_label:
+            issues.append(BarrierefreiheitIssue(
+                category='barrierefreiheit',
+                severity='warning',
+                title=f'WCAG 4.1.2: {len(inputs_without_label)} Formularfeld(er) ohne Label',
+                description=f'{len(inputs_without_label)} Eingabefeld(er) haben kein zugehöriges Label. '
+                           'Screenreader können den Zweck des Felds nicht vermitteln.',
+                risk_euro=1500,
+                recommendation='Verknüpfen Sie jedes Formularfeld mit einem <label for="...">-Element oder aria-label.',
+                legal_basis='WCAG 2.1 Level A (4.1.2), BFSG §12',
+                auto_fixable=False,
+                is_missing=False
+            ))
+
+        # WCAG 1.3.1: Keine semantischen HTML5-Strukturelemente
+        has_semantic = bool(soup.find(['main', 'nav', 'header', 'footer', 'aside', 'article', 'section']))
+        if not has_semantic:
+            issues.append(BarrierefreiheitIssue(
+                category='barrierefreiheit',
+                severity='warning',
+                title='WCAG 1.3.1: Keine semantischen HTML5-Strukturelemente gefunden',
+                description='Die Seite verwendet keine semantischen HTML5-Elemente (main, nav, header, footer). '
+                           'Dies erschwert die Navigation mit Screenreadern.',
+                risk_euro=1000,
+                recommendation='Verwenden Sie semantische HTML5-Elemente zur Strukturierung der Seite.',
+                legal_basis='WCAG 2.1 Level A (1.3.1), BFSG §12',
+                auto_fixable=False,
+                is_missing=False
+            ))
+
     else:
-        # Widget vorhanden, führe detaillierte Checks durch
-        # 2. Alt-Texte prüfen (MULTI-PAGE SCAN!)
+        # Widget vorhanden — führe detaillierte Checks durch
+        # Multi-Page Scan für Bilder
         logger.info(f"🔍 Starting multi-page accessibility scan for {url}")
-        
-        # NEU: Multi-Page Scan für Bilder
         if session:
             all_pages = await _discover_pages(url, session)
             logger.info(f"📄 Discovered {len(all_pages)} pages to scan")
-            
-            for page_url in all_pages[:50]:  # Max 50 Seiten
+            for page_url in all_pages[:50]:
                 try:
                     page_content = await _fetch_page(page_url, session)
                     if page_content:
                         page_soup = BeautifulSoup(page_content, 'html.parser')
-                        
-                        # Scanne Bilder auf dieser Seite
                         page_issues = await _check_images_for_alt_text(page_url, page_soup)
                         issues.extend(page_issues)
                         logger.info(f"  ✓ {page_url}: {len(page_issues)} issues found")
@@ -233,27 +217,155 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
                     logger.warning(f"  ✗ Failed to scan {page_url}: {e}")
                     continue
         else:
-            # Fallback: Nur Hauptseite scannen
-            logger.info("⚠️ No session provided, scanning main page only")
             alt_issues = await _check_alt_texts_enhanced(url, soup, session)
             issues.extend(alt_issues)
-        
-        # 3. ARIA-Labels prüfen
-        aria_issues = await _check_aria_labels(soup)
-        issues.extend(aria_issues)
-        
-        # 4. Semantisches HTML prüfen
-        semantic_issues = await _check_semantic_html(soup)
-        issues.extend(semantic_issues)
-        
-        # 5. Tastaturbedienung prüfen
-        keyboard_issues = await _check_keyboard_navigation(soup)
-        issues.extend(keyboard_issues)
-        
-        # 6. Kontraste prüfen (basiert auf inline-styles)
-        contrast_issues = await _check_color_contrast(soup)
-        issues.extend(contrast_issues)
+
+    # Detaillierte WCAG-Struktur-Checks laufen immer — unabhängig vom Widget
+    aria_issues = await _check_aria_labels(soup)
+    issues.extend(aria_issues)
+
+    semantic_issues = await _check_semantic_html(soup)
+    issues.extend(semantic_issues)
+
+    keyboard_issues = await _check_keyboard_navigation(soup)
+    issues.extend(keyboard_issues)
+
+    contrast_issues = await _check_color_contrast(soup)
+    issues.extend(contrast_issues)
     
+    # BFSG §14: Barrierefreiheitserklärung (für B2C-Dienste ab 28.06.2025 Pflicht)
+    html_text_full = str(soup).lower()
+    has_a11y_statement = bool(re.search(
+        r'barrierefreiheit(?:serkl[äa]rung)?|accessibility.statement|erkl[äa]rung.zur.barrierefreiheit',
+        html_text_full, re.I
+    ))
+    # Prüfe auch ob es einen Link zur Erklärung gibt
+    if not has_a11y_statement:
+        for a in soup.find_all('a', href=True):
+            href = a.get('href', '').lower()
+            text = a.get_text(strip=True).lower()
+            if 'barrierefreiheit' in href or 'accessibility' in href or 'barrierefreiheit' in text:
+                has_a11y_statement = True
+                break
+
+    if not has_a11y_statement:
+        issues.append(BarrierefreiheitIssue(
+            category='barrierefreiheit',
+            severity='warning',
+            title='Barrierefreiheitserklärung fehlt (BFSG §14)',
+            description=(
+                'Es wurde keine Barrierefreiheitserklärung gefunden. Ab 28.06.2025 sind '
+                'B2C-Dienste (Online-Shops, Buchungssysteme, digitale Services) verpflichtet, '
+                'eine Erklärung zur Barrierefreiheit zu veröffentlichen, die den Konformitätsstatus, '
+                'bekannte Mängel und einen Feedback-Mechanismus enthält.'
+            ),
+            risk_euro=2000,
+            recommendation=(
+                'Erstellen Sie eine Barrierefreiheitserklärung gemäß BFSG §14 und verlinken Sie diese '
+                'im Footer. Die Erklärung muss enthalten: Konformitätsstatus (WCAG 2.1 AA), '
+                'nicht konforme Bereiche, Alternativen, Feedback-Kontakt.'
+            ),
+            legal_basis='BFSG §14, EU-Richtlinie 2019/882 (European Accessibility Act)',
+            auto_fixable=False,
+            is_missing=False,
+        ))
+
+    # WCAG 3.1.1: Sprache der Seite (lang-Attribut)
+    html_tag = soup.find('html')
+    if html_tag and not html_tag.get('lang'):
+        issues.append(BarrierefreiheitIssue(
+            category='barrierefreiheit',
+            severity='warning',
+            title='WCAG 3.1.1: Sprache der Seite nicht angegeben (lang-Attribut fehlt)',
+            description=(
+                'Das HTML-Element hat kein lang-Attribut. Screenreader können die Sprache '
+                'nicht automatisch erkennen und lesen den Text möglicherweise mit falscher Aussprache vor.'
+            ),
+            risk_euro=500,
+            recommendation='Fügen Sie dem <html>-Element ein lang-Attribut hinzu, z.B. <html lang="de">.',
+            legal_basis='WCAG 2.1 Level A (3.1.1), BFSG §12',
+            auto_fixable=True,
+            is_missing=False,
+        ))
+
+    # WCAG 2.4.2: Seitentitel vorhanden und sinnvoll
+    title_tag = soup.find('title')
+    if not title_tag or not title_tag.get_text(strip=True):
+        issues.append(BarrierefreiheitIssue(
+            category='barrierefreiheit',
+            severity='warning',
+            title='WCAG 2.4.2: Seitentitel fehlt oder ist leer',
+            description=(
+                'Die Seite hat keinen oder einen leeren <title>-Tag. '
+                'Screenreader-Nutzer hören den Seitentitel beim Laden — er ist essenziell zur Orientierung.'
+            ),
+            risk_euro=300,
+            recommendation='Fügen Sie einen aussagekräftigen <title> hinzu, der Seite und Website beschreibt.',
+            legal_basis='WCAG 2.1 Level A (2.4.2), BFSG §12',
+            auto_fixable=True,
+            is_missing=False,
+        ))
+
+    # WCAG 2.4.1: Skip-Navigation-Link
+    has_skip_link = bool(soup.find('a', href=re.compile(r'^#(main|content|inhalt|skip)', re.I)))
+    if not has_skip_link:
+        # Prüfe auch auf aria-label skip patterns
+        for a in soup.find_all('a', href=True):
+            text = a.get_text(strip=True).lower()
+            if re.search(r'skip.*(content|navigation|main)|zum inhalt|zur navigation springen', text):
+                has_skip_link = True
+                break
+    if not has_skip_link:
+        issues.append(BarrierefreiheitIssue(
+            category='barrierefreiheit',
+            severity='info',
+            title='WCAG 2.4.1: Kein Skip-Navigation-Link gefunden',
+            description=(
+                'Es wurde kein "Zum Inhalt springen"-Link gefunden. '
+                'Tastatur- und Screenreader-Nutzer müssen ohne diesen Link die gesamte Navigation '
+                'auf jeder Seite durchlaufen, bevor sie zum Hauptinhalt gelangen.'
+            ),
+            risk_euro=200,
+            recommendation='Fügen Sie am Seitenanfang einen versteckten Skip-Link ein: <a href="#main" class="skip-link">Zum Inhalt springen</a>.',
+            legal_basis='WCAG 2.1 Level A (2.4.1), BFSG §12',
+            auto_fixable=True,
+            is_missing=False,
+        ))
+
+    # WCAG 2.4.4: Nichtssagende Linktexte ("hier klicken", "mehr", "weiterlesen")
+    vague_link_patterns = re.compile(
+        r'^(hier|here|click here|hier klicken|mehr|more|weiterlesen|read more|details|link|weiter|next|›|»|\.{3})$',
+        re.I
+    )
+    vague_links = []
+    for a in soup.find_all('a', href=True):
+        text = a.get_text(strip=True)
+        aria = a.get('aria-label', '').strip()
+        title_attr = a.get('title', '').strip()
+        if text and vague_link_patterns.match(text) and not aria and not title_attr:
+            vague_links.append(text)
+    if vague_links:
+        count = len(vague_links)
+        issues.append(BarrierefreiheitIssue(
+            category='barrierefreiheit',
+            severity='warning',
+            title=f'WCAG 2.4.4: {count} nichtssagende Linktexte gefunden',
+            description=(
+                f'{count} Links haben nichtssagende Texte wie "hier", "mehr", "weiterlesen". '
+                'Screenreader-Nutzer navigieren häufig durch Sprung von Link zu Link — '
+                'ohne Kontext sind diese Links unverständlich.'
+            ),
+            risk_euro=500,
+            recommendation=(
+                'Ersetzen Sie vage Linktexte durch beschreibende Alternativen, z.B. '
+                '"Mehr über unsere Datenschutzrichtlinie" statt "hier". '
+                'Oder ergänzen Sie aria-label mit dem vollständigen Kontext.'
+            ),
+            legal_basis='WCAG 2.1 Level A (2.4.4), BFSG §12',
+            auto_fixable=False,
+            is_missing=False,
+        ))
+
     return [asdict(issue) for issue in issues]
 
 async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIssue | None:
@@ -272,9 +384,10 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
     - Level Access
     """
     widget_patterns = [
-        # Complyo eigenes Widget (WICHTIG!)
+        # Complyo eigenes Widget
         r'complyo',
         r'api\.complyo\.tech',
+        r'api\.complyo\.de',
         r'complyo.*accessibility',
         r'complyo.*widget',
         r'complyo.*a11y',
@@ -282,7 +395,7 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
         # Bekannte Drittanbieter
         r'userway',
         r'accessibe',
-        r'acsbapp',  # AccessiBe Domain
+        r'acsbapp',
         r'eye-able',
         r'eyeable',
         r'equalweb',
@@ -290,60 +403,71 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
         r'reciteme',
         r'userzoom',
         r'levelaccess',
-        r'adally',  # Adally Widget
-        r'max-access',  # MaxAccess
-        r'essl\.ai',  # Essential Accessibility
+        r'adally',
+        r'max-access',
+        r'essl\.ai',
+        r'silktide',
+        r'siteimprove',
+        r'monsido',
+        r'texthelp',
+        r'readspeaker',
+        r'browsealoud',
+        r'reciteme',
+        r'wcagchecker',
+        r'ablenet',
+        r'axesslab',
+        r'ally\.js',
         
         # Generische Patterns
         r'accessibility.*widget',
         r'accessibility.*tool',
+        r'accessibility.*toolbar',
         r'a11y.*widget',
         r'a11y.*tool',
         r'barrier.*free.*widget',
-        r'wcag.*widget'
+        r'wcag.*widget',
+        r'wcag.*toolbar',
     ]
     
-    # Suche in Scripts
+    # Suche in Scripts mit src
     scripts = soup.find_all('script', src=True)
     for script in scripts:
         src = script.get('src', '').lower()
         for pattern in widget_patterns:
             if re.search(pattern, src, re.I):
-                return None  # Widget gefunden, kein Issue
-        
-        # NEU: Complyo-spezifische Attribute prüfen
-        if script.get('data-site-id') or script.get('data-auto-fix'):
-            return None  # Complyo Widget erkannt
+                return None
+
+        # Complyo-spezifische Attribute NUR wenn src auch auf ein Accessibility-Widget deutet
+        script_src = script.get('src', '').lower()
+        has_site_id = bool(script.get('data-site-id'))
+        has_auto_fix = bool(script.get('data-auto-fix'))
+        if has_auto_fix and 'accessibility' in script_src:
+            return None
+        if has_site_id and ('accessibility' in script_src or 'complyo' in script_src or 'widget' in script_src):
+            return None
     
-    # NEU: Suche nach Scripts mit Complyo-spezifischen Attributen (auch ohne src)
-    all_scripts = soup.find_all('script')
-    for script in all_scripts:
+    # Suche nach Scripts mit Complyo-spezifischen Attributen (auch ohne src)
+    for script in soup.find_all('script'):
         if script.get('data-site-id') and ('complyo' in str(script).lower() or 'accessibility' in str(script).lower()):
-            return None  # Complyo Widget erkannt
+            return None
     
-    # NEU: Suche in Preload-Links (für Next.js, React etc.)
-    # Modern frameworks nutzen <link rel="preload" as="script">
-    preload_links = soup.find_all('link', rel='preload')
-    for link in preload_links:
+    # Suche in Preload-Links (Next.js afterInteractive Scripts)
+    for link in soup.find_all('link', href=True):
         href = link.get('href', '').lower()
         for pattern in widget_patterns:
             if re.search(pattern, href, re.I):
-                return None  # Widget gefunden (via preload), kein Issue
+                return None
     
-    # NEU: Suche in allen Link-Tags nach Widget-URLs
-    all_links = soup.find_all('link', href=True)
-    for link in all_links:
-        href = link.get('href', '').lower()
-        if 'accessibility' in href and 'complyo' in href:
-            return None  # Complyo Accessibility Widget gefunden
-        for pattern in widget_patterns:
-            if re.search(pattern, href, re.I):
-                return None  # Widget gefunden, kein Issue
-    
-    # NEU: Suche im gesamten HTML nach Complyo Widget-URLs
+    # NEU: Suche im gesamten HTML nach Complyo Widget-URLs (inkl. Preload-Links)
     html_text = str(soup).lower()
-    if 'api.complyo.tech/api/widgets/accessibility' in html_text:
-        return None  # Complyo Widget URL im HTML gefunden
+    if 'api.complyo.tech/api/widgets/accessibility' in html_text or 'api.complyo.de/api/widgets/accessibility' in html_text:
+        return None  # Complyo Widget URL im HTML gefunden (z.B. als <link rel="preload">)
+
+    # Zusätzlich: Suche in allen link-Tags unabhängig von rel-Attribut
+    for link in soup.find_all('link', href=True):
+        href = link.get('href', '').lower()
+        if 'accessibility' in href and ('complyo' in href or 'userway' in href or 'accessibe' in href or 'eye-able' in href):
+            return None
     
     # Suche in Script-Content
     script_contents = soup.find_all('script', src=False)
@@ -496,8 +620,8 @@ async def _check_alt_texts_enhanced(url: str, soup: BeautifulSoup, session=None)
             # Erstelle detailliertes Issue
             issues.append(BarrierefreiheitIssue(
                 category='barrierefreiheit',
-                severity='error',
-                title=f'Bild ohne Alt-Text',
+                severity='critical',
+                title=f'WCAG 1.1.1: Bild ohne Alt-Text',
                 description=f'Dieses Bild hat keinen Alt-Text und ist nicht als dekorativ markiert. '
                            f'Screenreader können das Bild nicht beschreiben.',
                 risk_euro=500,
@@ -573,10 +697,25 @@ async def _check_aria_labels(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
     inputs = soup.find_all(['input', 'select', 'textarea'])
     inputs_without_label = []
     
+    # Cookie-Banner Container identifizieren (Inputs darin werden übersprungen)
+    cookie_banner_selectors = [
+        soup.find(id=re.compile(r'cookie|consent|gdpr|ccm|complyo', re.I)),
+        soup.find(class_=re.compile(r'cookie.*banner|cookie.*consent|consent.*banner|ccm|complyo.*cookie', re.I)),
+    ]
+    cookie_containers = [c for c in cookie_banner_selectors if c is not None]
+    
     for inp in inputs:
         input_type = inp.get('type', 'text')
-        if input_type in ['hidden', 'submit', 'button']:
-            continue  # Skip non-input types
+        if input_type in ['hidden', 'submit', 'button', 'image', 'reset']:
+            continue  # Skip non-labelable types
+        
+        # Skip inputs inside known cookie/consent containers
+        in_cookie_banner = any(
+            cookie_container and inp in cookie_container.find_all(['input', 'select', 'textarea'])
+            for cookie_container in cookie_containers
+        )
+        if in_cookie_banner:
+            continue
         
         input_id = inp.get('id', '')
         aria_label = inp.get('aria-label', '').strip()
@@ -590,6 +729,15 @@ async def _check_aria_labels(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
             label = soup.find('label', attrs={'for': input_id})
             if label:
                 has_label = True
+        
+        # Check if the input is wrapped inside a <label> element (implicit label pattern)
+        if not has_label:
+            parent = inp.parent
+            while parent and parent.name not in ['body', 'form', 'div', 'section']:
+                if parent.name == 'label':
+                    has_label = True
+                    break
+                parent = parent.parent
         
         if not any([has_label, aria_label, aria_labelledby, title]) and not placeholder:
             inputs_without_label.append(input_type)

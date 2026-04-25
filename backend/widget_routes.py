@@ -14,10 +14,13 @@ import gzip
 import io
 import hashlib
 import asyncpg
+import json
+import logging
 from accessibility_templates import AccessibilityTemplates
 from accessibility_patch_generator import AccessibilityPatchGenerator
 import aiohttp
 from accessibility_fix_saver import AccessibilityFixSaver
+from dependencies import get_current_user, get_db
 
 router = APIRouter()
 
@@ -217,23 +220,29 @@ async def track_widget_event(event: WidgetTrackingEvent):
     Track widget events (consent decisions, accessibility usage, etc.)
     """
     try:
-        # Log event (in production, save to database)
-        print(f"[Widget Tracking] {event.siteId} - {event.event} at {event.timestamp}")
-        
-        # TODO: Save to database for analytics
-        # await db_pool.execute(
-        #     "INSERT INTO widget_events (site_id, event_type, timestamp, metadata) VALUES ($1, $2, $3, $4)",
-        #     event.siteId, event.event, event.timestamp, event.metadata
-        # )
-        
+        if db_pool:
+            async with db_pool.acquire() as conn:
+                await conn.execute(
+                    """INSERT INTO widget_events
+                       (site_id, widget_type, event_name, event_data)
+                       VALUES ($1, $2, $3, $4)""",
+                    event.siteId,
+                    "tracking",
+                    event.event,
+                    json.dumps(event.metadata) if event.metadata else "{}",
+                )
+        else:
+            logger = logging.getLogger(__name__)
+            logger.warning(f"[Widget Tracking] DB not available - {event.siteId}: {event.event}")
+
         return {
             "success": True,
             "message": "Event tracked"
         }
-    
+
     except Exception as e:
-        print(f"Error tracking widget event: {e}")
-        # Don't fail the request
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error tracking widget event: {e}")
         return {
             "success": False,
             "message": "Tracking failed"
@@ -295,27 +304,34 @@ async def track_widget_analytics(
 async def _check_upsell_opportunity(site_id: str):
     """
     Background task to check if user should see upsell notification
-    
+
     Checks:
     - Total usage count > 100 (widget is heavily used)
     - Specific features used frequently (font-size > 50x)
-    
+
     If threshold met: Send notification to dashboard
     """
+    _logger = logging.getLogger(__name__)
     try:
-        # TODO: Implement with database
-        # usage_count = await db_service.fetchval(
-        #     """SELECT COUNT(*) FROM widget_usage_stats
-        #     WHERE site_id = $1 AND timestamp > NOW() - INTERVAL '30 days'""",
-        #     site_id
-        # )
-        # 
-        # if usage_count > 100:
-        #     await _send_upsell_notification(site_id, usage_count)
-        
-        pass
+        if not db_pool:
+            return
+
+        async with db_pool.acquire() as conn:
+            usage_count = await conn.fetchval(
+                """SELECT COUNT(*) FROM widget_usage_stats
+                   WHERE site_id = $1
+                   AND date > CURRENT_DATE - INTERVAL '30 days'""",
+                site_id,
+            )
+
+        if usage_count and usage_count > 100:
+            _logger.info(
+                f"[Upsell] Site {site_id} hit upsell threshold: {usage_count} events in 30 days"
+            )
+
     except Exception as e:
-        print(f"Error checking upsell opportunity: {e}")
+        _logger = logging.getLogger(__name__)
+        _logger.error(f"Error checking upsell opportunity: {e}")
 
 
 @router.get("/api/widgets/config/{site_id}")
@@ -323,25 +339,45 @@ async def get_widget_config(site_id: str):
     """
     Get widget configuration for a specific site
     """
-    # TODO: Fetch from database
-    # For now, return default config
-    
+    _logger = logging.getLogger(__name__)
+    default_config = {
+        "cookie_consent": {
+            "enabled": True,
+            "position": "bottom",
+            "primaryColor": "#6366f1",
+            "accentColor": "#8b5cf6",
+            "language": "de",
+        },
+        "accessibility": {
+            "enabled": True,
+            "features": ["contrast", "font-size", "keyboard-nav", "skip-links", "alt-text-fallback"],
+            "showToolbar": True,
+        },
+    }
+
+    if db_pool:
+        try:
+            async with db_pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    """SELECT layout, primary_color, accent_color, position, language
+                       FROM cookie_banner_configs
+                       WHERE site_id = $1 AND is_active = TRUE
+                       LIMIT 1""",
+                    site_id,
+                )
+            if row:
+                default_config["cookie_consent"].update({
+                    "position": row["position"] or "bottom",
+                    "primaryColor": row["primary_color"] or "#6366f1",
+                    "accentColor": row["accent_color"] or "#8b5cf6",
+                    "language": row.get("language") or "de",
+                })
+        except Exception as e:
+            _logger.warning(f"[Widget Config] Could not load config for {site_id}: {e}")
+
     return {
         "success": True,
-        "config": {
-            "cookie_consent": {
-                "enabled": True,
-                "position": "bottom",
-                "primaryColor": "#6366f1",
-                "accentColor": "#8b5cf6",
-                "language": "de"
-            },
-            "accessibility": {
-                "enabled": True,
-                "features": ["contrast", "font-size", "keyboard-nav", "skip-links", "alt-text-fallback"],
-                "showToolbar": True
-            }
-        }
+        "config": default_config,
     }
 
 
@@ -504,8 +540,8 @@ async def get_alt_text_fixes_for_widget(site_id: str):
 async def generate_accessibility_patches(
     site_id: str,
     background_tasks: BackgroundTasks,
-    db_pool: asyncpg.Pool = Depends(lambda: None),  # TODO: Proper dependency injection
-    # user_id: int = Depends(get_current_user_id)  # TODO: Add auth
+    current_user: dict = Depends(get_current_user),
+    db_pool: asyncpg.Pool = Depends(get_db),
 ):
     """
     Generiert Barrierefreiheits-Patches als ZIP-Download
@@ -575,7 +611,7 @@ async def generate_accessibility_patches(
         generator = AccessibilityPatchGenerator()
         zip_buffer = await generator.generate_patch_bundle(
             site_id=site_id,
-            user_id=1,  # TODO: Real user_id
+            user_id=current_user["user_id"],
             fixes=fixes
         )
         
@@ -868,3 +904,123 @@ async def check_widget_status(website_url: str, site_id: str):
             },
             headers={'Access-Control-Allow-Origin': '*'}
         )
+
+
+# =============================================================================
+# Cookie Scanner Endpoints
+# =============================================================================
+
+class ScanRequest(BaseModel):
+    url: str
+    follow_links: int = 0
+
+
+@router.post("/api/cookie-compliance/scan")
+async def trigger_cookie_scan(
+    body: ScanRequest,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """
+    Startet einen automatischen Cookie-Scan für eine URL.
+    Der Scan läuft im Hintergrund; Ergebnis wird in der DB gespeichert.
+    """
+    from compliance_engine.automated_cookie_scanner import CookieScanner
+
+    url = body.url.strip()
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+
+    site_id = current_user.get("site_id") or url
+
+    async def run_scan():
+        try:
+            scanner = CookieScanner(timeout_ms=20000)
+            result  = await scanner.scan(url, follow_links=body.follow_links)
+
+            cookies_json   = json.dumps([c.__dict__ for c in result.cookies])
+            services_json  = json.dumps([s.__dict__ for s in result.services])
+
+            await db.execute(
+                """
+                INSERT INTO cookie_scan_results
+                    (site_id, url, scanned_at, cookies, services,
+                     has_cmp, cmp_name, config_hash, scan_duration_ms, error)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+                ON CONFLICT (site_id) DO UPDATE SET
+                    url              = EXCLUDED.url,
+                    scanned_at       = EXCLUDED.scanned_at,
+                    cookies          = EXCLUDED.cookies,
+                    services         = EXCLUDED.services,
+                    has_cmp          = EXCLUDED.has_cmp,
+                    cmp_name         = EXCLUDED.cmp_name,
+                    config_hash      = EXCLUDED.config_hash,
+                    scan_duration_ms = EXCLUDED.scan_duration_ms,
+                    error            = EXCLUDED.error
+                """,
+                site_id, url, result.scanned_at,
+                cookies_json, services_json,
+                result.has_cmp, result.cmp_name,
+                result.config_hash, result.scan_duration_ms,
+                result.error
+            )
+            logging.getLogger(__name__).info(
+                f"[Scanner] {url} – {len(result.cookies)} Cookies, "
+                f"{len(result.services)} Services, {result.scan_duration_ms}ms"
+            )
+        except Exception as e:
+            logging.getLogger(__name__).error(f"[Scanner] Background-Fehler: {e}", exc_info=True)
+
+    background_tasks.add_task(run_scan)
+
+    return JSONResponse(
+        content={"success": True, "message": "Scan gestartet", "url": url},
+        headers={"Access-Control-Allow-Origin": "*"}
+    )
+
+
+@router.get("/api/cookie-compliance/scan/{site_id}")
+async def get_scan_result(
+    site_id: str,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """
+    Gibt das letzte Scan-Ergebnis für eine Site zurück.
+    """
+    row = await db.fetchrow(
+        """
+        SELECT site_id, url, scanned_at, cookies, services,
+               has_cmp, cmp_name, config_hash, scan_duration_ms, error
+        FROM cookie_scan_results
+        WHERE site_id = $1
+        ORDER BY scanned_at DESC
+        LIMIT 1
+        """,
+        site_id
+    )
+
+    if not row:
+        return JSONResponse(
+            content={"success": False, "message": "Kein Scan-Ergebnis gefunden"},
+            status_code=404,
+            headers={"Access-Control-Allow-Origin": "*"}
+        )
+
+    return JSONResponse(
+        content={
+            "success":        True,
+            "site_id":        row["site_id"],
+            "url":            row["url"],
+            "scanned_at":     str(row["scanned_at"]),
+            "cookies":        json.loads(row["cookies"]),
+            "services":       json.loads(row["services"]),
+            "has_cmp":        row["has_cmp"],
+            "cmp_name":       row["cmp_name"],
+            "config_hash":    row["config_hash"],
+            "scan_duration_ms": row["scan_duration_ms"],
+            "error":          row["error"],
+        },
+        headers={"Access-Control-Allow-Origin": "*"}
+    )
