@@ -142,6 +142,10 @@ from git_routes import git_router, init_git_routes
 # Alt-Text AI Generation - KI-generierte Alt-Texte für Bilder
 from alt_text_routes import router as alt_text_router
 
+# Deep Cookie Scanner - Premium Feature
+from deep_cookie_scanner_routes import router as deep_cookie_scanner_router
+import deep_cookie_scanner_routes as _deep_cookie_scanner_routes
+
 # Models for new endpoints
 class AnalyzeRequest(BaseModel):
     url: str
@@ -501,6 +505,7 @@ async def startup_event():
     app.include_router(accessibility_fix_router)  # BFSG Accessibility Fix Pipeline - NEW
     app.include_router(git_router)  # Git Integration - Automatic PRs - NEW
     app.include_router(alt_text_router)  # Alt-Text AI Generation - NEW
+    app.include_router(deep_cookie_scanner_router)  # Deep Cookie Scanner - Premium Feature
     
     # Initialize Alt-Text routes
     import alt_text_routes
@@ -553,7 +558,9 @@ async def startup_event():
     # Set global references for ab_test_routes
     import ab_test_routes
     ab_test_routes.db_pool = db_pool
-    
+
+    _deep_cookie_scanner_routes.db_pool = db_pool
+
     # Set global references for ai_legal_routes
     import ai_legal_routes
     ai_legal_routes.db_pool = db_pool
@@ -669,12 +676,16 @@ async def health_check():
     redis_start = time.monotonic()
     try:
         import redis as _redis
-        _r = _redis.Redis(
-            host=os.getenv("REDIS_HOST", "shared-redis"),
-            port=int(os.getenv("REDIS_PORT", 6379)),
-            password=os.getenv("REDIS_PASSWORD"),
-            socket_connect_timeout=1
-        )
+        _redis_url = os.getenv("REDIS_URL")
+        if _redis_url:
+            _r = _redis.from_url(_redis_url, socket_connect_timeout=1)
+        else:
+            _r = _redis.Redis(
+                host=os.getenv("REDIS_HOST", "shared-redis"),
+                port=int(os.getenv("REDIS_PORT", 6379)),
+                password=os.getenv("REDIS_PASSWORD"),
+                socket_connect_timeout=1
+            )
         _r.ping()
         checks["redis"] = {"status": "up", "latency_ms": round((time.monotonic() - redis_start) * 1000, 2)}
     except Exception:

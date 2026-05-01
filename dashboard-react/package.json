@@ -46,8 +46,9 @@
     "zustand": "^4.5.4"
   },
   "devDependencies": {
-    "@types/dompurify": "^3.0.5",
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/typography": "^0.5.16",
+    "@types/dompurify": "^3.0.5",
     "@types/react-syntax-highlighter": "^15.5.13",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.5",
@@ -55,6 +56,9 @@
     "lint-staged": "^15.0.0"
   },
   "lint-staged": {
-    "src/**/*.{ts,tsx}": ["eslint --fix", "prettier --write"]
+    "src/**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ]
   }
 }

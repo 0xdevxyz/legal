@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 02-accessibility-statement-generator plan 02 (AUDIT-05 dashboard UI)
-last_updated: "2026-05-01T10:36:32.534Z"
+status: executing
+stopped_at: Completed 03-e2e-compliance-test-suite (AUDIT-06, AUDIT-07, AUDIT-08)
+last_updated: "2026-05-01T19:20:00.000Z"
 last_activity: 2026-05-01
 progress:
   total_phases: 9
-  completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
-  percent: 0
+  completed_phases: 3
+  total_plans: 6
+  completed_plans: 6
+  percent: 33
 ---
 
 # Project State
@@ -21,30 +21,32 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-30)
 
 **Core value:** Kunden können DSGVO, BFSG und Rechtstext-Compliance schnell, rechtssicher und ohne Expertenwissen erreichen
-**Current focus:** Phase 2 — Accessibility Statement Generator
+**Current focus:** Phase 3 — E2E Compliance Test Suite — COMPLETE
 
 ## Current Position
 
-Phase: 2 (Accessibility Statement Generator) — EXECUTING
+Phase: 3 (E2E Compliance Test Suite) — COMPLETE
 Plan: 2 of 2
-Status: Phase complete — ready for verification
+Status: Phase complete — all tests green
 Last activity: 2026-05-01
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: -
+- Total plans completed: 6
+- Average duration: ~15min
+- Total execution time: ~90min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| Phase 01-critical-compliance-fixes | 2 | 18min | 9min |
+| Phase 02-accessibility-statement-generator | 2 | 40min | 20min |
+| Phase 03-e2e-compliance-test-suite | 2 | 30min | 15min |
 
 ## Accumulated Context
 
@@ -52,6 +54,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-critical-compliance-fixes P02 | 15min | 2 tasks | 4 files |
 | Phase 02-accessibility-statement-generator P01 | 28 | 2 tasks | 2 files |
 | Phase 02-accessibility-statement-generator P02 | 12 | 2 tasks | 3 files |
+| Phase 03-e2e-compliance-test-suite P01 | 30 | 5 tasks | 7 files |
 
 ### Decisions
 
@@ -66,6 +69,10 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 02-accessibility-statement-generator]: AUDIT-05: Jinja2 autoescape=select_autoescape(['html']) enabled in _statement_jinja_env — prevents XSS from user-provided contact_email and site_url
 - [Phase 02-accessibility-statement-generator]: AUDIT-05 SC3: Used window.print() for PDF export (not jsPDF/html2pdf) — zero new dependencies, consistent with RESEARCH.md
 - [Phase 02-accessibility-statement-generator]: AUDIT-05 SC3: Nav link to /accessibility/statement deferred — not in plan scope, documented as known stub
+- [Phase 03-e2e-compliance-test-suite]: Python pytest tests use FastAPI TestClient + monkeypatch pattern (zero DB deps) — 18/18 passed
+- [Phase 03-e2e-compliance-test-suite]: Node.js Playwright uses @playwright/test@1.41.2 added to dashboard-react devDependencies
+- [Phase 03-e2e-compliance-test-suite]: AUDIT-08 content blocker test uses pre-blocked pattern (data-complyo-consent + type=text/plain) since cookie-blocker.js requires API config for URL-based blocking
+- [Phase 03-e2e-compliance-test-suite]: widget-test-page.html added to backend/public/ as stable test fixture
 
 ### Pending Todos
 
@@ -75,9 +82,10 @@ None yet.
 
 - TCF 2.2 Registration (€1.575/Jahr) ist Business-Entscheidung — wird als "Coming Soon" markiert, nicht implementiert
 - BFSG-Deadline 28.06.2025 war vor Projekt-Start — Disclaimer nötig, keine Retroaktiv-Compliance möglich
+- cookie_compliance_stats DB schema bug: uses site_identifier not site_id — causes 500 errors on live DB; mocked in all tests
 
 ## Session Continuity
 
-Last session: 2026-05-01T10:36:32.531Z
-Stopped at: Completed 02-accessibility-statement-generator plan 02 (AUDIT-05 dashboard UI)
+Last session: 2026-05-01T19:20:00.000Z
+Stopped at: Completed 03-e2e-compliance-test-suite (AUDIT-06, AUDIT-07, AUDIT-08 — 32 tests total, all green)
 Resume file: None
