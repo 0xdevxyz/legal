@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
 import asyncpg
 import hashlib
+import re
 import uuid
 from datetime import datetime, date, timedelta
 import json
@@ -228,6 +229,40 @@ def hash_ip_address(ip: str) -> str:
         return ""
     return hashlib.sha256(ip.encode()).hexdigest()
 
+
+def truncate_user_agent(ua_string):
+    """DSGVO-compliant UA truncation to browser family + major version.
+    Returns 'Browser/Version' (e.g. 'Chrome/120') or 'unknown' on no match.
+    Priority order: more-specific browsers (Edge/Edg, OPR, CriOS, FxiOS,
+    SamsungBrowser, UCBrowser, MSIE/Trident) MUST win over Chrome/Safari
+    because Chrome UAs contain 'Safari/' and Edge UAs contain 'Chrome/'.
+    We collect all matches then select by priority rank.
+    AUDIT-03 — Phase 1, v2.0 milestone.
+    """
+    if not ua_string:
+        return "unknown"
+    # Priority list: index 0 = highest priority
+    priority = [
+        "Edge", "Edg", "OPR", "CriOS", "FxiOS",
+        "SamsungBrowser", "UCBrowser", "MSIE", "Trident",
+        "Firefox", "Opera", "Chrome", "Safari",
+    ]
+    pattern = re.compile(
+        r'(Edge|Edg|OPR|CriOS|FxiOS|SamsungBrowser|UCBrowser|MSIE|Trident|Chrome|Firefox|Safari|Opera)[\/ ](\d+)'
+    )
+    matches = pattern.findall(ua_string)
+    if not matches:
+        return "unknown"
+    # Select the match with the highest priority rank
+    best = min(matches, key=lambda m: priority.index(m[0]) if m[0] in priority else 99)
+    browser = best[0]
+    if browser == "Edg":
+        browser = "Edge"
+    elif browser in ("Trident", "MSIE"):
+        browser = "IE"
+    return f"{browser}/{best[1]}"
+
+
 def get_client_ip(request: Request) -> Optional[str]:
     """Get client IP from request headers"""
     forwarded = request.headers.get("X-Forwarded-For")
@@ -265,8 +300,9 @@ async def log_consent(
         ip_address = consent.ip_address or get_client_ip(request)
         ip_hash = hash_ip_address(ip_address) if ip_address else None
         
-        # Get user agent
-        user_agent = consent.user_agent or request.headers.get("User-Agent", "")[:500]
+        # Get user agent (AUDIT-03: DSGVO-compliant truncation)
+        raw_ua = consent.user_agent or request.headers.get("User-Agent", "")
+        user_agent = truncate_user_agent(raw_ua)  # AUDIT-03: DSGVO-compliant truncation
         
         # Get banner config ID (instead of revision)
         config_query = """
