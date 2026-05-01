@@ -14,4 +14,5 @@ export type {
   FeatureId
 } from './FixWizard';
 export { FixStepCard } from './FixStepCard';
+export { default as StatementGenerator } from './StatementGenerator';
 
