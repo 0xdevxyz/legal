@@ -7,6 +7,7 @@ Endpoints:
 - POST /api/v2/accessibility/generate-fixes - Fixes generieren
 - GET /api/v2/accessibility/download-bundle - Fix-Bundle herunterladen
 - POST /api/v2/accessibility/generate-alt-text - Einzelnen Alt-Text generieren
+- POST /api/v2/accessibility/generate-statement - BFSG Barrierefreiheitserklärung generieren (AUDIT-05)
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
@@ -17,6 +18,7 @@ from typing import Dict, Any, Optional, List
 import logging
 import io
 from datetime import datetime
+from jinja2 import Environment, select_autoescape
 
 from compliance_engine.feature_engine import (
     FeatureEngine, FeatureId, StructuredIssue,
@@ -105,6 +107,73 @@ class DownloadBundleRequest(BaseModel):
     site_url: str
     fix_package: Dict[str, Any]
     include_wordpress: bool = True
+
+
+# =============================================================================
+# BFSG Accessibility Statement Generator (AUDIT-05)
+# =============================================================================
+
+_statement_jinja_env = Environment(autoescape=select_autoescape(['html']))
+
+STATEMENT_TEMPLATE_HTML = """<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Barrierefreiheitserklärung - {{ site_url }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; line-height: 1.6; padding: 0 1rem; }
+    h1 { border-bottom: 2px solid #1e40af; padding-bottom: 0.5rem; color: #1e40af; }
+    h2 { color: #1e3a8a; margin-top: 1.5rem; }
+    ul { padding-left: 1.5rem; }
+    a { color: #1e40af; }
+    @media print { body { margin: 1rem; max-width: none; } a { color: #000; } }
+  </style>
+</head>
+<body>
+  <h1>Barrierefreiheitserklärung</h1>
+
+  <h2>Geltungsbereich</h2>
+  <p>Diese Erklärung gilt für die Website <strong>{{ site_url }}</strong>.</p>
+
+  <h2>Stand der Vereinbarkeit mit den Anforderungen</h2>
+  <p>{{ conformity_text }}</p>
+
+  <h2>Nicht barrierefreie Inhalte</h2>
+  {% if known_issues %}
+  <p>Die folgenden Inhalte sind aus den nachstehenden Gründen nicht barrierefrei:</p>
+  <ul>
+    {% for issue in known_issues %}<li>{{ issue }}</li>{% endfor %}
+  </ul>
+  {% else %}
+  <p>Es sind aktuell keine nicht barrierefreien Inhalte bekannt.</p>
+  {% endif %}
+
+  <h2>Kontakt und Feedback-Mechanismus</h2>
+  <p>Sollten Ihnen Mängel beim barrierefreien Zugang zu Inhalten auffallen, kontaktieren Sie uns bitte:</p>
+  <p>E-Mail: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a></p>
+
+  <h2>Durchsetzungsverfahren</h2>
+  <p>Sollten auch nach Ihrem Feedback an uns keine zufriedenstellende Lösung gefunden worden sein, können Sie sich an die Schlichtungsstelle nach dem Behindertengleichstellungsgesetz wenden:</p>
+  <p><a href="https://www.schlichtungsstelle-bfsg.de/">https://www.schlichtungsstelle-bfsg.de/</a></p>
+
+  <p><small>Diese Erklärung wurde am {{ generated_date }} erstellt. Letzte Überprüfung: {{ review_date }}.</small></p>
+</body>
+</html>"""
+
+
+class GenerateStatementRequest(BaseModel):
+    """Request für BFSG Barrierefreiheitserklärung-Generator"""
+    site_id: str = Field(..., description="Site-ID des Scans (z.B. 'example-de')")
+    site_url: Optional[str] = Field(None, description="URL der Website (Anzeige)")
+    contact_email: Optional[str] = Field(None, description="Kontakt-Email für Feedback")
+    review_date: Optional[str] = Field(None, description="Datum der Überprüfung (DD.MM.YYYY oder YYYY-MM-DD)")
+
+
+class GenerateStatementResponse(BaseModel):
+    """Response des Barrierefreiheitserklärung-Generators"""
+    html: str
+    markdown: str
+    filename: str = "barrierefreiheitserklaerung.html"
 
 
 # =============================================================================
@@ -421,6 +490,109 @@ async def get_fix_summary(
     except Exception as e:
         logger.error(f"❌ Failed to get fix summary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@accessibility_fix_router.post("/generate-statement", response_model=GenerateStatementResponse)
+async def generate_statement(
+    request: GenerateStatementRequest,
+    user: Dict[str, Any] = Depends(get_current_user)
+) -> GenerateStatementResponse:
+    """Generate BFSG-compliant Barrierefreiheitserklärung (AUDIT-05).
+
+    Pulls scan results from accessibility_fix_packages (column: fix_package, key: site_id),
+    renders Jinja2 HTML template with all 6 BFSG required fields, and returns html + markdown.
+    """
+    await require_accessibility_module(user)
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database not available")
+
+    # Defaults (used when no scan data exists)
+    conformity_text = "Konformitätsstatus: Nicht bewertet — bisher wurde keine Barrierefreiheits-Prüfung durchgeführt."
+    known_issues: List[str] = []
+    display_url = request.site_url or request.site_id
+
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT fix_package, site_url, created_at
+            FROM accessibility_fix_packages
+            WHERE site_id = $1 AND user_id = $2
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            request.site_id,
+            str(user.get("user_id")),
+        )
+
+    if row:
+        display_url = row.get("site_url") or display_url
+        package = row.get("fix_package") or {}
+        summary = package.get("summary", {}) if isinstance(package, dict) else {}
+        total = int(summary.get("total_issues", 0) or 0)
+        if total == 0:
+            conformity_text = "Diese Website ist vollständig konform mit WCAG 2.1 Level AA / EN 301 549."
+        else:
+            conformity_text = (
+                f"Diese Website ist teilweise konform mit WCAG 2.1 Level AA / EN 301 549. "
+                f"Es sind {total} bekannte Abweichungen dokumentiert."
+            )
+
+        # Collect up to 10 issue descriptions from widget_fixes + code_patches + manual_guides
+        collected: List[str] = []
+        for bucket in ("widget_fixes", "code_patches", "manual_guides"):
+            for entry in (package.get(bucket) or []):
+                desc = (entry or {}).get("description")
+                if desc:
+                    collected.append(desc)
+                if len(collected) >= 10:
+                    break
+            if len(collected) >= 10:
+                break
+        known_issues = collected[:10]
+
+    template = _statement_jinja_env.from_string(STATEMENT_TEMPLATE_HTML)
+    html_out = template.render(
+        site_url=display_url,
+        conformity_text=conformity_text,
+        known_issues=known_issues,
+        contact_email=request.contact_email or "info@ihre-domain.de",
+        review_date=request.review_date or datetime.now().strftime("%d.%m.%Y"),
+        generated_date=datetime.now().strftime("%d.%m.%Y"),
+    )
+
+    # Markdown variant (simple, no library)
+    md_lines = [
+        "# Barrierefreiheitserklärung",
+        "",
+        "## Geltungsbereich",
+        f"Diese Erklärung gilt für die Website **{display_url}**.",
+        "",
+        "## Stand der Vereinbarkeit",
+        conformity_text,
+        "",
+        "## Nicht barrierefreie Inhalte",
+    ]
+    if known_issues:
+        md_lines.extend(f"- {i}" for i in known_issues)
+    else:
+        md_lines.append("Es sind aktuell keine nicht barrierefreien Inhalte bekannt.")
+    md_lines.extend([
+        "",
+        "## Kontakt und Feedback",
+        f"E-Mail: {request.contact_email or 'info@ihre-domain.de'}",
+        "",
+        "## Durchsetzungsverfahren",
+        "Schlichtungsstelle BFSG: https://www.schlichtungsstelle-bfsg.de/",
+        "",
+        f"_Erstellt am {datetime.now().strftime('%d.%m.%Y')}. Letzte Überprüfung: {request.review_date or datetime.now().strftime('%d.%m.%Y')}._",
+    ])
+    markdown_out = "\n".join(md_lines)
+
+    return GenerateStatementResponse(
+        html=html_out,
+        markdown=markdown_out,
+        filename="barrierefreiheitserklaerung.html",
+    )
 
 
 # =============================================================================
