@@ -1,14 +1,14 @@
-# Complyo — Technical Debt & Feature Completeness
+# Complyo — Feature Completeness: Cookie, BFSG & Rechtstexte
 
 ## What This Is
 
 Complyo ist eine SaaS-Plattform die Websites automatisch auf DSGVO/TTDSG-Verstöße scannt, KI-generierte Fixes vorschlägt und rechtlich konforme Texte verwaltet. Das Backend ist ein FastAPI-Monolith mit 30+ Routen, zwei Next.js-Frontends (Landing + Dashboard) und Integrationen zu Stripe, eRecht24, Firebase Auth und OpenRouter AI.
 
-Dieser Milestone schließt alle offenen Critical/High-Debt-Items und zwei mittlere Features, die nach dem Security-Hardening-Milestone (v1, abgeschlossen 2026-03-29) noch offen sind.
+Dieser Milestone (v2.0) bringt Complyo zur Produktionsreife in den drei Kernbereichen Cookie-Banner, Barrierefreiheitsgesetz (BFSG/WCAG) und Rechtstexte/DSGVO — basierend auf dem vollständigen Audit-Bericht vom 2026-04-30.
 
 ## Core Value
 
-Das System ist live. Ziel ist es, die letzten ungesicherten Endpoints abzusichern, Analytics-Daten persistent zu speichern und zwei konkrete Features (Email-Notification + Cookie-Settings-Modal) funktionsfähig zu machen.
+Kunden können DSGVO, BFSG und Rechtstext-Compliance schnell, rechtssicher und ohne Expertenwissen erreichen.
 
 ## Previous Milestone
 
