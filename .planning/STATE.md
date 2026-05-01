@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 01-critical-compliance-fixes plan 01 (AUDIT-01 + AUDIT-02)
-last_updated: "2026-05-01T00:08:17.898Z"
+status: verifying
+stopped_at: Completed 01-critical-compliance-fixes plan 02 (AUDIT-03 + AUDIT-04)
+last_updated: "2026-05-01T00:16:54.842Z"
 last_activity: 2026-05-01
 progress:
   total_phases: 9
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-30)
 
 Phase: 1 (Critical Compliance Fixes) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-01
 
 Progress: [░░░░░░░░░░] 0%
@@ -49,6 +49,7 @@ Progress: [░░░░░░░░░░] 0%
 ## Accumulated Context
 
 | Phase 01-critical-compliance-fixes P01 | 3min | 3 tasks | 7 files |
+| Phase 01-critical-compliance-fixes P02 | 15min | 2 tasks | 4 files |
 
 ### Decisions
 
@@ -56,6 +57,8 @@ Progress: [░░░░░░░░░░] 0%
 - v2.0 Fokus: Cookie-Banner-Perfektion, BFSG-Compliance, Rechtstexte/DSGVO
 - [Phase 01-critical-compliance-fixes]: BfsgDisclaimer placed as first visible element in all 3 active AB-test landing variants (100% traffic coverage)
 - [Phase 01-critical-compliance-fixes]: TCF stub in cookie_banner_v2.js retained, only documentation comments added — marked Coming Soon, not removed
+- [Phase 01-critical-compliance-fixes]: AUDIT-03: Used findall+priority-index regex instead of re.search to correctly match Edge/OPR before Chrome in UA strings
+- [Phase 01-critical-compliance-fixes]: AUDIT-04: Security headers placed at nginx server-block level (not in location blocks) to prevent inheritance shadowing
 
 ### Pending Todos
 
@@ -68,6 +71,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-01T00:08:17.895Z
-Stopped at: Completed 01-critical-compliance-fixes plan 01 (AUDIT-01 + AUDIT-02)
+Last session: 2026-05-01T00:16:54.839Z
+Stopped at: Completed 01-critical-compliance-fixes plan 02 (AUDIT-03 + AUDIT-04)
 Resume file: None

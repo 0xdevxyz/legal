@@ -10,7 +10,7 @@ Dieser Milestone bringt Complyo zur Produktionsreife in den drei Kernbereichen C
 
 ## Phases
 
-- [ ] **Phase 1: Critical Compliance Fixes** — BFSG-Disclaimer, TCF 2.2 deaktivieren, PII-Logging, STS-Header
+- [x] **Phase 1: Critical Compliance Fixes** — BFSG-Disclaimer, TCF 2.2 deaktivieren, PII-Logging, STS-Header (completed 2026-05-01)
 - [ ] **Phase 2: Accessibility Statement Generator** — BFSG-Pflicht: Barrierefreiheitserklärung-Generator
 - [ ] **Phase 3: E2E Compliance Test Suite** — Cookie-Flow E2E, Accessibility-Regression, DSGVO §25 Tests
 - [ ] **Phase 4: Mobile & Extended WCAG Checks** — Touch-Targets, WCAG AAA, Tabellen/SVG/Canvas, PDF, Video
@@ -118,7 +118,7 @@ Dieser Milestone bringt Complyo zur Produktionsreife in den drei Kernbereichen C
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Critical Compliance Fixes | 1/2 | In Progress|  |
+| 1. Critical Compliance Fixes | 2/2 | Complete   | 2026-05-01 |
 | 2. Accessibility Statement Generator | 0/0 | Not Started | - |
 | 3. E2E Compliance Test Suite | 0/0 | Not Started | - |
 | 4. Mobile & Extended WCAG Checks | 0/0 | Not Started | - |
