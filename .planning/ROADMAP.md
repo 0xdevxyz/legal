@@ -119,7 +119,7 @@ Dieser Milestone bringt Complyo zur Produktionsreife in den drei Kernbereichen C
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Critical Compliance Fixes | 2/2 | Complete    | 2026-05-01 |
-| 2. Accessibility Statement Generator | 0/0 | Not Started | - |
+| 2. Accessibility Statement Generator | 1/2 | In Progress|  |
 | 3. E2E Compliance Test Suite | 0/0 | Not Started | - |
 | 4. Mobile & Extended WCAG Checks | 0/0 | Not Started | - |
 | 5. Dashboard ATAG Compliance | 0/0 | Not Started | - |

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 01-critical-compliance-fixes plan 02 (AUDIT-03 + AUDIT-04)
-last_updated: "2026-05-01T00:23:21.926Z"
+status: executing
+stopped_at: Completed 02-accessibility-statement-generator plan 01 (AUDIT-05 backend endpoint)
+last_updated: "2026-05-01T09:13:11.085Z"
 last_activity: 2026-05-01
 progress:
   total_phases: 9
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-30)
 
 **Core value:** Kunden können DSGVO, BFSG und Rechtstext-Compliance schnell, rechtssicher und ohne Expertenwissen erreichen
-**Current focus:** Phase 1 — Critical Compliance Fixes
+**Current focus:** Phase 2 — Accessibility Statement Generator
 
 ## Current Position
 
-Phase: 2
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 2 (Accessibility Statement Generator) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-05-01
 
 Progress: [░░░░░░░░░░] 0%
@@ -50,6 +50,7 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase 01-critical-compliance-fixes P01 | 3min | 3 tasks | 7 files |
 | Phase 01-critical-compliance-fixes P02 | 15min | 2 tasks | 4 files |
+| Phase 02-accessibility-statement-generator P01 | 28 | 2 tasks | 2 files |
 
 ### Decisions
 
@@ -59,6 +60,9 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 01-critical-compliance-fixes]: TCF stub in cookie_banner_v2.js retained, only documentation comments added — marked Coming Soon, not removed
 - [Phase 01-critical-compliance-fixes]: AUDIT-03: Used findall+priority-index regex instead of re.search to correctly match Edge/OPR before Chrome in UA strings
 - [Phase 01-critical-compliance-fixes]: AUDIT-04: Security headers placed at nginx server-block level (not in location blocks) to prevent inheritance shadowing
+- [Phase 02-accessibility-statement-generator]: AUDIT-05: Used local get_current_user (line 114 in accessibility_fix_routes.py) for generate_statement — consistent with all other endpoints in this file, not imported from auth_routes
+- [Phase 02-accessibility-statement-generator]: AUDIT-05: Column names fix_package and site_id used (not package_data/website_id) — verified from create_accessibility_fix_packages.sql and live queries
+- [Phase 02-accessibility-statement-generator]: AUDIT-05: Jinja2 autoescape=select_autoescape(['html']) enabled in _statement_jinja_env — prevents XSS from user-provided contact_email and site_url
 
 ### Pending Todos
 
@@ -71,6 +75,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-01T00:16:54.839Z
-Stopped at: Completed 01-critical-compliance-fixes plan 02 (AUDIT-03 + AUDIT-04)
+Last session: 2026-05-01T09:13:11.082Z
+Stopped at: Completed 02-accessibility-statement-generator plan 01 (AUDIT-05 backend endpoint)
 Resume file: None
