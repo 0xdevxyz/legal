@@ -112,3 +112,12 @@ Pre-change nginx config backed up to: `/etc/nginx/sites-available/complyo.de.bak
 ## Known Stubs
 
 None — all plan goals are fully implemented and verified live.
+
+## Self-Check: PASSED
+
+- test_ua_truncation.py: FOUND
+- cookie_compliance_routes.py: FOUND (truncate_user_agent defined + wired)
+- nginx/complyo.de: FOUND (live + in repo)
+- nginx backup: FOUND (/etc/nginx/sites-available/complyo.de.bak.20260430)
+- Commit ddc11f5 (Task 1): FOUND
+- Commit 28d6a60 (Task 2): FOUND
