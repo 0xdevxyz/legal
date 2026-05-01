@@ -19,6 +19,7 @@ import {
   Globe
 } from 'lucide-react';
 import { Logo } from './Logo';
+import BfsgDisclaimer from './BfsgDisclaimer';
 
 interface ComplyoLandingProps {
   variant: 'original' | 'high-conversion';
@@ -1806,6 +1807,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
       {/* Header mit Navigation und Hero */}
       <header>
         <Navigation />
+        <BfsgDisclaimer />
         <HeroSection />
       </header>
       

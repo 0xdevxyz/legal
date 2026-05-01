@@ -16,6 +16,7 @@ import FAQAccordion from './landing/FAQAccordion';
 import TrustMetrics from './landing/TrustMetrics';
 import CTASection from './landing/CTASection';
 import { Logo } from './Logo';
+import BfsgDisclaimer from './BfsgDisclaimer';
 
 /**
  * ProfessionalLanding - Professional Audit Dashboard Landing-Page
@@ -75,6 +76,7 @@ export default function ProfessionalLanding() {
         </nav>
         
         {/* Hero Section with Dashboard Preview */}
+        <BfsgDisclaimer />
         <HeroSection />
       </header>
       

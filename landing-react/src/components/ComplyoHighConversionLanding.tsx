@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import WebsiteScanner from './landing/WebsiteScanner';
 import { Logo } from './Logo';
+import BfsgDisclaimer from './BfsgDisclaimer';
 
 interface ComplyoLandingProps {
   variant: 'original' | 'high-conversion';
@@ -54,6 +55,7 @@ export default function ComplyoHighConversionLanding({ variant, sessionId }: Com
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      <BfsgDisclaimer />
       {/* Header mit Top Banner und Hero */}
       <header>
         {/* Navigation */}
