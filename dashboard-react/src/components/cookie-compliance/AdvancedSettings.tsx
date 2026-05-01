@@ -50,8 +50,8 @@ export default function AdvancedSettings({ siteId, config, onSave }: AdvancedSet
       id: 'tcf', 
       label: 'TCF 2.2', 
       icon: Shield,
-      badge: 'Beta',
-      badgeColor: 'bg-yellow-500'
+      badge: 'Coming Soon',
+      badgeColor: 'bg-gray-500'
     },
     { 
       id: 'policy', 

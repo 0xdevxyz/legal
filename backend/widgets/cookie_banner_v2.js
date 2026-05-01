@@ -190,7 +190,12 @@
             // Initialize Google Consent Mode v2 FIRST (before any Google scripts load)
             this.initGoogleConsentMode();
 
-            // Initialize IAB TCF 2.2 stub if enabled via data-tcf attribute
+            // Initialize IAB TCF 2.2 stub if enabled via data-tcf attribute.
+            // STATUS: Coming Soon — not for production use. The stub returns cmpId: 0
+            // (unregistered CMP) and IS NOT a substitute for an IAB-registered CMP.
+            // It is opt-in and remains inactive unless the script tag explicitly sets
+            // data-tcf="true". Do NOT enable on production sites until Complyo completes
+            // IAB Europe TCF 2.2 registration. See AUDIT-02 in Phase 1 of v2.0 milestone.
             const script = document.currentScript ||
                            document.querySelector('script[data-site-id]') ||
                            document.querySelector('script[src*="cookie-compliance.js"]');
@@ -851,6 +856,7 @@
          *
          * Supported commands: ping, getTCData, addEventListener, removeEventListener
          */
+        // STATUS: Coming Soon — opt-in only via data-tcf="true". See AUDIT-02.
         initTCF() {
             const self = this;
 

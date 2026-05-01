@@ -117,7 +117,7 @@ export default function TCFManager({ siteId, config, onSave }: TCFManagerProps) 
           <CardTitle className="text-white flex items-center gap-2">
             <Shield className="w-5 h-5 text-yellow-400" />
             TCF 2.2 Konfiguration
-            <Badge className="ml-2 bg-yellow-500/20 text-yellow-400">Beta</Badge>
+            <Badge className="ml-2 bg-gray-500/20 text-gray-400 border border-gray-500/30">Coming Soon</Badge>
           </CardTitle>
           <CardDescription>
             Transparency and Consent Framework für standardisierte Einwilligungen
