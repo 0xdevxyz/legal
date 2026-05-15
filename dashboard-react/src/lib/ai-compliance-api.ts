@@ -32,7 +32,7 @@ const aiApiClient = axios.create({
 aiApiClient.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('access_token');
+      const token = (window as any).__complyo_access_token || localStorage.getItem('access_token');
       if (token) {
         config.headers['Authorization'] = `Bearer ${token}`;
       }
@@ -42,10 +42,13 @@ aiApiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: Handle errors
+// Response interceptor: Handle errors gracefully
 aiApiClient.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 403) {
+      return Promise.reject(error);
+    }
     const message = error.response?.data?.detail || error.message;
     console.error('AI Compliance API Error:', message);
     return Promise.reject(error);
