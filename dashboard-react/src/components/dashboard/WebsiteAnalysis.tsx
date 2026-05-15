@@ -24,6 +24,7 @@ import { generateSiteId, isScanHash } from '@/lib/siteIdUtils';
 import { OptimizationModeLock } from './OptimizationModeLock';
 import { ComplianceWizard } from './ComplianceWizard';
 import QuickWins from './QuickWins';
+import apiClient from '@/lib/api';
 
 export const WebsiteAnalysis: React.FC = () => {
   const { user } = useAuth();
@@ -35,10 +36,18 @@ export const WebsiteAnalysis: React.FC = () => {
   const [previousScore, setPreviousScore] = useState<number | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const pillarRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  
-  // Get plan type from user, default to 'free'
+
   const rawPlanType = user?.plan_type || 'free';
   const planType: 'free' | 'ai' | 'expert' = (['free','ai','expert'].includes(rawPlanType) ? rawPlanType : 'free') as 'free' | 'ai' | 'expert';
+
+  const isCurrentSiteLocked = isInOptimizationMode &&
+    lockedOptimizationUrl &&
+    currentWebsite?.url &&
+    (currentWebsite.url === lockedOptimizationUrl ||
+     currentWebsite.url.includes(lockedOptimizationUrl) ||
+     lockedOptimizationUrl.includes(currentWebsite.url));
+
+  const isAnalysisOnly = !!(isInOptimizationMode && lockedOptimizationUrl && !isCurrentSiteLocked);
   
   // ✅ PERSISTENCE: Lade letzte Scan-Ergebnisse beim Mount
   const { data: latestScanData, isLoading: isLoadingLatestScan } = useLatestScan();
@@ -49,8 +58,8 @@ export const WebsiteAnalysis: React.FC = () => {
     currentWebsite?.url || null // ← CRITICAL FIX: null statt undefined
   );
   
-  // Priorität: Store > Fetched > Latest Scan (beim Mount)
-  const analysisData = storedAnalysisData || fetchedAnalysisData || latestScanData;
+  // Priorität: DB (latestScan) > Fetched > Store (localStorage-Cache)
+  const analysisData = latestScanData || fetchedAnalysisData || storedAnalysisData;
   
   // ✅ DEBUG: Log final analysisData
   React.useEffect(() => {
@@ -72,15 +81,14 @@ export const WebsiteAnalysis: React.FC = () => {
   }, [analysisData, storedAnalysisData, fetchedAnalysisData, latestScanData]);
   
   // ✅ FIX: Gesamter Loading-State berücksichtigt auch latestScan
-  const isActuallyLoading = isLoading || (isLoadingLatestScan && !storedAnalysisData && !fetchedAnalysisData);
+  const isActuallyLoading = isLoading || (isLoadingLatestScan && !fetchedAnalysisData && !storedAnalysisData);
   
   // Wenn neue Daten vom Hook kommen, in Store speichern
   React.useEffect(() => {
-    if (fetchedAnalysisData && !storedAnalysisData) {
-
+    if (fetchedAnalysisData) {
       setAnalysisData(fetchedAnalysisData);
     }
-  }, [fetchedAnalysisData, storedAnalysisData, setAnalysisData]);
+  }, [fetchedAnalysisData, setAnalysisData]);
   
   // ✅ PERSISTENCE: Letzte Scan-Ergebnisse beim Mount in Store laden
   React.useEffect(() => {
@@ -353,15 +361,48 @@ export const WebsiteAnalysis: React.FC = () => {
     }
   }, [analysisData]);
 
+  useEffectAlias(() => {
+    const handler = () => {
+      const firstCriticalPillar = groupedIssues.find(p =>
+        p.issues.some(i => i.severity === 'critical')
+      );
+      const targetPillar = firstCriticalPillar || groupedIssues.find(p => p.issues.length > 0);
+      if (targetPillar) {
+        setExpandedPillar(targetPillar.id);
+        setTimeout(() => {
+          const el = pillarRefs.current[targetPillar.id];
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+      }
+    };
+    window.addEventListener('complyo:scroll-to-first-critical', handler);
+    return () => window.removeEventListener('complyo:scroll-to-first-critical', handler);
+  }, [groupedIssues]);
+
+  useEffectAlias(() => {
+    const handler = (e: Event) => {
+      const pillarId = (e as CustomEvent).detail?.pillarId;
+      if (pillarId) {
+        setExpandedPillar(pillarId);
+        setTimeout(() => {
+          const el = pillarRefs.current[pillarId];
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+      }
+    };
+    window.addEventListener('complyo:scroll-to-pillar', handler);
+    return () => window.removeEventListener('complyo:scroll-to-pillar', handler);
+  }, []);
+
   return (
     <div className="space-y-6">
       {/* ✅ PROMINENTER WEBSITE-BANNER - IMMER SICHTBAR */}
       {currentWebsite && (
-        <div className="glass-strong rounded-2xl p-6 border-2 border-sky-500/30 shadow-glow-blue sticky top-20 z-40 mb-6">
+        <div className="glass-strong rounded-2xl p-6 border-2 border-orange-500/30 mb-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-4 flex-1">
-              <div className="p-3 bg-gradient-to-br from-sky-500 to-purple-500 rounded-xl shadow-lg">
-                <Globe className="w-8 h-8 text-white" />
+              <div className="p-3 bg-orange-500/15 rounded-xl">
+                <Globe className="w-8 h-8 text-orange-400" />
               </div>
               <div className="flex-1">
                 <div className="text-xs font-semibold text-sky-400 mb-1 uppercase tracking-wider">📊 Analysierte Website</div>
@@ -391,33 +432,21 @@ export const WebsiteAnalysis: React.FC = () => {
                 size="sm"
                 onClick={async () => {
                   if (analysisData && analysisData.scan_id) {
-                    const token = localStorage.getItem('access_token');
-                    const apiBaseUrl = typeof window !== 'undefined' && window.location.hostname.includes('complyo.tech')
-                      ? 'https://api.complyo.de'
-                      : 'http://localhost:8002';
-                    const downloadUrl = `${apiBaseUrl}/api/v2/reports/${analysisData.scan_id}/download`;
-                    
                     try {
-                      const response = await fetch(downloadUrl, {
-                        headers: {
-                          'Authorization': `Bearer ${token}`
-                        }
-                      });
-                      
-                      if (response.ok) {
-                        const blob = await response.blob();
-                        const url = window.URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `complyo-report-${analysisData.scan_id}.pdf`;
-                        document.body.appendChild(a);
-                        a.click();
-                        window.URL.revokeObjectURL(url);
-                        document.body.removeChild(a);
-                      } else {
-                        showToast('PDF-Download fehlgeschlagen. Bitte versuchen Sie es erneut.', 'error');
-                      }
-                    } catch (error) {
+                      const response = await apiClient.get(
+                        `/api/v2/reports/${analysisData.scan_id}/download`,
+                        { responseType: 'blob' }
+                      );
+                      const blob = response.data;
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `complyo-report-${analysisData.scan_id}.pdf`;
+                      document.body.appendChild(a);
+                      a.click();
+                      window.URL.revokeObjectURL(url);
+                      document.body.removeChild(a);
+                    } catch {
                       showToast('PDF-Download fehlgeschlagen. Bitte versuchen Sie es erneut.', 'error');
                     }
                   }
@@ -615,6 +644,25 @@ export const WebsiteAnalysis: React.FC = () => {
                             
                             return (
                               <>
+                                {/* Analyse-Modus Banner pro Säule */}
+                                {isAnalysisOnly && (
+                                  <div className="flex items-center justify-between gap-3 px-4 py-2.5 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                                    <span className="text-xs text-amber-300">
+                                      Analyse-Modus — Optimierungen sind nur für <strong className="text-white">{lockedOptimizationUrl}</strong> verfügbar
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        if (typeof window !== 'undefined') {
+                                          window.dispatchEvent(new CustomEvent('complyo:back-to-optimization'));
+                                        }
+                                      }}
+                                      className="text-xs text-amber-300 hover:text-white underline whitespace-nowrap"
+                                    >
+                                      Zurück zur Optimierung
+                                    </button>
+                                  </div>
+                                )}
+
                                 {/* Zeige gruppierte Issues */}
                                 {pillarGroups.map((group: any, idx: number) => (
                                   <ErrorBoundary key={`group-${group.group_id}-${idx}`} componentName={`ComplianceIssueGroup (${group.title})`}>
@@ -624,6 +672,7 @@ export const WebsiteAnalysis: React.FC = () => {
                                       websiteUrl={analysisData?.url}
                                       scanId={analysisData?.scan_id}
                                       onStartFix={handleAIFix}
+                                      isAnalysisOnly={isAnalysisOnly}
                                     />
                                   </ErrorBoundary>
                                 ))}
@@ -638,6 +687,7 @@ export const WebsiteAnalysis: React.FC = () => {
                                       scanId={analysisData?.scan_id}
                                       websiteUrl={analysisData?.url}
                                       onStartFix={handleAIFix}
+                                      isAnalysisOnly={isAnalysisOnly}
                                     />
                                   </ErrorBoundary>
                                 ))}

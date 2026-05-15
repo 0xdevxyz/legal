@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { useRouter } from 'next/navigation';
 import { LegalArchiveModal } from './LegalArchiveModal';
 import { SkeletonLegalNews } from '@/components/ui/Skeleton';
+import { useDashboardStore, RescanContext } from '@/stores/dashboard';
+import apiClient from '@/lib/api';
 
 // TypeScript Interfaces
 interface AIClassification {
@@ -65,7 +67,8 @@ interface NewsItem {
 
 export const LegalNews: React.FC = () => {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'updates' | 'news'>('updates'); // KI-Updates per Default
+  const { setPendingRescanContext, currentWebsite } = useDashboardStore();
+  const [activeTab, setActiveTab] = useState<'updates' | 'news'>('updates');
   const [legalUpdates, setLegalUpdates] = useState<LegalUpdate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [newsData, setNewsData] = useState<NewsItem[]>([]);
@@ -80,16 +83,23 @@ export const LegalNews: React.FC = () => {
     fetchRSSNews();
   }, []);
 
+  const triggerRescan = (update: LegalUpdate, focusCategory?: RescanContext['focus_category']) => {
+    setPendingRescanContext({
+      legal_update_id: update.id,
+      legal_update_title: update.title,
+      focus_category: focusCategory,
+      triggered_at: new Date().toISOString(),
+    });
+  };
+
   // KI-gesteuerte Aktionen
   const handlePrimaryAction = async (update: LegalUpdate, event?: React.MouseEvent) => {
-    // Verhindere Standard-Navigation
     if (event) {
       event.preventDefault();
       event.stopPropagation();
     }
     
     if (!update.classification?.primary_action) {
-      // Fallback: Zeige Details
       setSelectedUpdate(update);
       return;
     }
@@ -97,77 +107,48 @@ export const LegalNews: React.FC = () => {
     const action = update.classification.primary_action;
     const startTime = Date.now();
     
-    // ✅ PRÜFE: Hat User eine Website?
+    // PRÜFE: Hat User eine Website?
     if ((action as any).has_website === false && action.action_type !== 'info_only' && action.action_type !== 'information_only') {
-      // Zeige Warnung + Details
       const message = `⚠️ Keine Website hinterlegt\n\n${update.title}\n\nUm diese Gesetzesänderung auf Ihre Website anzuwenden, müssen Sie zunächst eine Website scannen.\n\n📋 Details:\n${update.classification.reasoning || 'Keine Details verfügbar'}\n\nMöchten Sie jetzt eine Website scannen?`;
       
       if (confirm(message)) {
         window.location.href = '/';
       } else {
-        // Zeige trotzdem Details-Modal
         setSelectedUpdate(update);
       }
       return;
     }
     
-    // ✅ ZEIGE DETAILS + AKTION
-    // Zeige Details-Modal mit reasoning, user_impact, consequences
     const detailsMessage = `📋 ${update.title}\n\n${(action as any).description || ''}\n\n⏱️ Dauer: ${(action as any).estimated_time || 'N/A'}\n\n🤔 Begründung:\n${update.classification.reasoning || 'Keine Details'}\n\n👤 Auswirkungen:\n${update.classification.user_impact || 'Keine Angaben'}\n\n${update.classification.consequences_if_ignored ? `⚠️ Folgen bei Ignorierung:\n${update.classification.consequences_if_ignored}` : ''}\n\nMöchten Sie fortfahren?`;
     
     if (!confirm(detailsMessage)) {
       return;
     }
     
-    // Track Feedback (impliziter Click)
     trackFeedback(update, 'implicit_click', 'click_primary_button', startTime);
     
-    console.log('🔍 Action triggered:', action.action_type, 'für Update:', update.title);
-    
-    // Führe Aktion aus
     switch (action.action_type) {
       case 'scan_website':
-        // ✅ ECHTE SCAN-INTEGRATION: Navigiere zur Hauptseite mit Scan-Trigger
-        const scanUrl = `/?trigger_scan=true&legal_update_id=${update.id}&legal_context=${encodeURIComponent(update.title)}`;
-        window.location.href = scanUrl;
+        triggerRescan(update);
         break;
         
       case 'update_cookie_banner':
-        // ✅ KI-ANALYSE: Starte Cookie-Compliance Analyse
-        const cookieAnalysisUrl = `/?trigger_scan=true&focus=cookies&legal_update_id=${update.id}&legal_context=${encodeURIComponent(update.title)}&ai_analysis=cookie_banner`;
-        // Zeige Hinweis BEVOR der Scan startet
         if (confirm(`🍪 Cookie-Banner KI-Analyse\n\nWegen: ${update.title}\n\nDie KI wird Ihren Cookie-Banner analysieren und konkrete Verbesserungsvorschläge machen.\n\nMöchten Sie die Analyse jetzt starten?`)) {
-          window.location.href = cookieAnalysisUrl;
+          triggerRescan(update, 'cookies');
         }
         break;
         
       case 'review_policy':
       case 'update_privacy_policy':
-        // ✅ Trigger Scan mit Fokus auf Datenschutz
-        const privacyUrl = `/?trigger_scan=true&focus=datenschutz&legal_update_id=${update.id}&legal_context=${encodeURIComponent(update.title)}`;
-        window.location.href = privacyUrl;
+        triggerRescan(update, 'datenschutz');
         break;
         
       case 'update_impressum':
-        // ✅ Trigger Scan mit Fokus auf Impressum
-        const impressumUrl = `/?trigger_scan=true&focus=impressum&legal_update_id=${update.id}&legal_context=${encodeURIComponent(update.title)}`;
-        window.location.href = impressumUrl;
+        triggerRescan(update, 'impressum');
         break;
         
       case 'check_accessibility':
-        // ✅ DIREKT ZUM ACCESSIBILITY WIDGET (Tool ist bereits implementiert!)
-        // Scroll zum Widget falls auf der Seite, sonst navigiere zur Hauptseite
-        const accessibilityWidget = document.querySelector('[data-widget="accessibility"]') || document.getElementById('accessibility-widget');
-        if (accessibilityWidget) {
-          accessibilityWidget.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          setTimeout(() => {
-            alert(`♿ Barrierefreiheit-Widget\n\nWegen: ${update.title}\n\nIhr Accessibility-Widget (unten rechts) hilft Ihnen, WCAG 2.1 AA-konform zu werden.\n\nDas Widget ist bereits aktiv und behebt automatisch viele Barrierefreiheits-Probleme!`);
-          }, 500);
-        } else {
-          // Falls nicht auf Seite, navigiere zur Hauptseite und zeige Widget-Hinweis
-          alert(`♿ Barrierefreiheit-Tool\n\nWegen: ${update.title}\n\nIhr Accessibility-Widget (unten rechts auf der Hauptseite) hilft Ihnen WCAG-konform zu werden!`);
-          window.location.href = '/';
-        }
+        triggerRescan(update, 'barrierefreiheit');
         break;
         
       case 'contact_support':
@@ -176,12 +157,10 @@ export const LegalNews: React.FC = () => {
         break;
         
       case 'info_only':
-        // Nur Details zeigen
         setSelectedUpdate(update);
         break;
         
       default:
-        console.log('⚠️ Unbekannter Action-Type:', action.action_type);
         setSelectedUpdate(update);
     }
   };
@@ -242,94 +221,76 @@ export const LegalNews: React.FC = () => {
     return icons[iconName] || Info;
   };
   
-  const handleStartScan = () => {
-    // Navigiere zur Hauptseite wo der User eine neue Analyse starten kann
-    window.location.href = '/';
+  const handleStartScan = (update?: LegalUpdate) => {
+    if (update) {
+      triggerRescan(update);
+    } else {
+      window.location.href = '/';
+    }
   };
 
   const fetchLegalUpdates = async () => {
     setLoadError(null);
     
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
-
-      // ✅ Lade ALLE Updates (include_info_only=true), damit auch News ohne action_required sichtbar sind
-      const response = await fetch(`${API_URL}/api/legal-ai/updates?limit=10&include_info_only=true`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
+      const res = await apiClient.get('/api/legal-ai/updates', {
+        params: { limit: 10, include_info_only: true }
       });
 
-      if (response.ok) {
-        const updates = await response.json();
-        
-        console.log('📥 Legal Updates geladen:', updates?.length || 0);
-        
-        // Parse Classification-Daten
-        const parsedUpdates = (updates || []).map((update: any) => ({
-          ...update,
-          severity: update.severity || (update.action_required ? 'warning' : 'info'),
-          classification: update.primary_action ? {
-            action_required: update.action_required,
-            confidence: update.confidence,
-            impact_score: update.impact_score,
-            primary_action: update.primary_action,
-            recommended_actions: update.recommended_actions,
-            reasoning: update.reasoning,
-            user_impact: update.user_impact,
-            consequences_if_ignored: update.consequences_if_ignored,
-            classification_id: update.classification_id
-          } : null
-        }));
-        
-        setLegalUpdates(parsedUpdates);
+      const updates = res.data || [];
+      
+      console.log('📥 Legal Updates geladen:', updates?.length || 0);
+      
+      // Parse Classification-Daten
+      const parsedUpdates = (updates || []).map((update: any) => ({
+        ...update,
+        severity: update.severity || (update.action_required ? 'warning' : 'info'),
+        classification: update.primary_action ? {
+          action_required: update.action_required,
+          confidence: update.confidence,
+          impact_score: update.impact_score,
+          primary_action: update.primary_action,
+          recommended_actions: update.recommended_actions,
+          reasoning: update.reasoning,
+          user_impact: update.user_impact,
+          consequences_if_ignored: update.consequences_if_ignored,
+          classification_id: update.classification_id
+        } : null
+      }));
+      
+      setLegalUpdates(parsedUpdates);
+    } catch (err: any) {
+      const status = err.response?.status;
+      if (status === 403) {
+        setLegalUpdates([]);
       } else {
-        console.error('❌ Legal Updates API Fehler:', response.status, response.statusText);
-        setLoadError(`API-Fehler: ${response.status} ${response.statusText}`);
+        setLoadError('Rechtliche Updates konnten nicht geladen werden.');
         setLegalUpdates([]);
       }
-    } catch (error) {
-      console.error('❌ Fehler beim Laden der Gesetzesänderungen:', error);
-      setLoadError('Verbindung zur API fehlgeschlagen. Bitte später erneut versuchen.');
-      setLegalUpdates([]);
     }
   };
 
   const fetchRSSNews = async () => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
+      const res = await apiClient.get('/api/legal/news', { params: { limit: 6 } });
+      const data = res.data;
 
-      const response = await fetch(`${API_URL}/api/legal/news?limit=6`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-
-        if (data.success && data.news && data.news.length > 0) {
-          // Konvertiere Backend-Format zu Frontend-Format
-          const formattedNews = data.news.map((item: any) => ({
-            id: String(item.id) || String(Math.random()),
-            type: item.news_type || 'update',
-            severity: item.severity || 'info',
-            title: item.title,
-            summary: item.summary,
-            date: item.published_date || new Date().toISOString(),
-            source: item.source,
-            url: item.url
-          }));
+      if (data.success && data.news && data.news.length > 0) {
+        // Konvertiere Backend-Format zu Frontend-Format
+        const formattedNews = data.news.map((item: any) => ({
+          id: String(item.id) || String(Math.random()),
+          type: item.news_type || 'update',
+          severity: item.severity || 'info',
+          title: item.title,
+          summary: item.summary,
+          date: item.published_date || new Date().toISOString(),
+          source: item.source,
+          url: item.url
+        }));
 
           setNewsData(formattedNews);
-        } else {
-
         }
-      } else {
-        console.error('❌ RSS API Fehler:', response.status, response.statusText);
-      }
-    } catch (error) {
-      console.error('❌ Fehler beim Laden der RSS-News:', error);
+    } catch {
     } finally {
       setIsLoading(false);
     }
@@ -415,7 +376,7 @@ export const LegalNews: React.FC = () => {
             className={`flex-1 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
               activeTab === 'updates'
                 ? 'bg-purple-500/15 text-purple-400 border-2 border-purple-500/50 shadow-lg shadow-purple-500/10'
-                : 'glass-card text-zinc-400 hover:glass-strong hover:text-white'
+                : 'bg-zinc-900/50 border border-zinc-800/50 text-zinc-400 hover:bg-zinc-800/60 hover:text-white hover:border-zinc-700/60'
             }`}
           >
             <Bell className="w-4 h-4 inline mr-2" />
@@ -431,7 +392,7 @@ export const LegalNews: React.FC = () => {
             className={`flex-1 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
               activeTab === 'news'
                 ? 'bg-sky-500/15 text-sky-400 border-2 border-sky-500/50 shadow-lg shadow-sky-500/10'
-                : 'glass-card text-zinc-400 hover:glass-strong hover:text-white'
+                : 'bg-zinc-900/50 border border-zinc-800/50 text-zinc-400 hover:bg-zinc-800/60 hover:text-white hover:border-zinc-700/60'
             }`}
           >
             <Newspaper className="w-4 h-4 inline mr-2" />
@@ -561,7 +522,7 @@ export const LegalNews: React.FC = () => {
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleStartScan();
+                          handleStartScan(update);
                         }}
                         className="w-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2.5 px-4 rounded-lg transition-all flex items-center justify-center gap-2"
                       >

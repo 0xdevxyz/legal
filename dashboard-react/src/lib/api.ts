@@ -12,21 +12,57 @@ const apiClient = axios.create({
  },
 });
 
-// ✅ Request Interceptor: Auto-inject Authorization Token
+// Single-flight for token refresh — prevents multiple concurrent refresh calls
+let _inflightTokenRefresh: Promise<string | null> | null = null;
+
+const refreshAccessToken = async (): Promise<string | null> => {
+  if (_inflightTokenRefresh) return _inflightTokenRefresh;
+  _inflightTokenRefresh = (async () => {
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/auth/refresh-cookie`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const token = data.access_token;
+        if (typeof window !== 'undefined' && token) {
+          (window as any).__complyo_access_token = token;
+        }
+        return token as string;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      _inflightTokenRefresh = null;
+    }
+  })();
+  return _inflightTokenRefresh;
+};
+
+// ✅ Request Interceptor: Auto-inject Authorization Token + CSRF token
 apiClient.interceptors.request.use(
  (config) => {
-   // Get token from localStorage
-   const token = localStorage.getItem('access_token');
-   
-  // If token exists, add it to Authorization header
-  if (token) {
-    config.headers['Authorization'] = `Bearer ${token}`;
-  }
-  
-  return config;
+   const token = typeof window !== 'undefined'
+     ? ((window as any).__complyo_access_token || localStorage.getItem('access_token'))
+     : null;
+   if (token) {
+     config.headers['Authorization'] = `Bearer ${token}`;
+   }
+   if (typeof document !== 'undefined') {
+     const csrf = document.cookie
+       .split('; ')
+       .find(row => row.startsWith('csrf_token='))
+       ?.split('=')[1];
+     if (csrf) {
+       config.headers['X-CSRF-Token'] = csrf;
+     }
+   }
+   return config;
  },
  (error) => {
-   console.error('💥 API Request Error:', error);
+   console.error('API Request Error:', error);
    return Promise.reject(error);
  }
 );
@@ -46,42 +82,21 @@ apiClient.interceptors.response.use(
      return apiClient(originalRequest);
    }
    
-   // ✅ Token-Refresh bei 401
+   // ✅ Token-Refresh bei 401 via HttpOnly cookie endpoint (Single-Flight)
    if (error.response?.status === 401 && !originalRequest._retry) {
      originalRequest._retry = true;
      
-     const refreshToken = localStorage.getItem('refresh_token');
-     if (refreshToken) {
-       try {
-         const refreshResponse = await apiClient.post('/api/auth/refresh', {
-           refresh_token: refreshToken
-         });
-         
-         const newToken = refreshResponse.data.access_token;
-         localStorage.setItem('access_token', newToken);
-         originalRequest.headers.Authorization = `Bearer ${newToken}`;
-         
-         return apiClient(originalRequest);
-       } catch (refreshError) {
-         // ✅ Refresh fehlgeschlagen → Logout
-         console.error('Token refresh failed in interceptor:', refreshError);
-         localStorage.removeItem('access_token');
-         localStorage.removeItem('refresh_token');
-         localStorage.removeItem('user');
-         
-         // ✅ Redirect zu Login (nur im Browser)
-         if (typeof window !== 'undefined') {
-           window.location.href = '/login';
-         }
-         
-         return Promise.reject(refreshError);
-       }
-     } else {
-       // ✅ Kein Refresh-Token → Logout
-       if (typeof window !== 'undefined') {
-         window.location.href = '/login';
-       }
+     const newToken = await refreshAccessToken();
+     if (newToken) {
+       originalRequest.headers.Authorization = `Bearer ${newToken}`;
+       return apiClient(originalRequest);
      }
+
+     if (typeof window !== 'undefined') {
+       delete (window as any).__complyo_access_token;
+       window.location.href = '/login';
+     }
+     return Promise.reject(error);
    }
    
    console.error('💥 API Response Error:', {
@@ -152,22 +167,35 @@ const validateAndNormalizeUrl = (url: string): string => {
  }
 };
 
+// Ensures the CSRF cookie is present by performing a GET request if missing
+export const ensureCsrfCookie = async (): Promise<void> => {
+  if (typeof document === 'undefined') return;
+  const hasCsrf = document.cookie.split('; ').some(row => row.startsWith('csrf_token='));
+  if (!hasCsrf) {
+    try {
+      await apiClient.get('/api/auth/health');
+    } catch {
+      // ignore errors — we only need the Set-Cookie side-effect
+    }
+  }
+};
+
 // ✅ Website Analysis API Call
-export const analyzeWebsite = async (url: string): Promise<ComplianceAnalysis> => {
+export const analyzeWebsite = async (url: string, legalUpdateId?: number): Promise<ComplianceAnalysis> => {
  try {
    const normalizedUrl = validateAndNormalizeUrl(url);
-   const payload = { url: normalizedUrl };
+   const payload: Record<string, any> = { url: normalizedUrl };
+   if (legalUpdateId !== undefined) {
+     payload.legal_update_id = legalUpdateId;
+   }
 
-  // Point to the public analysis endpoint (no auth required for now)
-  const response: AxiosResponse<ComplianceAnalysis & { success: boolean }> = await apiClient.post('/api/analyze', payload);
+  const response: AxiosResponse<{ success: boolean; data: ComplianceAnalysis }> = await apiClient.post('/api/v2/analyze', payload);
 
    if (!response.data || !response.data.success) {
      throw new Error('Analysis API did not return a successful response');
    }
 
-   // ✅ Die Daten sind direkt in response.data (nicht verschachtelt!)
-
-   return response.data;
+   return response.data.data;
  } catch (error) {
    console.error('💥 analyzeWebsite failed:', error);
 

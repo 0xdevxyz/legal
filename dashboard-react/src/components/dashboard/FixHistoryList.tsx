@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Calendar, Download, FileText, Code, RefreshCw, Filter } from 'lucide-react'
+import apiClient from '@/lib/api'
 
 interface GeneratedFix {
   id: number
@@ -33,19 +34,9 @@ export function FixHistoryList() {
 
   const loadFixHistory = async () => {
     try {
-      const token = localStorage.getItem('access_token')
-      const response = await fetch('https://api.complyo.de/api/v2/fixes/history', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      
-      if (response.ok) {
-        const data: FixHistoryResponse = await response.json()
-        setFixes(data.fixes)
-      }
-    } catch (error) {
-      console.error('Failed to load fix history:', error)
+      const res = await apiClient.get<FixHistoryResponse>('/api/v2/fixes/history')
+      setFixes(res.data.fixes)
+    } catch {
     } finally {
       setIsLoading(false)
     }
@@ -53,30 +44,15 @@ export function FixHistoryList() {
 
   const handleExport = async (fixId: number, format: 'html' | 'pdf') => {
     try {
-      const token = localStorage.getItem('access_token')
-      const response = await fetch('https://api.complyo.de/api/v2/fixes/export', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          fix_id: fixId,
-          export_format: format
-        })
+      const res = await apiClient.post('/api/v2/fixes/export', {
+        fix_id: fixId,
+        export_format: format
       })
-      
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success && data.download_url) {
-          // Trigger download
-          window.open(data.download_url, '_blank')
-          // Reload history to update export status
-          loadFixHistory()
-        }
+      if (res.data.success && res.data.download_url) {
+        window.open(res.data.download_url, '_blank')
+        loadFixHistory()
       }
-    } catch (error) {
-      console.error('Export failed:', error)
+    } catch {
       alert('Export fehlgeschlagen. Bitte versuchen Sie es erneut.')
     }
   }
