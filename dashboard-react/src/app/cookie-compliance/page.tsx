@@ -10,12 +10,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
+import apiClient from '@/lib/api';
 
 // Import Cookie Compliance Components
 import CookieBannerDesigner from '@/components/cookie-compliance/CookieBannerDesigner';
 import ServiceManager from '@/components/cookie-compliance/ServiceManager';
 import IntegrationGuide from '@/components/cookie-compliance/IntegrationGuide';
 import ConsentStatistics from '@/components/cookie-compliance/ConsentStatistics';
+import RevocationChart from '@/components/cookie-compliance/RevocationChart';
 import AdvancedSettings from '@/components/cookie-compliance/AdvancedSettings';
 
 export default function CookieCompliancePage() {
@@ -25,14 +27,37 @@ export default function CookieCompliancePage() {
   const [siteId, setSiteId] = useState<string>('');
   const [config, setConfig] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('design');
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
   
   // ✅ NEU: 1 Website pro Account Absicherung
   const [websiteLocked, setWebsiteLocked] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState<string>('');
   
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
-  
-  useEffect(() => {
+
+  const handleUnlockCookie = async () => {
+    setCheckoutLoading(true);
+    setCheckoutError('');
+    try {
+      const res = await apiClient.post('/api/stripe/create-checkout', {
+        plan: 'single',
+        modules: ['cookie'],
+        billing_period: 'monthly',
+        success_url: `${window.location.origin}/cookie-compliance?activated=true`,
+        cancel_url: `${window.location.origin}/cookie-compliance`,
+      });
+      if (res.data.checkout_url) {
+        window.location.href = res.data.checkout_url;
+      } else {
+        setCheckoutError(res.data.detail || 'Checkout konnte nicht gestartet werden.');
+      }
+    } catch (err: any) {
+      setCheckoutError(err.response?.data?.detail || 'Fehler beim Starten des Checkouts.');
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };  useEffect(() => {
     loadConfig();
   }, []);
   
@@ -207,12 +232,16 @@ export default function CookieCompliancePage() {
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            {checkoutError && (
+              <p className="text-red-400 text-sm text-center w-full">{checkoutError}</p>
+            )}
             <Button
-              onClick={() => router.push('/subscription')}
+              onClick={handleUnlockCookie}
+              disabled={checkoutLoading}
               className="bg-orange-500 hover:bg-orange-600 text-white font-semibold gap-2"
             >
               <CreditCard className="w-4 h-4" />
-              Jetzt freischalten
+              {checkoutLoading ? 'Wird gestartet…' : 'Jetzt freischalten'}
             </Button>
             <Button
               variant="outline"
@@ -493,6 +522,9 @@ export default function CookieCompliancePage() {
               
               <TabsContent value="statistics">
                 <ConsentStatistics siteId={siteId} />
+                <div className="mt-6">
+                  <RevocationChart siteId={siteId} />
+                </div>
               </TabsContent>
             </Tabs>
           </CardContent>
