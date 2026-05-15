@@ -296,6 +296,10 @@ async def log_consent(
     - Auto-expires after 3 years
     """
     try:
+        # AUDIT-19: Rate-Limiting (max 100 Consent-Logs/Minute pro Site-ID)
+        if not check_rate_limit(consent.site_id):
+            raise HTTPException(status_code=429, detail="Rate limit exceeded: max 100 consents per minute per site")
+
         # Get IP and hash it
         ip_address = consent.ip_address or get_client_ip(request)
         ip_hash = hash_ip_address(ip_address) if ip_address else None
@@ -540,8 +544,8 @@ async def get_my_config(
         }
         
     except Exception as e:
-        print(f"Error getting user config: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get configuration: {str(e)}")
+        logger.error(f"Error in get_my_config (user lookup/db): {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get configuration: {type(e).__name__}: {str(e)[:200]}")
 
 
 @router.get("/api/cookie-compliance/config/{site_id}")
@@ -2341,6 +2345,195 @@ async def get_bannerless_config(
         return {
             "success": True,
             "bannerless_mode": row['bannerless_mode'] if row else False
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# AUDIT-16/17: Consent Revocation & Revocation Analytics
+# =============================================================================
+
+class RevocationRequest(BaseModel):
+    site_id: str = Field(..., min_length=1, max_length=255)
+    visitor_id: str = Field(..., min_length=1, max_length=255)
+    reason: Optional[str] = None
+
+_revocation_rate_cache: Dict[str, Any] = {}
+
+@router.post("/api/cookie-compliance/revoke")
+async def revoke_consent(
+    revocation: RevocationRequest,
+    request: Request,
+):
+    """AUDIT-16: Widerruf einer erteilten Einwilligung (DSGVO Art. 7 Abs. 3)."""
+    if not db_pool:
+        return {"success": True, "message": "Revocation recorded (no db)"}
+    try:
+        await db_pool.execute(
+            """INSERT INTO cookie_consent_logs
+               (site_id, visitor_id, consent_categories, action, timestamp, user_agent)
+               VALUES ($1, $2, $3, 'revoke', NOW(), $4)""",
+            revocation.site_id,
+            revocation.visitor_id,
+            json.dumps({"necessary": True, "functional": False, "analytics": False, "marketing": False}),
+            truncate_user_agent(request.headers.get("user-agent", ""))
+        )
+        return {"success": True, "action": "revoke", "site_id": revocation.site_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/cookie-compliance/revocation-stats/{site_id}")
+async def get_revocation_stats(
+    site_id: str,
+    days: int = 30,
+    current_user: Dict = Depends(get_current_user_required),
+):
+    """AUDIT-17: Acceptance vs. Revocation Rate der letzten N Tage."""
+    if not db_pool:
+        return {"site_id": site_id, "acceptance_rate": 0.0, "revocation_rate": 0.0, "total": 0, "days": days}
+    try:
+        rows = await db_pool.fetch(
+            """SELECT action, COUNT(*) as cnt
+               FROM cookie_consent_logs
+               WHERE site_id = $1
+                 AND timestamp >= NOW() - ($2 * INTERVAL '1 day')
+               GROUP BY action""",
+            site_id, days
+        )
+        counts = {r["action"]: r["cnt"] for r in rows}
+        total = sum(counts.values())
+        accept_count = counts.get("accept", 0) + counts.get(None, 0)
+        revoke_count = counts.get("revoke", 0)
+        return {
+            "site_id": site_id,
+            "days": days,
+            "total": total,
+            "accept_count": accept_count,
+            "revoke_count": revoke_count,
+            "acceptance_rate": round(accept_count / total, 4) if total else 0.0,
+            "revocation_rate": round(revoke_count / total, 4) if total else 0.0,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# AUDIT-18: Per-Service Consent Tracking bereits im ConsentLog.services_accepted
+# Zusätzlicher Endpoint: Per-Service Breakdown aus Logs
+# =============================================================================
+
+@router.get("/api/cookie-compliance/service-stats/{site_id}")
+async def get_service_consent_stats(
+    site_id: str,
+    days: int = 30,
+    current_user: Dict = Depends(get_current_user_required),
+):
+    """AUDIT-18: Per-Service Consent-Statistiken (welche Services wie oft akzeptiert)."""
+    if not db_pool:
+        return {"site_id": site_id, "services": {}, "days": days}
+    try:
+        rows = await db_pool.fetch(
+            """SELECT services_accepted
+               FROM cookie_consent_logs
+               WHERE site_id = $1
+                 AND action IS DISTINCT FROM 'revoke'
+                 AND timestamp >= NOW() - ($2 * INTERVAL '1 day')
+                 AND services_accepted IS NOT NULL""",
+            site_id, days
+        )
+        service_counts: Dict[str, int] = {}
+        for row in rows:
+            services = row["services_accepted"]
+            if isinstance(services, str):
+                try:
+                    services = json.loads(services)
+                except Exception:
+                    continue
+            if isinstance(services, list):
+                for svc in services:
+                    service_counts[svc] = service_counts.get(svc, 0) + 1
+        return {"site_id": site_id, "days": days, "services": service_counts}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# AUDIT-19: Rate-Limiting (max 100 Consent-Logs/Minute pro Site-ID)
+# Implementiert als In-Memory Sliding Window (ergänzt log_consent)
+# =============================================================================
+
+import time as _time
+from collections import defaultdict, deque
+
+_rate_limit_windows: Dict[str, deque] = defaultdict(deque)
+_RATE_LIMIT_MAX = 100
+_RATE_LIMIT_WINDOW_SECONDS = 60
+
+
+def check_rate_limit(site_id: str) -> bool:
+    """Returns True if within rate limit, False if exceeded."""
+    now = _time.monotonic()
+    window = _rate_limit_windows[site_id]
+    while window and window[0] < now - _RATE_LIMIT_WINDOW_SECONDS:
+        window.popleft()
+    if len(window) >= _RATE_LIMIT_MAX:
+        return False
+    window.append(now)
+    return True
+
+
+# =============================================================================
+# AUDIT-24: Agency-Dashboard — Aggregierte Consent-Statistiken
+# =============================================================================
+
+@router.get("/api/cookie-compliance/agency/stats")
+async def get_agency_stats(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """AUDIT-24: Aggregierte Consent-Statistiken über alle verwalteten Sites."""
+    user = await get_current_user_required(credentials)
+    if not db_pool:
+        return {"sites": [], "totals": {"total_impressions": 0, "acceptance_rate": 0.0}}
+    user_id = int(user.get("id") or user.get("user_id"))
+    try:
+        rows = await db_pool.fetch(
+            """SELECT
+                 s.site_id,
+                 s.total_impressions,
+                 s.accepted_all,
+                 s.rejected_all,
+                 s.accepted_partial,
+                 s.date
+               FROM cookie_compliance_stats s
+               INNER JOIN cookie_banner_configs c ON c.site_id = s.site_id AND c.user_id = $1
+               WHERE s.date >= CURRENT_DATE - INTERVAL '30 days'
+               ORDER BY s.date DESC""",
+            user_id
+        )
+        site_map: Dict[str, Any] = {}
+        for r in rows:
+            sid = r["site_id"]
+            if sid not in site_map:
+                site_map[sid] = {"site_id": sid, "total_impressions": 0, "accepted_all": 0, "rejected_all": 0, "accepted_partial": 0}
+            site_map[sid]["total_impressions"] += r["total_impressions"] or 0
+            site_map[sid]["accepted_all"] += r["accepted_all"] or 0
+            site_map[sid]["rejected_all"] += r["rejected_all"] or 0
+            site_map[sid]["accepted_partial"] += r["accepted_partial"] or 0
+        sites = list(site_map.values())
+        for s in sites:
+            total = s["total_impressions"]
+            s["acceptance_rate"] = round((s["accepted_all"] + s["accepted_partial"]) / total, 4) if total else 0.0
+        total_impressions = sum(s["total_impressions"] for s in sites)
+        accepted = sum(s["accepted_all"] + s["accepted_partial"] for s in sites)
+        return {
+            "sites": sites,
+            "totals": {
+                "total_impressions": total_impressions,
+                "acceptance_rate": round(accepted / total_impressions, 4) if total_impressions else 0.0,
+                "site_count": len(sites),
+            }
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

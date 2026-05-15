@@ -11,6 +11,9 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import hashlib
 import bcrypt as _bcrypt
+from passlib.context import CryptContext as _CryptContext
+_pwd_context = _CryptContext(schemes=["bcrypt"], deprecated="auto")
+from csrf_middleware import CSRFMiddleware
 import jwt
 import datetime
 import os
@@ -41,9 +44,7 @@ from compliance_engine.fixer import AIComplianceFixer
 from compliance_engine.workflow_engine import workflow_engine, UserSkillLevel
 from compliance_engine.workflow_integration import WorkflowIntegration
 from compliance_engine.pdf_generator import pdf_generator
-# ✅ FIX: Import centralized Score Calculator
 from compliance_engine.score_calculator import ScoreCalculator
-# NEU: Enhanced Scanner & AI Fix Engine
 from compliance_engine.deep_scanner import DeepScanner
 from compliance_engine.data_validator import DataValidator
 from ai_fix_engine.intelligent_analyzer import IntelligentAnalyzer
@@ -53,15 +54,6 @@ from fastapi.responses import StreamingResponse
 import io
 from payment.stripe_service import StripeService
 import stripe
-
-import sentry_sdk
-# [DUPLICATE-REMOVED] _sentry_dsn = os.getenv("SENTRY_DSN")
-# [DUPLICATE-REMOVED] if _sentry_dsn:
-# [DUPLICATE-REMOVED]     sentry_sdk.init(
-# [DUPLICATE-REMOVED]         dsn=_sentry_dsn,
-# [DUPLICATE-REMOVED]         traces_sample_rate=0.1,
-# [DUPLICATE-REMOVED]         environment=os.getenv("ENVIRONMENT", "production"),
-# [DUPLICATE-REMOVED]     )
 
 # Import API Routers
 from lead_routes import lead_router
@@ -125,6 +117,9 @@ from ai_legal_classifier import init_ai_classifier
 from ai_feedback_learning import init_feedback_learning
 from ai_legal_routes import router as ai_legal_router
 
+# AUDIT-19: DPA Generator (Legal Document Routes)
+from legal_document_routes import legal_document_router, init_routes as init_legal_document_routes
+
 # Legal News Notification System - NEW
 from legal_notification_service import init_legal_notification_service
 from legal_notification_routes import router as legal_notification_router
@@ -180,6 +175,14 @@ class CreateCheckoutSessionRequest(BaseModel):
 
 # Initialize FastAPI app
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
+
+# Security guard: dangerous flags must not be enabled in production
+if ENVIRONMENT == "production":
+    if os.getenv("BYPASS_PAYMENT", "false").lower() == "true":
+        raise RuntimeError("BYPASS_PAYMENT=true is not allowed in production environment!")
+    if os.getenv("UNLIMITED_FIXES", "false").lower() == "true":
+        import logging as _log
+        _log.getLogger(__name__).warning("UNLIMITED_FIXES=true is set in production — this bypasses fix quotas!")
 _docs_url = "/docs" if ENVIRONMENT != "production" else None
 _redoc_url = "/redoc" if ENVIRONMENT != "production" else None
 app = FastAPI(
@@ -223,9 +226,24 @@ app.add_middleware(
     allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-CSRF-Token"],
     expose_headers=["X-Request-ID"]
 )
+
+_csrf_enabled = os.getenv("CSRF_PROTECTION", "true").lower() != "false"
+app.add_middleware(CSRFMiddleware, enabled=_csrf_enabled)
+
+# MCP Auth-Middleware: Bearer-Token auf /mcp-Endpunkten erzwingen
+@app.middleware("http")
+async def mcp_auth_middleware(request: Request, call_next):
+    if request.url.path.startswith("/mcp"):
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "MCP requires Bearer token authentication"},
+            )
+    return await call_next(request)
 
 # Request-ID Middleware (MON-003)
 import uuid as _uuid
@@ -257,6 +275,7 @@ JWT_ALGORITHM = "HS256"
 # Database
 DATABASE_URL = os.getenv("DATABASE_URL")
 db_pool = None
+_async_redis = None
 news_service = None
 risk_calculator = None
 export_service = None
@@ -330,6 +349,26 @@ async def close_db():
 @app.on_event("startup")
 async def startup_event():
     await init_db()
+
+    # Initialize async Redis client for brute-force lockout + general caching
+    global _async_redis
+    import redis.asyncio as _aioredis
+    _redis_url = os.getenv("REDIS_URL")
+    if _redis_url:
+        _async_redis = await _aioredis.from_url(_redis_url, decode_responses=True)
+    else:
+        _async_redis = _aioredis.Redis(
+            host=os.getenv("REDIS_HOST", "redis"),
+            port=int(os.getenv("REDIS_PORT", 6379)),
+            password=os.getenv("REDIS_PASSWORD"),
+            decode_responses=True,
+        )
+    try:
+        await _async_redis.ping()
+        print("✅ Async Redis connected")
+    except Exception as e:
+        print(f"⚠️  Async Redis unavailable (account lockout disabled): {e}")
+        _async_redis = None
 
     # Initialize database service for lead management
     await db_service.initialize()
@@ -421,7 +460,7 @@ async def startup_event():
 
     # Initialize Auth Service
     global auth_service
-    auth_service = AuthService(db_pool)
+    auth_service = AuthService(db_pool, redis_client=_async_redis)
     # Set global references in auth_routes
     auth_routes.auth_service = auth_service
     auth_routes.db_pool = db_pool
@@ -429,6 +468,10 @@ async def startup_event():
     # Initialize BFSG Accessibility Fix routes (after auth_service is ready)
     init_accessibility_routes(db_pool, auth_service, db_service)
     print("✅ BFSG Accessibility Fix routes initialized")
+
+    # Initialize Legal Document routes (AUDIT-19)
+    init_legal_document_routes(db_pool, auth_service)
+    print("✅ Legal Document routes (DPA Generator) initialized")
     
     # Initialize Git Integration routes
     init_git_routes(db_pool, auth_service)
@@ -506,6 +549,7 @@ async def startup_event():
     app.include_router(git_router)  # Git Integration - Automatic PRs - NEW
     app.include_router(alt_text_router)  # Alt-Text AI Generation - NEW
     app.include_router(deep_cookie_scanner_router)  # Deep Cookie Scanner - Premium Feature
+    app.include_router(legal_document_router)  # AUDIT-19: DPA Generator
     
     # Initialize Alt-Text routes
     import alt_text_routes
@@ -619,6 +663,11 @@ async def startup_event():
 
     print("✅ All routers initialized successfully")
 
+    # MCP Server – KI-Agenten-Integration (fastapi-mcp)
+    from mcp_server import setup_mcp
+    setup_mcp(app)
+    logger.info("🤖 Complyo MCP Server mounted at /mcp")
+
 @app.on_event("shutdown")
 async def shutdown_event():
     # Stop Background Worker
@@ -634,11 +683,11 @@ async def shutdown_event():
 # Utility Functions
 def hash_password(password: str) -> str:
     """Hash password with bcrypt (cost factor 12). Replaces insecure SHA-256."""
-    return _bcrypt.hashpw(password.encode('utf-8'), _bcrypt.gensalt(rounds=12)).decode('utf-8')
+    return _pwd_context.hash(password)
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Verify bcrypt password hash."""
-    return _bcrypt.checkpw(plain.encode('utf-8'), hashed.encode('utf-8'))
+    return _pwd_context.verify(plain, hashed)
 
 # API Routes
 @app.get("/")
@@ -922,7 +971,7 @@ async def dashboard_overview(current_user: dict = Depends(get_current_user)):
             # Get user projects
             projects = await connection.fetch(
                 "SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at DESC",
-                current_user["user_id"]
+                current_user["id"]
             )
             
             # Calculate stats
@@ -966,7 +1015,7 @@ async def get_projects(current_user: dict = Depends(get_current_user)):
         async with db_pool.acquire() as connection:
             projects = await connection.fetch(
                 "SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at DESC",
-                current_user["user_id"]
+                current_user["id"]
             )
             
             return {
@@ -999,7 +1048,7 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
         
         # Save quick scan to database
         async with db_pool.acquire() as connection:
-            scan_id = f"quick_{current_user['user_id']}_{int(datetime.datetime.now().timestamp())}"
+            scan_id = f"quick_{current_user['id']}_{int(datetime.datetime.now().timestamp())}"
             await connection.execute(
                 """
                 INSERT INTO scan_history (
@@ -1008,9 +1057,9 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 """,
                 scan_id,
-                current_user["user_id"],
+                int(current_user["id"]),
                 scan_result["url"],
-                scan_result["scan_duration_ms"],
+                int(scan_result.get("scan_duration_ms") or 0),
                 scan_result["compliance_score"],
                 scan_result["total_risk_euro"],
                 scan_result["critical_issues"],
@@ -1020,7 +1069,7 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
             )
             new_scan = await connection.fetchrow(
                 "SELECT id FROM scan_history WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", 
-                current_user["user_id"]
+                current_user["id"]
             )
         
         return {
@@ -1051,7 +1100,14 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
             raise HTTPException(status_code=400, detail=scan_result["error_message"])
 
         async with db_pool.acquire() as connection:
-            scan_id = f"scan_{current_user['user_id']}_{int(datetime.datetime.now().timestamp())}"
+            user_id_raw = current_user.get("id") or current_user.get("user_id") or ""
+            try:
+                user_id_value = int(user_id_raw)
+            except (ValueError, TypeError):
+                logger.error(f"analyze_website_v2: cannot convert user_id '{user_id_raw}' to int")
+                raise HTTPException(status_code=400, detail="Ungültige Benutzer-ID im Token")
+
+            scan_id = f"scan_{user_id_value}_{int(datetime.datetime.now().timestamp())}"
             await connection.execute(
                 """
                 INSERT INTO scan_history (
@@ -1060,9 +1116,9 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 """,
                 scan_id,
-                current_user["user_id"],
+                user_id_value,
                 scan_result["url"],
-                scan_result["scan_duration_ms"],
+                int(scan_result.get("scan_duration_ms") or 0),
                 scan_result["compliance_score"],
                 scan_result["total_risk_euro"],
                 scan_result["critical_issues"],
@@ -1070,11 +1126,12 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
                 scan_result["total_issues"],
                 json.dumps(scan_result, default=str)
             )
-            new_scan = await connection.fetchrow("SELECT id, scan_id FROM scan_history WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", current_user["user_id"])
+            user_id_int = user_id_value
+            new_scan = await connection.fetchrow("SELECT id, scan_id FROM scan_history WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", user_id_int)
             
             tracked_site = await connection.fetchrow(
                 "SELECT id FROM tracked_websites WHERE user_id = $1 AND url = $2",
-                current_user["user_id"], scan_result["url"]
+                user_id_int, scan_result["url"]
             )
             
             if tracked_site:
@@ -1091,7 +1148,7 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
                     VALUES ($1, $2, $3, $4, NOW())
                     """,
                     tracked_site["id"],
-                    current_user["user_id"],
+                    user_id_int,
                     scan_result["compliance_score"],
                     json.dumps(pillar_scores)
                 )
@@ -1125,7 +1182,7 @@ async def generate_ai_fixes(request: AIFixRequest, current_user: dict = Depends(
         async with db_pool.acquire() as connection:
             scan_result = await connection.fetchrow(
                 "SELECT * FROM scan_history WHERE scan_id = $1 AND user_id = $2",
-                request.scan_id, current_user["user_id"]
+                request.scan_id, current_user["id"]
             )
         
         if not scan_result:
@@ -1178,7 +1235,7 @@ async def start_user_journey(request: StartJourneyRequest, current_user: dict = 
     try:
         skill_level = UserSkillLevel(request.skill_level)
         journey = await workflow_engine.start_user_journey(
-            user_id=str(current_user["user_id"]),
+            user_id=str(current_user["id"]),
             website_url=request.website_url,
             skill_level=skill_level
         )
@@ -1190,7 +1247,7 @@ async def start_user_journey(request: StartJourneyRequest, current_user: dict = 
 @app.get("/api/v2/workflow/current-step")
 async def get_current_workflow_step(current_user: dict = Depends(get_current_user)):
     try:
-        current_step = await workflow_engine.get_current_step(str(current_user["user_id"]))
+        current_step = await workflow_engine.get_current_step(str(current_user["id"]))
         return {"success": True, "data": current_step}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get current step: {e}")
@@ -1199,7 +1256,7 @@ async def get_current_workflow_step(current_user: dict = Depends(get_current_use
 async def complete_workflow_step(request: CompleteStepRequest, current_user: dict = Depends(get_current_user)):
     try:
         result = await workflow_engine.complete_step(
-            user_id=str(current_user["user_id"]),
+            user_id=str(current_user["id"]),
             step_id=request.step_id,
             validation_data=request.validation_data
         )
@@ -1210,7 +1267,7 @@ async def complete_workflow_step(request: CompleteStepRequest, current_user: dic
 @app.get("/api/v2/workflow/progress")
 async def get_workflow_progress(current_user: dict = Depends(get_current_user)):
     try:
-        progress = await workflow_engine.get_journey_progress(str(current_user["user_id"]))
+        progress = await workflow_engine.get_journey_progress(str(current_user["id"]))
         return {"success": True, "data": progress}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get progress: {e}")
@@ -1244,7 +1301,7 @@ async def get_latest_scan(current_user: dict = Depends(get_current_user)):
                 ORDER BY scan_timestamp DESC
                 LIMIT 1
                 """,
-                int(current_user["user_id"])
+                int(current_user["id"])
             )
             
             if not scan:
@@ -1315,7 +1372,7 @@ async def get_scan_history(limit: int = 10, current_user: dict = Depends(get_cur
                 ORDER BY scan_timestamp DESC
                 LIMIT $2
                 """,
-                current_user["user_id"],
+                current_user["id"],
                 limit
             )
             
@@ -1358,14 +1415,14 @@ async def create_fix_job(
             try:
                 scan = await connection.fetchrow(
                     "SELECT scan_id FROM scan_history WHERE scan_id = $1 AND user_id = $2",
-                    scan_id, current_user["user_id"]
+                    scan_id, current_user["id"]
                 )
                 if not scan:
                     # Versuche mit int-cast
                     try:
                         scan = await connection.fetchrow(
                             "SELECT scan_id FROM scan_history WHERE scan_id = $1 AND user_id = $2",
-                            scan_id, int(current_user["user_id"])
+                            scan_id, int(current_user["id"])
                         )
                     except Exception:
                         pass
@@ -1377,9 +1434,9 @@ async def create_fix_job(
             
             # Erstelle Job — user_id als int casten für asyncpg-Kompatibilität
             try:
-                user_id_int = int(current_user["user_id"])
+                user_id_int = int(current_user["id"])
             except (ValueError, TypeError):
-                user_id_int = current_user["user_id"]
+                user_id_int = current_user["id"]
             
             job = await connection.fetchrow(
                 """
@@ -1431,7 +1488,7 @@ async def get_fix_job_status(job_id: str, current_user: dict = Depends(get_curre
                 WHERE job_id = $1 AND user_id = $2
                 """,
                 job_id,
-                current_user["user_id"]
+                current_user["id"]
             )
             
             if not job:
@@ -1486,7 +1543,7 @@ async def get_active_fix_jobs(current_user: dict = Depends(get_current_user)):
                   )
                 ORDER BY created_at DESC
                 """,
-                int(current_user["user_id"])
+                int(current_user["id"])
             )
             
             jobs_list = []
@@ -1518,19 +1575,30 @@ async def get_active_fix_jobs(current_user: dict = Depends(get_current_user)):
 @app.get("/api/v2/reports/{scan_id}/download")
 async def download_report(scan_id: str, current_user: dict = Depends(get_current_user)):
     try:
+        user_id_raw = current_user.get("id") or current_user.get("user_id") or ""
         async with db_pool.acquire() as connection:
             scan_result = await connection.fetchrow(
-                "SELECT * FROM scan_history WHERE scan_id = $1 AND user_id = $2",
-                scan_id, current_user["user_id"]
+                "SELECT * FROM scan_history WHERE scan_id = $1 AND user_id::text = $2",
+                scan_id, str(user_id_raw)
             )
         
         if not scan_result:
             raise HTTPException(status_code=404, detail="Scan not found or access denied.")
 
-        # 2. Generate the PDF report
-        report_bytes = pdf_generator.generate_compliance_report(dict(scan_result))
+        scan_dict = dict(scan_result)
+        raw_data = scan_dict.get("scan_data")
+        if isinstance(raw_data, str):
+            try:
+                report_data = json.loads(raw_data)
+            except Exception:
+                report_data = scan_dict
+        elif isinstance(raw_data, dict):
+            report_data = raw_data
+        else:
+            report_data = scan_dict
+
+        report_bytes = pdf_generator.generate_compliance_report(report_data)
         
-        # 3. Stream the PDF as a response
         return StreamingResponse(io.BytesIO(report_bytes), media_type="application/pdf", headers={
             "Content-Disposition": f"attachment; filename=complyo-report-{scan_id}.pdf"
         })
@@ -1538,7 +1606,7 @@ async def download_report(scan_id: str, current_user: dict = Depends(get_current
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Report generation error: {e}")
+        logger.error(f"Report generation error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"PDF-Generierung fehlgeschlagen: {str(e)}"
@@ -1554,12 +1622,12 @@ async def create_checkout_session(
     try:
         async with db_pool.acquire() as connection:
             user = await connection.fetchrow(
-                "SELECT email, name FROM users WHERE id = $1",
-                current_user["user_id"]
+                "SELECT email, full_name FROM users WHERE id = $1",
+                current_user["id"]
             )
         
         result = await stripe_service.create_checkout_session(
-            user_id=current_user["user_id"],
+            user_id=current_user["id"],
             price_id=request.price_id,
             success_url=request.success_url,
             cancel_url=request.cancel_url,
@@ -1574,7 +1642,7 @@ async def create_checkout_session(
 async def create_portal_session(current_user: dict = Depends(get_current_user)):
     try:
         result = await stripe_service.create_portal_session(
-            user_id=current_user["user_id"],
+            user_id=current_user["id"],
             return_url="https://complyo.ai/dashboard"  # Adjust this URL as needed
         )
         return {"success": True, "data": result}
@@ -1584,7 +1652,7 @@ async def create_portal_session(current_user: dict = Depends(get_current_user)):
 @app.get("/api/v2/payments/subscription-status")
 async def get_subscription_status(current_user: dict = Depends(get_current_user)):
     try:
-        status = await stripe_service.get_subscription_status(current_user["user_id"])
+        status = await stripe_service.get_subscription_status(current_user["id"])
         return {"success": True, "data": status}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get subscription status: {str(e)}")
@@ -1592,7 +1660,7 @@ async def get_subscription_status(current_user: dict = Depends(get_current_user)
 @app.get("/api/v2/payments/history")
 async def get_payment_history(current_user: dict = Depends(get_current_user)):
     try:
-        history = await stripe_service.get_payment_history(current_user["user_id"])
+        history = await stripe_service.get_payment_history(current_user["id"])
         return {"success": True, "data": history}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get payment history: {str(e)}")

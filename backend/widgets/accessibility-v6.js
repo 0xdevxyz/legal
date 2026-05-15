@@ -916,10 +916,10 @@
       
       if (isActive || this.features[feature] === true) {
         tile.classList.add('active');
-        check.hidden = false;
+        if (check) check.hidden = false;
       } else {
         tile.classList.remove('active');
-        check.hidden = true;
+        if (check) check.hidden = true;
       }
     }
     
@@ -1033,17 +1033,21 @@
           
         case 'readingGuide':
           const guide = document.getElementById('complyo-reading-guide-overlay');
-          guide.hidden = !this.features.readingGuide;
-          if (this.features.readingGuide) {
-            this.setupReadingGuide();
+          if (guide) {
+            guide.hidden = !this.features.readingGuide;
+            if (this.features.readingGuide) {
+              this.setupReadingGuide();
+            }
           }
           break;
           
         case 'pageStructure':
           const structureOverlay = document.getElementById('complyo-page-structure-overlay');
-          structureOverlay.hidden = !this.features.pageStructure;
-          if (this.features.pageStructure) {
-            this.showPageStructure();
+          if (structureOverlay) {
+            structureOverlay.hidden = !this.features.pageStructure;
+            if (this.features.pageStructure) {
+              this.showPageStructure();
+            }
           }
           break;
           
@@ -1378,11 +1382,13 @@
       const panel = this.container.querySelector('.complyo-panel');
       const toggleBtn = this.container.querySelector('.complyo-toggle-btn');
       
-      panel.hidden = !this.isOpen;
-      toggleBtn.setAttribute('aria-expanded', this.isOpen);
-      
-      // Toggle-Button verstecken wenn Panel offen
-      toggleBtn.style.display = this.isOpen ? 'none' : 'flex';
+      if (panel) {
+        panel.hidden = !this.isOpen;
+      }
+      if (toggleBtn) {
+        toggleBtn.setAttribute('aria-expanded', this.isOpen);
+        toggleBtn.style.display = this.isOpen ? 'none' : 'flex';
+      }
       
       if (this.isOpen) {
         this.trackAnalytics('widget_open', true);

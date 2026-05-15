@@ -64,13 +64,13 @@ async def get_user_id_from_token(user: Dict[str, Any]) -> Any:
     user_id_from_token = user.get("id") or user.get("user_id")
     
     if not user_id_from_token:
-        logger.error(f"No user_id in token: {user}")
+        logger.error(f"No user_id in token claims: {list(user.keys())}")
         raise HTTPException(status_code=403, detail="User ID not found in token")
     
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database not available")
     
-    # ✅ Hole echte user_id aus DB (kann UUID sein)
+    # ✅ Hole echte user_id aus DB — tolerant gegenüber UUID und Integer-Strings
     async with db_pool.acquire() as conn:
         db_user = await conn.fetchrow(
             "SELECT id FROM users WHERE id::text = $1 OR email = $2 LIMIT 1",
@@ -79,9 +79,14 @@ async def get_user_id_from_token(user: Dict[str, Any]) -> Any:
         )
         
         if not db_user:
-            logger.error(f"User not found in database for token: {user_id_from_token}")
+            logger.error(
+                f"User not found in DB — token_id='{user_id_from_token}' "
+                f"email='{user.get('email', '')}' "
+                f"all_claims={list(user.keys())}"
+            )
             raise HTTPException(status_code=403, detail="User not found in database")
         
+        logger.info(f"Resolved DB user_id={db_user['id']} from token_id='{user_id_from_token}'")
         return db_user["id"]
 
 @router.get("", response_model=WebsitesResponse)
@@ -217,6 +222,44 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                     )
                     
                     if not existing_config:
+                        # Farben der Website scrapen für Banner-Vorschlag
+                        scraped_primary = '#7c3aed'
+                        scraped_accent = '#8b5cf6'
+                        scraped_text = '#333333'
+                        scraped_bg = '#ffffff'
+                        try:
+                            from website_crawler import WebsiteCrawler
+                            import aiohttp
+                            from bs4 import BeautifulSoup
+                            from ssrf_protection import validate_url, SSRFError
+                            _crawl_url = data.url if data.url.startswith('http') else f'https://{data.url}'
+                            try:
+                                _crawl_url = validate_url(_crawl_url)
+                            except SSRFError:
+                                _crawl_url = None
+                            if _crawl_url:
+                                import aiohttp as _aiohttp
+                                _timeout = _aiohttp.ClientTimeout(total=10)
+                                async with _aiohttp.ClientSession(timeout=_timeout) as _session:
+                                    async with _session.get(
+                                        _crawl_url,
+                                        headers={'User-Agent': 'Mozilla/5.0 (compatible; ComplyoBot/1.0)'},
+                                        allow_redirects=True
+                                    ) as _resp:
+                                        if _resp.status == 200:
+                                            _html = await _resp.text()
+                                            _soup = BeautifulSoup(_html, 'lxml')
+                                            _crawler = WebsiteCrawler()
+                                            _colors = _crawler.extract_brand_colors(_soup, _html)
+                                            if _colors.get('scraped'):
+                                                scraped_primary = _colors['primary_color']
+                                                scraped_accent = _colors['accent_color']
+                                                scraped_text = _colors['text_color']
+                                                scraped_bg = _colors['bg_color']
+                                                logger.info(f"✅ Farben gescrapt für {data.url}: {scraped_primary} / {scraped_accent}")
+                        except Exception as _color_err:
+                            logger.warning(f"Farb-Scraping fehlgeschlagen (nicht kritisch): {_color_err}")
+
                         # Erstelle Default-Cookie-Banner-Konfiguration
                         default_texts = {
                             "de": {
@@ -251,11 +294,11 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                         """,
                             site_id,
                             user_id,
-                            'box_modal',  # Default Layout
-                            '#7c3aed',    # Primary Color (Violet)
-                            '#8b5cf6',    # Accent Color
-                            '#333333',    # Text Color
-                            '#ffffff',    # Background Color
+                            'box_modal',        # Default Layout
+                            scraped_primary,    # Primary Color (gescrapt oder Fallback)
+                            scraped_accent,     # Accent Color (gescrapt oder Fallback)
+                            scraped_text,       # Text Color
+                            scraped_bg,         # Background Color
                             'rounded',    # Button Style
                             'center',     # Position
                             'boxed',      # Width Mode
@@ -523,4 +566,71 @@ async def get_score_history(
     except Exception as e:
         logger.error(f"Error getting score history: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get score history: {str(e)}")
+
+
+@router.get("/{website_id}/scan-status")
+async def get_scan_status(
+    website_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Gibt Rescan-Status einer Website zurück.
+    Wird vom RescanRequiredBanner im Dashboard abgefragt.
+
+    Returns:
+        {
+            rescan_required: bool,
+            rescan_reason: str | null,
+            last_scan: str | null,
+            triggered_by: { id, title } | null
+        }
+    """
+    try:
+        user_id = current_user.get("uid") or current_user.get("user_id")
+        async with db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    tw.rescan_required,
+                    tw.rescan_reason,
+                    tw.rescan_triggered_by,
+                    lu.title AS legal_update_title,
+                    sh.scan_date AS last_scan
+                FROM tracked_websites tw
+                LEFT JOIN legal_updates lu ON tw.rescan_triggered_by = lu.id
+                LEFT JOIN LATERAL (
+                    SELECT scan_date FROM scan_history
+                    WHERE website_id = tw.id
+                    ORDER BY scan_date DESC
+                    LIMIT 1
+                ) sh ON TRUE
+                WHERE tw.id = $1::uuid
+                  AND tw.user_id = $2::uuid
+                """,
+                website_id,
+                user_id,
+            )
+
+            if not row:
+                raise HTTPException(status_code=404, detail="Website nicht gefunden")
+
+            triggered_by = None
+            if row["rescan_triggered_by"]:
+                triggered_by = {
+                    "id": row["rescan_triggered_by"],
+                    "title": row["legal_update_title"],
+                }
+
+            return {
+                "rescan_required": bool(row["rescan_required"]),
+                "rescan_reason": row["rescan_reason"],
+                "last_scan": row["last_scan"].isoformat() if row["last_scan"] else None,
+                "triggered_by": triggered_by,
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"get_scan_status error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Fehler beim Laden des Scan-Status")
 
