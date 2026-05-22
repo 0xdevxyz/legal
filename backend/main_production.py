@@ -1094,10 +1094,13 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
     """
     try:
         async with ComplianceScanner() as scanner:
-            scan_result = await scanner.scan_website(request.url)
+            scan_result = await asyncio.wait_for(
+                scanner.scan_website(request.url),
+                timeout=120.0
+            )
         
         if scan_result.get("error"):
-            raise HTTPException(status_code=400, detail=scan_result["error_message"])
+            raise HTTPException(status_code=400, detail=scan_result.get("error_message", "Scan failed"))
 
         async with db_pool.acquire() as connection:
             user_id_raw = current_user.get("id") or current_user.get("user_id") or ""
@@ -1164,8 +1167,14 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
 
     except HTTPException:
         raise
+    except asyncio.TimeoutError:
+        logger.error(f"Analysis v2 timeout for url={request.url}")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Scan-Timeout: Die Website hat nicht rechtzeitig geantwortet."
+        )
     except Exception as e:
-        print(f"Analysis v2 error: {e}")
+        logger.exception(f"Analysis v2 error for url={getattr(request, 'url', 'unknown')}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Analyse fehlgeschlagen: {str(e)}"
