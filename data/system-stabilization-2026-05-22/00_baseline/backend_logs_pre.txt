@@ -1,0 +1,500 @@
+INFO:     127.0.0.1:59122 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38910 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36022 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40810 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45090 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47324 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53408 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43470 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54024 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33572 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55636 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51744 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44290 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42878 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48210 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59604 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46160 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34412 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46556 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60814 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49238 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36244 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34644 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57300 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56742 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51960 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44946 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59938 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39542 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40206 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59612 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40072 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41424 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48486 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43004 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59748 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49572 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38838 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50160 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33504 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52858 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43338 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35214 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41704 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47590 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51794 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46662 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44408 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33288 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55526 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37190 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38342 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59724 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.22.0.1:44700 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+INFO:     172.22.0.1:44706 - "GET /api/scans/latest HTTP/1.0" 200 OK
+INFO:     127.0.0.1:50694 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52658 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42248 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53024 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49604 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43140 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44384 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58328 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39410 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51336 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45884 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40170 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57846 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.22.0.1:37072 - "POST /api/auth/refresh-cookie HTTP/1.0" 200 OK
+INFO:     172.22.0.1:37078 - "GET /api/v2/websites HTTP/1.0" 200 OK
+INFO:     127.0.0.1:58846 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44918 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35438 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35808 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50660 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60058 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36338 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42988 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53930 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35718 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35932 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57902 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44804 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45298 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58980 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37458 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42968 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54818 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52552 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55548 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45894 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54308 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55890 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50090 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51836 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55542 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47574 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34766 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33652 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35026 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41836 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56186 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36760 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36160 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37998 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40012 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.22.0.1:33166 - "GET /api/widgets/accessibility.js?version=6 HTTP/1.0" 200 OK
+INFO:     172.22.0.1:33180 - "GET /api/widgets/cookie-compliance.js HTTP/1.0" 200 OK
+Error getting variant assignment: relation "cookie_ab_tests" does not exist
+INFO:     172.22.0.1:33184 - "GET /api/ab-tests/assign/complyo-tech/2013d3ee-3a7b-4483-a1a1-584007c637de HTTP/1.0" 200 OK
+INFO:     172.22.0.1:33188 - "GET /api/cookie-compliance/config/complyo-tech HTTP/1.0" 200 OK
+INFO:     127.0.0.1:39074 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40048 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34714 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38728 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38602 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33360 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53500 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55504 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46460 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34812 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47322 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54320 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34680 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42590 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60574 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38978 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45502 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43170 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33046 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55000 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60200 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49950 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51768 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59772 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41104 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59892 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46132 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60818 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46702 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59352 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44740 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49208 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38612 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48844 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42126 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34222 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39338 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34462 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55356 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48476 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58988 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48800 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39950 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43828 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45056 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54084 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39314 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57540 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53916 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57196 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39318 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48820 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:32904 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59692 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52808 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38440 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36362 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34256 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49078 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54774 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58978 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39996 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.22.0.1:50768 - "GET /api/scans/latest HTTP/1.0" 200 OK
+INFO:     172.22.0.1:50776 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+INFO:     127.0.0.1:40338 - "GET /health HTTP/1.1" 200 OK
+INFO:compliance_engine.scanner:🌐 Browser rendering needed — fetching once for all checks
+INFO:compliance_engine.browser_renderer:🌐 Browser needed: Next.js detected - using browser for full hydration
+INFO:compliance_engine.browser_renderer:✅ Browser initialized
+INFO:compliance_engine.browser_renderer:🌐 Rendering page: https://complyo.de
+INFO:     172.22.0.1:36108 - "GET /api/widgets/cookie-compliance.js HTTP/1.0" 200 OK
+INFO:     172.22.0.1:36124 - "GET /api/widgets/accessibility.js?version=6 HTTP/1.0" 200 OK
+Error getting variant assignment: relation "cookie_ab_tests" does not exist
+INFO:     172.22.0.1:36136 - "GET /api/ab-tests/assign/complyo-tech/8fcdc1b2-4936-4dc6-9e85-5a1a5a300394 HTTP/1.0" 200 OK
+INFO:     172.22.0.1:36140 - "GET /api/cookie-compliance/config/complyo-tech HTTP/1.0" 200 OK
+INFO:compliance_engine.browser_renderer:✅ Rendered successfully in 5186.0ms (server)
+INFO:compliance_engine.browser_renderer:🔒 Browser closed
+INFO:compliance_engine.scanner:✅ Single browser render complete
+INFO:compliance_engine.checks.barrierefreiheit_check:🔍 Starting multi-page accessibility scan for https://complyo.de
+INFO:compliance_engine.checks.impressum_check:🔍 Impressum-Links gefunden: 1
+INFO:compliance_engine.checks.impressum_check:   → /impressum: Impressum
+INFO:compliance_engine.checks.impressum_check:✅ Impressum-Link gefunden, starte Deep-Analyse
+WARNING:compliance_engine.checks.impressum_check:⚠️ HybridValidator nicht verfügbar - überspringe Deep-Analyse
+INFO:compliance_engine.checks.datenschutz_check:🔍 Datenschutz-Links gefunden: 2
+INFO:compliance_engine.checks.datenschutz_check:   → /datenschutz: Datenschutzerklärung
+INFO:compliance_engine.checks.datenschutz_check:   → /datenschutz: Datenschutz
+INFO:compliance_engine.checks.datenschutz_check:✅ Datenschutz-Link gefunden, starte Deep-Analyse
+WARNING:compliance_engine.checks.datenschutz_check:⚠️ HybridValidator nicht verfügbar - überspringe Deep-Analyse
+INFO:compliance_engine.checks.agb_check:AGB-Check: shop_detected=False, url=https://complyo.de
+INFO:compliance_engine.checks.agb_check:AGB-Links gefunden: 1
+INFO:compliance_engine.checks.shop_check:Shop-Detection: 0/3 Patterns
+INFO:compliance_engine.checks.shop_check:Kein Shop erkannt auf https://complyo.de — Shop-Checks übersprungen
+INFO:compliance_engine.screenshot_service:🖼️  Capturing images from https://complyo.de
+INFO:     172.22.0.1:33214 - "GET /api/widgets/cookie-compliance.js HTTP/1.0" 200 OK
+INFO:     172.22.0.1:33224 - "GET /api/widgets/accessibility.js?version=6 HTTP/1.0" 200 OK
+Error getting variant assignment: relation "cookie_ab_tests" does not exist
+INFO:     172.22.0.1:33226 - "GET /api/ab-tests/assign/complyo-tech/06aa67b9-77e5-4eeb-aed4-760973a5e302 HTTP/1.0" 200 OK
+INFO:     172.22.0.1:33238 - "GET /api/cookie-compliance/config/complyo-tech HTTP/1.0" 200 OK
+INFO:     172.22.0.1:42446 - "POST /api/auth/refresh-cookie HTTP/1.0" 200 OK
+INFO:     172.22.0.1:42448 - "GET /api/v2/websites HTTP/1.0" 200 OK
+INFO:     127.0.0.1:36348 - "GET /health HTTP/1.1" 200 OK
+WARNING:compliance_engine.screenshot_service:Navigation timeout/error: Timeout 30000ms exceeded., continuing anyway
+INFO:compliance_engine.screenshot_service:Found 0 images on page
+INFO:compliance_engine.screenshot_service:✅ Captured 0 images successfully
+INFO:compliance_engine.checks.barrierefreiheit_check:📸 Captured 0 images
+WARNING:compliance_engine.scanner:Check failed (non-critical): asdict() should be called on dataclass instances
+INFO:httpx:HTTP Request: GET https://vendor-list.consensu.org/v2/vendor-list.json "HTTP/1.1 200 OK"
+INFO:compliance_engine.scanner:✅ TCF 2.2 Check completed: None, 0 vendors
+INFO:httpx:HTTP Request: GET https://api.e-recht24.de/v1/compliance/descriptions/cookies "HTTP/1.1 404 Not Found"
+WARNING:erecht24_service:Fallback auf Mock-Beschreibung für cookies
+INFO:httpx:HTTP Request: GET https://api.e-recht24.de/v1/compliance/descriptions/cookies "HTTP/1.1 404 Not Found"
+WARNING:erecht24_service:Fallback auf Mock-Beschreibung für cookies
+INFO:httpx:HTTP Request: GET https://api.e-recht24.de/v1/compliance/descriptions/cookies "HTTP/1.1 404 Not Found"
+WARNING:erecht24_service:Fallback auf Mock-Beschreibung für cookies
+INFO:httpx:HTTP Request: GET https://api.e-recht24.de/v1/compliance/descriptions/security "HTTP/1.1 404 Not Found"
+WARNING:erecht24_service:Fallback auf Mock-Beschreibung für security
+INFO:compliance_engine.issue_grouper:🔄 Gruppiere 4 Issues...
+INFO:compliance_engine.issue_grouper:✅ Gruppierung abgeschlossen: 0 Gruppen, 4 einzeln (0.0% gruppiert)
+INFO:compliance_engine.scanner:✅ Issue-Gruppierung abgeschlossen: 0 Gruppen, 0.0% gruppiert
+ERROR:main_production:Analysis v2 error for url=https://complyo.de, user_id=5
+Traceback (most recent call last):
+  File "/app/main_production.py", line 1111, in analyze_website_v2
+    await connection.execute(
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 353, in execute
+    _, status, _ = await self._execute(
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 1794, in _execute
+    result, _ = await self.__execute(
+                ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 1892, in __execute
+    result, stmt = await self._do_execute(
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 1945, in _do_execute
+    result = await executor(stmt, None)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "asyncpg/protocol/protocol.pyx", line 207, in bind_execute
+asyncpg.exceptions.UndefinedFunctionError: operator does not exist: uuid = integer
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+INFO:     172.22.0.1:36100 - "POST /api/v2/analyze HTTP/1.0" 500 Internal Server Error
+INFO:     127.0.0.1:52834 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52860 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40382 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43256 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56056 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43760 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42312 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42988 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38436 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52232 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45212 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57322 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56718 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33668 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35760 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.22.0.1:36524 - "GET /api/scans/latest HTTP/1.0" 200 OK
+INFO:     172.22.0.1:36538 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+INFO:     127.0.0.1:44146 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.22.0.1:43982 - "POST /api/auth/refresh-cookie HTTP/1.0" 200 OK
+INFO:     172.22.0.1:43994 - "POST /api/auth/refresh-cookie HTTP/1.0" 401 Unauthorized
+INFO:     127.0.0.1:50362 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.22.0.1:32798 - "POST /api/auth/refresh-cookie HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:32802 - "POST /api/auth/refresh-cookie HTTP/1.0" 401 Unauthorized
+INFO:auth_service:User authenticated: mail@panoart360.de
+INFO:     172.22.0.1:32812 - "POST /api/auth/login HTTP/1.0" 200 OK
+INFO:     172.22.0.1:32824 - "GET /api/v2/websites HTTP/1.0" 200 OK
+INFO:dashboard_routes:Fetching dashboard metrics for user_id: 5
+ERROR:dashboard_routes:Error fetching dashboard metrics: column "ai_fixes_count" does not exist
+Traceback (most recent call last):
+  File "/app/dashboard_routes.py", line 113, in get_dashboard_metrics
+    user_limits = await conn.fetchrow(
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 749, in fetchrow
+    data = await self._execute(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 1794, in _execute
+    result, _ = await self.__execute(
+                ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 1892, in __execute
+    result, stmt = await self._do_execute(
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 1925, in _do_execute
+    stmt = await self._get_statement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 433, in _get_statement
+    statement = await self._protocol.prepare(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "asyncpg/protocol/protocol.pyx", line 166, in prepare
+asyncpg.exceptions.UndefinedColumnError: column "ai_fixes_count" does not exist
+INFO:     172.22.0.1:32830 - "GET /api/v2/dashboard/metrics HTTP/1.0" 200 OK
+INFO:     172.22.0.1:32842 - "GET /api/v2/websites HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:32854 - "GET /api/scans/latest HTTP/1.0" 200 OK
+INFO:     172.22.0.1:32870 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+INFO:     172.22.0.1:32876 - "GET /api/v2/websites HTTP/1.0" 200 OK
+WARNING:dependencies:Invalid token: Not enough segments
+INFO:     172.22.0.1:32898 - "GET /api/legal-ai/updates?limit=10&include_info_only=true HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:32882 - "GET /api/legal/news?limit=6 HTTP/1.0" 200 OK
+INFO:     172.22.0.1:32912 - "GET /api/widgets/accessibility.js HTTP/1.0" 200 OK
+INFO:compliance_engine.scanner:🌐 Browser rendering needed — fetching once for all checks
+INFO:compliance_engine.browser_renderer:🌐 Browser needed: Next.js detected - using browser for full hydration
+INFO:compliance_engine.browser_renderer:✅ Browser initialized
+INFO:compliance_engine.browser_renderer:🌐 Rendering page: https://complyo.de
+INFO:     172.22.0.1:50822 - "GET /api/widgets/accessibility.js?version=6 HTTP/1.0" 200 OK
+INFO:     172.22.0.1:50818 - "GET /api/widgets/cookie-compliance.js HTTP/1.0" 200 OK
+Error getting variant assignment: relation "cookie_ab_tests" does not exist
+INFO:     172.22.0.1:50830 - "GET /api/ab-tests/assign/complyo-tech/a646f589-ee68-4255-ab85-1bacb27b9deb HTTP/1.0" 200 OK
+INFO:     172.22.0.1:50838 - "GET /api/cookie-compliance/config/complyo-tech HTTP/1.0" 200 OK
+INFO:compliance_engine.browser_renderer:✅ Rendered successfully in 5105.0ms (server)
+INFO:compliance_engine.browser_renderer:🔒 Browser closed
+INFO:compliance_engine.scanner:✅ Single browser render complete
+INFO:compliance_engine.checks.barrierefreiheit_check:🔍 Starting multi-page accessibility scan for https://complyo.de
+INFO:compliance_engine.checks.impressum_check:🔍 Impressum-Links gefunden: 1
+INFO:compliance_engine.checks.impressum_check:   → /impressum: Impressum
+INFO:compliance_engine.checks.impressum_check:✅ Impressum-Link gefunden, starte Deep-Analyse
+WARNING:compliance_engine.checks.impressum_check:⚠️ HybridValidator nicht verfügbar - überspringe Deep-Analyse
+INFO:compliance_engine.checks.datenschutz_check:🔍 Datenschutz-Links gefunden: 2
+INFO:compliance_engine.checks.datenschutz_check:   → /datenschutz: Datenschutzerklärung
+INFO:compliance_engine.checks.datenschutz_check:   → /datenschutz: Datenschutz
+INFO:compliance_engine.checks.datenschutz_check:✅ Datenschutz-Link gefunden, starte Deep-Analyse
+WARNING:compliance_engine.checks.datenschutz_check:⚠️ HybridValidator nicht verfügbar - überspringe Deep-Analyse
+INFO:compliance_engine.checks.agb_check:AGB-Check: shop_detected=False, url=https://complyo.de
+INFO:compliance_engine.checks.agb_check:AGB-Links gefunden: 1
+INFO:compliance_engine.checks.shop_check:Shop-Detection: 0/3 Patterns
+INFO:compliance_engine.checks.shop_check:Kein Shop erkannt auf https://complyo.de — Shop-Checks übersprungen
+INFO:compliance_engine.screenshot_service:🖼️  Capturing images from https://complyo.de
+INFO:     172.22.0.1:54366 - "GET /api/widgets/cookie-compliance.js HTTP/1.0" 200 OK
+INFO:     172.22.0.1:54372 - "GET /api/widgets/accessibility.js?version=6 HTTP/1.0" 200 OK
+Error getting variant assignment: relation "cookie_ab_tests" does not exist
+INFO:     172.22.0.1:54386 - "GET /api/ab-tests/assign/complyo-tech/fc47cdc9-2e11-4735-80c0-0d073641024c HTTP/1.0" 200 OK
+INFO:     172.22.0.1:54396 - "GET /api/cookie-compliance/config/complyo-tech HTTP/1.0" 200 OK
+INFO:     127.0.0.1:35926 - "GET /health HTTP/1.1" 200 OK
+WARNING:compliance_engine.screenshot_service:Navigation timeout/error: Timeout 30000ms exceeded., continuing anyway
+INFO:compliance_engine.screenshot_service:Found 0 images on page
+INFO:compliance_engine.screenshot_service:✅ Captured 0 images successfully
+INFO:compliance_engine.checks.barrierefreiheit_check:📸 Captured 0 images
+WARNING:compliance_engine.scanner:Check failed (non-critical): asdict() should be called on dataclass instances
+INFO:compliance_engine.scanner:✅ TCF 2.2 Check completed: None, 0 vendors
+INFO:httpx:HTTP Request: GET https://api.e-recht24.de/v1/compliance/descriptions/cookies "HTTP/1.1 404 Not Found"
+WARNING:erecht24_service:Fallback auf Mock-Beschreibung für cookies
+INFO:httpx:HTTP Request: GET https://api.e-recht24.de/v1/compliance/descriptions/cookies "HTTP/1.1 404 Not Found"
+WARNING:erecht24_service:Fallback auf Mock-Beschreibung für cookies
+INFO:httpx:HTTP Request: GET https://api.e-recht24.de/v1/compliance/descriptions/cookies "HTTP/1.1 404 Not Found"
+WARNING:erecht24_service:Fallback auf Mock-Beschreibung für cookies
+INFO:httpx:HTTP Request: GET https://api.e-recht24.de/v1/compliance/descriptions/security "HTTP/1.1 404 Not Found"
+WARNING:erecht24_service:Fallback auf Mock-Beschreibung für security
+INFO:compliance_engine.issue_grouper:🔄 Gruppiere 4 Issues...
+INFO:compliance_engine.issue_grouper:✅ Gruppierung abgeschlossen: 0 Gruppen, 4 einzeln (0.0% gruppiert)
+INFO:compliance_engine.scanner:✅ Issue-Gruppierung abgeschlossen: 0 Gruppen, 0.0% gruppiert
+ERROR:main_production:Analysis v2 error for url=https://complyo.de, user_id=5
+Traceback (most recent call last):
+  File "/app/main_production.py", line 1111, in analyze_website_v2
+    await connection.execute(
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 353, in execute
+    _, status, _ = await self._execute(
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 1794, in _execute
+    result, _ = await self.__execute(
+                ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 1892, in __execute
+    result, stmt = await self._do_execute(
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 1945, in _do_execute
+    result = await executor(stmt, None)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "asyncpg/protocol/protocol.pyx", line 207, in bind_execute
+asyncpg.exceptions.UndefinedFunctionError: operator does not exist: uuid = integer
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+INFO:     172.22.0.1:50814 - "POST /api/v2/analyze HTTP/1.0" 500 Internal Server Error
+INFO:     127.0.0.1:41036 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54054 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51548 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.22.0.1:33826 - "GET /api/scans/latest HTTP/1.0" 200 OK
+INFO:     172.22.0.1:33832 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+INFO:     127.0.0.1:45504 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56104 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47356 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49604 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58930 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45002 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.22.0.1:37856 - "GET /api/scans/latest HTTP/1.0" 200 OK
+INFO:     172.22.0.1:37868 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+INFO:     127.0.0.1:59374 - "GET /health HTTP/1.1" 200 OK
+ERROR:cookie_compliance_routes:Error in get_my_config (user lookup/db): 401: Authentication required
+Traceback (most recent call last):
+  File "/app/cookie_compliance_routes.py", line 416, in get_my_config
+    user = await get_current_user_required(credentials)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/cookie_compliance_routes.py", line 60, in get_current_user_required
+    raise HTTPException(status_code=401, detail="Authentication required")
+fastapi.exceptions.HTTPException: 401: Authentication required
+INFO:     172.22.0.1:56430 - "GET /api/cookie-compliance/my-config HTTP/1.0" 500 Internal Server Error
+INFO:     172.22.0.1:56446 - "GET /api/v2/websites HTTP/1.0" 401 Unauthorized
+WARNING:dependencies:Invalid token: Not enough segments
+INFO:     172.22.0.1:37588 - "GET /api/legal-ai/updates?limit=10&include_info_only=true HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:37596 - "GET /api/v2/websites HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:37610 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+INFO:     172.22.0.1:37616 - "GET /api/legal/news?limit=6 HTTP/1.0" 200 OK
+INFO:     127.0.0.1:48300 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36316 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.22.0.1:56758 - "GET /api/scans/latest HTTP/1.0" 200 OK
+INFO:     172.22.0.1:56774 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+ERROR:cookie_compliance_routes:Error in get_my_config (user lookup/db): 401: Authentication required
+Traceback (most recent call last):
+  File "/app/cookie_compliance_routes.py", line 416, in get_my_config
+    user = await get_current_user_required(credentials)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/cookie_compliance_routes.py", line 60, in get_current_user_required
+    raise HTTPException(status_code=401, detail="Authentication required")
+fastapi.exceptions.HTTPException: 401: Authentication required
+INFO:     172.22.0.1:56788 - "GET /api/cookie-compliance/my-config HTTP/1.0" 500 Internal Server Error
+INFO:     172.22.0.1:56792 - "GET /api/v2/websites HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:56794 - "GET /api/ai/systems HTTP/1.0" 403 Forbidden
+INFO:     172.22.0.1:56804 - "GET /api/ai/stats HTTP/1.0" 403 Forbidden
+INFO:     172.22.0.1:56820 - "GET /api/addons/catalog HTTP/1.0" 200 OK
+INFO:     172.22.0.1:56834 - "GET /api/addons/my-addons HTTP/1.0" 403 Forbidden
+INFO:     127.0.0.1:41140 - "GET /health HTTP/1.1" 200 OK
+INFO:cookie_compliance_routes:User authenticated: 5
+INFO:     172.22.0.1:53330 - "GET /api/cookie-compliance/agency/stats HTTP/1.0" 200 OK
+WARNING:dependencies:Invalid token: Not enough segments
+INFO:     172.22.0.1:53344 - "GET /api/legal-ai/updates?limit=10&include_info_only=true HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:53354 - "GET /api/v2/websites HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:53358 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+INFO:     172.22.0.1:53368 - "GET /api/legal/news?limit=6 HTTP/1.0" 200 OK
+WARNING:dependencies:Invalid token: Not enough segments
+INFO:     172.22.0.1:53376 - "GET /api/legal-ai/updates?limit=10&include_info_only=true HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:53380 - "GET /api/legal/news?limit=6 HTTP/1.0" 200 OK
+INFO:     172.22.0.1:53392 - "GET /api/v2/websites HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:53408 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+INFO:     127.0.0.1:34770 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.22.0.1:35934 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+INFO:     127.0.0.1:59022 - "GET /health HTTP/1.1" 200 OK
+WARNING:dependencies:Invalid token: Not enough segments
+INFO:     172.22.0.1:39242 - "GET /api/legal-ai/updates?limit=10&include_info_only=true HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:39236 - "GET /api/legal/news?limit=6 HTTP/1.0" 200 OK
+INFO:     172.22.0.1:39252 - "GET /api/v2/websites HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:39258 - "GET /api/scans/latest HTTP/1.0" 200 OK
+INFO:     172.22.0.1:39262 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+WARNING:dependencies:Invalid token: Not enough segments
+INFO:     172.22.0.1:39856 - "GET /api/legal-ai/updates?limit=10&include_info_only=true HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:39858 - "GET /api/v2/websites HTTP/1.0" 401 Unauthorized
+INFO:     172.22.0.1:39868 - "GET /api/legal/news?limit=6 HTTP/1.0" 200 OK
+INFO:     172.22.0.1:39880 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+INFO:     127.0.0.1:48034 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35314 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37404 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41856 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50496 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59436 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34390 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56214 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43428 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49864 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48530 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50964 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57398 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33948 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54142 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46874 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55274 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47922 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45352 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49712 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41350 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56520 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50246 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.22.0.1:36482 - "GET /api/scans/latest HTTP/1.0" 200 OK
+INFO:     172.22.0.1:36498 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+INFO:     172.22.0.1:59604 - "GET /api/fix-jobs/active HTTP/1.0" 200 OK
+INFO:     127.0.0.1:55284 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35164 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40760 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47570 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36638 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47254 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50370 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33054 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43132 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48838 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54568 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58006 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41198 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42942 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41786 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44006 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42196 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35470 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33232 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46492 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38990 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47410 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35530 - "GET /health HTTP/1.1" 200 OK
