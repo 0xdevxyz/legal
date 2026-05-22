@@ -22,6 +22,9 @@ db_pool = None
 oauth_service = None  # OAuth Service for Google & Apple
 firebase_verify_token = None  # Firebase token verification function
 
+# Cookie domain for cross-subdomain sharing (app.complyo.de <-> api.complyo.de)
+COOKIE_DOMAIN = ".complyo.de" if os.getenv("ENVIRONMENT", "production") == "production" else None
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
@@ -126,7 +129,8 @@ async def register(request: Request, body: RegisterRequest):
             secure=is_secure,
             samesite="lax",
             max_age=60 * 60 * 24 * 30,
-            path="/api/auth"
+            path="/",
+            domain=COOKIE_DOMAIN
         )
         return response
     except HTTPException:
@@ -135,7 +139,7 @@ async def register(request: Request, body: RegisterRequest):
         logger.error(f"Registration error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Registration failed: {str(e)}"
+            detail="Registrierung fehlgeschlagen"
         )
     except ValueError as e:
         raise HTTPException(
@@ -197,7 +201,8 @@ async def login(request: Request, body: LoginRequest):
             secure=is_secure,
             samesite="lax",
             max_age=60 * 60 * 24 * 30,
-            path="/api/auth"
+            path="/",
+            domain=COOKIE_DOMAIN
         )
         return response
     except HTTPException:
@@ -206,43 +211,63 @@ async def login(request: Request, body: LoginRequest):
         logger.error(f"Login error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login failed: {str(e)}"
+            detail="Login fehlgeschlagen"
         )
 
 @router.post("/refresh")
 @limiter.limit("10/minute")
 async def refresh_token(request: Request, body: RefreshRequest):
-    """Refresh access token"""
-    new_access_token = await auth_service.refresh_access_token(body.refresh_token)
-    if not new_access_token:
+    """Refresh access token with token rotation"""
+    result = await auth_service.refresh_access_token(body.refresh_token)
+    if not result:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token"
         )
     
-    return {
+    new_access_token, new_refresh_token = result
+    is_secure = os.getenv("ENVIRONMENT", "production") == "production"
+    response = JSONResponse({
         "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
         "token_type": "bearer"
-    }
+    })
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh_token,
+        httponly=True,
+        secure=is_secure,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,
+        path="/",
+        domain=COOKIE_DOMAIN
+    )
+    return response
 
 @router.post("/refresh-cookie")
 @limiter.limit("10/minute")
 async def refresh_token_from_cookie(request: Request):
-    """Refresh access token using HttpOnly cookie (survives localStorage clear)"""
+    """Refresh access token using HttpOnly cookie (with token rotation)"""
     refresh_token_value = request.cookies.get("refresh_token")
     if not refresh_token_value:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No refresh token cookie"
-        )
-    new_access_token = await auth_service.refresh_access_token(refresh_token_value)
-    if not new_access_token:
+        return JSONResponse(status_code=204, content=None)
+    result = await auth_service.refresh_access_token(refresh_token_value)
+    if not result:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token"
         )
+    new_access_token, new_refresh_token = result
     payload = auth_service.verify_token(new_access_token)
-    user_id = int(payload.get("sub"))
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Token verification failed")
+    raw_id = payload.get("user_id") or payload.get("id") or payload.get("sub")
+    if not raw_id:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="User ID not found in token")
+    try:
+        user_id = int(raw_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid user ID in token")
     async with auth_service.db_pool.acquire() as conn:
         user = await conn.fetchrow(
             "SELECT id, email, full_name, company, plan_type, onboarding_completed FROM users WHERE id = $1",
@@ -250,8 +275,10 @@ async def refresh_token_from_cookie(request: Request):
         )
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return {
+    is_secure = os.getenv("ENVIRONMENT", "production") == "production"
+    response = JSONResponse({
         "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
         "token_type": "bearer",
         "user": {
             "id": str(user["id"]),
@@ -261,13 +288,89 @@ async def refresh_token_from_cookie(request: Request):
             "plan_type": user.get("plan_type", "free"),
             "onboarding_completed": user.get("onboarding_completed") or False
         }
-    }
+    })
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh_token,
+        httponly=True,
+        secure=is_secure,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,
+        path="/",
+        domain=COOKIE_DOMAIN
+    )
+    return response
+
+@router.post("/oauth-pickup")
+async def oauth_token_pickup(request: Request):
+    """
+    One-time endpoint for the frontend OAuth callback page to collect the
+    access token after a social login redirect.
+
+    The access token is stored in a short-lived (5 min) HttpOnly cookie
+    'access_token_once' after the OAuth redirect. This endpoint returns it
+    exactly once and immediately clears the cookie.
+    """
+    token = request.cookies.get("access_token_once")
+    if not token:
+        raise HTTPException(status_code=400, detail="No pending OAuth token")
+
+    payload = auth_service.verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token expired or invalid")
+
+    user_id = int(payload.get("user_id") or payload.get("id") or payload.get("sub"))
+    async with auth_service.db_pool.acquire() as conn:
+        user = await conn.fetchrow(
+            "SELECT id, email, full_name, company, plan_type, onboarding_completed FROM users WHERE id = $1",
+            user_id
+        )
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    is_secure = os.getenv("ENVIRONMENT", "production") == "production"
+    response = JSONResponse({
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user["id"]),
+            "email": user["email"],
+            "full_name": user["full_name"],
+            "company": user.get("company"),
+            "plan_type": user.get("plan_type", "free"),
+            "onboarding_completed": user.get("onboarding_completed") or False,
+        }
+    })
+    response.delete_cookie(key="access_token_once", path="/api/auth", httponly=True, secure=is_secure, samesite="lax")
+    return response
+
 
 @router.post("/logout")
-async def logout(request: RefreshRequest):
-    """Logout user (revoke refresh token)"""
-    await auth_service.revoke_refresh_token(request.refresh_token)
-    return {"message": "Logged out successfully"}
+async def logout(request: Request):
+    """Logout user: revoke refresh token and clear HttpOnly cookie"""
+    token_from_cookie = request.cookies.get("refresh_token")
+    token_from_body: Optional[str] = None
+    try:
+        body = await request.json()
+        token_from_body = body.get("refresh_token")
+    except Exception:
+        pass
+
+    token = token_from_cookie or token_from_body
+    if token:
+        await auth_service.revoke_refresh_token(token)
+
+    is_secure = os.getenv("ENVIRONMENT", "production") == "production"
+    response = JSONResponse({"message": "Logged out successfully"})
+    response.delete_cookie(
+        key="refresh_token",
+        path="/",
+        httponly=True,
+        secure=is_secure,
+        samesite="lax",
+        domain=COOKIE_DOMAIN,
+    )
+    return response
 
 @router.post("/complete-onboarding")
 async def complete_onboarding(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -276,46 +379,69 @@ async def complete_onboarding(credentials: HTTPAuthorizationCredentials = Depend
     payload = auth_service.verify_token(token)
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    user_id = int(payload.get("sub"))
+    raw_id = payload.get("user_id") or payload.get("id") or payload.get("sub")
+    if not raw_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID not found in token")
+    try:
+        user_id = int(raw_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user ID in token")
     async with auth_service.db_pool.acquire() as conn:
         await conn.execute(
             "UPDATE users SET onboarding_completed = TRUE WHERE id = $1", user_id
         )
     return {"onboarding_completed": True}
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Dependency to get current user from JWT token"""
-    token = credentials.credentials
-    payload = auth_service.verify_token(token)
-    
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungültiger oder abgelaufener Token",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    
-    user_id = payload.get("user_id")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungültiger Token"
-        )
-
-    # Get user from database
-    user = await auth_service.get_user_by_id(int(user_id))
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User nicht gefunden"
-        )
-    
-    return user
+from dependencies import get_current_user
 
 @router.get("/me")
 async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     """Get current user information"""
     return current_user
+
+# ============= NextAuth.js v5 Credential Endpoints =============
+
+class VerifyCredentialsRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+@router.post("/verify-credentials")
+@limiter.limit("5/minute")
+async def verify_credentials(request: Request, body: VerifyCredentialsRequest):
+    """NextAuth.js v5 credentials provider endpoint — verify email/password and return user data"""
+    if auth_service is None:
+        raise HTTPException(status_code=503, detail="Auth service not available")
+    user = await auth_service.authenticate(body.email, body.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    async with auth_service.db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT onboarding_completed, plan_type, role FROM users WHERE id = $1",
+            user['id']
+        )
+    return {
+        "id": str(user['id']),
+        "email": user['email'],
+        "full_name": user.get('full_name'),
+        "company": user.get('company'),
+        "plan_type": row['plan_type'] if row else 'free',
+        "role": row['role'] if row else 'customer',
+        "onboarding_completed": row['onboarding_completed'] if row else False,
+    }
+
+@router.get("/session-info")
+async def session_info(current_user: dict = Depends(get_current_user)):
+    """Return enriched session data for NextAuth.js v5 session callback"""
+    return {
+        "id": str(current_user['id']),
+        "email": current_user.get('email'),
+        "full_name": current_user.get('full_name'),
+        "company": current_user.get('company'),
+        "plan_type": current_user.get('plan_type', 'free'),
+        "role": current_user.get('role', 'customer'),
+        "onboarding_completed": current_user.get('onboarding_completed', False),
+        "active_modules": current_user.get('active_modules', []),
+    }
 
 # ============= OAuth2 Routes (Google & Apple) =============
 
@@ -377,15 +503,34 @@ async def google_oauth_callback(code: str, state: str):
         access_token = auth_service.create_access_token(user['id'])
         refresh_token = await auth_service.create_refresh_token(user['id'])
         
-        # Redirect to frontend — tokens via URL fragment (never visible in server logs or Referer headers)
-        frontend_url = "https://app.complyo.tech"
-        return RedirectResponse(
-            url=f"{frontend_url}/auth/callback#access_token={access_token}&refresh_token={refresh_token}"
+        # Set HttpOnly cookie and redirect cleanly — never put tokens in URL fragments
+        is_secure = os.getenv("ENVIRONMENT", "production") == "production"
+        frontend_url = os.getenv("FRONTEND_URL", "https://app.complyo.tech")
+        response = RedirectResponse(url=f"{frontend_url}/auth/callback?provider=google&status=ok")
+        response.set_cookie(
+            key="access_token_once",
+            value=access_token,
+            httponly=True,
+            secure=is_secure,
+            samesite="lax",
+            max_age=300,  # 5 min one-time pickup window
+            path="/api/auth",
         )
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=is_secure,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 30,
+            path="/",
+            domain=COOKIE_DOMAIN,
+        )
+        return response
 
     except Exception as e:
         logger.error(f"Google OAuth error: {e}")
-        raise HTTPException(500, f"Google OAuth failed: {str(e)}")
+        raise HTTPException(500, "OAuth authentication failed")
 
 @router.get("/apple")
 async def apple_oauth_start():
@@ -445,15 +590,33 @@ async def apple_oauth_callback(code: str, state: str):
         access_token = auth_service.create_access_token(user['id'])
         refresh_token = await auth_service.create_refresh_token(user['id'])
         
-        # Redirect to frontend — tokens via URL fragment (never visible in server logs or Referer headers)
-        frontend_url = "https://app.complyo.tech"
-        return RedirectResponse(
-            url=f"{frontend_url}/auth/callback#access_token={access_token}&refresh_token={refresh_token}"
+        is_secure = os.getenv("ENVIRONMENT", "production") == "production"
+        frontend_url = os.getenv("FRONTEND_URL", "https://app.complyo.tech")
+        response = RedirectResponse(url=f"{frontend_url}/auth/callback?provider=apple&status=ok")
+        response.set_cookie(
+            key="access_token_once",
+            value=access_token,
+            httponly=True,
+            secure=is_secure,
+            samesite="lax",
+            max_age=300,
+            path="/api/auth",
         )
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=is_secure,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 30,
+            path="/",
+            domain=COOKIE_DOMAIN,
+        )
+        return response
 
     except Exception as e:
         logger.error(f"Apple OAuth error: {e}")
-        raise HTTPException(500, f"Apple OAuth failed: {str(e)}")
+        raise HTTPException(500, "OAuth authentication failed")
 
 # ============= Firebase Auth Route =============
 

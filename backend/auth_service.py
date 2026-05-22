@@ -1,5 +1,5 @@
 import os
-import bcrypt
+import bcrypt as _bcrypt
 import jwt
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -10,25 +10,30 @@ from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
+_MAX_ATTEMPTS = int(os.getenv("LOGIN_MAX_ATTEMPTS", "5"))
+_LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "900"))  # 15 min
+
 def _utcnow():
     return datetime.now(timezone.utc)
 
 class AuthService:
-    def __init__(self, db_pool: asyncpg.Pool):
+    def __init__(self, db_pool: asyncpg.Pool, redis_client=None):
         self.db_pool = db_pool
+        self.redis = redis_client
+
         self.jwt_secret = os.getenv("JWT_SECRET")
         if not self.jwt_secret:
             raise RuntimeError("❌ CRITICAL: JWT_SECRET environment variable is required!")
         self.jwt_issuer = os.getenv("FRONTEND_URL", "https://complyo.tech")
         self.jwt_audience = "complyo-api"
-        self.access_token_expire = 7 * 24 * 60  # 7 Tage = 10080 Minuten
-        self.refresh_token_expire = 30 * 24 * 60  # 30 days
+        self.access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+        self.refresh_token_expire = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30")) * 24 * 60
     
     async def get_user_by_email(self, email: str) -> Optional[Dict]:
         """Get user by email address"""
         async with self.db_pool.acquire() as conn:
             user = await conn.fetchrow(
-                "SELECT * FROM users WHERE email = $1",
+                "SELECT id, email, full_name, company, password_hash, is_active, is_verified, created_at FROM users WHERE email = $1",
                 email
             )
             return dict(user) if user else None
@@ -37,7 +42,7 @@ class AuthService:
         """Get user by ID including plan_type and active_modules"""
         async with self.db_pool.acquire() as conn:
             user = await conn.fetchrow(
-                "SELECT id, email, full_name, company, is_active, is_verified, created_at FROM users WHERE id = $1",
+                "SELECT id, email, full_name, company, is_active, is_verified, created_at, onboarding_completed, role FROM users WHERE id = $1",
                 user_id
             )
             if not user:
@@ -77,7 +82,7 @@ class AuthService:
         """Register a new user"""
         try:
             # Hash password with bcrypt
-            password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            password_hash = _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
             
             # Insert user
             async with self.db_pool.acquire() as conn:
@@ -100,24 +105,57 @@ class AuthService:
             raise
     
     async def authenticate(self, email: str, password: str) -> Optional[Dict]:
-        """Authenticate user with email and password"""
+        """Authenticate user with email and password, enforcing brute-force lockout."""
+        lockout_key = f"login_fail:{email.lower()}"
+
+        if self.redis:
+            try:
+                attempts = await self.redis.get(lockout_key)
+                if attempts and int(attempts) >= _MAX_ATTEMPTS:
+                    ttl = await self.redis.ttl(lockout_key)
+                    logger.warning(f"Account locked: {email} ({attempts} attempts, {ttl}s remaining)")
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"Account temporarily locked due to too many failed attempts. Try again in {ttl} seconds."
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Redis lockout check failed: {e}")
+
         async with self.db_pool.acquire() as conn:
             user = await conn.fetchrow(
-                "SELECT * FROM users WHERE email = $1 AND is_active = TRUE",
+                "SELECT id, email, full_name, company, password_hash, is_active, is_verified, created_at FROM users WHERE email = $1 AND is_active = TRUE",
                 email
             )
-        
+
         if not user:
+            if self.redis:
+                try:
+                    await self.redis.incr(lockout_key)
+                    await self.redis.expire(lockout_key, _LOCKOUT_SECONDS)
+                except Exception:
+                    pass
             logger.warning(f"Authentication failed: User not found {email}")
             return None
-        
-        # Verify password
-        if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+
+        if not _bcrypt.checkpw(password.encode(), user['password_hash'].encode()):
+            if self.redis:
+                try:
+                    await self.redis.incr(lockout_key)
+                    await self.redis.expire(lockout_key, _LOCKOUT_SECONDS)
+                except Exception:
+                    pass
             logger.warning(f"Authentication failed: Invalid password for {email}")
             return None
 
+        if self.redis:
+            try:
+                await self.redis.delete(lockout_key)
+            except Exception:
+                pass
+
         logger.info(f"User authenticated: {email}")
-        # Return user without password_hash
         user_dict = dict(user)
         del user_dict['password_hash']
         return user_dict
@@ -125,6 +163,7 @@ class AuthService:
     def create_access_token(self, user_id) -> str:
         """Create JWT access token"""
         payload = {
+            "id": str(user_id),
             "user_id": str(user_id),
             "exp": _utcnow() + timedelta(minutes=self.access_token_expire),
             "iat": _utcnow(),
@@ -163,8 +202,8 @@ class AuthService:
             logger.warning(f"Invalid token: {e}")
             return None
     
-    async def refresh_access_token(self, refresh_token: str) -> Optional[str]:
-        """Refresh access token using refresh token"""
+    async def refresh_access_token(self, refresh_token: str) -> Optional[tuple]:
+        """Refresh access token using refresh token (with token rotation)"""
         async with self.db_pool.acquire() as conn:
             session = await conn.fetchrow(
                 """
@@ -177,9 +216,7 @@ class AuthService:
         if not session:
             return None
         
-        # Check if token is expired
         if session['expires_at'] < datetime.now(timezone.utc):
-            # Delete expired token
             async with self.db_pool.acquire() as conn:
                 await conn.execute(
                     "DELETE FROM user_sessions WHERE refresh_token = $1",
@@ -187,8 +224,18 @@ class AuthService:
                 )
             return None
         
-        # Create new access token
-        return self.create_access_token(session['user_id'])
+        user_id = session['user_id']
+        
+        async with self.db_pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM user_sessions WHERE refresh_token = $1",
+                refresh_token
+            )
+        
+        new_access_token = self.create_access_token(user_id)
+        new_refresh_token = await self.create_refresh_token(user_id)
+        
+        return new_access_token, new_refresh_token
     
     async def revoke_refresh_token(self, refresh_token: str):
         """Revoke a refresh token (logout)"""
