@@ -128,7 +128,7 @@ Dieser Milestone bringt Complyo zur Produktionsreife in den drei Kernbereichen C
 Plans:
 - [x] 10-01-PLAN.md — DB migration + backend endpoints (client fields, list clients, logo upload)
 - [x] 10-02-PLAN.md — AgencyReportGenerator class (ReportLab PDF generation)
-- [ ] 10-03-PLAN.md — PDF download endpoint + frontend dashboard wiring + human verification
+- [x] 10-03-PLAN.md — PDF download endpoint + frontend dashboard wiring + human verification
 
 ## Progress
 
@@ -143,4 +143,4 @@ Plans:
 | 7. CMS Docs & Widget Performance | 0/0 | Not Started | - |
 | 8. Enterprise & International | 0/0 | Not Started | - |
 | 9. Rechtstexte & DSGVO Audit | 0/0 | Not Started | - |
-| 10. Agentur-Kanal Stufe 1 | 2/3 | In Progress|  |
+| 10. Agentur-Kanal Stufe 1 | 3/3 | Complete   | 2026-05-24 |
