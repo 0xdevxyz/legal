@@ -51,17 +51,17 @@ system-stabilization-2026-05-22/
 
 | Phase | Beschreibung | Status |
 |-------|-------------|--------|
-| P0 | Vorbereitung & Baseline | in_progress |
-| P1 | Backend Auth-Hardening | pending |
-| P2 | NextAuth.js v5 Migration | pending |
-| P3 | Re-Scan 500 Fix | pending |
-| P4 | Widgets + First-Party-Proxy | pending |
-| P5 | Stripe-Path-Konsolidierung | pending |
-| P6 | Redesign Foundation | pending |
-| P7 | Redesign Pages | pending |
-| P8 | Sentry Self-Hosted | pending |
-| P9 | Notifications-System | pending |
-| P10 | Dashboard-Widgets + Multi-Domain | pending |
-| P11 | Audit-Log + Export/Backup + Admin-Panel | pending |
-| P12 | E2E-Tests + Cutover + Final-Report | pending |
+| P0 | Vorbereitung & Baseline | completed |
+| P1 | Backend Auth-Hardening | completed |
+| P2 | NextAuth.js v5 Migration | completed |
+| P3 | Re-Scan 500 Fix | completed |
+| P4 | Widgets + First-Party-Proxy | completed |
+| P5 | Stripe-Path-Konsolidierung | completed |
+| P6 | Redesign Foundation | completed |
+| P7 | Redesign Pages | completed |
+| P8 | Sentry Self-Hosted | completed |
+| P9 | Notifications-System | completed |
+| P10 | Dashboard-Widgets + Multi-Domain | completed |
+| P11 | Audit-Log + Export/Backup + Admin-Panel | completed |
+| P12 | E2E-Tests + Cutover + Final-Report | completed |
 ```

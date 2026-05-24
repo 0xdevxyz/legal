@@ -1,0 +1,64 @@
+{
+  "_comment": "Complyo MCP Server Konfiguration fuer KI-Agenten. Token via COMPLYO_API_TOKEN Umgebungsvariable setzen.",
+
+  "claude_desktop": {
+    "mcpServers": {
+      "complyo": {
+        "command": "npx",
+        "args": [
+          "mcp-remote",
+          "https://api.complyo.de/mcp",
+          "--header",
+          "Authorization: Bearer ${COMPLYO_API_TOKEN}"
+        ]
+      }
+    }
+  },
+
+  "http_client": {
+    "mcp_endpoint": "https://api.complyo.de/mcp",
+    "transport": "sse",
+    "auth": {
+      "type": "bearer",
+      "token_env": "COMPLYO_API_TOKEN"
+    }
+  },
+
+  "local_development": {
+    "mcp_endpoint": "http://localhost:8002/mcp",
+    "transport": "sse",
+    "auth": {
+      "type": "bearer",
+      "token_env": "COMPLYO_API_TOKEN"
+    }
+  },
+
+  "available_tool_groups": [
+    "websites          – Website-Scans starten & verwalten",
+    "fixes             – AI-generierte Compliance-Fixes",
+    "cookie-compliance – Cookie-Banner & Consent-Management",
+    "legal-documents   – DSGVO-Dokumente generieren (DSE, Impressum, DPA)",
+    "dashboard         – Compliance-Scores & Reports",
+    "ai-compliance     – ComplyAI Guard (AI Act Compliance)",
+    "accessibility-alt-text – BFSG/WCAG Alt-Text-Fixes",
+    "TCF 2.2           – Vendor Consent Framework",
+    "Legal AI          – Gesetzesaenderungs-Analyse",
+    "Legal Changes     – Live-Monitoring neuer Gesetze",
+    "Legal Notifications – Benachrichtigungen bei Gesetzesaenderungen",
+    "git-integration   – Automatische PRs fuer Accessibility-Fixes"
+  ],
+
+  "excluded_tool_groups": [
+    "admin  – Admin-only Routen (ausgeschlossen)",
+    "stripe – Interne Stripe-Callbacks (ausgeschlossen)",
+    "leads  – Interne Lead-Verwaltung (ausgeschlossen)"
+  ],
+
+  "security": {
+    "auth_required": true,
+    "auth_type": "Bearer JWT",
+    "token_lifetime": "8h",
+    "rate_limit": "10 req/s (burst 5)",
+    "csrf_exempt": true
+  }
+}
