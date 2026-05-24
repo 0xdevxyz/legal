@@ -66,4 +66,16 @@ Erwartung: JavaScript-Content, kein 404
 ## Fehler-Protokoll
 | Datum | Phase | Schritt | Fehler | Fix |
 |-------|-------|---------|--------|-----|
-| – | – | – | – | – |
+| 2026-05-24 | Post-Smoke | Fix Generate `/api/v2/fixes/generate` | `column "is_active" of relation "website_structures" does not exist` | Pre-existing in old container image; nicht durch Cleanup verursacht. Container-Rebuild mit neuem Image nötig. |
+| 2026-05-24 | Post-Smoke | Dashboard Overview `/api/v2/dashboard/overview` | `Dashboard data could not be loaded` | Route-Fehler; Dashboard-Metrics-Endpoint `/api/v2/dashboard/metrics` funktioniert korrekt. |
+
+## Smoke-Test-Ergebnis (2026-05-24, Container = pre-cleanup image)
+| Schritt | Endpoint | Status |
+|---------|----------|--------|
+| Health Check | `/health` | ✓ DB + Redis connected |
+| Register | `/api/auth/register` | ✓ JWT Token erhalten |
+| Login | `/api/auth/login` | ✓ JWT Token erhalten |
+| Dashboard Metrics | `/api/v2/dashboard/metrics` | ✓ OK |
+| Fix Generate | `/api/v2/fixes/generate` | ✗ DB-Schema-Fehler (pre-existing) |
+| Cookie Widget | `/api/widgets/cookie-banner.js` | ✓ 200 |
+| Accessibility Widget | `/api/widgets/accessibility-v6.js` | ✓ 200 (nach Container-Rebuild) |

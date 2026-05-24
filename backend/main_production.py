@@ -43,7 +43,6 @@ from prometheus_client import Counter as _PCounter, Histogram as _PHistogram, ge
 _http_requests_total = _PCounter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
 _http_request_duration = _PHistogram("http_request_duration_seconds", "HTTP request duration", ["method", "endpoint"])
 from compliance_engine.scanner import ComplianceScanner
-from compliance_engine.fixer import AIComplianceFixer
 from compliance_engine.workflow_engine import workflow_engine, UserSkillLevel
 from compliance_engine.workflow_integration import WorkflowIntegration
 from compliance_engine.pdf_generator import pdf_generator
@@ -66,6 +65,7 @@ from gdpr_api import gdpr_router
 from i18n_api import i18n_router
 from legal_news_routes import router as legal_news_router
 from fix_routes import fix_router
+from fix_apply_routes import apply_router, init_apply_routes
 from website_routes import router as website_router
 from dashboard_routes import dashboard_router
 import auth_routes  # Auth routes with AuthService
@@ -510,6 +510,11 @@ async def startup_event():
     fix_routes.fix_generator = fix_generator
     fix_routes.export_service = export_service
 
+    # Wire fix_apply_routes
+    from audit_service import FixAuditService
+    audit_service = FixAuditService(db_pool)
+    init_apply_routes(db_pool, auth_service, audit_service)
+
     # Set global references for legal_news_routes
     import legal_news_routes
     legal_news_routes.db_pool = db_pool
@@ -524,6 +529,7 @@ async def startup_event():
     app.include_router(i18n_router)
     app.include_router(legal_news_router)
     app.include_router(fix_router)
+    app.include_router(apply_router)  # Fix Apply (deployment, rollback, preview)
     app.include_router(website_router)  # Website management router
     app.include_router(dashboard_router)  # Dashboard metrics router
     app.include_router(auth_routes.router)  # Auth router enabled
@@ -1209,13 +1215,25 @@ async def generate_ai_fixes(request: AIFixRequest, current_user: dict = Depends(
         if request.fix_categories:
             violations = [v for v in violations if v.get('category') in request.fix_categories]
 
-        # 3. Instantiate and run the AI Fixer
-        fixer = AIComplianceFixer()
-        fix_result = await fixer.fix_compliance_issues(
-            scan_id=request.scan_id,
-            violations=violations,
-            company_info=request.company_info
-        )
+        # 3. Run fixes via UnifiedFixEngine (batch over violations)
+        fix_results = []
+        for violation in violations:
+            context = {
+                "scan_id": request.scan_id,
+                "company_info": request.company_info or {}
+            }
+            result = await fix_generator.generate_fix(
+                issue=violation,
+                context=context
+            )
+            fix_results.append(result if isinstance(result, dict) else vars(result) if hasattr(result, '__dict__') else {"raw": str(result)})
+
+        fix_result = {
+            "scan_id": request.scan_id,
+            "total_issues_fixed": len([r for r in fix_results if r.get("status") != "error"]),
+            "fixes_applied": fix_results,
+            "success_rate": len([r for r in fix_results if r.get("status") != "error"]) / len(violations) if violations else 1.0
+        }
 
         # 4. ✅ DB-Speicherung entfernt - fix_jobs Tabelle wird stattdessen verwendet
         # (siehe /api/fix-jobs Endpoint für persistente Speicherung)

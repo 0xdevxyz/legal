@@ -11,8 +11,8 @@ import asyncpg
 from datetime import datetime
 from dependencies import get_current_user
 
-from .compliance_engine.deployment_engine import DeploymentEngine, DeploymentConfig, DeploymentResult
-from .audit_service import FixAuditService
+from compliance_engine.deployment_engine import DeploymentEngine, DeploymentConfig, DeploymentResult
+from audit_service import FixAuditService
 
 logger = logging.getLogger(__name__)
 

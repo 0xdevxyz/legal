@@ -61,8 +61,6 @@ services:
       - REDIS_HOST=redis
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - ERECHT24_API_KEY=${ERECHT24_API_KEY}
-      - ERECHT24_API_URL=${ERECHT24_API_URL:-https://api.e-recht24.de}
       - ENVIRONMENT=production
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
@@ -92,8 +90,10 @@ services:
       - LETSENCRYPT_HOST=api.complyo.de
       - LETSENCRYPT_EMAIL=admin@complyo.de
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - complyo-network
       - proxy-network
