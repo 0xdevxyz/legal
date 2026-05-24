@@ -14,9 +14,12 @@ import uuid
 from datetime import datetime, date, timedelta
 import json
 import logging
+from fastapi.responses import StreamingResponse
+import io
 from cookie_scanner_service import cookie_scanner
 from file_storage_service import file_storage
 from functools import wraps
+from agency_report_generator import AgencyReportGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -2667,3 +2670,85 @@ async def upload_agency_logo(
         info["relative_path"], user_id,
     )
     return {"relative_path": info["relative_path"], "filename": info["filename"]}
+
+
+# =============================================================================
+# AGENCY-02 + AGENCY-03: PDF report download per client (Phase 10)
+# =============================================================================
+
+_agency_pdf_generator = AgencyReportGenerator()
+
+
+@router.get("/api/cookie-compliance/agency/client-report/{client_name}")
+async def download_client_report(
+    client_name: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """AGENCY-02 + AGENCY-03: Stream a branded PDF report for one client."""
+    user = await get_current_user_required(credentials)
+    user_id = int(user.get("id") or user.get("user_id"))
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Datenbank nicht verfuegbar.")
+
+    # 1. Fetch per-site rows for this client. last_scan_url is on cookie_banner_configs.
+    #    Latest compliance_score per site via scan_history LEFT JOIN LATERAL.
+    rows = await db_pool.fetch(
+        """SELECT
+             c.site_id,
+             c.last_scan_url,
+             sh.compliance_score,
+             sh.scan_data
+           FROM cookie_banner_configs c
+           LEFT JOIN LATERAL (
+               SELECT compliance_score, scan_data
+               FROM scan_history
+               WHERE user_id = c.user_id
+                 AND url = c.last_scan_url
+               ORDER BY scan_timestamp DESC
+               LIMIT 1
+           ) sh ON true
+           WHERE c.user_id = $1 AND c.client_name = $2""",
+        user_id, client_name,
+    )
+
+    # 2. Build the sites list for the generator.
+    severity_rank = {"critical": 0, "high": 1, "medium": 2, "warning": 2, "low": 3, "info": 4}
+    sites = []
+    for r in rows:
+        scan_data = r["scan_data"] or {}
+        detected = scan_data.get("detected_issues", []) if isinstance(scan_data, dict) else []
+        sorted_issues = sorted(
+            detected,
+            key=lambda i: severity_rank.get((i.get("severity") or "low").lower(), 9),
+        )
+        top_3 = [
+            (i.get("title") or i.get("description") or "Unbekanntes Issue")
+            for i in sorted_issues[:3]
+        ]
+        sites.append({
+            "url": r["last_scan_url"] or r["site_id"],
+            "compliance_score": r["compliance_score"],
+            "top_issues": top_3,
+        })
+
+    # 3. Fetch agency logo bytes (if uploaded).
+    logo_row = await db_pool.fetchrow(
+        "SELECT agency_logo_path FROM users WHERE id = $1", user_id,
+    )
+    logo_bytes = None
+    if logo_row and logo_row["agency_logo_path"]:
+        logo_bytes = await file_storage.get_file(logo_row["agency_logo_path"])
+
+    # 4. Generate the PDF.
+    pdf_bytes = _agency_pdf_generator.generate(
+        client_name=client_name,
+        sites=sites,
+        agency_logo_bytes=logo_bytes,
+    )
+
+    # 5. Stream it.
+    safe_name = "".join(c for c in client_name if c.isalnum() or c in "-_") or "report"
+    headers = {
+        "Content-Disposition": f'attachment; filename="complyo_report_{safe_name}.pdf"',
+    }
+    return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers=headers)
