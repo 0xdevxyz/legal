@@ -122,7 +122,7 @@ Dieser Milestone bringt Complyo zur Produktionsreife in den drei Kernbereichen C
   1. Sites können einem `client_name` + `client_email` zugeordnet werden (DB-Migration + Backend-Endpoint + Dashboard-UI)
   2. Agentur-Dashboard zeigt pro-Kunde-Gruppierung: Kunde A — 3 Sites — Compliance-Score — Acceptance Rate
   3. "Report herunterladen" Button pro Kunde generiert PDF mit Compliance-Status aller zugehörigen Sites
-  4. Agentur kann eigenes Logo hochladen (PNG/SVG, max 2MB) — Logo erscheint in generierten PDFs
+  4. Agentur kann eigenes Logo hochladen (PNG, max 2MB) — Logo erscheint in generierten PDFs
   5. Generierter PDF-Report zeigt Agentur-Logo, Kundenname, Datum, je Site: Compliance-Score + Top-3-Issues
 **Plans**: 3 plans
 Plans:
@@ -143,4 +143,4 @@ Plans:
 | 7. CMS Docs & Widget Performance | 0/0 | Not Started | - |
 | 8. Enterprise & International | 0/0 | Not Started | - |
 | 9. Rechtstexte & DSGVO Audit | 0/0 | Not Started | - |
-| 10. Agentur-Kanal Stufe 1 | 3/3 | Complete   | 2026-05-24 |
+| 10. Agentur-Kanal Stufe 1 | 3/3 | Complete    | 2026-05-24 |
