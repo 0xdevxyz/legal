@@ -114,6 +114,22 @@ Dieser Milestone bringt Complyo zur Produktionsreife in den drei Kernbereichen C
   3. DSGVO-Compliance-Checkliste (Art. 13/14 Informationspflichten) verifiziert gegen generierte Datenschutzerklärungen
   4. Automatischer Hinweis wenn Datenschutzerklärung >365 Tage nicht aktualisiert wurde
 
+### Phase 10: Agentur-Kanal Stufe 1
+**Goal**: Complyo als verkaufbares Agentur-Tool positionieren — Agenturen können Kunden zuordnen, pro Kunde einen gebrandeten PDF-Report generieren und ihr eigenes Logo in Reports einbinden
+**Depends on**: Phase 1
+**Requirements**: AGENCY-01, AGENCY-02, AGENCY-03
+**Success Criteria** (what must be TRUE):
+  1. Sites können einem `client_name` + `client_email` zugeordnet werden (DB-Migration + Backend-Endpoint + Dashboard-UI)
+  2. Agentur-Dashboard zeigt pro-Kunde-Gruppierung: Kunde A — 3 Sites — Compliance-Score — Acceptance Rate
+  3. "Report herunterladen" Button pro Kunde generiert PDF mit Compliance-Status aller zugehörigen Sites
+  4. Agentur kann eigenes Logo hochladen (PNG/SVG, max 2MB) — Logo erscheint in generierten PDFs
+  5. Generierter PDF-Report zeigt Agentur-Logo, Kundenname, Datum, je Site: Compliance-Score + Top-3-Issues
+**Plans**: 3 plans
+Plans:
+- [x] 10-01-PLAN.md — DB migration + backend endpoints (client fields, list clients, logo upload)
+- [ ] 10-02-PLAN.md — AgencyReportGenerator class (ReportLab PDF generation)
+- [ ] 10-03-PLAN.md — PDF download endpoint + frontend dashboard wiring + human verification
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -127,3 +143,4 @@ Dieser Milestone bringt Complyo zur Produktionsreife in den drei Kernbereichen C
 | 7. CMS Docs & Widget Performance | 0/0 | Not Started | - |
 | 8. Enterprise & International | 0/0 | Not Started | - |
 | 9. Rechtstexte & DSGVO Audit | 0/0 | Not Started | - |
+| 10. Agentur-Kanal Stufe 1 | 1/3 | In Progress|  |
