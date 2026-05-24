@@ -335,6 +335,32 @@ export default function AgencyPage() {
     return <LoadingSkeleton />;
   }
 
+  // ── Paywall: non-agency users see ONLY the upgrade banner ─────────────────
+  if (!isAgency) {
+    return (
+      <main
+        role="main"
+        aria-label="Agentur-Dashboard"
+        className="min-h-full bg-zinc-950 text-white p-6 lg:p-8"
+      >
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-2 bg-blue-500/20 rounded-lg">
+                <Building2 className="w-5 h-5 text-blue-400" />
+              </div>
+              <h1 className="text-2xl font-bold text-white">Agentur-Dashboard</h1>
+            </div>
+            <p className="text-zinc-400 text-sm ml-[52px]">
+              Verwalten Sie Client-Websites und Consent-Metriken mit dem Agency Plan.
+            </p>
+          </div>
+          <UpgradeBanner />
+        </div>
+      </main>
+    );
+  }
+
   if (error) {
     return <ErrorState />;
   }
@@ -364,9 +390,6 @@ export default function AgencyPage() {
               Übersicht aller verwalteten Client-Websites und aggregierten Consent-Metriken
             </p>
           </div>
-
-          {/* ── Upgrade banner if no agency plan ──────────────────────────────── */}
-          {!isAgency && <UpgradeBanner />}
 
           {/* ── Stats grid ────────────────────────────────────────────────────── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
