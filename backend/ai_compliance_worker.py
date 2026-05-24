@@ -192,7 +192,7 @@ class AIComplianceWorker:
                     )
                     
                     await self._create_notification(
-                        user['user_id'],
+                        user['id'],
                         None,
                         'scan_reminder',
                         'info',

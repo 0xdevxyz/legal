@@ -16,16 +16,14 @@ logger = logging.getLogger(__name__)
 
 class DatabaseService:
     def __init__(self):
-        self.database_url = os.getenv("DATABASE_URL", "postgresql://complyo_user:ComplYo2025SecurePass@localhost:5432/complyo_db")
+        self.database_url = os.getenv("DATABASE_URL")
+        if not self.database_url:
+            raise RuntimeError("DATABASE_URL environment variable is required!")
         self.pool = None
         self.use_fallback = False
-        self.fallback_storage = {
-            'leads': [],
-            'verification_tokens': {}
-        }
         
     async def initialize(self):
-        """Initialize database connection pool with fallback to in-memory storage"""
+        """Initialize database connection pool"""
         try:
             self.pool = await asyncpg.create_pool(
                 self.database_url,
@@ -37,9 +35,13 @@ class DatabaseService:
             self.use_fallback = False
             return True
         except Exception as e:
-            logger.warning(f"Database connection failed, using in-memory fallback: {e}")
-            self.use_fallback = True
-            return True  # Still successful, just using fallback
+            logger.error(f"Database connection failed: {e}")
+            try:
+                import sentry_sdk
+                sentry_sdk.capture_exception(e)
+            except Exception:
+                pass
+            raise RuntimeError(f"Database initialization failed: {e}") from e
     
     async def close(self):
         """Close database connection pool"""
@@ -60,9 +62,6 @@ class DatabaseService:
         """
         Create a new GDPR-compliant lead record
         """
-        if self.use_fallback:
-            return await self._create_lead_fallback(lead_data)
-            
         try:
             async with self.get_connection() as conn:
                 lead_id = str(uuid.uuid4())
@@ -109,50 +108,10 @@ class DatabaseService:
                 
         except Exception as e:
             logger.error(f"Error creating lead: {e}")
-            # Fallback to in-memory storage on database error
-            logger.warning("Falling back to in-memory storage")
-            return await self._create_lead_fallback(lead_data)
-    
-    async def _create_lead_fallback(self, lead_data: Dict[str, Any]) -> str:
-        """Fallback method using in-memory storage"""
-        lead_id = str(uuid.uuid4())
-        verification_token = str(uuid.uuid4())
-        
-        lead_record = {
-            "id": lead_id,
-            "email": lead_data['email'].lower(),
-            "name": lead_data['name'],
-            "company": lead_data.get('company'),
-            "source": lead_data.get('source', 'landing_page'),
-            "url_analyzed": lead_data.get('url_analyzed'),
-            "analysis_data": lead_data.get('analysis_data'),
-            "session_id": lead_data.get('session_id'),
-            "consent_given": True,
-            "consent_timestamp": datetime.now().isoformat(),
-            "consent_ip_address": lead_data.get('consent_ip_address'),
-            "consent_user_agent": lead_data.get('consent_user_agent'),
-            "legal_basis": 'consent',
-            "email_verified": False,
-            "verification_token": verification_token,
-            "verification_sent_at": datetime.now().isoformat(),
-            "verification_expires_at": (datetime.now() + timedelta(hours=24)).isoformat(),
-            "data_retention_until": (datetime.now() + timedelta(days=730)).isoformat(),
-            "status": 'new',
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat()
-        }
-        
-        self.fallback_storage['leads'].append(lead_record)
-        self.fallback_storage['verification_tokens'][verification_token] = lead_id
-        
-        logger.info(f"Created lead in fallback storage: {lead_data['email']} with ID: {lead_id}")
-        return lead_id, verification_token
+            raise
     
     async def get_lead_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get lead by email address"""
-        if self.use_fallback:
-            return self._get_lead_by_email_fallback(email)
-            
         try:
             async with self.get_connection() as conn:
                 query = """
@@ -170,21 +129,10 @@ class DatabaseService:
                 
         except Exception as e:
             logger.error(f"Error getting lead by email {email}: {e}")
-            # Fallback to in-memory storage
-            return self._get_lead_by_email_fallback(email)
-    
-    def _get_lead_by_email_fallback(self, email: str) -> Optional[Dict[str, Any]]:
-        """Fallback method using in-memory storage"""
-        for lead in self.fallback_storage['leads']:
-            if lead['email'].lower() == email.lower():
-                return lead
-        return None
+            raise
     
     async def get_lead_by_verification_token(self, token: str) -> Optional[Dict[str, Any]]:
         """Get lead by verification token"""
-        if self.use_fallback:
-            return self._get_lead_by_verification_token_fallback(token)
-            
         try:
             async with self.get_connection() as conn:
                 query = """
@@ -202,22 +150,10 @@ class DatabaseService:
                 
         except Exception as e:
             logger.error(f"Error getting lead by token: {e}")
-            return self._get_lead_by_verification_token_fallback(token)
-    
-    def _get_lead_by_verification_token_fallback(self, token: str) -> Optional[Dict[str, Any]]:
-        """Fallback method using in-memory storage"""
-        lead_id = self.fallback_storage['verification_tokens'].get(token)
-        if lead_id:
-            for lead in self.fallback_storage['leads']:
-                if lead['id'] == lead_id:
-                    return lead
-        return None
+            raise
     
     async def verify_email(self, verification_token: str, ip_address: str = None, user_agent: str = None) -> bool:
         """Verify email address and update lead status"""
-        if self.use_fallback:
-            return self._verify_email_fallback(verification_token)
-            
         try:
             async with self.get_connection() as conn:
                 # Check if token exists and is not expired
@@ -264,33 +200,7 @@ class DatabaseService:
                 
         except Exception as e:
             logger.error(f"Error verifying email: {e}")
-            return self._verify_email_fallback(verification_token)
-    
-    def _verify_email_fallback(self, verification_token: str) -> bool:
-        """Fallback email verification using in-memory storage"""
-        lead_id = self.fallback_storage['verification_tokens'].get(verification_token)
-        if not lead_id:
-            return False
-            
-        for lead in self.fallback_storage['leads']:
-            if lead['id'] == lead_id:
-                # Check if expired
-                expires_at = datetime.fromisoformat(lead['verification_expires_at'])
-                if expires_at < datetime.now():
-                    return False
-                    
-                # Update lead
-                lead['email_verified'] = True
-                lead['verified_at'] = datetime.now().isoformat()
-                lead['status'] = 'verified'
-                lead['updated_at'] = datetime.now().isoformat()
-                
-                # Remove token
-                del self.fallback_storage['verification_tokens'][verification_token]
-                
-                logger.info(f"Email verified for lead (fallback): {lead['email']}")
-                return True
-        return False
+            raise
     
     async def update_lead_status_by_email(self, email: str, status: str) -> bool:
         """Update lead status by email address"""
@@ -301,9 +211,6 @@ class DatabaseService:
     
     async def update_lead_status(self, lead_id: str, status: str, **kwargs) -> bool:
         """Update lead status and additional fields"""
-        if self.use_fallback:
-            return self._update_lead_status_fallback(lead_id, status, **kwargs)
-            
         try:
             async with self.get_connection() as conn:
                 # Build dynamic update query
@@ -328,27 +235,10 @@ class DatabaseService:
                 
         except Exception as e:
             logger.error(f"Error updating lead status: {e}")
-            return self._update_lead_status_fallback(lead_id, status, **kwargs)
-    
-    def _update_lead_status_fallback(self, lead_id: str, status: str, **kwargs) -> bool:
-        """Fallback method for updating lead status"""
-        for lead in self.fallback_storage['leads']:
-            if lead['id'] == lead_id:
-                lead['status'] = status
-                lead['updated_at'] = datetime.now().isoformat()
-                for key, value in kwargs.items():
-                    if key in ['last_contacted', 'report_sent_at']:
-                        lead[key] = value.isoformat() if hasattr(value, 'isoformat') else value
-                logger.info(f"Updated lead {lead_id} status to {status} (fallback)")
-                return True
-        return False
+            raise
     
     async def log_consent(self, lead_id: str, consent_type: str, granted: bool, ip_address: str = None, user_agent: str = None) -> bool:
         """Log consent for GDPR compliance"""
-        if self.use_fallback:
-            logger.info(f"Logged consent for lead {lead_id}: {consent_type} = {granted} (fallback mode)")
-            return True
-            
         try:
             async with self.get_connection() as conn:
                 query = """
@@ -365,10 +255,6 @@ class DatabaseService:
     
     async def log_communication(self, lead_id: str, comm_type: str, subject: str, content: str = None) -> bool:
         """Log communication for GDPR compliance"""
-        if self.use_fallback:
-            logger.info(f"Logged communication for lead {lead_id}: {comm_type} (fallback mode)")
-            return True
-            
         try:
             async with self.get_connection() as conn:
                 query = """
@@ -385,9 +271,6 @@ class DatabaseService:
     
     async def get_lead_statistics(self) -> Dict[str, Any]:
         """Get lead statistics for dashboard"""
-        if self.use_fallback:
-            return self._get_lead_statistics_fallback()
-            
         try:
             async with self.get_connection() as conn:
                 # Total leads
@@ -423,34 +306,11 @@ class DatabaseService:
                 
         except Exception as e:
             logger.error(f"Error getting lead statistics: {e}")
-            return self._get_lead_statistics_fallback()
-    
-    def _get_lead_statistics_fallback(self) -> Dict[str, Any]:
-        """Fallback method for getting lead statistics"""
-        leads = self.fallback_storage['leads']
-        total_leads = len(leads)
-        verified_leads = len([l for l in leads if l.get('email_verified', False)])
-        converted_leads = len([l for l in leads if l.get('status') == 'converted'])
-        
-        # Leads in last 24 hours
-        cutoff_time = datetime.now() - timedelta(hours=24)
-        leads_24h = len([l for l in leads if 
-                        datetime.fromisoformat(l['created_at']) > cutoff_time])
-        
-        verification_rate = round((verified_leads / total_leads * 100), 2) if total_leads > 0 else 0
-        conversion_rate = round((converted_leads / verified_leads * 100), 2) if verified_leads > 0 else 0
-        
-        return {
-            "total_leads": total_leads,
-            "verified_leads": verified_leads,
-            "converted_leads": converted_leads,
-            "leads_last_24h": leads_24h,
-            "verification_rate": verification_rate,
-            "conversion_rate": conversion_rate,
-            "gdpr_compliant": True,
-            "data_retention_days": 730,
-            "storage_type": "fallback"
-        }
+            return {
+                "total_leads": 0, "verified_leads": 0, "converted_leads": 0,
+                "leads_last_24h": 0, "verification_rate": 0, "conversion_rate": 0,
+                "gdpr_compliant": True, "data_retention_days": 730, "storage_type": "error"
+            }
     
     async def get_leads_for_retention_cleanup(self) -> List[Dict[str, Any]]:
         """Get leads that need to be deleted due to GDPR data retention"""
@@ -510,9 +370,6 @@ class DatabaseService:
         """
         Check if user has an active add-on
         """
-        if self.use_fallback:
-            return False  # No add-ons in fallback mode
-        
         try:
             async with self.get_connection() as conn:
                 query = """
@@ -532,9 +389,6 @@ class DatabaseService:
         """
         Get limits for a user's add-on
         """
-        if self.use_fallback:
-            return {"ai_systems": 10}  # Default limit
-        
         try:
             async with self.get_connection() as conn:
                 query = """
@@ -558,9 +412,6 @@ class DatabaseService:
         """
         Count active AI systems for a user
         """
-        if self.use_fallback:
-            return 0
-        
         try:
             async with self.get_connection() as conn:
                 query = """
@@ -586,9 +437,6 @@ class DatabaseService:
         """
         Create a new user add-on subscription
         """
-        if self.use_fallback:
-            return str(uuid.uuid4())
-        
         try:
             async with self.get_connection() as conn:
                 addon_id = str(uuid.uuid4())

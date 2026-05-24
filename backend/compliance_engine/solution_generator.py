@@ -170,7 +170,7 @@ class SolutionGenerator:
                 "die Anforderungen stark."
             ),
             how=[
-                "1. Nutzen Sie einen Datenschutz-Generator (z.B. eRecht24, activeMind)",
+                "1. Nutzen Sie Complyo's internen Rechtstexte-Generator (Einstellungen > Rechtstexte)",
                 "2. Geben Sie dort alle verwendeten Tools und Dienste an",
                 "3. Laden Sie die generierte Datenschutzerklärung herunter",
                 "4. Erstellen Sie eine Seite 'datenschutz.html' oder '/datenschutz'",
@@ -399,7 +399,7 @@ class SolutionGenerator:
                 "und können nicht automatisch generiert werden."
             ),
             how=[
-                "1. Nutzen Sie einen AGB-Generator (z.B. eRecht24, IT-Recht-Kanzlei)",
+                "1. Nutzen Sie Complyo's internen AGB-Generator (Einstellungen > Rechtstexte > AGB)",
                 "2. Geben Sie Ihre Geschäftsbedingungen an",
                 "3. Laden Sie die generierten AGB herunter",
                 "4. Verlinken Sie im Footer und im Checkout-Prozess"

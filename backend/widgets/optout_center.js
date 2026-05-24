@@ -14,7 +14,7 @@
  * - Consent-Widerruf
  * 
  * Integration:
- * <script src="https://api.complyo.tech/widgets/optout-center.js" data-site-id="YOUR_SITE_ID"></script>
+ * <script src="https://api.complyo.de/widgets/optout-center.js" data-site-id="YOUR_SITE_ID"></script>
  * 
  * API:
  * window.complyo.openPreferences()  - Oeffnet Einstellungen
@@ -30,7 +30,13 @@
     'use strict';
     
     const VERSION = '1.0.0';
-    const API_BASE = 'https://api.complyo.tech';
+    const API_BASE = (function() {
+        const s = document.currentScript || (function() {
+            const scripts = document.getElementsByTagName('script');
+            return scripts[scripts.length - 1];
+        })();
+        return (s && s.getAttribute('data-api-base')) || 'https://api.complyo.de';
+    })();
     const CONSENT_STORAGE_KEY = 'complyo_cookie_consent';
     
     // ========================================================================

@@ -2,7 +2,6 @@
  * AI Compliance API Service (ComploAI Guard)
  */
 
-import axios from 'axios';
 import type {
   AISystem,
   AISystemCreate,
@@ -15,45 +14,9 @@ import type {
   AIActRequirement,
   RiskCategoryInfo
 } from '@/types/ai-compliance';
-import { getApiBaseUrl } from '@/lib/api-utils';
+import { getApiClient } from '@/lib/api-client';
 
-// Create axios instance for AI Compliance API
-const aiApiClient = axios.create({
-  baseURL: getApiBaseUrl(),
-  timeout: 60000, // 60 seconds for AI analysis
-  withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  },
-});
-
-// Request interceptor: Add auth token
-aiApiClient.interceptors.request.use(
-  (config) => {
-    if (typeof window !== 'undefined') {
-      const token = (window as any).__complyo_access_token || localStorage.getItem('access_token');
-      if (token) {
-        config.headers['Authorization'] = `Bearer ${token}`;
-      }
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// Response interceptor: Handle errors gracefully
-aiApiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 403) {
-      return Promise.reject(error);
-    }
-    const message = error.response?.data?.detail || error.message;
-    console.error('AI Compliance API Error:', message);
-    return Promise.reject(error);
-  }
-);
+const aiApiClient = getApiClient();
 
 // ==================== AI SYSTEMS MANAGEMENT ====================
 

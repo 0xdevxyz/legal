@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, ArrowRight, ArrowLeft, Copy, Download, AlertCircle, Building, Mail, Phone, MapPin, User, Globe } from 'lucide-react';
 import { sanitizeHtml } from '@/lib/sanitize';
+import { apiClient } from '@/lib/api-client';
 
 interface LegalTextWizardProps {
   fixType: 'impressum' | 'datenschutz' | 'agb' | 'widerruf';
@@ -71,27 +72,12 @@ export const LegalTextWizard: React.FC<LegalTextWizardProps> = ({
     setIsGenerating(true);
     
     try {
-      // Call eRecht24 API to generate personalized legal text
-      const token = localStorage.getItem('access_token');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v2/legal/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          text_type: fixType === 'datenschutz' ? 'datenschutz' : fixType,
-          company_data: companyData,
-          language: 'de'
-        })
+      const data = await apiClient.post('/api/v2/legal/generate', {
+        text_type: fixType === 'datenschutz' ? 'datenschutz' : fixType,
+        company_data: companyData,
+        language: 'de'
       });
-      
-      if (!response.ok) {
-        throw new Error('Rechtstext-Generierung fehlgeschlagen');
-      }
-      
-      const data = await response.json();
-      setFinalContent(data.html || data.content || '');
+      setFinalContent((data as any).html || (data as any).content || '');
       setStep(3);
     } catch (error) {
       console.error('Fehler bei Rechtstext-Generierung:', error);

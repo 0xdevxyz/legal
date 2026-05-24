@@ -267,6 +267,60 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ==========================================
+  # Dependency Vulnerability Audit
+  # ==========================================
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: "./backend/requirements.txt"
+
+      - name: Python — pip-audit
+        working-directory: ./backend
+        run: |
+          pip install --upgrade pip pip-audit
+          pip install -r requirements.txt
+          pip-audit --requirement requirements.txt --format markdown --output /tmp/pip-audit.md || true
+          cat /tmp/pip-audit.md
+
+      - name: Upload pip-audit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pip-audit-report
+          path: /tmp/pip-audit.md
+          retention-days: 30
+
+      - name: Node.js — npm audit (dashboard)
+        working-directory: ./dashboard-react
+        run: |
+          npm ci --ignore-scripts
+          npm audit --audit-level=high --json > /tmp/npm-audit-dashboard.json || true
+
+      - name: Node.js — npm audit (landing)
+        working-directory: ./landing-react
+        run: |
+          npm ci --ignore-scripts
+          npm audit --audit-level=high --json > /tmp/npm-audit-landing.json || true
+
+      - name: Upload npm audit reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit-reports
+          path: /tmp/npm-audit-*.json
+          retention-days: 30
+
+  # ==========================================
   # Security Scan
   # ==========================================
   security-scan:

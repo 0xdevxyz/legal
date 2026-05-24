@@ -191,7 +191,7 @@
   - Widerrufsbelehrung
   - Cookie-Richtlinie
   
-- **eRecht24-Integration:**
+- **KI-Rechtstexte-Generator:**
   - Abmahnsichere Texte
   - Automatische Updates
   - API-Synchronisation
@@ -389,11 +389,13 @@
 
 ## 6. Integrationen
 
-### 6.1 eRecht24 API
+### ~~6.1 eRecht24 API~~ (entfernt 2026-05-23)
 **Dateien:**
 - `backend/erecht24_manager.py`
 - `backend/erecht24_routes_v2.py`
 - `backend/erecht24_service.py`
+
+> Ersetzt durch: backend/legal_text_generator.py, backend/legal_text_routes.py
 
 **Features:**
 - Abmahnsichere Rechtstexte
@@ -463,7 +465,7 @@
 
 ### 7.2 Widget-Status-Badge
 **Komponenten:**
-- `dashboard-react/src/components/dashboard/AbmahnschutzStatus.tsx`
+- `dashboard-react/src/components/dashboard/RiskRadarStatus.tsx`
 - Fix: `has_accessibility_widget` aus Backend übertragen
 
 **Anzeige:**
@@ -556,7 +558,7 @@
 - `backend/fix_routes.py` – Fix-Generierung
 - `backend/fix_apply_routes.py` – Fix-Anwendung (NEU!)
 - `backend/widget_routes.py` – Widget-Analytics
-- `backend/erecht24_routes_v2.py` – eRecht24-Integration
+- `backend/legal_text_routes.py` – Interner KI-Generator
 - `backend/legal_change_routes.py` – Legal-News
 
 ### 8.5 Monitoring & Logging
@@ -680,8 +682,8 @@
 - [TELEFON]
 - etc.
 
-**⚠️ Disclaimer:** KI-generierte Texte sind NICHT abmahnsicher!  
-**Empfehlung:** eRecht24-Integration nutzen.
+**⚠️ Disclaimer:** KI-generierte Texte sind Vorlagen auf Basis aktueller Rechtslage — kein Anwaltsersatz.  
+**Empfehlung:** Juristische Prüfung durch Rechtsanwalt.
 
 ---
 
@@ -875,8 +877,9 @@ Response: { "audit_log": [...], "statistics": {...} }
 ### 14.2 Webhooks
 
 **eRecht24 Webhook:**
+
+> ~~POST /api/webhook/erecht24~~ (entfernt 2026-05-23)
 ```
-POST /api/webhook/erecht24
 Body: { "project_key": "...", "text_type": "...", "updated_at": "..." }
 Action: Update Rechtstexte in DB
 ```
@@ -916,7 +919,7 @@ Action: Mark Fix as Deployed
 - ✅ Backup & Rollback
 - ✅ Audit Trail (rechtssicher)
 - ✅ Haftungsklauseln (AGB + UI)
-- ✅ eRecht24-Integration
+- ✅ KI-Rechtstexte mit Auto-Update
 - ✅ Widget-System
 - ✅ Diff-Viewer
 - ✅ Dashboard mit allen Komponenten

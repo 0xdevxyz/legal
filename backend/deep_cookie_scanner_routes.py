@@ -89,7 +89,7 @@ async def start_deep_scan(
             "estimated_duration_seconds": 180
         }
     """
-    user_id = current_user["user_id"]
+    user_id = current_user["id"]
     
     # 1. Check if user has premium plan
     has_premium = await check_premium_plan(user_id, connection)
@@ -197,7 +197,7 @@ async def get_scan_status(
                 "scan_duration_seconds": 127
             }
     """
-    user_id = current_user["user_id"]
+    user_id = current_user["id"]
     
     # Fetch scan
     scan = await connection.fetchrow(
@@ -276,7 +276,7 @@ async def export_scan_for_configurator(
             "import_ready": true
         }
     """
-    user_id = current_user["user_id"]
+    user_id = current_user["id"]
     
     scan = await connection.fetchrow(
         "SELECT categorized, services_detected FROM deep_cookie_scans WHERE id = $1 AND user_id = $2 AND status = 'completed'",
@@ -469,7 +469,7 @@ async def get_my_scans(
             ]
         }
     """
-    user_id = current_user["user_id"]
+    user_id = current_user["id"]
     
     try:
         scans = await connection.fetch(
@@ -521,7 +521,7 @@ async def delete_scan(
             "message": "Scan deleted successfully"
         }
     """
-    user_id = current_user["user_id"]
+    user_id = current_user["id"]
     
     # Verify ownership
     scan = await connection.fetchval(
@@ -583,7 +583,7 @@ async def get_scan_statistics(
             "created_at": "2026-04-20T14:30:00Z"
         }
     """
-    user_id = current_user["user_id"]
+    user_id = current_user["id"]
     
     scan = await connection.fetchrow(
         """

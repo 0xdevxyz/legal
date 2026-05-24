@@ -142,19 +142,25 @@ async def get_redis() -> Optional[aioredis.Redis]:
 security = HTTPBearer(auto_error=False)
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     settings: Settings = Depends(get_settings)
 ) -> dict:
     """
     Kanonische Auth-Dependency — Single Source of Truth.
 
-    - Validiert JWT (signature, exp, aud, iss)
+    - Validiert JWT aus Bearer-Header ODER HttpOnly-Cookie 'access_token'
     - Lädt User aus DB via AuthService.get_user_by_id
     - Garantiert: id ist int, is_active ist True
     - Wirft 401 bei Token-Problem oder User-nicht-gefunden
     - Wirft 403 bei deaktiviertem User
     """
-    if not credentials:
+    token: Optional[str] = None
+    if credentials:
+        token = credentials.credentials
+    if not token:
+        token = request.cookies.get("access_token")
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
@@ -163,7 +169,7 @@ async def get_current_user(
 
     try:
         payload = jwt.decode(
-            credentials.credentials,
+            token,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
             audience=settings.jwt_audience,
@@ -214,19 +220,26 @@ async def get_current_user(
     return user
 
 async def get_current_user_optional(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     settings: Settings = Depends(get_settings)
 ) -> Optional[dict]:
     """
     Dependency: Get current user if authenticated, None otherwise.
     Does NOT raise exception if not authenticated.
+    Reads token from Bearer header OR HttpOnly 'access_token' cookie.
     """
-    if not credentials:
+    token: Optional[str] = None
+    if credentials:
+        token = credentials.credentials
+    if not token:
+        token = request.cookies.get("access_token")
+    if not token:
         return None
 
     try:
         payload = jwt.decode(
-            credentials.credentials,
+            token,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
             audience=settings.jwt_audience,

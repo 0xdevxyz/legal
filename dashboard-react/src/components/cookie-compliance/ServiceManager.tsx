@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { apiClient } from '@/lib/api-client';
 
 interface Service {
   id: number;
@@ -70,15 +71,11 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
   const loadServicesAndWebsite = async () => {
     try {
       setLoading(true);
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
       
       // Lade verfügbare Services
-      const servicesResponse = await fetch(`${API_URL}/api/cookie-compliance/services`);
-      if (servicesResponse.ok) {
-        const data = await servicesResponse.json();
-        if (data.success) {
-          setServices(data.services || []);
-        }
+      const data = await apiClient.get('/api/cookie-compliance/services') as any;
+      if (data.success) {
+        setServices(data.services || []);
       }
     } catch (error) {
       console.error('Error loading services:', error);
@@ -93,25 +90,16 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
     try {
       setScanning(true);
       setScanResults(null);
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
-      const response = await fetch(`${API_URL}/api/cookie-compliance/scan`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // ✅ NEU: Sende auch die siteId mit, damit die richtige Config aktualisiert wird
-        body: JSON.stringify({ url, site_id: siteId }),
-      });
+      const data = await apiClient.post('/api/cookie-compliance/scan', { url, site_id: siteId }) as any;
       
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setScanResults(data);
-          
-          // Auto-select detected services
-          if (data.detected_services && data.detected_services.length > 0) {
-            const detectedKeys = data.detected_services.map((s: any) => s.service_key);
-            const newSelected = [...new Set([...selectedServices, ...detectedKeys])];
-            onServicesChange(newSelected);
-          }
+      if (data.success) {
+        setScanResults(data);
+        
+        // Auto-select detected services
+        if (data.detected_services && data.detected_services.length > 0) {
+          const detectedKeys = data.detected_services.map((s: any) => s.service_key);
+          const newSelected = [...new Set([...selectedServices, ...detectedKeys])];
+          onServicesChange(newSelected);
         }
       }
     } catch (error) {

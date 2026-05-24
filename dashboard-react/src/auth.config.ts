@@ -47,10 +47,24 @@ export const authConfig: NextAuthConfig = {
         token.active_modules = user.active_modules;
         token.accessToken = user.accessToken;
         token.refreshToken = user.refreshToken;
+        token.accessTokenExpiresAt = (user as any).accessTokenExpiresAt ?? (Date.now() + 60 * 60 * 1000);
+        token.error = undefined;
       }
+
       if (trigger === "update" && session) {
-        return { ...token, ...session };
+        const merged = { ...token, ...session };
+        if (session.accessTokenExpiresAt) {
+          merged.accessTokenExpiresAt = session.accessTokenExpiresAt;
+        }
+        merged.error = undefined;
+        return merged;
       }
+
+      const expiresAt = token.accessTokenExpiresAt as number | undefined;
+      if (expiresAt && Date.now() > expiresAt - 5 * 60 * 1000) {
+        token.error = "RefreshAccessTokenError";
+      }
+
       return token;
     },
     async session({ session, token }) {
@@ -63,6 +77,7 @@ export const authConfig: NextAuthConfig = {
       session.user.onboarding_completed = token.onboarding_completed as boolean;
       session.user.active_modules = token.active_modules as string[];
       session.accessToken = token.accessToken as string;
+      (session as any).error = token.error;
       return session;
     },
   },
@@ -103,6 +118,7 @@ export const authConfig: NextAuthConfig = {
             active_modules: user.active_modules || [],
             accessToken: tokenData.access_token,
             refreshToken: tokenData.refresh_token,
+            accessTokenExpiresAt: Date.now() + 60 * 60 * 1000,
           };
         } catch {
           return null;

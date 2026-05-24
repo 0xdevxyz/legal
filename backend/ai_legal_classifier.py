@@ -22,7 +22,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 from enum import Enum
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 
 logger = logging.getLogger(__name__)
 
@@ -64,26 +64,62 @@ class ActionRecommendation:
 
 
 @dataclass
+class NormReference:
+    law: str
+    article: str
+    paragraph: str = ""
+    url: str = ""
+    relevance_score: float = 0.0
+    quote: str = ""
+
+
+@dataclass
+class Factor:
+    factor: str
+    weight: float
+    description: str
+
+
+@dataclass
+class ExplanationDoc:
+    cited_norms: List[NormReference] = field(default_factory=list)
+    triggering_factors: List[Factor] = field(default_factory=list)
+    confidence_breakdown: Dict[str, float] = field(default_factory=dict)
+    counterfactuals: List[str] = field(default_factory=list)
+    xai_version: str = "v1"
+    
+    def to_dict(self) -> Dict:
+        return {
+            "cited_norms": [
+                {"law": n.law, "article": n.article, "paragraph": n.paragraph,
+                 "url": n.url, "relevance_score": n.relevance_score, "quote": n.quote}
+                for n in self.cited_norms
+            ],
+            "triggering_factors": [
+                {"factor": f.factor, "weight": f.weight, "description": f.description}
+                for f in self.triggering_factors
+            ],
+            "confidence_breakdown": self.confidence_breakdown,
+            "counterfactuals": self.counterfactuals,
+            "xai_version": self.xai_version
+        }
+
+
+@dataclass
 class ClassificationResult:
     """Ergebnis der KI-Klassifizierung"""
-    # Hauptentscheidung
     action_required: bool
     confidence: DecisionConfidence
-    
-    # Klassifizierung
-    severity: str  # critical, high, medium, low, info
-    impact_score: float  # 0.0 - 10.0
-    
-    # Aktionen
+    severity: str
+    impact_score: float
     recommended_actions: List[ActionRecommendation]
-    primary_action: ActionRecommendation  # Hauptaktion (für großen Button)
-    
-    # Erklärung
-    reasoning: str  # Warum wurde so klassifiziert?
-    user_impact: str  # Was bedeutet das für den User?
+    primary_action: ActionRecommendation
+    reasoning: str
+    user_impact: str
     classified_at: datetime
-    
-    # Optional fields
+    applicable_laws: List[str] = field(default_factory=list)
+    law_confidence: Dict[str, float] = field(default_factory=dict)
+    explanation: Optional['ExplanationDoc'] = None
     consequences_if_ignored: Optional[str] = None
     model_version: str = "v1.0"
     
@@ -239,6 +275,96 @@ Gib die VERBESSERTE Klassifizierung im gleichen JSON-Format zurück.
             logger.error(f"❌ Re-Klassifizierung fehlgeschlagen: {e}")
             return original_classification
     
+    async def generate_counterfactuals(
+        self,
+        classification: ClassificationResult,
+        update_data: Dict[str, Any]
+    ) -> List[str]:
+        """
+        Generiert Counterfactual-Erklärungen: was müsste anders sein,
+        damit die Klassifizierung anders ausfiele?
+        """
+        prompt = f"""
+Du hast folgende Compliance-Änderung klassifiziert:
+Titel: {update_data.get('title', '')}
+Severity: {classification.severity}
+Action Required: {classification.action_required}
+Applicable Laws: {', '.join(classification.applicable_laws)}
+
+Generiere exakt 3 kurze Counterfactual-Szenarien im Format:
+"Wenn [Bedingung], dann wäre die Klassifizierung [andere Einschätzung]."
+
+Fokus: Was müsste an der Gesetzesänderung anders sein, damit keine Handlung erforderlich wäre?
+Antworte nur mit 3 Sätzen, einer pro Zeile, ohne Nummerierung.
+"""
+        try:
+            response = await self._call_ai_api(prompt)
+            lines = [l.strip() for l in response.strip().split('\n') if l.strip()]
+            return lines[:3]
+        except Exception as e:
+            logger.warning(f"Counterfactual generation failed: {e}")
+            return []
+
+    async def build_explanation(
+        self,
+        classification: ClassificationResult,
+        update_data: Dict[str, Any],
+        retrieved_docs: List[Dict]
+    ) -> ExplanationDoc:
+        """
+        Baut strukturiertes XAI-Dokument aus Klassifizierungs-Ergebnis und RAG-Dokumenten.
+        """
+        cited_norms = []
+        for doc in retrieved_docs[:3]:
+            for law_ref in doc.get('law_refs', []):
+                cited_norms.append(NormReference(
+                    law=law_ref,
+                    article="",
+                    relevance_score=doc.get('score', 0.0),
+                    url=f"https://www.gesetze-im-internet.de/{law_ref.lower().replace('ö','oe').replace('ü','ue').replace('ä','ae')}/"
+                ))
+
+        triggering_factors = []
+        confidence_value = {
+            DecisionConfidence.HIGH: 0.9,
+            DecisionConfidence.MEDIUM: 0.75,
+            DecisionConfidence.LOW: 0.5,
+        }.get(classification.confidence, 0.5)
+
+        if classification.applicable_laws:
+            triggering_factors.append(Factor(
+                factor="law_match",
+                weight=confidence_value * 0.4,
+                description=f"Gesetzestexte gefunden: {', '.join(classification.applicable_laws)}"
+            ))
+        if classification.severity in ("high", "critical"):
+            triggering_factors.append(Factor(
+                factor="severity_keywords",
+                weight=0.3,
+                description="Kritische Schlüsselbegriffe im Update erkannt"
+            ))
+        triggering_factors.append(Factor(
+            factor="context_clarity",
+            weight=confidence_value * 0.3,
+            description="Klarheit des regulatorischen Kontexts"
+        ))
+
+        confidence_breakdown = {
+            "law_match_score": round(confidence_value * 0.4, 3),
+            "severity_keywords": 0.3 if classification.severity in ("high", "critical") else 0.1,
+            "historical_precedent": round(confidence_value * 0.2, 3),
+            "context_clarity": round(confidence_value * 0.1, 3),
+        }
+
+        counterfactuals = await self.generate_counterfactuals(classification, update_data)
+
+        return ExplanationDoc(
+            cited_norms=cited_norms,
+            triggering_factors=triggering_factors,
+            confidence_breakdown=confidence_breakdown,
+            counterfactuals=counterfactuals
+        )
+
     def _build_classification_prompt(
         self,
         update_data: Dict[str, Any],
@@ -296,6 +422,8 @@ Antworte im folgenden JSON-Format:
     "severity": "high",  // critical/high/medium/low/info
     "impact_score": 7.5,  // 0.0 - 10.0
     "reasoning": "Diese Änderung betrifft...",
+    "applicable_laws": ["DSGVO", "TTDSG"],  // Liste der betroffenen Rechtsgebiete/Gesetze
+    "law_confidence": {{"DSGVO": 0.87, "TTDSG": 0.74}},  // Konfidenz pro Gesetz (0.0 - 1.0)
     "user_impact": "Für den Nutzer bedeutet das...",
     "consequences_if_ignored": "Bei Nicht-Umsetzung drohen...",
     
@@ -332,7 +460,8 @@ WICHTIG:
 - Button-Farben: red (kritisch), orange (wichtig), blue (moderat), gray (info)
 - Icons: Verwende Lucide React Icon-Namen (Search, AlertTriangle, Shield, etc.)
 - estimated_time: Realistisch einschätzen
-- requires_paid_plan: true nur wenn Premium-Features nötig sind
+- Gib applicable_laws als Liste der betroffenen Rechtsgebiete zurück (z.B. ["DSGVO", "TTDSG"])
+- Gib law_confidence als Dict mit Konfidenz pro Gesetz zurück (0.0 - 1.0)
 """
     
     def _parse_classification_response(self, response: str) -> ClassificationResult:
@@ -386,6 +515,8 @@ WICHTIG:
                 recommended_actions=recommended_actions,
                 primary_action=primary_action,
                 reasoning=data['reasoning'],
+                applicable_laws=data.get('applicable_laws', []),
+                law_confidence=data.get('law_confidence', {}),
                 user_impact=data['user_impact'],
                 consequences_if_ignored=data.get('consequences_if_ignored'),
                 classified_at=datetime.now()
@@ -417,7 +548,7 @@ WICHTIG:
                         "Du bist ein hochspezialisierter KI-Assistent für deutsches und "
                         "europäisches Recht im Bereich Web-Compliance. Du analysierst "
                         "Gesetzesänderungen und triffst intelligente Entscheidungen über "
-                        "Handlungsbedarf und Aktionen. Antworte IMMER im geforderten JSON-Format."
+                        "Handlungsbedarf und Aktionen. Antworte präzise im angeforderten Format."
                     )
                 },
                 {
@@ -425,9 +556,8 @@ WICHTIG:
                     "content": prompt
                 }
             ],
-            "temperature": 0.2,  # Niedrig für konsistente, verlässliche Antworten
-            "max_tokens": 3000,
-            "response_format": {"type": "json_object"}  # Erzwingt JSON
+            "temperature": 0.2,
+            "max_tokens": 1000
         }
         
         async with httpx.AsyncClient(timeout=60.0) as client:

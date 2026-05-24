@@ -4,6 +4,17 @@
     "no-console": "warn",
     "no-unused-vars": "warn",
     "react-hooks/exhaustive-deps": "warn",
-    "react/no-unescaped-entities": "warn"
+    "react/no-unescaped-entities": "warn",
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "CallExpression[callee.object.name='localStorage'][callee.property.name='getItem'][arguments.0.value='access_token']",
+        "message": "Do not read 'access_token' from localStorage directly. Use apiClient from '@/lib/api-client' instead."
+      },
+      {
+        "selector": "CallExpression[callee.object.name='localStorage'][callee.property.name='getItem'][arguments.0.value='token']",
+        "message": "Do not read 'token' from localStorage directly. Use apiClient from '@/lib/api-client' instead."
+      }
+    ]
   }
 }

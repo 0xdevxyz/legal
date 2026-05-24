@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
 
 interface User {
@@ -34,10 +34,12 @@ interface RegisterData {
 interface AuthContextType {
   user: User | null;
   accessToken: string | null;
+  isAuthReady: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   markOnboardingCompleted: () => void;
+  refreshUser: () => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
 }
@@ -48,6 +50,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002';
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { data: session, status, update } = useSession();
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [hasTriedUpdate, setHasTriedUpdate] = useState(false);
 
   const isLoading = status === 'loading';
   const isAuthenticated = status === 'authenticated';
@@ -64,6 +68,36 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         active_modules: session.user.active_modules,
       }
     : null;
+
+  useEffect(() => {
+    if (status === 'loading') return;
+
+    const sessionError = (session as any)?.error;
+    if (sessionError === 'RefreshAccessTokenError') {
+      import('@/lib/auth-refresh').then(({ clearAccessToken }) => clearAccessToken());
+      signOut({ redirect: false }).then(() => {
+        window.location.href = '/login';
+      });
+      return;
+    }
+
+    if (status === 'authenticated') {
+      if (session?.accessToken) {
+        import('@/lib/auth-refresh').then(({ setAccessToken }) => {
+          setAccessToken(session.accessToken as string);
+        });
+        setIsAuthReady(true);
+      } else if (!hasTriedUpdate) {
+        setHasTriedUpdate(true);
+        update();
+      } else {
+        setIsAuthReady(true);
+      }
+    } else if (status === 'unauthenticated') {
+      import('@/lib/auth-refresh').then(({ clearAccessToken }) => clearAccessToken());
+      setIsAuthReady(true);
+    }
+  }, [status, session?.accessToken, (session as any)?.error, hasTriedUpdate]);
 
   const login = async (email: string, password: string) => {
     const result = await signIn('credentials', {
@@ -87,7 +121,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const err = await res.json();
       throw new Error(err.detail || 'Registrierung fehlgeschlagen');
     }
-    const result = await res.json();
     await signIn('credentials', {
       email: data.email,
       password: data.password,
@@ -96,6 +129,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = async () => {
+    const { clearAccessToken } = await import('@/lib/auth-refresh');
+    clearAccessToken();
     await signOut({ redirect: false });
     window.location.href = '/login';
   };
@@ -104,15 +139,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await update({ onboarding_completed: true });
   };
 
+  const refreshUser = async () => {
+    await update();
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
         accessToken: session?.accessToken ?? null,
+        isAuthReady,
         login,
         register,
         logout,
         markOnboardingCompleted,
+        refreshUser,
         isAuthenticated,
         isLoading,
       }}
@@ -128,10 +169,12 @@ export const useAuth = () => {
     return {
       user: null,
       accessToken: null,
+      isAuthReady: false,
       login: async () => {},
       register: async () => {},
-      logout: () => {},
+      logout: async () => {},
       markOnboardingCompleted: () => {},
+      refreshUser: async () => {},
       isAuthenticated: false,
       isLoading: true,
     } as AuthContextType;

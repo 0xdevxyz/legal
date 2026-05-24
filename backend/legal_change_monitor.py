@@ -123,9 +123,10 @@ class LegalChangeMonitor:
     Hauptklasse für Gesetzesänderungs-Überwachung
     """
     
-    def __init__(self, openrouter_api_key: str = None):
+    def __init__(self, openrouter_api_key: str = None, db_pool=None):
         self.api_key = openrouter_api_key or os.getenv("OPENROUTER_API_KEY")
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
+        self.db_pool = db_pool
         
         # Quellen für Gesetzesänderungen
         self.sources = {
@@ -156,6 +157,141 @@ class LegalChangeMonitor:
         except Exception as e:
             logger.error(f"❌ Legal change monitoring failed: {e}")
             return []
+
+    async def on_legal_change(self, change: "LegalChange", legal_update_id: str) -> Dict[str, Any]:
+        """
+        Hook: Wird nach dem Persistieren einer Gesetzesänderung aufgerufen.
+        Triggert Re-Generation betroffener Rechtstexte für alle User (severity >= medium).
+        """
+        if not self.db_pool:
+            return {"skipped": True, "reason": "no db_pool"}
+
+        try:
+            from legal_text_generator import get_legal_text_generator
+            generator = get_legal_text_generator(self.db_pool)
+            affected_laws = [area.value for area in change.affected_areas]
+            result = await generator.regenerate_affected_users(
+                affected_laws=affected_laws,
+                legal_update_id=str(legal_update_id),
+                severity=change.severity.value,
+            )
+            logger.info(f"on_legal_change: Re-Generation abgeschlossen — {result}")
+            return result
+        except Exception as e:
+            logger.error(f"on_legal_change: Re-Generation fehlgeschlagen: {e}", exc_info=True)
+            return {"error": str(e)}
+
+    async def monitor_and_persist(self) -> Dict[str, Any]:
+        """
+        Kompletter Durchlauf: Überwachen → DB speichern → Pipeline auslösen → Re-Generation.
+
+        Wird vom Cronjob aufgerufen.
+
+        Returns:
+            {
+                "detected": int,
+                "new_saved": int,
+                "pipeline_results": List[Dict],
+                "regeneration_results": List[Dict]
+            }
+        """
+        from compliance_engine.legal_update_integration import LegalUpdateIntegration
+
+        summary: Dict[str, Any] = {
+            "detected": 0,
+            "new_saved": 0,
+            "pipeline_results": [],
+            "regeneration_results": [],
+        }
+
+        if not self.db_pool:
+            logger.warning("monitor_and_persist: kein db_pool — nur Erkennung ohne Persistenz")
+            changes = await self.monitor_legal_changes()
+            summary["detected"] = len(changes)
+            return summary
+
+        changes = await self.monitor_legal_changes()
+        summary["detected"] = len(changes)
+
+        integration = LegalUpdateIntegration(self.db_pool)
+
+        for change in changes:
+            try:
+                saved_id = await self._save_change_to_db(change)
+                if saved_id is None:
+                    continue  # duplicate — already processed
+
+                summary["new_saved"] += 1
+                legal_update_dict = {
+                    "id": saved_id,
+                    "title": change.title,
+                    "description": change.description,
+                    "update_type": change.severity.value,
+                    "severity": change.severity.value,
+                }
+                pipeline_result = await integration.process_new_legal_update(legal_update_dict)
+                pipeline_result["legal_update_id"] = saved_id
+                pipeline_result["title"] = change.title
+                summary["pipeline_results"].append(pipeline_result)
+
+                regen_result = await self.on_legal_change(change, str(saved_id))
+                regen_result["legal_update_id"] = saved_id
+                summary["regeneration_results"].append(regen_result)
+
+            except Exception as e:
+                logger.error(f"monitor_and_persist: Fehler bei change '{change.title}': {e}", exc_info=True)
+
+        logger.info(
+            f"monitor_and_persist: {summary['detected']} detected, "
+            f"{summary['new_saved']} new, "
+            f"{len(summary['pipeline_results'])} pipeline runs, "
+            f"{len(summary['regeneration_results'])} regen runs"
+        )
+        return summary
+
+    async def _save_change_to_db(self, change: "LegalChange") -> Optional[int]:
+        """
+        Speichert eine LegalChange in die legal_updates Tabelle.
+
+        Returns:
+            ID des neuen Eintrags oder None wenn bereits vorhanden (duplicate title+date).
+        """
+        try:
+            async with self.db_pool.acquire() as conn:
+                existing = await conn.fetchval(
+                    """
+                    SELECT id FROM legal_updates
+                    WHERE title = $1
+                      AND published_at::date = $2::date
+                    LIMIT 1
+                    """,
+                    change.title,
+                    change.detected_at,
+                )
+                if existing:
+                    return None
+
+                new_id = await conn.fetchval(
+                    """
+                    INSERT INTO legal_updates
+                      (update_type, title, description, severity,
+                       source, published_at, effective_date, url)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    RETURNING id
+                    """,
+                    change.severity.value,
+                    change.title,
+                    change.description,
+                    change.severity.value,
+                    change.source,
+                    change.detected_at,
+                    change.effective_date,
+                    change.source_url,
+                )
+                return new_id
+        except Exception as e:
+            logger.error(f"_save_change_to_db failed: {e}", exc_info=True)
+            return None
     
     async def analyze_impact(
         self,
@@ -438,9 +574,9 @@ Fokussiere auf Änderungen, die KONKRETE Auswirkungen auf Websites haben.
 legal_monitor = None
 
 
-def init_legal_monitor(openrouter_api_key: str):
+def init_legal_monitor(openrouter_api_key: str, db_pool=None):
     """Initialisiert den Legal Change Monitor"""
     global legal_monitor
-    legal_monitor = LegalChangeMonitor(openrouter_api_key)
+    legal_monitor = LegalChangeMonitor(openrouter_api_key, db_pool=db_pool)
     return legal_monitor
 

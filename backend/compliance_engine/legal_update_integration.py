@@ -8,6 +8,8 @@ import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 
+from .rule_versioning_service import RuleVersioningService
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,6 +28,7 @@ class LegalUpdateIntegration:
         self._active_updates = []
         self._last_refresh = None
         self._notification_queue = []
+        self._rule_versioning = RuleVersioningService(db_pool)
         
     async def get_active_legal_updates(self, force_refresh: bool = False) -> List[Dict]:
         """
@@ -291,6 +294,126 @@ class LegalUpdateIntegration:
                 
         except Exception as e:
             logger.error(f"❌ Fehler bei Benachrichtigungen: {e}")
+
+    # ------------------------------------------------------------------
+    # NEW: Full pipeline for a single legal_update entry
+    # ------------------------------------------------------------------
+
+    async def process_new_legal_update(self, legal_update: Dict) -> Dict:
+        """
+        Vollständiger Pipeline-Durchlauf für einen neuen Legal-Update-Eintrag:
+
+        1. Betroffene Regeln in compliance_risk_matrix identifizieren
+        2. Regeln via RuleVersioningService versionieren
+        3. Betroffene tracked_websites als rescan_required markieren
+        4. Notification-Queue befüllen (user_legal_notifications)
+
+        Args:
+            legal_update: Dict aus der legal_updates Tabelle (muss 'id' enthalten)
+
+        Returns:
+            {
+                "rules_updated": int,
+                "websites_flagged": int,
+                "notifications_queued": int
+            }
+        """
+        update_id = legal_update.get("id")
+        result = {"rules_updated": 0, "websites_flagged": 0, "notifications_queued": 0}
+
+        try:
+            # 1. Betroffene Regeln ermitteln
+            affected_rules = await self._rule_versioning.find_rules_affected_by_legal_update(
+                legal_update
+            )
+
+            # 2. Regel-Versionen erhöhen
+            for rule in affected_rules:
+                bumped = await self._rule_versioning.bump_rule_version(
+                    rule_id=rule["id"],
+                    change_description=(
+                        f"Aktualisiert durch Legal-Update: {legal_update.get('title', '')}"
+                    ),
+                    legal_update_id=update_id,
+                )
+                if bumped:
+                    result["rules_updated"] += 1
+
+            # 3. Betroffene Websites markieren
+            affected_categories = self._extract_affected_categories(legal_update)
+            websites_flagged = await self._flag_websites_for_rescan(
+                legal_update_id=update_id,
+                reason=legal_update.get("title", "Gesetzliche Änderung erkannt"),
+                affected_categories=affected_categories,
+            )
+            result["websites_flagged"] = websites_flagged
+
+            # 4. Notifications erstellen
+            if update_id and affected_categories:
+                await self.create_scan_notification_for_users(update_id, affected_categories)
+                result["notifications_queued"] = websites_flagged
+
+            logger.info(
+                f"process_new_legal_update #{update_id}: "
+                f"{result['rules_updated']} rules, "
+                f"{result['websites_flagged']} sites, "
+                f"{result['notifications_queued']} notifications"
+            )
+            return result
+
+        except Exception as e:
+            logger.error(f"process_new_legal_update failed for #{update_id}: {e}", exc_info=True)
+            return result
+
+    def _extract_affected_categories(self, legal_update: Dict) -> List[str]:
+        """Ableiten betroffener Kategorien aus update_type + Keywords im Titel."""
+        from .rule_versioning_service import CATEGORY_TO_RULE_KEYWORDS
+
+        title_desc = (
+            f"{legal_update.get('title', '')} "
+            f"{legal_update.get('description', '')} "
+            f"{legal_update.get('update_type', '')}"
+        ).lower()
+
+        matched = []
+        for category, keywords in CATEGORY_TO_RULE_KEYWORDS.items():
+            if any(kw in title_desc for kw in keywords):
+                matched.append(category)
+
+        return matched or ["datenschutz"]
+
+    async def _flag_websites_for_rescan(
+        self,
+        legal_update_id: Optional[int],
+        reason: str,
+        affected_categories: List[str],
+    ) -> int:
+        """
+        Markiert alle aktiven tracked_websites als rescan_required.
+
+        Returns:
+            Anzahl markierter Websites
+        """
+        try:
+            async with self.db_pool.acquire() as conn:
+                result = await conn.execute(
+                    """
+                    UPDATE tracked_websites
+                    SET rescan_required        = TRUE,
+                        rescan_reason          = $1,
+                        rescan_triggered_by    = $2
+                    WHERE status = 'active'
+                      AND (rescan_required IS NULL OR rescan_required = FALSE)
+                    """,
+                    reason,
+                    legal_update_id,
+                )
+                # asyncpg returns e.g. "UPDATE 42"
+                count = int(result.split()[-1]) if result else 0
+                return count
+        except Exception as e:
+            logger.error(f"_flag_websites_for_rescan failed: {e}", exc_info=True)
+            return 0
 
 
 # Global instance

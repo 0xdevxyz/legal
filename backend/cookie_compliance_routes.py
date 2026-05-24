@@ -195,6 +195,14 @@ class BannerConfig(BaseModel):
     cookie_lifetime_days: int = 365
     show_branding: bool = True
     custom_logo_url: Optional[str] = None
+    consent_mode_enabled: Optional[bool] = True
+    gtm_container_id: Optional[str] = None
+    privacy_policy_url: Optional[str] = None
+    cookie_policy_url: Optional[str] = None
+    imprint_url: Optional[str] = None
+
+    class Config:
+        extra = "allow"
 
 class BannerConfigUpdate(BaseModel):
     layout: Optional[str] = None

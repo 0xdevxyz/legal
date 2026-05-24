@@ -34,8 +34,9 @@ Der Cookie-Banner wird **nicht angezeigt**, wenn bereits ein Consent im `localSt
 
 ```javascript
 // In Browser-Console (F12):
-localStorage.removeItem('complyo_cookie_consent');
-localStorage.removeItem('complyo_cookie_consent_date');
+// WICHTIG: Korrekte Storage-Keys laut cookie_banner_v2.js:
+localStorage.removeItem('complyo_cookie_consent');   // CONSENT_STORAGE_KEY
+localStorage.removeItem('complyo_consent_date');     // CONSENT_DATE_KEY (NICHT complyo_cookie_consent_date!)
 location.reload();
 ```
 
@@ -65,9 +66,9 @@ location.reload();
 // In Browser-Console:
 console.log('Consent:', localStorage.getItem('complyo_cookie_consent'));
 
-// Falls vorhanden, löschen:
-localStorage.removeItem('complyo_cookie_consent');
-localStorage.removeItem('complyo_cookie_consent_date');
+// Falls vorhanden, löschen (korrekte Keys laut cookie_banner_v2.js):
+localStorage.removeItem('complyo_cookie_consent');  // CONSENT_STORAGE_KEY
+localStorage.removeItem('complyo_consent_date');    // CONSENT_DATE_KEY
 location.reload();
 ```
 

@@ -11,7 +11,7 @@ Features:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
@@ -35,33 +35,10 @@ def get_db_pool():
 
 # Helper function to extract user_id
 async def get_current_user_id(current_user: dict = Depends(get_current_user)) -> Optional[int]:
-    # ✅ FIX: verify_token() gibt JWT-Payload zurück mit "user_id" (String)
-    # Wir müssen die echte user_id aus der DB holen
-    user_id_from_token = current_user.get("id") or current_user.get("user_id")
-    
-    if not user_id_from_token:
-        return None
-    
-    # ✅ Versuche user_id zu finden (kann UUID oder String sein)
+    user_id = current_user.get("id")
     try:
-        from main_production import db_pool as main_db_pool
-        if main_db_pool:
-            async with main_db_pool.acquire() as conn:
-                db_user = await conn.fetchrow(
-                    "SELECT id FROM users WHERE id::text = $1 OR email = $2 LIMIT 1",
-                    str(user_id_from_token),
-                    current_user.get("email", "")
-                )
-                if db_user:
-                    # UUID zurückgeben (kann als int oder UUID sein)
-                    return db_user["id"]
-    except Exception as e:
-        logger.warning(f"Could not resolve user_id from token: {e}")
-    
-    # Fallback: Versuche user_id_from_token direkt zu verwenden
-    try:
-        return int(user_id_from_token) if isinstance(user_id_from_token, str) and user_id_from_token.isdigit() else user_id_from_token
-    except:
+        return int(user_id) if user_id is not None else None
+    except (ValueError, TypeError):
         return None
 
 
@@ -559,7 +536,7 @@ async def classify_update(
 @router.post("/feedback")
 async def submit_feedback(
     feedback: FeedbackRequest,
-    user_id: Optional[int] = None
+    user_id: Optional[int] = Depends(get_current_user_id)
 ):
     """
     Nimmt User-Feedback zu einer Klassifizierung entgegen
@@ -942,4 +919,246 @@ async def _classify_update_background(
 
 # Export router
 __all__ = ['router']
+
+
+# =============================================================================
+# AUDIT-28: Legal Document Generator Endpoints
+# =============================================================================
+
+class ImpressumRequest(BaseModel):
+    company_name: str = Field(..., min_length=2)
+    street: str = Field(..., min_length=3)
+    city: str = Field(..., min_length=2)
+    country: str = Field(default="Deutschland")
+    email: str = Field(..., min_length=5)
+    phone: Optional[str] = None
+    ust_id: Optional[str] = None
+    managing_director: Optional[str] = None
+    court: Optional[str] = None
+    hrb: Optional[str] = None
+
+
+class DatenschutzRequest(BaseModel):
+    company_name: str = Field(..., min_length=2)
+    website_url: str = Field(..., min_length=5)
+    contact_email: str = Field(..., min_length=5)
+    dpo_email: Optional[str] = None
+    uses_analytics: bool = False
+    uses_marketing: bool = False
+    uses_social_media: bool = False
+    third_party_services: Optional[List[str]] = []
+    data_retention_days: int = 365
+
+
+class DocumentResponse(BaseModel):
+    document_id: Optional[int]
+    html: str
+    document_type: str
+    created_at: str
+    legal_note: str
+    stale_after_days: int = 365
+
+
+@router.post("/generate-impressum", response_model=DocumentResponse)
+async def generate_impressum(
+    request: ImpressumRequest,
+    current_user: dict = Depends(get_current_user),
+    user_id: Optional[int] = Depends(get_current_user_id),
+):
+    """AUDIT-28: Generiert Impressum gemäß §5 TMG / §5 DDG."""
+    db = get_db_pool()
+    company_data = request.dict()
+    try:
+        if db:
+            generator = AIDocumentGenerator(db)
+            result = await generator.generate_impressum_document(user_id or 0, company_data)
+        else:
+            result = _static_impressum(company_data)
+        return DocumentResponse(
+            document_id=result.get("document_id"),
+            html=result.get("html", ""),
+            document_type="impressum",
+            created_at=datetime.now().isoformat(),
+            legal_note="Dieses Impressum wurde generiert. Bitte prüfen Sie alle Angaben auf Richtigkeit.",
+        )
+    except Exception as e:
+        logger.error(f"Impressum generation failed: {e}")
+        result = _static_impressum(company_data)
+        return DocumentResponse(
+            document_id=None,
+            html=result.get("html", ""),
+            document_type="impressum",
+            created_at=datetime.now().isoformat(),
+            legal_note="Statisches Template (AI nicht verfügbar). Bitte prüfen Sie alle Angaben.",
+        )
+
+
+@router.post("/generate-datenschutz", response_model=DocumentResponse)
+async def generate_datenschutz(
+    request: DatenschutzRequest,
+    current_user: dict = Depends(get_current_user),
+    user_id: Optional[int] = Depends(get_current_user_id),
+):
+    """AUDIT-28: Generiert Datenschutzerklärung gemäß DSGVO Art. 13/14."""
+    db = get_db_pool()
+    company_data = request.dict()
+    try:
+        if db:
+            generator = AIDocumentGenerator(db)
+            result = await generator.generate_datenschutz_document(user_id or 0, company_data)
+        else:
+            result = _static_datenschutz(company_data)
+        art13_gaps = _validate_art13_fields(result.get("html", ""))
+        return DocumentResponse(
+            document_id=result.get("document_id"),
+            html=result.get("html", ""),
+            document_type="datenschutzerklaerung",
+            created_at=datetime.now().isoformat(),
+            legal_note=(
+                "Generierte Datenschutzerklärung gemäß DSGVO Art. 13/14. "
+                + (f"Hinweis: Folgende Pflichtfelder wurden nicht erkannt: {', '.join(art13_gaps)}. " if art13_gaps else "Alle Art. 13 Pflichtfelder erkannt. ")
+                + "Bitte lassen Sie dieses Dokument von einem Rechtsanwalt prüfen."
+            ),
+        )
+    except Exception as e:
+        logger.error(f"Datenschutz generation failed: {e}")
+        result = _static_datenschutz(company_data)
+        return DocumentResponse(
+            document_id=None,
+            html=result.get("html", ""),
+            document_type="datenschutzerklaerung",
+            created_at=datetime.now().isoformat(),
+            legal_note="Statisches Template (AI nicht verfügbar). Bitte von Rechtsanwalt prüfen lassen.",
+        )
+
+
+# =============================================================================
+# AUDIT-28: Stale-Reminder (>365 Tage nicht aktualisiert)
+# =============================================================================
+
+@router.get("/documents/stale-check")
+async def check_stale_documents(
+    current_user: dict = Depends(get_current_user),
+    user_id: Optional[int] = Depends(get_current_user_id),
+):
+    """AUDIT-28: Prüft ob Rechtsdokumente > 365 Tage nicht aktualisiert wurden."""
+    db = get_db_pool()
+    if not db:
+        return {"stale_documents": [], "checked_at": datetime.now().isoformat()}
+    try:
+        rows = await db.fetch(
+            """SELECT id, document_type, title, created_at, updated_at, last_reviewed_at
+               FROM generated_documents
+               WHERE user_id = $1 AND status = 'active'
+               ORDER BY updated_at ASC""",
+            user_id or 0
+        )
+        stale = []
+        now = datetime.now()
+        for r in rows:
+            last_update = r["last_reviewed_at"] or r["updated_at"] or r["created_at"]
+            if last_update:
+                age_days = (now - last_update.replace(tzinfo=None)).days
+                if age_days > 365:
+                    stale.append({
+                        "id": r["id"],
+                        "document_type": r["document_type"],
+                        "title": r["title"],
+                        "age_days": age_days,
+                        "last_updated": last_update.isoformat(),
+                        "warning": f"Dieses Dokument wurde seit {age_days} Tagen nicht überprüft. Bitte aktualisieren.",
+                    })
+        return {"stale_documents": stale, "checked_at": datetime.now().isoformat(), "threshold_days": 365}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/documents/{document_id}/mark-reviewed")
+async def mark_document_reviewed(
+    document_id: int,
+    current_user: dict = Depends(get_current_user),
+    user_id: Optional[int] = Depends(get_current_user_id),
+):
+    """AUDIT-28: Markiert ein Dokument als manuell geprüft (setzt last_reviewed_at = NOW())."""
+    db = get_db_pool()
+    if not db:
+        return {"success": True}
+    row = await db.fetchrow(
+        "UPDATE generated_documents SET last_reviewed_at = NOW(), updated_at = NOW() WHERE id = $1 AND user_id = $2 RETURNING id",
+        document_id, user_id or 0
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Dokument nicht gefunden")
+    return {"success": True, "id": row["id"], "reviewed_at": datetime.now().isoformat()}
+
+
+# =============================================================================
+# AUDIT-28: Art. 13/14 Post-Generation Validator
+# =============================================================================
+
+ART13_REQUIRED_FIELDS = {
+    "Verantwortlicher": ["verantwortlicher", "responsible", "controller", "angaben zum unternehmen"],
+    "Zwecke der Verarbeitung": ["zweck", "verarbeitungszweck", "purpose"],
+    "Rechtsgrundlage": ["rechtsgrundlage", "art. 6", "artikel 6", "legal basis"],
+    "Speicherdauer": ["speicherdauer", "löschung", "aufbewahrung", "storage period", "retention"],
+    "Betroffenenrechte": ["betroffenenrechte", "auskunft", "art. 15", "artikel 15", "right to access"],
+    "Beschwerderecht": ["aufsichtsbehörde", "beschwerderecht", "supervisory authority"],
+}
+
+
+def _validate_art13_fields(html_content: str) -> List[str]:
+    """Returns list of missing Art. 13 DSGVO mandatory field names."""
+    lower = html_content.lower()
+    missing = []
+    for field_name, keywords in ART13_REQUIRED_FIELDS.items():
+        if not any(kw in lower for kw in keywords):
+            missing.append(field_name)
+    return missing
+
+
+def _static_impressum(data: dict) -> dict:
+    name = data.get("company_name", "")
+    street = data.get("street", "")
+    city = data.get("city", "")
+    email = data.get("email", "")
+    phone = data.get("phone", "")
+    ust = data.get("ust_id", "")
+    html = f"""<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Impressum</title></head><body>
+<h1>Impressum</h1>
+<h2>Angaben gemäß § 5 TMG / § 5 DDG</h2>
+<p>{name}<br>{street}<br>{city}</p>
+{'<p>Telefon: ' + phone + '</p>' if phone else ''}
+<p>E-Mail: {email}</p>
+{'<p>USt-ID: ' + ust + '</p>' if ust else ''}
+</body></html>"""
+    return {"html": html, "document_id": None}
+
+
+def _static_datenschutz(data: dict) -> dict:
+    name = data.get("company_name", "")
+    email = data.get("contact_email", "")
+    url = data.get("website_url", "")
+    html = f"""<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Datenschutzerklärung</title></head><body>
+<h1>Datenschutzerklärung</h1>
+<h2>1. Verantwortlicher</h2>
+<p>{name}, Kontakt: {email}</p>
+<h2>2. Zwecke der Verarbeitung</h2>
+<p>Diese Website {url} verarbeitet personenbezogene Daten zum Betrieb der Website und zur Erfüllung gesetzlicher Pflichten.</p>
+<h2>3. Rechtsgrundlage</h2>
+<p>Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung), Art. 6 Abs. 1 lit. f DSGVO (berechtigte Interessen).</p>
+<h2>4. Speicherdauer</h2>
+<p>Daten werden gelöscht, sobald der Zweck der Speicherung entfallen ist.</p>
+<h2>5. Betroffenenrechte</h2>
+<p>Sie haben das Recht auf Auskunft (Art. 15 DSGVO), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung (Art. 18), Widerspruch (Art. 21) und Datenübertragbarkeit (Art. 20).</p>
+<h2>6. Beschwerderecht</h2>
+<p>Sie haben das Recht, sich bei einer Aufsichtsbehörde zu beschweren (Art. 77 DSGVO).</p>
+</body></html>"""
+    return {"html": html, "document_id": None}
+
+
+# Import for generator
+try:
+    from ai_document_generator import AIDocumentGenerator
+except ImportError:
+    AIDocumentGenerator = None  # type: ignore
 

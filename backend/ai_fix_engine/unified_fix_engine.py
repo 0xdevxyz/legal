@@ -23,6 +23,7 @@ from enum import Enum
 from .prompts_v2 import PromptBuilder, FixType, AIModel, ContextBuilder
 from .prompts_v2 import CODE_FIX_SCHEMA, TEXT_FIX_SCHEMA, WIDGET_FIX_SCHEMA, GUIDE_FIX_SCHEMA
 from .validators import FixValidator, ValidationResult
+from .fix_quality_gate import FixQualityGate
 
 
 # =============================================================================
@@ -256,6 +257,7 @@ class UnifiedFixEngine:
         self.ai_client = AIApiClient()
         self.parser = ResponseParser()
         self.context_builder = ContextBuilder()
+        self.quality_gate = FixQualityGate()
         
         # Schema mapping
         self.schemas = {
@@ -387,6 +389,27 @@ class UnifiedFixEngine:
         )
         
         print(f"  ✅ Fix generated successfully in {generation_time}ms")
+
+        # 10. Quality Gate — validate the generated fix
+        original_html = context.get("page_html", context.get("html", ""))
+        gate_result = await self.quality_gate.run(result.data, original_html)
+        result.data["quality_gate_status"] = gate_result.final_status
+        result.data["quality_gate_log"] = [
+            {
+                "stage": s.stage,
+                "name": s.name,
+                "passed": s.passed,
+                "duration_ms": s.duration_ms,
+                "errors": s.errors,
+                "warnings": s.warnings,
+            }
+            for s in gate_result.stage_results
+        ]
+        if gate_result.final_status == "pending_review":
+            print(f"  ⚠️ Quality Gate: pending_review — {gate_result.summary}")
+        else:
+            print(f"  ✅ Quality Gate: validated")
+
         return result
     
     def _determine_fix_type(self, issue: Dict[str, Any]) -> str:

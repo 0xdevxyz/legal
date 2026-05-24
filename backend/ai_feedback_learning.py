@@ -410,37 +410,76 @@ class AIFeedbackLearning:
         
         return suggestions
     
-    async def _trigger_learning_if_needed(self):
+    async def _trigger_learning_if_needed(self) -> None:
         """
-        Prüft ob genug neue Daten vorhanden sind für Re-Learning
+        Prüft ob genug neues Feedback vorhanden ist, um Re-Klassifikation ähnlicher Updates auszulösen.
+        Schwellwert: 10 neue negative Feedbacks seit letztem Learning-Cycle.
         """
-        async with self.db.pool.acquire() as conn:
-            # Prüfe wann letztes Learning war
-            last_learning = await conn.fetchval(
+        try:
+            async with self.db.pool.acquire() as conn:
+                # Negative Feedbacks seit letztem Cycle zählen
+                since = await conn.fetchval(
+                    """
+                    SELECT COALESCE(MAX(created_at), NOW() - INTERVAL '30 days')
+                    FROM classification_drift_log
+                    WHERE check_date >= CURRENT_DATE - 7
+                    """
+                )
+                negative_count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*) FROM ai_classification_feedback
+                    WHERE created_at > $1
+                    AND feedback_type IN ('rejected', 'action_ignored', 'incorrect')
+                    """,
+                    since
+                )
+                if negative_count >= 10:
+                    logger.info(f"🔄 Learning-Trigger: {negative_count} negative Feedbacks → starte Adaption")
+                    await self._adapt_prompts_from_feedback(conn, since)
+                else:
+                    logger.debug(f"Learning-Trigger: {negative_count}/10 negative Feedbacks (noch kein Trigger)")
+        except Exception as e:
+            logger.error(f"Learning trigger check failed: {e}")
+
+    async def _adapt_prompts_from_feedback(self, conn, since) -> None:
+        """
+        Analysiert negative Feedbacks und markiert underperformende Prompt-Versionen.
+        """
+        try:
+            # Kategorien mit hoher Ablehnungsrate finden
+            rows = await conn.fetch(
                 """
-                SELECT MAX(learned_at) FROM ai_learning_cycles
-                """
-            )
-            
-            if last_learning and (datetime.now() - last_learning) < timedelta(hours=6):
-                return  # Zu früh für neues Learning
-            
-            # Prüfe ob genug neue Feedback-Events
-            new_feedback_count = await conn.fetchval(
-                """
-                SELECT COUNT(*) FROM ai_classification_feedback
-                WHERE created_at > COALESCE($1, '1970-01-01')
+                SELECT
+                    acl.risk_category,
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN f.feedback_type IN ('rejected','action_ignored') THEN 1 ELSE 0 END) AS negative
+                FROM ai_compliance_logs acl
+                JOIN ai_classification_feedback f ON f.classification_id = acl.id
+                WHERE f.created_at > $1
+                GROUP BY acl.risk_category
+                HAVING COUNT(*) >= 3
+                ORDER BY (SUM(CASE WHEN f.feedback_type IN ('rejected','action_ignored') THEN 1 ELSE 0 END)::float / COUNT(*)) DESC
                 """,
-                last_learning
+                since
             )
-            
-            if new_feedback_count < 50:  # Mindestens 50 neue Events
-                return
-            
-            logger.info(f"🎓 Triggering learning cycle ({new_feedback_count} new feedback events)")
-            
-            # Führe Learning durch
-            await self._run_learning_cycle()
+            for row in rows:
+                negative_rate = row['negative'] / row['total'] if row['total'] > 0 else 0
+                if negative_rate > 0.4:
+                    logger.warning(
+                        f"⚠️ Hohe Ablehnungsrate für '{row['risk_category']}': "
+                        f"{negative_rate:.0%} — Prompt-Review empfohlen"
+                    )
+                    await conn.execute(
+                        """
+                        UPDATE prompt_versions
+                        SET performance_score = performance_score - 0.1,
+                            notes = CONCAT(COALESCE(notes,''), ' | Auto-Flag: high rejection rate ', NOW()::TEXT)
+                        WHERE prompt_key = $1 AND is_active = TRUE
+                        """,
+                        row['risk_category']
+                    )
+        except Exception as e:
+            logger.error(f"Prompt adaption failed: {e}")
     
     async def _run_learning_cycle(self):
         """

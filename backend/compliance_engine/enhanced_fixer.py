@@ -2,7 +2,7 @@
 Enhanced Complyo Fixer - Integration Layer
 Erweitert bestehende Fix-Engine um neue Features OHNE bestehende Strukturen zu überschreiben
 
-WICHTIG: eRecht24 API hat IMMER Vorrang bei Rechtstexten!
+Rechtstexte: interner KI-Generator hat Vorrang (knowledge/laws/ + Templates).
 """
 
 import os
@@ -18,15 +18,14 @@ class EnhancedFixerIntegration:
     Integration Layer für neue Features
     
     Prinzipien:
-    1. ✅ eRecht24 API hat VORRANG bei Rechtstexten (Impressum, Datenschutz)
+    1. ✅ Interner KI-Generator hat VORRANG bei Rechtstexten (Impressum, Datenschutz)
     2. ✅ Neue Module nur als Fallback/Enhancement
     3. ✅ Bestehende Strukturen werden NICHT überschrieben
     4. ✅ Optionale Features - können aktiviert/deaktiviert werden
     """
     
     def __init__(
-        self, 
-        erecht24_service=None,
+        self,
         fix_generator=None,
         enable_preview: bool = True,
         enable_deployment: bool = False,
@@ -34,15 +33,13 @@ class EnhancedFixerIntegration:
     ):
         """
         Initialisiert Enhanced Fixer
-        
+
         Args:
-            erecht24_service: Bestehender eRecht24 Service (PRIORITÄT!)
             fix_generator: Bestehender Fix Generator
             enable_preview: Preview-Engine aktivieren
             enable_deployment: Deployment-Engine aktivieren
             enable_github: GitHub-Integration aktivieren
         """
-        self.erecht24_service = erecht24_service
         self.fix_generator = fix_generator
         
         # Feature Flags
@@ -113,24 +110,15 @@ class EnhancedFixerIntegration:
         user_context: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """
-        Generiert Fix mit korrekter Priorität
-        
-        WICHTIG: Hierarchie für Rechtstexte:
-        1. ✅ eRecht24 API (wenn verfügbar) - ABMAHNSCHUTZ!
-        2. 🔄 Bestehender Fix Generator (Fallback)
-        3. 🤖 KI-Enhanced Prompts (nur zur Ergänzung)
-        
-        Args:
-            issue_category: Kategorie des Issues
-            issue_data: Issue-Daten
-            company_info: Firmeninformationen
-            user_context: User-Kontext (z.B. erecht24_project_id)
-            
-        Returns:
-            Fix-Daten mit Prioritäts-Info
+        Generiert Fix mit korrekter Priorität.
+
+        Hierarchie für Rechtstexte:
+        1. Interner KI-Generator (knowledge/laws/ + Templates) — Risiko-Reduktion
+        2. Bestehender Fix Generator (Fallback)
+        3. Basis-Fallback (Notfall)
         """
-        logger.info(f"🔧 Generiere Fix für Kategorie: {issue_category}")
-        
+        logger.info(f"Generiere Fix für Kategorie: {issue_category}")
+
         fix_result = {
             'category': issue_category,
             'source': None,
@@ -139,83 +127,40 @@ class EnhancedFixerIntegration:
             'priority_used': None,
             'timestamp': datetime.now().isoformat()
         }
-        
-        # ===== RECHTSTEXTE: eRecht24 hat ABSOLUTE PRIORITÄT =====
+
         if issue_category.lower() in ['impressum', 'datenschutz', 'datenschutzerklärung']:
-            
-            # PRIORITÄT 1: eRecht24 API
-            if self.erecht24_service:
-                try:
-                    logger.info(f"🔑 Versuche eRecht24 API für {issue_category}")
-                    
-                    if issue_category.lower() == 'impressum':
-                        erecht24_content = await self.erecht24_service.get_legal_text(
-                            project_id=user_context.get('erecht24_project_id') if user_context else None,
-                            text_type='impressum'
-                        )
-                    else:  # datenschutz
-                        erecht24_content = await self.erecht24_service.get_legal_text(
-                            project_id=user_context.get('erecht24_project_id') if user_context else None,
-                            text_type='privacy_policy'
-                        )
-                    
-                    if erecht24_content:
-                        fix_result['source'] = 'eRecht24 API'
-                        fix_result['content'] = erecht24_content
-                        fix_result['priority_used'] = 1
-                        fix_result['metadata'] = {
-                            'rechtssicher': True,
-                            'abmahnschutz': True,
-                            'provider': 'eRecht24',
-                            'generated_by': 'Complyo + eRecht24'
-                        }
-                        logger.info(f"✅ eRecht24 Content erfolgreich geholt")
-                        return fix_result
-                    
-                except Exception as e:
-                    logger.warning(f"⚠️ eRecht24 API nicht verfügbar: {e}")
-            
-            # PRIORITÄT 2: Bestehender Fix Generator (Fallback)
+
             if self.fix_generator:
                 try:
-                    logger.info(f"🔄 Fallback auf bestehenden Fix Generator")
+                    logger.info(f"Interner Generator für {issue_category}")
                     existing_fix = await self.fix_generator.generate_fix(
                         category=issue_category,
                         issue_data=issue_data,
                         company_info=company_info
                     )
-                    
                     if existing_fix:
-                        fix_result['source'] = 'Complyo Templates'
+                        fix_result['source'] = 'Complyo Internal Generator'
                         fix_result['content'] = existing_fix.get('content')
-                        fix_result['priority_used'] = 2
+                        fix_result['priority_used'] = 1
                         fix_result['metadata'] = {
-                            'rechtssicher': False,
-                            'abmahnschutz': False,
-                            'provider': 'Complyo (Template)',
-                            'note': 'Empfehlung: eRecht24 API aktivieren für Abmahnschutz'
+                            'risk_reduced': True,
+                            'risk_note': 'KI-generierte Vorlage — juristische Prüfung empfohlen',
+                            'provider': 'Complyo KI',
                         }
-                        logger.info(f"✅ Template-basierter Fix generiert")
                         return fix_result
-                    
                 except Exception as e:
-                    logger.warning(f"⚠️ Fix Generator Fehler: {e}")
-            
-            # PRIORITÄT 3: KI-Enhanced Prompts (nur Notfall-Fallback)
-            logger.info(f"🤖 Letzer Fallback: KI-Prompts")
-            fix_result['source'] = 'KI-Generated (Fallback)'
+                    logger.warning(f"Fix Generator Fehler: {e}")
+
+            fix_result['source'] = 'KI-Fallback'
             fix_result['content'] = self._generate_basic_fallback(issue_category, company_info)
-            fix_result['priority_used'] = 3
+            fix_result['priority_used'] = 2
             fix_result['metadata'] = {
-                'rechtssicher': False,
-                'abmahnschutz': False,
-                'provider': 'Complyo AI',
-                'warning': 'DRINGEND: eRecht24 API konfigurieren für rechtssicheren Text!'
+                'risk_reduced': False,
+                'risk_note': 'Basis-Template — bitte vollständig ausfüllen und juristisch prüfen lassen',
+                'provider': 'Complyo AI Fallback',
             }
-            
             return fix_result
-        
-        # ===== ANDERE KATEGORIEN: Bestehender Generator hat Vorrang =====
+
         else:
             if self.fix_generator:
                 try:
@@ -224,32 +169,27 @@ class EnhancedFixerIntegration:
                         issue_data=issue_data,
                         company_info=company_info
                     )
-                    
                     if existing_fix:
                         fix_result['source'] = 'Complyo Fix Generator'
                         fix_result['content'] = existing_fix.get('content')
                         fix_result['priority_used'] = 1
                         return fix_result
-                
                 except Exception as e:
-                    logger.warning(f"⚠️ Fix Generator Fehler: {e}")
-            
-            # Fallback
+                    logger.warning(f"Fix Generator Fehler: {e}")
+
             fix_result['source'] = 'Basic Fallback'
             fix_result['content'] = self._generate_basic_fallback(issue_category, company_info)
             fix_result['priority_used'] = 2
-            
             return fix_result
     
     def _generate_basic_fallback(self, category: str, company_info: Dict = None) -> str:
         """Einfacher Fallback wenn alles andere fehlschlägt"""
-        return f"""
-<!-- Complyo Fallback: {category} -->
-<p><strong>ACHTUNG:</strong> Dies ist ein Basis-Template.</p>
-<p>Für rechtssichere Texte bitte eRecht24 API konfigurieren!</p>
-
-<!-- TODO: Ergänzen Sie hier Ihre {category}-Daten -->
-"""
+        return (
+            f"<!-- Complyo Fallback: {category} -->\n"
+            "<p><strong>Hinweis:</strong> Dies ist ein Basis-Template.</p>\n"
+            "<p>Bitte vollständig ausfüllen. KI-Generierung unter Einstellungen &gt; Rechtstexte.</p>\n"
+            f"<!-- TODO: Ergänzen Sie hier Ihre {category}-Daten -->\n"
+        )
     
     async def create_preview(
         self,
@@ -381,9 +321,9 @@ class EnhancedFixerIntegration:
             },
             'priority_system': {
                 'rechtstexte': {
-                    '1_priority': 'eRecht24 API',
+                    '1_priority': 'Complyo Internal Generator (knowledge/laws/)',
                     '2_fallback': 'Complyo Templates',
-                    '3_emergency': 'KI-Generated'
+                    '3_emergency': 'KI-Fallback'
                 },
                 'other_categories': {
                     '1_priority': 'Complyo Fix Generator',
@@ -391,7 +331,6 @@ class EnhancedFixerIntegration:
                 }
             },
             'integrations': {
-                'erecht24_service': self.erecht24_service is not None,
                 'fix_generator': self.fix_generator is not None
             }
         }
@@ -402,36 +341,19 @@ enhanced_fixer = None
 
 
 def initialize_enhanced_fixer(
-    erecht24_service=None,
     fix_generator=None,
     enable_preview: bool = True,
     enable_deployment: bool = False,
     enable_github: bool = False
 ):
-    """
-    Initialisiert Enhanced Fixer
-    
-    Aufruf in main_production.py beim Startup:
-    ```python
-    from compliance_engine.enhanced_fixer import initialize_enhanced_fixer
-    
-    enhanced_fixer = initialize_enhanced_fixer(
-        erecht24_service=erecht24_service,
-        fix_generator=fix_generator,
-        enable_preview=True,    # Preview aktivieren
-        enable_deployment=False, # Deployment noch deaktiviert
-        enable_github=False      # GitHub noch deaktiviert
-    )
-    ```
-    """
+    """Initialisiert Enhanced Fixer (ohne eRecht24-Abhängigkeit)."""
     global enhanced_fixer
     enhanced_fixer = EnhancedFixerIntegration(
-        erecht24_service=erecht24_service,
         fix_generator=fix_generator,
         enable_preview=enable_preview,
         enable_deployment=enable_deployment,
         enable_github=enable_github
     )
-    logger.info("✅ Enhanced Fixer global initialisiert")
+    logger.info("Enhanced Fixer global initialisiert")
     return enhanced_fixer
 

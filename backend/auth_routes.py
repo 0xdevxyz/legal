@@ -110,6 +110,7 @@ async def register(request: Request, body: RegisterRequest):
         refresh_token = await auth_service.create_refresh_token(user['id'])
         
         is_secure = os.getenv("ENVIRONMENT", "production") == "production"
+        access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
         response = JSONResponse({
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -122,6 +123,16 @@ async def register(request: Request, body: RegisterRequest):
                 "onboarding_completed": False
             }
         })
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            secure=is_secure,
+            samesite="lax",
+            max_age=access_token_expire * 60,
+            path="/",
+            domain=COOKIE_DOMAIN
+        )
         response.set_cookie(
             key="refresh_token",
             value=refresh_token,
@@ -182,6 +193,7 @@ async def login(request: Request, body: LoginRequest):
             ) or False
 
         is_secure = os.getenv("ENVIRONMENT", "production") == "production"
+        access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
         response = JSONResponse({
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -194,6 +206,16 @@ async def login(request: Request, body: LoginRequest):
                 "onboarding_completed": onboarding_completed
             }
         })
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            secure=is_secure,
+            samesite="lax",
+            max_age=access_token_expire * 60,
+            path="/",
+            domain=COOKIE_DOMAIN
+        )
         response.set_cookie(
             key="refresh_token",
             value=refresh_token,
@@ -276,6 +298,7 @@ async def refresh_token_from_cookie(request: Request):
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     is_secure = os.getenv("ENVIRONMENT", "production") == "production"
+    access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
     response = JSONResponse({
         "access_token": new_access_token,
         "refresh_token": new_refresh_token,
@@ -289,6 +312,16 @@ async def refresh_token_from_cookie(request: Request):
             "onboarding_completed": user.get("onboarding_completed") or False
         }
     })
+    response.set_cookie(
+        key="access_token",
+        value=new_access_token,
+        httponly=True,
+        secure=is_secure,
+        samesite="lax",
+        max_age=access_token_expire * 60,
+        path="/",
+        domain=COOKIE_DOMAIN
+    )
     response.set_cookie(
         key="refresh_token",
         value=new_refresh_token,
@@ -416,15 +449,20 @@ async def verify_credentials(request: Request, body: VerifyCredentialsRequest):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     async with auth_service.db_pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT onboarding_completed, plan_type, role FROM users WHERE id = $1",
+            "SELECT onboarding_completed, role FROM users WHERE id = $1",
             user['id']
         )
+        limits_row = await conn.fetchrow(
+            "SELECT plan_type FROM user_limits WHERE user_id = $1",
+            user['id']
+        )
+    plan_type = limits_row['plan_type'] if limits_row else (row['plan_type'] if row and 'plan_type' in row.keys() else 'free')
     return {
         "id": str(user['id']),
         "email": user['email'],
         "full_name": user.get('full_name'),
         "company": user.get('company'),
-        "plan_type": row['plan_type'] if row else 'free',
+        "plan_type": plan_type,
         "role": row['role'] if row else 'customer',
         "onboarding_completed": row['onboarding_completed'] if row else False,
     }

@@ -2,45 +2,25 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
+import { setAccessToken } from '@/lib/auth-refresh';
+import { apiClient } from '@/lib/api-client';
 
-/**
- * OAuth Callback Handler
- * Receives tokens from backend OAuth flow and stores them
- */
 function AuthCallbackContent() {
   const router = useRouter();
-  const { login } = useAuth();
 
   useEffect(() => {
     const handleCallback = async () => {
       const hash = window.location.hash.slice(1);
       const params = new URLSearchParams(hash);
       const accessToken = params.get('access_token');
-      const refreshToken = params.get('refresh_token');
 
-      if (accessToken && refreshToken) {
-        // Store tokens
-        localStorage.setItem('access_token', accessToken);
-        localStorage.setItem('refresh_token', refreshToken);
+      if (accessToken) {
+        setAccessToken(accessToken);
 
-        // Get user info
         try {
-          const response = await fetch('https://api.complyo.de/api/auth/me', {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`
-            }
-          });
-
-          if (response.ok) {
-            const user = await response.json();
-            localStorage.setItem('user', JSON.stringify(user));
-
-            // Redirect to dashboard
-            router.push('/dashboard');
-          } else {
-            throw new Error('Failed to fetch user');
-          }
+          const user = await apiClient.get('/api/auth/me');
+          try { localStorage.setItem('user', JSON.stringify(user)); } catch {}
+          router.push('/dashboard');
         } catch (error) {
           console.error('OAuth callback error:', error);
           router.push('/login?error=oauth_failed');
@@ -68,4 +48,3 @@ export default function AuthCallbackPage() {
     <AuthCallbackContent />
   );
 }
-

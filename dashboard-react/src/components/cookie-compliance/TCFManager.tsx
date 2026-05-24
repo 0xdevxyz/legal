@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { AlertCircle, Shield, ExternalLink, Lock, CheckCircle } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 interface TCFManagerProps {
   siteId: string;
@@ -38,8 +39,6 @@ export default function TCFManager({ siteId, config, onSave }: TCFManagerProps) 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
-
   useEffect(() => {
     loadVendors();
   }, []);
@@ -47,12 +46,9 @@ export default function TCFManager({ siteId, config, onSave }: TCFManagerProps) 
   const loadVendors = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/cookie-compliance/tcf/vendors`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setVendors(data.vendors || []);
-        }
+      const data = await apiClient.get('/api/cookie-compliance/tcf/vendors') as any;
+      if (data.success) {
+        setVendors(data.vendors || []);
       }
     } catch (error) {
       console.error('Error loading TCF vendors:', error);
@@ -64,20 +60,13 @@ export default function TCFManager({ siteId, config, onSave }: TCFManagerProps) 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const response = await fetch(`${API_URL}/api/cookie-compliance/tcf/config`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          site_id: siteId,
-          tcf_enabled: enabled,
-          tcf_vendors: selectedVendors
-        })
+      await apiClient.post('/api/cookie-compliance/tcf/config', {
+        site_id: siteId,
+        tcf_enabled: enabled,
+        tcf_vendors: selectedVendors
       });
-      
-      if (response.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 3000);
-      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error('Error saving TCF settings:', error);
     } finally {

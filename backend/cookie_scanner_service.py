@@ -14,6 +14,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import logging
+from ssrf_protection import validate_url, SSRFError
 
 logger = logging.getLogger(__name__)
 
@@ -351,6 +352,12 @@ class CookieScanner:
             }
         """
         try:
+            try:
+                url = validate_url(url)
+            except SSRFError as e:
+                logger.warning(f"SSRF blocked cookie scan for '{url}': {e}")
+                return {"url": url, "error": "Invalid URL", "detected_services": []}
+
             html_content = await self._fetch_html(url)
             if not html_content:
                 return {

@@ -6,9 +6,9 @@
 -- User Limits Tabelle
 CREATE TABLE IF NOT EXISTS user_limits (
     user_id INTEGER PRIMARY KEY,
-    plan_type VARCHAR(20) NOT NULL DEFAULT 'ai',
+    plan_type VARCHAR(20) NOT NULL DEFAULT 'free',
     websites_count INTEGER DEFAULT 0,
-    websites_max INTEGER DEFAULT 1, -- AI: 1, Expert: unlimited
+    websites_max INTEGER DEFAULT 1, -- free: 1, pro: 1, agency: 25
     exports_this_month INTEGER DEFAULT 0,
     exports_max INTEGER DEFAULT 10,
     exports_reset_date DATE,
@@ -189,7 +189,7 @@ $$ LANGUAGE plpgsql;
 
 -- Demo-Daten für Testing (User ID 1)
 INSERT INTO user_limits (user_id, plan_type, websites_max, exports_max, exports_reset_date)
-VALUES (1, 'ai', 1, 10, CURRENT_DATE + INTERVAL '1 month')
+VALUES (1, 'free', 1, 1, CURRENT_DATE + INTERVAL '1 month')
 ON CONFLICT (user_id) DO UPDATE SET
     plan_type = EXCLUDED.plan_type,
     websites_max = EXCLUDED.websites_max,
@@ -197,6 +197,6 @@ ON CONFLICT (user_id) DO UPDATE SET
 
 -- Demo-Subscription für User 1
 INSERT INTO subscriptions (user_id, plan_type, stripe_subscription_id)
-VALUES (1, 'ai', 'sub_demo_12345')
+VALUES (1, 'free', 'sub_demo_12345')
 ON CONFLICT DO NOTHING;
 

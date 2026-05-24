@@ -13,6 +13,7 @@ import { LegalArchiveModal } from './LegalArchiveModal';
 import { SkeletonLegalNews } from '@/components/ui/Skeleton';
 import { useDashboardStore, RescanContext } from '@/stores/dashboard';
 import apiClient from '@/lib/api';
+import { apiClient as httpApiClient } from '@/lib/api-client';
 
 // TypeScript Interfaces
 interface AIClassification {
@@ -177,26 +178,18 @@ export const LegalNews: React.FC = () => {
     }
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
       const timeToAction = startTime ? Math.floor((Date.now() - startTime) / 1000) : null;
       
-      await fetch(`${API_URL}/api/legal-ai/feedback`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          update_id: String(update.id),
-          classification_id: update.classification.classification_id,
-          feedback_type: feedbackType,
-          user_action: userAction,
-          time_to_action: timeToAction,
-          context_data: {
-            severity: update.severity,
-            update_type: update.update_type
-          }
-        })
+      await httpApiClient.post('/api/legal-ai/feedback', {
+        update_id: String(update.id),
+        classification_id: update.classification.classification_id,
+        feedback_type: feedbackType,
+        user_action: userAction,
+        time_to_action: timeToAction,
+        context_data: {
+          severity: update.severity,
+          update_type: update.update_type
+        }
       });
     } catch (error) {
       // Silent fail - nicht kritisch
@@ -261,10 +254,14 @@ export const LegalNews: React.FC = () => {
       setLegalUpdates(parsedUpdates);
     } catch (err: any) {
       const status = err.response?.status;
-      if (status === 403) {
+      // 401 (Auth) und 403 (Plan) → still leeres Array, keine Fehlermeldung
+      if (status === 401 || status === 403 || status === 404) {
+        setLegalUpdates([]);
+      } else if (status >= 500) {
+        setLoadError('Rechtliche Updates konnten nicht geladen werden.');
         setLegalUpdates([]);
       } else {
-        setLoadError('Rechtliche Updates konnten nicht geladen werden.');
+        // Netzwerkfehler oder unbekannt → still
         setLegalUpdates([]);
       }
     }

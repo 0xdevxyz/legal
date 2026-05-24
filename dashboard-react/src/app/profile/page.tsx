@@ -5,8 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Shield, User, CreditCard, Lock, Mail, Building, Save, AlertCircle, CheckCircle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
+import { apiClient } from '@/lib/api-client';
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -36,27 +35,16 @@ export default function ProfilePage() {
     confirm_password: '',
   });
 
-  const getAuthHeaders = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-    return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-  };
-
   const handleSaveProfile = async () => {
     setIsSaving(true);
     setSuccessMessage('');
     setErrorMessage('');
 
     try {
-      const res = await fetch(`${API_BASE}/api/user/profile`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ full_name: profileData.full_name, company: profileData.company }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Fehler beim Speichern');
+      await apiClient.put('/api/user/profile', { full_name: profileData.full_name, company: profileData.company });
       setSuccessMessage('Profil erfolgreich aktualisiert!');
     } catch (error: any) {
-      setErrorMessage(error.message || 'Fehler beim Speichern der Profildaten');
+      setErrorMessage(error.response?.data?.detail || error.message || 'Fehler beim Speichern der Profildaten');
     } finally {
       setIsSaving(false);
     }
@@ -68,16 +56,10 @@ export default function ProfilePage() {
     setErrorMessage('');
 
     try {
-      const res = await fetch(`${API_BASE}/api/user/billing`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(billingData),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Fehler beim Speichern');
+      await apiClient.put('/api/user/billing', billingData);
       setSuccessMessage('Rechnungsdaten erfolgreich gespeichert!');
     } catch (error: any) {
-      setErrorMessage(error.message || 'Fehler beim Speichern der Rechnungsdaten');
+      setErrorMessage(error.response?.data?.detail || error.message || 'Fehler beim Speichern der Rechnungsdaten');
     } finally {
       setIsSaving(false);
     }
@@ -98,20 +80,14 @@ export default function ProfilePage() {
     setErrorMessage('');
 
     try {
-      const res = await fetch(`${API_BASE}/api/user/password`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          current_password: passwordData.current_password,
-          new_password: passwordData.new_password,
-        }),
+      await apiClient.put('/api/user/password', {
+        current_password: passwordData.current_password,
+        new_password: passwordData.new_password,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Fehler beim Aendern');
       setSuccessMessage('Passwort erfolgreich geaendert!');
       setPasswordData({ current_password: '', new_password: '', confirm_password: '' });
     } catch (error: any) {
-      setErrorMessage(error.message || 'Fehler beim Aendern des Passworts');
+      setErrorMessage(error.response?.data?.detail || error.message || 'Fehler beim Aendern des Passworts');
     } finally {
       setIsSaving(false);
     }

@@ -86,8 +86,8 @@ export default function ProductFeatures() {
             <div className="flex items-center gap-3">
               <Shield className="w-6 h-6 text-cyan-500" />
               <div>
-                <p className="text-sm uppercase tracking-wide text-slate-500">Abmahn-Schutz</p>
-                <p className="text-lg font-semibold text-slate-900">Rechtssichere Compliance</p>
+                <p className="text-sm uppercase tracking-wide text-slate-500">Risiko-Radar</p>
+                <p className="text-lg font-semibold text-slate-900">Compliance-Frühwarnsystem</p>
               </div>
             </div>
             <p className="mt-4 text-sm text-slate-600">

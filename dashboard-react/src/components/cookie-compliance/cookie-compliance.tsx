@@ -34,7 +34,7 @@ import {
   FiCheck,
   FiRefreshCw,
 } from 'react-icons/fi';
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';
 
 // Components
 import CookieBannerDesigner from './CookieBannerDesigner';
@@ -79,13 +79,18 @@ const CookieCompliancePage: React.FC = () => {
   
   // Step 1: Scan Website
   const handleScan = async () => {
-    if (!websiteUrl) {
+    if (!websiteUrl.trim()) {
       toast({ title: 'Bitte URL eingeben', status: 'warning', duration: 3000 });
+      return;
+    }
+    if (!isValidUrl(websiteUrl)) {
+      toast({ title: 'Ungültige URL', description: 'Bitte geben Sie eine gültige Website-URL ein (z.B. https://ihre-website.de)', status: 'warning', duration: 4000 });
       return;
     }
     
     try {
       setScanning(true);
+      setLoading(true);
       setScanResult(null);
       
       const generatedSiteId = generateSiteId(websiteUrl);
@@ -107,23 +112,32 @@ const CookieCompliancePage: React.FC = () => {
             setSelectedServices(data.detected_services.map((s: any) => s.service_key));
           }
           
-          // Load config if exists
-          const configResponse = await fetch(`${API_URL}/api/cookie-compliance/config/${generatedSiteId}`);
-          if (configResponse.ok) {
-            const configData = await configResponse.json();
-            if (configData.success) {
-              setConfig(configData.data);
+          // Load existing config if available
+          try {
+            const configResponse = await fetch(`${API_URL}/api/cookie-compliance/config/${generatedSiteId}`);
+            if (configResponse.ok) {
+              const configData = await configResponse.json();
+              if (configData.success) {
+                setConfig(configData.data);
+              }
             }
+          } catch {
+            // kein Fehler wenn keine Config vorhanden
           }
           
           toast({ title: 'Scan abgeschlossen!', status: 'success', duration: 3000 });
+        } else {
+          toast({ title: 'Scan fehlgeschlagen', description: data.error || 'Unbekannter Fehler', status: 'error', duration: 4000 });
         }
+      } else {
+        toast({ title: 'Scan fehlgeschlagen', description: `Server-Fehler: ${response.status}`, status: 'error', duration: 4000 });
       }
     } catch (error) {
       console.error('Scan error:', error);
-      toast({ title: 'Scan fehlgeschlagen', status: 'error', duration: 3000 });
+      toast({ title: 'Verbindungsfehler', description: 'Prüfen Sie Ihre Internetverbindung', status: 'error', duration: 4000 });
     } finally {
       setScanning(false);
+      setLoading(false);
     }
   };
   
@@ -171,10 +185,21 @@ const CookieCompliancePage: React.FC = () => {
   // Can proceed to next step?
   const canProceed = () => {
     switch (currentStep) {
-      case 1: return scanResult !== null;
-      case 2: return true; // Can always proceed from services (even with 0)
-      case 3: return true; // Can always proceed from design
+      case 1: return scanResult !== null && websiteUrl.trim().length > 0;
+      case 2: return true;
+      case 3: return true;
       default: return false;
+    }
+  };
+  
+  // Step 1 URL validation
+  const isValidUrl = (url: string): boolean => {
+    if (!url) return false;
+    try {
+      new URL(url.startsWith('http') ? url : `https://${url}`);
+      return true;
+    } catch {
+      return false;
     }
   };
   

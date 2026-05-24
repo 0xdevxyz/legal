@@ -51,31 +51,12 @@
         cookieLifetimeDays: 365,
         showBranding: true,
         
+        // Legal Links (konfigurierbar per Backend-Config)
+        privacyPolicyUrl: '/datenschutz',
+        cookiePolicyUrl: '/cookie-richtlinie',
+        imprintUrl: '/impressum',
+        
         // Google Consent Mode v2 (Pflicht seit Maerz 2024)
-        consent_mode_enabled: true,
-        consent_mode_default: {
-            ad_storage: 'denied',
-            analytics_storage: 'denied',
-            ad_user_data: 'denied',
-            ad_personalization: 'denied'
-        },
-        
-        // Google Tag Manager
-        gtm_enabled: false,
-        gtm_container_id: null,
-        
-        // Geo-Restriction
-        geo_restriction_enabled: false,
-        geo_countries: [],
-        
-        // Age Verification (Jugendschutz)
-        age_verification_enabled: false,
-        age_verification_min_age: 16,
-        
-        // Bannerless Mode
-        bannerless_mode: false,
-        
-        // Services
         consent_mode_enabled: true,
         consent_mode_default: {
             ad_storage: 'denied',
@@ -130,6 +111,20 @@
             collapse: 'Informationen ausblenden'
         }
     };
+    
+    // ========================================================================
+    // Security Helper – XSS-Schutz
+    // ========================================================================
+    
+    function sanitizeText(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#x27;');
+    }
     
     // ========================================================================
     // ComplyoCookieBanner Class
@@ -522,6 +517,11 @@
             this.config.isActiveFromServer = serverConfig.is_active === true;
             this.configHash = serverConfig.config_hash || null;
 
+            // Konfigurierbare Legal-Links (Task 2.5)
+            if (serverConfig.privacy_policy_url) this.config.privacyPolicyUrl = serverConfig.privacy_policy_url;
+            if (serverConfig.cookie_policy_url) this.config.cookiePolicyUrl = serverConfig.cookie_policy_url;
+            if (serverConfig.imprint_url) this.config.imprintUrl = serverConfig.imprint_url;
+
             // Phase 6 features
             this.config.bannerless_mode = serverConfig.bannerless_mode || false;
             this.config.age_verification_enabled = serverConfig.age_verification_enabled || false;
@@ -539,10 +539,36 @@
             }
             
             // Override with server texts if available
+            // Task 1.3: snake_case → camelCase Mapping für Backend-gespeicherte Texte
+            let serverTexts = null;
             if (serverConfig.texts && serverConfig.texts[browserLang]) {
-                this.config.texts = { ...this.config.texts, ...serverConfig.texts[browserLang] };
+                serverTexts = serverConfig.texts[browserLang];
             } else if (serverConfig.texts && serverConfig.texts['de']) {
-                this.config.texts = { ...this.config.texts, ...serverConfig.texts['de'] };
+                serverTexts = serverConfig.texts['de'];
+            }
+            
+            if (serverTexts) {
+                const mapped = {
+                    title:           serverTexts.title           || serverTexts.title,
+                    description:     serverTexts.description     || serverTexts.description,
+                    acceptAll:       serverTexts.acceptAll       || serverTexts.accept_all,
+                    continueWithout: serverTexts.continueWithout || serverTexts.reject_all,
+                    acceptSelected:  serverTexts.acceptSelected  || serverTexts.accept_selected,
+                    settingsLink:    serverTexts.settingsLink    || serverTexts.settings,
+                    privacyPolicy:   serverTexts.privacyPolicy   || serverTexts.privacy_policy || serverTexts.privacy_link,
+                    imprint:         serverTexts.imprint         || serverTexts.imprint_link,
+                    necessary:       serverTexts.necessary,
+                    necessaryDesc:   serverTexts.necessaryDesc,
+                    functional:      serverTexts.functional,
+                    functionalDesc:  serverTexts.functionalDesc,
+                    analytics:       serverTexts.analytics,
+                    analyticsDesc:   serverTexts.analyticsDesc,
+                    marketing:       serverTexts.marketing,
+                    marketingDesc:   serverTexts.marketingDesc,
+                };
+                // Entferne undefined-Keys, um Defaults nicht zu überschreiben
+                Object.keys(mapped).forEach(k => mapped[k] === undefined && delete mapped[k]);
+                this.config.texts = { ...this.config.texts, ...mapped };
             }
         }
         
@@ -1771,49 +1797,54 @@
             banner.id = 'complyo-banner';
             
             // Content
+            const t = this.config.texts;
+            const privacyUrl = sanitizeText(this.config.privacyPolicyUrl || '/datenschutz');
+            const cookiePolicyUrl = sanitizeText(this.config.cookiePolicyUrl || '/cookie-richtlinie');
+            const imprintUrl = sanitizeText(this.config.imprintUrl || '/impressum');
+
             banner.innerHTML = `
                 <div class="complyo-content">
-                    <h2 id="complyo-banner-title" class="complyo-title">${this.config.texts.title}</h2>
+                    <h2 id="complyo-banner-title" class="complyo-title">${sanitizeText(t.title)}</h2>
                     <p id="complyo-banner-desc" class="complyo-description">
-                        ${this.config.texts.description}
+                        ${sanitizeText(t.description)}
                     </p>
                     <p class="complyo-description">
-                        ${this.config.texts.description2}
+                        ${sanitizeText(t.description2)}
                     </p>
-                    ${this.config.texts.ageNotice ? `
+                    ${t.ageNotice ? `
                         <div class="complyo-age-notice">
-                            ${this.config.texts.ageNotice}
+                            ${sanitizeText(t.ageNotice)}
                         </div>
                     ` : ''}
                     <div class="complyo-actions">
                         <button 
                             id="complyo-accept-all" 
-                            class="complyo-btn complyo-btn-primary complyo-btn-${this.config.buttonStyle}"
-                            aria-label="${this.config.texts.acceptAll}"
+                            class="complyo-btn complyo-btn-primary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
+                            aria-label="${sanitizeText(t.acceptAll)}"
                         >
-                            ${this.config.texts.acceptAll}
+                            ${sanitizeText(t.acceptAll)}
                         </button>
                         <button 
                             id="complyo-reject-all" 
-                            class="complyo-btn complyo-btn-secondary complyo-btn-${this.config.buttonStyle}"
-                            aria-label="${this.config.texts.continueWithout}"
+                            class="complyo-btn complyo-btn-secondary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
+                            aria-label="${sanitizeText(t.continueWithout)}"
                         >
-                            ${this.config.texts.continueWithout}
+                            ${sanitizeText(t.continueWithout)}
                         </button>
                         <button 
                             id="complyo-settings" 
                             class="complyo-btn complyo-btn-link"
-                            aria-label="${this.config.texts.settingsLink}"
+                            aria-label="${sanitizeText(t.settingsLink)}"
                         >
-                            ${this.config.texts.settingsLink}
+                            ${sanitizeText(t.settingsLink)}
                         </button>
                     </div>
                     <div class="complyo-footer">
-                        <a href="/datenschutz" target="_blank" rel="noopener">${this.config.texts.privacyPolicy}</a>
+                        <a href="${privacyUrl}" target="_blank" rel="noopener">${sanitizeText(t.privacyPolicy)}</a>
                         <span style="opacity: 0.5;">•</span>
-                        <a href="/cookie-richtlinie" target="_blank" rel="noopener">${this.config.texts.cookiePolicy}</a>
+                        <a href="${cookiePolicyUrl}" target="_blank" rel="noopener">${sanitizeText(t.cookiePolicy)}</a>
                         <span style="opacity: 0.5;">•</span>
-                        <a href="/impressum" target="_blank" rel="noopener">${this.config.texts.imprint}</a>
+                        <a href="${imprintUrl}" target="_blank" rel="noopener">${sanitizeText(t.imprint)}</a>
                     </div>
                     ${this.config.showBranding ? `
                         <div class="complyo-branding">
@@ -2427,7 +2458,9 @@
         }
         
         renderSettingsHTML() {
-            const { primaryColor } = this.config;
+            const privacyUrl = sanitizeText(this.config.privacyPolicyUrl || '/datenschutz');
+            const imprintUrl = sanitizeText(this.config.imprintUrl || '/impressum');
+            const descText = sanitizeText(this.config.texts?.description || 'Hier finden Sie eine Übersicht über alle verwendeten Cookies. Sie können Ihre Einwilligung für ganze Kategorien geben oder sich weitere Informationen anzeigen lassen und bestimmte Cookies auswählen.');
             return `
                 <!-- Header -->
                 <div class="cps-header">
@@ -2436,14 +2469,14 @@
                         <h2 class="cps-title" id="complyo-settings-title">Datenschutz-Präferenz</h2>
                     </div>
                     <div class="cps-header-links">
-                        <a href="/datenschutz" target="_blank">Datenschutzerklärung</a>
-                        <a href="/impressum" target="_blank">Impressum</a>
+                        <a href="${privacyUrl}" target="_blank">Datenschutzerklärung</a>
+                        <a href="${imprintUrl}" target="_blank">Impressum</a>
                     </div>
                 </div>
                 
                 <!-- Description -->
                 <div class="cps-description">
-                    ${this.config.texts?.description || 'Hier finden Sie eine Übersicht über alle verwendeten Cookies. Sie können Ihre Einwilligung für ganze Kategorien geben oder sich weitere Informationen anzeigen lassen und bestimmte Cookies auswählen.'}
+                    ${descText}
                 </div>
                 
                 <!-- Tabs -->
@@ -2523,33 +2556,33 @@
                 const isChecked = this.categorySelections[cat.key];
                 
                 html += `
-                    <div class="cps-item" data-category="${cat.key}">
+                    <div class="cps-item" data-category="${sanitizeText(cat.key)}">
                         <div class="cps-item-header">
                             <div class="cps-item-checkbox">
                                 <input type="checkbox" 
-                                       id="cat-${cat.key}" 
-                                       data-category="${cat.key}"
+                                       id="cat-${sanitizeText(cat.key)}" 
+                                       data-category="${sanitizeText(cat.key)}"
                                        ${isChecked ? 'checked' : ''} 
                                        ${cat.required ? 'checked disabled' : ''}>
                             </div>
                             <div class="cps-item-content">
-                                <h3 class="cps-item-title">${cat.name}</h3>
-                                <p class="cps-item-desc">${cat.desc}</p>
+                                <h3 class="cps-item-title">${sanitizeText(cat.name)}</h3>
+                                <p class="cps-item-desc">${sanitizeText(cat.desc)}</p>
                             </div>
                             <div class="cps-item-actions">
-                                <button class="cps-expand-btn" data-expand="cat-${cat.key}">
+                                <button class="cps-expand-btn" data-expand="cat-${sanitizeText(cat.key)}">
                                     Informationen anzeigen <span>▼</span>
                                 </button>
                             </div>
                         </div>
-                        <div class="cps-item-details" id="details-cat-${cat.key}">
+                        <div class="cps-item-details" id="details-cat-${sanitizeText(cat.key)}">
                             ${services.length > 0 ? `
                                 <div class="cps-details-section">
                                     <div class="cps-details-title">Zugehörige Services (${services.length})</div>
                                     ${services.map(s => `
                                         <div class="cps-details-row">
-                                            <span class="cps-details-label">${s.name}</span>
-                                            <span class="cps-details-value">${s.description || ''}</span>
+                                            <span class="cps-details-label">${sanitizeText(s.name)}</span>
+                                            <span class="cps-details-value">${sanitizeText(s.description || '')}</span>
                                         </div>
                                     `).join('')}
                                 </div>
@@ -2587,10 +2620,10 @@
                     const isEssential = service.category === 'necessary';
                     
                     html += `
-                        <div class="cps-item cps-service-item" data-service="${service.service_key || service.name}" data-category="${service.category}">
+                        <div class="cps-item cps-service-item" data-service="${sanitizeText(service.service_key || service.name)}" data-category="${sanitizeText(service.category)}">
                             <div class="cps-item-header">
                                 <div class="cps-item-content">
-                                    <h3 class="cps-item-title">${service.name}</h3>
+                                    <h3 class="cps-item-title">${sanitizeText(service.name)}</h3>
                                 </div>
                                 <div class="cps-item-actions">
                                     <button class="cps-expand-btn" data-expand="svc-${idx}">
@@ -2598,8 +2631,8 @@
                                     </button>
                                     <label class="cps-toggle">
                                         <input type="checkbox" 
-                                               data-service-toggle="${service.service_key || service.name}"
-                                               data-category="${service.category}"
+                                               data-service-toggle="${sanitizeText(service.service_key || service.name)}"
+                                               data-category="${sanitizeText(service.category)}"
                                                ${isEnabled || isEssential ? 'checked' : ''} 
                                                ${isEssential ? 'disabled' : ''}>
                                         <span class="cps-toggle-slider"></span>
@@ -2611,23 +2644,23 @@
                                     ${service.description ? `
                                         <div class="cps-details-row">
                                             <span class="cps-details-label">Beschreibung</span>
-                                            <span class="cps-details-value">${service.description}</span>
+                                            <span class="cps-details-value">${sanitizeText(service.description)}</span>
                                         </div>
                                     ` : ''}
                                     <div class="cps-details-row">
                                         <span class="cps-details-label">Kategorie</span>
-                                        <span class="cps-details-value">${this.getCategoryName(service.category)}</span>
+                                        <span class="cps-details-value">${sanitizeText(this.getCategoryName(service.category))}</span>
                                     </div>
                                     ${service.provider ? `
                                         <div class="cps-details-row">
                                             <span class="cps-details-label">Anbieter</span>
-                                            <span class="cps-details-value">${service.provider}</span>
+                                            <span class="cps-details-value">${sanitizeText(service.provider)}</span>
                                         </div>
                                     ` : ''}
                                     ${service.cookies && service.cookies.length > 0 ? `
                                         <div class="cps-details-row">
                                             <span class="cps-details-label">Cookies</span>
-                                            <span class="cps-details-value">${service.cookies.map(c => typeof c === 'string' ? c : c.name).join(', ')}</span>
+                                            <span class="cps-details-value">${sanitizeText(service.cookies.map(c => typeof c === 'string' ? c : c.name).join(', '))}</span>
                                         </div>
                                     ` : ''}
                                 </div>

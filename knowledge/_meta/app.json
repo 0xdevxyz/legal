@@ -1,0 +1,15 @@
+{
+  "useMarkdownLinks": false,
+  "newLinkFormat": "shortest",
+  "attachmentFolderPath": "_meta/attachments",
+  "alwaysUpdateLinks": true,
+  "theme": "obsidian",
+  "defaultViewMode": "source",
+  "foldHeading": false,
+  "foldIndent": false,
+  "showLineNumber": true,
+  "readableLineLength": true,
+  "strictLineBreaks": false,
+  "showFrontmatter": false,
+  "spellcheck": false
+}

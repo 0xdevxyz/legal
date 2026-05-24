@@ -126,7 +126,7 @@ services:
     mem_limit: 512m
     memswap_limit: 512m
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -145,6 +145,9 @@ services:
       - NEXT_PUBLIC_API_URL=https://api.complyo.de
       - NEXTAUTH_URL=https://app.complyo.de
       - NEXTAUTH_SECRET=${JWT_SECRET:?JWT_SECRET is required in .env}
+      - AUTH_SECRET=${JWT_SECRET}
+      - AUTH_URL=https://app.complyo.de
+      - AUTH_TRUST_HOST=true
       - NEXTAUTH_BACKEND_URL=https://api.complyo.de
       - NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}
       - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
@@ -163,7 +166,7 @@ services:
     mem_limit: 512m
     memswap_limit: 512m
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
       interval: 30s
       timeout: 10s
       retries: 3

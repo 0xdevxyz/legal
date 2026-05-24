@@ -116,7 +116,7 @@ export const AIAssistant: React.FC = () => {
 • An wen Sie Daten weitergeben
 • Welche Rechte Nutzer haben
 
-📋 **Tipp:** Nutzen Sie einen Generator wie den von eRecht24, um eine vollständige Datenschutzerklärung zu erstellen.
+📋 **Tipp:** Nutzen Sie unseren internen Rechtstexte-Generator unter Einstellungen > Rechtstexte.
 
 Soll ich Ihnen zeigen, wo Sie das auf Ihrer Website einfügen?`;
     }

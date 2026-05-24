@@ -47,7 +47,8 @@ def set_db_pool(pool):
     return pool
 
 class AnalyzeRequest(BaseModel):
-    url: str  # Akzeptiert URLs mit oder ohne Protokoll
+    url: str
+    legal_update_id: Optional[int] = None
 
 class IssueLocation(BaseModel):
     area: str
@@ -112,7 +113,7 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
     """
     try:
         url = str(request.url)
-        # ✅ FIX: Key ist "id", nicht "user_id" (siehe auth_service.get_user_by_id)
+        legal_update_id = request.legal_update_id
         user_id = current_user.get("id") or current_user.get("user_id")
         
         # ✅ FIX: Normalisiere URL (füge https:// hinzu falls fehlt)
@@ -145,6 +146,16 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
         
         # Get risk calculator from app state
         from main_production import db_pool, risk_calculator
+        
+        # Bei legal_update_id: force-refresh des Legal-Update-Cache
+        if legal_update_id:
+            try:
+                from main_production import legal_update_integration
+                if legal_update_integration:
+                    await legal_update_integration.get_active_legal_updates(force_refresh=True)
+                    logger.info(f"Legal Update Cache refreshed für Update ID {legal_update_id}")
+            except Exception as e:
+                logger.warning(f"Legal Update Cache refresh fehlgeschlagen (non-critical): {e}")
         
         # Perform compliance scan and crawl in parallel
         try:
@@ -378,8 +389,8 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         INSERT INTO scan_history (
                             scan_id, user_id, website_id, url, website_name, scan_timestamp,
                             scan_data, compliance_score, total_risk_euro, critical_issues,
-                            warning_issues, total_issues, scan_duration_ms
-                        ) VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7, $8, $9, $10, $11, $12)
+                            warning_issues, total_issues, scan_duration_ms, legal_update_id
+                        ) VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7, $8, $9, $10, $11, $12, $13)
                         """,
                         scan_id,
                         user_id_int,
@@ -401,17 +412,18 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                             ],
                             'positive_checks': positive_checks,
                             'pillar_scores': [{'pillar': p.pillar, 'score': p.score} for p in pillar_scores],
-                            'issue_groups': scan_result.get('issue_groups', []),  # ✅ NEU: Gruppierte Issues
-                            'grouping_stats': scan_result.get('grouping_stats', {})  # ✅ NEU: Gruppierungs-Statistiken
+                            'issue_groups': scan_result.get('issue_groups', []),
+                            'grouping_stats': scan_result.get('grouping_stats', {})
                         }),
                         overall_compliance_score,
                         total_risk_data.get('total_risk_max', 0),
                         critical_issues_count,
                         warning_issues_count,
                         len(structured_issues),
-                        scan_result.get("scan_duration_ms")
+                        scan_result.get("scan_duration_ms"),
+                        legal_update_id
                     )
-                    logger.info(f"✅ Saved scan history for website ID {website_id}")
+                    logger.info(f"Saved scan history for website ID {website_id}" + (f" (triggered by legal update {legal_update_id})" if legal_update_id else ""))
                     
                     # 🚀 NEU: Post-Process Accessibility-Issues (Alt-Text-Generierung)
                     try:
@@ -1015,7 +1027,7 @@ add_header Referrer-Policy "strict-origin-when-cross-origin" always;''',
                 '2. Verlinken Sie die AGB im Footer und im Bestellprozess',
                 '3. Im Checkout: Pflicht-Checkbox "Ich akzeptiere die AGB" einbauen',
                 '4. Senden Sie AGB per E-Mail mit jeder Bestellbestätigung mit',
-                '5. Lassen Sie die AGB von einem Rechtsanwalt prüfen (Abmahnschutz)'
+                '5. Lassen Sie die AGB von einem Rechtsanwalt prüfen (juristische Prüfung empfohlen)'
             ]
         )
     
@@ -1558,7 +1570,7 @@ def _generate_solution(category: str) -> IssueSolution:
                 '1. AGB-Seite unter /agb erstellen und im Footer verlinken',
                 '2. Im Checkout: Pflicht-Checkbox "Ich akzeptiere die AGB" einbauen',
                 '3. AGB per E-Mail mit jeder Bestellbestätigung mitsenden',
-                '4. AGB von einem Rechtsanwalt prüfen lassen (Abmahnschutz)'
+                '4. AGB von einem Rechtsanwalt prüfen lassen (juristische Prüfung empfohlen)'
             ]
         ),
         'widerruf': IssueSolution(

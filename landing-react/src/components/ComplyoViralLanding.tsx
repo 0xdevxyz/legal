@@ -305,8 +305,8 @@ export default function ComplyoViralLanding() {
 
   const features = [
     'DSGVO-Prüfung', 'BFSG 2025', 'Cookie-Consent', 'Impressum-Check',
-    'WCAG 2.1 AA', 'KI-Code-Fixes', 'TCF 2.2', 'PDF-Export', 'eRecht24',
-    'TTDSG', 'Alt-Text-KI', 'Live-Scanner', 'Abmahnschutz', 'Git-Integration',
+    'WCAG 2.1 AA', 'KI-Code-Fixes', 'TCF 2.2', 'PDF-Export', 'Risiko-Radar',
+    'TTDSG', 'Alt-Text-KI', 'Live-Scanner', 'KI-Rechtstexte', 'Git-Integration',
   ];
 
   const faqs = [
@@ -336,7 +336,7 @@ export default function ComplyoViralLanding() {
     },
   ];
 
-  const appUrl = process.env.NODE_ENV === 'production' ? 'https://app.complyo.tech' : 'http://localhost:3001';
+  const appUrl = process.env.NODE_ENV === 'production' ? 'https://app.complyo.de' : 'http://localhost:3001';
 
   return (
     <div className="min-h-screen bg-white text-gray-900 overflow-x-hidden">
@@ -534,7 +534,7 @@ export default function ComplyoViralLanding() {
                   Für jedes gefundene Problem erstellt die KI sofort anwendbare Lösungen — kommentiert, erklärt, copy-paste-ready. Kein Rätselraten mehr.
                 </p>
                 <ul className="space-y-3">
-                  {['Sofort einsatzbereiter Code', 'Schritt-für-Schritt Erklärung', 'eRecht24 geprüft & zertifiziert'].map((item) => (
+                  {['Sofort einsatzbereiter Code', 'Schritt-für-Schritt Erklärung', 'KI-geprüfte Vorlage (juristisch prüfen lassen)'].map((item) => (
                     <li key={item} className="flex items-center gap-3 text-gray-700">
                       <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
                         <Check className="w-3 h-3 text-purple-600" />
@@ -623,7 +623,7 @@ export default function ComplyoViralLanding() {
               {[
                 { icon: <Zap className="w-5 h-5" />, title: '90-Sekunden-Scan', description: 'KI analysiert DSGVO, TTDSG, Impressumspflicht und BFSG-Barrierefreiheit — vollautomatisch.', tag: 'Schnell' },
                 { icon: <Code className="w-5 h-5" />, title: 'KI-Code-Fixes', description: 'Sofort anwendbare Code-Snippets für jedes gefundene Problem — kommentiert, copy-paste-ready.' },
-                { icon: <Shield className="w-5 h-5" />, title: 'eRecht24 Integration', description: 'Direkte API-Anbindung: rechtssichere Datenschutz-, Impressum- und AGB-Texte auf Knopfdruck.' },
+                { icon: <Shield className="w-5 h-5" />, title: 'KI-Rechtstexte', description: 'Interner Generator: Datenschutz-, Impressum- und AGB-Texte auf Basis aktueller Gesetzeslage — automatisch aktualisiert.' },
                 { icon: <Eye className="w-5 h-5" />, title: 'BFSG & WCAG 2.1 AA', description: 'Vollständige Prüfung nach Barrierefreiheitsstärkungsgesetz (ab Juni 2025 Pflicht) und WCAG 2.1.', tag: 'Neu' },
                 { icon: <Scale className="w-5 h-5" />, title: 'DSGVO & TTDSG', description: 'Automatische Prüfung aller datenschutzrelevanten Bereiche inkl. Telekommunikations-Datenschutz.' },
                 { icon: <Lock className="w-5 h-5" />, title: 'TCF 2.2 Cookie-Consent', description: 'IAB TCF 2.2-konformes Cookie-Banner mit Blockliste, Opt-Out und vollständigem Vendor-Management.' },
@@ -673,7 +673,7 @@ export default function ComplyoViralLanding() {
                       'Schritt-für-Schritt Anleitungen',
                       'Score-Verlauf & Reports',
                       'PDF/Excel Export',
-                      'eRecht24 Integration',
+                      'KI-Rechtstexte mit Auto-Update',
                       'E-Mail Support',
                     ].map((f) => (
                       <li key={f} className="flex items-center gap-3 text-sm text-gray-700">

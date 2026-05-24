@@ -3,6 +3,13 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import { DashboardState, Website } from '@/types/dashboard';
 import { ComplianceAnalysis, LegalNews, ComplianceIssue } from '@/types/api';
 
+export interface RescanContext {
+  legal_update_id: number;
+  legal_update_title: string;
+  focus_category?: 'cookies' | 'datenschutz' | 'impressum' | 'barrierefreiheit';
+  triggered_at: string;
+}
+
 interface DashboardStore extends DashboardState {
   // Actions
   setCurrentWebsite: (website: Website) => void;
@@ -12,13 +19,17 @@ interface DashboardStore extends DashboardState {
   setError: (error: string | null) => void;
   updateMetrics: (metrics: Partial<DashboardState['metrics']>) => void;
 
-  // ✅ NEU: Optimierungsmodus - Eine gelockte Seite für Optimierung
+  // Optimierungsmodus - Eine gelockte Seite für Optimierung
   lockedOptimizationUrl: string | null;
   isInOptimizationMode: boolean;
   lockForOptimization: (url: string) => void;
   restoreLockFromPrimary: (primaryUrl: string) => void;
   unlockOptimization: () => void;
   setOptimizationMode: (enabled: boolean) => void;
+
+  // Rescan-Kontext von Legal News
+  pendingRescanContext: RescanContext | null;
+  setPendingRescanContext: (ctx: RescanContext | null) => void;
 
   // Computed
   getCriticalIssues: () => number;
@@ -27,8 +38,7 @@ interface DashboardStore extends DashboardState {
 
 export const useDashboardStore = create<DashboardStore>()(
   subscribeWithSelector((set, get) => ({
-    // ✅ Initial state ohne hardcodierte Daten
-    currentWebsite: null, // Wird durch API geladen
+    currentWebsite: null,
     metrics: {
       totalScore: 0,
       websites: 0,
@@ -39,12 +49,13 @@ export const useDashboardStore = create<DashboardStore>()(
     analysisData: null,
     legalNews: [],
     complianceTrends: [],
-    isLoading: true, // Initial loading state
+    isLoading: true,
     error: null,
 
-    // ✅ NEU: Optimierungsmodus State
     lockedOptimizationUrl: null,
     isInOptimizationMode: false,
+
+    pendingRescanContext: null,
 
     // Actions
     setCurrentWebsite: (website) => {
@@ -105,10 +116,7 @@ export const useDashboardStore = create<DashboardStore>()(
     },
 
     unlockOptimization: () => {
-      // ⛔ DEAKTIVIERT: Website-Verknüpfung ist DAUERHAFT
-      // Änderungen nur über Support-Ticket möglich
       console.warn('⛔ unlockOptimization ist deaktiviert. Die Website-Verknüpfung ist dauerhaft und kann nur über den Support geändert werden: support@complyo.tech');
-      // Funktion tut NICHTS mehr - keine Änderung am State oder localStorage
     },
 
     setOptimizationMode: (enabled: boolean) => {
@@ -122,12 +130,14 @@ export const useDashboardStore = create<DashboardStore>()(
       }
     },
 
+    setPendingRescanContext: (ctx) => set({ pendingRescanContext: ctx }),
+
     // Computed values
     getCriticalIssues: () => {
       const { analysisData } = get();
-      if (!analysisData) return 0;
+      if (!analysisData?.issues) return 0;
 
-      return analysisData?.issues.filter(
+      return analysisData.issues.filter(
         issue => issue.severity === 'critical'
       ).length || 0;
     },

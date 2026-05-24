@@ -88,7 +88,7 @@ saas-project-2/
 │       ├── app/          # Pages
 │       └── components/   # Landing Komponenten
 ├── gateway/               # NGINX Konfiguration
-├── docs/                  # Technische Dokumentation
+├── data/                  # Technische Dokumentation
 ├── md/                    # Projekt-Dokumentation
 └── scripts/               # Deployment & Maintenance
 ```

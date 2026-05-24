@@ -55,7 +55,7 @@ Kosten: ~25.000 € (wird zu 50% gefördert!)
 **EFRE-ARGUMENT:**
 > "Mit dem Green Module sparen 500 KMU-Kunden 50 Tonnen CO₂/Jahr ein."
 
-📄 **Details**: Siehe `/saas-project-2/docs/GREEN_COMPLIANCE_MODULE_SPEC.md`
+📄 **Details**: Siehe `data/efre/GREEN_COMPLIANCE_MODULE_SPEC.md`
 
 ---
 
@@ -95,7 +95,7 @@ Kosten: ~25.000 € (wird zu 50% gefördert!)
 - Technologie-Stack dokumentieren
 - Patentfähigkeit prüfen (Patent-Anwalt konsultieren)
 
-📄 **Vorlage**: `/saas-project-2/docs/FORSCHUNG_ENTWICKLUNG_NACHWEIS.md`
+📄 **Vorlage**: `data/efre/FORSCHUNG_ENTWICKLUNG_NACHWEIS.md`
 
 ✅ **2. Finanzplan** (Excel)
 - 24 Monate detailliert
@@ -115,7 +115,7 @@ Kosten: ~25.000 € (wird zu 50% gefördert!)
 - Professionelles Design
 - Fokus: Innovation + Regionalität + Klima
 
-📄 **Outline**: `/saas-project-2/docs/EFRE_PITCH_DECK_OUTLINE.md`
+📄 **Outline**: `data/efre/EFRE_PITCH_DECK_OUTLINE.md`
 
 ---
 
@@ -285,9 +285,9 @@ Kosten: ~25.000 € (wird zu 50% gefördert!)
 | Dokument | Zweck | Pfad |
 |----------|-------|------|
 | **Strategie-Übersicht** | Gesamtstrategie, alle Details | `/saas-project-2/EFRE_FOERDERANTRAG_STRATEGIE.md` |
-| **Green Module Spec** | Technische Umsetzung Nachhaltigkeit | `/saas-project-2/docs/GREEN_COMPLIANCE_MODULE_SPEC.md` |
-| **Pitch Deck Outline** | Präsentation für Förderstelle | `/saas-project-2/docs/EFRE_PITCH_DECK_OUTLINE.md` |
-| **F&E-Nachweis** | Forschungs-Dokumentation | `/saas-project-2/docs/FORSCHUNG_ENTWICKLUNG_NACHWEIS.md` |
+| **Green Module Spec** | Technische Umsetzung Nachhaltigkeit | `data/efre/GREEN_COMPLIANCE_MODULE_SPEC.md` |
+| **Pitch Deck Outline** | Präsentation für Förderstelle | `data/efre/EFRE_PITCH_DECK_OUTLINE.md` |
+| **F&E-Nachweis** | Forschungs-Dokumentation | `data/efre/FORSCHUNG_ENTWICKLUNG_NACHWEIS.md` |
 | **Quick Start** | Dieser Leitfaden | `/saas-project-2/EFRE_QUICK_START.md` |
 
 ---

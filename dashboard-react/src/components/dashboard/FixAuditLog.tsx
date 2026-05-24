@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Download, RotateCcw, Clock, Server, GitBranch, Package } from 'lucide-react';
+import { getApiClient } from '@/lib/api-client';
 
 interface AuditEntry {
   id: string;
@@ -27,20 +28,30 @@ export const FixAuditLog: React.FC = () => {
 
   const fetchAuditLog = async () => {
     try {
-      const response = await fetch('/api/v2/audit/log', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAuditLog(data.audit_log || []);
-      }
+      const client = getApiClient();
+      const response = await client.get('/api/v2/audit/log');
+      setAuditLog((response.data as any).audit_log || []);
     } catch (error) {
       console.error('Failed to fetch audit log:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExportCSV = async () => {
+    try {
+      const client = getApiClient();
+      const response = await client.get('/api/v2/audit/export', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data as BlobPart]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'audit_log.csv');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export audit log:', error);
     }
   };
 
@@ -54,7 +65,6 @@ export const FixAuditLog: React.FC = () => {
       return;
     }
 
-    // TODO: Rollback-Credentials-Modal öffnen
     alert('Rollback-Funktion: Credentials-Modal würde hier öffnen');
   };
 
@@ -120,13 +130,24 @@ export const FixAuditLog: React.FC = () => {
     <div className="bg-white rounded-lg shadow">
       {/* Header */}
       <div className="p-6 border-b border-gray-200">
-        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <Clock className="w-6 h-6 text-blue-600" />
-          Audit Log
-        </h2>
-        <p className="text-sm text-gray-600 mt-1">
-          Alle Ihre Fix-Aktionen werden hier rechtssicher dokumentiert.
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <Clock className="w-6 h-6 text-blue-600" />
+              Audit Log
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Alle Ihre Fix-Aktionen werden hier rechtssicher dokumentiert.
+            </p>
+          </div>
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            CSV Export
+          </button>
+        </div>
       </div>
 
       {/* Table */}

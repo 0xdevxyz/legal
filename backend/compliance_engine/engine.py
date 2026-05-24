@@ -133,12 +133,29 @@ class AIComplianceEngine:
             }
         ]
 
+    async def _get_knowledge_context(self, check_type: str, detected_issues: List = None) -> List[Dict]:
+        """Retrieves relevant knowledge context from the Knowledge Vault for RAG enrichment."""
+        try:
+            from knowledge.knowledge_retriever import KnowledgeRetriever
+            retriever = KnowledgeRetriever()
+            issue_summary = ""
+            if detected_issues:
+                issue_summary = " ".join([
+                    getattr(i, "title", "") for i in (detected_issues or [])[:5]
+                ])
+            query = f"{check_type} {issue_summary}".strip()
+            context_docs = await retriever.retrieve(query, top_k=5)
+            return context_docs
+        except Exception as e:
+            self.logger.warning(f"Knowledge context retrieval failed (non-critical): {e}")
+            return []
+
     async def analyze_website_with_ai(self, website_url: str, user_level: UserExpertiseLevel) -> Dict[str, Any]:
         """
         Hauptfunktion: KI-Analyse der Website mit personalisierten Empfehlungen
         """
         try:
-            self.logger.info(f"🤖 Starting AI analysis for {website_url} (User level: {user_level.value})")
+            self.logger.info(f"Starting AI analysis for {website_url} (User level: {user_level.value})")
             
             # 1. Technische Analyse durchführen
             technical_analysis = await self._perform_technical_analysis(website_url)
@@ -146,13 +163,21 @@ class AIComplianceEngine:
             # 2. KI-basierte Problemerkennung
             detected_issues = await self._ai_detect_compliance_issues(technical_analysis)
             
-            # 3. Personalisierte Lösungsvorschläge generieren
-            personalized_fixes = await self._generate_personalized_fixes(detected_issues, user_level)
+            # 3. Knowledge Vault RAG-Kontext abrufen
+            knowledge_context = await self._get_knowledge_context(
+                check_type="compliance website analysis",
+                detected_issues=detected_issues,
+            )
             
-            # 4. Optimierungs-Roadmap erstellen
+            # 4. Personalisierte Lösungsvorschläge generieren (mit Wissenskontext)
+            personalized_fixes = await self._generate_personalized_fixes(
+                detected_issues, user_level, knowledge_context=knowledge_context
+            )
+            
+            # 5. Optimierungs-Roadmap erstellen
             optimization_roadmap = await self._create_optimization_roadmap(personalized_fixes, user_level)
             
-            # 5. Risikobewertung
+            # 6. Risikobewertung
             risk_assessment = await self._calculate_compliance_risks(detected_issues)
             
             return {
@@ -165,6 +190,7 @@ class AIComplianceEngine:
                 "risk_assessment": risk_assessment,
                 "estimated_total_time": sum(step.estimated_time for step in optimization_roadmap),
                 "priority_actions": self._get_priority_actions(detected_issues),
+                "knowledge_context": knowledge_context[:3],
                 "generated_at": datetime.now().isoformat()
             }
             
@@ -225,9 +251,21 @@ class AIComplianceEngine:
         
         return issues
 
-    async def _generate_personalized_fixes(self, issues: List[ComplianceIssue], user_level: UserExpertiseLevel) -> List[ComplianceIssue]:
-        """Generiert personalisierte Fix-Anleitungen basierend auf User-Level"""
-        
+    async def _generate_personalized_fixes(
+        self,
+        issues: List[ComplianceIssue],
+        user_level: UserExpertiseLevel,
+        knowledge_context: List[Dict] = None,
+    ) -> List[ComplianceIssue]:
+        """Generiert personalisierte Fix-Anleitungen basierend auf User-Level und Knowledge-Vault-Kontext."""
+
+        if knowledge_context:
+            high_impact_updates = [k for k in knowledge_context if k.get("impact") == "high"]
+            if high_impact_updates:
+                self.logger.info(
+                    f"Enriching fixes with {len(high_impact_updates)} high-impact knowledge items"
+                )
+
         for issue in issues:
             # Passe Anleitungen an User-Level an
             if user_level == UserExpertiseLevel.BEGINNER:

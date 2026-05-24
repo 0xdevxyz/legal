@@ -1,18 +1,19 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import {
   Shield, Eye, FileText, BarChart3, CreditCard, ExternalLink,
-  Loader2, AlertCircle, CheckCircle, Zap, Star, Building2, X
+  Loader2, AlertCircle, CheckCircle, Zap, Star, Building2, X, RefreshCw
 } from 'lucide-react';
-import { getAccessToken } from '@/lib/auth-helper';
 import apiClient from '@/lib/api';
 
 const PLAN_LABELS: Record<string, string> = {
   free: 'Kostenlos', single: 'Einzelne Säule', pro: 'Pro-Paket',
   agency: 'Agentur', expert: 'Expertenservice', update: 'Updateservice',
+  unknown: 'Unbekannt',
 };
 
 const MODULE_META: Record<string, { label: string; icon: React.ElementType }> = {
@@ -53,7 +54,7 @@ const PLANS = [
       'Unbegrenzte KI-Fixes',
       'Schritt-für-Schritt Anleitungen',
       'Score-Verlauf & Reports',
-      'eRecht24 Integration',
+      'KI-Rechtstexte mit Auto-Update',
       'PDF/Excel Export',
       'Prioritäts-Support',
     ],
@@ -79,32 +80,103 @@ const PLANS = [
 
 interface SubStatus {
   has_subscription: boolean;
-  plan: string;
+  plan_type: string;
   status: string;
-  modules: { id: string; name: string }[];
+  fixes_limit?: number;
+  websites_max?: number;
+  modules?: { id: string; name: string }[];
 }
+
+const PLAN_RANK: Record<string, number> = {
+  free: 0, single: 1, pro: 2, agency: 3, expert: 2, update: 1,
+};
+
+const MAX_RETRIES = 6;
+const RETRY_INTERVAL_MS = 5000;
 
 export default function SubscriptionPage() {
   const { user } = useAuth();
+  const { update: updateSession } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [sub, setSub] = useState<SubStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [portalLoading, setPortalLoading] = useState(false);
   const [upgradeLoading, setUpgradeLoading] = useState<string | null>(null);
   const [showPlans, setShowPlans] = useState(false);
+  const [activationSuccess, setActivationSuccess] = useState(false);
+  const [activatedPlanName, setActivatedPlanName] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadSubscriptionStatus = useCallback(async () => {
+    try {
+      const res = await apiClient.get('/api/stripe/subscription-status');
+      setSub(res.data);
+      if (!res.data.has_subscription) setShowPlans(true);
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || 'Abonnement-Status konnte nicht geladen werden.';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    apiClient.get('/api/payment/subscription-status')
-      .then(res => {
-        setSub(res.data);
-        if (!res.data.has_subscription) setShowPlans(true);
-      })
-      .catch((err) => {
-        const msg = err.response?.data?.detail || 'Abonnement-Status konnte nicht geladen werden.';
-        setError(msg);
-      })
-      .finally(() => setLoading(false));
+    loadSubscriptionStatus();
+  }, [loadSubscriptionStatus]);
+
+  const handleVerifyCheckout = useCallback(async (sessionId: string, attempt = 1) => {
+    setVerifying(true);
+    setVerifyError('');
+    try {
+      const res = await apiClient.get(`/api/stripe/verify-checkout?session_id=${sessionId}`);
+      if (res.data.activated || res.data.already_active) {
+        const planKey = res.data.plan ?? 'pro';
+        setActivatedPlanName(PLAN_LABELS[planKey] ?? planKey);
+        setActivationSuccess(true);
+        await updateSession();
+        await loadSubscriptionStatus();
+        router.replace('/subscription', { scroll: false } as any);
+      } else if (attempt < MAX_RETRIES) {
+        console.warn(`[verify-checkout] Plan noch nicht aktiviert, Versuch ${attempt}/${MAX_RETRIES} — retry in ${RETRY_INTERVAL_MS / 1000}s`);
+        retryTimerRef.current = setTimeout(() => {
+          handleVerifyCheckout(sessionId, attempt + 1);
+        }, RETRY_INTERVAL_MS);
+      } else {
+        setVerifyError('Die Aktivierung dauert ungewöhnlich lange. Bitte kurz warten oder die Seite neu laden.');
+        setVerifying(false);
+        router.replace('/subscription', { scroll: false } as any);
+      }
+    } catch {
+      if (attempt < MAX_RETRIES) {
+        console.warn(`[verify-checkout] Fehler bei Versuch ${attempt}/${MAX_RETRIES} — retry in ${RETRY_INTERVAL_MS / 1000}s`);
+        retryTimerRef.current = setTimeout(() => {
+          handleVerifyCheckout(sessionId, attempt + 1);
+        }, RETRY_INTERVAL_MS);
+      } else {
+        setVerifyError('Die Aktivierung dauert ungewöhnlich lange. Bitte kurz warten oder die Seite neu laden.');
+        setVerifying(false);
+        router.replace('/subscription', { scroll: false } as any);
+      }
+    }
+    if (!verifying) return;
+    setVerifying(false);
+  }, [loadSubscriptionStatus, router, updateSession, verifying]);
+
+  useEffect(() => {
+    const sessionId = searchParams.get('session_id');
+    const success = searchParams.get('success');
+    if (sessionId && success === 'true') {
+      retryCountRef.current = 0;
+      handleVerifyCheckout(sessionId);
+    }
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
   }, []);
 
   const handlePortal = async () => {
@@ -133,7 +205,7 @@ export default function SubscriptionPage() {
       const res = await apiClient.post('/api/stripe/create-checkout', {
         plan: planId,
         billing_period: 'monthly',
-        success_url: `${window.location.origin}/subscription?success=true`,
+        success_url: `${window.location.origin}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${window.location.origin}/subscription`,
       });
       if (res.data.checkout_url) {
@@ -157,9 +229,10 @@ export default function SubscriptionPage() {
     );
   }
 
-  const planLabel = PLAN_LABELS[sub?.plan ?? user?.plan_type ?? 'free'] ?? 'Unbekannt';
+  const currentPlanType = sub?.plan_type ?? user?.plan_type ?? 'free';
+  const planLabel = PLAN_LABELS[currentPlanType] ?? PLAN_LABELS['unknown'];
   const activeModuleIds = sub?.modules?.map(m => m.id) ?? user?.active_modules ?? [];
-  const isFreePlan = !sub?.has_subscription || sub?.plan === 'free';
+  const isFreePlan = !sub?.has_subscription || sub?.plan_type === 'free';
 
   const colorMap: Record<string, string> = {
     blue: 'from-blue-500/20 to-blue-600/10 border-blue-500/40',
@@ -185,6 +258,45 @@ export default function SubscriptionPage() {
           <div className="mb-6 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
+          </div>
+        )}
+
+        {verifying && (
+          <div className="mb-6 flex items-center gap-3 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-300 text-sm">
+            <Loader2 className="w-5 h-5 shrink-0 animate-spin" />
+            <span>Plan wird aktiviert — bitte einen Moment warten…</span>
+          </div>
+        )}
+
+        {verifyError && !verifying && (
+          <div className="mb-6 flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-yellow-300 text-sm">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p>{verifyError}</p>
+              <button
+                onClick={() => { setVerifyError(''); loadSubscriptionStatus(); }}
+                className="mt-2 flex items-center gap-1.5 text-yellow-400 hover:text-yellow-200 text-xs font-medium"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Erneut prüfen
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activationSuccess && (
+          <div className="mb-6 flex items-center justify-between gap-2 p-4 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-sm">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 shrink-0" />
+              <span>
+                Zahlung erfolgreich — Ihr <strong>{activatedPlanName || planLabel}</strong> wurde aktiviert.
+              </span>
+            </div>
+            <button
+              onClick={() => setActivationSuccess(false)}
+              className="text-green-600 hover:text-green-400 shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         )}
 
@@ -285,11 +397,14 @@ export default function SubscriptionPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {PLANS.map(plan => {
-                const isCurrentPlan = (sub?.plan ?? user?.plan_type ?? 'free') === plan.id;
+                const isCurrentPlan = currentPlanType === plan.id;
+                const isDowngrade = (PLAN_RANK[plan.id] ?? 0) < (PLAN_RANK[currentPlanType] ?? 0);
                 const Icon = plan.icon;
                 return (
-                  <div key={plan.id} className={`relative rounded-xl border bg-gradient-to-br p-5 flex flex-col ${colorMap[plan.color]}`}>
-                    {plan.highlight && (
+                  <div key={plan.id} className={`relative rounded-xl border bg-gradient-to-br p-5 flex flex-col ${
+                    isDowngrade ? 'opacity-50 grayscale' : colorMap[plan.color]
+                  }`}>
+                    {plan.highlight && !isDowngrade && (
                       <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                         <span className="bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
                           <Star className="w-3 h-3" /> Beliebteste
@@ -320,26 +435,50 @@ export default function SubscriptionPage() {
                       ))}
                     </ul>
 
-                    <button
-                      onClick={() => !isCurrentPlan && handleUpgrade(plan.id)}
-                      disabled={isCurrentPlan || upgradeLoading === plan.id}
-                      className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
-                        isCurrentPlan
-                          ? 'bg-zinc-700 text-zinc-400 cursor-default'
-                          : `${btnMap[plan.color]} text-white`
-                      } disabled:opacity-60`}
-                    >
-                      {upgradeLoading === plan.id
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : isCurrentPlan
-                        ? <><CheckCircle className="w-4 h-4" /> Aktueller Plan</>
-                        : <><Zap className="w-4 h-4" /> Jetzt upgraden</>
-                      }
-                    </button>
+                    {isDowngrade ? (
+                      <button
+                        onClick={handlePortal}
+                        disabled={portalLoading}
+                        className="w-full py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 disabled:opacity-60"
+                      >
+                        {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+                        Downgrade via Portal
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => !isCurrentPlan && handleUpgrade(plan.id)}
+                        disabled={isCurrentPlan || upgradeLoading === plan.id}
+                        className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                          isCurrentPlan
+                            ? 'bg-zinc-700 text-zinc-400 cursor-default'
+                            : `${btnMap[plan.color]} text-white`
+                        } disabled:opacity-60`}
+                      >
+                        {upgradeLoading === plan.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : isCurrentPlan
+                          ? <><CheckCircle className="w-4 h-4" /> Aktueller Plan</>
+                          : <><Zap className="w-4 h-4" /> Jetzt upgraden</>
+                        }
+                      </button>
+                    )}
                   </div>
                 );
               })}
             </div>
+
+            {sub?.has_subscription && (PLAN_RANK[currentPlanType] ?? 0) > 0 && (
+              <div className="mt-4 p-3 bg-zinc-800/60 border border-zinc-700/50 rounded-lg flex items-start gap-2.5 text-xs text-zinc-400">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-zinc-500" />
+                <span>
+                  Downgrade auf einen niedrigeren Plan? Nutze den{' '}
+                  <button onClick={handlePortal} className="text-orange-400 hover:text-orange-300 underline underline-offset-2">
+                    Stripe Billing-Portal
+                  </button>
+                  {' '}— Änderungen werden zum nächsten Abrechnungsdatum wirksam.
+                </span>
+              </div>
+            )}
 
             <p className="text-center text-xs text-zinc-600 mt-2">
               Alle Pläne beinhalten eine 14-Tage Kündigungsfrist · Zahlung via Stripe · SSL-verschlüsselt

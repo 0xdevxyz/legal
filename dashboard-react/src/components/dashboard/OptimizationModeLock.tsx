@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Lock, Globe, ArrowRight, AlertTriangle, CheckCircle, Sparkles, Zap, Info, Loader2 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Lock, Globe, ArrowRight, AlertTriangle, CheckCircle, Info, Loader2 } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useDashboardStore } from '@/stores/dashboard';
@@ -14,12 +14,20 @@ interface OptimizationModeLockProps {
   hasInteracted?: boolean;
 }
 
+const getShortDomain = (url: string) => {
+  try {
+    return new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace('www.', '');
+  } catch {
+    return url;
+  }
+};
+
 export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
   onLock,
   hasInteracted = false
 }) => {
   const router = useRouter();
-  const { 
+  const {
     currentWebsite,
     analysisData,
     lockedOptimizationUrl,
@@ -27,18 +35,15 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
     lockForOptimization,
     setCurrentWebsite,
     updateMetrics
-    // unlockOptimization entfernt - NICHT mehr verfügbar
   } = useDashboardStore();
-  
+
   const [showConfirm, setShowConfirm] = useState(false);
   const [isLoadingBack, setIsLoadingBack] = useState(false);
 
-  // Restore from localStorage on mount
   useEffect(() => {
     if (typeof localStorage !== 'undefined') {
       const savedUrl = localStorage.getItem('complyo_locked_optimization_url');
       const savedMode = localStorage.getItem('complyo_optimization_mode');
-      
       if (savedUrl && savedMode === 'true' && !isInOptimizationMode) {
         lockForOptimization(savedUrl);
       }
@@ -47,50 +52,33 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
 
   const handleLock = () => {
     if (!currentWebsite?.url) return;
-    
     lockForOptimization(currentWebsite.url);
     setShowConfirm(false);
-    
-    if (onLock) {
-      onLock(currentWebsite.url);
-    }
+    if (onLock) onLock(currentWebsite.url);
   };
 
-  // ⛔ handleUnlock ENTFERNT - Website-Verknüpfung ist DAUERHAFT
-  // Änderungen nur über Support-Ticket: support@complyo.tech
-
-  // Prüfe ob aktuelle Website die gelockte ist
-  const isCurrentSiteLocked = isInOptimizationMode && 
-    lockedOptimizationUrl && 
-    currentWebsite?.url && 
-    (currentWebsite.url === lockedOptimizationUrl || 
+  const isCurrentSiteLocked = isInOptimizationMode &&
+    lockedOptimizationUrl &&
+    currentWebsite?.url &&
+    (currentWebsite.url === lockedOptimizationUrl ||
      currentWebsite.url.includes(lockedOptimizationUrl) ||
      lockedOptimizationUrl.includes(currentWebsite.url));
 
-  // Don't show if no website is analyzed
   if (!currentWebsite?.url || !analysisData) {
     return null;
   }
 
-  // ✅ Funktion: Zurück zur Optimierung - Lädt gespeicherte Daten, KEINE neue Analyse
   const handleBackToOptimization = async () => {
     if (!lockedOptimizationUrl) return;
-    
     setIsLoadingBack(true);
-    
     try {
-      // Lade gespeicherte Website-Daten vom Backend
       const websites = await getTrackedWebsites();
-      
-      // Finde die gelockte Website
-      const lockedWebsite = websites.find(w => 
+      const lockedWebsite = websites.find((w: any) =>
         w.url === lockedOptimizationUrl ||
         w.url.includes(lockedOptimizationUrl) ||
         lockedOptimizationUrl.includes(w.url)
       );
-      
       if (lockedWebsite) {
-        // ✅ Setze die gespeicherten Daten direkt in den Store
         setCurrentWebsite({
           id: String(lockedWebsite.id),
           url: lockedWebsite.url,
@@ -99,106 +87,47 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
           complianceScore: lockedWebsite.last_score || 0,
           status: 'completed' as const
         });
-        
         updateMetrics({
           totalScore: lockedWebsite.last_score || 0,
           websites: websites.length
         });
       }
-      
-      // Navigiere zur Hauptseite (ohne URL-Parameter = zeigt gespeicherte Daten)
       router.push('/');
-    } catch (error) {
-      console.error('Fehler beim Laden der Website-Daten:', error);
-      // Fallback: Navigiere trotzdem zur Hauptseite
+    } catch {
       router.push('/');
     } finally {
       setIsLoadingBack(false);
     }
   };
 
-  // Bereits im Optimierungsmodus und andere Seite wird angezeigt
-  // → Info-Meldung mit prominentem "Zurück zur Optimierung" Button
+  // Andere Seite analysiert während eigene Seite gelockt ist → kompakter Hinweis
   if (isInOptimizationMode && lockedOptimizationUrl && !isCurrentSiteLocked) {
     return (
-      <Card className="mb-6 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-amber-500/20 rounded-xl">
-                <Info className="w-6 h-6 text-amber-400" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-lg font-bold text-white">Nur Analyse-Modus</h3>
-                  <Badge variant="warning" className="text-xs">
-                    Keine Optimierung möglich
-                  </Badge>
-                </div>
-                <p className="text-sm text-zinc-400">
-                  Sie analysieren: <strong className="text-white">{currentWebsite.url}</strong>
-                </p>
-                <p className="text-xs text-zinc-500 mt-1">
-                  Optimierungen sind nur für Ihre registrierte Website verfügbar.
-                </p>
-              </div>
-            </div>
-            
-            {/* ✅ PROMINENTER "Zurück zur Optimierung" Button */}
-            <Button
-              onClick={handleBackToOptimization}
-              disabled={isLoadingBack}
-              className="gap-2 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white font-semibold shadow-lg shadow-emerald-500/25 disabled:opacity-70"
-              size="lg"
-            >
-              {isLoadingBack ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <ArrowRight className="w-5 h-5 rotate-180" />
-              )}
-              {isLoadingBack ? 'Lädt Daten...' : 'Zurück zur Optimierung'}
-            </Button>
-          </div>
-          
-          {/* ✅ Kurzwahl-Leiste */}
-          <div className="mt-4 pt-4 border-t border-amber-500/20">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-emerald-400" />
-                <span className="text-sm text-zinc-400">
-                  Ihre Seite: <strong className="text-emerald-400">{lockedOptimizationUrl}</strong>
-                </span>
-              </div>
-              
-              <div className="flex gap-2">
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  className="gap-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
-                  onClick={handleBackToOptimization}
-                  disabled={isLoadingBack}
-                >
-                  {isLoadingBack ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                  KI-Optimierung
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  className="gap-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
-                  onClick={() => router.push('/cookie-compliance')}
-                >
-                  <Zap className="w-3 h-3" />
-                  Cookies
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+        <div className="flex items-center gap-2 min-w-0">
+          <Info className="w-4 h-4 text-amber-400 flex-shrink-0" />
+          <span className="text-xs text-amber-300 truncate">
+            Analyse-Modus — Fixes sind gesperrt für{' '}
+            <strong className="text-white">{getShortDomain(lockedOptimizationUrl)}</strong>
+          </span>
+        </div>
+        <button
+          onClick={handleBackToOptimization}
+          disabled={isLoadingBack}
+          className="flex items-center gap-1.5 text-xs text-amber-300 hover:text-white whitespace-nowrap disabled:opacity-60"
+        >
+          {isLoadingBack ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <ArrowRight className="w-3 h-3 rotate-180" />
+          )}
+          Zurück zur Optimierung
+        </button>
+      </div>
     );
   }
 
-  // Im Optimierungsmodus und die richtige Seite wird angezeigt
+  // Eigene gelockte Seite wird angezeigt
   if (isInOptimizationMode && lockedOptimizationUrl && isCurrentSiteLocked) {
     return (
       <Card className="mb-6 bg-gradient-to-r from-emerald-500/10 to-green-500/10 border-emerald-500/30">
@@ -224,13 +153,9 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
                 </p>
               </div>
             </div>
-            
-            {/* Kein Entsperren-Button mehr - Hinweis auf Support */}
             <div className="text-right">
-              <p className="text-xs text-zinc-500">
-                Änderungen nur via Support
-              </p>
-              <a 
+              <p className="text-xs text-zinc-500">Änderungen nur via Support</p>
+              <a
                 href="mailto:support@complyo.tech?subject=Website-Änderung"
                 className="text-xs text-blue-400 hover:text-blue-300 underline"
               >
@@ -238,28 +163,12 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
               </a>
             </div>
           </div>
-          
-          {/* Quick Actions for optimization */}
-          <div className="mt-4 pt-4 border-t border-emerald-500/20">
-            <p className="text-xs text-zinc-400 mb-3">Schnelle Optimierungs-Aktionen:</p>
-            <div className="flex flex-wrap gap-2">
-              <Button 
-                size="sm" 
-                variant="secondary" 
-                className="gap-2"
-                onClick={() => router.push('/cookie-compliance')}
-              >
-                <Zap className="w-3 h-3" />
-                Cookie-Compliance
-              </Button>
-            </div>
-          </div>
         </CardContent>
       </Card>
     );
   }
 
-  // Noch nicht im Optimierungsmodus - erst nach Pillar-Interaktion anzeigen
+  // Noch nicht im Optimierungsmodus — erst nach Pillar-Interaktion anzeigen
   if (!hasInteracted) {
     return null;
   }
@@ -288,7 +197,6 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
                 </p>
               </div>
             </div>
-            
             <Button
               onClick={() => setShowConfirm(true)}
               className="gap-2 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
@@ -326,25 +234,17 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
                     Analysen anderer Seiten sind weiterhin möglich
                   </li>
                 </ul>
-                
-                {/* Wichtiger Warnhinweis */}
                 <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mt-3">
-                  <p className="text-sm text-amber-300 font-semibold mb-1">
-                    Wichtiger Hinweis
-                  </p>
+                  <p className="text-sm text-amber-300 font-semibold mb-1">Wichtiger Hinweis</p>
                   <p className="text-xs text-amber-300/80">
-                    Die Verknüpfung kann <strong>nicht selbstständig</strong> rückgängig gemacht werden. 
+                    Die Verknüpfung kann <strong>nicht selbstständig</strong> rückgängig gemacht werden.
                     Änderungen sind nur über ein <strong>Support-Ticket</strong> möglich.
                   </p>
                 </div>
               </div>
             </div>
-            
             <div className="flex gap-3 justify-end">
-              <Button
-                variant="ghost"
-                onClick={() => setShowConfirm(false)}
-              >
+              <Button variant="ghost" onClick={() => setShowConfirm(false)}>
                 Abbrechen
               </Button>
               <Button

@@ -318,16 +318,16 @@ class FixGenerator:
         """
         Generiert Code-Snippet für AI Plan
         
-        ✅ MIT eRecht24-INTEGRATION:
-        - Versucht zuerst eRecht24-Rechtstexte zu holen
-        - Fallback auf statische Templates wenn eRecht24 nicht verfügbar
+        Interner KI-Generator — keine eRecht24-Abhängigkeit mehr.
+        - Versucht zuerst LegalTextGenerator (knowledge/laws/ + Templates)
+        - Fallback auf statische Templates
         """
-        # ✅ SCHRITT 1: Versuche eRecht24-Rechtstexte zu holen
-        erecht24_content = await self._get_erecht24_content(category)
-        
-        if erecht24_content:
-            logger.info(f"✅ Using eRecht24 legal text for {category}")
-            return erecht24_content
+        # SCHRITT 1: Versuche internen KI-Generator
+        internal_content = await self._get_internal_legal_content(category)
+
+        if internal_content:
+            logger.info(f"Interner Generator für {category}")
+            return internal_content
         
         # ✅ SCHRITT 2: Fallback auf statische Templates
         logger.info(f"⚠️ Falling back to static template for {category}")
@@ -1006,67 +1006,40 @@ function loadEmbed(btn) {
         
         return f"fix_cache:{issue_category}:{cache_hash}"
 
-    async def _get_erecht24_content(self, category: str) -> Optional[Dict[str, Any]]:
+    async def _get_internal_legal_content(self, category: str) -> Optional[Dict[str, Any]]:
         """
-        Holt eRecht24-Rechtstexte wenn verfügbar
-        
-        ✅ KI-UNTERSTÜTZUNG MIT eRecht24:
-        - Generiert rechtssichere Texte direkt von eRecht24
-        - Nur für bestimmte Kategorien verfügbar (impressum, datenschutz, agb)
-        - Fallback auf statische Templates wenn nicht verfügbar
-        
-        Args:
-            category: Issue-Kategorie (impressum, datenschutz, agb, cookies, etc.)
-            
-        Returns:
-            Dict mit Code-Snippet oder None wenn nicht verfügbar
+        Holt Rechtstexte vom internen KI-Generator (knowledge/laws/ + Templates).
+        Ersetzt _get_erecht24_content vollständig.
         """
+        legal_category_map = {
+            'datenschutz': 'privacy',
+            'impressum': 'imprint',
+            'agb': 'tos',
+            'cookie': 'cookie-policy',
+        }
+        doc_type = legal_category_map.get(category.lower())
+        if not doc_type:
+            return None
         try:
-            from erecht24_service import erecht24_service
-            
-            # Mapping: Unsere Kategorien -> eRecht24-Text-Typen
-            erecht24_mapping = {
-                'impressum': 'impressum',
-                'datenschutz': 'datenschutz',
-                'agb': 'agb',
-                # Für andere Kategorien nutzen wir unsere Fallback-Templates
-            }
-            
-            text_type = erecht24_mapping.get(category)
-            if not text_type:
-                # Kategorie nicht von eRecht24 unterstützt
-                return None
-            
-            # TODO: Project-ID sollte aus User-Daten kommen
-            # Für jetzt: Nutze Mock-Funktion
-            legal_text = await erecht24_service.get_legal_text(
-                project_id='demo_project',
-                text_type=text_type,
-                language='de'
+            template_path = os.path.join(
+                os.path.dirname(__file__), '..', 'knowledge', 'templates', 'legal',
+                f'{doc_type}_de.md'
             )
-            
-            if not legal_text:
-                return None
-            
-            # Formatiere als Code-Snippet
-            return {
-                'type': 'code_snippet',
-                'format': 'html',
-                'code': legal_text,
-                'steps': [
-                    f'1. Erstellen Sie eine Seite unter /{text_type}',
-                    '2. Fügen Sie den generierten eRecht24-Text ein',
-                    '3. Verlinken Sie die Seite im Footer',
-                    '4. WICHTIG: Text ist rechtlich geprüft von eRecht24'
-                ],
-                'legal_note': f'✅ Rechtssicherer Text von eRecht24 - Abmahnschutz inklusive!',
-                'source': 'erecht24',
-                'erecht24_certified': True
-            }
-            
-        except ImportError:
-
-            return None
+            if os.path.exists(template_path):
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    template_content = f.read()
+                return {
+                    'code': f'<!-- {doc_type} Template -->\n{template_content[:500]}...',
+                    'steps': [
+                        f'1. Einstellungen > Rechtstexte > {doc_type.capitalize()} aufrufen',
+                        '2. Firmendaten ausfüllen',
+                        '3. KI-Generierung starten',
+                        '4. Hinweis: juristische Prüfung empfohlen',
+                    ],
+                    'legal_note': 'Compliance-Hinweis: KI-generierte Vorlage (kein Anwaltsersatz)',
+                    'source': 'complyo-internal',
+                    'risk_reduced': True,
+                }
         except Exception as e:
-            logger.warning(f"Fehler beim Abrufen von eRecht24-Inhalten für {category}: {e}")
-            return None
+            logger.warning(f"Interner Generator Fehler für {category}: {e}")
+        return None

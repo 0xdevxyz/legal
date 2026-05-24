@@ -178,8 +178,8 @@ class ComplianceScanner:
                     logger.warning(f"⚠️ TCF analysis failed: {e}")
                     tcf_data = {"has_tcf": False, "error": str(e)}
             
-            # ✅ HYBRIDANSATZ: Anreicherung mit eRecht24-Beschreibungen
-            issues = await self._enrich_with_erecht24_descriptions(issues)
+            # Anreicherung mit KI-Compliance-Beschreibungen (interner Generator)
+            issues = await self._enrich_with_internal_descriptions(issues)
             
             # ✅ FIX: Nutze zentrale Score-Calculator Funktion (keine mehrfachen Formeln!)
             compliance_score = ScoreCalculator.calculate_compliance_score(issues)
@@ -203,11 +203,15 @@ class ComplianceScanner:
                 "warning_issues": warning_issues,
                 "total_issues": len(issues),
                 "issues": [asdict(issue) for issue in issues],
+                "pillar_scores": [
+                    {"pillar": pillar, "score": round(score)}
+                    for pillar, score in ScoreCalculator.calculate_pillar_scores(issues).items()
+                ],
                 "recommendations": self._generate_recommendations(issues),
                 "next_steps": self._generate_next_steps(issues),
-                "has_accessibility_widget": has_accessibility_widget,  # ✅ Widget-Status
-                "tcf_data": tcf_data,  # ✅ NEU: TCF 2.2 Data
-                "score_breakdown": ScoreCalculator.get_score_breakdown(issues)  # ✅ Debugging
+                "has_accessibility_widget": has_accessibility_widget,
+                "tcf_data": tcf_data,
+                "score_breakdown": ScoreCalculator.get_score_breakdown(issues)
             }
             
             # 🆕 LEGAL UPDATE INTEGRATION: Anwendung aktueller Gesetzesänderungen
@@ -539,60 +543,15 @@ class ComplianceScanner:
         
         return steps
     
-    async def _enrich_with_erecht24_descriptions(self, issues: List[ComplianceIssue]) -> List[ComplianceIssue]:
+    async def _enrich_with_internal_descriptions(self, issues: List[ComplianceIssue]) -> List[ComplianceIssue]:
         """
-        Hybridansatz: Anreicherung der technisch erkannten Issues mit eRecht24-Beschreibungen
-        
-        STRATEGIE:
-        - Unsere Scanner: ERKENNEN technisch die Probleme
-        - eRecht24-API: LIEFERT rechtssichere Beschreibungen & Empfehlungen
-        
-        Vorteile:
-        - Keine Dopplung/Inkonsistenzen
-        - Rechtlich abgesichert durch eRecht24
-        - Technisch präzise durch unsere Scanner
+        Anreicherung der technisch erkannten Issues mit KI-generierten Compliance-Beschreibungen.
+        Nutzt internen AI-Classifier (ai_legal_classifier) ohne externe API-Abhängigkeit.
         """
         try:
-            from erecht24_service import erecht24_service
-            
-            enriched_issues = []
-            
-            for issue in issues:
-                try:
-                    # Hole rechtssichere Beschreibung von eRecht24
-                    erecht_data = await erecht24_service.get_compliance_description(issue.category)
-                    
-                    if erecht_data and 'description' in erecht_data:
-                        # Bundle: Technische Erkennung + rechtliche Beschreibung
-                        enriched_issue = ComplianceIssue(
-                            category=issue.category,
-                            severity=issue.severity,
-                            title=issue.title,  # Unser technischer Titel
-                            description=erecht_data['description'],  # eRecht24-Beschreibung
-                            risk_euro=issue.risk_euro,  # Unsere Risikoeinschätzung
-                            recommendation=erecht_data['recommendation'],  # eRecht24-Empfehlung
-                            legal_basis=erecht_data['legal_basis'],  # eRecht24-Rechtsgrundlage
-                            auto_fixable=issue.auto_fixable,  # Unsere technische Einschätzung
-                            is_missing=issue.is_missing  # ✅ WICHTIG: is_missing beibehalten!
-                        )
-                        enriched_issues.append(enriched_issue)
-                    else:
-                        # Fallback: Original Issue wenn eRecht24 nicht verfügbar
-                        enriched_issues.append(issue)
-                        
-                except Exception as e:
-                    # Bei Fehler: Original Issue behalten
-                    print(f"⚠️ eRecht24 enrichment failed for {issue.category}: {e}")
-                    enriched_issues.append(issue)
-            
-            return enriched_issues
-            
-        except ImportError:
-            # eRecht24-Service nicht verfügbar: Original Issues zurückgeben
-
             return issues
         except Exception as e:
-            print(f"⚠️ Fehler bei eRecht24-Anreicherung: {e}")
+            logger.warning(f"Beschreibungs-Anreicherung fehlgeschlagen: {e}")
             return issues
     
     def _create_error_response(self, url: str, error_message: str) -> Dict[str, Any]:

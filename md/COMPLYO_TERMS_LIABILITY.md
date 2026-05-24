@@ -104,22 +104,17 @@ Jede Ihrer Aktionen wird protokolliert:
 
 ## § 4 Rechtssichere Texte – Disclaimer
 
-### 4.1 eRecht24-Integration (Priorität)
+### 4.1 Interner KI-Rechtstexte-Generator
 
-Für **Impressum** und **Datenschutzerklärung** nutzen wir primär die **eRecht24 API** (falls verbunden).
+Für **Impressum**, **Datenschutzerklärung**, **AGB** und **Cookie-Policy** nutzt Complyo ausschließlich den internen KI-Generator auf Basis aktueller Rechtsgrundlagen (`knowledge/laws/` + Templates).
 
-**Garantie:**
-- ✅ Abmahnsichere Rechtstexte von Rechtsanwälten
-- ✅ Automatische Updates bei Gesetzesänderungen
-- ✅ eRecht24 haftet für Richtigkeit
+**Wichtiger rechtlicher Hinweis:**
+- KI-generierte Texte sind Vorlagen auf Basis der zum Zeitpunkt der Generierung geltenden Rechtslage
+- Sie stellen **keine Rechtsberatung** dar und sind **kein Ersatz** für anwaltliche Prüfung
+- Complyo übernimmt **keine Haftung** für Abmahnungen oder rechtliche Konsequenzen
+- **Empfehlung:** Lassen Sie generierte Texte von einem Rechtsanwalt prüfen
 
-**Empfehlung:** Schließen Sie eine eRecht24-Mitgliedschaft ab (ab 14,90€/Monat).
-
-### 4.2 KI-generierte Rechtstexte (Fallback)
-
-Falls **keine** eRecht24-Integration besteht, generiert unsere KI Textvorlagen.
-
-**WICHTIG:** Diese sind **NICHT** abmahnsicher!
+Rechtstexte werden automatisch aktualisiert, wenn die Update-Pipeline (`legal_change_monitor`) Gesetzesänderungen erkennt.
 
 **Haftungsausschluss:**
 - ❌ Complyo übernimmt keine Haftung für KI-generierte Rechtstexte
@@ -194,7 +189,7 @@ Gründe:
 **Für vollständige Rechtssicherheit:**
 - ✅ Nutzen Sie Complyo als Basis
 - ✅ Lassen Sie kritische Punkte von einem Anwalt prüfen
-- ✅ Nutzen Sie eRecht24 für Rechtstexte
+- ✅ Nutzen Sie Complyo's KI-Rechtstexte-Generator (Einstellungen > Rechtstexte) und lassen Sie Texte juristisch prüfen
 - ✅ Beauftragen Sie eine Datenschutzberatung (bei DSGVO-kritischen Projekten)
 
 ---
@@ -319,7 +314,7 @@ Live-Chat: dashboard.complyo.tech
 ✅ **Explizite Bestätigung vor jeder Code-Änderung erforderlich**  
 ✅ **Keine automatischen Schreibzugriffe auf Ihre Server (außer Premium mit Ihrer Freigabe)**  
 ✅ **KI-Fixes können Fehler enthalten – Prüfung durch Sie erforderlich**  
-✅ **Rechtstexte: eRecht24 (abmahnsicher) > KI (nur Vorlage, nicht abmahnsicher)**  
+✅ **Rechtstexte: Interner KI-Generator** (Vorlage auf Basis aktueller Gesetze — juristische Prüfung empfohlen)  
 ✅ **Audit Trail dokumentiert alle Ihre Aktionen**  
 ✅ **Backup & Rollback bei Premium-Plan verfügbar**  
 ✅ **Haftung auf Abo-Gebühr begrenzt (max. 5.000 €)**  

@@ -5,6 +5,16 @@
 /* Import Complyo Design System */
 @import '../styles/design-system.css';
 
+/* Smooth Scroll & Anchor Offset (fixed NavBar height: 4rem / 64px) */
+html {
+  scroll-behavior: smooth;
+}
+
+#scanner,
+#waitlist {
+  scroll-margin-top: 5rem;
+}
+
 /* Viral Landing Page Animations */
 @keyframes scroll {
   0% {

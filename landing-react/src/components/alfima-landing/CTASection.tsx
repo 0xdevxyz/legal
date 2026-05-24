@@ -21,7 +21,7 @@ export default function CTASection() {
 
           <div className="flex flex-wrap justify-center gap-4">
             <a
-              href="https://app.complyo.tech/register"
+              href="https://app.complyo.de/register"
               className="inline-flex items-center gap-2 rounded-full bg-white px-8 py-3 text-base font-semibold text-slate-900 shadow-xl transition hover:bg-white/90"
             >
               Kostenfrei starten

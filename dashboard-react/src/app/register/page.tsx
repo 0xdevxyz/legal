@@ -7,8 +7,7 @@ import { Shield, CheckCircle, Loader2, AlertCircle, Eye, FileText, BarChart3, Cr
 import SocialLoginButtons from '@/components/SocialLoginButtons';
 import { Logo } from '@/components/Logo';
 import { getApiBaseUrl } from '@/lib/api-utils';
-
-const API_BASE = getApiBaseUrl();
+import { apiClient } from '@/lib/api-client';
 
 const MODULES = [
     { id: 'cookie', name: 'Cookie & DSGVO', icon: Shield, description: 'Cookie-Banner, Consent-Management' },
@@ -40,9 +39,9 @@ function RegisterForm() {
     const [error, setError] = useState('');
     
     useEffect(() => {
-        if (plan === 'complete') {
+        if (plan === 'pro') {
             setSelectedModules(['cookie', 'accessibility', 'legal_texts', 'monitoring']);
-        } else if (plan === 'expert') {
+        } else if (plan === 'agency') {
             setSelectedModules(['cookie', 'accessibility', 'legal_texts', 'monitoring']);
         }
     }, [plan]);
@@ -57,9 +56,9 @@ function RegisterForm() {
     };
     
     const calculatePrice = () => {
-        if (plan === 'expert') return { monthly: 39, setup: 2990 };
-        if (plan === 'complete') return { monthly: 49, setup: 0 };
-        return { monthly: selectedModules.length * 19, setup: 0 };
+        if (plan === 'agency') return { monthly: 299, yearly: 2990, setup: 0 };
+        if (plan === 'pro') return { monthly: 49, yearly: 490, setup: 0 };
+        return { monthly: selectedModules.length * 19, yearly: 0, setup: 0 };
     };
     
     const price = calculatePrice();
@@ -78,24 +77,18 @@ function RegisterForm() {
         try {
             await register({ ...formData, plan, modules: selectedModules });
             
-            const checkoutResponse = await fetch(`${API_BASE}/api/payment/create-checkout`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    plan_type: plan,
-                    modules: selectedModules
-                })
-            });
+            const checkoutData = await apiClient.post('/api/stripe/create-checkout', {
+                plan: plan,
+                billing_period: 'monthly',
+                success_url: `${window.location.origin}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: `${window.location.origin}/register`
+            }) as any;
             
-            if (!checkoutResponse.ok) {
+            if (!checkoutData.checkout_url) {
                 throw new Error('Fehler beim Erstellen der Zahlungssitzung');
             }
             
-            const { checkout_url } = await checkoutResponse.json();
-            window.location.href = checkout_url;
+            window.location.href = checkoutData.checkout_url;
         } catch (error: any) {
             console.error('Registration error:', error);
             setError(error.message || 'Registrierung fehlgeschlagen. Bitte versuchen Sie es erneut.');
@@ -104,14 +97,14 @@ function RegisterForm() {
     };
     
     const getPlanName = () => {
-        if (plan === 'expert') return 'Expertenservice';
-        if (plan === 'complete') return 'Komplett-Paket';
-        return `Einzelmodul${selectedModules.length > 1 ? 'e' : ''}`;
+        if (plan === 'agency') return 'Agentur';
+        if (plan === 'pro') return 'Pro-Paket';
+        return `Einzelne Säule${selectedModules.length > 1 ? 'n' : ''}`;
     };
     
     const getPriceDisplay = () => {
-        if (price.setup > 0) {
-            return `${price.setup.toLocaleString('de-DE')}€ + ${price.monthly}€/Monat`;
+        if (price.yearly > 0) {
+            return `${price.monthly}€/Monat oder ${price.yearly}€/Jahr`;
         }
         return `${price.monthly}€/Monat`;
     };

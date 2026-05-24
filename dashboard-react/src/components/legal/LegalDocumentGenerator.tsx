@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useDashboardStore } from '@/stores/dashboard';
 import { sanitizeHtml } from '@/lib/sanitize';
+import { apiClient } from '@/lib/api-client';
 
 interface LegalDocumentGeneratorProps {
   documentType: 'impressum' | 'datenschutz';
@@ -181,30 +182,15 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
     setIsGenerating(true);
     
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v2/legal/generate-complete`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          document_type: documentType,
-          company_data: companyData,
-          website_features: features,
-          website_url: currentWebsite?.url || companyData.website,
-          language: 'de'
-        })
-      });
+      const data = await apiClient.post('/api/v2/legal/generate-complete', {
+        document_type: documentType,
+        company_data: companyData,
+        website_features: features,
+        website_url: currentWebsite?.url || companyData.website,
+        language: 'de'
+      }) as any;
       
-      if (response.ok) {
-        const data = await response.json();
-        setFinalContent(data.html || data.content || '');
-      } else {
-        // Fallback: Lokale Generierung
-        const content = generateLocalContent();
-        setFinalContent(content);
-      }
+      setFinalContent(data.html || data.content || '');
       setStep(5);
     } catch (error) {
       console.error('Fehler bei Rechtstext-Generierung:', error);

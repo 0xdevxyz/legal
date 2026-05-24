@@ -33,7 +33,10 @@ if _sentry_dsn:
     _sentry_sdk.init(
         dsn=_sentry_dsn,
         traces_sample_rate=0.1,
+        profiles_sample_rate=0.05,
         environment=os.getenv("ENVIRONMENT", "production"),
+        release=os.getenv("GIT_COMMIT", "unknown"),
+        send_default_pii=False,
     )
 
 from prometheus_client import Counter as _PCounter, Histogram as _PHistogram, generate_latest as _prom_generate, CONTENT_TYPE_LATEST as _PROM_CT
@@ -74,7 +77,6 @@ import user_routes  # User profile & domain locks
 from database_service import db_service
 from dependencies import get_current_user
 from email_service import email_service
-from erecht24_rechtstexte_service import erecht24_rechtstexte_service, LegalTextType
 from news_service import NewsService
 from risk_calculator import RiskCalculator
 from fix_generator import FixGenerator
@@ -82,8 +84,6 @@ from export_service import ExportService
 from firebase_auth import init_firebase_admin, verify_firebase_token
 
 # New Services
-from erecht24_service import erecht24_service
-from erecht24_webhook_routes import router as erecht24_webhook_router
 from compliance_engine.solution_generator import solution_generator
 from compliance_engine.cookie_analyzer import cookie_analyzer
 from compliance_engine.priority_engine import priority_engine
@@ -91,6 +91,7 @@ from compliance_engine.priority_engine import priority_engine
 # AI Compliance Module (ComploAI Guard)
 from ai_compliance_routes import router as ai_compliance_router
 from addon_payment_routes import router as addon_payment_router
+from ai_compliance_worker import start_worker as start_ai_compliance_worker
 from widget_routes import router as widget_router
 from expert_service_routes import router as expert_service_router
 
@@ -124,9 +125,8 @@ from legal_document_routes import legal_document_router, init_routes as init_leg
 from legal_notification_service import init_legal_notification_service
 from legal_notification_routes import router as legal_notification_router
 from eulex_service import init_eulex_service
-
-# NEW V2 API Routes - Enhanced AI Fix Engine & eRecht24 Integration (Full Version)
-from erecht24_routes_v2 import router as erecht24_v2_router
+from legal_text_routes import router as legal_text_router
+from risk_radar_routes import router as risk_radar_router
 
 # BFSG Accessibility Fix Pipeline - Anfängerfreundliche Fix-Generierung
 from accessibility_fix_routes import accessibility_fix_router, init_routes as init_accessibility_routes
@@ -323,10 +323,8 @@ async def init_db():
                     print(f"Applying migration: {filename}")
                     await execute_sql_from_file(connection, os.path.join(sql_dir, filename))
         
-        # Apply new schema files (erecht24, score_history, legal_updates)
         backend_dir = os.path.dirname(__file__)
         new_schema_files = [
-            'init_erecht24_projects.sql',
             'init_legal_updates.sql',
             'init_score_history.sql'
         ]
@@ -414,6 +412,13 @@ async def startup_event():
         print("✅ Background worker for fix-jobs started")
     except Exception as e:
         print(f"⚠️ Background worker start failed: {e}")
+
+    # Start AI Compliance Worker (ComploAI Guard — scheduled scans & notifications)
+    try:
+        asyncio.create_task(start_ai_compliance_worker())
+        print("✅ AI Compliance Worker started")
+    except Exception as e:
+        print(f"⚠️ AI Compliance Worker start failed: {e}")
 
     # Auto-fetch news on startup if older than 6 hours
     try:
@@ -505,10 +510,6 @@ async def startup_event():
     fix_routes.fix_generator = fix_generator
     fix_routes.export_service = export_service
 
-    # Set global references for erecht24_webhook_routes
-    import erecht24_webhook_routes
-    erecht24_webhook_routes.db_pool = db_pool
-
     # Set global references for legal_news_routes
     import legal_news_routes
     legal_news_routes.db_pool = db_pool
@@ -529,8 +530,8 @@ async def startup_event():
     app.include_router(payment_routes.router)  # Payment router enabled
     app.include_router(stripe_routes.router)  # NEW: Freemium Stripe routes
     app.include_router(user_routes.router)  # User profile & domain locks
-    app.include_router(erecht24_webhook_router)  # eRecht24 webhooks for legal updates
-    app.include_router(erecht24_v2_router)  # NEW V2: Enhanced AI Fix Engine & eRecht24 Integration
+    app.include_router(legal_text_router)  # Interner Rechtstexte-Generator (ersetzt eRecht24)
+    app.include_router(risk_radar_router)  # Risiko-Radar + Frühwarner
     app.include_router(ai_compliance_router)  # AI Compliance (ComploAI Guard)
     app.include_router(addon_payment_router)  # Add-on Payments (ComploAI Guard & Priority Support)
     app.include_router(widget_router)  # Complyo Widgets (Cookie Consent & Accessibility)
@@ -840,13 +841,8 @@ async def execute_fix(execute_request: ExecuteFixRequest, request: Request, curr
     Generate complete fix content (code/text/widget/guide)
     """
     try:
-        # Initialize Smart Fix Generator
         smart_fix_generator = SmartFixGenerator()
-        
-        # Inject erecht24 service for legal texts
-        smart_fix_generator.set_erecht24_service(erecht24_service)
-        
-        # Generate fix
+
         fix_result = await smart_fix_generator.generate(
             execute_request.fix_id, 
             execute_request.fix_data, 
@@ -1327,6 +1323,7 @@ async def get_latest_scan(current_user: dict = Depends(get_current_user)):
                     scan_dict['scan_data'] = json.loads(scan_dict['scan_data'])
                 scan_dict['issues'] = scan_dict['scan_data'].get('issues', [])
                 scan_dict['recommendations'] = scan_dict['scan_data'].get('recommendations', [])
+                scan_dict['pillar_scores'] = scan_dict['scan_data'].get('pillar_scores', [])
                 # ✅ NEU: Issue-Gruppen für professionelle UX
                 scan_dict['issue_groups'] = scan_dict['scan_data'].get('issue_groups', [])
                 scan_dict['grouping_stats'] = scan_dict['scan_data'].get('grouping_stats', {})
@@ -1345,6 +1342,7 @@ async def get_latest_scan(current_user: dict = Depends(get_current_user)):
                     "scan_duration_ms": scan_dict['scan_duration_ms'],
                     "issues": scan_dict.get('issues', []),
                     "recommendations": scan_dict.get('recommendations', []),
+                    "pillar_scores": scan_dict.get('pillar_scores', []),
                     # ✅ NEU: Issue-Gruppen für professionelle UX
                     "issue_groups": scan_dict.get('issue_groups', []),
                     "grouping_stats": scan_dict.get('grouping_stats', {})
@@ -1621,6 +1619,73 @@ async def download_report(scan_id: str, current_user: dict = Depends(get_current
             detail=f"PDF-Generierung fehlgeschlagen: {str(e)}"
         )
 
+# ========== AUDIT LOG ENDPOINTS ==========
+
+@app.get("/api/v2/audit/log")
+async def get_audit_log(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_user)
+):
+    user_id = current_user.get("id") or current_user.get("user_id")
+    try:
+        async with db_pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, fix_id, fix_category, fix_type, action_type,
+                       deployment_method, applied_at, success, error_message,
+                       backup_id, rollback_available
+                FROM fix_audit_trail
+                WHERE user_id = $1
+                ORDER BY applied_at DESC
+                LIMIT $2 OFFSET $3
+                """,
+                user_id, limit, offset
+            )
+        return {"audit_log": [dict(r) for r in rows], "total": len(rows)}
+    except Exception as e:
+        logger.error(f"Error fetching audit log: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v2/audit/export")
+async def export_audit_log(
+    current_user: dict = Depends(get_current_user)
+):
+    user_id = current_user.get("id") or current_user.get("user_id")
+    try:
+        import csv, io
+        async with db_pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, fix_id, fix_category, fix_type, action_type,
+                       deployment_method, applied_at, success, error_message
+                FROM fix_audit_trail
+                WHERE user_id = $1
+                ORDER BY applied_at DESC
+                """,
+                user_id
+            )
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=[
+            "id", "fix_id", "fix_category", "fix_type", "action_type",
+            "deployment_method", "applied_at", "success", "error_message"
+        ])
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(dict(row))
+        output.seek(0)
+        from fastapi.responses import StreamingResponse
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=audit_log.csv"}
+        )
+    except Exception as e:
+        logger.error(f"Error exporting audit log: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ========== PAYMENT ENDPOINTS ==========
 
 @app.post("/api/v2/payments/create-checkout-session")
@@ -1707,215 +1772,6 @@ async def stripe_webhook(request: Request):
         await stripe_service.handle_invoice_paid(invoice)
 
     return {"success": True}
-
-
-# ===== eRecht24 Rechtstexte API =====
-# Automatische Generierung von Impressum, Datenschutzerklärung, etc.
-
-@app.get("/api/erecht24/status")
-async def get_erecht24_status():
-    """Prüft den Status der eRecht24 Rechtstexte-API"""
-    try:
-        # Teste API-Verbindung durch Abruf der Client-Liste
-        clients = await erecht24_rechtstexte_service.get_client_list()
-        
-        return {
-            "status": "connected" if clients is not None else "disconnected",
-            "api_url": erecht24_rechtstexte_service.API_BASE_URL,
-            "has_api_key": bool(erecht24_rechtstexte_service.api_key),
-            "plugin_key": erecht24_rechtstexte_service.plugin_key,
-            "registered_clients": len(clients) if clients else 0
-        }
-    except Exception as e:
-        logger.error(f"❌ eRecht24 Status-Check fehlgeschlagen: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"eRecht24 Status-Check fehlgeschlagen: {str(e)}"
-        )
-
-
-@app.get("/api/erecht24/imprint")
-async def get_impressum(
-    language: str = "de",
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Generiert ein rechtssicheres Impressum mit eRecht24
-    
-    Args:
-        language: Sprache (de, en, fr)
-    """
-    try:
-        html_text = await erecht24_rechtstexte_service.get_imprint(language)
-        
-        if not html_text:
-            raise HTTPException(
-                status_code=404,
-                detail="Impressum konnte nicht abgerufen werden. Bitte prüfen Sie Ihren eRecht24 API-Key."
-            )
-        
-        return {
-            "success": True,
-            "text_type": "imprint",
-            "language": language,
-            "html": html_text,
-            "generated_at": datetime.utcnow().isoformat(),
-            "source": "eRecht24"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Impressum-Generierung fehlgeschlagen: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Impressum-Generierung fehlgeschlagen: {str(e)}"
-        )
-
-
-@app.get("/api/erecht24/privacy-policy")
-async def get_datenschutzerklaerung(
-    language: str = "de",
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Generiert eine rechtssichere Datenschutzerklärung mit eRecht24
-    
-    Args:
-        language: Sprache (de, en, fr)
-    """
-    try:
-        html_text = await erecht24_rechtstexte_service.get_privacy_policy(language)
-        
-        if not html_text:
-            raise HTTPException(
-                status_code=404,
-                detail="Datenschutzerklärung konnte nicht abgerufen werden. Bitte prüfen Sie Ihren eRecht24 API-Key."
-            )
-        
-        return {
-            "success": True,
-            "text_type": "privacy_policy",
-            "language": language,
-            "html": html_text,
-            "generated_at": datetime.utcnow().isoformat(),
-            "source": "eRecht24"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Datenschutzerklärung-Generierung fehlgeschlagen: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Datenschutzerklärung-Generierung fehlgeschlagen: {str(e)}"
-        )
-
-
-@app.get("/api/erecht24/privacy-policy-social-media")
-async def get_datenschutz_social_media(
-    language: str = "de",
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Generiert eine Datenschutzerklärung für Social Media mit eRecht24
-    
-    Args:
-        language: Sprache (de, en, fr)
-    """
-    try:
-        html_text = await erecht24_rechtstexte_service.get_privacy_policy_social_media(language)
-        
-        if not html_text:
-            raise HTTPException(
-                status_code=404,
-                detail="Social Media Datenschutzerklärung konnte nicht abgerufen werden."
-            )
-        
-        return {
-            "success": True,
-            "text_type": "privacy_policy_social_media",
-            "language": language,
-            "html": html_text,
-            "generated_at": datetime.utcnow().isoformat(),
-            "source": "eRecht24"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Social Media Datenschutz-Generierung fehlgeschlagen: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Social Media Datenschutz-Generierung fehlgeschlagen: {str(e)}"
-        )
-
-
-class ERecht24ClientCreate(BaseModel):
-    push_uri: str
-    cms: str = "Custom"
-    cms_version: str = "1.0"
-    plugin_name: str = "complyo-ai-compliance"
-    author_mail: str = "api@complyo.tech"
-    push_method: str = "POST"
-
-
-@app.post("/api/erecht24/clients")
-async def register_erecht24_client(
-    client_data: ERecht24ClientCreate,
-    current_user: dict = Depends(get_current_user)
-):
-    """Registriert einen neuen eRecht24 Client für Push-Notifications"""
-    try:
-        client = await erecht24_rechtstexte_service.create_client(
-            push_uri=client_data.push_uri,
-            cms=client_data.cms,
-            cms_version=client_data.cms_version,
-            plugin_name=client_data.plugin_name,
-            author_mail=client_data.author_mail,
-            push_method=client_data.push_method
-        )
-        
-        if not client:
-            raise HTTPException(
-                status_code=500,
-                detail="Client-Registrierung fehlgeschlagen"
-            )
-        
-        return {
-            "success": True,
-            "client": client,
-            "message": "Client erfolgreich registriert"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Client-Registrierung fehlgeschlagen: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Client-Registrierung fehlgeschlagen: {str(e)}"
-        )
-
-
-@app.get("/api/erecht24/clients")
-async def list_erecht24_clients(
-    current_user: dict = Depends(get_current_user)
-):
-    """Listet alle registrierten eRecht24 Clients auf"""
-    try:
-        clients = await erecht24_rechtstexte_service.get_client_list()
-        
-        if clients is None:
-            clients = []
-        
-        return {
-            "success": True,
-            "clients": clients,
-            "count": len(clients)
-        }
-    except Exception as e:
-        logger.error(f"❌ Client-Listen-Abruf fehlgeschlagen: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Client-Listen-Abruf fehlgeschlagen: {str(e)}"
-        )
 
 
 if __name__ == "__main__":

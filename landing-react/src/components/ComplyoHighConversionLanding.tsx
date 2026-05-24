@@ -39,7 +39,7 @@ export default function ComplyoHighConversionLanding({ variant, sessionId }: Com
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
-  const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || 'https://app.complyo.tech';
+  const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || 'https://app.complyo.de';
 
   const handleAnalyze = async () => {
     if (!websiteUrl) return;
@@ -50,7 +50,7 @@ export default function ComplyoHighConversionLanding({ variant, sessionId }: Com
   };
 
   const handlePlanSelect = (plan: 'ki' | 'expert') => {
-    window.location.href = `https://app.complyo.tech/register?plan=${plan}`;
+    window.location.href = `https://app.complyo.de/register?plan=${plan}`;
   };
 
   return (

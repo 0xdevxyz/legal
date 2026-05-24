@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Sparkles, Shield, Zap, ArrowRight } from 'lucide-react';
-import { getAddonsCatalog, subscribeToAddon, getMyAddons } from '@/lib/ai-compliance-api';
+import { getAddonsCatalog, subscribeToAddon, getMyAddons, purchaseOnetimeAddon } from '@/lib/ai-compliance-api';
 import type { AddonCatalog } from '@/types/ai-compliance';
 
 export default function UpgradePage() {
@@ -12,6 +12,7 @@ export default function UpgradePage() {
   const [myAddons, setMyAddons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState(false);
+  const [purchasing, setPurchasing] = useState<string | null>(null);
   
   useEffect(() => {
     loadData();
@@ -33,6 +34,18 @@ export default function UpgradePage() {
     }
   };
   
+  const handlePurchase = async (addonKey: string) => {
+    try {
+      setPurchasing(addonKey);
+      const { checkout_url } = await purchaseOnetimeAddon(addonKey);
+      window.location.href = checkout_url;
+    } catch (err: any) {
+      console.error('Error purchasing addon:', err);
+      alert('Fehler: ' + (err.response?.data?.detail || err.message));
+      setPurchasing(null);
+    }
+  };
+
   const handleSubscribe = async (addonKey: string) => {
     try {
       setSubscribing(true);
@@ -219,8 +232,12 @@ export default function UpgradePage() {
                     ))}
                   </div>
                   
-                  <button className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors">
-                    Anfragen
+                  <button
+                    onClick={() => handlePurchase(key)}
+                    disabled={purchasing === key}
+                    className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {purchasing === key ? 'Wird geladen...' : 'Anfragen'}
                   </button>
                 </div>
               ))}

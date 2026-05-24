@@ -79,7 +79,7 @@ async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depend
     """Get current user ID from JWT token"""
     from auth_routes import get_current_user
     user = await get_current_user(credentials)
-    return user["user_id"]
+    return user["id"]
 
 @router.post("/systems", response_model=AISystemResponse)
 async def create_ai_system(

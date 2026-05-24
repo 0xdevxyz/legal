@@ -414,3 +414,189 @@ async def admin_system_health(admin: bool = Depends(verify_admin_access)):
     except Exception as e:
         logger.error(f"Error getting system health: {e}")
         raise HTTPException(status_code=500, detail="Error getting system health")
+
+
+# =============================================================================
+# Fix Review Queue — Human-in-the-Loop Quality Gate
+# =============================================================================
+
+from fastapi import Body
+from dependencies import get_db
+
+@admin_router.get("/fix-review-queue")
+async def get_fix_review_queue(
+    admin: bool = Depends(verify_admin_access),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db=Depends(get_db),
+):
+    """
+    Gibt alle Fixes mit quality_gate_status='pending_review' zurück.
+    """
+    try:
+        rows = await db.fetch(
+            """
+            SELECT
+                faa.id,
+                faa.fix_type,
+                faa.issue_title,
+                faa.quality_gate_status,
+                faa.quality_gate_log,
+                faa.applied_at,
+                faa.reviewed_by,
+                faa.reviewed_at,
+                tw.url AS website_url,
+                u.email AS user_email
+            FROM fix_application_audit faa
+            LEFT JOIN tracked_websites tw ON faa.website_id = tw.id
+            LEFT JOIN users u ON faa.user_id = u.id
+            WHERE faa.quality_gate_status = 'pending_review'
+            ORDER BY faa.applied_at DESC
+            LIMIT $1 OFFSET $2
+            """,
+            limit,
+            offset,
+        )
+
+        total = await db.fetchval(
+            "SELECT COUNT(*) FROM fix_application_audit WHERE quality_gate_status = 'pending_review'"
+        )
+
+        return {
+            "items": [dict(r) for r in rows],
+            "total": total or 0,
+            "limit": limit,
+            "offset": offset,
+        }
+    except Exception as e:
+        logger.error(f"get_fix_review_queue error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Fehler beim Laden der Review-Queue")
+
+
+@admin_router.get("/fix-review-queue/{fix_id}")
+async def get_fix_review_detail(
+    fix_id: int,
+    admin: bool = Depends(verify_admin_access),
+    db=Depends(get_db),
+):
+    """
+    Detail-Ansicht eines einzelnen Fixes inkl. Quality Gate Log und HTML-Diff.
+    """
+    try:
+        row = await db.fetchrow(
+            """
+            SELECT
+                faa.*,
+                tw.url AS website_url,
+                u.email AS user_email
+            FROM fix_application_audit faa
+            LEFT JOIN tracked_websites tw ON faa.website_id = tw.id
+            LEFT JOIN users u ON faa.user_id = u.id
+            WHERE faa.id = $1
+            """,
+            fix_id,
+        )
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Fix nicht gefunden")
+
+        return dict(row)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"get_fix_review_detail error for fix {fix_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Fehler beim Laden des Fix-Details")
+
+
+@admin_router.post("/fix-review-queue/{fix_id}/approve")
+async def approve_fix(
+    fix_id: int,
+    admin: bool = Depends(verify_admin_access),
+    db=Depends(get_db),
+):
+    """
+    Setzt quality_gate_status='validated' und speichert Reviewer.
+    """
+    try:
+        api_key = _ADMIN_API_KEY or "admin"
+        updated = await db.fetchval(
+            """
+            UPDATE fix_application_audit
+            SET quality_gate_status = 'validated',
+                reviewed_by          = $1,
+                reviewed_at          = NOW()
+            WHERE id = $2
+              AND quality_gate_status = 'pending_review'
+            RETURNING id
+            """,
+            api_key,
+            fix_id,
+        )
+
+        if not updated:
+            raise HTTPException(
+                status_code=404,
+                detail="Fix nicht gefunden oder bereits bearbeitet",
+            )
+
+        logger.info(f"Fix {fix_id} approved by admin")
+        return {"success": True, "fix_id": fix_id, "new_status": "validated"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"approve_fix error for {fix_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Fehler beim Freigeben des Fixes")
+
+
+@admin_router.post("/fix-review-queue/{fix_id}/reject")
+async def reject_fix(
+    fix_id: int,
+    reason: str = Body(..., embed=True),
+    admin: bool = Depends(verify_admin_access),
+    db=Depends(get_db),
+):
+    """
+    Setzt quality_gate_status='rejected' mit Begründung.
+    """
+    if not reason or len(reason.strip()) < 5:
+        raise HTTPException(status_code=422, detail="Begründung muss mindestens 5 Zeichen haben")
+
+    try:
+        api_key = _ADMIN_API_KEY or "admin"
+        updated = await db.fetchval(
+            """
+            UPDATE fix_application_audit
+            SET quality_gate_status = 'rejected',
+                reviewed_by          = $1,
+                reviewed_at          = NOW(),
+                quality_gate_log     = COALESCE(quality_gate_log, '[]'::jsonb)
+                                       || jsonb_build_array(
+                                           jsonb_build_object(
+                                             'stage', 0,
+                                             'name', 'Admin Review',
+                                             'passed', false,
+                                             'errors', jsonb_build_array($3)
+                                           )
+                                         )
+            WHERE id = $2
+              AND quality_gate_status = 'pending_review'
+            RETURNING id
+            """,
+            api_key,
+            fix_id,
+            reason.strip(),
+        )
+
+        if not updated:
+            raise HTTPException(
+                status_code=404,
+                detail="Fix nicht gefunden oder bereits bearbeitet",
+            )
+
+        logger.info(f"Fix {fix_id} rejected by admin: {reason}")
+        return {"success": True, "fix_id": fix_id, "new_status": "rejected", "reason": reason}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"reject_fix error for {fix_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Fehler beim Ablehnen des Fixes")

@@ -5,6 +5,7 @@ import {
   X, Archive, ChevronLeft, ChevronRight, Filter, Search, 
   AlertTriangle, Info, Clock, TrendingUp 
 } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 interface LegalUpdate {
   id: number;
@@ -44,21 +45,14 @@ export const LegalArchiveModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const loadArchive = async () => {
     setIsLoading(true);
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
-      
-      let url = `${API_URL}/api/legal-ai/archive?page=${page}&page_size=20`;
+      const params: Record<string, unknown> = { page, page_size: 20 };
       if (filterSeverity) {
-        url += `&severity=${filterSeverity}`;
+        params.severity = filterSeverity;
       }
       
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      });
+      const data = await apiClient.get('/api/legal-ai/archive', params) as any;
       
-      if (response.ok) {
-        const data = await response.json();
+      if (data) {
         setUpdates(data.updates);
         setTotalPages(Math.ceil(data.total / 20));
       }

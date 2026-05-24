@@ -24,8 +24,8 @@ export default function FeaturesShowcase() {
   const features = [
     {
       icon: Shield,
-      title: 'Abmahn-Schutz',
-      description: 'Schützen Sie sich vor teuren Abmahnungen und Bußgeldern. Rechtssichere Compliance.',
+      title: 'Risiko-Radar',
+      description: 'Erkennen Sie Compliance-Risiken frühzeitig. KI-gestütztes Frühwarnsystem für DSGVO, TTDSG, UWG & BFSG.',
       gradient: 'from-green-500 to-emerald-500',
     },
     {

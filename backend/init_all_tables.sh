@@ -14,7 +14,6 @@ SQL_FILES=(
     "init_documents_table.sql"
     "init_website_structures.sql"
     "init_risk_matrix.sql"
-    "init_erecht24_projects.sql"
     "init_legal_updates.sql"
     "init_score_history.sql"
     "migration_freemium_model.sql"

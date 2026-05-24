@@ -32,7 +32,6 @@ class EnhancedFixRequest(BaseModel):
     issue_category: str
     company_info: Optional[Dict[str, str]] = None
     enable_preview: bool = True
-    erecht24_project_id: Optional[str] = None
 
 
 class PreviewRequest(BaseModel):
@@ -99,12 +98,12 @@ async def generate_fix_with_priority(
 ):
     """
     Generiert Fix mit korrekter Priorität
-    
-    WICHTIG: Hierarchie für Rechtstexte:
-    1. eRecht24 API (wenn verfügbar) - ABMAHNSCHUTZ!
+
+    Hierarchie für Rechtstexte:
+    1. Interner KI-Generator (knowledge/laws/ + Templates) — Risiko-Reduktion
     2. Bestehende Templates (Fallback)
-    3. KI-Generated (Notfall-Fallback)
-    
+    3. Generischer KI-Fix (Notfall-Fallback)
+
     Returns:
         Fix mit Prioritäts-Information
     """
@@ -116,8 +115,7 @@ async def generate_fix_with_priority(
     
     try:
         user_context = {
-            'user_id': current_user['user_id'],
-            'erecht24_project_id': request.erecht24_project_id
+            'user_id': current_user['id'],
         }
         
         fix_result = await enhanced_fixer.generate_fix_with_priority(
@@ -144,7 +142,7 @@ async def generate_fix_with_priority(
             'success': True,
             'fix': fix_result,
             'preview': preview_data,
-            'user_id': current_user['user_id']
+            'user_id': current_user['id']
         }
         
     except Exception as e:
@@ -303,7 +301,7 @@ async def create_github_pr(
         async with db_pool.acquire() as conn:
             fix_record = await conn.fetchrow(
                 "SELECT * FROM generated_fixes WHERE id = $1 AND user_id = $2",
-                int(request.fix_id), current_user['user_id']
+                int(request.fix_id), current_user['id']
             )
             
             if not fix_record:

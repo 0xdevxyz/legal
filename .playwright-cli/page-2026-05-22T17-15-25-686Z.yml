@@ -1,0 +1,42 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e2]
+  - main "Login" [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img "Complyo Logo" [ref=e9]
+        - paragraph [ref=e10]: Legal Compliance Platform
+      - generic [ref=e11]:
+        - generic [ref=e13]:
+          - heading "Willkommen zurück" [level=1] [ref=e14]
+          - paragraph [ref=e15]: Melden Sie sich an, um auf Ihr Dashboard zuzugreifen
+        - generic [ref=e16]:
+          - generic [ref=e17]:
+            - generic [ref=e18]: E-Mail-Adresse
+            - generic [ref=e19]:
+              - img [ref=e20]
+              - textbox "E-Mail-Adresse" [ref=e23]:
+                - /placeholder: ihre@email.com
+          - generic [ref=e24]:
+            - generic [ref=e25]:
+              - generic [ref=e26]: Passwort
+              - link "Passwort vergessen?" [ref=e27] [cursor=pointer]:
+                - /url: mailto:support@complyo.tech
+            - generic [ref=e28]:
+              - img [ref=e29]
+              - textbox "Passwort" [ref=e32]:
+                - /placeholder: ••••••••••••
+          - button "Anmelden" [ref=e33] [cursor=pointer]:
+            - generic [ref=e35]:
+              - img [ref=e36]
+              - text: Anmelden
+              - img [ref=e39]
+        - paragraph [ref=e42]:
+          - text: Noch kein Konto?
+          - link "Jetzt registrieren" [ref=e43] [cursor=pointer]:
+            - /url: /register
+      - generic [ref=e44]:
+        - generic [ref=e45]:
+          - img [ref=e46]
+          - generic [ref=e49]: 256-bit SSL
+        - generic [ref=e51]: DSGVO-konform
+        - generic [ref=e53]: ISO 27001

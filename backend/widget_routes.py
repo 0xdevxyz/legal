@@ -166,18 +166,9 @@ async def serve_cookie_compliance_widget(request: Request, site_id: Optional[str
 @router.get("/api/widgets/accessibility.js")
 async def serve_accessibility_widget(request: Request, version: str = "6"):
     """
-    Serve the Accessibility Widget JavaScript
-    
-    Args:
-        version: Widget version (4, 5 or 6, default 6)
+    Serve the Accessibility Widget JavaScript (v6 only)
     """
-    # V6 ist jetzt default - Next Level Edition mit Grid-Layout
-    if version == "6":
-        widget_filename = 'accessibility-v6.js'
-    elif version == "5":
-        widget_filename = 'accessibility-v5.js'
-    else:
-        widget_filename = 'accessibility.js'
+    widget_filename = 'accessibility-v6.js'
     
     widget_path = os.path.join(WIDGET_DIR, widget_filename)
     
@@ -611,7 +602,7 @@ async def generate_accessibility_patches(
         generator = AccessibilityPatchGenerator()
         zip_buffer = await generator.generate_patch_bundle(
             site_id=site_id,
-            user_id=current_user["user_id"],
+            user_id=current_user["id"],
             fixes=fixes
         )
         

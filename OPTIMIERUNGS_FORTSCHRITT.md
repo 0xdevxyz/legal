@@ -170,17 +170,26 @@ from compliance_engine.deployment_engine import deployment_engine
 
 ## Verbleibende Tasks
 
-### ⏳ HIGH-002: Token zu HttpOnly Cookies migrieren
-**Status:** Pending  
-**Grund:** Größeres Refactoring (4+ Stunden)  
-**Priorität:** Hoch, aber nicht kritisch  
+### ✅ HIGH-002: Token-Refresh-Mechanismus implementiert
+**Status:** Behoben (2026-05-23)  
+**Umgesetzt:**
+- `auth-refresh.ts` als zentrales Token-Modul (Single-Flight-Refresh)
+- Axios-Interceptor in `api-client.ts` mit Pending-Queue (1 Refresh bei N parallelen 401)
+- NextAuth-Session-Sync nach Refresh via `update()`
+- 21 Komponenten von `localStorage.getItem` auf `apiClient` migriert
+- ESLint-Regel verhindert künftige Direkt-Zugriffe
 
-**Aufwand:**
-- Backend: Cookie-basierte Auth implementieren
-- Frontend: localStorage durch Cookie-Handling ersetzen (56 Stellen)
-- Testing: Auth-Flow komplett testen
+**Offen (optional):** HttpOnly-only Access-Token (localStorage entfernen) — Phase 5 des Token-Refresh-Plans
 
-**Empfehlung:** Separates Sprint-Item, dedizierter Zeitslot
+---
+
+### ✅ HIGH-002b: Access-Token aus localStorage entfernt (HttpOnly-only)
+**Status:** Behoben (2026-05-23)  
+**Umgesetzt:**
+- Backend: `access_token` als HttpOnly-Cookie bei Login/Register/Refresh ausgeliefert
+- Backend: `get_current_user` / `get_current_user_optional` lesen Token aus Header **oder** Cookie
+- Frontend: `localStorage.setItem/getItem('access_token')` vollständig entfernt
+- Token lebt nur noch in Memory + HttpOnly-Cookie (XSS-sicher)
 
 ---
 
@@ -393,3 +402,32 @@ curl http://localhost:3003
 **Nächstes Review:** Nach Sprint 2  
 **Fortschritt:** 7/43 Issues behoben (16%)  
 **Security-Score:** 6/10 → 8/10 (+33%)
+
+---
+
+## Cookie-Tool Stabilisierung Phase 1 – 2026-05-24
+
+**Session:** Cookie-Compliance Wettbewerbsfähigkeit  
+**Status:** ✅ Abgeschlossen
+
+### Behobene Bugs
+
+| # | Endpoint | Vorher | Nachher |
+|---|----------|--------|---------|
+| 1 | `GET /tcf/vendors` | 500 – Tabelle fehlte | 200 – 1169 IAB-Vendors (GVL v3) |
+| 2 | `GET /policy/{site}?lang=de` | 500 – JSONB-JOIN falsch | 200 – valides Policy-Dokument |
+| 3 | `GET /stats/{site}?days=30` | SQL-Injection offen | 200 – parametrisiert, days geclampt |
+
+### UX-Verbesserungen
+
+- Quick-Stat-Karten laden Live-Daten statt `--`
+- Empty-States mit erklärendem Text + CTA bei 0 Consents
+- 3-Step-Setup-Wizard (Scan → Services → Integration)
+- Mobile Tab-Navigation via Select-Dropdown
+
+### Neue Dateien
+
+- `backend/migrations/create_tcf_vendors.sql`
+- `backend/cronjobs/tcf_gvl_sync.py` (täglich 03:00)
+
+**Vollständige Doku:** `data/cookie-tool-stability-2026-05-24/`

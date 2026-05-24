@@ -1,9 +1,34 @@
 # Changelog
 
 > Jede Code-Änderung wird hier eingetragen. Format: `## [YYYY-MM-DD]` mit Kategorien.  
-> Detaillierte Analyse offener Punkte: `docs/TECHNICAL_DEBT.md`  
-> Systemübersicht: `docs/SYSTEM_OVERVIEW.md`  
-> Offene Tasks & Entwicklungsstand: `docs/ENTWICKLUNGSSTAND.md`
+> Detaillierte Analyse offener Punkte: `data/technisch/TECHNICAL_DEBT.md`  
+> Systemübersicht: `data/architektur/SYSTEM_OVERVIEW.md`  
+> Offene Tasks & Entwicklungsstand: `data/anleitungen/ENTWICKLUNGSSTAND.md`
+
+---
+
+## [2026-05-23]
+
+### Security — HttpOnly-Härtung Access-Token (Phase 5)
+- `backend/auth_routes.py`: Login/Register/Refresh-Cookie-Endpoints setzen `access_token` jetzt als HttpOnly-Cookie (`httponly=True, secure=True, samesite="lax"`)
+- `backend/dependencies.py`: `get_current_user` + `get_current_user_optional` lesen Token aus Bearer-Header **oder** `access_token`-Cookie
+- `dashboard-react/src/lib/auth-refresh.ts`: `localStorage` komplett entfernt — Token nur noch in Memory (`window.__complyo_access_token`) + HttpOnly-Cookie
+- `dashboard-react/src/app/auth/callback/page.tsx`: kein `localStorage.setItem('access_token')` mehr
+- `dashboard-react/src/components/SocialLoginButtons.tsx`: kein `localStorage.setItem('access_token')` mehr
+
+**Auswirkung:** `localStorage.getItem('access_token')` liefert `null`. XSS kann Access-Token nicht mehr exfiltrieren.
+
+
+- `dashboard-react/src/lib/auth-refresh.ts` (neu): Zentrales Token-Modul mit `getAccessToken`, `setAccessToken`, `clearAccessToken`, `refreshAccessToken` (Single-Flight-Pattern)
+- `dashboard-react/src/lib/api-client.ts`: Response-Interceptor erneuert abgelaufene Access-Tokens transparent via `POST /api/auth/refresh-cookie`; Pending-Queue für parallele 401-Requests → exakt 1 Refresh-Call
+- `dashboard-react/src/auth.config.ts`: `accessTokenExpiresAt` im NextAuth-JWT; `session.error`-Propagation für erzwungenen Logout
+- `dashboard-react/src/contexts/AuthContext.tsx`: Reagiert auf `RefreshAccessTokenError` mit sauberem `signOut`
+- `dashboard-react/src/lib/api.ts` + `ai-compliance-api.ts`: Eigene Axios-Clients konsolidiert → nutzen zentralen `getApiClient()` mit Refresh-Logik
+- `dashboard-react/src/lib/auth-helper.ts`: Deprecated → Re-Export aus `auth-refresh.ts`
+- 21 Komponenten/Seiten: `fetch + localStorage.getItem('access_token')` → `apiClient` (kein Token-Direktzugriff mehr)
+- `dashboard-react/.eslintrc.json`: ESLint-Regel blockiert künftige `localStorage.getItem('access_token')` Direkt-Zugriffe
+
+**Auswirkung:** Sessions werden nicht mehr nach 60 Min beendet. Abgelaufene Access-Tokens werden automatisch über den HttpOnly-Cookie-Refresh-Token erneuert.
 
 ---
 
@@ -36,8 +61,8 @@
 ## [2026-04-10]
 
 ### Dokumentation
-- `docs/SYSTEM_OVERVIEW.md` erstellt – Master-Referenz für alle Entwicklungssessions (Tech-Stack, Router, Services, Datenpfade, Env-Variablen)
-- `docs/ENTWICKLUNGSSTAND.md` erstellt – Offene Tasks, Technical Debt nach Priorität, Coding-Konventionen, Session-Checkliste
+- `data/architektur/SYSTEM_OVERVIEW.md` erstellt – Master-Referenz für alle Entwicklungssessions (Tech-Stack, Router, Services, Datenpfade, Env-Variablen)
+- `data/anleitungen/ENTWICKLUNGSSTAND.md` erstellt – Offene Tasks, Technical Debt nach Priorität, Coding-Konventionen, Session-Checkliste
 - `CONTRIBUTING.md` erweitert – verbindliches Dokumentationsprotokoll für alle Code-Änderungen
 
 ---

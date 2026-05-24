@@ -21,6 +21,7 @@ EXEMPT_PATHS: Set[str] = {
     "/api/auth/apple",
     "/api/auth/apple/callback",
     "/api/auth/complete-onboarding",
+    "/api/auth/verify-credentials",
     "/api/analyze",
     "/api/analyze-preview",
     "/api/v2/analyze",

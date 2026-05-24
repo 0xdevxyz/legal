@@ -13,7 +13,7 @@
         // Configuration
         config: {
             siteId: 'SITE_ID_PLACEHOLDER',
-            apiUrl: 'https://api.complyo.tech',
+            apiUrl: 'https://api.complyo.de',
             blockedScripts: [],
             blockedIframes: [],
             cookiesToDelete: [],

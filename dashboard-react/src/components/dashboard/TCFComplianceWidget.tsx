@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, CheckCircle, AlertTriangle, Info, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import { TCFData } from '@/types/api';
+import { apiClient } from '@/lib/api-client';
 
 interface Vendor {
   vendor_id: string;
@@ -55,17 +56,8 @@ export default function TCFComplianceWidget({ scanId, tcfData }: TCFComplianceWi
     
     setLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await fetch(`/api/tcf/status/${scanId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setFullTCFData(data);
-      }
+      const data = await apiClient.get(`/api/tcf/status/${scanId}`);
+      setFullTCFData(data as TCFData);
     } catch (error) {
       console.error('Failed to load TCF data:', error);
     } finally {

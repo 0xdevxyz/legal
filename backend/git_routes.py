@@ -11,12 +11,12 @@ Endpoints:
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 import logging
 import secrets
 from datetime import datetime
+from dependencies import get_current_user
 
 from git_service import (
     git_service, GitProvider, GitCredentials, RepoInfo, PullRequestResult
@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 # Router Setup
 git_router = APIRouter(prefix="/api/v2/git", tags=["git-integration"])
-security = HTTPBearer()
 
 # Global references
 db_pool = None
@@ -103,32 +102,6 @@ class ConnectedRepo(BaseModel):
     full_name: str
     default_branch: str
     connected_at: str
-
-
-# =============================================================================
-# Auth Helper
-# =============================================================================
-
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> Dict[str, Any]:
-    """Verify JWT token and return user data"""
-    try:
-        if not auth_service:
-            raise HTTPException(status_code=500, detail="Auth service not initialized")
-        
-        token = credentials.credentials
-        user_data = auth_service.verify_token(token)
-        
-        if not user_data:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        
-        return user_data
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Authentication failed: {e}")
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
 
 # =============================================================================

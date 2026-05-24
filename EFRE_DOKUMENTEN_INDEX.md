@@ -65,7 +65,7 @@
 ---
 
 ### 3. 🌱 Green Compliance Module - Technische Spezifikation
-**Datei**: `docs/GREEN_COMPLIANCE_MODULE_SPEC.md`  
+**Datei**: `data/efre/GREEN_COMPLIANCE_MODULE_SPEC.md`  
 **Umfang**: 35 Seiten  
 **Für wen**: CTO, Entwickler, Tech-Lead  
 
@@ -91,7 +91,7 @@
 ---
 
 ### 4. 🎤 EFRE Pitch Deck Outline
-**Datei**: `docs/EFRE_PITCH_DECK_OUTLINE.md`  
+**Datei**: `data/efre/EFRE_PITCH_DECK_OUTLINE.md`  
 **Umfang**: 25 Seiten  
 **Für wen**: CEO (Präsentation), Designer  
 
@@ -124,7 +124,7 @@
 ---
 
 ### 5. 🔬 Forschungs- und Entwicklungsnachweis
-**Datei**: `docs/FORSCHUNG_ENTWICKLUNG_NACHWEIS.md`  
+**Datei**: `data/efre/FORSCHUNG_ENTWICKLUNG_NACHWEIS.md`  
 **Umfang**: 40 Seiten  
 **Für wen**: CTO, Forschungsbeauftragte, Förderstelle  
 
@@ -161,13 +161,13 @@
 │  └─ EFRE_FOERDERANTRAG_STRATEGIE.md ....... Gesamtstrategie (50 Seiten)
 │
 ├─ 📙 TECHNISCHE UMSETZUNG
-│  └─ docs/GREEN_COMPLIANCE_MODULE_SPEC.md .. Green-Module-Entwicklung
+│  └─ data/efre/GREEN_COMPLIANCE_MODULE_SPEC.md .. Green-Module-Entwicklung
 │
 ├─ 📕 PRÄSENTATION
-│  └─ docs/EFRE_PITCH_DECK_OUTLINE.md ....... Pitch-Deck-Vorlage (15 Slides)
+│  └─ data/efre/EFRE_PITCH_DECK_OUTLINE.md ....... Pitch-Deck-Vorlage (15 Slides)
 │
 ├─ 📔 FORSCHUNG
-│  └─ docs/FORSCHUNG_ENTWICKLUNG_NACHWEIS.md  F&E-Dokumentation
+│  └─ data/efre/FORSCHUNG_ENTWICKLUNG_NACHWEIS.md  F&E-Dokumentation
 │
 └─ 📄 DIESER INDEX
    └─ EFRE_DOKUMENTEN_INDEX.md .............. Diese Datei
