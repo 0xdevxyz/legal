@@ -479,7 +479,7 @@ async def startup_event():
     print("✅ Legal Document routes (DPA Generator) initialized")
     
     # Initialize Git Integration routes
-    init_git_routes(db_pool, auth_service)
+    init_git_routes(db_pool, auth_service, _async_redis)
     print("✅ Git Integration routes initialized")
 
     # Initialize Firebase Admin SDK
@@ -597,8 +597,9 @@ async def startup_event():
     # Set global references for cookie_compliance_routes
     import cookie_compliance_routes
     cookie_compliance_routes.db_pool = db_pool
-    cookie_compliance_routes.auth_service = auth_service  # ✅ Auth-Service hinzugefügt
-    cookie_compliance_routes.db_service = db_service  # ✅ DB-Service für Modul-Checks
+    cookie_compliance_routes.auth_service = auth_service
+    cookie_compliance_routes.db_service = db_service
+    cookie_compliance_routes.redis_client = _async_redis
     
     # Set global references for ab_test_routes
     import ab_test_routes

@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 import logging
+import json
 import secrets
 from datetime import datetime
 from dependencies import get_current_user
@@ -30,9 +31,28 @@ git_router = APIRouter(prefix="/api/v2/git", tags=["git-integration"])
 # Global references
 db_pool = None
 auth_service = None
+redis_client = None
 
-# In-Memory OAuth State Store (Production: Redis)
-oauth_states: Dict[str, Dict[str, Any]] = {}
+_OAUTH_STATE_TTL = 600  # 10 minutes
+
+
+async def _set_oauth_state(state: str, data: Dict[str, Any]) -> None:
+    if redis_client:
+        await redis_client.setex(f"oauth_state:{state}", _OAUTH_STATE_TTL, json.dumps(data))
+    else:
+        raise RuntimeError("Redis not available – OAuth state cannot be stored securely")
+
+
+async def _get_oauth_state(state: str) -> Optional[Dict[str, Any]]:
+    if redis_client:
+        raw = await redis_client.get(f"oauth_state:{state}")
+        return json.loads(raw) if raw else None
+    raise RuntimeError("Redis not available")
+
+
+async def _del_oauth_state(state: str) -> None:
+    if redis_client:
+        await redis_client.delete(f"oauth_state:{state}")
 
 
 # =============================================================================
@@ -124,12 +144,12 @@ async def get_oauth_url(
     
     # Generiere State für CSRF-Schutz
     state = secrets.token_urlsafe(32)
-    oauth_states[state] = {
+    await _set_oauth_state(state, {
         "user_id": user.get("user_id"),
         "provider": provider,
         "redirect_uri": redirect_uri,
         "created_at": datetime.now().isoformat()
-    }
+    })
     
     if provider == "github":
         url = git_service.get_github_oauth_url(redirect_uri, state)
@@ -149,15 +169,14 @@ async def oauth_callback(
     Verarbeitet OAuth-Callback und speichert Credentials
     """
     # Validiere State
-    state_data = oauth_states.get(request.state)
+    state_data = await _get_oauth_state(request.state)
     if not state_data:
         raise HTTPException(status_code=400, detail="Invalid state - CSRF protection")
     
     if state_data.get("user_id") != user.get("user_id"):
         raise HTTPException(status_code=400, detail="State mismatch")
     
-    # Lösche State (einmalig verwendbar)
-    del oauth_states[request.state]
+    await _del_oauth_state(request.state)
     
     # Tausche Code gegen Token
     if provider == "github":
@@ -496,9 +515,10 @@ async def _save_pr_record(
 # Init Function
 # =============================================================================
 
-def init_git_routes(pool, auth_svc):
+def init_git_routes(pool, auth_svc, redis_svc=None):
     """Initialize route dependencies"""
-    global db_pool, auth_service
+    global db_pool, auth_service, redis_client
     db_pool = pool
     auth_service = auth_svc
+    redis_client = redis_svc
     logger.info("✅ Git routes initialized")

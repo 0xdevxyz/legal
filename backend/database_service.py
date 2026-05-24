@@ -20,7 +20,6 @@ class DatabaseService:
         if not self.database_url:
             raise RuntimeError("DATABASE_URL environment variable is required!")
         self.pool = None
-        self.use_fallback = False
         
     async def initialize(self):
         """Initialize database connection pool"""
@@ -32,7 +31,6 @@ class DatabaseService:
                 command_timeout=60
             )
             logger.info("Database connection pool initialized")
-            self.use_fallback = False
             return True
         except Exception as e:
             logger.error(f"Database connection failed: {e}")
@@ -479,9 +477,6 @@ class DatabaseService:
         """
         Cancel a user's add-on subscription
         """
-        if self.use_fallback:
-            return True
-        
         try:
             async with self.get_connection() as conn:
                 query = """
@@ -501,9 +496,6 @@ class DatabaseService:
         """
         Get all add-ons for a user
         """
-        if self.use_fallback:
-            return []
-        
         try:
             async with self.get_connection() as conn:
                 query = """
@@ -538,9 +530,6 @@ class DatabaseService:
         """
         Check if user has access to a specific module (cookie, accessibility, etc.)
         """
-        if self.use_fallback:
-            return True
-        
         try:
             async with self.get_connection() as conn:
                 query = """
@@ -560,9 +549,6 @@ class DatabaseService:
         """
         Get list of active module IDs for a user
         """
-        if self.use_fallback:
-            return ['cookie', 'accessibility', 'legal_texts', 'monitoring']
-        
         try:
             async with self.get_connection() as conn:
                 query = """
@@ -587,9 +573,6 @@ class DatabaseService:
         """
         Grant a module to a user
         """
-        if self.use_fallback:
-            return True
-        
         try:
             async with self.get_connection() as conn:
                 query = """
@@ -627,9 +610,6 @@ class DatabaseService:
         """
         Revoke a module from a user
         """
-        if self.use_fallback:
-            return True
-        
         try:
             async with self.get_connection() as conn:
                 query = """

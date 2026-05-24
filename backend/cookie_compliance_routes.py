@@ -30,6 +30,7 @@ security = HTTPBearer(auto_error=False)  # auto_error=False für optionale Auth
 db_pool = None
 auth_service = None  # Wird von main_production.py gesetzt
 db_service = None  # Wird von main_production.py gesetzt für Modul-Checks
+redis_client = None  # Wird von main_production.py gesetzt für Rate-Limiting
 
 # ============================================================================
 # Authentication Helpers
@@ -313,7 +314,7 @@ async def log_consent(
     """
     try:
         # AUDIT-19: Rate-Limiting (max 100 Consent-Logs/Minute pro Site-ID)
-        if not check_rate_limit(consent.site_id):
+        if not await check_rate_limit(consent.site_id):
             raise HTTPException(status_code=429, detail="Rate limit exceeded: max 100 consents per minute per site")
 
         # Get IP and hash it
@@ -2496,26 +2497,31 @@ async def get_service_consent_stats(
 
 # =============================================================================
 # AUDIT-19: Rate-Limiting (max 100 Consent-Logs/Minute pro Site-ID)
-# Implementiert als In-Memory Sliding Window (ergänzt log_consent)
+# Redis Sliding Window (ZADD/ZREMRANGEBYSCORE)
 # =============================================================================
 
 import time as _time
-from collections import defaultdict, deque
 
-_rate_limit_windows: Dict[str, deque] = defaultdict(deque)
 _RATE_LIMIT_MAX = 100
 _RATE_LIMIT_WINDOW_SECONDS = 60
 
 
-def check_rate_limit(site_id: str) -> bool:
-    """Returns True if within rate limit, False if exceeded."""
-    now = _time.monotonic()
-    window = _rate_limit_windows[site_id]
-    while window and window[0] < now - _RATE_LIMIT_WINDOW_SECONDS:
-        window.popleft()
-    if len(window) >= _RATE_LIMIT_MAX:
+async def check_rate_limit(site_id: str) -> bool:
+    """Returns True if within rate limit, False if exceeded. Uses Redis ZADD sliding window."""
+    if not redis_client:
+        return True
+    now = _time.time()
+    key = f"rate_limit:consent:{site_id}"
+    pipe = redis_client.pipeline()
+    pipe.zremrangebyscore(key, 0, now - _RATE_LIMIT_WINDOW_SECONDS)
+    pipe.zadd(key, {str(now): now})
+    pipe.zcard(key)
+    pipe.expire(key, _RATE_LIMIT_WINDOW_SECONDS * 2)
+    results = await pipe.execute()
+    count = results[2]
+    if count > _RATE_LIMIT_MAX:
+        await redis_client.zrem(key, str(now))
         return False
-    window.append(now)
     return True
 
 

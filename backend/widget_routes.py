@@ -609,15 +609,12 @@ async def generate_accessibility_patches(
         # Create download ID (timestamp-based)
         download_id = f"{site_id}_{int(time.time())}"
         
-        # TODO: Store in temporary storage (Redis/file)
-        # For now: Return immediately
-        
-        # Store ZIP in memory for this session (simplified)
-        # In production: Use Redis or filesystem
-        if not hasattr(generate_accessibility_patches, '_temp_storage'):
-            generate_accessibility_patches._temp_storage = {}
-        
-        generate_accessibility_patches._temp_storage[download_id] = zip_buffer.getvalue()
+        import tempfile
+        import os as _os
+        tmp_dir = tempfile.gettempdir()
+        tmp_path = _os.path.join(tmp_dir, f"complyo_patches_{download_id}.zip")
+        with open(tmp_path, "wb") as f:
+            f.write(zip_buffer.getvalue())
         
         return {
             "success": True,
@@ -651,16 +648,18 @@ async def download_accessibility_patches(download_id: str):
         ZIP-Datei mit Patches
     """
     try:
-        # Retrieve from temporary storage
-        if not hasattr(generate_accessibility_patches, '_temp_storage'):
+        import tempfile
+        import os as _os
+        tmp_path = _os.path.join(tempfile.gettempdir(), f"complyo_patches_{download_id}.zip")
+        
+        if not _os.path.exists(tmp_path):
             raise HTTPException(status_code=404, detail="Download nicht gefunden oder abgelaufen")
         
-        zip_content = generate_accessibility_patches._temp_storage.get(download_id)
+        with open(tmp_path, "rb") as f:
+            zip_content = f.read()
         
-        if not zip_content:
-            raise HTTPException(status_code=404, detail="Download nicht gefunden oder abgelaufen")
+        _os.unlink(tmp_path)
         
-        # Return as streaming response
         return StreamingResponse(
             iter([zip_content]),
             media_type="application/zip",
