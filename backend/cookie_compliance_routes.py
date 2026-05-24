@@ -3,7 +3,7 @@ Cookie Compliance Routes
 API endpoints for Cookie-Consent-Management
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Response
+from fastapi import APIRouter, HTTPException, Depends, Request, Response, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
@@ -15,6 +15,7 @@ from datetime import datetime, date, timedelta
 import json
 import logging
 from cookie_scanner_service import cookie_scanner
+from file_storage_service import file_storage
 from functools import wraps
 
 logger = logging.getLogger(__name__)
@@ -218,6 +219,10 @@ class ServiceTemplate(BaseModel):
     provider: Optional[str] = None
     template: Dict[str, Any]
     plan_required: str = "ai"
+
+class ClientAssignRequest(BaseModel):
+    client_name: Optional[str] = Field(None, max_length=255)
+    client_email: Optional[str] = Field(None, max_length=255)
 
 # ============================================================================
 # Helper Functions
@@ -985,20 +990,19 @@ async def get_site_statistics(
     - days: Number of days to include (default 30)
     """
     try:
-        # Get daily stats
+        days = max(1, min(days, 365))
         stats_query = """
             SELECT 
                 date, total_impressions,
                 accepted_all, accepted_partial, rejected_all,
-                accepted_analytics, accepted_marketing, accepted_functional,
-                service_stats
+                accepted_analytics, accepted_marketing, accepted_functional
             FROM cookie_compliance_stats
             WHERE site_id = $1 
-                AND date >= CURRENT_DATE - INTERVAL '%s days'
+                AND date >= CURRENT_DATE - ($2 * INTERVAL '1 day')
             ORDER BY date DESC
-        """ % days
+        """
         
-        rows = await db_pool.fetch(stats_query, site_id)
+        rows = await db_pool.fetch(stats_query, site_id, days)
         
         daily_stats = [dict(row) for row in rows]
         
@@ -1711,15 +1715,14 @@ async def get_tcf_vendors(
             vendors.append({
                 "vendor_id": row['vendor_id'],
                 "name": row['name'],
-                "purposes": row['purposes'] or [],
-                "legitimate_interests": row['legitimate_interests'] or [],
-                "special_purposes": row['special_purposes'] or [],
-                "features": row['features'] or [],
-                "special_features": row['special_features'] or [],
-                "policy_url": row['policy_url']
+                "purposes": list(row['purposes']) if row['purposes'] else [],
+                "legitimate_interests": list(row['legitimate_interests']) if row['legitimate_interests'] else [],
+                "special_purposes": list(row['special_purposes']) if row['special_purposes'] else [],
+                "features": list(row['features']) if row['features'] else [],
+                "special_features": list(row['special_features']) if row['special_features'] else [],
+                "policy_url": row['policy_url'] or ""
             })
         
-        # TCF 2.2 Purposes
         purposes = [
             {"id": 1, "name": "Speicherung von und Zugriff auf Informationen", "description": "Cookies, Geräte- oder ähnliche Online-Kennungen"},
             {"id": 2, "name": "Einfache Anzeigen", "description": "Anzeige von Werbung"},
@@ -1737,10 +1740,13 @@ async def get_tcf_vendors(
             "success": True,
             "vendors": vendors,
             "purposes": purposes,
-            "tcf_version": "2.2"
+            "tcf_version": "2.2",
+            "vendor_count": len(vendors)
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"TCF vendor fetch failed: {str(e)}")
 
 
 @router.get("/api/cookie-compliance/tcf/config/{site_id}")
@@ -2066,23 +2072,38 @@ async def generate_cookie_policy(
     Generate cookie policy document from configured services
     """
     try:
-        # Get config and services
         config_query = """
-            SELECT c.*, 
-                   array_agg(s.name) as service_names,
-                   array_agg(s.category) as service_categories,
-                   array_agg(s.provider) as service_providers,
-                   array_agg(s.description) as service_descriptions,
-                   array_agg(s.cookies) as service_cookies
+            SELECT c.*,
+                   array_agg(s.name ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)        AS service_names,
+                   array_agg(s.category ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)    AS service_categories,
+                   array_agg(s.provider ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)    AS service_providers,
+                   array_agg(s.description ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL) AS service_descriptions,
+                   array_agg(s.cookies ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)     AS service_cookies
             FROM cookie_banner_configs c
-            LEFT JOIN cookie_services s ON s.service_key = ANY(c.services)
+            LEFT JOIN LATERAL jsonb_array_elements_text(c.services) AS svc_key ON true
+            LEFT JOIN cookie_services s ON s.service_key = svc_key
             WHERE c.site_id = $1 AND c.is_active = true
             GROUP BY c.id
         """
         row = await db_pool.fetchrow(config_query, site_id)
         
         if not row:
-            return {"success": False, "error": "Site not configured"}
+            policy = {
+                "title": "Cookie-Richtlinie" if lang == "de" else "Cookie Policy",
+                "last_updated": datetime.now().isoformat(),
+                "site_id": site_id,
+                "sections": [
+                    {
+                        "title": "Einleitung" if lang == "de" else "Introduction",
+                        "content": "Diese Website verwendet Cookies und ähnliche Technologien, um die Benutzererfahrung zu verbessern." if lang == "de" else "This website uses cookies and similar technologies to improve user experience."
+                    },
+                    {
+                        "title": "Ihre Rechte" if lang == "de" else "Your Rights",
+                        "content": "Sie können Ihre Einwilligung jederzeit widerrufen." if lang == "de" else "You can withdraw your consent at any time."
+                    }
+                ]
+            }
+            return {"success": True, "policy": policy, "format": "json", "configured": False}
         
         # Build policy document
         policy = {
@@ -2135,10 +2156,13 @@ async def generate_cookie_policy(
         return {
             "success": True,
             "policy": policy,
-            "format": "json"
+            "format": "json",
+            "configured": True
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Policy generation failed: {str(e)}")
 
 
 @router.get("/api/cookie-compliance/revisions/{site_id}")
@@ -2538,3 +2562,108 @@ async def get_agency_stats(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# =============================================================================
+# AGENCY-01: Client attribution per site (Phase 10)
+# =============================================================================
+
+@router.patch("/api/cookie-compliance/agency/sites/{site_id}/client")
+async def assign_client_to_site(
+    site_id: str,
+    body: ClientAssignRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """AGENCY-01: Assign client_name + client_email to a site owned by this agency."""
+    user = await get_current_user_required(credentials)
+    user_id = int(user.get("id") or user.get("user_id"))
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Datenbank nicht verfügbar.")
+    result = await db_pool.execute(
+        """UPDATE cookie_banner_configs
+           SET client_name = $1,
+               client_email = $2,
+               updated_at = NOW()
+           WHERE site_id = $3 AND user_id = $4""",
+        body.client_name, body.client_email, site_id, user_id,
+    )
+    # asyncpg returns 'UPDATE N' string — 0 means site not owned by user
+    if isinstance(result, str) and result.strip().upper().endswith(" 0"):
+        raise HTTPException(status_code=404, detail="Site nicht gefunden oder nicht zugewiesen.")
+    return {"ok": True, "site_id": site_id, "client_name": body.client_name, "client_email": body.client_email}
+
+
+# =============================================================================
+# AGENCY-02: Per-client grouping endpoint (Phase 10)
+# Companion to /agency/stats — adds grouped view; existing endpoint untouched.
+# =============================================================================
+
+@router.get("/api/cookie-compliance/agency/clients")
+async def get_agency_clients(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """AGENCY-02: Aggregated stats grouped by client_name for the current agency."""
+    user = await get_current_user_required(credentials)
+    user_id = int(user.get("id") or user.get("user_id"))
+    if not db_pool:
+        return {"clients": []}
+    rows = await db_pool.fetch(
+        """SELECT
+             c.client_name,
+             c.client_email,
+             COUNT(DISTINCT c.site_id)                                          AS site_count,
+             COALESCE(SUM(s.total_impressions), 0)                              AS total_impressions,
+             COALESCE(SUM(s.accepted_all + s.accepted_partial), 0)              AS total_accepted
+           FROM cookie_banner_configs c
+           LEFT JOIN cookie_compliance_stats s
+                  ON s.site_id = c.site_id
+                 AND s.date >= CURRENT_DATE - INTERVAL '30 days'
+           WHERE c.user_id = $1 AND c.client_name IS NOT NULL
+           GROUP BY c.client_name, c.client_email
+           ORDER BY c.client_name""",
+        user_id,
+    )
+    clients = []
+    for r in rows:
+        total = r["total_impressions"] or 0
+        accepted = r["total_accepted"] or 0
+        clients.append({
+            "client_name": r["client_name"],
+            "client_email": r["client_email"],
+            "site_count": r["site_count"],
+            "total_impressions": total,
+            "total_accepted": accepted,
+            "acceptance_rate": round(accepted / total, 4) if total else 0.0,
+        })
+    return {"clients": clients}
+
+
+# =============================================================================
+# AGENCY-03: Logo upload (Phase 10) — PNG only, 2 MB max
+# =============================================================================
+
+@router.post("/api/cookie-compliance/agency/logo")
+async def upload_agency_logo(
+    file: UploadFile = File(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """AGENCY-03: Upload agency logo (PNG only, max 2 MB) and store path on users row."""
+    user = await get_current_user_required(credentials)
+    user_id = int(user.get("id") or user.get("user_id"))
+    content = await file.read()
+    if file.content_type != "image/png":
+        raise HTTPException(status_code=400, detail="Nur PNG-Logos werden unterstützt (kein SVG/JPEG).")
+    if len(content) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Logo zu groß (max 2 MB).")
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Datenbank nicht verfügbar.")
+    info = await file_storage.save_file(
+        user_id=user_id,
+        file_content=content,
+        original_filename=file.filename or "logo.png",
+        system_id="logos",
+    )
+    await db_pool.execute(
+        "UPDATE users SET agency_logo_path = $1 WHERE id = $2",
+        info["relative_path"], user_id,
+    )
+    return {"relative_path": info["relative_path"], "filename": info["filename"]}
