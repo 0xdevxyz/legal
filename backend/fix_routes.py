@@ -161,12 +161,11 @@ async def generate_fix(
         
         # Generiere Fix
         try:
-            fix_data = await fix_generator.generate_fix(
-                issue_id=fix_request.issue_id,
-                issue_category=fix_request.issue_category,
-                user_id=user_id,
-                plan_type=plan_type
+            fix_result = await fix_generator.generate_fix(
+                issue={"id": fix_request.issue_id, "category": fix_request.issue_category},
+                context={"user_id": user_id, "plan_type": plan_type}
             )
+            fix_data = fix_generator.to_dict(fix_result) if hasattr(fix_result, 'data') else fix_result
             
             # ✅ Fix erfolgreich generiert -> Increment Counter
             async with db_pool.acquire() as conn:
@@ -593,12 +592,11 @@ async def propose_pr_via_github(
                 )
         
         # 2. Generiere Fix-Content (aus FixGenerator)
-        fix_data = await fix_generator.generate_fix(
-            issue_id=fix_record['issue_id'],
-            issue_category=fix_record['issue_category'],
-            user_id=user_id,
-            plan_type=current_user.get('plan', 'ai')
+        fix_result = await fix_generator.generate_fix(
+            issue={"id": fix_record['issue_id'], "category": fix_record['issue_category']},
+            context={"user_id": user_id, "plan_type": current_user.get('plan', 'ai')}
         )
+        fix_data = fix_generator.to_dict(fix_result) if hasattr(fix_result, 'data') else fix_result
         
         # 3. Erstelle Unified Diff
         code = fix_data.get('code', '')

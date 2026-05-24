@@ -105,6 +105,23 @@ MONTHLY_ADDONS = {
         "stripe_price_id": os.getenv("STRIPE_PRICE_PRIORITY_SUPPORT", "price_5678"),  # Set in Stripe Dashboard
         "badge": "PREMIUM",
         "compatible_plans": ["starter", "professional", "business", "enterprise"]
+    },
+    "agency_sites_extra": {
+        "name": "Extra Sites Paket",
+        "tagline": "25 weitere Client-Sites für Ihr Agentur-Dashboard",
+        "price_monthly": 200,
+        "currency": "eur",
+        "features": [
+            "25 zusätzliche verwaltete Sites",
+            "Gleiche Features wie Basis-Paket",
+            "Sofort aktiv nach Buchung",
+        ],
+        "limits_by_plan": {
+            "agency": {"extra_sites": 25},
+        },
+        "stripe_price_id": os.getenv("STRIPE_PRICE_AGENCY_SITES_EXTRA", "price_agency_extra"),
+        "badge": "ADD-ON",
+        "compatible_plans": ["agency"],
     }
 }
 

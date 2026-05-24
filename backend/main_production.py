@@ -79,7 +79,7 @@ from dependencies import get_current_user
 from email_service import email_service
 from news_service import NewsService
 from risk_calculator import RiskCalculator
-from fix_generator import FixGenerator
+from ai_fix_engine.unified_fix_engine import UnifiedFixEngine as FixGenerator
 from export_service import ExportService
 from firebase_auth import init_firebase_admin, verify_firebase_token
 
@@ -457,7 +457,7 @@ async def startup_event():
 
     # Initialize Fix Generator
     global fix_generator
-    fix_generator = FixGenerator(db_pool)
+    fix_generator = FixGenerator()
 
     # Initialize Export Service
     global export_service
