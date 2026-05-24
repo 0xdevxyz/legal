@@ -234,9 +234,13 @@ export default function AgencyPage() {
               Verwalten Sie mehrere Client-Websites, erhalten Sie aggregierte Consent-Statistiken
               und nutzen Sie White-Label-Funktionen mit dem Agency Plan.
             </p>
+            <p className="mt-2 text-white font-bold text-xl">
+              299 €<span className="text-zinc-400 text-sm font-normal">/Monat</span>
+              <span className="ml-3 text-zinc-400 text-sm font-normal">oder 2.990 €/Jahr</span>
+            </p>
             <ul className="mt-3 space-y-1">
               {[
-                'Bis zu 50 Client-Websites verwalten',
+                'Bis zu 25 Client-Websites verwalten',
                 'Aggregierte Consent-Statistiken',
                 'White-Label Cookie-Banner',
                 'Prioritäts-Support',
