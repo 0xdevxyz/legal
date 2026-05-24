@@ -42,6 +42,14 @@ export async function assignClient(
   );
 }
 
+/** GET /api/cookie-compliance/agency/logo — returns existing logo URL or null */
+export async function getAgencyLogo(): Promise<string | null> {
+  const res = await apiClient.get<{ logo_url: string | null }>(
+    '/api/cookie-compliance/agency/logo',
+  );
+  return res.data.logo_url ?? null;
+}
+
 /** POST /api/cookie-compliance/agency/logo (multipart/form-data) */
 export async function uploadAgencyLogo(file: File): Promise<LogoUploadResponse> {
   const formData = new FormData();

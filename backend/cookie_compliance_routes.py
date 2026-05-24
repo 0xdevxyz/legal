@@ -2680,6 +2680,44 @@ async def upload_agency_logo(
     return {"relative_path": info["relative_path"], "filename": info["filename"]}
 
 
+@router.get("/api/cookie-compliance/agency/logo")
+async def get_agency_logo(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """AGENCY-03: Return the logo URL if the agency has uploaded one."""
+    user = await get_current_user_required(credentials)
+    user_id = int(user.get("id") or user.get("user_id"))
+    if not db_pool:
+        return {"logo_url": None}
+    row = await db_pool.fetchrow(
+        "SELECT agency_logo_path FROM users WHERE id = $1", user_id
+    )
+    if not row or not row["agency_logo_path"]:
+        return {"logo_url": None}
+    return {"logo_url": "/api/cookie-compliance/agency/logo/file"}
+
+
+@router.get("/api/cookie-compliance/agency/logo/file")
+async def serve_agency_logo_file(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """AGENCY-03: Serve the stored agency logo PNG via FileStorageService."""
+    from fastapi.responses import Response as FastAPIResponse
+    user = await get_current_user_required(credentials)
+    user_id = int(user.get("id") or user.get("user_id"))
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Datenbank nicht verfügbar.")
+    row = await db_pool.fetchrow(
+        "SELECT agency_logo_path FROM users WHERE id = $1", user_id
+    )
+    if not row or not row["agency_logo_path"]:
+        raise HTTPException(status_code=404, detail="Kein Logo hochgeladen.")
+    logo_bytes = await file_storage.get_file(row["agency_logo_path"])
+    if logo_bytes is None:
+        raise HTTPException(status_code=404, detail="Logo-Datei nicht gefunden.")
+    return FastAPIResponse(content=logo_bytes, media_type="image/png")
+
+
 # =============================================================================
 # AGENCY-02 + AGENCY-03: PDF report download per client (Phase 10)
 # =============================================================================

@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Image as ImageIcon, Upload, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { uploadAgencyLogo } from '@/lib/agency-api';
+import { uploadAgencyLogo, getAgencyLogo } from '@/lib/agency-api';
 
 interface AgencyLogoUploadProps {
   onUploaded?: (relativePath: string) => void;
@@ -16,6 +16,23 @@ export function AgencyLogoUpload({ onUploaded }: AgencyLogoUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch existing logo on mount so it persists across page refreshes
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const logoUrl = await getAgencyLogo();
+        if (!cancelled && logoUrl) {
+          // Append a cache-busting param so stale browser cache doesn't show old logo
+          setPreview(`${logoUrl}?t=${Date.now()}`);
+        }
+      } catch {
+        // Silently ignore — user may not have uploaded a logo yet
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
@@ -31,10 +48,15 @@ export function AgencyLogoUpload({ onUploaded }: AgencyLogoUploadProps) {
       setError('Logo zu gross (max 2 MB).');
       return;
     }
-    setPreview(URL.createObjectURL(file));
+    // Show local preview immediately while uploading
+    const localPreview = URL.createObjectURL(file);
+    setPreview(localPreview);
     setUploading(true);
     try {
       const res = await uploadAgencyLogo(file);
+      // Switch to the persisted server URL so preview survives page refresh
+      setPreview(`/api/cookie-compliance/agency/logo/file?t=${Date.now()}`);
+      URL.revokeObjectURL(localPreview);
       setSuccess(`Hochgeladen: ${res.filename}`);
       onUploaded?.(res.relative_path);
     } catch (err: any) {
