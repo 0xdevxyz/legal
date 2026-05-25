@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: "Complyo Dashboards"
+    orgId: 1
+    folder: "Complyo"
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

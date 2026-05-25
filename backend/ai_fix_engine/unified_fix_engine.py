@@ -25,6 +25,11 @@ from .prompts_v2 import CODE_FIX_SCHEMA, TEXT_FIX_SCHEMA, WIDGET_FIX_SCHEMA, GUI
 from .validators import FixValidator, ValidationResult
 from .fix_quality_gate import FixQualityGate
 
+try:
+    from metrics import openrouter_requests_total as _openrouter_counter
+except Exception:
+    _openrouter_counter = None
+
 
 # =============================================================================
 # Data Classes
@@ -145,6 +150,8 @@ class AIApiClient:
                             cost = (input_tokens * pricing["input"] / 1_000_000 + 
                                    output_tokens * pricing["output"] / 1_000_000)
                             
+                            if _openrouter_counter:
+                                _openrouter_counter.labels(status="success").inc()
                             return AICallResult(
                                 success=True,
                                 content=content,
@@ -186,6 +193,8 @@ class AIApiClient:
         
         # All retries failed
         response_time = int((time.time() - start_time) * 1000)
+        if _openrouter_counter:
+            _openrouter_counter.labels(status="error").inc()
         return AICallResult(
             success=False,
             content=None,

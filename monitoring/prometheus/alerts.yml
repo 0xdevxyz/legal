@@ -1,0 +1,46 @@
+groups:
+  - name: complyo_alerts
+    rules:
+      - alert: ScanSuccessRateBelow90
+        expr: |
+          (
+            rate(complyo_scans_total_v2{status="success"}[5m])
+            /
+            (rate(complyo_scans_total_v2{status="success"}[5m]) + rate(complyo_scans_total_v2{status="error"}[5m]) + 0.0001)
+          ) < 0.90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scan success rate below 90%"
+          description: "Scan success rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      - alert: OpenRouterErrorsHigh
+        expr: |
+          (
+            rate(complyo_openrouter_total_v2{status="error"}[5m])
+            /
+            (rate(complyo_openrouter_total_v2[5m]) + 0.0001)
+          ) > 0.10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OpenRouter error rate above 10%"
+          description: "OpenRouter error rate is {{ $value | humanizePercentage }}."
+
+      - alert: DatabaseDown
+        expr: complyo_postgres_health_v2 == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Postgres database is down"
+
+      - alert: RedisDown
+        expr: complyo_redis_health_v2 == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
