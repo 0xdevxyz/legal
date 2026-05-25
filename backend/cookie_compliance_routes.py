@@ -1272,6 +1272,78 @@ async def scan_website(
         raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
 
 
+@router.post("/api/cookie-compliance/monitor/check/{site_id}")
+async def monitor_website_check(
+    site_id: str,
+    data: Dict[str, Any],
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Vergleicht einen frischen Scan mit der gespeicherten Baseline.
+    Gibt hinzugekommene und entfernte Services zurück.
+    """
+    try:
+        url = data.get('url')
+        if not url:
+            raise HTTPException(status_code=400, detail="URL required")
+
+        # Gespeicherte Services aus der Config laden
+        config_row = await db_pool.fetchrow("""
+            SELECT services, last_scan_url, scan_completed_at
+            FROM cookie_banner_configs
+            WHERE site_id = $1
+        """, site_id)
+
+        stored_services: list = []
+        if config_row and config_row['services']:
+            raw = config_row['services']
+            if isinstance(raw, str):
+                raw = json.loads(raw)
+            if isinstance(raw, list):
+                stored_services = raw
+
+        # Frischen Scan durchführen
+        scan_result = await cookie_scanner.scan_website(url)
+
+        if scan_result.get('error'):
+            return {"success": False, "error": scan_result['error']}
+
+        # Erkannte Services mit DB abgleichen
+        new_service_keys = scan_result.get('detected_services', [])
+        matched_services = []
+        if new_service_keys:
+            rows = await db_pool.fetch("""
+                SELECT service_key, name, category
+                FROM cookie_services
+                WHERE service_key = ANY($1::text[]) AND is_active = true
+            """, new_service_keys)
+            matched_services = [dict(row) for row in rows]
+
+        current_keys = {s['service_key'] for s in matched_services}
+        stored_keys = set(stored_services)
+
+        new_services = [s for s in matched_services if s['service_key'] not in stored_keys]
+        removed_services = list(stored_keys - current_keys)
+        has_changes = bool(new_services or removed_services)
+
+        return {
+            "success": True,
+            "site_id": site_id,
+            "has_changes": has_changes,
+            "new_services": new_services,
+            "removed_services": removed_services,
+            "current_services": matched_services,
+            "baseline_services": stored_services,
+            "scan_timestamp": scan_result.get('scan_timestamp'),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Monitor check error for {site_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Monitor check failed: {str(e)}")
+
+
 @router.post("/api/cookie-compliance/scan/deep")
 async def scan_website_deep(
     request: Request,

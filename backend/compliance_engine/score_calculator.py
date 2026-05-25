@@ -24,26 +24,50 @@ class ComplianceIssue:
 
 class ScoreCalculator:
     """
-    Deterministische Score-Berechnung für Websites
-    
+    Deterministische Score-Berechnung für Websites — Single Source of Truth (v2.0)
+
     GARANTIEN:
     - Gleiche Issues → Gleicher Score (100% deterministisch)
     - Keine externen API-Calls während Scoring
     - Keine Zeit-abhängigen Berechnungen
     - Keine Random-Elemente
+
+    FORMEL v2.0:
+    - Pro Säule: max(0, 100 - (critical × 25 + warning × 8))
+    - Fehlendes Kern-Element (Impressum, Datenschutz, Cookie-Banner, A11y-Widget): 0
+    - Gesamtscore: gewichteter Mittelwert über Säulen
     """
-    
-    # Scoring-Gewichte (einmalig definiert)
-    WEIGHTS = {
-        "critical": -20,      # Ein Critical Issue = -20 Punkte
-        "warning": -5,         # Ein Warning = -5 Punkte
-        "info": 0              # Info-Level zählt nicht
+
+    FORMULA_VERSION = "v2.0"
+
+    # Pillar-Gewichte (Summe = 1.0)
+    PILLAR_WEIGHTS: Dict[str, float] = {
+        "accessibility": 0.15,   # BFSG ab 06/2025 verpflichtend
+        "gdpr":          0.25,   # Kernanforderung, höchste Bußgelder
+        "legal":         0.20,   # Impressum/AGB = TMG-Pflicht
+        "cookies":       0.20,   # TTDSG + EuGH C-673/17
+        "security":      0.15,   # DSGVO Art. 32 technische Schutzmaßnahmen
+        "shop":          0.05,   # Nur E-Commerce-relevant
     }
-    
+
+    # Severity-Abzüge pro Pillar-Issue (v2.0)
+    SEVERITY_DEDUCTIONS = {
+        "critical": 25,
+        "warning":  8,
+        "info":     0,
+    }
+
+    # Legacy-Gewichte (v1, für Rückwärtskompatibilität in alten Methoden)
+    WEIGHTS = {
+        "critical": -20,
+        "warning": -5,
+        "info": 0,
+    }
+
     # Boni (DETERMINISTISCHE Bedingungen nur!)
     BONUSES = {
-        "tcf_complete": 5,     # TCF vollständig implementiert UND geprüft
-        "gdpr_compliant": 3,   # Alle DSGVO-Anforderungen erfüllt
+        "tcf_complete": 5,
+        "gdpr_compliant": 3,
     }
     
     @staticmethod
@@ -94,6 +118,46 @@ class ScoreCalculator:
         # 5. Runden für Konsistenz
         return round(final_score)
     
+    @staticmethod
+    def calculate_pillar_score(critical_count: int, warning_count: int, has_missing_core: bool = False) -> int:
+        """
+        Berechne Score für eine einzelne Compliance-Säule (v2.0).
+
+        Args:
+            critical_count: Anzahl Critical-Issues in dieser Säule
+            warning_count:  Anzahl Warning-Issues in dieser Säule
+            has_missing_core: True wenn das Kern-Element fehlt (Impressum, Datenschutz, etc.)
+
+        Returns:
+            int: Score 0-100
+        """
+        if has_missing_core:
+            return 0
+        score = 100 - (critical_count * ScoreCalculator.SEVERITY_DEDUCTIONS["critical"]
+                       + warning_count * ScoreCalculator.SEVERITY_DEDUCTIONS["warning"])
+        return max(0, score)
+
+    @staticmethod
+    def calculate_overall_score(pillar_scores: Dict[str, int]) -> int:
+        """
+        Berechne gewichteten Gesamt-Score aus Säulen-Scores (v2.0).
+
+        Args:
+            pillar_scores: {"gdpr": 100, "legal": 85, "cookies": 70, ...}
+
+        Returns:
+            int: Gewichteter Gesamtscore 0-100
+        """
+        total = 0.0
+        total_weight = 0.0
+        for pillar, weight in ScoreCalculator.PILLAR_WEIGHTS.items():
+            score = pillar_scores.get(pillar, 100)  # Fehlende Säule = 100 (keine Issues)
+            total += score * weight
+            total_weight += weight
+        if total_weight == 0:
+            return 0
+        return round(total / total_weight)
+
     @staticmethod
     def _has_tcf_compliant_status(issues: List[ComplianceIssue]) -> bool:
         """

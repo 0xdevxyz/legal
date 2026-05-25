@@ -337,9 +337,11 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             pillar_scores = _calculate_pillar_scores(structured_issues)
             logger.info(f"✅ Säulen-Scores berechnet: {[(p.pillar, p.score) for p in pillar_scores]}")
             
-            # ✅ FIX: Berechne Gesamt-Score als Durchschnitt der 4 Säulen
-            overall_compliance_score = int(sum(p.score for p in pillar_scores) / len(pillar_scores)) if pillar_scores else 0
-            logger.info(f"✅ Gesamt-Compliance-Score (Durchschnitt): {overall_compliance_score}/100")
+            # Gesamtscore = gewichteter Mittelwert über alle Säulen (ScoreCalculator SSOT v2.0)
+            from compliance_engine.score_calculator import ScoreCalculator as _SC
+            _pillar_score_map = {p.pillar: p.score for p in pillar_scores}
+            overall_compliance_score = _SC.calculate_overall_score(_pillar_score_map)
+            logger.info(f"✅ Gesamt-Compliance-Score (gewichtet v2.0): {overall_compliance_score}/100 | Säulen: {_pillar_score_map}")
             
             # ✅ PERSISTENCE: Save website and scan to database
             from main_production import db_pool
@@ -522,10 +524,12 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
 
 def _calculate_pillar_scores(issues: List[ComplianceIssue]) -> List[PillarScore]:
     """
-    Berechnet Säulen-Scores basierend auf Backend-Logik
-    Formel: 100 - (critical × 60 + warning × 15), max 40 bei critical > 0
+    Berechnet Säulen-Scores — delegiert an ScoreCalculator (SSOT v2.0).
+    Formel: max(0, 100 - (critical × 25 + warning × 8)), fehlendes Kern-Element → 0.
+    Gesamtscore wird über PILLAR_WEIGHTS gewichtet (siehe ScoreCalculator).
     """
-    # Säulen-Mapping (Backend-Logik)
+    from compliance_engine.score_calculator import ScoreCalculator
+
     pillar_mapping = {
         'accessibility': ['barrierefreiheit', 'kontraste', 'tastaturbedienung'],
         'gdpr':          ['datenschutz', 'tracking', 'datenverarbeitung', 'avv'],
@@ -534,52 +538,33 @@ def _calculate_pillar_scores(issues: List[ComplianceIssue]) -> List[PillarScore]
         'security':      ['security'],
         'shop':          ['shop', 'widerrufsbelehrung', 'preisangaben'],
     }
-    
+
     pillar_scores = []
-    
+
     for pillar, categories in pillar_mapping.items():
-        # Filtere Issues nach Säule
         pillar_issues = [
-            issue for issue in issues 
+            issue for issue in issues
             if issue.category.lower() in categories
         ]
-        
-        # ✅ NEUE LOGIK: Prüfe ob Hauptelement komplett fehlt
-        has_missing_core_element = any(
-            getattr(issue, 'is_missing', False) for issue in pillar_issues
+
+        has_missing_core = any(getattr(issue, 'is_missing', False) for issue in pillar_issues)
+        critical_count = sum(1 for i in pillar_issues if i.severity == 'critical')
+        warning_count  = sum(1 for i in pillar_issues if i.severity == 'warning')
+
+        score = ScoreCalculator.calculate_pillar_score(
+            critical_count=critical_count,
+            warning_count=warning_count,
+            has_missing_core=has_missing_core,
         )
-        
-        if has_missing_core_element:
-            # Wenn Hauptelement fehlt (Impressum, Datenschutz, Cookie-Banner, A11y-Widget):
-            # Score = 0 Punkte
-            score = 0
-            critical_count = sum(1 for i in pillar_issues if i.severity == 'critical')
-            warning_count = sum(1 for i in pillar_issues if i.severity == 'warning')
-        else:
-            # Normale Berechnung: Element vorhanden, aber fehlerhaft/unvollständig
-            # Zähle Severity
-            critical_count = sum(1 for i in pillar_issues if i.severity == 'critical')
-            warning_count = sum(1 for i in pillar_issues if i.severity == 'warning')
-            
-            # Berechne Score nach Backend-Formel
-            # CRITICAL: -60 Punkte pro Issue
-            # WARNING: -15 Punkte pro Issue
-            score = 100 - (critical_count * 60 + warning_count * 15)
-            
-            # Wenn CRITICAL Issues vorhanden: maximal Score 40
-            if critical_count > 0:
-                score = min(score, 40)
-            
-            score = max(0, score)  # Nie negativ
-        
+
         pillar_scores.append(PillarScore(
             pillar=pillar,
             score=score,
             issues_count=len(pillar_issues),
             critical_count=critical_count,
-            warning_count=warning_count
+            warning_count=warning_count,
         ))
-    
+
     return pillar_scores
 
 def _determine_issue_area(category: str) -> str:

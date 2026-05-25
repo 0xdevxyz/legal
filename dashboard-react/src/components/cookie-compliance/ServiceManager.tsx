@@ -29,7 +29,17 @@ interface Service {
   name: string;
   category: string;
   provider: string;
-  template: any;
+  description?: string;
+  cookies?: any[];
+  privacy_url?: string;
+  provider_privacy_url?: string;
+  template: {
+    description_de?: string;
+    cookies?: Array<string | { name: string; duration?: string; purpose?: string; type?: string }>;
+    data_processing_countries?: string[];
+    privacy_policy_url?: string;
+    [key: string]: any;
+  } | null;
   plan_required: string;
 }
 
@@ -456,9 +466,9 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
           </div>
           
           {/* Description */}
-          {service.template?.description_de && (
+          {(service.template?.description_de || service.description) && (
             <p className="text-sm text-gray-400 line-clamp-2">
-              {service.template.description_de}
+              {service.template?.description_de || service.description}
             </p>
           )}
           
@@ -483,33 +493,56 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
           {/* Expandable Details */}
           {isExpanded && (
             <div className="space-y-3 pt-3 border-t border-gray-700">
-              {service.template?.cookies && (
+              {/* Cookies */}
+              {((service.template?.cookies?.length ?? 0) > 0 || (service.cookies?.length ?? 0) > 0) && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-300 mb-1">Cookies:</p>
+                  <p className="text-xs font-semibold text-gray-300 mb-1.5">Cookies:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {(service.template?.cookies || service.cookies || []).map((c: any, i: number) => (
+                      <span
+                        key={i}
+                        className="px-2 py-0.5 text-xs bg-gray-700/70 text-gray-300 rounded border border-gray-600"
+                      >
+                        {typeof c === 'string' ? c : c.name}
+                        {typeof c !== 'string' && c.duration && (
+                          <span className="text-gray-500 ml-1">· {c.duration}</span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Data Processing Countries */}
+              {(service.template?.data_processing_countries?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-300 mb-1">Datenverarbeitung in:</p>
                   <p className="text-xs text-gray-400">
-                    {service.template.cookies.join(', ')}
+                    {service.template!.data_processing_countries!.join(', ')}
                   </p>
                 </div>
               )}
-              
-              {service.template?.data_processing_countries && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-300 mb-1">Datenverarbeitung:</p>
-                  <p className="text-xs text-gray-400">
-                    {service.template.data_processing_countries.join(', ')}
-                  </p>
-                </div>
-              )}
-              
-              {service.template?.privacy_policy_url && (
+
+              {/* Privacy Policy */}
+              {(service.template?.privacy_policy_url || service.privacy_url || service.provider_privacy_url) && (
                 <a
-                  href={service.template.privacy_policy_url}
+                  href={service.template?.privacy_policy_url || service.privacy_url || service.provider_privacy_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-xs text-orange-400 hover:text-orange-300 transition-colors"
                 >
                   Datenschutzerklärung <ExternalLink className="w-3 h-3" />
                 </a>
+              )}
+
+              {/* Fallback when nothing available */}
+              {!(service.template?.cookies?.length) &&
+               !(service.cookies?.length) &&
+               !(service.template?.data_processing_countries?.length) &&
+               !service.template?.privacy_policy_url &&
+               !service.privacy_url &&
+               !service.provider_privacy_url && (
+                <p className="text-xs text-gray-500 italic">Keine weiteren Details verfügbar.</p>
               )}
             </div>
           )}

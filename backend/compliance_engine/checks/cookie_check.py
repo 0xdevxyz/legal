@@ -176,26 +176,25 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None) -
                     has_cookie_banner = True
                     break
     
+    # Tracking-Erkennung — wird sowohl ohne als auch mit Banner benötigt
+    has_tracking = False
+    tracking_patterns = [
+        r'google-analytics',
+        r'googletagmanager',
+        r'facebook.*pixel',
+        r'hotjar',
+        r'matomo',
+        r'analytics',
+        r'tracking',
+    ]
+    for script in scripts:
+        src = script.get('src', '').lower()
+        for pattern in tracking_patterns:
+            if re.search(pattern, src, re.I):
+                has_tracking = True
+                break
+
     if not has_cookie_banner:
-        # Prüfe ob Tracking-Scripts vorhanden sind
-        has_tracking = False
-        tracking_patterns = [
-            r'google-analytics',
-            r'googletagmanager',
-            r'facebook.*pixel',
-            r'hotjar',
-            r'matomo',
-            r'analytics',
-            r'tracking'
-        ]
-        
-        for script in scripts:
-            src = script.get('src', '').lower()
-            for pattern in tracking_patterns:
-                if re.search(pattern, src, re.I):
-                    has_tracking = True
-                    break
-        
         if has_tracking:
             # Tracking vorhanden aber kein Banner → alle Sub-Issues als critical
             issues.append(asdict(CookieIssue(
@@ -289,7 +288,26 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None) -
                 is_missing=False
             )))
     else:
-        # Banner vorhanden — Qualitätsprüfung
+        # Banner vorhanden — Qualitätsprüfung nur wenn Tracking-Cookies gesetzt werden.
+        # Ohne Tracking: kein Consent nötig → keine Issues, Score 100.
+        if not has_tracking:
+            issues.append(asdict(CookieIssue(
+                category='cookies',
+                severity='info',
+                title='Kein Cookie-Banner erforderlich',
+                description=(
+                    'Es werden keine einwilligungspflichtigen Cookies gesetzt. '
+                    'Ein Cookie-Banner ist nach TDDDG §25 Abs. 2 nicht erforderlich, '
+                    'solange ausschließlich technisch notwendige Cookies genutzt werden.'
+                ),
+                risk_euro=0,
+                recommendation='Kein Handlungsbedarf. Sobald Tracking oder Analytics eingesetzt werden, muss ein Consent-Banner ergänzt werden.',
+                legal_basis='TDDDG §25 Abs. 2 (Ausnahme technisch notwendige Cookies)',
+                auto_fixable=False,
+                is_missing=False,
+            )))
+            return issues
+
         html_text = str(soup).lower()
 
         # 1. Opt-In vs. Opt-Out — gibt es einen Akzeptieren-Button?

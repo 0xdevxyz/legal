@@ -5,7 +5,7 @@ export const fetchCache = 'force-no-store'
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Cookie, Settings, Eye, Code, BarChart3, CheckCircle, AlertCircle, Globe, Lock, Zap, CreditCard, TrendingUp, Users, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Cookie, Settings, Eye, Code, BarChart3, CheckCircle, AlertCircle, Globe, Lock, Zap, CreditCard, TrendingUp, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -21,6 +21,8 @@ import IntegrationGuide from '@/components/cookie-compliance/IntegrationGuide';
 import ConsentStatistics from '@/components/cookie-compliance/ConsentStatistics';
 import RevocationChart from '@/components/cookie-compliance/RevocationChart';
 import AdvancedSettings from '@/components/cookie-compliance/AdvancedSettings';
+import CookieSetupWizard from '@/components/cookie-compliance/CookieSetupWizard';
+import ScanMonitor from '@/components/cookie-compliance/ScanMonitor';
 
 export default function CookieCompliancePage() {
   const router = useRouter();
@@ -32,6 +34,7 @@ export default function CookieCompliancePage() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
   const [quickStats, setQuickStats] = useState<any>(null);
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
 
   const [websiteLocked, setWebsiteLocked] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState<string>('');
@@ -144,6 +147,13 @@ export default function CookieCompliancePage() {
       setLoading(false);
     }
   };
+
+  // Wizard nach Laden einblenden wenn noch kein Scan durchgeführt wurde
+  useEffect(() => {
+    if (!loading && !config?.scan_completed && (!config?.services || (config.services as string[]).length === 0)) {
+      setShowSetupWizard(true);
+    }
+  }, [loading, config]);
   
   const generateSiteIdFromUrl = (url: string): string => {
     try {
@@ -251,6 +261,16 @@ export default function CookieCompliancePage() {
 
   return (
     <main role="main" aria-label="Cookie-Compliance Management" className="min-h-screen bg-gray-900 text-white">
+      {/* Ersteinrichtungs-Wizard */}
+      {showSetupWizard && (
+        <CookieSetupWizard
+          websiteUrl={websiteUrl}
+          websiteLocked={websiteLocked}
+          siteId={siteId}
+          onComplete={() => { setShowSetupWizard(false); loadConfig(); }}
+          onSkip={() => setShowSetupWizard(false)}
+        />
+      )}
       {/* Header */}
       <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8">
@@ -470,6 +490,12 @@ export default function CookieCompliancePage() {
                   </button>
                 ))}
               </div>
+              <button
+                onClick={() => setShowSetupWizard(true)}
+                className="mt-3 w-full text-center text-xs text-orange-400 hover:text-orange-300 underline transition-colors"
+              >
+                Ersteinrichtungs-Guide öffnen →
+              </button>
             </CardContent>
           </Card>
         )}
@@ -490,11 +516,12 @@ export default function CookieCompliancePage() {
                     <SelectItem value="advanced" className="text-white">Erweitert</SelectItem>
                     <SelectItem value="integration" className="text-white">Integration</SelectItem>
                     <SelectItem value="statistics" className="text-white">Statistiken</SelectItem>
+                    <SelectItem value="monitoring" className="text-white">Überwachung</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               {/* Desktop: Tab bar */}
-              <TabsList className="hidden sm:grid w-full grid-cols-5 bg-gray-900/50 p-1 h-auto">
+              <TabsList className="hidden sm:grid w-full grid-cols-6 bg-gray-900/50 p-1 h-auto">
                 <TabsTrigger
                   value="design"
                   className="gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white transition-all py-3"
@@ -530,6 +557,13 @@ export default function CookieCompliancePage() {
                 >
                   <BarChart3 className="w-4 h-4 flex-shrink-0" />
                   <span>Statistiken</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="monitoring"
+                  className="relative gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white transition-all py-3"
+                >
+                  <Radio className="w-4 h-4 flex-shrink-0" />
+                  <span>Überwachung</span>
                 </TabsTrigger>
               </TabsList>
               
@@ -570,6 +604,15 @@ export default function CookieCompliancePage() {
                 <div className="mt-6">
                   <RevocationChart siteId={siteId} />
                 </div>
+              </TabsContent>
+
+              <TabsContent value="monitoring">
+                <ScanMonitor
+                  siteId={siteId}
+                  websiteUrl={websiteUrl}
+                  lastScanDate={config?.scan_completed_at}
+                  storedServices={Array.isArray(config?.services) ? config.services : []}
+                />
               </TabsContent>
             </Tabs>
           </CardContent>

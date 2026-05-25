@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect as useEffectAlias } from 'react';
-import { Globe, RefreshCw, AlertTriangle, AlertCircle, CheckCircle, Bot, Download, Eye, Shield, FileText, Cookie, ChevronDown, ListChecks } from 'lucide-react';
+import { Globe, RefreshCw, AlertTriangle, AlertCircle, CheckCircle, Bot, Download, Eye, Shield, FileText, Cookie, ChevronDown, ListChecks, Lock } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/button';
@@ -294,19 +294,27 @@ export const WebsiteAnalysis: React.FC = () => {
       color: 'orange',
       description: 'Cookie-Banner & Consent',
       keywords: ['cookie', 'consent', 'tracking', 'ttdsg']
+    },
+    {
+      id: 'security',
+      name: 'Sicherheits-Header',
+      icon: Lock,
+      color: 'red',
+      description: 'CSP, HSTS & HTTP-Header',
+      keywords: ['security', 'csp', 'content-security-policy', 'hsts', 'x-frame', 'header', 'strict-transport']
     }
   ];
 
   const categorizeIssue = (issue: ComplianceIssue): string => {
     const text = `${issue.title} ${issue.description} ${issue.category}`.toLowerCase();
-    
+
     for (const pillar of pillars) {
       if (pillar.keywords.some(keyword => text.includes(keyword))) {
         return pillar.id;
       }
     }
-    
-    return 'legal'; // Default
+
+    return 'legal'; // Default für TMG/UWG-Issues ohne explizites Keyword
   };
 
   // ✅ NEU: Verwende Backend-Säulen-Scores (wenn vorhanden), sonst Fallback
@@ -561,15 +569,17 @@ export const WebsiteAnalysis: React.FC = () => {
                     >
                       <div className="flex items-center gap-4">
                         <div className={`p-3 rounded-xl bg-gradient-to-br ${
-                          pillar.color === 'blue' ? 'from-sky-500/20 to-blue-500/20' :
-                          pillar.color === 'green' ? 'from-green-500/20 to-emerald-500/20' :
+                          pillar.color === 'blue'   ? 'from-sky-500/20 to-blue-500/20' :
+                          pillar.color === 'green'  ? 'from-green-500/20 to-emerald-500/20' :
                           pillar.color === 'purple' ? 'from-purple-500/20 to-pink-500/20' :
+                          pillar.color === 'red'    ? 'from-red-500/20 to-rose-500/20' :
                           'from-orange-500/20 to-red-500/20'
                         }`}>
                           <Icon className={`w-6 h-6 ${
-                            pillar.color === 'blue' ? 'text-sky-400' :
-                            pillar.color === 'green' ? 'text-green-400' :
+                            pillar.color === 'blue'   ? 'text-sky-400' :
+                            pillar.color === 'green'  ? 'text-green-400' :
                             pillar.color === 'purple' ? 'text-purple-400' :
+                            pillar.color === 'red'    ? 'text-red-400' :
                             'text-orange-400'
                           }`} />
                         </div>
