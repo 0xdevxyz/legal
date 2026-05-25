@@ -1,0 +1,6 @@
+{
+  "_note": "Snapshot pending – run: curl http://localhost:8002/openapi.json > data/hardening-2026-05-25/contracts/openapi.snapshot.json after docker compose build backend",
+  "openapi": "3.1.0",
+  "info": {"title": "Complyo API", "version": "1.0"},
+  "paths": {}
+}

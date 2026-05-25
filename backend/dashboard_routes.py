@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import logging
 from dependencies import get_current_user
+from schemas.dashboard import DashboardMetrics as _DashboardMetricsSchema
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class DashboardMetrics(BaseModel):
     scoreTrend: Optional[float] = None  # Prozentuale Änderung zum Vormonat
     criticalTrend: Optional[int] = None  # Absolute Änderung kritischer Issues
 
-@dashboard_router.get("/metrics", response_model=DashboardMetrics)
+@dashboard_router.get("/metrics", response_model=_DashboardMetricsSchema)
 async def get_dashboard_metrics(user: Dict[str, Any] = Depends(get_current_user)):
     """
     Get aggregated dashboard metrics for the authenticated user

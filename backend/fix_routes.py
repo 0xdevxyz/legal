@@ -13,6 +13,7 @@ from datetime import datetime
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 import asyncpg
+from schemas.fixes import FixGenerateResponse as _FixGenerateResponse
 from dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ class FixOutcomeRequest(BaseModel):
     decision: str
     rejection_reason: Optional[str] = None
 
-@fix_router.post("/generate", response_model=Dict[str, Any])
+@fix_router.post("/generate", response_model=_FixGenerateResponse)
 @limiter.limit("10/hour")  # AI Plan: 10 Fix-Generierungen pro Stunde
 async def generate_fix(
     request: Request,

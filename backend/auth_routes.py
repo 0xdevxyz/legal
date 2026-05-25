@@ -9,6 +9,7 @@ import os
 from datetime import datetime, timedelta
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from schemas.auth import LoginResponse, RegisterResponse, RefreshResponse, MeResponse
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ async def init_user_limits(user_id: int, plan_type: str):
             )
             logger.info(f"User limits initialized for user {user_id} with plan {plan_type}")
 
-@router.post("/register", response_model=TokenResponse)
+@router.post("/register", response_model=RegisterResponse)
 @limiter.limit("3/hour")
 async def register(request: Request, body: RegisterRequest):
     """Register a new user"""
@@ -164,7 +165,7 @@ async def register(request: Request, body: RegisterRequest):
             detail="Registrierung fehlgeschlagen"
         )
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=LoginResponse)
 @limiter.limit("5/minute")
 async def login(request: Request, body: LoginRequest):
     """Login user"""
@@ -236,7 +237,7 @@ async def login(request: Request, body: LoginRequest):
             detail="Login fehlgeschlagen"
         )
 
-@router.post("/refresh")
+@router.post("/refresh", response_model=RefreshResponse)
 @limiter.limit("10/minute")
 async def refresh_token(request: Request, body: RefreshRequest):
     """Refresh access token with token rotation"""
@@ -496,7 +497,7 @@ async def complete_onboarding(credentials: HTTPAuthorizationCredentials = Depend
 
 from dependencies import get_current_user
 
-@router.get("/me")
+@router.get("/me", response_model=MeResponse)
 async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     """Get current user information"""
     return current_user
