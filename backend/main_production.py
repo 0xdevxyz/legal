@@ -39,9 +39,15 @@ if _sentry_dsn:
         send_default_pii=False,
     )
 
-from prometheus_client import Counter as _PCounter, Histogram as _PHistogram, generate_latest as _prom_generate, CONTENT_TYPE_LATEST as _PROM_CT
+from prometheus_client import Counter as _PCounter, Histogram as _PHistogram, Gauge as _PGauge, generate_latest as _prom_generate, CONTENT_TYPE_LATEST as _PROM_CT
 _http_requests_total = _PCounter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
 _http_request_duration = _PHistogram("http_request_duration_seconds", "HTTP request duration", ["method", "endpoint"])
+_scan_requests_total = _PCounter("complyo_scans_total", "Scan requests", ["status"])
+_fix_requests_total = _PCounter("complyo_fixes_total", "Fix generation requests", ["status"])
+_openrouter_requests_total = _PCounter("complyo_openrouter_total", "OpenRouter API calls", ["status"])
+_redis_health_gauge = _PGauge("complyo_redis_health", "Redis health (1=up, 0=down)")
+_postgres_health_gauge = _PGauge("complyo_postgres_health", "Postgres health (1=up, 0=down)")
+_5xx_errors_total = _PCounter("complyo_5xx_total", "5xx errors", ["endpoint"])
 from compliance_engine.scanner import ComplianceScanner
 from compliance_engine.workflow_engine import workflow_engine, UserSkillLevel
 from compliance_engine.workflow_integration import WorkflowIntegration
@@ -264,6 +270,8 @@ async def prometheus_middleware(request: Request, call_next):
     endpoint = request.url.path
     _http_requests_total.labels(method=request.method, endpoint=endpoint, status=str(response.status_code)).inc()
     _http_request_duration.labels(method=request.method, endpoint=endpoint).observe(duration)
+    if response.status_code >= 500:
+        _5xx_errors_total.labels(endpoint=endpoint).inc()
     return response
 
 # Security
@@ -716,6 +724,7 @@ async def root():
 @app.get("/health")
 async def health_check():
     import time
+    from metrics import redis_health_gauge, postgres_health_gauge
     checks = {}
 
     # Database
@@ -725,10 +734,13 @@ async def health_check():
             async with db_pool.acquire() as conn:
                 await conn.fetchval("SELECT 1")
             checks["database"] = {"status": "up", "latency_ms": round((time.monotonic() - db_start) * 1000, 2)}
+            postgres_health_gauge.set(1)
         else:
             checks["database"] = {"status": "down", "latency_ms": None}
+            postgres_health_gauge.set(0)
     except Exception as e:
         checks["database"] = {"status": "error", "error": str(e)}
+        postgres_health_gauge.set(0)
 
     # Redis
     redis_start = time.monotonic()
@@ -746,8 +758,10 @@ async def health_check():
             )
         _r.ping()
         checks["redis"] = {"status": "up", "latency_ms": round((time.monotonic() - redis_start) * 1000, 2)}
+        redis_health_gauge.set(1)
     except Exception:
         checks["redis"] = {"status": "down"}
+        redis_health_gauge.set(0)
 
     # OpenRouter API key present
     checks["openrouter"] = {"status": "configured" if os.getenv("OPENROUTER_API_KEY") else "missing"}
