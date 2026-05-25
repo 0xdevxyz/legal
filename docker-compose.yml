@@ -184,10 +184,6 @@ services:
       - complyo-network
     restart: unless-stopped
 
-volumes:
-  postgres_data:
-  grafana_data:
-
   prometheus:
     image: prom/prometheus:latest
     container_name: complyo-prometheus
@@ -221,3 +217,7 @@ volumes:
     restart: unless-stopped
     depends_on:
       - prometheus
+
+volumes:
+  postgres_data:
+  grafana_data:

@@ -39,8 +39,8 @@ class DeploymentConfig:
     method: str
     credentials: Dict[str, str]
     target_path: str
+    files: List[Dict[str, str]]
     backup_before_deploy: bool = True
-    files: List[Dict[str, str]]  # [{'local_path': '...', 'remote_path': '...'}]
 
 
 class DeploymentEngine:
