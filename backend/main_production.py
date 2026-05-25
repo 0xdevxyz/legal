@@ -253,6 +253,7 @@ async def add_request_id(request: Request, call_next):
     request.state.request_id = request_id
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
+    response.headers["X-API-Version"] = "1.0"
     return response
 
 @app.middleware("http")
