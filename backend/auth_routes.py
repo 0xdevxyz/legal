@@ -380,7 +380,10 @@ async def oauth_token_pickup(request: Request):
 
 @router.post("/logout")
 async def logout(request: Request):
-    """Logout user: revoke refresh token and clear HttpOnly cookie"""
+    """Logout user: blacklist JTI, revoke refresh token, clear cookies"""
+    import jwt as _jwt
+    from dependencies import get_redis, get_settings
+
     token_from_cookie = request.cookies.get("refresh_token")
     token_from_body: Optional[str] = None
     try:
@@ -393,16 +396,82 @@ async def logout(request: Request):
     if token:
         await auth_service.revoke_refresh_token(token)
 
+    access_token: Optional[str] = None
+    cred_header = request.headers.get("Authorization", "")
+    if cred_header.startswith("Bearer "):
+        access_token = cred_header[7:]
+    if not access_token:
+        access_token = request.cookies.get("access_token")
+
+    if access_token and auth_service:
+        try:
+            settings = get_settings()
+            payload = _jwt.decode(
+                access_token,
+                settings.jwt_secret,
+                algorithms=["HS256"],
+                audience=settings.jwt_audience,
+                issuer=settings.jwt_issuer,
+            )
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                import time
+                ttl = max(int(exp - time.time()), 1)
+                await auth_service._blacklist_jti(jti, ttl)
+        except Exception:
+            pass
+
     is_secure = os.getenv("ENVIRONMENT", "production") == "production"
     response = JSONResponse({"message": "Logged out successfully"})
-    response.delete_cookie(
-        key="refresh_token",
-        path="/",
-        httponly=True,
-        secure=is_secure,
-        samesite="lax",
-        domain=COOKIE_DOMAIN,
-    )
+    response.delete_cookie(key="refresh_token", path="/", httponly=True, secure=is_secure, samesite="lax", domain=COOKIE_DOMAIN)
+    response.delete_cookie(key="access_token", path="/", httponly=True, secure=is_secure, samesite="lax", domain=COOKIE_DOMAIN)
+    return response
+
+
+@router.post("/logout-all")
+async def logout_all(request: Request):
+    """Logout all sessions for the current user: blacklist all JTIs, delete all sessions"""
+    import jwt as _jwt
+    from dependencies import get_settings, get_current_user
+
+    current_user: Optional[dict] = None
+    try:
+        from dependencies import get_settings as _gs, security as _sec
+        from fastapi.security import HTTPAuthorizationCredentials
+        cred_header = request.headers.get("Authorization", "")
+        token: Optional[str] = None
+        if cred_header.startswith("Bearer "):
+            token = cred_header[7:]
+        if not token:
+            token = request.cookies.get("access_token")
+        if token:
+            settings = get_settings()
+            payload = _jwt.decode(
+                token,
+                settings.jwt_secret,
+                algorithms=["HS256"],
+                audience=settings.jwt_audience,
+                issuer=settings.jwt_issuer,
+            )
+            raw_id = payload.get("user_id") or payload.get("id")
+            if raw_id:
+                current_user = {"id": int(raw_id)}
+    except Exception:
+        pass
+
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+    user_id = current_user["id"]
+    expire_seconds = auth_service.access_token_expire * 60
+    await auth_service.blacklist_all_user_jtis(user_id, expire_seconds)
+    await auth_service.revoke_all_sessions(user_id)
+
+    is_secure = os.getenv("ENVIRONMENT", "production") == "production"
+    response = JSONResponse({"message": "All sessions logged out"})
+    response.delete_cookie(key="refresh_token", path="/", httponly=True, secure=is_secure, samesite="lax", domain=COOKIE_DOMAIN)
+    response.delete_cookie(key="access_token", path="/", httponly=True, secure=is_secure, samesite="lax", domain=COOKIE_DOMAIN)
     return response
 
 @router.post("/complete-onboarding")

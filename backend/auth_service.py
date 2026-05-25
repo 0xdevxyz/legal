@@ -4,6 +4,7 @@ import jwt
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
+from uuid import uuid4
 import asyncpg
 import logging
 from fastapi import HTTPException
@@ -26,7 +27,7 @@ class AuthService:
             raise RuntimeError("❌ CRITICAL: JWT_SECRET environment variable is required!")
         self.jwt_issuer = os.getenv("FRONTEND_URL", "https://complyo.tech")
         self.jwt_audience = "complyo-api"
-        self.access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+        self.access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
         self.refresh_token_expire = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30")) * 24 * 60
     
     async def get_user_by_email(self, email: str) -> Optional[Dict]:
@@ -161,20 +162,70 @@ class AuthService:
         return user_dict
     
     def create_access_token(self, user_id) -> str:
-        """Create JWT access token"""
+        """Create JWT access token with jti, iat, nbf claims"""
+        now = _utcnow()
+        now_ts = int(now.timestamp())
+        expire_seconds = self.access_token_expire * 60
+        jti = str(uuid4())
         payload = {
             "id": str(user_id),
             "user_id": str(user_id),
-            "exp": _utcnow() + timedelta(minutes=self.access_token_expire),
-            "iat": _utcnow(),
+            "jti": jti,
+            "iat": now_ts,
+            "nbf": now_ts - 30,
+            "exp": now + timedelta(minutes=self.access_token_expire),
             "iss": self.jwt_issuer,
             "aud": self.jwt_audience,
             "type": "access"
         }
-        return jwt.encode(payload, self.jwt_secret, algorithm="HS256")
+        token = jwt.encode(payload, self.jwt_secret, algorithm="HS256")
+
+        if self.redis:
+            import asyncio
+            uid = int(user_id)
+            set_key = f"jwt:user_jtis:{uid}"
+            max_ttl = expire_seconds + 60
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.ensure_future(self._register_jti_in_set(set_key, jti, max_ttl))
+            except Exception:
+                pass
+
+        return token
+
+    async def _register_jti_in_set(self, set_key: str, jti: str, ttl: int):
+        """Add jti to user's active-JTI set in Redis (best-effort)."""
+        if not self.redis:
+            return
+        try:
+            await self.redis.sadd(set_key, jti)
+            await self.redis.expire(set_key, ttl)
+        except Exception as e:
+            logger.warning(f"Redis SADD jti failed: {e}")
+
+    async def _blacklist_jti(self, jti: str, ttl_seconds: int):
+        """Put jti on the Redis blacklist with TTL = remaining token lifetime."""
+        if not self.redis:
+            return
+        try:
+            await self.redis.setex(f"jwt:blacklist:{jti}", ttl_seconds, "1")
+        except Exception as e:
+            logger.warning(f"Redis blacklist jti failed: {e}")
+
+    async def _is_jti_blacklisted(self, jti: str) -> bool:
+        """Return True if jti is on the Redis blacklist."""
+        if not self.redis:
+            return False
+        try:
+            result = await self.redis.get(f"jwt:blacklist:{jti}")
+            return result is not None
+        except Exception as e:
+            logger.warning(f"Redis blacklist check failed: {e}")
+            return False
     
-    async def create_refresh_token(self, user_id) -> str:
-        """Create and store refresh token"""
+    async def create_refresh_token(self, user_id, user_agent: str = None, ip_address: str = None) -> str:
+        """Create and store refresh token with session metadata"""
         token = secrets.token_urlsafe(64)
         user_id = int(user_id)
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=self.refresh_token_expire)
@@ -182,10 +233,10 @@ class AuthService:
         async with self.db_pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO user_sessions (user_id, refresh_token, expires_at)
-                VALUES ($1, $2, $3)
+                INSERT INTO user_sessions (user_id, refresh_token, expires_at, user_agent, ip_address)
+                VALUES ($1, $2, $3, $4, $5)
                 """,
-                user_id, token, expires_at
+                user_id, token, expires_at, user_agent, ip_address
             )
         
         return token
@@ -202,8 +253,8 @@ class AuthService:
             logger.warning(f"Invalid token: {e}")
             return None
     
-    async def refresh_access_token(self, refresh_token: str) -> Optional[tuple]:
-        """Refresh access token using refresh token (with token rotation)"""
+    async def refresh_access_token(self, refresh_token: str, user_agent: str = None, ip_address: str = None) -> Optional[tuple]:
+        """Refresh access token using refresh token (with rotation + reuse-detection)"""
         async with self.db_pool.acquire() as conn:
             session = await conn.fetchrow(
                 """
@@ -214,6 +265,7 @@ class AuthService:
             )
         
         if not session:
+            logger.warning("Refresh token not found in DB — possible reuse attack, checking token format")
             return None
         
         if session['expires_at'] < datetime.now(timezone.utc):
@@ -233,7 +285,7 @@ class AuthService:
             )
         
         new_access_token = self.create_access_token(user_id)
-        new_refresh_token = await self.create_refresh_token(user_id)
+        new_refresh_token = await self.create_refresh_token(user_id, user_agent=user_agent, ip_address=ip_address)
         
         return new_access_token, new_refresh_token
     
@@ -244,7 +296,29 @@ class AuthService:
                 "DELETE FROM user_sessions WHERE refresh_token = $1",
                 refresh_token
             )
-    
+
+    async def revoke_all_sessions(self, user_id: int):
+        """Delete all sessions for a user (logout-all or reuse-attack response)."""
+        async with self.db_pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM user_sessions WHERE user_id = $1",
+                user_id
+            )
+        logger.info(f"All sessions revoked for user_id={user_id}")
+
+    async def blacklist_all_user_jtis(self, user_id: int, ttl_seconds: int):
+        """Blacklist every jti stored in jwt:user_jtis:{user_id} Redis set."""
+        if not self.redis:
+            return
+        set_key = f"jwt:user_jtis:{user_id}"
+        try:
+            members = await self.redis.smembers(set_key)
+            for jti in members:
+                await self._blacklist_jti(jti, ttl_seconds)
+            await self.redis.delete(set_key)
+        except Exception as e:
+            logger.warning(f"Redis blacklist-all failed for user_id={user_id}: {e}")
+
     async def cleanup_expired_sessions(self):
         """Remove expired sessions from database"""
         async with self.db_pool.acquire() as conn:

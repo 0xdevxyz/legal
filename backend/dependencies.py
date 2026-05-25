@@ -199,9 +199,26 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"}
         )
 
+    jti = payload.get("jti")
+    if jti:
+        redis = await get_redis()
+        if redis:
+            try:
+                blacklisted = await redis.get(f"jwt:blacklist:{jti}")
+                if blacklisted:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Token has been revoked",
+                        headers={"WWW-Authenticate": "Bearer"}
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.warning(f"JTI blacklist check failed: {e}")
+
     db = await get_db()
     from auth_service import AuthService
-    auth = AuthService(db)
+    auth = AuthService(db, await get_redis())
     user = await auth.get_user_by_id(user_id)
 
     if not user:
