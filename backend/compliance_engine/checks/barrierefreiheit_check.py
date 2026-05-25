@@ -232,7 +232,27 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
 
     contrast_issues = await _check_color_contrast(soup)
     issues.extend(contrast_issues)
-    
+
+    # AUDIT-09: Touch-Targets (WCAG 2.5.5)
+    touch_issues = _check_touch_targets(soup)
+    issues.extend(touch_issues)
+
+    # AUDIT-10: WCAG AAA Checks
+    wcag_aaa_issues = _check_wcag_aaa(soup)
+    issues.extend(wcag_aaa_issues)
+
+    # AUDIT-11: Tabellen / SVG / Canvas
+    table_svg_canvas_issues = _check_tables_svg_canvas(soup)
+    issues.extend(table_svg_canvas_issues)
+
+    # AUDIT-12: Video Captions
+    video_caption_issues = _check_video_captions(soup)
+    issues.extend(video_caption_issues)
+
+    # AUDIT-13: PDF-Links
+    pdf_link_issues = _check_pdf_links(soup)
+    issues.extend(pdf_link_issues)
+
     # BFSG §14: Barrierefreiheitserklärung (für B2C-Dienste ab 28.06.2025 Pflicht)
     html_text_full = str(soup).lower()
     has_a11y_statement = bool(re.search(
@@ -1219,4 +1239,240 @@ async def check_barrierefreiheit_enhanced(
     logger.info(f"✅ Enhanced Check abgeschlossen: {len(all_issues)} Issues insgesamt")
     
     return all_issues
+
+
+# =============================================================================
+# AUDIT-09: Touch-Target-Größen (WCAG 2.5.5)
+# =============================================================================
+
+def _check_touch_targets(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
+    issues = []
+    small_targets = []
+    for el in soup.find_all(['button', 'a', 'input', 'select', 'textarea']):
+        style = el.get('style', '')
+        width_match = re.search(r'width\s*:\s*(\d+)px', style)
+        height_match = re.search(r'height\s*:\s*(\d+)px', style)
+        if width_match and height_match:
+            w = int(width_match.group(1))
+            h = int(height_match.group(1))
+            if w < 44 or h < 44:
+                small_targets.append(f"{el.name} ({w}x{h}px)")
+    if small_targets:
+        count = len(small_targets)
+        issues.append(BarrierefreiheitIssue(
+            category='barrierefreiheit',
+            severity='warning',
+            title=f'WCAG 2.5.5: {count} interaktive Element(e) zu klein (min. 44×44px)',
+            description=(
+                f'{count} interaktive Element(e) haben laut Inline-Style eine Größe unter 44×44px. '
+                'Mobile Nutzer und motorisch eingeschränkte Personen können diese Elemente '
+                'schwer oder gar nicht bedienen.'
+            ),
+            risk_euro=800,
+            recommendation=(
+                'Stellen Sie sicher, dass alle anklickbaren Elemente (Buttons, Links, Inputs) '
+                'mindestens 44×44 CSS-Pixel groß sind (WCAG 2.5.5 Level AA).'
+            ),
+            legal_basis='WCAG 2.1 Level AA (2.5.5), BFSG §12',
+            auto_fixable=False,
+            metadata={'small_targets': small_targets[:5]},
+        ))
+    return [asdict(i) for i in issues]
+
+
+# =============================================================================
+# AUDIT-10: WCAG AAA Checks
+# =============================================================================
+
+def _check_wcag_aaa(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
+    issues = []
+
+    # 2.4.9: Link Purpose (Link Only) — AAA
+    vague_aaa = re.compile(
+        r'^(hier|here|click here|hier klicken|mehr|more|link|weiter|next|›|»|\.{3}|lesen sie mehr|read more)$',
+        re.I
+    )
+    vague_count = 0
+    for a in soup.find_all('a', href=True):
+        text = a.get_text(strip=True)
+        if text and vague_aaa.match(text) and not a.get('aria-label') and not a.get('title'):
+            vague_count += 1
+    if vague_count:
+        issues.append(BarrierefreiheitIssue(
+            category='barrierefreiheit',
+            severity='info',
+            title=f'WCAG 2.4.9 (AAA): {vague_count} Link(s) ohne eindeutigen Zweck',
+            description=(
+                f'{vague_count} Link(s) sind ohne Kontext nicht verständlich (z.B. "mehr", "hier"). '
+                'Auf AAA-Level muss der Linkzweck aus dem Linktext allein erkennbar sein.'
+            ),
+            risk_euro=200,
+            recommendation='Ergänzen Sie aria-label mit vollständigem Kontext oder formulieren Sie den Linktext beschreibend.',
+            legal_basis='WCAG 2.1 Level AAA (2.4.9)',
+            auto_fixable=False,
+        ))
+
+    # 1.4.8: Visual Presentation — AAA (Zeilenlänge, Zeilenabstand)
+    body_style = soup.find('body')
+    if body_style:
+        style = body_style.get('style', '')
+        line_height_match = re.search(r'line-height\s*:\s*([\d.]+)', style)
+        if line_height_match and float(line_height_match.group(1)) < 1.5:
+            issues.append(BarrierefreiheitIssue(
+                category='barrierefreiheit',
+                severity='info',
+                title='WCAG 1.4.8 (AAA): Zeilenabstand unter 1.5 (body inline style)',
+                description='Der Zeilenabstand im body-Style ist unter dem AAA-Empfehlungswert von 1.5.',
+                risk_euro=100,
+                recommendation='Setzen Sie line-height auf mindestens 1.5 für bessere Lesbarkeit.',
+                legal_basis='WCAG 2.1 Level AAA (1.4.8)',
+                auto_fixable=True,
+            ))
+
+    return [asdict(i) for i in issues]
+
+
+# =============================================================================
+# AUDIT-11: Tabellen / SVG / Canvas Accessibility
+# =============================================================================
+
+def _check_tables_svg_canvas(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
+    issues = []
+
+    # Tabellen: <th> ohne scope, <table> ohne <caption>
+    tables = soup.find_all('table')
+    for table in tables:
+        if not table.find('caption'):
+            issues.append(BarrierefreiheitIssue(
+                category='barrierefreiheit',
+                severity='warning',
+                title='WCAG 1.3.1: Tabelle ohne <caption>',
+                description='Eine Datentabelle hat keine <caption>. Screenreader-Nutzer können den Zweck der Tabelle nicht erkennen.',
+                risk_euro=400,
+                recommendation='Fügen Sie ein <caption>-Element als erstes Kind der <table> ein.',
+                legal_basis='WCAG 2.1 Level A (1.3.1), BFSG §12',
+                auto_fixable=False,
+                element_html=str(table)[:200],
+            ))
+        th_without_scope = [th for th in table.find_all('th') if not th.get('scope')]
+        if th_without_scope:
+            issues.append(BarrierefreiheitIssue(
+                category='barrierefreiheit',
+                severity='warning',
+                title=f'WCAG 1.3.1: {len(th_without_scope)} <th>-Element(e) ohne scope-Attribut',
+                description='Tabellenköpfe ohne scope-Attribut sind für Screenreader mehrdeutig.',
+                risk_euro=300,
+                recommendation='Ergänzen Sie scope="col" oder scope="row" auf allen <th>-Elementen.',
+                legal_basis='WCAG 2.1 Level A (1.3.1), BFSG §12',
+                auto_fixable=False,
+            ))
+
+    # SVG: ohne <title> und role="img"
+    for svg in soup.find_all('svg'):
+        if svg.get('aria-hidden') == 'true':
+            continue
+        missing_title = not svg.find('title')
+        missing_role = svg.get('role') != 'img'
+        if missing_title or missing_role:
+            issues.append(BarrierefreiheitIssue(
+                category='barrierefreiheit',
+                severity='warning',
+                title='WCAG 1.1.1: SVG ohne <title> oder role="img"',
+                description='Ein SVG-Element fehlt entweder ein <title>-Kind-Element oder das Attribut role="img". Screenreader können das Bild nicht beschreiben.',
+                risk_euro=400,
+                recommendation='Fügen Sie <title>Beschreibung</title> als erstes SVG-Kind ein und setzen Sie role="img" auf dem <svg>-Element.',
+                legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
+                auto_fixable=False,
+                element_html=str(svg)[:200],
+            ))
+
+    # Canvas: ohne aria-label
+    for canvas in soup.find_all('canvas'):
+        if not canvas.get('aria-label') and not canvas.get('aria-labelledby'):
+            issues.append(BarrierefreiheitIssue(
+                category='barrierefreiheit',
+                severity='warning',
+                title='WCAG 1.1.1: <canvas> ohne aria-label',
+                description='Ein <canvas>-Element hat kein aria-label oder aria-labelledby. Screenreader haben keinen Zugang zu dessen Inhalt.',
+                risk_euro=400,
+                recommendation='Fügen Sie aria-label="Beschreibung des Canvas-Inhalts" hinzu.',
+                legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
+                auto_fixable=False,
+            ))
+
+    return [asdict(i) for i in issues]
+
+
+# =============================================================================
+# AUDIT-12: Video Caption Check (WCAG 1.2.2)
+# =============================================================================
+
+def _check_video_captions(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
+    issues = []
+    for video in soup.find_all('video'):
+        caption_tracks = [
+            t for t in video.find_all('track')
+            if t.get('kind', '').lower() in ('captions', 'subtitles')
+        ]
+        if not caption_tracks:
+            issues.append(BarrierefreiheitIssue(
+                category='barrierefreiheit',
+                severity='error',
+                title='WCAG 1.2.2: Video ohne Untertitel-Track',
+                description='Ein <video>-Element hat kein <track kind="captions"> oder <track kind="subtitles">. Gehörlose und schwerhörige Nutzer können den Inhalt nicht konsumieren.',
+                risk_euro=1500,
+                recommendation='Fügen Sie <track kind="captions" src="untertitel.vtt" srclang="de" label="Deutsch"> innerhalb des <video>-Elements ein.',
+                legal_basis='WCAG 2.1 Level AA (1.2.2), BFSG §12',
+                auto_fixable=False,
+                element_html=str(video)[:300],
+            ))
+        else:
+            for track in caption_tracks:
+                if not track.get('srclang'):
+                    issues.append(BarrierefreiheitIssue(
+                        category='barrierefreiheit',
+                        severity='warning',
+                        title='WCAG 1.2.2: Untertitel-Track ohne srclang-Attribut',
+                        description='Ein <track>-Element für Untertitel hat kein srclang-Attribut. Screenreader und Browser können die Sprache nicht erkennen.',
+                        risk_euro=300,
+                        recommendation='Ergänzen Sie srclang="de" (oder die jeweilige Sprache) auf dem <track>-Element.',
+                        legal_basis='WCAG 2.1 Level AA (1.2.2), BFSG §12',
+                        auto_fixable=True,
+                    ))
+    return [asdict(i) for i in issues]
+
+
+# =============================================================================
+# AUDIT-13: PDF-Links (Info-Hinweis auf manuelle Prüfung)
+# =============================================================================
+
+def _check_pdf_links(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
+    issues = []
+    pdf_links = []
+    for a in soup.find_all('a', href=True):
+        href = a.get('href', '')
+        text = a.get_text(strip=True)
+        if href.lower().endswith('.pdf') or 'pdf' in href.lower() or re.search(r'\bPDF\b', text):
+            pdf_links.append(href[:80])
+    if pdf_links:
+        issues.append(BarrierefreiheitIssue(
+            category='barrierefreiheit',
+            severity='info',
+            title=f'PDF-Links gefunden: {len(pdf_links)} PDF(s) — manuelle Prüfung erforderlich',
+            description=(
+                f'Es wurden {len(pdf_links)} Links zu PDF-Dokumenten gefunden. '
+                'PDF-Barrierefreiheit (Tagged PDF, Lesereihenfolge, Alt-Texte in PDF) '
+                'kann nicht automatisch geprüft werden.'
+            ),
+            risk_euro=0,
+            recommendation=(
+                'Prüfen Sie alle verlinkten PDFs manuell mit dem Adobe Acrobat Accessibility Checker '
+                'oder dem PAC 3-Tool. Stellen Sie sicher, dass PDFs getaggt sind und eine logische '
+                'Lesereihenfolge haben (WCAG 1.3.2, PDF/UA-1).'
+            ),
+            legal_basis='WCAG 2.1 (1.3.2), PDF/UA-1 (ISO 14289-1), BFSG §12',
+            auto_fixable=False,
+            metadata={'pdf_links': pdf_links[:10]},
+        ))
+    return [asdict(i) for i in issues]
 

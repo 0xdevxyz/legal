@@ -1,5 +1,5 @@
 """
-Legal Text Handler - eRecht24 Integration + AI Fallback
+Legal Text Handler - Interner KI-Generator + AI Fallback
 
 Behandelt Impressum, Datenschutzerklärung, AGB, Widerrufsbelehrung
 """
@@ -11,12 +11,8 @@ from datetime import datetime
 class LegalTextHandler:
     """Handler für rechtssichere Texte"""
     
-    def __init__(self, erecht24_integration=None):
-        """
-        Args:
-            erecht24_integration: Optional eRecht24Integration instance
-        """
-        self.erecht24 = erecht24_integration
+    def __init__(self):
+        pass
     
     async def handle(
         self,
@@ -28,27 +24,11 @@ class LegalTextHandler:
         Hauptmethode: Generiert rechtssicheren Text
         
         Priority:
-        1. eRecht24 API (falls verfügbar)
+        1. Interner KI-Generator
         2. AI-generated text (als Fallback)
         3. Template-based text (als letzter Fallback)
         """
         text_type = self._determine_text_type(issue)
-        
-        # Try eRecht24 first if available
-        if self.erecht24:
-            erecht24_text = await self._fetch_from_erecht24(
-                context.get("erecht24_project_id"),
-                text_type,
-                context
-            )
-            
-            if erecht24_text:
-                return self._build_erecht24_result(
-                    erecht24_text,
-                    text_type,
-                    issue,
-                    context
-                )
         
         # Fallback to AI-generated
         if ai_generated_fix:
@@ -72,54 +52,6 @@ class LegalTextHandler:
         else:
             return "generic"
     
-    async def _fetch_from_erecht24(
-        self,
-        project_id: Optional[str],
-        text_type: str,
-        context: Dict[str, Any]
-    ) -> Optional[str]:
-        """Holt Text von eRecht24 API"""
-        if not self.erecht24 or not project_id:
-            return None
-        
-        try:
-            text = await self.erecht24.get_legal_text_with_fallback(
-                project_id=project_id,
-                text_type=text_type,
-                language="de"
-            )
-            return text
-        except Exception as e:
-            print(f"eRecht24 fetch failed: {e}")
-            return None
-    
-    def _build_erecht24_result(
-        self,
-        erecht24_text: str,
-        text_type: str,
-        issue: Dict[str, Any],
-        context: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Baut Result aus eRecht24-Text"""
-        return {
-            "fix_id": issue.get("id", f"{text_type}_erecht24"),
-            "title": f"Rechtssicherer {text_type.capitalize()} (eRecht24)",
-            "description": f"Von eRecht24 generierter, anwaltlich geprüfter {text_type}",
-            "text_content": erecht24_text,
-            "text_type": text_type,
-            "format": "html",
-            "source": "erecht24",
-            "placeholders": [],
-            "integration": {
-                "filename": f"{text_type}.html",
-                "instructions": self._get_integration_instructions(text_type)
-            },
-            "estimated_time": "5 Minuten",
-            "legal_references": self._get_legal_references(text_type),
-            "quality_score": 1.0,  # eRecht24 = höchste Qualität
-            "complyo_branding": True
-        }
-    
     def _enrich_ai_fix(
         self,
         ai_fix: Dict[str, Any],
@@ -136,7 +68,7 @@ class LegalTextHandler:
         # Add legal disclaimer
         enriched["disclaimer"] = (
             "Dieser Text wurde KI-generiert und sollte von einem Anwalt geprüft werden. "
-            "Für rechtssichere Texte empfehlen wir die Nutzung der eRecht24-Integration."
+            "Für rechtsverbindliche Texte empfehlen wir die juristische Prüfung durch einen Anwalt."
         )
         
         # Ensure legal references

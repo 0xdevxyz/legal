@@ -17,6 +17,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import apiClient from '@/lib/api';
+import { ClientGroup } from '@/components/agency/ClientGroup';
+import { AgencyLogoUpload } from '@/components/agency/AgencyLogoUpload';
+import { getAgencyClients, type AgencyClient } from '@/lib/agency-api';
 
 interface SiteStat {
   site_id: string;
@@ -158,6 +161,9 @@ export default function AgencyPage() {
   const [error, setError] = useState<string | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
+  const [clients, setClients] = useState<AgencyClient[]>([]);
+  const [clientsLoading, setClientsLoading] = useState(true);
+  const [clientsError, setClientsError] = useState<string | null>(null);
 
   const handleActivateAgency = async () => {
     setCheckoutLoading(true);
@@ -166,7 +172,7 @@ export default function AgencyPage() {
       const res = await apiClient.post('/api/stripe/create-checkout', {
         plan: 'agency',
         billing_period: 'monthly',
-        success_url: `${window.location.origin}/agency?activated=true`,
+        success_url: `${window.location.origin}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${window.location.origin}/agency`,
       });
       if (res.data.checkout_url) {
@@ -194,9 +200,23 @@ export default function AgencyPage() {
     }
   }, []);
 
+  const fetchClients = useCallback(async () => {
+    setClientsLoading(true);
+    setClientsError(null);
+    try {
+      const data = await getAgencyClients();
+      setClients(data);
+    } catch (err: any) {
+      setClientsError(err?.response?.data?.detail ?? err?.message ?? 'Fehler beim Laden der Kundengruppen.');
+    } finally {
+      setClientsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchStats();
-  }, [fetchStats]);
+    fetchClients();
+  }, [fetchStats, fetchClients]);
 
   const isAgency = user?.plan_type === 'agency' || user?.plan_type === 'expert';
 
@@ -214,9 +234,13 @@ export default function AgencyPage() {
               Verwalten Sie mehrere Client-Websites, erhalten Sie aggregierte Consent-Statistiken
               und nutzen Sie White-Label-Funktionen mit dem Agency Plan.
             </p>
+            <p className="mt-2 text-white font-bold text-xl">
+              299 €<span className="text-zinc-400 text-sm font-normal">/Monat</span>
+              <span className="ml-3 text-zinc-400 text-sm font-normal">oder 2.990 €/Jahr</span>
+            </p>
             <ul className="mt-3 space-y-1">
               {[
-                'Bis zu 50 Client-Websites verwalten',
+                'Bis zu 25 Client-Websites verwalten',
                 'Aggregierte Consent-Statistiken',
                 'White-Label Cookie-Banner',
                 'Prioritäts-Support',
@@ -315,6 +339,32 @@ export default function AgencyPage() {
     return <LoadingSkeleton />;
   }
 
+  // ── Paywall: non-agency users see ONLY the upgrade banner ─────────────────
+  if (!isAgency) {
+    return (
+      <main
+        role="main"
+        aria-label="Agentur-Dashboard"
+        className="min-h-full bg-zinc-950 text-white p-6 lg:p-8"
+      >
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-2 bg-blue-500/20 rounded-lg">
+                <Building2 className="w-5 h-5 text-blue-400" />
+              </div>
+              <h1 className="text-2xl font-bold text-white">Agentur-Dashboard</h1>
+            </div>
+            <p className="text-zinc-400 text-sm ml-[52px]">
+              Verwalten Sie Client-Websites und Consent-Metriken mit dem Agency Plan.
+            </p>
+          </div>
+          <UpgradeBanner />
+        </div>
+      </main>
+    );
+  }
+
   if (error) {
     return <ErrorState />;
   }
@@ -344,9 +394,6 @@ export default function AgencyPage() {
               Übersicht aller verwalteten Client-Websites und aggregierten Consent-Metriken
             </p>
           </div>
-
-          {/* ── Upgrade banner if no agency plan ──────────────────────────────── */}
-          {!isAgency && <UpgradeBanner />}
 
           {/* ── Stats grid ────────────────────────────────────────────────────── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
@@ -378,6 +425,43 @@ export default function AgencyPage() {
               icon={<Users className="w-5 h-5 text-orange-400" />}
               accent="orange"
             />
+          </div>
+
+          {/* Agency logo upload (Phase 10 AGENCY-03) */}
+          <div className="mb-6">
+            <AgencyLogoUpload onUploaded={() => fetchClients()} />
+          </div>
+
+          {/* Per-client grouped view (Phase 10 AGENCY-02) */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-white font-semibold text-lg">Kunden-Uebersicht</h2>
+              {clientsError && (
+                <span className="text-red-400 text-xs">{clientsError}</span>
+              )}
+            </div>
+            {clientsLoading ? (
+              <div className="space-y-3">
+                {[0, 1, 2].map(i => (
+                  <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                    <SkeletonBox className="h-5 w-48 mb-2" />
+                    <SkeletonBox className="h-3 w-32" />
+                  </div>
+                ))}
+              </div>
+            ) : clients.length === 0 ? (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center">
+                <p className="text-zinc-400 text-sm">
+                  Noch keine Kunden zugeordnet. Weisen Sie Ihren Sites <code>client_name</code> zu, um sie hier gruppiert zu sehen.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {clients.map(c => (
+                  <ClientGroup key={c.client_name} client={c} />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* ── Client table ──────────────────────────────────────────────────── */}

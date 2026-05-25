@@ -22,6 +22,8 @@ services:
     networks:
       - complyo-network
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-complyo_user} -d ${POSTGRES_DB:-complyo_db}"]
       interval: 10s
@@ -38,6 +40,8 @@ services:
     networks:
       - complyo-network
     restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 256m
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
@@ -57,10 +61,6 @@ services:
       - REDIS_HOST=redis
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - ERECHT24_API_KEY=${ERECHT24_API_KEY}
-      - ERECHT24_API_URL=${ERECHT24_API_URL:-https://api.e-recht24.de}
-      - UNLIMITED_FIXES=${UNLIMITED_FIXES:-false}
-      - BYPASS_PAYMENT=${BYPASS_PAYMENT:-false}
       - ENVIRONMENT=production
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
@@ -90,12 +90,20 @@ services:
       - LETSENCRYPT_HOST=api.complyo.de
       - LETSENCRYPT_EMAIL=admin@complyo.de
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - complyo-network
       - proxy-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # Landing Page (React/Next.js)
   landing:
@@ -115,6 +123,14 @@ services:
       - complyo-network
       - proxy-network
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # Dashboard (React/Next.js)  
   dashboard:
@@ -127,6 +143,12 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=https://api.complyo.de
+      - NEXTAUTH_URL=https://app.complyo.de
+      - NEXTAUTH_SECRET=${JWT_SECRET:?JWT_SECRET is required in .env}
+      - AUTH_SECRET=${JWT_SECRET}
+      - AUTH_URL=https://app.complyo.de
+      - AUTH_TRUST_HOST=true
+      - NEXTAUTH_BACKEND_URL=https://api.complyo.de
       - NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}
       - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
       - NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
@@ -141,6 +163,14 @@ services:
       - complyo-network
       - proxy-network
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # Admin Panel
   admin:

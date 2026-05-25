@@ -10,7 +10,7 @@ const getAppUrl = (path: string) => {
       return `http://localhost:3000${path}`;
     }
   }
-  return `https://app.complyo.tech${path}`;
+  return `https://app.complyo.de${path}`;
 };
 
 /**
@@ -109,7 +109,7 @@ export default function PricingTable() {
             </div>
             <ul className="space-y-3 text-sm text-white/80 mb-6">
               <li>✅ Unbegrenzte Analysen</li>
-              <li>✅ eRecht24 Integration</li>
+              <li>✅ KI-Rechtstexte mit Auto-Update</li>
               <li>✅ Priority Support</li>
               <li>✅ API-Zugang</li>
             </ul>

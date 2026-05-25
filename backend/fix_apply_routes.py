@@ -4,20 +4,19 @@ Endpoints für das Anwenden von Fixes via FTP, SFTP, GitHub PR, etc.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, status, Request, BackgroundTasks
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 import logging
 import asyncpg
 from datetime import datetime
+from dependencies import get_current_user
 
-from .compliance_engine.deployment_engine import DeploymentEngine, DeploymentConfig, DeploymentResult
-from .audit_service import FixAuditService
+from compliance_engine.deployment_engine import DeploymentEngine, DeploymentConfig, DeploymentResult
+from audit_service import FixAuditService
 
 logger = logging.getLogger(__name__)
 
 apply_router = APIRouter(prefix="/api/v2/fixes", tags=["fix-apply"])
-security = HTTPBearer()
 
 # Global references (set in main_production.py)
 db_pool: Optional[asyncpg.Pool] = None
@@ -91,25 +90,6 @@ class ApplyStatusResponse(BaseModel):
 
 
 # ============================================================================
-# Auth Helper
-# ============================================================================
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
-    """Verify JWT token and return user data"""
-    try:
-        token = credentials.credentials
-        user_data = auth_service.verify_token(token)
-        
-        if not user_data:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        
-        return user_data
-    except Exception as e:
-        logger.error(f"Authentication failed: {e}")
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-
-# ============================================================================
 # Apply Endpoints
 # ============================================================================
 
@@ -140,7 +120,7 @@ async def apply_fix(
     5. User benachrichtigen
     """
     try:
-        user_id = current_user.get('user_id')
+        user_id = current_user.get('id')
         user_plan = current_user.get('plan', 'ai')
         
         logger.info(f"🚀 Apply fix request: {apply_request.fix_id} via {apply_request.deployment_method}")
@@ -256,7 +236,7 @@ async def rollback_fix(
     3. Audit-Log schreiben
     """
     try:
-        user_id = current_user.get('user_id')
+        user_id = current_user.get('id')
         
         logger.info(f"🔄 Rollback request: backup_id={rollback_request.backup_id}")
         
@@ -334,7 +314,7 @@ async def preview_fix_on_staging(
     5. Warte auf User-Approval
     """
     try:
-        user_id = current_user.get('user_id')
+        user_id = current_user.get('id')
         user_plan = current_user.get('plan', 'ai')
         
         # Premium-Check
@@ -376,7 +356,7 @@ async def get_apply_status(
     Für asynchrone Deployments (z.B. Netlify, Vercel)
     """
     try:
-        user_id = current_user.get('user_id')
+        user_id = current_user.get('id')
         
         # TODO: Implementierung von Background-Task-Tracking
         # Für jetzt: Audit-Log-Status zurückgeben

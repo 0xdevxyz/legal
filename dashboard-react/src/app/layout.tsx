@@ -1,10 +1,14 @@
 export const runtime = 'nodejs'
 import type { Metadata } from 'next'
-import Link from 'next/link';
 import './globals.css'
 import Script from 'next/script'
-import Providers from './providers'  // <— WICHTIG: Provider einbinden
-import { AIAssistant } from '@/components/ai/AIAssistant'
+import Providers from './providers'
+import dynamic from 'next/dynamic'
+
+const SidebarLayout = dynamic(
+  () => import('@/components/dashboard/SidebarLayout').then((m) => m.SidebarLayout),
+  { ssr: false }
+)
 
 export const metadata: Metadata = {
   title: 'Complyo Dashboard - KI-gestützte Website-Compliance',
@@ -27,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 try {
                   var theme = localStorage.getItem('complyo-theme');
                   if (!theme) {
-                    theme = 'dark'; // ✅ ALWAYS dark by default!
+                    theme = 'dark';
                     localStorage.setItem('complyo-theme', 'dark');
                   }
                   document.documentElement.classList.add(theme);
@@ -40,7 +44,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="min-h-screen text-white dark:text-white light:text-gray-900 antialiased">
-        {/* Cookie-Banner - DSGVO-konform, lädt nach Interaktivität */}
         <Script
           src="https://api.complyo.de/api/widgets/cookie-compliance.js"
           data-site-id="complyo-tech"
@@ -48,8 +51,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           strategy="afterInteractive"
         />
         <Providers>
-          {children}
-          <AIAssistant />
+          <SidebarLayout>
+            {children}
+          </SidebarLayout>
         </Providers>
       </body>
     </html>

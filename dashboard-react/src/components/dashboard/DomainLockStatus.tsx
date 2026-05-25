@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Lock, Unlock, RefreshCw, AlertCircle } from 'lucide-react';
-import axios from 'axios';
+import { apiClient } from '@/lib/api-client';
 
 interface DomainLock {
   domain_name: string;
@@ -31,21 +31,10 @@ export const DomainLockStatus: React.FC<DomainLockStatusProps> = ({ refreshTrigg
     setError(null);
     
     try {
-      const token = localStorage.getItem('access_token');
-      if (!token) {
-        setError('Nicht angemeldet');
-        return;
-      }
+      const data = await apiClient.get('/api/user/domain-locks') as any;
 
-      const response = await axios.get('/api/user/domain-locks', {
-        baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.data.success) {
-        setLocks(response.data.domain_locks || []);
+      if (data.success) {
+        setLocks(data.domain_locks || []);
       }
     } catch (err: any) {
       console.error('Failed to fetch domain locks:', err);

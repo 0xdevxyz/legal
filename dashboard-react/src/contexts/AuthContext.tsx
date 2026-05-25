@@ -1,283 +1,183 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+'use client';
 
-// Intelligente API-URL-Erkennung
-const getApiBase = () => {
-  // 1. Environment-Variable hat Priorität
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  
-  // 2. Für Browser: Prüfe Hostname
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:8002';
-    }
-    if (hostname.includes('complyo.tech') || hostname.includes('complyo.de')) {
-      return 'https://api.complyo.de';
-    }
-  }
-  
-  // 3. Fallback für lokale Entwicklung
-  return 'http://localhost:8002';
-};
-
-const API_BASE = getApiBase();
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { useSession, signIn, signOut } from 'next-auth/react';
 
 interface User {
-    id: number;
-    email: string;
-    full_name: string;
-    company?: string;
-    plan_type?: 'free' | 'single' | 'complete' | 'expert' | 'ai' | 'agency';
-    onboarding_completed?: boolean;
-    active_modules?: string[];
-    plan_limits?: {
-        websites_max: number;
-        exports_max: number;
-        websites_count: number;
-        exports_this_month: number;
-        fixes_used: number;       // Anzahl verwendeter Fixes
-        fixes_limit: number;      // Max. erlaubte Fixes (free=1, ai=unlimited)
-    };
+  id: number;
+  email: string;
+  full_name: string;
+  company?: string;
+  plan_type?: 'free' | 'single' | 'pro' | 'agency' | 'expert' | 'update';
+  role?: 'admin' | 'agency' | 'customer';
+  onboarding_completed?: boolean;
+  active_modules?: string[];
+  plan_limits?: {
+    websites_max: number;
+    exports_max: number;
+    websites_count: number;
+    exports_this_month: number;
+    fixes_used: number;
+    fixes_limit: number;
+  };
 }
 
 interface RegisterData {
-    email: string;
-    password: string;
-    full_name: string;
-    company?: string;
-    plan: string;
-    modules?: string[];
+  email: string;
+  password: string;
+  full_name: string;
+  company?: string;
+  plan: string;
+  modules?: string[];
 }
 
 interface AuthContextType {
-    user: User | null;
-    accessToken: string | null;
-    login: (email: string, password: string) => Promise<void>;
-    register: (data: RegisterData) => Promise<void>;
-    logout: () => void;
-    isAuthenticated: boolean;
-    isLoading: boolean;
+  user: User | null;
+  accessToken: string | null;
+  isAuthReady: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (data: RegisterData) => Promise<void>;
+  logout: () => Promise<void>;
+  markOnboardingCompleted: () => void;
+  refreshUser: () => Promise<void>;
+  isAuthenticated: boolean;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002';
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<User | null>(null);
-    const [accessToken, setAccessToken] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    
-    // Auto-Refresh Token alle 50 Minuten (Token läuft nach 60 Minuten ab)
-    useEffect(() => {
-        if (!accessToken) return;
-        
-        const refreshTokenWithRetry = async (retries = 3): Promise<boolean> => {
-            const refreshToken = localStorage.getItem('refresh_token');
-            if (!refreshToken) return false;
-            
-            for (let i = 0; i < retries; i++) {
-                try {
-                    // ✅ Timeout für Request (10 Sekunden)
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 10000);
-                    
-                    const response = await fetch(`${API_BASE}/api/auth/refresh`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ refresh_token: refreshToken }),
-                        signal: controller.signal,
-                    });
-                    
-                    clearTimeout(timeoutId);
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        setAccessToken(data.access_token);
-                        localStorage.setItem('access_token', data.access_token);
-                        // ✅ SSR-Check
-                        if (typeof document !== 'undefined') {
-                            document.cookie = `access_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax; Secure`;
-                        }
-                        return true;
-                    }
-                    
-                    // ✅ Bei 401: Token ungültig, nicht retry
-                    if (response.status === 401) {
-                        console.log('Refresh token invalid, logging out');
-                        logout();
-                        return false;
-                    }
-                    
-                    // ✅ Bei anderen Fehlern: Retry mit exponential backoff
-                    if (i < retries - 1) {
-                        const delay = 1000 * Math.pow(2, i); // 1s, 2s, 4s
-                        console.log(`Token refresh failed, retrying in ${delay}ms... (attempt ${i + 1}/${retries})`);
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        continue;
-                    }
-                } catch (error: any) {
-                    // ✅ Netzwerk-Fehler: Retry
-                    if (error.name === 'AbortError' || error.name === 'TypeError' || error.message?.includes('fetch')) {
-                        if (i < retries - 1) {
-                            const delay = 1000 * Math.pow(2, i); // 1s, 2s, 4s
-                            console.log(`Network error during token refresh, retrying in ${delay}ms... (attempt ${i + 1}/${retries})`);
-                            await new Promise(resolve => setTimeout(resolve, delay));
-                            continue;
-                        }
-                    }
-                    
-                    // ✅ Letzter Versuch fehlgeschlagen
-                    if (i === retries - 1) {
-                        console.error('Token refresh failed after all retries:', error);
-                        // ✅ Nicht sofort ausloggen bei Netzwerk-Fehlern
-                        // User kann noch arbeiten, Token wird beim nächsten Request refreshed
-                        return false;
-                    }
-                }
-            }
-            return false;
-        };
-        
-        const refreshInterval = setInterval(async () => {
-            await refreshTokenWithRetry();
-        }, 50 * 60 * 1000); // 50 minutes
-        
-        return () => clearInterval(refreshInterval);
-    }, [accessToken]);
-    
-    useEffect(() => {
-        const restoreSession = async () => {
-            const token = localStorage.getItem('access_token');
-            const userData = localStorage.getItem('user');
-            if (token && userData) {
-                try {
-                    setAccessToken(token);
-                    setUser(JSON.parse(userData));
-                    setIsLoading(false);
-                    return;
-                } catch (e) {
-                    localStorage.removeItem('access_token');
-                    localStorage.removeItem('refresh_token');
-                    localStorage.removeItem('user');
-                }
-            }
-            // localStorage leer (z.B. nach Cache-Leerung) → HttpOnly Cookie als Fallback
-            try {
-                const response = await fetch(`${API_BASE}/api/auth/refresh-cookie`, {
-                    method: 'POST',
-                    credentials: 'include',
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    setAccessToken(data.access_token);
-                    setUser(data.user);
-                    localStorage.setItem('access_token', data.access_token);
-                    localStorage.setItem('user', JSON.stringify(data.user));
-                    if (typeof document !== 'undefined') {
-                        document.cookie = `access_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax; Secure`;
-                    }
-                }
-            } catch (_) {
-                // Kein Cookie vorhanden oder abgelaufen → kein Login, normal
-            }
-            setIsLoading(false);
-        };
-        restoreSession();
-    }, []);
-    
-    const login = async (email: string, password: string) => {
-        const response = await fetch(`${API_BASE}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password }),
-            credentials: 'include' // Important for cookies
+  const { data: session, status, update } = useSession();
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [hasTriedUpdate, setHasTriedUpdate] = useState(false);
+
+  const isLoading = status === 'loading';
+  const isAuthenticated = status === 'authenticated';
+
+  const user: User | null = session?.user
+    ? {
+        id: Number(session.user.id),
+        email: session.user.email,
+        full_name: session.user.full_name,
+        company: session.user.company,
+        plan_type: session.user.plan_type as User['plan_type'],
+        role: session.user.role as User['role'],
+        onboarding_completed: session.user.onboarding_completed,
+        active_modules: session.user.active_modules,
+      }
+    : null;
+
+  useEffect(() => {
+    if (status === 'loading') return;
+
+    const sessionError = (session as any)?.error;
+    if (sessionError === 'RefreshAccessTokenError') {
+      import('@/lib/auth-refresh').then(({ clearAccessToken }) => clearAccessToken());
+      signOut({ redirect: false }).then(() => {
+        window.location.href = '/login';
+      });
+      return;
+    }
+
+    if (status === 'authenticated') {
+      if (session?.accessToken) {
+        import('@/lib/auth-refresh').then(({ setAccessToken }) => {
+          setAccessToken(session.accessToken as string);
         });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Login fehlgeschlagen');
-        }
-        
-        const data = await response.json();
-        setAccessToken(data.access_token);
-        setUser(data.user);
-        
-        // Store in localStorage
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('refresh_token', data.refresh_token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        
-        // Also store as cookie for middleware (30 days)
-        // ✅ SSR-Check
-        if (typeof document !== 'undefined') {
-            document.cookie = `access_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax; Secure`;
-        }
-    };
-    
-    const register = async (data: RegisterData) => {
-        const response = await fetch(`${API_BASE}/api/auth/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-            credentials: 'include'
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Registrierung fehlgeschlagen');
-        }
-        
-        const result = await response.json();
-        setAccessToken(result.access_token);
-        setUser(result.user);
-        
-        // Store in localStorage
-        localStorage.setItem('access_token', result.access_token);
-        localStorage.setItem('refresh_token', result.refresh_token);
-        localStorage.setItem('user', JSON.stringify(result.user));
-        
-        // Also store as cookie for middleware
-        // ✅ SSR-Check
-        if (typeof document !== 'undefined') {
-            document.cookie = `access_token=${result.access_token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax; Secure`;
-        }
-    };
-    
-    const logout = () => {
-        setAccessToken(null);
-        setUser(null);
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user');
-        
-        // Delete cookie
-        // ✅ SSR-Check
-        if (typeof document !== 'undefined') {
-            document.cookie = 'access_token=; path=/; max-age=0';
-        }
-    };
-    
-    return (
-        <AuthContext.Provider value={{ 
-            user, 
-            accessToken, 
-            login, 
-            register, 
-            logout, 
-            isAuthenticated: !!user,
-            isLoading 
-        }}>
-            {children}
-        </AuthContext.Provider>
-    );
+        setIsAuthReady(true);
+      } else if (!hasTriedUpdate) {
+        setHasTriedUpdate(true);
+        update();
+      } else {
+        setIsAuthReady(true);
+      }
+    } else if (status === 'unauthenticated') {
+      import('@/lib/auth-refresh').then(({ clearAccessToken }) => clearAccessToken());
+      setIsAuthReady(true);
+    }
+  }, [status, session?.accessToken, (session as any)?.error, hasTriedUpdate]);
+
+  const login = async (email: string, password: string) => {
+    const result = await signIn('credentials', {
+      email,
+      password,
+      redirect: false,
+    });
+    if (result?.error) {
+      throw new Error('Ungültige Zugangsdaten');
+    }
+  };
+
+  const register = async (data: RegisterData) => {
+    const res = await fetch(`${API_BASE}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Registrierung fehlgeschlagen');
+    }
+    await signIn('credentials', {
+      email: data.email,
+      password: data.password,
+      redirect: false,
+    });
+  };
+
+  const logout = async () => {
+    const { clearAccessToken } = await import('@/lib/auth-refresh');
+    clearAccessToken();
+    await signOut({ redirect: false });
+    window.location.href = '/login';
+  };
+
+  const markOnboardingCompleted = async () => {
+    await update({ onboarding_completed: true });
+  };
+
+  const refreshUser = async () => {
+    await update();
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        accessToken: session?.accessToken ?? null,
+        isAuthReady,
+        login,
+        register,
+        logout,
+        markOnboardingCompleted,
+        refreshUser,
+        isAuthenticated,
+        isLoading,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {
-    const context = useContext(AuthContext);
-    if (!context) {
-        throw new Error('useAuth must be used within AuthProvider');
-    }
-    return context;
+  const context = useContext(AuthContext);
+  if (!context) {
+    return {
+      user: null,
+      accessToken: null,
+      isAuthReady: false,
+      login: async () => {},
+      register: async () => {},
+      logout: async () => {},
+      markOnboardingCompleted: () => {},
+      refreshUser: async () => {},
+      isAuthenticated: false,
+      isLoading: true,
+    } as AuthContextType;
+  }
+  return context;
 };
-

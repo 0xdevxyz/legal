@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { AlertCircle, CheckCircle, Info, ExternalLink } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 interface ConsentModeSettingsProps {
   siteId: string;
@@ -25,26 +26,17 @@ export default function ConsentModeSettings({ siteId, config, onSave }: ConsentM
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
-
   const handleSave = async () => {
     setSaving(true);
     try {
-      const response = await fetch(`${API_URL}/api/cookie-compliance/consent-mode-config`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          site_id: siteId,
-          consent_mode_enabled: enabled,
-          gtm_enabled: gtmEnabled,
-          gtm_container_id: gtmContainerId || null
-        })
+      await apiClient.post('/api/cookie-compliance/consent-mode-config', {
+        site_id: siteId,
+        consent_mode_enabled: enabled,
+        gtm_enabled: gtmEnabled,
+        gtm_container_id: gtmContainerId || null
       });
-      
-      if (response.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 3000);
-      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error('Error saving consent mode settings:', error);
     } finally {

@@ -5,12 +5,14 @@ export const fetchCache = 'force-no-store'
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Cookie, Settings, Eye, Code, BarChart3, CheckCircle, AlertCircle, Globe, Lock, Zap, ShieldCheck, CreditCard } from 'lucide-react';
+import { ArrowLeft, Cookie, Settings, Eye, Code, BarChart3, CheckCircle, AlertCircle, Globe, Lock, Zap, CreditCard, TrendingUp, Users, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import apiClient from '@/lib/api';
+import { apiClient as httpApiClient } from '@/lib/api-client';
 
 // Import Cookie Compliance Components
 import CookieBannerDesigner from '@/components/cookie-compliance/CookieBannerDesigner';
@@ -29,13 +31,11 @@ export default function CookieCompliancePage() {
   const [activeTab, setActiveTab] = useState('design');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
-  
-  // ✅ NEU: 1 Website pro Account Absicherung
+  const [quickStats, setQuickStats] = useState<any>(null);
+
   const [websiteLocked, setWebsiteLocked] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState<string>('');
   
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
-
   const handleUnlockCookie = async () => {
     setCheckoutLoading(true);
     setCheckoutError('');
@@ -60,14 +60,18 @@ export default function CookieCompliancePage() {
   };  useEffect(() => {
     loadConfig();
   }, []);
-  
-  // ✅ Helper für authentifizierte API-Calls
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token') || localStorage.getItem('access_token');
-    return {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-    };
+
+  useEffect(() => {
+    if (siteId) loadQuickStats(siteId);
+  }, [siteId]);
+
+  const loadQuickStats = async (id: string) => {
+    try {
+      const data = await httpApiClient.get(`/api/cookie-compliance/stats/${id}?days=30`) as any;
+      if (data?.success) setQuickStats(data);
+    } catch {
+      setQuickStats(null);
+    }
   };
   
   const loadConfig = async () => {
@@ -75,13 +79,14 @@ export default function CookieCompliancePage() {
       setLoading(true);
       
       // ✅ ZUERST: Prüfe ob User bereits eine Website konfiguriert hat
-      const myConfigResponse = await fetch(`${API_URL}/api/cookie-compliance/my-config`, {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      let myConfigData: any = null;
+      try {
+        myConfigData = await httpApiClient.get('/api/cookie-compliance/my-config');
+      } catch {
+        myConfigData = null;
+      }
       
-      if (myConfigResponse.ok) {
-        const myConfigData = await myConfigResponse.json();
+      if (myConfigData) {
         
         if (myConfigData.success && myConfigData.has_config && myConfigData.data) {
           // ✅ User hat bereits eine Website - diese ist GESPERRT
@@ -111,31 +116,26 @@ export default function CookieCompliancePage() {
       }
       
       // FALLBACK: Wenn keine Config, versuche Website aus /api/v2/websites
-      const websiteResponse = await fetch(`${API_URL}/api/v2/websites`, {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      let websiteData: any = null;
+      try {
+        websiteData = await httpApiClient.get('/api/v2/websites');
+      } catch {
+        websiteData = null;
+      }
       
-      if (websiteResponse.ok) {
-        const websiteData = await websiteResponse.json();
-        if (websiteData.success && websiteData.websites?.length) {
-          const primaryWebsite = websiteData.websites.find((w: any) => w.is_primary) || websiteData.websites[0];
-          const determinedSiteId = generateSiteIdFromUrl(primaryWebsite.url);
-          setSiteId(determinedSiteId);
-          setWebsiteUrl(primaryWebsite.url);
-          
-          // Lade Config für diese Website
-          const configResponse = await fetch(`${API_URL}/api/cookie-compliance/config/${determinedSiteId}`, {
-            headers: getAuthHeaders(),
-            credentials: 'include',
-          });
-          
-          if (configResponse.ok) {
-            const data = await configResponse.json();
-            if (data.success) {
-              setConfig(data.data);
-            }
+      if (websiteData && websiteData.success && websiteData.websites?.length) {
+        const primaryWebsite = websiteData.websites.find((w: any) => w.is_primary) || websiteData.websites[0];
+        const determinedSiteId = generateSiteIdFromUrl(primaryWebsite.url);
+        setSiteId(determinedSiteId);
+        setWebsiteUrl(primaryWebsite.url);
+        
+        // Lade Config für diese Website
+        try {
+          const configData = await httpApiClient.get(`/api/cookie-compliance/config/${determinedSiteId}`) as any;
+          if (configData.success) {
+            setConfig(configData.data);
           }
+        } catch {
         }
       }
     } catch (error) {
@@ -157,24 +157,16 @@ export default function CookieCompliancePage() {
   
   const saveConfig = async (newConfig: any) => {
     try {
-      const response = await fetch(`${API_URL}/api/cookie-compliance/config`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        credentials: 'include',
-        body: JSON.stringify({
-          ...newConfig,
-          site_id: siteId,
-        }),
-      });
+      const data = await httpApiClient.post('/api/cookie-compliance/config', {
+        ...newConfig,
+        site_id: siteId,
+      }) as any;
       
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setConfig(newConfig);
-          // Nach erstem Speichern ist die Website gesperrt
-          setWebsiteLocked(true);
-          return true;
-        }
+      if (data.success) {
+        setConfig(newConfig);
+        // Nach erstem Speichern ist die Website gesperrt
+        setWebsiteLocked(true);
+        return true;
       }
       
       return false;
@@ -195,8 +187,8 @@ export default function CookieCompliancePage() {
     );
   }
 
-  // Paywall: Cookie-Modul erforderlich
-  const hasCookieModule = user?.active_modules?.includes('cookie');
+  // Paywall: Cookie-Modul erforderlich (inkl. in Pro/Agency Plan)
+  const hasCookieModule = user?.active_modules?.includes('cookie') || ['pro', 'agency'].includes(user?.plan_type ?? '');
   if (!hasCookieModule) {
     return (
       <main role="main" className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4">
@@ -327,23 +319,41 @@ export default function CookieCompliancePage() {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="text-sm font-medium text-green-300 mb-1">Opt-In-Rate</div>
-                  <div className="text-3xl font-bold text-green-400">--</div>
-                  <div className="text-xs text-green-300/70 mt-1">Letzte 30 Tage</div>
+                  {quickStats ? (
+                    <>
+                      <div className="text-3xl font-bold text-green-400">{quickStats.summary.acceptance_rate.toFixed(1)}%</div>
+                      <div className="text-xs text-green-300/70 mt-1">{quickStats.summary.accepted_all.toLocaleString('de-DE')} Consents</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-xl font-semibold text-green-300/50 mt-1">Noch keine Daten</div>
+                      <button onClick={() => setActiveTab('integration')} className="text-xs text-green-400 underline mt-1 hover:text-green-300">Banner einbinden →</button>
+                    </>
+                  )}
                 </div>
                 <div className="p-2 bg-green-500/20 rounded-lg">
-                  <CheckCircle className="w-5 h-5 text-green-400" />
+                  <TrendingUp className="w-5 h-5 text-green-400" />
                 </div>
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20 hover:border-blue-500/40 transition-all duration-200 hover:shadow-lg hover:shadow-blue-900/20">
             <CardContent className="pt-6">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="text-sm font-medium text-blue-300 mb-1">Consents</div>
-                  <div className="text-3xl font-bold text-blue-400">--</div>
-                  <div className="text-xs text-blue-300/70 mt-1">Gesamt</div>
+                  {quickStats ? (
+                    <>
+                      <div className="text-3xl font-bold text-blue-400">{quickStats.summary.total_impressions.toLocaleString('de-DE')}</div>
+                      <div className="text-xs text-blue-300/70 mt-1">Letzte 30 Tage</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-xl font-semibold text-blue-300/50 mt-1">Noch keine Daten</div>
+                      <div className="text-xs text-blue-300/50 mt-1">Letzte 30 Tage</div>
+                    </>
+                  )}
                 </div>
                 <div className="p-2 bg-blue-500/20 rounded-lg">
                   <BarChart3 className="w-5 h-5 text-blue-400" />
@@ -351,14 +361,14 @@ export default function CookieCompliancePage() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-purple-500/20 hover:border-purple-500/40 transition-all duration-200 hover:shadow-lg hover:shadow-purple-900/20">
             <CardContent className="pt-6">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="text-sm font-medium text-purple-300 mb-1">Services</div>
-                  <div className="text-3xl font-bold text-purple-400">{config?.services?.length || 0}</div>
-                  <div className="text-xs text-purple-300/70 mt-1">Aktiv</div>
+                  <div className="text-3xl font-bold text-purple-400">{Array.isArray(config?.services) ? config.services.length : 0}</div>
+                  <div className="text-xs text-purple-300/70 mt-1">Konfiguriert</div>
                 </div>
                 <div className="p-2 bg-purple-500/20 rounded-lg">
                   <Eye className="w-5 h-5 text-purple-400" />
@@ -366,14 +376,14 @@ export default function CookieCompliancePage() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-gradient-to-br from-orange-500/10 to-orange-600/5 border-orange-500/20 hover:border-orange-500/40 transition-all duration-200 hover:shadow-lg hover:shadow-orange-900/20">
             <CardContent className="pt-6">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="text-sm font-medium text-orange-300 mb-1">Banner</div>
                   <div className="text-xl font-bold text-orange-400 capitalize">
-                    {config?.layout?.replace('_', ' ') || 'Banner Bottom'}
+                    {config?.layout?.replace(/_/g, ' ') || 'Banner Bottom'}
                   </div>
                   <div className="text-xs text-orange-300/70 mt-1">Layout</div>
                 </div>
@@ -424,22 +434,41 @@ export default function CookieCompliancePage() {
         {(!config?.scan_completed && (!config?.services || config.services.length === 0)) && (
           <Card className="mb-6 bg-gradient-to-r from-orange-500/20 to-orange-600/10 border-orange-500/30 hover:border-orange-500/50 transition-all shadow-lg shadow-orange-900/20">
             <CardContent className="pt-6">
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-3 mb-4">
                 <div className="p-2 bg-orange-500/20 rounded-lg flex-shrink-0">
                   <AlertCircle className="w-5 h-5 text-orange-400" />
                 </div>
                 <div className="flex-1">
-                  <div className="font-bold text-white mb-1">🚀 Setup erforderlich</div>
-                  <div className="text-sm text-gray-300">
-                    Scannen Sie Ihre Website um Cookies zu erkennen, oder wählen Sie Services manuell aus.
-                  </div>
+                  <div className="font-bold text-white mb-1">Setup erforderlich</div>
+                  <div className="text-sm text-gray-300">Folgen Sie diesen 3 Schritten, um Ihren DSGVO-konformen Cookie-Banner einzurichten.</div>
                 </div>
                 <Button
                   onClick={() => setActiveTab('services')}
-                  className="bg-orange-500 hover:bg-orange-600 shadow-lg shadow-orange-500/30 transition-all hover:scale-105"
+                  className="bg-orange-500 hover:bg-orange-600 shadow-lg shadow-orange-500/30 transition-all hover:scale-105 flex-shrink-0"
                 >
                   Jetzt einrichten
                 </Button>
+              </div>
+              <div className="grid grid-cols-3 gap-3 mt-2">
+                {[
+                  { step: 1, label: 'Website scannen', desc: 'Cookies automatisch erkennen', tab: 'services', icon: Eye },
+                  { step: 2, label: 'Services bestätigen', desc: 'Tracking-Dienste konfigurieren', tab: 'services', icon: Settings },
+                  { step: 3, label: 'Code einbinden', desc: 'Banner auf Ihrer Website', tab: 'integration', icon: Code },
+                ].map(({ step, label, desc, tab, icon: Icon }) => (
+                  <button
+                    key={step}
+                    onClick={() => setActiveTab(tab)}
+                    className="flex items-center gap-3 p-3 bg-gray-800/60 rounded-lg border border-gray-700 hover:border-orange-500/40 transition-all text-left group"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-orange-500/20 border border-orange-500/40 flex items-center justify-center text-orange-400 font-bold text-sm flex-shrink-0 group-hover:bg-orange-500/30">
+                      {step}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-white truncate">{label}</div>
+                      <div className="text-xs text-gray-400 truncate">{desc}</div>
+                    </div>
+                  </button>
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -449,42 +478,58 @@ export default function CookieCompliancePage() {
         <Card className="bg-gray-800/50 border-gray-700 backdrop-blur-sm shadow-xl">
           <CardContent className="pt-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-              <TabsList className="grid w-full grid-cols-5 bg-gray-900/50 p-1 h-auto">
-                <TabsTrigger 
-                  value="design" 
+              {/* Mobile: Select dropdown */}
+              <div className="sm:hidden">
+                <Select value={activeTab} onValueChange={setActiveTab}>
+                  <SelectTrigger className="w-full bg-gray-900/50 border-gray-600 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-900 border-gray-700">
+                    <SelectItem value="design" className="text-white">Design</SelectItem>
+                    <SelectItem value="services" className="text-white">Services</SelectItem>
+                    <SelectItem value="advanced" className="text-white">Erweitert</SelectItem>
+                    <SelectItem value="integration" className="text-white">Integration</SelectItem>
+                    <SelectItem value="statistics" className="text-white">Statistiken</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* Desktop: Tab bar */}
+              <TabsList className="hidden sm:grid w-full grid-cols-5 bg-gray-900/50 p-1 h-auto">
+                <TabsTrigger
+                  value="design"
                   className="gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white transition-all py-3"
                 >
-                  <Settings className="w-4 h-4" />
-                  <span className="hidden sm:inline">Design</span>
+                  <Settings className="w-4 h-4 flex-shrink-0" />
+                  <span>Design</span>
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="services" 
+                <TabsTrigger
+                  value="services"
                   className="gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white transition-all py-3"
                 >
-                  <Eye className="w-4 h-4" />
-                  <span className="hidden sm:inline">Services</span>
+                  <Eye className="w-4 h-4 flex-shrink-0" />
+                  <span>Services</span>
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="advanced" 
+                <TabsTrigger
+                  value="advanced"
                   className="relative gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white transition-all py-3"
                 >
-                  <Zap className="w-4 h-4" />
-                  <span className="hidden sm:inline">Erweitert</span>
+                  <Zap className="w-4 h-4 flex-shrink-0" />
+                  <span>Erweitert</span>
                   <span className="absolute -top-1 -right-1 px-1 py-0.5 text-[10px] rounded bg-red-500 text-white">Neu</span>
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="integration" 
+                <TabsTrigger
+                  value="integration"
                   className="gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white transition-all py-3"
                 >
-                  <Code className="w-4 h-4" />
-                  <span className="hidden sm:inline">Integration</span>
+                  <Code className="w-4 h-4 flex-shrink-0" />
+                  <span>Integration</span>
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="statistics" 
+                <TabsTrigger
+                  value="statistics"
                   className="gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white transition-all py-3"
                 >
-                  <BarChart3 className="w-4 h-4" />
-                  <span className="hidden sm:inline">Statistiken</span>
+                  <BarChart3 className="w-4 h-4 flex-shrink-0" />
+                  <span>Statistiken</span>
                 </TabsTrigger>
               </TabsList>
               

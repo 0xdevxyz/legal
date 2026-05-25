@@ -20,7 +20,7 @@ Usage:
 """
 
 import os
-from typing import Optional, AsyncGenerator
+from typing import Optional, AsyncGenerator, List
 from functools import lru_cache
 
 import asyncpg
@@ -28,6 +28,9 @@ import redis.asyncio as aioredis
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ==========================================
 # Configuration
@@ -139,35 +142,39 @@ async def get_redis() -> Optional[aioredis.Redis]:
 security = HTTPBearer(auto_error=False)
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     settings: Settings = Depends(get_settings)
 ) -> dict:
     """
-    Dependency: Get current authenticated user.
-    
-    Raises HTTPException 401 if not authenticated.
-    
-    Usage:
-        @router.get("/profile")
-        async def get_profile(current_user: dict = Depends(get_current_user)):
-            return {"user_id": current_user["user_id"]}
+    Kanonische Auth-Dependency — Single Source of Truth.
+
+    - Validiert JWT aus Bearer-Header ODER HttpOnly-Cookie 'access_token'
+    - Lädt User aus DB via AuthService.get_user_by_id
+    - Garantiert: id ist int, is_active ist True
+    - Wirft 401 bei Token-Problem oder User-nicht-gefunden
+    - Wirft 403 bei deaktiviertem User
     """
-    if not credentials:
+    token: Optional[str] = None
+    if credentials:
+        token = credentials.credentials
+    if not token:
+        token = request.cookies.get("access_token")
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"}
         )
-    
+
     try:
         payload = jwt.decode(
-            credentials.credentials,
+            token,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
             audience=settings.jwt_audience,
             issuer=settings.jwt_issuer,
         )
-        return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -175,49 +182,110 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"}
         )
     except jwt.InvalidTokenError as e:
+        logger.warning(f"Invalid token: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}",
+            detail="Authentication failed",
             headers={"WWW-Authenticate": "Bearer"}
         )
 
+    raw_id = payload.get("user_id") or payload.get("id") or payload.get("sub")
+    try:
+        user_id = int(raw_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user_id in token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    jti = payload.get("jti")
+    if jti:
+        redis = await get_redis()
+        if redis:
+            try:
+                blacklisted = await redis.get(f"jwt:blacklist:{jti}")
+                if blacklisted:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Token has been revoked",
+                        headers={"WWW-Authenticate": "Bearer"}
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.warning(f"JTI blacklist check failed: {e}")
+
+    db = await get_db()
+    from auth_service import AuthService
+    auth = AuthService(db, await get_redis())
+    user = await auth.get_user_by_id(user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    if not user.get("is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated"
+        )
+
+    user["id"] = int(user["id"])
+    return user
+
 async def get_current_user_optional(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     settings: Settings = Depends(get_settings)
 ) -> Optional[dict]:
     """
     Dependency: Get current user if authenticated, None otherwise.
-    
     Does NOT raise exception if not authenticated.
-    
-    Usage:
-        @router.get("/public")
-        async def public_endpoint(user: Optional[dict] = Depends(get_current_user_optional)):
-            if user:
-                return {"message": f"Hello {user['email']}"}
-            return {"message": "Hello guest"}
+    Reads token from Bearer header OR HttpOnly 'access_token' cookie.
     """
-    if not credentials:
+    token: Optional[str] = None
+    if credentials:
+        token = credentials.credentials
+    if not token:
+        token = request.cookies.get("access_token")
+    if not token:
         return None
-    
+
     try:
         payload = jwt.decode(
-            credentials.credentials,
+            token,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
             audience=settings.jwt_audience,
             issuer=settings.jwt_issuer,
         )
-        return payload
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
 
+    raw_id = payload.get("user_id") or payload.get("id") or payload.get("sub")
+    try:
+        user_id = int(raw_id)
+    except (TypeError, ValueError):
+        return None
+
+    db = await get_db()
+    from auth_service import AuthService
+    auth = AuthService(db)
+    user = await auth.get_user_by_id(user_id)
+    if not user or not user.get("is_active", True):
+        return None
+
+    user["id"] = int(user["id"])
+    return user
+
 async def require_admin(
     current_user: dict = Depends(get_current_user),
-    db: asyncpg.Pool = Depends(get_db)
 ) -> dict:
     """
-    Dependency: Require admin/superuser access.
+    Dependency: Require admin role access.
     
     Raises HTTPException 403 if not admin.
     
@@ -226,13 +294,7 @@ async def require_admin(
         async def delete_user(user_id: str, admin: dict = Depends(require_admin)):
             ...
     """
-    async with db.acquire() as conn:
-        user = await conn.fetchrow(
-            "SELECT is_superuser FROM users WHERE id = $1",
-            current_user.get("user_id")
-        )
-    
-    if not user or not user["is_superuser"]:
+    if current_user.get("role") != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"
@@ -291,12 +353,19 @@ def get_client_ip(request: Request) -> str:
     """
     Dependency: Get client IP address.
     
-    Handles X-Forwarded-For header for proxied requests.
+    Only trusts X-Forwarded-For from known trusted proxies (TRUSTED_PROXIES env var,
+    comma-separated). Falls back to direct client IP if the source is not trusted.
     """
+    _trusted_raw = os.getenv("TRUSTED_PROXIES", "")
+    trusted_proxies: List[str] = [p.strip() for p in _trusted_raw.split(",") if p.strip()]
+    
+    direct_ip = request.client.host if request.client else None
+    
     forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
+    if forwarded and direct_ip and direct_ip in trusted_proxies:
         return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    
+    return direct_ip or "unknown"
 
 # ==========================================
 # Lifecycle Management

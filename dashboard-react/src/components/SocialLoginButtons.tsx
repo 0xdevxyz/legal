@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { firebaseAuth, isFirebaseEnabled } from '@/lib/firebase';
 import { getApiBaseUrl } from '@/lib/api-utils';
+import { setAccessToken } from '@/lib/auth-refresh';
+import { apiClient } from '@/lib/api-client';
 
 const API_BASE = getApiBaseUrl();
 
@@ -50,29 +52,17 @@ export default function SocialLoginButtons({ plan = 'ki', mode = 'login' }: Soci
 
       const data = await response.json();
 
-      // Store Complyo tokens
-      localStorage.setItem('access_token', data.access_token);
-      localStorage.setItem('refresh_token', data.refresh_token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      setAccessToken(data.access_token);
+      try { localStorage.setItem('user', JSON.stringify(data.user)); } catch {}
 
-      // Redirect to dashboard or payment
       if (mode === 'register') {
-        // Redirect to Stripe Checkout
-        const checkoutResponse = await fetch(`${API_BASE}/api/payment/create-checkout`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${data.access_token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ plan_type: plan })
+        const checkoutData = await apiClient.post<{ checkout_url: string }>('/api/stripe/create-checkout', {
+          plan,
+          billing_period: 'monthly',
+          success_url: `${window.location.origin}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${window.location.origin}/register`,
         });
-
-        if (checkoutResponse.ok) {
-          const { checkout_url } = await checkoutResponse.json();
-          window.location.href = checkout_url;
-        } else {
-          throw new Error('Fehler beim Erstellen der Checkout-Session');
-        }
+        window.location.href = checkoutData.checkout_url;
       } else {
         router.push('/dashboard');
       }

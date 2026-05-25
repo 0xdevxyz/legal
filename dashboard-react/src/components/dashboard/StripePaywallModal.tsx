@@ -102,7 +102,7 @@ export const StripePaywallModal: React.FC<PaywallModalProps> = ({
               </li>
               <li className="flex items-start gap-2">
                 <Check className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                <span><strong>eRecht24 Integration</strong> für rechtssichere Texte</span>
+                <span><strong>KI-Rechtstexte</strong> mit automatischer Aktualisierung</span>
               </li>
               <li className="flex items-start gap-2">
                 <Check className="w-5 h-5 flex-shrink-0 mt-0.5" />

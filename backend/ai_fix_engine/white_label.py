@@ -1,8 +1,9 @@
 """
 Complyo - White-Label Processor
 
-Entfernt Third-Party-Branding und fügt Complyo-Branding ein.
-Speziell für eRecht24-Texte, aber generisch verwendbar.
+Entfernt Third-Party-Branding aus HTML-Rechtstexten und fügt Complyo-Branding ein.
+Historisch für eRecht24-Texte genutzt; jetzt als generischer Branding-Cleaner für
+alle importierten Rechtstexte (z.B. copy-paste aus externen Quellen).
 
 © 2025 Complyo.tech
 """

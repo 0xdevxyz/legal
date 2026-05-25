@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { X, Send, CheckCircle } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 /**
  * ExpertServiceModal - Kontaktformular für Expertenservice
@@ -25,25 +26,11 @@ export default function ExpertServiceModal() {
     setIsSubmitting(true);
     
     try {
-      // TODO: API-Endpunkt für Kontaktanfrage
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
-      const response = await fetch(`${API_URL}/api/v2/contact/expert-service`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        },
-        body: JSON.stringify(formData)
-      });
-      
-      if (response.ok) {
-        setIsSuccess(true);
-        setTimeout(() => {
-          closeModal();
-        }, 3000);
-      } else {
-        alert('Fehler beim Senden der Anfrage. Bitte versuchen Sie es erneut.');
-      }
+      await apiClient.post('/api/v2/contact/expert-service', formData);
+      setIsSuccess(true);
+      setTimeout(() => {
+        closeModal();
+      }, 3000);
     } catch (error) {
       console.error('Fehler beim Senden:', error);
       alert('Fehler beim Senden der Anfrage.');

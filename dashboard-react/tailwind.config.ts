@@ -12,16 +12,59 @@ const config: Config = {
       colors: {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
+        },
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        chart: {
+          "1": "hsl(var(--chart-1))",
+          "2": "hsl(var(--chart-2))",
+          "3": "hsl(var(--chart-3))",
+          "4": "hsl(var(--chart-4))",
+          "5": "hsl(var(--chart-5))",
+        },
         complyo: {
-          blue: "#0ea5e9",        // Sky-500 - heller, moderner
-          purple: "#a855f7",      // Purple-500 - eleganter
-          indigo: "#6366f1",      // Indigo-500 - neu
-          dark: "#0c0a09",        // Stone-950 - wärmer
-          slate: "#18181b",       // Zinc-900 - moderner
-          accent: "#14b8a6",      // Teal-500 - Akzentfarbe
-          muted: "#27272a",       // Zinc-800 - für Cards
-          border: "#3f3f46"       // Zinc-700 - subtile Borders
+          blue: "#0ea5e9",
+          purple: "#a855f7",
+          indigo: "#6366f1",
+          dark: "#0c0a09",
+          slate: "#18181b",
+          accent: "#14b8a6",
+          muted: "#27272a",
+          border: "#3f3f46"
         }
+      },
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
@@ -65,11 +108,11 @@ const config: Config = {
           "100%": { transform: "scale(1)", opacity: "1" }
         },
         pulseGlow: {
-          "0%, 100%": { 
-            boxShadow: "0 0 20px rgba(14, 165, 233, 0.2), 0 0 40px rgba(168, 85, 247, 0.2)" 
+          "0%, 100%": {
+            boxShadow: "0 0 20px rgba(14, 165, 233, 0.2), 0 0 40px rgba(168, 85, 247, 0.2)"
           },
-          "50%": { 
-            boxShadow: "0 0 30px rgba(14, 165, 233, 0.4), 0 0 60px rgba(168, 85, 247, 0.4)" 
+          "50%": {
+            boxShadow: "0 0 30px rgba(14, 165, 233, 0.4), 0 0 60px rgba(168, 85, 247, 0.4)"
           }
         },
         float: {

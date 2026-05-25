@@ -9,7 +9,7 @@ const getAppUrl = (path: string) => {
       return `http://localhost:3000${path}`;
     }
   }
-  return `https://app.complyo.tech${path}`;
+  return `https://app.complyo.de${path}`;
 };
 
 export default function CTAModern() {

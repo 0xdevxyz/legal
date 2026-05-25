@@ -1,115 +1,8 @@
 import axios, { AxiosResponse } from 'axios';
 import type { ComplianceAnalysis, FixResult, UserLimits, FixHistory } from '@/types/api';
-import { getApiBaseUrl } from '@/lib/api-utils';
+import { getApiClient } from '@/lib/api-client';
 
-const apiClient = axios.create({
- baseURL: getApiBaseUrl(),
- timeout: 60000,
- withCredentials: true,
- headers: {
-   'Content-Type': 'application/json',
-   'Accept': 'application/json',
- },
-});
-
-// Single-flight for token refresh — prevents multiple concurrent refresh calls
-let _inflightTokenRefresh: Promise<string | null> | null = null;
-
-const refreshAccessToken = async (): Promise<string | null> => {
-  if (_inflightTokenRefresh) return _inflightTokenRefresh;
-  _inflightTokenRefresh = (async () => {
-    try {
-      const res = await fetch(`${getApiBaseUrl()}/api/auth/refresh-cookie`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const token = data.access_token;
-        if (typeof window !== 'undefined' && token) {
-          (window as any).__complyo_access_token = token;
-        }
-        return token as string;
-      }
-      return null;
-    } catch {
-      return null;
-    } finally {
-      _inflightTokenRefresh = null;
-    }
-  })();
-  return _inflightTokenRefresh;
-};
-
-// ✅ Request Interceptor: Auto-inject Authorization Token + CSRF token
-apiClient.interceptors.request.use(
- (config) => {
-   const token = typeof window !== 'undefined'
-     ? ((window as any).__complyo_access_token || localStorage.getItem('access_token'))
-     : null;
-   if (token) {
-     config.headers['Authorization'] = `Bearer ${token}`;
-   }
-   if (typeof document !== 'undefined') {
-     const csrf = document.cookie
-       .split('; ')
-       .find(row => row.startsWith('csrf_token='))
-       ?.split('=')[1];
-     if (csrf) {
-       config.headers['X-CSRF-Token'] = csrf;
-     }
-   }
-   return config;
- },
- (error) => {
-   console.error('API Request Error:', error);
-   return Promise.reject(error);
- }
-);
-
-apiClient.interceptors.response.use(
- (response) => {
-   return response;
- },
- async (error) => {
-   const originalRequest = error.config;
-   
-   // ✅ Retry bei Netzwerk-Fehlern
-   if ((error.code === 'ERR_NETWORK' || error.code === 'ERR_NETWORK_CHANGED' || error.message?.includes('fetch')) && !originalRequest._retry) {
-     originalRequest._retry = true;
-     console.log('Network error detected, retrying request...');
-     await new Promise(resolve => setTimeout(resolve, 1000));
-     return apiClient(originalRequest);
-   }
-   
-   // ✅ Token-Refresh bei 401 via HttpOnly cookie endpoint (Single-Flight)
-   if (error.response?.status === 401 && !originalRequest._retry) {
-     originalRequest._retry = true;
-     
-     const newToken = await refreshAccessToken();
-     if (newToken) {
-       originalRequest.headers.Authorization = `Bearer ${newToken}`;
-       return apiClient(originalRequest);
-     }
-
-     if (typeof window !== 'undefined') {
-       delete (window as any).__complyo_access_token;
-       window.location.href = '/login';
-     }
-     return Promise.reject(error);
-   }
-   
-   console.error('💥 API Response Error:', {
-     status: error.response?.status,
-     statusText: error.response?.statusText,
-     data: error.response?.data,
-     message: error.message,
-     code: error.code,
-   });
-   
-   return Promise.reject(error);
- }
-);
+const apiClient = getApiClient();
 
 // ✅ URL Validation Helper - Akzeptiert ALLE gängigen Formate
 // Unterstützt: https://, http://, www., nur domain (z.B. complyo.tech)
@@ -343,7 +236,7 @@ export const getDashboardOverview = async () => {
 // ✅ Create Checkout Session API Call
 export const createCheckoutSession = async (priceId: string, successUrl: string, cancelUrl: string): Promise<any> => {
  try {
-   const response = await apiClient.post('/api/v2/payments/create-checkout-session', {
+   const response = await apiClient.post('/api/stripe/create-checkout', {
      price_id: priceId,
      success_url: successUrl,
      cancel_url: cancelUrl
@@ -362,7 +255,7 @@ export const createCheckoutSession = async (priceId: string, successUrl: string,
 // ✅ Create Portal Session API Call
 export const createPortalSession = async (): Promise<any> => {
  try {
-   const response = await apiClient.post('/api/v2/payments/create-portal-session');
+   const response = await apiClient.post('/api/stripe/create-portal-session');
    return response.data;
  } catch (error) {
    console.error('💥 createPortalSession failed:', error);
@@ -377,7 +270,7 @@ export const createPortalSession = async (): Promise<any> => {
 // ✅ Get Subscription Status API Call
 export const getSubscriptionStatus = async (): Promise<any> => {
  try {
-   const response = await apiClient.get('/api/v2/payments/subscription-status');
+   const response = await apiClient.get('/api/stripe/subscription-status');
    return response.data;
  } catch (error) {
    console.error('💥 getSubscriptionStatus failed:', error);
@@ -392,7 +285,7 @@ export const getSubscriptionStatus = async (): Promise<any> => {
 // ✅ Get Payment History API Call
 export const getPaymentHistory = async (): Promise<any> => {
  try {
-   const response = await apiClient.get('/api/v2/payments/history');
+   const response = await apiClient.get('/api/stripe/payment-history');
    return response.data;
  } catch (error) {
    console.error('💥 getPaymentHistory failed:', error);
@@ -407,7 +300,7 @@ export const getPaymentHistory = async (): Promise<any> => {
 // ✅ Get Available Plans API Call
 export const getAvailablePlans = async (): Promise<any> => {
  try {
-   const response = await apiClient.get('/api/v2/payments/plans');
+   const response = await apiClient.get('/api/stripe/plans');
    return response.data;
  } catch (error) {
    console.error('💥 getAvailablePlans failed:', error);
@@ -642,7 +535,7 @@ export const createStripeCheckout = async (
       plan,
       billing_period: billingPeriod,
       domain, // Domain mitgeben für Domain-Lock
-      success_url: successUrl || `${window.location.origin}/dashboard?payment=success&domain=${encodeURIComponent(domain || '')}`,
+      success_url: successUrl || `${window.location.origin}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: cancelUrl || `${window.location.origin}/dashboard?payment=cancelled`
     });
 
@@ -684,83 +577,106 @@ export const createStripePortal = async (returnUrl?: string): Promise<PortalResp
 };
 
 /**
- * eRecht24 API Integration
- * Bundling: Technische Checks + rechtliche Beschreibungen
+ * Interner Rechtstexte-Generator (ersetzt eRecht24)
+ * Generiert Impressum, Datenschutz, AGB, Cookie-Policy via eigener KI + knowledge/laws/
  */
 
-export interface ERecht24Project {
-  project_id: string;
-  api_key: string;
-  secret: string;
-}
+export type LegalDocumentType = 'imprint' | 'privacy' | 'tos' | 'cookie-policy';
 
-export interface LegalText {
-  html_content: string;
-  text_type: string;
+export interface LegalTextResponse {
+  document_id: number | null;
+  document_type: string;
   language: string;
-  created_at: string;
+  html_content: string;
+  plain_text: string;
+  template_version: string;
+  generated_at: string;
+  regeneration_trigger: string;
+  disclaimer: string;
+  source: string;
 }
 
-export interface ImpressumValidation {
-  is_valid: boolean;
-  score: number;
-  missing_fields: string[];
-  recommendations: string[];
+export interface LegalTextGenerateRequest {
+  user_data: {
+    company_name: string;
+    legal_form?: string;
+    address?: string;
+    zip_city?: string;
+    country?: string;
+    phone?: string;
+    email?: string;
+    website?: string;
+    represented_by?: string;
+    vat_id?: string;
+  };
+  language?: string;
+  services_used?: string[];
+  business_type?: string;
+  cookie_inventory?: Array<Record<string, string>>;
 }
 
-export interface CookieBannerConfig {
-  banner_text: string;
-  categories: Array<{
-    name: string;
-    required: boolean;
-    description: string;
+export interface RiskRadarScore {
+  overall_risk_score: number;
+  risk_level: string;
+  categories: Record<string, { score: number; label: string; issues: string[] }>;
+  top_risks: Array<{
+    category: string;
+    label: string;
+    score: number;
+    top_issue: string | null;
+    recommendation: string;
   }>;
-  cookies: any[];
-  script?: string;
+  last_updated: string | null;
+  disclaimer: string;
 }
 
-/**
- * Erstellt ein eRecht24-Projekt für eine Domain
- */
-export const createERecht24Project = async (domain: string): Promise<ERecht24Project> => {
+export interface EarlyWarning {
+  id: number;
+  title: string;
+  summary: string;
+  severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
+  law_category: string;
+  source: string | null;
+  url: string | null;
+  published_at: string | null;
+  action_required: boolean;
+  recommendation: string;
+}
+
+export const getLegalText = async (
+  type: LegalDocumentType,
+  userId: number,
+): Promise<LegalTextResponse> => {
   try {
-
-    const response: AxiosResponse<ERecht24Project> = await apiClient.post('/api/v2/erecht24/projects', {
-      domain
-    });
-
+    const response: AxiosResponse<LegalTextResponse> = await apiClient.get(
+      `/api/legal-texts/${type}`,
+      { params: { user_id: userId } },
+    );
     return response.data;
   } catch (error) {
-    console.error('💥 createERecht24Project failed:', error);
+    console.error(`💥 getLegalText(${type}) failed:`, error);
     if (axios.isAxiosError(error)) {
       const message = error.response?.data?.detail || error.message;
-      throw new Error(`eRecht24 Projekt-Erstellung fehlgeschlagen: ${message}`);
+      throw new Error(`Rechtstext abrufen fehlgeschlagen: ${message}`);
     }
     throw error;
   }
 };
 
-/**
- * Generiert rechtssichere Texte (Impressum, Datenschutz, AGB)
- */
 export const generateLegalText = async (
-  projectId: string,
-  type: 'impressum' | 'datenschutz' | 'agb',
-  companyData: Record<string, any>
-): Promise<LegalText> => {
+  type: LegalDocumentType,
+  userId: number,
+  payload: LegalTextGenerateRequest,
+): Promise<LegalTextResponse> => {
   try {
-
-    const response: AxiosResponse<LegalText> = await apiClient.post(
-      `/api/v2/erecht24/legal-text/${type}`,
-      {
-        project_id: projectId,
-        ...companyData
-      }
+    const response: AxiosResponse<LegalTextResponse> = await apiClient.post(
+      `/api/legal-texts/${type}/generate`,
+      payload,
+      { params: { user_id: userId } },
     );
-
     return response.data;
   } catch (error) {
-    console.error('💥 generateLegalText failed:', error);
+    console.error(`💥 generateLegalText(${type}) failed:`, error);
     if (axios.isAxiosError(error)) {
       const message = error.response?.data?.detail || error.message;
       throw new Error(`Rechtstext-Generierung fehlgeschlagen: ${message}`);
@@ -769,46 +685,61 @@ export const generateLegalText = async (
   }
 };
 
-/**
- * Validiert ein Impressum auf Vollständigkeit
- */
-export const validateImpressum = async (text: string): Promise<ImpressumValidation> => {
+export const getLegalTextHistory = async (
+  type: LegalDocumentType,
+  userId: number,
+  limit = 10,
+): Promise<{ versions: LegalTextResponse[]; count: number }> => {
   try {
-
-    const response: AxiosResponse<ImpressumValidation> = await apiClient.post(
-      '/api/v2/erecht24/validate-impressum',
-      { text }
-    );
-
+    const response = await apiClient.get(`/api/legal-texts/${type}/history`, {
+      params: { user_id: userId, limit },
+    });
     return response.data;
   } catch (error) {
-    console.error('💥 validateImpressum failed:', error);
-    if (axios.isAxiosError(error)) {
-      const message = error.response?.data?.detail || error.message;
-      throw new Error(`Impressum-Validierung fehlgeschlagen: ${message}`);
-    }
+    console.error(`💥 getLegalTextHistory(${type}) failed:`, error);
     throw error;
   }
 };
 
-/**
- * Generiert Cookie-Banner-Konfiguration basierend auf erkannten Cookies
- */
-export const generateCookieBanner = async (cookies: any[]): Promise<CookieBannerConfig> => {
+export const previewLegalText = async (
+  type: LegalDocumentType,
+  companyName: string,
+  language = 'de',
+): Promise<{ html_content: string; disclaimer: string; is_preview: boolean }> => {
   try {
-
-    const response: AxiosResponse<CookieBannerConfig> = await apiClient.post(
-      '/api/v2/erecht24/cookie-config',
-      { cookies }
-    );
-
+    const response = await apiClient.get(`/api/legal-texts/${type}/preview`, {
+      params: { company_name: companyName, language },
+    });
     return response.data;
   } catch (error) {
-    console.error('💥 generateCookieBanner failed:', error);
-    if (axios.isAxiosError(error)) {
-      const message = error.response?.data?.detail || error.message;
-      throw new Error(`Cookie-Banner-Generierung fehlgeschlagen: ${message}`);
-    }
+    console.error(`💥 previewLegalText(${type}) failed:`, error);
+    throw error;
+  }
+};
+
+export const getRiskRadarScore = async (domain?: string): Promise<RiskRadarScore> => {
+  try {
+    const response: AxiosResponse<RiskRadarScore> = await apiClient.get('/api/risk-radar/score', {
+      params: domain ? { domain } : {},
+    });
+    return response.data;
+  } catch (error) {
+    console.error('💥 getRiskRadarScore failed:', error);
+    throw error;
+  }
+};
+
+export const getEarlyWarnings = async (
+  severityMin = 'low',
+  limit = 20,
+): Promise<{ warnings: EarlyWarning[]; count: number; disclaimer: string }> => {
+  try {
+    const response = await apiClient.get('/api/risk-radar/early-warnings', {
+      params: { severity_min: severityMin, limit },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('💥 getEarlyWarnings failed:', error);
     throw error;
   }
 };

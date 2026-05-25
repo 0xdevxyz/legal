@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 03-e2e-compliance-test-suite (AUDIT-06, AUDIT-07, AUDIT-08)
-last_updated: "2026-05-01T19:20:00.000Z"
-last_activity: 2026-05-01
+status: verifying
+stopped_at: Completed 10-03 agency dashboard post-verification fixes (paywall, logo persistence, add-on catalog, pricing)
+last_updated: "2026-05-24T22:01:28.257Z"
+last_activity: 2026-05-24
 progress:
-  total_phases: 9
+  total_phases: 10
   completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 7
+  completed_plans: 7
   percent: 33
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-30)
 
 **Core value:** Kunden können DSGVO, BFSG und Rechtstext-Compliance schnell, rechtssicher und ohne Expertenwissen erreichen
-**Current focus:** Phase 3 — E2E Compliance Test Suite — COMPLETE
+**Current focus:** Phase 10 — agentur-kanal-stufe-1
 
 ## Current Position
 
-Phase: 3 (E2E Compliance Test Suite) — COMPLETE
-Plan: 2 of 2
-Status: Phase complete — all tests green
-Last activity: 2026-05-01
+Phase: 10
+Plan: Not started
+Status: Phase complete — ready for verification
+Last activity: 2026-05-24
 
 Progress: [███░░░░░░░] 33%
 
@@ -47,6 +47,9 @@ Progress: [███░░░░░░░] 33%
 | Phase 01-critical-compliance-fixes | 2 | 18min | 9min |
 | Phase 02-accessibility-statement-generator | 2 | 40min | 20min |
 | Phase 03-e2e-compliance-test-suite | 2 | 30min | 15min |
+| Phase 10 P01 | 20 | 3 tasks | 4 files |
+| Phase 10-agentur-kanal-stufe-1 P02 | 6min | 2 tasks | 2 files |
+| Phase 10 P3 | 35 | 4 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -73,6 +76,14 @@ Progress: [███░░░░░░░] 33%
 - [Phase 03-e2e-compliance-test-suite]: Node.js Playwright uses @playwright/test@1.41.2 added to dashboard-react devDependencies
 - [Phase 03-e2e-compliance-test-suite]: AUDIT-08 content blocker test uses pre-blocked pattern (data-complyo-consent + type=text/plain) since cookie-blocker.js requires API config for URL-based blocking
 - [Phase 03-e2e-compliance-test-suite]: widget-test-page.html added to backend/public/ as stable test fixture
+- [Phase 10]: No require_module gating on agency endpoints — matches existing /agency/stats pattern; deferred to follow-up phase
+- [Phase 10]: s.site_id column reference (not s.site_identifier) to avoid live-DB schema bug — consistent with working /agency/stats query
+- [Phase 10]: PNG validation by content_type only — pragmatic for Phase 10 Stufe 1 scope
+- [Phase 10-agentur-kanal-stufe-1]: AGENCY-03: pageCompression=0 in SimpleDocTemplate enables text-searchable PDF bytes (required for test assertions)
+- [Phase 10-agentur-kanal-stufe-1]: AGENCY-03: _normalize_logo() uses PIL LOAD_TRUNCATED_IMAGES=True + RGBA->RGB conversion to handle minimal PNGs safely in ReportLab
+- [Phase 10-agentur-kanal-stufe-1]: AGENCY-03: TOP_ISSUES_LIMIT=3 as class constant enforces top-3 truncation per AGENCY-03 spec
+- [Phase 10]: Paywall implemented as early return before stats/logo/clients render in agency/page.tsx
+- [Phase 10]: agency_sites_extra add-on: 200 EUR/month, 25 extra sites, agency plan only
 
 ### Pending Todos
 
@@ -86,6 +97,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-01T19:20:00.000Z
-Stopped at: Completed 03-e2e-compliance-test-suite (AUDIT-06, AUDIT-07, AUDIT-08 — 32 tests total, all green)
+Last session: 2026-05-24T21:13:20.263Z
+Stopped at: Completed 10-03 agency dashboard post-verification fixes (paywall, logo persistence, add-on catalog, pricing)
 Resume file: None

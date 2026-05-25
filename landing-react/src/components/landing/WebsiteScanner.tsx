@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Shield, Cookie, FileText, Eye, AlertTriangle, CheckCircle, Search, TrendingUp, Euro } from 'lucide-react';
 import { complianceApi } from '@/lib/api';
 
@@ -13,6 +13,22 @@ export default function WebsiteScanner() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Ergebnis beim Mount aus localStorage wiederherstellen
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('last_scan_data');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.results) {
+          setScanResult(parsed.results);
+          setUrl(parsed.url || '');
+        }
+      }
+    } catch {
+      // ignorieren – kein gültiger gespeicherter Scan
+    }
+  }, []);
 
   const pillars = [
     {
@@ -197,61 +213,72 @@ export default function WebsiteScanner() {
       
       console.log('📡 API Response:', apiData);
       
-      // Prüfe ob Issues vorhanden sind
-      if (!apiData.issues || !Array.isArray(apiData.issues) || apiData.issues.length === 0) {
+      // API liefert risk_categories[] — validieren
+      const categories: any[] = Array.isArray(apiData.risk_categories) ? apiData.risk_categories : [];
+      const hasData = apiData.success === true || categories.length > 0 || apiData.score != null;
+
+      if (!hasData) {
         setError('Keine Analysedaten verfügbar. Die Website konnte nicht gescannt werden. Bitte versuchen Sie es später erneut oder kontaktieren Sie den Support.');
         setIsScanning(false);
         return;
       }
-      
-      const issues = apiData.issues;
-      console.log('📋 Issues für Berechnung:', issues);
-      
-      // ✅ NEU: Verwende Backend-Säulen-Scores (wenn vorhanden)
-      let pillarScores: any = {};
-      
-      if (apiData.pillar_scores && Array.isArray(apiData.pillar_scores)) {
-        // Backend liefert bereits Säulen-Scores!
-        console.log('✅ Verwende Backend-Säulen-Scores:', apiData.pillar_scores);
-        
-        apiData.pillar_scores.forEach((p: any) => {
-          pillarScores[p.pillar] = {
-            score: p.score,
-            issues: p.issues_count,
-            critical: p.critical_count
-          };
-        });
-      } else {
-        // Fallback: Client-seitige Berechnung (sollte nicht mehr nötig sein)
-        console.log('⚠️ Fallback: Client-seitige Säulen-Berechnung');
-        const calculated = calculateScoresFromIssues(issues);
-        pillarScores = calculated.pillarScores;
-      }
-      
-      // Berechne Abmahnrisiko aus Issues
-      const fineRisk = issues.reduce((sum: number, issue: any) => 
-        sum + (issue.risk_euro_max || issue.risk_euro_min || 1000), 0
+
+      // Mappe alle API-Kategorien auf interne Pillar-Keys
+      const categoryToSäule: Record<string, string> = {
+        barrierefreiheit: 'accessibility',
+        dsgvo:            'gdpr',
+        cookies:          'cookies',
+        rechtstexte:      'legal',
+        sicherheit:       'security',
+        wettbewerb:       'competition',
+        shop:             'shop',
+        preise:           'prices',
+      };
+
+      const pillarScores: any = {};
+
+      categories.forEach((cat: any) => {
+        const key = categoryToSäule[cat.id] ?? cat.id;
+        if (!cat.detected) return; // nicht relevant für diese Website → nicht anzeigen
+        const cnt = cat.issues_count ?? 0;
+        const crit = cat.severity === 'critical' ? cnt : 0;
+        const score = Math.max(0, 100 - (crit * 60 + (cnt - crit) * 15));
+        pillarScores[key] = { score, issues: cnt, critical: crit, detected: true, label: cat.label, id: cat.id };
+      });
+
+      // Abmahnrisiko: nur Kategorien mit tatsächlichen Issues, skaliert nach Schwere
+      // Nicht einfach risk_max summieren – das wäre immer maximal
+      const fineRisk = categories.reduce((sum: number, cat: any) => {
+        const cnt = cat.issues_count ?? 0;
+        if (cnt === 0) return sum;
+        const riskMin = cat.risk_min ?? 0;
+        const riskMax = cat.risk_max ?? riskMin;
+        const isCritical = cat.severity === 'critical';
+        // Kritische Issues → risk_max, normale Issues → risk_min + 20% Aufschlag
+        const risk = isCritical ? riskMax : Math.round(riskMin + (riskMax - riskMin) * 0.2);
+        return sum + risk;
+      }, 0);
+
+      const backendScore = apiData.score ?? apiData.compliance_score ?? Math.round(
+        (pillarScores.gdpr.score * 0.45) +
+        (pillarScores.accessibility.score * 0.20) +
+        (pillarScores.cookies.score * 0.20) +
+        (pillarScores.legal.score * 0.15)
       );
-      
-      // Backend-Score für Gesamt-Score
-      const backendScore = apiData.compliance_score ?? apiData.score ?? 50;
-      console.log('🎯 Backend-Gesamt-Score:', backendScore);
-      console.log('🎯 Backend-Säulen-Scores:', pillarScores);
-      
+
       const transformedResult = {
         url: normalizedUrl,
-        overallScore: backendScore, // ✅ Backend-Score!
+        overallScore: backendScore,
         fineRisk,
-        pillars: pillarScores  // ✅ Backend-Säulen-Scores!
+        pillars: pillarScores,
       };
-      
-      // Speichere Scan-Daten für Dashboard-Sync
+
       const scanData = {
         scan_id: apiData.scan_id || `scan_${Date.now()}`,
         url: normalizedUrl,
         timestamp: new Date().toISOString(),
         results: transformedResult,
-        issues: issues
+        issues: categories,
       };
       localStorage.setItem('last_scan_data', JSON.stringify(scanData));
       console.log('✅ Scan-Daten gespeichert für Dashboard-Sync:', scanData.scan_id);
@@ -292,6 +319,7 @@ export default function WebsiteScanner() {
   };
 
   const getScoreColor = (score: number) => {
+    if (score == null) return 'text-gray-400 bg-gray-100';
     if (score >= 80) return 'text-green-600 bg-green-100';
     if (score >= 60) return 'text-yellow-600 bg-yellow-100';
     return 'text-red-600 bg-red-100';
@@ -304,7 +332,7 @@ export default function WebsiteScanner() {
   };
 
   return (
-    <section className="py-20 bg-[#111827]">
+    <section id="scanner" className="py-20 bg-[#111827]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-12">
@@ -445,72 +473,67 @@ export default function WebsiteScanner() {
                 </div>
 
                 {/* Fine Risk */}
-                <div className={`rounded-xl p-6 border-2 ${
-                  scanResult.fineRisk === 0 
-                    ? 'bg-green-50 border-green-200' 
-                    : 'bg-red-50 border-red-200'
-                }`}>
-                  <div className="flex items-center gap-3 mb-2">
-                    {scanResult.fineRisk === 0 ? (
-                      <CheckCircle className="w-6 h-6 text-green-600" />
-                    ) : (
-                    <AlertTriangle className="w-6 h-6 text-red-600" />
-                    )}
-                    <h4 className={`text-lg font-bold ${
-                      scanResult.fineRisk === 0 ? 'text-green-900' : 'text-red-900'
-                    }`}>
-                      {scanResult.fineRisk === 0 ? 'Keine Gefahr' : 'Abmahngefahr'}
-                    </h4>
-                  </div>
-                  <div className={`text-3xl font-bold flex items-center gap-1 ${
-                    scanResult.fineRisk === 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {scanResult.fineRisk === 0 ? (
-                      <span>0€</span>
-                    ) : (
-                      <>
-                    <Euro className="w-6 h-6" />
-                    {scanResult.fineRisk.toLocaleString('de-DE')}
-                      </>
-                    )}
-                  </div>
-                  <p className={`text-sm mt-1 ${
-                    scanResult.fineRisk === 0 ? 'text-green-700' : 'text-red-700'
-                  }`}>
-                    {scanResult.fineRisk === 0 
-                      ? 'Vollständig geschützt' 
-                      : 'Geschätztes Bußgeldrisiko'
-                    }
-                  </p>
-                </div>
+                {(() => {
+                  const risk = scanResult.fineRisk;
+                  const score = scanResult.overallScore;
+                  const isGreen = risk === 0;
+                  const isRed = score < 60;
+                  const bgClass = isGreen ? 'bg-green-50 border-green-200' : isRed ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200';
+                  const textClass = isGreen ? 'text-green-900' : isRed ? 'text-red-900' : 'text-yellow-900';
+                  const numClass = isGreen ? 'text-green-600' : isRed ? 'text-red-600' : 'text-yellow-600';
+                  const subClass = isGreen ? 'text-green-700' : isRed ? 'text-red-700' : 'text-yellow-700';
+                  const label = isGreen ? 'Keine Gefahr' : isRed ? 'Abmahngefahr' : 'Handlungsbedarf';
+                  const sub = isGreen ? 'Vollständig geschützt' : 'Geschätztes Risikopotenzial';
+                  return (
+                    <div className={`rounded-xl p-6 border-2 ${bgClass}`}>
+                      <div className="flex items-center gap-3 mb-2">
+                        {isGreen
+                          ? <CheckCircle className="w-6 h-6 text-green-600" />
+                          : <AlertTriangle className={`w-6 h-6 ${isRed ? 'text-red-600' : 'text-yellow-600'}`} />
+                        }
+                        <h4 className={`text-lg font-bold ${textClass}`}>{label}</h4>
+                      </div>
+                      <div className={`text-3xl font-bold flex items-center gap-1 ${numClass}`}>
+                        {isGreen ? <span>0€</span> : <><Euro className="w-6 h-6" />{risk.toLocaleString('de-DE')}</>}
+                      </div>
+                      <p className={`text-sm mt-1 ${subClass}`}>{sub}</p>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
-            {/* Pillar Details */}
+            {/* Pillar Details – nur tatsächlich geprüfte Kategorien */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {pillars.map((pillar) => {
-                const Icon = pillar.icon;
-                const pillarData = scanResult.pillars[pillar.id];
+              {Object.entries(scanResult.pillars).map(([key, pillarData]: [string, any]) => {
+                const meta: Record<string, { icon: any; color: string; description: string }> = {
+                  accessibility: { icon: Eye,       color: 'blue',   description: 'WCAG 2.1 AA Konformität' },
+                  gdpr:          { icon: Shield,     color: 'green',  description: 'Datenschutz-Compliance' },
+                  legal:         { icon: FileText,   color: 'purple', description: 'Impressum, AGB, Widerrufsrecht' },
+                  cookies:       { icon: Cookie,     color: 'orange', description: 'Cookie-Banner & Consent' },
+                  security:      { icon: Shield,     color: 'red',    description: 'HTTPS, Sicherheitsheader' },
+                  competition:   { icon: FileText,   color: 'yellow', description: 'Wettbewerbsrechtliche Anforderungen' },
+                  shop:          { icon: FileText,   color: 'indigo', description: 'Shop-Compliance' },
+                  prices:        { icon: Euro,       color: 'teal',   description: 'Preisangabenverordnung' },
+                };
+                const m = meta[key] ?? { icon: Shield, color: 'gray', description: '' };
+                const Icon = m.icon;
                 return (
-                  <div
-                    key={pillar.id}
-                    className="bg-white rounded-xl p-6 border-2 border-gray-200"
-                  >
+                  <div key={key} className="bg-white rounded-xl p-6 border-2 border-gray-200">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 bg-${pillar.color}-100 rounded-lg flex items-center justify-center`}>
-                          <Icon className={`w-5 h-5 text-${pillar.color}-600`} />
+                        <div className={`w-10 h-10 bg-${m.color}-100 rounded-lg flex items-center justify-center`}>
+                          <Icon className={`w-5 h-5 text-${m.color}-600`} />
                         </div>
                         <div>
-                          <h4 className="font-bold text-gray-900">{pillar.name}</h4>
-                          <p className="text-sm text-gray-600">{pillar.description}</p>
+                          <h4 className="font-bold text-gray-900">{pillarData.label ?? key}</h4>
+                          <p className="text-sm text-gray-600">{m.description}</p>
                         </div>
                       </div>
                       <div className={`text-2xl font-bold ${getScoreColor(pillarData.score)}`}>
                         {pillarData.score}
                       </div>
                     </div>
-                    
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-600">Gefundene Issues:</span>
@@ -529,21 +552,21 @@ export default function WebsiteScanner() {
             {/* CTA */}
             <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-center text-white">
               <h3 className="text-2xl font-bold mb-4">
-                🎯 Wollen Sie diese Probleme beheben?
+                Bereit, die gefundenen Probleme zu lösen?
               </h3>
               <p className="text-lg mb-6 opacity-90">
-                Unsere KI generiert automatisch rechtssichere Lösungen für alle gefundenen Issues
+                Complyo zeigt dir konkrete Lösungsvorschläge für alle gefundenen Issues – verständlich erklärt, direkt umsetzbar.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <a
-                  href={process.env.NODE_ENV === 'production' ? 'https://app.complyo.tech' : 'http://localhost:3001'}
+                  href="#waitlist"
                   className="px-8 py-4 bg-white text-blue-600 font-semibold rounded-xl hover:shadow-2xl transition-all transform hover:scale-105 inline-flex items-center justify-center gap-2"
                 >
                   <TrendingUp className="w-5 h-5" />
-                  Jetzt kostenlos starten
+                  Auf Warteliste setzen
                 </a>
                 <button
-                  onClick={() => setScanResult(null)}
+                  onClick={() => { setScanResult(null); setUrl(''); localStorage.removeItem('last_scan_data'); }}
                   className="px-8 py-4 bg-white/20 hover:bg-white/30 text-white font-semibold rounded-xl transition-all"
                 >
                   Neue Website scannen
@@ -556,16 +579,6 @@ export default function WebsiteScanner() {
           </div>
         )}
 
-        {/* Trust Badges */}
-        <div className="mt-12 text-center">
-          <p className="text-sm text-gray-400 mb-4">Vertraut von über 5.000+ Unternehmen</p>
-          <div className="flex flex-wrap justify-center gap-8 opacity-60">
-            <div className="text-gray-500 font-semibold">eRecht24 Partner</div>
-            <div className="text-gray-500 font-semibold">DSGVO-konform</div>
-            <div className="text-gray-500 font-semibold">Made in Germany</div>
-            <div className="text-gray-500 font-semibold">ISO 27001</div>
-          </div>
-        </div>
       </div>
     </section>
   );

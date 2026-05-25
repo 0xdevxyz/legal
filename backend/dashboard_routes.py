@@ -4,15 +4,14 @@ Provides aggregated metrics and statistics for authenticated users
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import logging
+from dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
 dashboard_router = APIRouter(prefix="/api/v2/dashboard", tags=["dashboard"])
-security = HTTPBearer()
 
 # Global references (set in main_production.py)
 db_pool = None
@@ -34,47 +33,17 @@ class DashboardMetrics(BaseModel):
     scoreTrend: Optional[float] = None  # Prozentuale Änderung zum Vormonat
     criticalTrend: Optional[int] = None  # Absolute Änderung kritischer Issues
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
-    """Verify JWT token and return user data"""
-    try:
-        token = credentials.credentials
-        user_data = auth_service.verify_token(token)
-        
-        if not user_data:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        
-        logger.info(f"User authenticated: {user_data.get('user_id')}")
-        return user_data
-    except Exception as e:
-        logger.error(f"Authentication failed: {e}")
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
 @dashboard_router.get("/metrics", response_model=DashboardMetrics)
 async def get_dashboard_metrics(user: Dict[str, Any] = Depends(get_current_user)):
     """
     Get aggregated dashboard metrics for the authenticated user
-    
-    Returns:
-    - totalScore: Average compliance score across all tracked websites
-    - websites: Number of tracked websites
-    - criticalIssues: Sum of critical issues from latest scans
-    - scansAvailable: Based on user plan (100 for AI, unlimited for Expert)
-    - scansUsed: Number of scans performed this month
-    - avgScore: Same as totalScore
-    - totalRiskEuro: Sum of total risk from latest scans
     """
     try:
-        # Get user_id from authenticated user
-        user_id = user.get("user_id")
-        
-        if not user_id:
-            raise HTTPException(status_code=401, detail="User ID not found in token")
-        
-        # Check if database is available
+        user_id = user["id"]
+
         if not db_pool:
             raise HTTPException(status_code=500, detail="Database not available")
-        
-        # For authenticated user, get real metrics
+
         async with db_pool.acquire() as conn:
             logger.info(f"Fetching dashboard metrics for user_id: {user_id}")
             
@@ -84,16 +53,16 @@ async def get_dashboard_metrics(user: Dict[str, Any] = Depends(get_current_user)
                 user_id
             )
             
-            # Get latest scans per website
+            # Get latest scans per website (URL-based fallback if website_id is NULL)
             latest_scans = await conn.fetch("""
-                SELECT DISTINCT ON (website_id)
-                    website_id,
+                SELECT DISTINCT ON (COALESCE(website_id::text, url))
+                    COALESCE(website_id::text, url) AS scan_key,
                     compliance_score,
                     critical_issues,
                     total_risk_euro
                 FROM scan_history
                 WHERE user_id = $1
-                ORDER BY website_id, scan_timestamp DESC
+                ORDER BY COALESCE(website_id::text, url), scan_timestamp DESC
             """, user_id)
             
             # Calculate aggregated metrics
@@ -120,13 +89,13 @@ async def get_dashboard_metrics(user: Dict[str, Any] = Depends(get_current_user)
             
             week_ago = datetime.now() - timedelta(days=7)
             old_scans = await conn.fetch("""
-                SELECT DISTINCT ON (website_id)
-                    website_id,
+                SELECT DISTINCT ON (COALESCE(website_id::text, url))
+                    COALESCE(website_id::text, url) AS scan_key,
                     compliance_score,
                     critical_issues
                 FROM scan_history
                 WHERE user_id = $1 AND scan_timestamp < $2
-                ORDER BY website_id, scan_timestamp DESC
+                ORDER BY COALESCE(website_id::text, url), scan_timestamp DESC
             """, user_id, week_ago)
             
             if old_scans and latest_scans:

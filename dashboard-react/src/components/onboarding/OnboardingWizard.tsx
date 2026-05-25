@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Globe, CheckCircle, ArrowRight, Loader2, Shield, Zap, FileCheck, X } from 'lucide-react';
-import { analyzeWebsite, saveTrackedWebsite } from '@/lib/api';
+import { analyzeWebsite, ensureCsrfCookie, saveTrackedWebsite, apiClient } from '@/lib/api';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -26,8 +26,14 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
   const [lockConfirmed, setLockConfirmed] = useState(false);
   
   const { showToast } = useToast();
-  const { accessToken } = useAuth();
+  const { accessToken, markOnboardingCompleted } = useAuth();
   const { setCurrentWebsite, setAnalysisData, updateMetrics, lockForOptimization } = useDashboardStore();
+
+  const handleSkip = () => {
+    markOnboardingCompleted();
+    localStorage.setItem('complyo_onboarding_completed', 'true');
+    onComplete();
+  };
 
   // Validate URL in real-time with strict validation
   useEffect(() => {
@@ -116,6 +122,9 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
     }
     const urlObj = new URL(normalizedUrl);
     const domain = urlObj.hostname;
+
+    // Ensure CSRF cookie is set before making POST requests
+    await ensureCsrfCookie();
 
     // Start API call and animation in parallel
     const apiPromise = analyzeWebsite(domain);
@@ -206,14 +215,13 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
       await saveTrackedWebsite(normalizedUrl, score);
       lockForOptimization(normalizedUrl);
 
-      // DB-Flag setzen (überlebt Cache-Leerung)
       if (accessToken) {
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de'}/api/auth/complete-onboarding`, {
-          method: 'POST',
+        await apiClient.post('/api/auth/complete-onboarding', {}, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
       }
 
+      markOnboardingCompleted();
       localStorage.setItem('complyo_onboarding_completed', 'true');
       showToast('Website erfolgreich registriert!', 'success');
       onComplete();
@@ -368,7 +376,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
         {step === 0 && (
           <div className="bg-white rounded-2xl shadow-2xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <button
-              onClick={onComplete}
+              onClick={handleSkip}
               className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 transition-colors"
               aria-label="Onboarding überspringen"
             >
@@ -428,7 +436,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
             </button>
 
             <button
-              onClick={onComplete}
+              onClick={handleSkip}
               className="w-full mt-3 py-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
             >
               Überspringen – ich kenne Complyo bereits

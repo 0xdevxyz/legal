@@ -4,13 +4,13 @@ Handles tracked websites with persistence and limits
 """
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from uuid import UUID
 import traceback
 import logging
+from dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,6 @@ db_pool = None
 auth_service = None
 
 router = APIRouter(prefix="/api/v2/websites", tags=["websites"])
-security = HTTPBearer()
 
 # Pydantic Models
 class WebsiteCreate(BaseModel):
@@ -42,60 +41,12 @@ class WebsiteResponse(BaseModel):
     success: bool
     website: TrackedWebsite
 
-# Dependency for auth
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
-    """Verify JWT token and return user data"""
-    try:
-        token = credentials.credentials
-        user_data = auth_service.verify_token(token)
-        
-        if not user_data:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        
-        logger.info(f"User authenticated: {user_data.get('user_id')}")
-        return user_data
-    except Exception as e:
-        logger.error(f"Authentication failed: {e}")
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-# ✅ Helper function to extract user_id from token (with DB lookup)
-async def get_user_id_from_token(user: Dict[str, Any]) -> Any:
-    """Extract user_id from token and verify in database"""
-    user_id_from_token = user.get("id") or user.get("user_id")
-    
-    if not user_id_from_token:
-        logger.error(f"No user_id in token claims: {list(user.keys())}")
-        raise HTTPException(status_code=403, detail="User ID not found in token")
-    
-    if not db_pool:
-        raise HTTPException(status_code=500, detail="Database not available")
-    
-    # ✅ Hole echte user_id aus DB — tolerant gegenüber UUID und Integer-Strings
-    async with db_pool.acquire() as conn:
-        db_user = await conn.fetchrow(
-            "SELECT id FROM users WHERE id::text = $1 OR email = $2 LIMIT 1",
-            str(user_id_from_token),
-            user.get("email", "")
-        )
-        
-        if not db_user:
-            logger.error(
-                f"User not found in DB — token_id='{user_id_from_token}' "
-                f"email='{user.get('email', '')}' "
-                f"all_claims={list(user.keys())}"
-            )
-            raise HTTPException(status_code=403, detail="User not found in database")
-        
-        logger.info(f"Resolved DB user_id={db_user['id']} from token_id='{user_id_from_token}'")
-        return db_user["id"]
-
 @router.get("", response_model=WebsitesResponse)
 async def get_websites(user=Depends(get_current_user)):
     """Get all tracked websites for the current user"""
     try:
-        # ✅ FIX: Verwende Helper-Funktion für user_id
-        user_id = await get_user_id_from_token(user)
-        
+        user_id = user["id"]
+
         async with db_pool.acquire() as conn:
             # Get tracked websites
             rows = await conn.fetch("""
@@ -140,8 +91,7 @@ async def get_websites(user=Depends(get_current_user)):
 async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
     """Save or update a tracked website"""
     try:
-        # ✅ FIX: Verwende Helper-Funktion für user_id
-        user_id = await get_user_id_from_token(user)
+        user_id = user["id"]
         
         async with db_pool.acquire() as conn:
             # Check if website already exists
@@ -318,35 +268,13 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                     logger.warning(f"Cookie-Banner-Config konnte nicht erstellt werden: {e}")
                     # Nicht kritisch - kann später manuell erstellt werden
                 
-                # Create eRecht24 project for new website
+                # Trigger Legal Text Generator für neue Website
                 try:
-                    from erecht24_service import erecht24_service
-                    
-                    # Extract domain from URL
-                    parsed_url = urlparse(data.url)
-                    domain = parsed_url.netloc or parsed_url.path
-                    
-                    erecht24_project = await erecht24_service.create_project(domain, user_id)
-                    
-                    if erecht24_project:
-                        # Save eRecht24 credentials
-                        await conn.execute("""
-                            INSERT INTO erecht24_projects (
-                                website_id,
-                                erecht24_project_id,
-                                erecht24_api_key,
-                                erecht24_secret
-                            ) VALUES ($1, $2, $3, $4)
-                        """,
-                            website["id"],
-                            erecht24_project["project_id"],
-                            erecht24_project.get("api_key"),
-                            erecht24_project.get("secret")
-                        )
-                        logger.info(f"✅ eRecht24-Projekt erstellt für Website #{website['id']}")
+                    from legal_text_generator import get_legal_text_generator
+                    generator = get_legal_text_generator(conn)
+                    logger.info(f"Legal Text Generator bereit für Website #{website['id']}")
                 except Exception as e:
-                    # Nicht kritisch - Website wurde trotzdem gespeichert
-                    logger.warning(f"eRecht24-Projekt konnte nicht erstellt werden: {e}")
+                    logger.warning(f"Legal Text Generator init fehlgeschlagen: {e}")
             
             return {
                 "success": True,
@@ -372,7 +300,7 @@ async def delete_website(website_id: str, user=Depends(get_current_user)):
     """Delete a tracked website"""
     try:
         # ✅ FIX: Verwende Helper-Funktion für user_id
-        user_id = await get_user_id_from_token(user)
+        user_id = user["id"]
         
         # Convert website_id to UUID
         try:
@@ -428,7 +356,7 @@ async def get_last_scan(
     """Get last scan for a website"""
     try:
         # ✅ FIX: Verwende Helper-Funktion für user_id
-        user_id = await get_user_id_from_token(user)
+        user_id = user["id"]
         
         # Convert website_id to UUID
         try:
@@ -497,7 +425,7 @@ async def get_score_history(
         List of score history entries
     """
     try:
-        user_id = await get_user_id_from_token(user)
+        user_id = user["id"]
         
         try:
             from uuid import UUID as UUIDType
@@ -586,7 +514,7 @@ async def get_scan_status(
         }
     """
     try:
-        user_id = current_user.get("uid") or current_user.get("user_id")
+        user_id = current_user["id"]
         async with db_pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -605,7 +533,7 @@ async def get_scan_status(
                     LIMIT 1
                 ) sh ON TRUE
                 WHERE tw.id = $1::uuid
-                  AND tw.user_id = $2::uuid
+                  AND tw.user_id = $2
                 """,
                 website_id,
                 user_id,

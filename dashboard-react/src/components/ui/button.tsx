@@ -20,14 +20,14 @@ export const Button: React.FC<ButtonProps> = ({
   as: _as,
   ...props
 }) => {
-  const baseClasses = 'inline-flex items-center justify-center rounded-xl font-semibold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95';
+  const baseClasses = 'inline-flex items-center justify-center rounded-xl font-semibold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95';
   
   const variants = {
-    default: 'bg-gradient-to-r from-sky-500 to-purple-500 hover:from-sky-600 hover:to-purple-600 text-white shadow-lg shadow-sky-500/20 hover:shadow-xl hover:shadow-sky-500/30 focus:ring-sky-500',
-    secondary: 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 hover:border-zinc-600 shadow-md focus:ring-zinc-600',
-    outline: 'border-2 border-zinc-700 hover:border-zinc-600 hover:bg-zinc-800/50 text-zinc-300 hover:text-white focus:ring-zinc-600',
-    ghost: 'hover:bg-zinc-800/50 text-zinc-300 hover:text-white',
-    destructive: 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-500/20 hover:shadow-xl hover:shadow-red-500/30 focus:ring-red-500'
+    default: 'bg-gradient-to-r from-sky-500 to-purple-500 hover:from-sky-600 hover:to-purple-600 text-white shadow-lg shadow-sky-500/20 hover:shadow-xl hover:shadow-sky-500/30 focus:ring-sky-500 focus:ring-offset-zinc-900 dark:focus:ring-offset-zinc-900',
+    secondary: 'bg-gray-200 dark:bg-zinc-800 hover:bg-gray-300 dark:hover:bg-zinc-700 text-gray-900 dark:text-white border border-gray-300 dark:border-zinc-700 hover:border-gray-400 dark:hover:border-zinc-600 shadow-md dark:shadow-md focus:ring-gray-500 dark:focus:ring-zinc-600 focus:ring-offset-white dark:focus:ring-offset-zinc-900',
+    outline: 'border-2 border-gray-300 dark:border-zinc-700 hover:border-gray-400 dark:hover:border-zinc-600 hover:bg-gray-100 dark:hover:bg-zinc-800/50 text-gray-700 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white focus:ring-gray-500 dark:focus:ring-zinc-600 focus:ring-offset-white dark:focus:ring-offset-zinc-900',
+    ghost: 'hover:bg-gray-100 dark:hover:bg-zinc-800/50 text-gray-700 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white focus:ring-gray-500 dark:focus:ring-zinc-600 focus:ring-offset-white dark:focus:ring-offset-zinc-900',
+    destructive: 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-500/20 hover:shadow-xl hover:shadow-red-500/30 focus:ring-red-500 focus:ring-offset-zinc-900 dark:focus:ring-offset-zinc-900'
   };
   
   const sizes = {

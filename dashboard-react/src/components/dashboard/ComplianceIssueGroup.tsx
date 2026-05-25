@@ -7,6 +7,7 @@ import { UnifiedFixButton } from './UnifiedFixButton';
 import { useToast } from '@/components/ui/Toast';
 import { LegalDocumentGenerator } from '@/components/legal/LegalDocumentGenerator';
 import { Button } from '@/components/ui/button';
+import { apiClient } from '@/lib/api-client';
 
 interface IssueGroup {
   group_id: string;
@@ -31,6 +32,7 @@ interface ComplianceIssueGroupProps {
   websiteUrl?: string;
   scanId?: string;
   onStartFix?: (issueId: string) => void;
+  isAnalysisOnly?: boolean;
 }
 
 export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
@@ -38,7 +40,8 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
   planType,
   websiteUrl,
   scanId,
-  onStartFix
+  onStartFix,
+  isAnalysisOnly = false
 }) => {
   const { showToast } = useToast();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -92,10 +95,10 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
 
   // Zeige limitierte Anzahl wenn nicht expanded
   const displayIssues = showAllIssues 
-    ? group.sub_issues 
-    : group.sub_issues.slice(0, 3);
+    ? (group.sub_issues ?? []) 
+    : (group.sub_issues ?? []).slice(0, 3);
   
-  const hasMore = group.sub_issues.length > 3;
+  const hasMore = (group.sub_issues ?? []).length > 3;
 
   // ✅ NEU: "Alle beheben" Funktion - gemeinsame Lösung für alle Issues der Gruppe
   const handleFixAllIssues = async () => {
@@ -104,9 +107,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
     setIsFixingAll(true);
     
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
-      
-      // Prüfe ob es sich um Datenschutz/Impressum handelt - dann eRecht24 nutzen
+      // Nutze internen Rechtstexte-Generator
       const isLegalText = group.category === 'datenschutz' || 
                           group.category === 'impressum' ||
                           group.category === 'legal' ||
@@ -114,22 +115,12 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                           group.title.toLowerCase().includes('impressum');
       
       if (isLegalText) {
-        // ✅ RECHTSTEXT: eRecht24 API nutzen
         const textType = group.title.toLowerCase().includes('impressum') ? 'imprint' : 'privacy_policy';
         const endpoint = textType === 'imprint' 
-          ? '/api/erecht24/imprint'
-          : '/api/erecht24/privacy-policy';
+          ? '/api/legal-texts/imprint'
+          : '/api/legal-texts/privacy';
 
-        const response = await fetch(`${API_URL}${endpoint}?language=de`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-          },
-        });
-
-        if (!response.ok) throw new Error('Generierung fehlgeschlagen');
-
-        const data = await response.json();
+        const data = await apiClient.get(endpoint, { language: 'de' }) as any;
         
         // Auto-Download
         if (typeof document !== 'undefined' && data.html) {
@@ -152,22 +143,15 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
         );
       } else {
         // ✅ TECHNISCHE FIXES: Batch-Fix API nutzen
-        const response = await fetch(`${API_URL}/api/fixes/batch`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
+        let result: any;
+        try {
+          result = await apiClient.post(`/api/fixes/batch`, {
             scan_id: scanId,
             group_id: group.group_id,
-            issue_ids: group.sub_issues.map(i => i.id),
+            issue_ids: (group.sub_issues ?? []).map(i => i.id),
             category: group.category
-          })
-        });
-
-        if (!response.ok) {
-          // Fallback: Zeige Anleitungen
+          });
+        } catch {
           showToast(
             `📋 Für ${group.total_count} ${group.category}-Probleme: Bitte prüfen Sie die einzelnen Issues unten für detaillierte Lösungen.`,
             'info',
@@ -177,8 +161,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
           return;
         }
 
-        const result = await response.json();
-        showToast(`✅ ${result.fixed_count || group.total_count} Probleme werden behoben...`, 'success', 5000);
+        showToast(`✅ ${result?.fixed_count || group.total_count} Probleme werden behoben...`, 'success', 5000);
       }
       
       // Callback für Parent-Komponente
@@ -295,7 +278,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
         )}
 
         {/* ✅ Für Impressum/Datenschutz: Spezieller Wizard statt "Alle beheben" */}
-        {isLegalTextGroup ? (
+        {!isAnalysisOnly && isLegalTextGroup ? (
           <div className="mt-4 space-y-3">
             {/* Info-Box */}
             <div className="p-4 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-lg">
@@ -328,7 +311,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
           </div>
         ) : (
           /* ✅ Für andere Kategorien: Standard-Fix-Button */
-          (group.has_unified_solution || group.total_count > 1) && (
+          !isAnalysisOnly && (group.has_unified_solution || group.total_count > 1) && (
             <div className="mt-4 space-y-3">
               <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
                 <p className="text-sm text-purple-200">
@@ -365,12 +348,13 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                   websiteUrl={websiteUrl}
                   scanId={scanId}
                   onStartFix={onStartFix}
+                  isAnalysisOnly={isAnalysisOnly}
                 />
               </div>
             )}
 
             {/* Sub Issues */}
-            {group.sub_issues.length > 0 && (
+            {(group.sub_issues ?? []).length > 0 && (
               <div>
                 <div className="text-xs text-zinc-500 uppercase tracking-wider mb-2">
                   {group.parent_issue ? 'Detaillierte Probleme' : 'Alle Probleme'}
@@ -385,6 +369,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                       websiteUrl={websiteUrl}
                       scanId={scanId}
                       onStartFix={onStartFix}
+                      isAnalysisOnly={isAnalysisOnly}
                     />
                   ))}
                 </div>
@@ -395,7 +380,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                     onClick={() => setShowAllIssues(true)}
                     className="mt-4 w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors"
                   >
-                    Zeige {group.sub_issues.length - 3} weitere Problem{group.sub_issues.length - 3 > 1 ? 'e' : ''}
+                    Zeige {(group.sub_issues ?? []).length - 3} weitere Problem{(group.sub_issues ?? []).length - 3 > 1 ? 'e' : ''}
                   </button>
                 )}
                 

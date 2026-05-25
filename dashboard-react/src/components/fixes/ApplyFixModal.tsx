@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { X, Server, Globe, GitBranch, Download, Shield, AlertTriangle, CheckCircle, Loader } from 'lucide-react';
 import { ClientOnlyPortal } from '../ClientOnlyPortal';
+import { apiClient } from '@/lib/api-client';
 
 interface ApplyFixModalProps {
   isOpen: boolean;
@@ -106,32 +107,22 @@ export const ApplyFixModal: React.FC<ApplyFixModalProps> = ({
     setCurrentStep('deploying');
     
     try {
-      // API-Call zum Anwenden des Fixes
-      const response = await fetch('/api/v2/fixes/apply', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        },
-        body: JSON.stringify({
-          fix_id: fixId,
-          deployment_method: selectedMethod,
-          credentials,
-          target_path: credentials.path || '/',
-          backup_before_deploy: createBackup,
-          user_confirmed: true,
-          fix_category: fixCategory,
-          fix_type: fixType
-        })
+      const result = await apiClient.post('/api/v2/fixes/apply', {
+        fix_id: fixId,
+        deployment_method: selectedMethod,
+        credentials,
+        target_path: credentials.path || '/',
+        backup_before_deploy: createBackup,
+        user_confirmed: true,
+        fix_category: fixCategory,
+        fix_type: fixType
       });
 
-      const result = await response.json();
-
-      if (response.ok && result.success) {
+      if (result && (result as any).success) {
         setDeploymentResult(result);
         setCurrentStep('success');
       } else {
-        setError(result.error || 'Deployment fehlgeschlagen');
+        setError((result as any)?.error || 'Deployment fehlgeschlagen');
         setCurrentStep('error');
       }
     } catch (err: any) {

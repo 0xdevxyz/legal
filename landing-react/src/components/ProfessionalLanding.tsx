@@ -24,7 +24,7 @@ import BfsgDisclaimer from './BfsgDisclaimer';
  * 
  * ✅ Barrierefreiheit: Semantisches HTML5 (header, nav, main, footer)
  */
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || 'https://app.complyo.tech';
+const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || 'https://app.complyo.de';
 
 export default function ProfessionalLanding() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

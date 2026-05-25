@@ -1,7 +1,7 @@
 """
 Complyo Smart Fix Generator
 Generates various types of fixes: Code, Text, Widget, Guided Setup
-Integrates with erecht24 for legal texts (White-Label)
+Legal texts via internal KI-Generator (knowledge/laws/ + Templates) — no external API dependency.
 """
 
 import os
@@ -16,11 +16,7 @@ class SmartFixGenerator:
     """
     
     def __init__(self):
-        self.erecht24_service = None  # Will be injected
-    
-    def set_erecht24_service(self, service):
-        """Inject erecht24 service for legal text generation"""
-        self.erecht24_service = service
+        pass
     
     async def generate(self, fix_id: str, fix_data: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -76,7 +72,7 @@ class SmartFixGenerator:
     
     async def _generate_text_fix(self, fix_id: str, fix_data: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate text-based fix (Legal texts via erecht24, White-Label)
+        Generate text-based fix (Legal texts via internal KI-Generator, White-Label)
         """
         # Determine legal text type
         title = fix_data.get("title", "").lower()
@@ -92,26 +88,9 @@ class SmartFixGenerator:
         elif "widerruf" in title:
             legal_text_type = "widerruf"
         
-        # If legal text type detected and erecht24 available, use it
+        # If legal text type detected, use internal generator
         final_text = content
         source = "AI-Generated"
-        
-        if legal_text_type and self.erecht24_service:
-            try:
-                # Get personalized legal text from erecht24
-                # Note: This would need user's erecht24 project_id from context
-                project_id = context.get("erecht24_project_id")
-                if project_id:
-                    erecht24_text = await self.erecht24_service.get_legal_text(
-                        project_id=project_id,
-                        text_type=legal_text_type,
-                        language="de"
-                    )
-                    if erecht24_text:
-                        final_text = erecht24_text
-                        source = "eRecht24 (via Complyo)"
-            except Exception as e:
-                print(f"eRecht24 integration error: {e}")
         
         # Fill in company data placeholders
         final_text = self._fill_placeholders(final_text, context)

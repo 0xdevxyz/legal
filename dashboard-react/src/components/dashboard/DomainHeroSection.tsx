@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Search, TrendingUp, Bot, Globe, RefreshCw, Lock, Info } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, TrendingUp, Bot, Globe, RefreshCw, Lock, Info, X, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDashboardStore } from '@/stores/dashboard';
 import { analyzeWebsite, getTrackedWebsites } from '@/lib/api';
@@ -15,7 +15,7 @@ interface DomainHeroSectionProps {
 export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
   onAnalyze
 }) => {
-  const { currentWebsite, metrics, updateMetrics, setCurrentWebsite, isInOptimizationMode, lockedOptimizationUrl } = useDashboardStore();
+  const { currentWebsite, metrics, updateMetrics, setCurrentWebsite, isInOptimizationMode, lockedOptimizationUrl, pendingRescanContext, setPendingRescanContext } = useDashboardStore();
   const { showToast } = useToast();
   const [url, setUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -29,36 +29,30 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
 
   const score = currentWebsite?.complianceScore ?? metrics.totalScore ?? 0;
 
-  // ✅ AUTO-TRIGGER SCAN bei URL-Parametern (von Legal Updates)
+  // Store-Listener: Rescan-Kontext von Legal News empfangen
   useEffect(() => {
-    const checkAutoTrigger = () => {
-      // ✅ SSR-Check
-      if (typeof window === 'undefined' || typeof document === 'undefined') return;
-      
-      const params = new URLSearchParams(window.location.search);
-      const triggerScan = params.get('trigger_scan');
-      const legalUpdateId = params.get('legal_update_id');
-      const legalContext = params.get('legal_context');
-      const focus = params.get('focus');
-      
-      if (triggerScan === 'true') {
-        const parts: string[] = ['Website-Scan vorbereitet.'];
-        if (legalContext) parts.push(`Wegen Gesetzesänderung: "${decodeURIComponent(legalContext)}"`);
-        if (focus) parts.push(`Fokus: ${focus}`);
-        setAutoTriggerInfo(parts.join(' — '));
-        
-        window.history.replaceState({}, document.title, window.location.pathname);
-        
-        const urlInput = document.querySelector('input[type="text"]') as HTMLInputElement;
-        if (urlInput) {
-          urlInput.focus();
-          urlInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }
+    if (!pendingRescanContext) return;
+
+    const focusLabel: Record<string, string> = {
+      cookies: 'Cookies',
+      datenschutz: 'Datenschutz',
+      impressum: 'Impressum',
+      barrierefreiheit: 'Barrierefreiheit',
     };
-    
-    checkAutoTrigger();
-  }, []);
+    const focusPart = pendingRescanContext.focus_category
+      ? ` — Fokus: ${focusLabel[pendingRescanContext.focus_category] ?? pendingRescanContext.focus_category}`
+      : '';
+    setAutoTriggerInfo(
+      `Scan gestartet wegen: "${pendingRescanContext.legal_update_title}"${focusPart}`
+    );
+
+    if (currentWebsite?.url) {
+      handleAnalyze(currentWebsite.url, pendingRescanContext.legal_update_id);
+    }
+
+    setPendingRescanContext(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRescanContext]);
 
   // ✅ HINWEIS: Auto-Analyse wurde entfernt.
   // "Zurück zur Optimierung" lädt jetzt gespeicherte Daten direkt in den Store
@@ -108,12 +102,12 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
             id: String(latestWebsite.id),
             url: latestWebsite.url,
             name: latestWebsite.url,
-            lastScan: latestWebsite.last_scan || new Date().toISOString(),
-            complianceScore: latestWebsite.compliance_score || 0,
+            lastScan: latestWebsite.last_scan_date || latestWebsite.last_scan || new Date().toISOString(),
+            complianceScore: latestWebsite.last_score ?? latestWebsite.compliance_score ?? 0,
             status: 'completed' as const
           });
           updateMetrics({
-            totalScore: latestWebsite.compliance_score || 0,
+            totalScore: latestWebsite.last_score ?? latestWebsite.compliance_score ?? 0,
             websites: websites.length
           });
         }
@@ -126,8 +120,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
     loadSavedWebsite();
   }, [currentWebsite?.url, setCurrentWebsite, updateMetrics]);
 
-  const handleAnalyze = async (forceUrl?: string) => {
-    // ✅ FIX: Nutze entweder übergebene URL, url State, oder currentWebsite.url
+  const handleAnalyze = async (forceUrl?: string, legalUpdateId?: number) => {
+    // FIX: Nutze entweder übergebene URL, url State, oder currentWebsite.url
     const urlToUse = forceUrl || url.trim() || currentWebsite?.url;
     
     if (!urlToUse) {
@@ -162,7 +156,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
       const domain = urlObj.hostname;
 
       // Call API
-      const result = await analyzeWebsite(domain);
+      const result = await analyzeWebsite(domain, legalUpdateId);
 
       // Update store with website
       setCurrentWebsite({
@@ -250,15 +244,15 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
       {/* Hero Section */}
       <div className="relative glass-strong rounded-3xl p-8 lg:p-14 overflow-hidden">
         {/* Animated Background Gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-sky-500/10 via-purple-500/10 to-indigo-500/10 opacity-50"></div>
-        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-sky-500/5 to-transparent animate-gradient bg-[length:200%_200%]"></div>
+        <div className="absolute inset-0 bg-gradient-to-br from-orange-500/8 via-transparent to-orange-500/5 opacity-60"></div>
+        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-orange-500/3 to-transparent"></div>
         
         <div className="relative grid lg:grid-cols-2 gap-10 items-center">
           {/* Left: Domain Input & Info */}
           <div className="space-y-6">
             <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-6 leading-tight tracking-tight">
               Website-Compliance
-              <span className="block mt-2 bg-gradient-to-r from-sky-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
+              <span className="block mt-2 text-orange-500">
                 auf 100% optimieren
               </span>
             </h1>
@@ -297,15 +291,17 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
               
               <div className="flex flex-col sm:flex-row gap-3">
                 {autoTriggerInfo && (
-                  <div className="w-full flex items-start gap-2 bg-sky-500/10 border border-sky-500/30 rounded-xl px-4 py-3 mb-1">
-                    <Info className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-sky-300">{autoTriggerInfo}</p>
+                  <div className="w-full flex items-start gap-3 glass-card border border-sky-500/30 rounded-2xl px-4 py-3 mb-1 animate-fade-in">
+                    <div className="flex-shrink-0 p-1.5 bg-sky-500/20 rounded-lg mt-0.5">
+                      <Zap className="w-3.5 h-3.5 text-sky-400" />
+                    </div>
+                    <p className="text-sm text-sky-300 flex-1 leading-snug">{autoTriggerInfo}</p>
                     <button
                       onClick={() => setAutoTriggerInfo(null)}
-                      className="ml-auto text-zinc-500 hover:text-zinc-300 flex-shrink-0"
+                      className="flex-shrink-0 ml-1 p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50 transition-colors"
                       aria-label="Hinweis schließen"
                     >
-                      ×
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 )}
@@ -333,7 +329,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                   size="lg"
                   onClick={() => handleAnalyze()}
                   disabled={isAnalyzing || !url.trim()}
-                  className="bg-gradient-to-r from-sky-500 to-purple-500 hover:from-sky-600 hover:to-purple-600 text-white font-semibold px-8 py-6 text-lg shadow-lg shadow-sky-500/25 hover:shadow-xl hover:shadow-sky-500/40 transition-all rounded-2xl disabled:opacity-40"
+                  className="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-8 py-6 text-lg shadow-lg shadow-orange-500/25 hover:shadow-xl hover:shadow-orange-500/30 transition-all rounded-2xl disabled:opacity-40"
                 >
                   {isAnalyzing ? (
                     <>
@@ -396,8 +392,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                 <div className="glass-card rounded-2xl p-4 border border-zinc-700/50 animate-fade-in">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500/20 to-purple-500/20 flex items-center justify-center">
-                        <Globe className="w-5 h-5 text-sky-400" />
+                      <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center">
+                        <Globe className="w-5 h-5 text-orange-400" />
                       </div>
                       <div>
                         <p className="text-xs text-gray-500 dark:text-zinc-400 mb-0.5">Aktuell analysiert</p>
@@ -429,7 +425,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                   {/* Circular Progress mit Glassmorphism */}
                   <div className="relative w-72 h-72">
                     {/* Glow Effect */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-sky-500/20 to-purple-500/20 rounded-full blur-2xl"></div>
+                    <div className="absolute inset-0 bg-orange-500/15 rounded-full blur-2xl"></div>
                     
                     <svg className="w-full h-full transform -rotate-90 relative z-10">
                       {/* Background Circle */}
@@ -479,7 +475,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                 {/* Score Info Text */}
                 {score < 100 ? (
                   <p className="text-sm text-gray-500 dark:text-zinc-400 mt-5 text-center">
-                    Noch <strong className="text-gray-900 dark:text-white font-semibold">{100 - score} Punkte</strong> bis zum Abmahnschutz
+                    Noch <strong className="text-gray-900 dark:text-white font-semibold">{100 - score} Punkte</strong> bis zum Compliance-Ziel
                   </p>
                 ) : (
                   <div className="flex items-center gap-2 text-green-400 mt-5">
@@ -492,9 +488,9 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
               /* Empty State */
               <div className="text-center py-12">
                 <div className="w-56 h-56 mx-auto mb-8 relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-sky-500/10 to-purple-500/10 rounded-full animate-pulse"></div>
-                  <div className="absolute inset-6 bg-gradient-to-br from-sky-500/5 to-purple-500/5 rounded-full animate-pulse delay-75"></div>
-                  <div className="absolute inset-12 bg-gradient-to-br from-sky-500/5 to-purple-500/5 rounded-full animate-pulse delay-150"></div>
+                  <div className="absolute inset-0 bg-orange-500/10 rounded-full animate-pulse"></div>
+                  <div className="absolute inset-6 bg-orange-500/5 rounded-full animate-pulse delay-75"></div>
+                  <div className="absolute inset-12 bg-orange-500/5 rounded-full animate-pulse delay-150"></div>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="p-6 bg-zinc-900/50 rounded-full backdrop-blur-sm">
                       <Globe className="w-20 h-20 text-gray-300 dark:text-zinc-600" />
@@ -515,8 +511,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
         {/* Features Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-10 pt-8 border-t border-white/5">
           <div className="flex items-center gap-4 p-4 rounded-2xl glass-card hover:glass-strong transition-all group">
-            <div className="bg-gradient-to-br from-green-500/20 to-emerald-500/20 p-3.5 rounded-xl group-hover:scale-110 transition-transform">
-              <TrendingUp className="w-6 h-6 text-green-400" />
+            <div className="bg-orange-500/15 p-3.5 rounded-xl group-hover:scale-110 transition-transform">
+              <TrendingUp className="w-6 h-6 text-orange-400" />
             </div>
             <div>
               <h4 className="text-gray-900 dark:text-white font-semibold text-sm">KI-gestützt</h4>
@@ -524,8 +520,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-4 p-4 rounded-2xl glass-card hover:glass-strong transition-all group">
-            <div className="bg-gradient-to-br from-sky-500/20 to-blue-500/20 p-3.5 rounded-xl group-hover:scale-110 transition-transform">
-              <Globe className="w-6 h-6 text-sky-400" />
+            <div className="bg-orange-500/15 p-3.5 rounded-xl group-hover:scale-110 transition-transform">
+              <Globe className="w-6 h-6 text-orange-400" />
             </div>
             <div>
               <h4 className="text-gray-900 dark:text-white font-semibold text-sm">20+ Prüfpunkte</h4>
@@ -533,11 +529,11 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-4 p-4 rounded-2xl glass-card hover:glass-strong transition-all group">
-            <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 p-3.5 rounded-xl group-hover:scale-110 transition-transform">
-              <Bot className="w-6 h-6 text-purple-400" />
+            <div className="bg-orange-500/15 p-3.5 rounded-xl group-hover:scale-110 transition-transform">
+              <Bot className="w-6 h-6 text-orange-400" />
             </div>
             <div>
-              <h4 className="text-gray-900 dark:text-white font-semibold text-sm">Abmahnschutz</h4>
+              <h4 className="text-gray-900 dark:text-white font-semibold text-sm">Risiko-Radar</h4>
               <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">Bei 100% Compliance</p>
             </div>
           </div>

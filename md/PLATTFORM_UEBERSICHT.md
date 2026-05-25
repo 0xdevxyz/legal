@@ -14,7 +14,7 @@
 - **Automatische Erkennung** von Compliance-Verstößen
 - **KI-generierte Lösungen** (Code, Texte, Guides)
 - **One-Click-Deployment** auf die eigene Website
-- **Rechtssichere Texte** via eRecht24-Integration
+- **KI-Rechtstexte** mit automatischer Gesetzesüberwachung
 - **Kontinuierliches Monitoring** mit Legal-News-Feed
 
 ---
@@ -169,7 +169,7 @@ Complyo prüft Websites nach **4 fundamentalen Compliance-Säulen**:
 
 2. **Text-Fixes** (Rechtstexte)
    - Impressum, Datenschutzerklärung, AGB
-   - eRecht24-Integration (abmahnsicher)
+   - Interner KI-Generator + Risiko-Radar (Frühwarner)
    - Platzhalter für individuelle Daten
 
 3. **Guide-Fixes** (Schritt-für-Schritt-Anleitungen)
@@ -289,7 +289,7 @@ Complyo prüft Websites nach **4 fundamentalen Compliance-Säulen**:
 
 ## 🔗 Integrationen
 
-### eRecht24 API:
+### ~~eRecht24 API~~ (entfernt 2026-05-23, ersetzt durch internen Generator):
 
 - ✅ **Abmahnsichere Rechtstexte**
   - Impressum
@@ -459,7 +459,7 @@ Für **mehrere Websites**, **Custom-Lösungen**, **White-Label** oder **Enterpri
 ✅ **KI-generierte Fixes** (Code, Texte, Guides, Widgets)  
 ✅ **Self-Service Deployment** (FTP, ZIP-Download) - AI Plan  
 ✅ **Expert Service Implementation** - Complyo passt Ihre Website direkt an - Expert Plan  
-✅ **Rechtssichere Texte** via eRecht24-Integration  
+✅ **KI-Rechtstexte** mit Auto-Update via Gesetzesdatenbank  
 ✅ **Kontinuierliches Monitoring** mit Legal-News-Feed  
 ✅ **Compliance-Dashboard** mit Score, Analytics, History  
 ✅ **Für mehrere Websites, Team-Management, API-Zugriff, White-Label:** Individuelles Angebot auf Anfrage  

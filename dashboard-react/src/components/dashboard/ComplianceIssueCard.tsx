@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { ComplianceIssue, FixResult } from '@/types/api';
 import { generateFix } from '@/lib/api';
-import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie, Lock, Image as ImageIcon, Pencil } from 'lucide-react';
+import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie, Lock, Image as ImageIcon, Pencil, Eye, ArrowRight } from 'lucide-react';
 import { StripePaywallModal } from './StripePaywallModal';
 import { ConfirmFixModal } from './ConfirmFixModal';
 import { FixModal } from './FixModal';
@@ -14,6 +14,7 @@ import { useCreateFixJob } from '@/hooks/useCompliance';
 import { UnifiedFixButton } from './UnifiedFixButton';
 import { useRouter } from 'next/navigation';
 import { useDashboardStore } from '@/stores/dashboard';
+import { apiClient } from '@/lib/api-client';
 
 // Hilfsfunktion: Ist es ein Cookie-Problem?
 const isCookieIssue = (issue: ComplianceIssue): boolean => {
@@ -75,8 +76,9 @@ interface ComplianceIssueCardProps {
   issue: ComplianceIssue;
   planType: 'free' | 'ai' | 'expert';
   websiteUrl?: string;
-  scanId?: string; // ✅ PERSISTENCE: scan_id für Job-Erstellung
+  scanId?: string;
   onStartFix?: (issueId: string) => void;
+  isAnalysisOnly?: boolean;
 }
 
 export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
@@ -84,7 +86,8 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   planType,
   websiteUrl,
   scanId,
-  onStartFix
+  onStartFix,
+  isAnalysisOnly = false
 }) => {
   const { showToast } = useToast();
   const router = useRouter();
@@ -173,7 +176,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
     
     setShowConfirmModal(false);
     
-    // ✅ SPECIAL: Für Impressum/Datenschutz nutze eRecht24-API direkt
+    // Interner Rechtstexte-Generator
     const isLegalText = issue.title.toLowerCase().includes('impressum') || 
                        issue.title.toLowerCase().includes('datenschutz');
     
@@ -182,22 +185,15 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       try {
         const textType = issue.title.toLowerCase().includes('impressum') ? 'imprint' : 'privacy_policy';
         const endpoint = textType === 'imprint' 
-          ? '/api/erecht24/imprint'
-          : '/api/erecht24/privacy-policy';
+          ? '/api/legal-texts/imprint'
+          : '/api/legal-texts/privacy';
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}?language=de`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-          },
-        });
+        const data = await apiClient.get(`${endpoint}`, { language: 'de' } as any) as any;
 
-        if (!response.ok) {
+        if (!data) {
           throw new Error('Generierung fehlgeschlagen');
         }
 
-        const data = await response.json();
-        
         // Auto-Download
         // ✅ SSR-Check
         if (typeof document !== 'undefined') {
@@ -447,17 +443,10 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                   onClick={async () => {
                     if (!altTextValue.trim()) return;
                     try {
-                      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/accessibility/alt-text`, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-                        },
-                        body: JSON.stringify({
-                          image_src: issue.image_src,
-                          alt_text: altTextValue.trim(),
-                          fix_code: `<img src="${issue.image_src}" alt="${altTextValue.trim()}" />`,
-                        }),
+                      await apiClient.post('/api/accessibility/alt-text', {
+                        image_src: issue.image_src,
+                        alt_text: altTextValue.trim(),
+                        fix_code: `<img src="${issue.image_src}" alt="${altTextValue.trim()}" />`,
                       });
                       setAltTextSaved(true);
                       showToast('Alt-Text gespeichert!', 'success');
@@ -584,7 +573,160 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
               </div>
             </div>
           )}
-          
+
+          {/* ✅ NEU: Barrierefreiheit / WCAG / Accessibility */}
+          {!isCookieIssue(issue) &&
+           (issue.category?.toLowerCase().includes('barriere') ||
+            issue.category?.toLowerCase().includes('accessibility') ||
+            issue.title?.toLowerCase().includes('wcag') ||
+            issue.title?.toLowerCase().includes('aria') ||
+            issue.title?.toLowerCase().includes('kontrast') ||
+            issue.title?.toLowerCase().includes('alt-text')) && (
+            <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-sky-500/20 rounded-lg flex-shrink-0">
+                  <Eye className="w-5 h-5 text-sky-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-sky-800 font-medium mb-2">Barrierefreiheit beheben:</p>
+                  <ol className="list-decimal list-inside text-sm text-sky-700 space-y-2 mb-4">
+                    <li>Öffnen Sie die Säule <strong>"Barrierefreiheit"</strong> und klicken Sie auf <strong>"KI-Fix starten"</strong></li>
+                    <li>Das Complyo Widget behebt Alt-Texte, Kontrast und ARIA-Labels automatisch auf Ihrer Website</li>
+                    <li>Integrieren Sie das Widget per Script-Tag (einmalige Einrichtung, ca. 2 Minuten)</li>
+                    <li>Führen Sie einen neuen Scan durch, um die Verbesserung zu bestätigen</li>
+                  </ol>
+                  <button
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('complyo:scroll-to-pillar', { detail: { pillarId: 'accessibility' } }));
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-sky-500 to-blue-500 text-white font-semibold rounded-lg hover:from-sky-600 hover:to-blue-600 transition-all text-sm"
+                  >
+                    <Eye className="w-4 h-4" />
+                    Zur Barrierefreiheit-Lösung
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ✅ NEU: DSGVO allgemein / Datenschutz (nicht Datenschutzerklärung fehlt) */}
+          {!isCookieIssue(issue) &&
+           !issue.category?.toLowerCase().includes('barriere') &&
+           !issue.category?.toLowerCase().includes('accessibility') &&
+           (issue.category?.toLowerCase().includes('dsgvo') ||
+            issue.category?.toLowerCase().includes('gdpr') ||
+            issue.category?.toLowerCase().includes('datenschutz') ||
+            issue.title?.toLowerCase().includes('dsgvo') ||
+            issue.title?.toLowerCase().includes('personenbezogen') ||
+            issue.title?.toLowerCase().includes('verarbeitung')) &&
+           !issue.title?.toLowerCase().includes('datenschutzerklärung') &&
+           !issue.category?.toLowerCase().includes('impressum') && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-green-500/20 rounded-lg flex-shrink-0">
+                  <Shield className="w-5 h-5 text-green-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-green-800 font-medium mb-2">DSGVO-Problem beheben:</p>
+                  <ol className="list-decimal list-inside text-sm text-green-700 space-y-2 mb-4">
+                    <li>Prüfen Sie welche personenbezogenen Daten Sie erheben (Formulare, Analytics, Tracking)</li>
+                    <li>Dokumentieren Sie die Rechtsgrundlage für jede Datenverarbeitung (Art. 6 DSGVO)</li>
+                    <li>Aktualisieren Sie Ihre Datenschutzerklärung entsprechend der gefundenen Datenverarbeitungen</li>
+                    <li>Nutzen Sie unseren Generator für eine rechtssichere und vollständige Datenschutzerklärung</li>
+                  </ol>
+                  <button
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('complyo:open-legal-generator', { detail: { type: 'datenschutz' } }));
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all text-sm"
+                  >
+                    <Shield className="w-4 h-4" />
+                    Datenschutz-Generator öffnen
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ✅ NEU: Rechtssichere Texte — AGB / Widerruf */}
+          {!isCookieIssue(issue) &&
+           !issue.category?.toLowerCase().includes('barriere') &&
+           !issue.category?.toLowerCase().includes('accessibility') &&
+           !issue.category?.toLowerCase().includes('dsgvo') &&
+           !issue.category?.toLowerCase().includes('gdpr') &&
+           !issue.category?.toLowerCase().includes('datenschutz') &&
+           !issue.category?.toLowerCase().includes('impressum') &&
+           !issue.title?.toLowerCase().includes('datenschutz') &&
+           !issue.title?.toLowerCase().includes('impressum') &&
+           (issue.category?.toLowerCase().includes('legal') ||
+            issue.category?.toLowerCase().includes('rechtssicher') ||
+            issue.title?.toLowerCase().includes('agb') ||
+            issue.title?.toLowerCase().includes('widerruf') ||
+            issue.title?.toLowerCase().includes('allgemeine geschäfts')) && (
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-purple-500/20 rounded-lg flex-shrink-0">
+                  <FileText className="w-5 h-5 text-purple-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-purple-800 font-medium mb-2">Rechtssicherer Text fehlt:</p>
+                  <ol className="list-decimal list-inside text-sm text-purple-700 space-y-2 mb-4">
+                    <li>Prüfen Sie ob Sie AGB oder eine Widerrufserklärung benötigen (erforderlich bei Onlineshops & Dienstleistungen)</li>
+                    <li>Nutzen Sie unseren KI-Generator für rechtssichere, anwaltlich geprüfte Texte</li>
+                    <li>Passen Sie den generierten Text auf Ihr Unternehmen an und veröffentlichen Sie ihn</li>
+                  </ol>
+                  <button
+                    onClick={() => setShowAIPreview(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all text-sm"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    KI-Fix starten
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ✅ NEU: Allgemeiner Fallback für alle anderen Issue-Typen ohne spezifische Anleitung */}
+          {!isCookieIssue(issue) &&
+           !issue.category?.toLowerCase().includes('barriere') &&
+           !issue.category?.toLowerCase().includes('accessibility') &&
+           !issue.title?.toLowerCase().includes('wcag') &&
+           !issue.title?.toLowerCase().includes('aria') &&
+           !issue.title?.toLowerCase().includes('kontrast') &&
+           !issue.title?.toLowerCase().includes('alt-text') &&
+           !issue.category?.toLowerCase().includes('dsgvo') &&
+           !issue.category?.toLowerCase().includes('gdpr') &&
+           !issue.category?.toLowerCase().includes('datenschutz') &&
+           !issue.title?.toLowerCase().includes('dsgvo') &&
+           !issue.title?.toLowerCase().includes('personenbezogen') &&
+           !issue.title?.toLowerCase().includes('verarbeitung') &&
+           !issue.category?.toLowerCase().includes('legal') &&
+           !issue.category?.toLowerCase().includes('rechtssicher') &&
+           !issue.title?.toLowerCase().includes('agb') &&
+           !issue.title?.toLowerCase().includes('widerruf') &&
+           !issue.title?.toLowerCase().includes('allgemeine geschäfts') &&
+           !issue.category?.toLowerCase().includes('impressum') &&
+           !issue.title?.toLowerCase().includes('datenschutz') &&
+           !issue.title?.toLowerCase().includes('impressum') && (
+            <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-zinc-700 font-medium mb-2">So beheben Sie dieses Problem:</p>
+              <ol className="list-decimal list-inside text-sm text-zinc-600 space-y-2">
+                <li>Lesen Sie die Beschreibung des Problems oben sorgfältig durch</li>
+                <li>Klicken Sie auf <strong>"KI-Fix starten"</strong> für eine automatisch generierte Lösung</li>
+                <li>Kopieren Sie den generierten Code oder Text und fügen Sie ihn in Ihre Website ein</li>
+                <li>Starten Sie anschließend einen neuen Scan, um die Behebung zu bestätigen</li>
+              </ol>
+            </div>
+          )}
+
           {/* Steps für andere Issue-Typen */}
           {issue.solution.steps && issue.solution.steps.length > 0 && 
            !issue.category?.includes('datenschutz') && 
@@ -634,7 +776,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       )}
 
       {/* AI-Fix Section */}
-      {issue.auto_fixable && (planType === 'free' || planType === 'ai' || planType === 'expert') && (
+      {issue.auto_fixable && !isAnalysisOnly && (planType === 'free' || planType === 'ai' || planType === 'expert') && (
         <div className="mt-4 space-y-3">
           {/* Plan-Hinweis für Free-Nutzer — BEVOR sie klicken */}
           {planType === 'free' && (
@@ -677,8 +819,18 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         </div>
       )}
 
+      {/* Analyse-Only Hinweis: Fixes gesperrt */}
+      {isAnalysisOnly && (
+        <div className="mt-4 flex items-center gap-2 px-3 py-2 bg-zinc-100 border border-zinc-300 rounded-lg">
+          <Lock className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+          <span className="text-xs text-zinc-600">
+            Fixes sind nur für Ihre registrierte Website verfügbar. Wechseln Sie zurück, um Optimierungen zu starten.
+          </span>
+        </div>
+      )}
+
       {/* Expert Service CTA */}
-      {planType === 'expert' && (
+      {planType === 'expert' && !isAnalysisOnly && (
         <div className="mt-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4">
           <div className="flex items-center gap-3">
             <span className="text-2xl">👨‍💻</span>

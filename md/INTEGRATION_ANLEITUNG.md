@@ -1,5 +1,9 @@
 # 🔌 Integration der neuen Features
 
+> ⚠️ **DEPRECATED 2026-05-23:** Diese Anleitung beschreibt die entfernte eRecht24-Integration.
+> Die aktuelle Integration nutzt den internen KI-Rechtstexte-Generator (`backend/legal_text_generator.py`).
+> Neue Routen: `/api/legal-texts/*` statt `/api/erecht24/*`
+
 ## ✅ Status: BEREIT ZUR INTEGRATION
 
 Alle neuen Features sind implementiert und **warten nur auf Aktivierung**. Sie können schrittweise aktiviert werden, ohne bestehenden Code zu überschreiben.
@@ -8,12 +12,12 @@ Alle neuen Features sind implementiert und **warten nur auf Aktivierung**. Sie k
 
 ## 🎯 Wichtigste Regel
 
-### ⚠️ **eRecht24 API hat IMMER Vorrang bei Rechtstexten!**
+### ℹ️ Interner KI-Generator hat Vorrang bei Rechtstexten
 
 Die neue Integration respektiert diese Hierarchie:
 
 **Rechtstexte (Impressum, Datenschutz):**
-1. ✅ **eRecht24 API** (wenn verfügbar) → ABMAHNSCHUTZ!
+1. ✅ **Interner KI-Generator** (knowledge/laws/ + Templates)
 2. 🔄 **Bestehende Templates** (Fallback)
 3. 🤖 **KI-Generated** (Notfall-Fallback)
 
@@ -83,7 +87,7 @@ from enhanced_fix_routes import enhanced_router
 
 # Nach Initialisierung von erecht24_service und fix_generator
 enhanced_fixer = initialize_enhanced_fixer(
-    erecht24_service=erecht24_service,
+    # DEPRECATED: erecht24_service=erecht24_service,
     fix_generator=smart_fix_generator,
     enable_preview=True,    # ✅ Preview aktivieren
     enable_deployment=False, # ❌ Deployment noch deaktiviert
@@ -120,7 +124,7 @@ curl http://localhost:8002/api/v2/enhanced-fixes/status
 
 ```python
 enhanced_fixer = initialize_enhanced_fixer(
-    erecht24_service=erecht24_service,
+    # DEPRECATED: erecht24_service=erecht24_service,
     fix_generator=smart_fix_generator,
     enable_preview=True,     # ✅ Preview
     enable_deployment=True,  # ✅ Deployment
@@ -189,7 +193,7 @@ GET /api/v2/enhanced-fixes/status
   },
   "priority_system": {
     "rechtstexte": {
-      "1_priority": "eRecht24 API",
+      "1_priority": "Complyo Internal Generator",
       "2_fallback": "Complyo Templates",
       "3_emergency": "KI-Generated"
     }
@@ -214,7 +218,7 @@ Authorization: Bearer <token>
     "email": "info@musterfirma.de"
   },
   "enable_preview": true,
-  "erecht24_project_id": "optional_project_id"
+  // "erecht24_project_id": "optional_project_id" // DEPRECATED
 }
 ```
 
@@ -224,13 +228,13 @@ Authorization: Bearer <token>
   "success": true,
   "fix": {
     "category": "impressum",
-    "source": "eRecht24 API",
+    "source": "complyo-internal",
     "content": "...",
     "priority_used": 1,
     "metadata": {
       "rechtssicher": true,
-      "abmahnschutz": true,
-      "provider": "eRecht24"
+      "risk_reduced": true,
+      "provider": "Complyo KI"
     }
   },
   "preview": {
@@ -286,10 +290,10 @@ tests/test_cookies.py::TestCookieDetection::test_no_cookie_banner_detected PASSE
 
 ## ⚠️ Wichtige Hinweise
 
-### 1. eRecht24 hat Vorrang
-- Bei Rechtstexten wird IMMER zuerst eRecht24 API geprüft
-- Nur bei Fehler/Nicht-Verfügbar wird Fallback verwendet
-- **Niemals** eRecht24-Content überschreiben!
+### Interner Generator hat Vorrang
+- Bei Rechtstexten wird IMMER zuerst der interne Generator genutzt
+- Fallbacks werden versioniert nachvollziehbar gespeichert
+- Interner Generator-Content wird versioniert gespeichert.
 
 ### 2. Bestehende Routen unverändert
 - Bestehende `/api/v2/fixes/*` Routen bleiben wie sie sind

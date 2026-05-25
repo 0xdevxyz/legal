@@ -147,7 +147,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
   // Initialize Page
   useEffect(() => {
     // Set page title for screen readers
-    document.title = 'Complyo - Website Compliance & Abmahnschutz';
+    document.title = 'Complyo - Website Compliance & Risiko-Radar';
   }, []);
 
   // Utility Functions

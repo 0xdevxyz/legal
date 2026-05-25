@@ -34,3 +34,4 @@ Alle SQL-Dateien werden beim Backend-Start via `init_db()` automatisch ausgefüh
 | `migration_erecht24_full.sql` | eRecht24-Vollintegration: Webhooks, Cache |
 | `migration_user_limits_uuid.sql` | User-Limits UUID-Migration |
 | `update_complyo_plans.sql` | Subscription-Plan-Updates |
+| `migrations/create_waitlist_leads.sql` | Early-Access Waitlist: Double-Opt-In, DSGVO-konform (2026-05-15) |

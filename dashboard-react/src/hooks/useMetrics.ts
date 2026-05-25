@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import apiClient from '@/lib/api';
+import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface DashboardMetrics {
   totalScore: number;
@@ -20,21 +21,21 @@ export interface DashboardMetrics {
 
 export const useDashboardMetrics = () => {
   const queryClient = useQueryClient();
+  const { user, accessToken } = useAuth();
 
   const { data, isLoading, error, refetch } = useQuery<DashboardMetrics>({
     queryKey: ['dashboard-metrics'],
     queryFn: async () => {
-
-      const response = await apiClient.get('/api/v2/dashboard/metrics');
-
-      return response.data;
+      const data = await apiClient.get<DashboardMetrics>('/api/v2/dashboard/metrics');
+      return data;
     },
-    staleTime: Infinity, // Cache bleibt gültig bis manuell invalidiert
-    gcTime: 10 * 60 * 1000, // 10 Minuten im Cache halten
-    refetchOnWindowFocus: false, // Nicht bei jedem Focus neu laden
-    refetchOnMount: false, // Nicht bei jedem Mount neu laden
-    refetchOnReconnect: false, // Nicht bei Reconnect neu laden
-    refetchInterval: false, // Kein automatisches Polling
+    enabled: !!user && !!accessToken,
+    staleTime: Infinity,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
     retry: 1,
   });
 

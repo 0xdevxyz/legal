@@ -13,7 +13,7 @@ import TrustMetrics from './alfima-landing/TrustMetrics';
 import CTASection from './alfima-landing/CTASection';
 import { Logo } from './Logo';
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || 'https://app.complyo.tech';
+const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || 'https://app.complyo.de';
 
 /**
  * AlfimaLanding - Creator Business Landing Page

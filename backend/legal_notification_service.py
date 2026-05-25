@@ -543,6 +543,98 @@ Complyo GmbH | datenschutz@complyo.tech
             
         return results
 
+    # ------------------------------------------------------------------
+    # NEW: Rescan-Required Notification
+    # ------------------------------------------------------------------
+
+    async def notify_rescan_required(
+        self,
+        website_id: str,
+        legal_update: Dict[str, Any],
+        severity: str = "medium",
+    ) -> None:
+        """
+        Erstellt eine Dashboard-Notification wenn eine Website neu gescannt werden soll.
+
+        Verhalten je Severity:
+        - CRITICAL / HIGH  → Dashboard-Banner + E-Mail
+        - MEDIUM / LOW     → nur Dashboard-Banner (user_legal_notifications)
+
+        Args:
+            website_id:    ID der tracked_website
+            legal_update:  Dict mit 'id', 'title', 'description', optional 'url'
+            severity:      'critical' | 'high' | 'medium' | 'low' | 'info'
+        """
+        try:
+            async with self.db_pool.acquire() as conn:
+                update_id = legal_update.get("id")
+                title = legal_update.get("title", "Gesetzliche Änderung erkannt")
+
+                # 1. User der Website ermitteln
+                user_row = await conn.fetchrow(
+                    """
+                    SELECT tw.user_id, u.email
+                    FROM tracked_websites tw
+                    JOIN users u ON tw.user_id = u.id
+                    WHERE tw.id = $1
+                    """,
+                    website_id,
+                )
+
+                if not user_row:
+                    logger.warning(f"notify_rescan_required: website {website_id} nicht gefunden")
+                    return
+
+                user_id = user_row["user_id"]
+                user_email = user_row["email"]
+
+                # 2. Dashboard-Notification erstellen
+                await conn.execute(
+                    """
+                    INSERT INTO user_legal_notifications
+                      (user_id, legal_update_id, website_id, notification_type, is_read)
+                    VALUES ($1, $2, $3, 'rescan_required', FALSE)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    user_id,
+                    update_id,
+                    website_id,
+                )
+
+                logger.info(
+                    f"Dashboard-Notification erstellt für user {user_id}, "
+                    f"website {website_id}, legal_update #{update_id}"
+                )
+
+                # 3. E-Mail bei hoher Severity
+                if severity in ("critical", "high") and user_email:
+                    subject = f"[Complyo] Neu scannen empfohlen: {title[:60]}"
+                    html_body = f"""
+                    <p>Hallo,</p>
+                    <p>eine gesetzliche Änderung wurde erkannt, die Ihre Website betreffen könnte:</p>
+                    <p><strong>{title}</strong></p>
+                    <p>Wir empfehlen, Ihre Website erneut zu scannen, um sicherzustellen,
+                    dass Sie weiterhin konform sind.</p>
+                    <p>
+                      <a href="{self.frontend_url}/dashboard" style="
+                        background:#4f46e5;color:#fff;padding:10px 20px;
+                        border-radius:6px;text-decoration:none;font-weight:600;
+                      ">Jetzt neu scannen</a>
+                    </p>
+                    <p style="color:#666;font-size:12px;">
+                      Diese E-Mail wurde automatisch von Complyo versendet.
+                    </p>
+                    """
+                    text_body = (
+                        f"Gesetzliche Änderung erkannt: {title}\n\n"
+                        f"Wir empfehlen, Ihre Website zu überprüfen.\n\n"
+                        f"Zum Dashboard: {self.frontend_url}/dashboard\n"
+                    )
+                    await self._send_email(user_email, subject, html_body, text_body)
+
+        except Exception as e:
+            logger.error(f"notify_rescan_required error: {e}", exc_info=True)
+
 
 legal_notification_service: Optional[LegalNewsNotificationService] = None
 

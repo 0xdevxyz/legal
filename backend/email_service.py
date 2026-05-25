@@ -29,7 +29,8 @@ class EmailService:
         self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.tech')
         self.sender_name = os.getenv('SENDER_NAME', 'Complyo Compliance')
         self.frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-        
+        self.admin_notify_email = os.getenv('ADMIN_NOTIFY_EMAIL', '')
+
         # For demo/testing purposes, we'll use console output if no SMTP is configured
         self.demo_mode = not all([self.smtp_username, self.smtp_password])
         
@@ -584,6 +585,150 @@ support@complyo.tech • http://localhost:3000
         except Exception as e:
             logger.error(f"Error sending data export email: {e}")
             return False
+
+    def send_waitlist_confirmation(self, email: str, name: str, confirm_url: str) -> bool:
+        """
+        Bestätigungs-E-Mail für die Early-Access Waitlist (Double-Opt-In, DSGVO-konform)
+        """
+        try:
+            greeting = f"Hallo{(' ' + name) if name else ''},"
+            subject = "Bestätige deine Anmeldung auf der Complyo Early-Access-Liste"
+
+            html_body = f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bestätige deine Early-Access-Anmeldung</title>
+</head>
+<body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);color:white;padding:32px;text-align:center;border-radius:12px 12px 0 0;">
+    <div style="display:inline-flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <div style="width:36px;height:36px;background:rgba(255,255,255,0.2);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:18px;">C</div>
+      <span style="font-size:22px;font-weight:bold;">complyo</span>
+    </div>
+    <p style="margin:0;font-size:15px;opacity:0.85;">Early Access – Jetzt bestätigen</p>
+  </div>
+
+  <div style="background:#f8fafc;padding:32px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0;border-top:none;">
+    <h2 style="color:#1e293b;margin-top:0;">{greeting}</h2>
+
+    <p>vielen Dank für dein Interesse an <strong>complyo</strong> – der KI-Compliance-Plattform für Websites.</p>
+
+    <p>Bitte bestätige jetzt deine E-Mail-Adresse, um deinen Early-Access-Platz zu sichern:</p>
+
+    <div style="text-align:center;margin:32px 0;">
+      <a href="{confirm_url}"
+         style="background:#2563eb;color:white;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:bold;font-size:16px;display:inline-block;box-shadow:0 4px 14px rgba(37,99,235,0.35);">
+        E-Mail bestätigen
+      </a>
+    </div>
+
+    <p style="font-size:13px;color:#64748b;">
+      Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:<br>
+      <a href="{confirm_url}" style="color:#2563eb;word-break:break-all;">{confirm_url}</a>
+    </p>
+
+    <p style="font-size:13px;color:#64748b;">
+      Dieser Link ist 7 Tage gültig. Falls du dich nicht angemeldet hast, ignoriere diese E-Mail einfach.
+    </p>
+
+    <hr style="border:none;border-top:1px solid #e2e8f0;margin:28px 0;">
+
+    <p style="font-size:12px;color:#94a3b8;text-align:center;">
+      <strong>Complyo</strong> &bull; KI-Compliance-Plattform &bull; Made in Germany<br>
+      <a href="https://complyo.de/impressum" style="color:#94a3b8;">Impressum</a> &bull;
+      <a href="https://complyo.de/datenschutz" style="color:#94a3b8;">Datenschutz</a> &bull;
+      <a href="mailto:support@complyo.de" style="color:#94a3b8;">support@complyo.de</a>
+    </p>
+    <p style="font-size:11px;color:#cbd5e1;text-align:center;">
+      Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.tech für Early Access angemeldet hast.
+      Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
+    </p>
+  </div>
+</body>
+</html>"""
+
+            text_body = f"""{greeting}
+
+vielen Dank für dein Interesse an complyo – der KI-Compliance-Plattform für Websites.
+
+Bitte bestätige deine E-Mail-Adresse, um deinen Early-Access-Platz zu sichern:
+
+{confirm_url}
+
+Dieser Link ist 7 Tage gültig.
+Falls du dich nicht angemeldet hast, ignoriere diese E-Mail einfach.
+
+---
+Complyo – KI-Compliance-Plattform – Made in Germany
+Impressum: https://complyo.de/impressum
+Datenschutz: https://complyo.de/datenschutz
+Kontakt: support@complyo.de
+
+Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.tech für Early Access angemeldet hast.
+Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
+"""
+            return self._send_email(
+                to_email=email,
+                subject=subject,
+                html_body=html_body,
+                text_body=text_body,
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to send waitlist confirmation to {email}: {e}")
+            return False
+
+    def send_waitlist_admin_notification(self, email: str, name: str, phone: str, source: str) -> bool:
+        """
+        Interne Benachrichtigung an den Admin bei jeder neuen Waitlist-Anmeldung
+        """
+        if not self.admin_notify_email:
+            return False
+        try:
+            display_name = name or "(kein Name)"
+            display_phone = phone or "(keine Telefonnummer)"
+            subject = f"[complyo] Neue Waitlist-Anmeldung: {display_name} <{email}>"
+            html_body = f"""<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="utf-8"><title>Neue Waitlist-Anmeldung</title></head>
+<body style="font-family:Arial,sans-serif;color:#333;max-width:500px;margin:0 auto;padding:20px;">
+  <div style="background:#2563eb;color:white;padding:16px 20px;border-radius:10px 10px 0 0;">
+    <strong>complyo – Neue Waitlist-Anmeldung</strong>
+  </div>
+  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;padding:20px;border-radius:0 0 10px 10px;">
+    <table style="width:100%;border-collapse:collapse;font-size:14px;">
+      <tr><td style="padding:6px 0;color:#64748b;width:110px;">E-Mail</td><td style="padding:6px 0;font-weight:bold;">{email}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;">Name</td><td style="padding:6px 0;">{display_name}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;">Telefon</td><td style="padding:6px 0;">{display_phone}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;">Quelle</td><td style="padding:6px 0;">{source}</td></tr>
+    </table>
+    <p style="font-size:12px;color:#94a3b8;margin-top:16px;">
+      Double-Opt-In ausstehend – Bestätigungsmail wurde an den Nutzer gesendet.
+    </p>
+  </div>
+</body>
+</html>"""
+            text_body = f"""Neue Waitlist-Anmeldung
+
+E-Mail:   {email}
+Name:     {display_name}
+Telefon:  {display_phone}
+Quelle:   {source}
+
+Double-Opt-In ausstehend.
+"""
+            return self._send_email(
+                to_email=self.admin_notify_email,
+                subject=subject,
+                html_body=html_body,
+                text_body=text_body,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send admin notification for {email}: {e}")
+            return False
+
 
 # Global email service instance
 email_service = EmailService()

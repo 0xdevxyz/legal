@@ -1,0 +1,35 @@
+{
+  "collapse-whitespace": true,
+  "colorGroups": [
+    {
+      "query": "tag:#law-update",
+      "color": {"a": 1, "rgb": 16750848}
+    },
+    {
+      "query": "tag:#court-ruling",
+      "color": {"a": 1, "rgb": 16711680}
+    },
+    {
+      "query": "tag:#law",
+      "color": {"a": 1, "rgb": 255}
+    },
+    {
+      "query": "tag:#pattern",
+      "color": {"a": 1, "rgb": 65280}
+    },
+    {
+      "query": "tag:#index",
+      "color": {"a": 1, "rgb": 8421504}
+    }
+  ],
+  "showTags": true,
+  "showAttachments": false,
+  "hideUnresolved": false,
+  "showOrphans": true,
+  "centerStrength": 0.518,
+  "repelStrength": 10,
+  "linkStrength": 1,
+  "linkDistance": 250,
+  "scale": 1,
+  "close": false
+}

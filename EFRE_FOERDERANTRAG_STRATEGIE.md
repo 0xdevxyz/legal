@@ -1,9 +1,9 @@
 # 🇪🇺 EFRE-Förderungsstrategie für Complyo
 ## Strategiedokument zur Optimierung für Europäische Regionalförderung
 
-**Datum**: 11. November 2025  
-**Version**: 1.0  
-**Status**: Konzeptphase für Förderantrag
+**Datum**: 11. November 2025 | **Aktualisiert**: 15. Mai 2026  
+**Version**: 2.0  
+**Status**: F&E-Arbeitspakete implementiert — Antragsreife Dokumentation vorhanden
 
 ---
 
@@ -25,13 +25,24 @@
 
 | Förderkriterium | Erfüllung | Nachweis |
 |----------------|-----------|----------|
-| **Innovation** | ⭐⭐⭐⭐ (80%) | KI-gestützte Analyse, automatische Fix-Generierung |
+| **Innovation** | ⭐⭐⭐⭐⭐ (95%) | AP1 Semantik, AP5 XAI, AP3 Closed-Loop — code-basiert nachgewiesen |
 | **Digitalisierung** | ⭐⭐⭐⭐⭐ (100%) | Vollständig cloud-basierte SaaS-Lösung |
 | **KMU-Fokus** | ⭐⭐⭐⭐ (85%) | Zielgruppe: kleine/mittlere Unternehmen |
-| **Forschung & Entwicklung** | ⭐⭐⭐ (60%) | Verbesserungspotenzial bei F&E-Dokumentation |
+| **Forschung & Entwicklung** | ⭐⭐⭐⭐⭐ (95%) | 5 AP-Dokumente, Benchmark-Set, Patentrecherche, Hochschulbriefe |
 | **Regionale Relevanz** | ⭐⭐⭐ (65%) | Muss stärker hervorgehoben werden |
 | **Nachhaltigkeit/Klima** | ⭐⭐ (40%) | **Schwachstelle - muss ergänzt werden** |
-| **Messbare Ziele** | ⭐⭐⭐ (60%) | KPIs müssen definiert werden |
+| **Messbare Ziele** | ⭐⭐⭐⭐⭐ (95%) | KPI-Framework in AP2, Benchmark in AP1, MLOps-Metriken in AP3 |
+
+### Stand nach F&E-Implementierung (Mai 2026)
+
+| KI-Innovationskriterium | IST | SOLL | AP | Dokument |
+|-------------------------|-----|------|----|----------|
+| Semantische Klassifikation regulatorischer Risiken | 80% | **95%** | AP1 | [AP1](data/efre/AP1_semantische_klassifikation.md) |
+| Autonome Generierung rechtskonformer Handlungsempfehlungen | 90% | **98%** | AP2 | [AP2](data/efre/AP2_autonome_empfehlungen.md) |
+| Adaptive Compliance-Remediation | 55% | **90%** | AP3 | [AP3](data/efre/AP3_adaptive_remediation.md) |
+| Mehrsprachige regulatorische Wissensmodelle | 25% | **85%** | AP4 | [AP4](data/efre/AP4_multilinguale_wissensmodelle.md) |
+| Explainable AI für Compliance | 50% | **92%** | AP5 | [AP5](data/efre/AP5_explainable_ai.md) |
+| **Gesamt-Innovationsreife** | **60%** | **92%** | | [Index](data/efre/00_INDEX.md) |
 
 ---
 

@@ -93,14 +93,14 @@ export default function ModernHero() {
               </div>
               <div className="flex items-center gap-3 text-gray-700">
                 <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                <span className="text-base"><strong>Abmahn-Schutz:</strong> Vermeiden Sie teure Strafen</span>
+                <span className="text-base"><strong>Abmahnrisiko reduzieren:</strong> Frühwarnung &amp; Compliance-Hinweise</span>
               </div>
             </div>
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <motion.a
-                href={process.env.NODE_ENV === 'production' ? 'https://app.complyo.tech' : 'http://localhost:3001'}
+                href={process.env.NODE_ENV === 'production' ? 'https://app.complyo.de' : 'http://localhost:3001'}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold px-8 py-4 rounded-full transition-all shadow-xl hover:shadow-2xl"

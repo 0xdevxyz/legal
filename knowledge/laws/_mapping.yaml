@@ -1,0 +1,71 @@
+# Cross-lingual Norm-Mapping-Ontologie
+# Format: DE-Norm → Entsprechungen in anderen Sprachen + EU-Norm
+mappings:
+
+  - de_id: "DSGVO"
+    de_full: "Datenschutz-Grundverordnung"
+    eu_id: "GDPR"
+    translations:
+      en: "General Data Protection Regulation (GDPR)"
+      fr: "Règlement général sur la protection des données (RGPD)"
+      it: "Regolamento generale sulla protezione dei dati (RGPD)"
+      pl: "Ogólne rozporządzenie o ochronie danych (RODO)"
+    eur_lex_id: "32016R0679"
+    official_url: "https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:32016R0679"
+    article_mappings:
+      - de: "Art. 6 DSGVO"
+        eu: "Art. 6 GDPR"
+        fr: "Art. 6 RGPD"
+        topic: "Rechtmäßigkeit der Verarbeitung / Lawfulness of processing"
+      - de: "Art. 7 DSGVO"
+        eu: "Art. 7 GDPR"
+        fr: "Art. 7 RGPD"
+        topic: "Einwilligungsbedingungen / Conditions for consent"
+      - de: "Art. 13 DSGVO"
+        eu: "Art. 13 GDPR"
+        fr: "Art. 13 RGPD"
+        topic: "Informationspflichten / Information obligations"
+      - de: "Art. 17 DSGVO"
+        eu: "Art. 17 GDPR"
+        fr: "Art. 17 RGPD"
+        topic: "Recht auf Löschung / Right to erasure"
+
+  - de_id: "BFSG"
+    de_full: "Barrierefreiheitsstärkungsgesetz"
+    eu_id: "EAA"
+    translations:
+      en: "European Accessibility Act (EAA)"
+      fr: "Acte européen sur l'accessibilité"
+      it: "Atto europeo sull'accessibilità"
+      pl: "Europejski akt o dostępności"
+    eur_lex_id: "32019L0882"
+    official_url: "https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:32019L0882"
+    article_mappings:
+      - de: "§ 3 BFSG"
+        eu: "Art. 4 EAA"
+        topic: "Barrierefreiheitsanforderungen / Accessibility requirements"
+
+  - de_id: "TTDSG"
+    de_full: "Telekommunikation-Telemedien-Datenschutz-Gesetz"
+    eu_id: "ePrivacy"
+    translations:
+      en: "ePrivacy Directive (transposed)"
+      fr: "Directive vie privée et communications électroniques"
+    eur_lex_id: "32002L0058"
+    article_mappings:
+      - de: "§ 25 TTDSG"
+        eu: "Art. 5(3) ePrivacy"
+        topic: "Cookie-Einwilligung / Cookie consent"
+
+  - de_id: "NIS2"
+    de_full: "NIS-2-Umsetzungsgesetz"
+    eu_id: "NIS2"
+    translations:
+      en: "NIS2 Directive"
+      fr: "Directive SRI 2"
+    eur_lex_id: "32022L2555"
+    official_url: "https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:32022L2555"
+    article_mappings:
+      - de: "§ 30 BSIG (NIS2)"
+        eu: "Art. 21 NIS2"
+        topic: "Sicherheitsmaßnahmen / Security measures"

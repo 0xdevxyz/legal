@@ -1,0 +1,53 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e2]
+  - generic [ref=e4]:
+    - navigation "Hauptnavigation" [ref=e6]:
+      - generic [ref=e7]:
+        - generic [ref=e8] [cursor=pointer]:
+          - img [ref=e9]
+          - generic [ref=e11]: Complyo
+        - button "Sidebar einklappen" [ref=e12] [cursor=pointer]:
+          - img [ref=e13]
+      - generic [ref=e15]:
+        - generic [ref=e16]: Menü
+        - button "Dashboard" [ref=e17] [cursor=pointer]:
+          - img [ref=e18]
+          - generic [ref=e23]: Dashboard
+        - button "Cookie-Compliance" [ref=e24] [cursor=pointer]:
+          - img [ref=e25]
+          - generic [ref=e27]: Cookie-Compliance
+        - button "Barrierefreiheit" [ref=e28] [cursor=pointer]:
+          - img [ref=e29]
+          - generic [ref=e32]: Barrierefreiheit
+        - button "AI-Compliance" [ref=e33] [cursor=pointer]:
+          - img [ref=e34]
+          - generic [ref=e36]: AI-Compliance
+        - button "Dokumente" [ref=e37] [cursor=pointer]:
+          - img [ref=e38]
+          - generic [ref=e41]: Dokumente
+        - button "Agentur" [ref=e42] [cursor=pointer]:
+          - img [ref=e43]
+          - generic [ref=e47]: Agentur
+      - generic [ref=e48]:
+        - generic [ref=e49]: Account
+        - button "Einstellungen" [ref=e50] [cursor=pointer]:
+          - img [ref=e51]
+          - generic [ref=e54]: Einstellungen
+        - button "Abo & Rechnung" [ref=e55] [cursor=pointer]:
+          - img [ref=e56]
+          - generic [ref=e58]: Abo & Rechnung
+    - generic [ref=e59]:
+      - banner [ref=e61]:
+        - generic [ref=e62]:
+          - button "Zu hellem Theme wechseln" [ref=e63] [cursor=pointer]:
+            - img [ref=e64]
+          - button "Benachrichtigungen" [ref=e70] [cursor=pointer]:
+            - img [ref=e71]
+          - button "P PanoArt360 Kostenlos" [ref=e75] [cursor=pointer]:
+            - generic [ref=e77]: P
+            - generic [ref=e79]:
+              - generic [ref=e80]: PanoArt360
+              - generic [ref=e81]: Kostenlos
+            - img [ref=e82]
+      - main [ref=e85]:
+        - img [ref=e86]

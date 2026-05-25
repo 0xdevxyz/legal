@@ -44,13 +44,13 @@ export default function InteractiveDemo() {
       }
     },
     {
-      id: 'erecht24',
-      name: 'eRecht24 Texte',
+      id: 'legal-texts',
+      name: 'KI-Rechtstexte',
       icon: FileText,
       color: 'green',
       content: {
-        title: 'Rechtssichere Dokumente',
-        description: 'Automatisch generierte Rechtstexte',
+        title: 'KI-generierte Rechtstexte',
+        description: 'Automatisch aktualisierte Rechtstexte aus eigener KI + Gesetzesdatenbank',
         mockData: [
           { name: 'Impressum', status: 'success', updated: '12.10.2025' },
           { name: 'Datenschutzerklärung', status: 'success', updated: '12.10.2025' },
@@ -161,7 +161,7 @@ export default function InteractiveDemo() {
                 </div>
               )}
               
-              {/* eRecht24 Tab */}
+              {/* KI-Rechtstexte Tab */}
               {activeTab === 2 && (
                 <div className="space-y-3">
                   {activeContent.mockData.map((item: any, index: number) => (

@@ -9,15 +9,15 @@ Jede Code-Änderung erfordert eine Dokumentations-Aktualisierung. Keine Ausnahme
 | Änderung | CHANGELOG.md | Weitere Datei |
 |----------|-------------|--------------|
 | Bugfix | Eintrag unter aktuellem Datum | — |
-| Neues Feature | Eintrag unter aktuellem Datum | `docs/SYSTEM_OVERVIEW.md` wenn neue Route, Service oder DB-Tabelle |
-| Neue API-Route | Eintrag + Route-Tabelle in `docs/SYSTEM_OVERVIEW.md` aktualisieren | — |
-| Neuer DB-Table | Eintrag + Tabellen-Liste in `docs/SYSTEM_OVERVIEW.md` aktualisieren | — |
-| Neuer Service/Handler | Eintrag + Service-Tabelle in `docs/SYSTEM_OVERVIEW.md` aktualisieren | — |
-| Security-Fix | Eintrag mit Kategorie `### Security` | `docs/TECHNICAL_DEBT.md` Eintrag schließen |
-| Tech-Debt behoben | Eintrag mit Kategorie `### Tech Debt` | `docs/TECHNICAL_DEBT.md` Eintrag als erledigt markieren |
-| Neues offenes Problem entdeckt | — | `docs/TECHNICAL_DEBT.md` Eintrag hinzufügen |
-| Deployment-Änderung | Eintrag mit Kategorie `### Infrastruktur` | `docs/ENTWICKLUNGSSTAND.md` Status-Tabelle prüfen |
-| Widget-Update | Eintrag mit Kategorie `### Widgets` | Widget-Tabelle in `docs/SYSTEM_OVERVIEW.md` prüfen |
+| Neues Feature | Eintrag unter aktuellem Datum | `data/architektur/SYSTEM_OVERVIEW.md` wenn neue Route, Service oder DB-Tabelle |
+| Neue API-Route | Eintrag + Route-Tabelle in `data/architektur/SYSTEM_OVERVIEW.md` aktualisieren | — |
+| Neuer DB-Table | Eintrag + Tabellen-Liste in `data/architektur/SYSTEM_OVERVIEW.md` aktualisieren | — |
+| Neuer Service/Handler | Eintrag + Service-Tabelle in `data/architektur/SYSTEM_OVERVIEW.md` aktualisieren | — |
+| Security-Fix | Eintrag mit Kategorie `### Security` | `data/technisch/TECHNICAL_DEBT.md` Eintrag schließen |
+| Tech-Debt behoben | Eintrag mit Kategorie `### Tech Debt` | `data/technisch/TECHNICAL_DEBT.md` Eintrag als erledigt markieren |
+| Neues offenes Problem entdeckt | — | `data/technisch/TECHNICAL_DEBT.md` Eintrag hinzufügen |
+| Deployment-Änderung | Eintrag mit Kategorie `### Infrastruktur` | `data/anleitungen/ENTWICKLUNGSSTAND.md` Status-Tabelle prüfen |
+| Widget-Update | Eintrag mit Kategorie `### Widgets` | Widget-Tabelle in `data/architektur/SYSTEM_OVERVIEW.md` prüfen |
 
 ### CHANGELOG-Format
 
@@ -33,17 +33,17 @@ Jede Code-Änderung erfordert eine Dokumentations-Aktualisierung. Keine Ausnahme
 
 | Frage | Datei |
 |-------|-------|
-| Was ist das System? Wie ist es aufgebaut? | `docs/SYSTEM_OVERVIEW.md` |
-| Was ist aktuell offen, was ist fertig? | `docs/ENTWICKLUNGSSTAND.md` |
+| Was ist das System? Wie ist es aufgebaut? | `data/architektur/SYSTEM_OVERVIEW.md` |
+| Was ist aktuell offen, was ist fertig? | `data/anleitungen/ENTWICKLUNGSSTAND.md` |
 | Was wurde wann geändert? | `CHANGELOG.md` |
-| Welche Schulden / Bugs existieren? | `docs/TECHNICAL_DEBT.md` |
+| Welche Schulden / Bugs existieren? | `data/technisch/TECHNICAL_DEBT.md` |
 | Wie ist die DB-Migrationshistorie? | `backend/MIGRATIONS.md` |
 | Was sind die Architektur-Entscheidungen? | `.planning/PROJECT.md` + `.planning/ROADMAP.md` |
-| Welche Env-Variablen gibt es? | `docs/ENV_CONFIGURATION.md` |
+| Welche Env-Variablen gibt es? | `data/technisch/ENV_CONFIGURATION.md` |
 
 ### Historische Dokumente (nur lesen, nicht mehr bearbeiten)
 
-Die Dateien in `md/` (z.B. `COOKIE_BANNER_DEBUG.md`, `WIDGET-V5-BUGFIXES.md`) sind historische Aufzeichnungen aus der Entwicklungsphase. Sie werden nicht mehr aktualisiert – neue Informationen kommen in `CHANGELOG.md` und `docs/`.
+Die Dateien in `md/` (z.B. `COOKIE_BANNER_DEBUG.md`, `WIDGET-V5-BUGFIXES.md`) sind historische Aufzeichnungen aus der Entwicklungsphase. Sie werden nicht mehr aktualisiert – neue Informationen kommen in `CHANGELOG.md` und `data/`.
 
 ---
 
@@ -89,8 +89,8 @@ test: Tests
 - [ ] `cd dashboard-react && npm run type-check` ohne Fehler
 - [ ] Keine neuen Secrets oder hardcodierten Credentials
 - [ ] `CHANGELOG.md` aktualisiert (Pflicht, siehe Dokumentationsprotokoll oben)
-- [ ] `docs/SYSTEM_OVERVIEW.md` aktualisiert falls neue Route / Service / DB-Tabelle
-- [ ] `docs/TECHNICAL_DEBT.md` aktualisiert falls Tech-Debt behoben oder neu entdeckt
+- [ ] `data/architektur/SYSTEM_OVERVIEW.md` aktualisiert falls neue Route / Service / DB-Tabelle
+- [ ] `data/technisch/TECHNICAL_DEBT.md` aktualisiert falls Tech-Debt behoben oder neu entdeckt
 
 ## Sicherheitsrelevante Änderungen
 

@@ -7,7 +7,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import logging
-import bcrypt
+from passlib.context import CryptContext as _CryptContext
+
+_pwd_context = _CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 logger = logging.getLogger(__name__)
 
@@ -283,10 +285,10 @@ async def change_password(request: ChangePasswordRequest, current_user: dict = D
             if not user:
                 raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
 
-            if not bcrypt.checkpw(request.current_password.encode('utf-8'), user['hashed_password'].encode('utf-8')):
+            if not _pwd_context.verify(request.current_password, user['hashed_password']):
                 raise HTTPException(status_code=400, detail="Aktuelles Passwort ist falsch")
 
-            new_hash = bcrypt.hashpw(request.new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            new_hash = _pwd_context.hash(request.new_password)
             await conn.execute("UPDATE users SET hashed_password = $1, updated_at = NOW() WHERE id = $2", new_hash, user_id)
 
             return {"success": True, "message": "Passwort erfolgreich geaendert"}

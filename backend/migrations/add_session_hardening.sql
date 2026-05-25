@@ -1,0 +1,7 @@
+ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS jti VARCHAR(64);
+ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS user_agent TEXT;
+ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45);
+
+CREATE INDEX IF NOT EXISTS idx_user_sessions_jti ON user_sessions(jti);

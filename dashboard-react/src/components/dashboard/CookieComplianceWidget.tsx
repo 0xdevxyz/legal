@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useRouter } from 'next/navigation';
+import { apiClient } from '@/lib/api-client';
 
 export const CookieComplianceWidget: React.FC = () => {
   const router = useRouter();
@@ -35,36 +36,18 @@ export const CookieComplianceWidget: React.FC = () => {
     }
   };
 
-  const getAuthHeaders = () => {
-    const token = typeof window !== 'undefined'
-      ? (localStorage.getItem('token') || localStorage.getItem('access_token'))
-      : null;
-    return {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-    };
-  };
-
   const loadSiteIdAndStats = async () => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
-      
       let determinedSiteId: string | null = null;
       
       // 1. Hole Website-Info für echten site_id
       try {
-        const websiteResponse = await fetch(`${API_URL}/api/v2/websites`, {
-          headers: getAuthHeaders(),
-          credentials: 'include',
-        });
+        const websiteData = await apiClient.get('/api/v2/websites') as any;
         
-        if (websiteResponse.ok) {
-          const websiteData = await websiteResponse.json();
-          if (websiteData.success && websiteData.websites?.length > 0) {
-            const primaryWebsite = websiteData.websites.find((w: any) => w.is_primary) || websiteData.websites[0];
-            determinedSiteId = generateSiteIdFromUrl(primaryWebsite.url);
-            setSiteId(determinedSiteId);
-          }
+        if (websiteData.success && websiteData.websites?.length > 0) {
+          const primaryWebsite = websiteData.websites.find((w: any) => w.is_primary) || websiteData.websites[0];
+          determinedSiteId = generateSiteIdFromUrl(primaryWebsite.url);
+          setSiteId(determinedSiteId);
         }
       } catch (e) {
         console.log('Could not load website info');
@@ -77,17 +60,16 @@ export const CookieComplianceWidget: React.FC = () => {
       }
       
       // 3. Hole Stats mit dem ermittelten siteId
-      const response = await fetch(`${API_URL}/api/cookie-compliance/stats/${determinedSiteId}?days=7`, {
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const data = await response.json();
+      try {
+        const data = await apiClient.get(`/api/cookie-compliance/stats/${determinedSiteId}`, { days: '7' }) as any;
         if (data.success) {
           setStats(data);
         }
-      } else if (response.status === 404) {
-        // ✅ Cookie-Compliance noch nicht konfiguriert - graceful ignorieren
-        console.log('Cookie-Compliance noch nicht konfiguriert');
+      } catch (err: any) {
+        if (err.response?.status === 404) {
+          // ✅ Cookie-Compliance noch nicht konfiguriert - graceful ignorieren
+          console.log('Cookie-Compliance noch nicht konfiguriert');
+        }
       }
     } catch (error) {
       // ✅ Netzwerkfehler - graceful ignorieren

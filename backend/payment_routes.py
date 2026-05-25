@@ -33,14 +33,19 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.complyo.tech")
 
 # Stripe Price IDs je Plan (im Stripe Dashboard anlegen)
-# single:   19€/Monat × quantity (Anzahl Module)
-# complete: 49€/Monat (Pauschal, alle 4 Module)
-# expert:   39€/Monat (laufend) + einmalige Setup-Gebühr via price_data
-# agency:   490€/Monat (25 Websites, White-Label)
-STRIPE_PRICE_SINGLE_MODULE  = os.getenv("STRIPE_PRICE_SINGLE_MODULE")   # 19€/Monat
-STRIPE_PRICE_COMPLETE       = os.getenv("STRIPE_PRICE_COMPLETE")         # 49€/Monat
-STRIPE_PRICE_EXPERT_MONTHLY = os.getenv("STRIPE_PRICE_EXPERT_MONTHLY")  # 39€/Monat
-STRIPE_PRICE_AGENCY_MONTHLY = os.getenv("STRIPE_PRICE_AGENCY_MONTHLY")  # 490€/Monat
+# free:    kostenlos — 1 Domain, 1 Fix
+# single:  19€/Monat × quantity (Anzahl Säulen)
+# pro:     49€/Monat, 490€/Jahr — 1 Domain, alle 4 Säulen
+# agency:  299€/Monat, 2.990€/Jahr — 25 Domains, alle 4 Säulen
+# expert:  3.990€ einmalig — komplette Überarbeitung durch Complyo
+# update:  29€/Monat — laufende Updates nach Expertenservice
+STRIPE_PRICE_SINGLE_MODULE  = os.getenv("STRIPE_PRICE_SINGLE_MODULE")    # 19€/Monat
+STRIPE_PRICE_PRO_MONTHLY    = os.getenv("STRIPE_PRICE_PRO_MONTHLY")      # 49€/Monat
+STRIPE_PRICE_PRO_YEARLY     = os.getenv("STRIPE_PRICE_PRO_YEARLY")       # 490€/Jahr
+STRIPE_PRICE_AGENCY_MONTHLY = os.getenv("STRIPE_PRICE_AGENCY_MONTHLY")   # 299€/Monat
+STRIPE_PRICE_AGENCY_YEARLY  = os.getenv("STRIPE_PRICE_AGENCY_YEARLY")    # 2.990€/Jahr
+STRIPE_PRICE_EXPERT         = os.getenv("STRIPE_PRICE_EXPERT")            # 3.990€ einmalig
+STRIPE_PRICE_UPDATE_MONTHLY = os.getenv("STRIPE_PRICE_UPDATE_MONTHLY")   # 29€/Monat
 
 # Alle 4 verfügbaren Module
 ALL_MODULES = ['cookie', 'accessibility', 'legal_texts', 'monitoring']
@@ -60,7 +65,7 @@ class CheckoutResponse(BaseModel):
 
 async def get_current_user_from_auth_header(request: Request):
     """Get current user from Authorization header"""
-    from auth_routes import get_current_user, security
+    from dependencies import get_current_user, get_settings
     from fastapi.security import HTTPAuthorizationCredentials
 
     auth_header = request.headers.get('Authorization')
@@ -69,14 +74,14 @@ async def get_current_user_from_auth_header(request: Request):
 
     token = auth_header.replace('Bearer ', '')
     credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
-    return await get_current_user(credentials)
+    settings = get_settings()
+    return await get_current_user(credentials, settings)
 
 
 def _resolve_modules(plan_type: str, modules: List[str]) -> List[str]:
     """Gibt die aktiven Module für den Plan zurück."""
-    if plan_type in ('complete', 'expert', 'agency'):
+    if plan_type in ('pro', 'agency', 'expert', 'update'):
         return ALL_MODULES
-    # single: nur die gewählten, validiert gegen bekannte IDs
     valid = [m for m in modules if m in ALL_MODULES]
     return valid
 
@@ -87,9 +92,11 @@ async def create_checkout(request: Request, data: CreateCheckoutRequest):
     Erstellt eine Stripe Checkout Session.
 
     Pläne:
-      single   → 19€/Monat × Anzahl gewählter Module
-      complete → 49€/Monat (alle 4 Module)
-      expert   → 2.990€ Setup (einmalig) + 39€/Monat
+      single  → 19€/Monat × Anzahl gewählter Säulen
+      pro     → 49€/Monat oder 490€/Jahr (1 Domain, alle 4 Säulen)
+      agency  → 299€/Monat oder 2.990€/Jahr (25 Domains)
+      expert  → 3.990€ einmalig (komplette Überarbeitung durch Complyo)
+      update  → 29€/Monat (laufende Updates nach Expertenservice)
     """
     current_user = await get_current_user_from_auth_header(request)
     user_id: int = current_user['id']
@@ -102,7 +109,7 @@ async def create_checkout(request: Request, data: CreateCheckoutRequest):
     if plan_type == 'single' and not active_modules:
         raise HTTPException(status_code=400, detail="Mindestens ein Modul muss gewählt werden.")
 
-    if plan_type not in ('single', 'complete', 'expert', 'agency'):
+    if plan_type not in ('single', 'pro', 'agency', 'expert', 'update'):
         raise HTTPException(status_code=400, detail=f"Unbekannter Plan: {plan_type}")
 
     # ─── DEV MODE ────────────────────────────────────────────────────────────
@@ -168,7 +175,7 @@ async def create_checkout(request: Request, data: CreateCheckoutRequest):
                 mode='subscription',
                 line_items=[{
                     'price':    STRIPE_PRICE_SINGLE_MODULE,
-                    'quantity': len(active_modules),   # 19€ × Anzahl Module
+                    'quantity': len(active_modules),   # 19€ × Anzahl Säulen
                 }],
                 success_url=success_url,
                 cancel_url=cancel_url,
@@ -179,14 +186,35 @@ async def create_checkout(request: Request, data: CreateCheckoutRequest):
                 locale='de',
             )
 
-        elif plan_type == 'complete':
-            if not STRIPE_PRICE_COMPLETE:
-                raise HTTPException(500, "STRIPE_PRICE_COMPLETE nicht konfiguriert")
+        elif plan_type == 'pro':
+            billing = data.billing_period if hasattr(data, 'billing_period') else 'monthly'
+            price_id = STRIPE_PRICE_PRO_YEARLY if billing == 'yearly' else STRIPE_PRICE_PRO_MONTHLY
+            if not price_id:
+                raise HTTPException(500, f"STRIPE_PRICE_PRO_{billing.upper()} nicht konfiguriert")
             session = stripe.checkout.Session.create(
                 customer=customer_id,
                 payment_method_types=['card', 'sepa_debit'],
                 mode='subscription',
-                line_items=[{'price': STRIPE_PRICE_COMPLETE, 'quantity': 1}],
+                line_items=[{'price': price_id, 'quantity': 1}],
+                success_url=success_url,
+                cancel_url=cancel_url,
+                metadata=metadata,
+                subscription_data={'metadata': metadata},
+                allow_promotion_codes=True,
+                billing_address_collection='required',
+                locale='de',
+            )
+
+        elif plan_type == 'agency':
+            billing = data.billing_period if hasattr(data, 'billing_period') else 'monthly'
+            price_id = STRIPE_PRICE_AGENCY_YEARLY if billing == 'yearly' else STRIPE_PRICE_AGENCY_MONTHLY
+            if not price_id:
+                raise HTTPException(500, f"STRIPE_PRICE_AGENCY_{billing.upper()} nicht konfiguriert")
+            session = stripe.checkout.Session.create(
+                customer=customer_id,
+                payment_method_types=['card', 'sepa_debit'],
+                mode='subscription',
+                line_items=[{'price': price_id, 'quantity': 1}],
                 success_url=success_url,
                 cancel_url=cancel_url,
                 metadata=metadata,
@@ -197,27 +225,13 @@ async def create_checkout(request: Request, data: CreateCheckoutRequest):
             )
 
         elif plan_type == 'expert':
-            if not STRIPE_PRICE_EXPERT_MONTHLY:
-                raise HTTPException(500, "STRIPE_PRICE_EXPERT_MONTHLY nicht konfiguriert")
+            if not STRIPE_PRICE_EXPERT:
+                raise HTTPException(500, "STRIPE_PRICE_EXPERT nicht konfiguriert")
             session = stripe.checkout.Session.create(
                 customer=customer_id,
                 payment_method_types=['card', 'sepa_debit'],
-                mode='subscription',
-                # Einmalige Setup-Gebühr als invoice_item vor der Subscription
-                invoice_creation=None,  # Stripe handhabt dies intern
-                line_items=[{'price': STRIPE_PRICE_EXPERT_MONTHLY, 'quantity': 1}],
-                subscription_data={
-                    'metadata': metadata,
-                    # 2.990€ Einrichtungsgebühr als Add-on beim ersten Invoice
-                    'add_invoice_items': [{
-                        'price_data': {
-                            'currency': 'eur',
-                            'product_data': {'name': 'Expertenservice Setup-Gebühr'},
-                            'unit_amount': 299000,  # 2.990,00 € in Cent
-                        },
-                        'quantity': 1,
-                    }],
-                },
+                mode='payment',
+                line_items=[{'price': STRIPE_PRICE_EXPERT, 'quantity': 1}],
                 success_url=success_url,
                 cancel_url=cancel_url,
                 metadata=metadata,
@@ -226,14 +240,14 @@ async def create_checkout(request: Request, data: CreateCheckoutRequest):
                 locale='de',
             )
 
-        elif plan_type == 'agency':
-            if not STRIPE_PRICE_AGENCY_MONTHLY:
-                raise HTTPException(500, "STRIPE_PRICE_AGENCY_MONTHLY nicht konfiguriert")
+        elif plan_type == 'update':
+            if not STRIPE_PRICE_UPDATE_MONTHLY:
+                raise HTTPException(500, "STRIPE_PRICE_UPDATE_MONTHLY nicht konfiguriert")
             session = stripe.checkout.Session.create(
                 customer=customer_id,
                 payment_method_types=['card', 'sepa_debit'],
                 mode='subscription',
-                line_items=[{'price': STRIPE_PRICE_AGENCY_MONTHLY, 'quantity': 1}],
+                line_items=[{'price': STRIPE_PRICE_UPDATE_MONTHLY, 'quantity': 1}],
                 success_url=success_url,
                 cancel_url=cancel_url,
                 metadata=metadata,

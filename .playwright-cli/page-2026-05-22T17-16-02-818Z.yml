@@ -1,0 +1,528 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e2]
+  - generic [ref=e61]:
+    - navigation "Hauptnavigation" [ref=e63]:
+      - generic [ref=e64]:
+        - generic [ref=e65] [cursor=pointer]:
+          - img [ref=e66]
+          - generic [ref=e68]: Complyo
+        - button "Sidebar einklappen" [ref=e69] [cursor=pointer]:
+          - img [ref=e70]
+      - generic [ref=e72]:
+        - generic [ref=e73]: Menü
+        - button "Dashboard" [ref=e74] [cursor=pointer]:
+          - img [ref=e75]
+          - generic [ref=e80]: Dashboard
+        - button "Cookie-Compliance" [ref=e81] [cursor=pointer]:
+          - img [ref=e82]
+          - generic [ref=e84]: Cookie-Compliance
+        - button "Barrierefreiheit" [ref=e85] [cursor=pointer]:
+          - img [ref=e86]
+          - generic [ref=e89]: Barrierefreiheit
+        - button "AI-Compliance" [ref=e90] [cursor=pointer]:
+          - img [ref=e91]
+          - generic [ref=e93]: AI-Compliance
+        - button "Dokumente" [ref=e94] [cursor=pointer]:
+          - img [ref=e95]
+          - generic [ref=e98]: Dokumente
+        - button "Agentur" [ref=e99] [cursor=pointer]:
+          - img [ref=e100]
+          - generic [ref=e104]: Agentur
+      - generic [ref=e105]:
+        - generic [ref=e106]: Account
+        - button "Einstellungen" [ref=e107] [cursor=pointer]:
+          - img [ref=e108]
+          - generic [ref=e111]: Einstellungen
+        - button "Abo & Rechnung" [ref=e112] [cursor=pointer]:
+          - img [ref=e113]
+          - generic [ref=e115]: Abo & Rechnung
+    - generic [ref=e116]:
+      - banner [ref=e118]:
+        - generic [ref=e119]:
+          - button "Zu hellem Theme wechseln" [ref=e120] [cursor=pointer]:
+            - img [ref=e121]
+          - button "Benachrichtigungen" [ref=e127] [cursor=pointer]:
+            - img [ref=e128]
+          - button "P PanoArt360 Kostenlos" [ref=e132] [cursor=pointer]:
+            - generic [ref=e134]: P
+            - generic [ref=e136]:
+              - generic [ref=e137]: PanoArt360
+              - generic [ref=e138]: Kostenlos
+            - img [ref=e139]
+      - main "Hauptinhalt" [ref=e142]:
+        - region "Website-Analyse" [ref=e143]:
+          - generic [ref=e145]:
+            - generic [ref=e148]:
+              - generic [ref=e149]:
+                - heading "Website-Compliance auf 100% optimieren" [level=1] [ref=e150]:
+                  - text: Website-Compliance
+                  - generic [ref=e151]: auf 100% optimieren
+                - paragraph [ref=e152]: KI-gestützte Analyse & automatische Optimierung für DSGVO, BFSG & TTDSG
+                - generic [ref=e153]:
+                  - generic [ref=e154]:
+                    - img [ref=e155]
+                    - generic [ref=e158]:
+                      - generic [ref=e159]:
+                        - generic [ref=e160]: "Ihre registrierte Website:"
+                        - generic [ref=e161]: Dauerhaft verknüpft
+                      - paragraph [ref=e162]:
+                        - strong [ref=e163]: https://complyo.de
+                        - text: —Alle KI-Fixes und Optimierungen sind für diese Seite personalisiert.
+                    - generic [ref=e164]:
+                      - paragraph [ref=e165]: Änderung nur via
+                      - link "Support" [ref=e166] [cursor=pointer]:
+                        - /url: mailto:support@complyo.tech?subject=Website-Änderung
+                  - generic [ref=e168]:
+                    - generic [ref=e169]:
+                      - img [ref=e170]
+                      - generic [ref=e173]: Website-URL eingeben
+                      - textbox "Website-URL zur Compliance-Analyse eingeben" [ref=e174]:
+                        - /placeholder: ihre-domain.de eingeben
+                    - button "Analysieren" [disabled] [ref=e175]:
+                      - img [ref=e176]
+                      - text: Analysieren
+                  - generic [ref=e180]:
+                    - generic [ref=e181]:
+                      - img [ref=e183]
+                      - generic [ref=e186]:
+                        - paragraph [ref=e187]: Aktuell analysiert
+                        - paragraph [ref=e188]: https://complyo.de
+                    - button "Erneut scannen" [ref=e189] [cursor=pointer]:
+                      - img [ref=e190]
+                      - text: Erneut scannen
+              - generic [ref=e195]:
+                - generic [ref=e197]:
+                  - img [ref=e199]
+                  - generic [ref=e202]:
+                    - generic [ref=e203]: https://complyo.de
+                    - generic [ref=e204]: "0"
+                    - generic [ref=e205]: /100
+                    - generic [ref=e206]: Compliance-Score
+                - paragraph [ref=e207]:
+                  - text: Noch
+                  - strong [ref=e208]: 100 Punkte
+                  - text: bis zum Abmahnschutz
+            - generic [ref=e209]:
+              - generic [ref=e210]:
+                - img [ref=e212]
+                - generic [ref=e215]:
+                  - heading "KI-gestützt" [level=4] [ref=e216]
+                  - paragraph [ref=e217]: Automatische Optimierung
+              - generic [ref=e218]:
+                - img [ref=e220]
+                - generic [ref=e223]:
+                  - heading "20+ Prüfpunkte" [level=4] [ref=e224]
+                  - paragraph [ref=e225]: DSGVO, BFSG, TTDSG
+              - generic [ref=e226]:
+                - img [ref=e228]
+                - generic [ref=e231]:
+                  - heading "Abmahnschutz" [level=4] [ref=e232]
+                  - paragraph [ref=e233]: Bei 100% Compliance
+        - region "Optimierungsprozess" [ref=e234]:
+          - generic [ref=e236]:
+            - generic [ref=e238]:
+              - generic [ref=e239]:
+                - img [ref=e240]
+                - generic [ref=e244]:
+                  - heading "Optimierungsprozess" [level=2] [ref=e245]
+                  - paragraph [ref=e246]: Schritt-für-Schritt zur vollständigen Compliance
+              - generic [ref=e247]:
+                - paragraph [ref=e248]: Fortschritt
+                - paragraph [ref=e249]: 1/5
+            - generic [ref=e251]:
+              - img [ref=e252]
+              - paragraph [ref=e254]:
+                - strong [ref=e255]: "KI-gestützter Optimierungsassistent:"
+                - text: Folgen Sie den 5 Schritten für eine vollständige Compliance-Prüfung. Die KI analysiert Ihre Website, identifiziert Probleme und schlägt konkrete Fixes vor.
+            - generic [ref=e256]:
+              - generic [ref=e257]:
+                - generic [ref=e258] [cursor=pointer]:
+                  - img [ref=e261]
+                  - generic [ref=e265]:
+                    - generic [ref=e266]:
+                      - generic [ref=e267]: "01"
+                      - heading "Seite scannen" [level=3] [ref=e268]
+                    - paragraph [ref=e269]: Automatische Analyse Ihrer Website auf Compliance-Probleme
+                  - img [ref=e270]
+                - generic [ref=e273]:
+                  - generic [ref=e274]:
+                    - paragraph [ref=e275]: "Die KI überprüft Ihre Website auf alle kritischen Compliance-Anforderungen:"
+                    - list [ref=e276]:
+                      - listitem [ref=e277]: DSGVO & Datenschutzerklärung
+                      - listitem [ref=e279]: Cookie-Compliance (TTDSG)
+                      - listitem [ref=e281]: Impressum nach § 5 TMG
+                      - listitem [ref=e283]: Barrierefreiheit (BFSG/WCAG 2.1)
+                      - listitem [ref=e285]: AGB & Widerrufsbelehrung
+                  - button "Re-scan starten" [ref=e287] [cursor=pointer]:
+                    - img [ref=e288]
+                    - text: Re-scan starten
+              - generic [ref=e292] [cursor=pointer]:
+                - img [ref=e295]
+                - generic [ref=e297]:
+                  - generic [ref=e298]:
+                    - generic [ref=e299]: "02"
+                    - heading "Kritische Probleme (0)" [level=3] [ref=e300]
+                    - img [ref=e301]
+                  - paragraph [ref=e304]: 0 Abmahnungs-relevante Probleme gefunden
+                - img [ref=e305]
+              - generic [ref=e308] [cursor=pointer]:
+                - img [ref=e311]
+                - generic [ref=e313]:
+                  - generic [ref=e314]:
+                    - generic [ref=e315]: "03"
+                    - heading "Warnungen optimieren (0)" [level=3] [ref=e316]
+                  - paragraph [ref=e317]: 0 Verbesserungen empfohlen
+                - img [ref=e318]
+              - generic [ref=e321] [cursor=pointer]:
+                - img [ref=e324]
+                - generic [ref=e328]:
+                  - generic [ref=e329]:
+                    - generic [ref=e330]: "04"
+                    - heading "Änderungen testen" [level=3] [ref=e331]
+                  - paragraph [ref=e332]: Validieren Sie Ihre Fixes mit unserem Tester
+                - img [ref=e333]
+              - generic [ref=e336] [cursor=pointer]:
+                - img [ref=e339]
+                - generic [ref=e342]:
+                  - generic [ref=e343]:
+                    - generic [ref=e344]: "05"
+                    - heading "Validierung abschließen" [level=3] [ref=e345]
+                  - paragraph [ref=e346]: Endgültige Sicherheitsprüfung durchführen
+                - img [ref=e347]
+            - generic [ref=e350]:
+              - generic [ref=e351]: Gesamtfortschritt
+              - generic [ref=e352]: 1/5 Schritte
+          - generic [ref=e356]:
+            - generic [ref=e357]:
+              - paragraph [ref=e358]: Willkommen zurück, PanoArt360
+              - heading "Ihr Compliance-Score" [level=2] [ref=e359]
+            - generic [ref=e360]:
+              - button "Gesamt" [ref=e361] [cursor=pointer]
+              - button "DSGVO" [ref=e362] [cursor=pointer]
+              - button "Cookie" [ref=e363] [cursor=pointer]
+              - button "Barriere" [ref=e364] [cursor=pointer]
+            - generic [ref=e365]:
+              - 'img "Compliance Score: 0%" [ref=e367]':
+                - generic [ref=e371]: "0"
+                - generic [ref=e372]: "50"
+                - generic [ref=e373]: "100"
+                - generic [ref=e374]: "0"
+              - generic [ref=e377]: Kritisch
+        - region "Metriken" [ref=e378]:
+          - generic [ref=e379]:
+            - generic [ref=e380]:
+              - img [ref=e382]
+              - generic [ref=e385]:
+                - paragraph [ref=e386]: Gesamt-Score
+                - paragraph [ref=e387]: "0"
+                - paragraph [ref=e388]: Keine Vergleichsdaten
+            - generic [ref=e389]:
+              - img [ref=e391]
+              - generic [ref=e394]:
+                - paragraph [ref=e395]: Websites
+                - paragraph [ref=e396]: 4/3
+                - paragraph [ref=e397]: Limit erreicht
+            - generic [ref=e398]:
+              - img [ref=e400]
+              - generic [ref=e402]:
+                - paragraph [ref=e403]: KI-Optimierungen
+                - paragraph [ref=e404]: 0/1
+                - paragraph [ref=e405]: 1 verfügbar
+            - generic [ref=e406]:
+              - img [ref=e408]
+              - generic [ref=e410]:
+                - paragraph [ref=e411]: Kritische Issues
+                - paragraph [ref=e412]: "0"
+                - paragraph [ref=e413]: Sofortige Beachtung
+        - region "Compliance Flow" [ref=e414]:
+          - generic [ref=e415]:
+            - generic [ref=e417]:
+              - heading "Compliance Flow" [level=3] [ref=e418]
+              - paragraph [ref=e419]: Alle Bereiche im Überblick
+            - generic [ref=e420]:
+              - generic [ref=e422]:
+                - generic [ref=e423]: OUTPUT
+                - generic [ref=e424]: "0"
+                - generic [ref=e425]: Gesamt
+              - img [ref=e427]
+              - generic [ref=e436]:
+                - button "DSGVO / Impressum Noch nicht analysiert" [ref=e437] [cursor=pointer]:
+                  - img [ref=e439]
+                  - generic [ref=e441]:
+                    - generic [ref=e442]: DSGVO / Impressum
+                    - generic [ref=e443]: Noch nicht analysiert
+                  - img [ref=e446]
+                - button "Cookie-Compliance Noch nicht analysiert" [ref=e448] [cursor=pointer]:
+                  - img [ref=e450]
+                  - generic [ref=e452]:
+                    - generic [ref=e453]: Cookie-Compliance
+                    - generic [ref=e454]: Noch nicht analysiert
+                  - img [ref=e457]
+                - button "Barrierefreiheit Noch nicht analysiert" [ref=e459] [cursor=pointer]:
+                  - img [ref=e461]
+                  - generic [ref=e464]:
+                    - generic [ref=e465]: Barrierefreiheit
+                    - generic [ref=e466]: Noch nicht analysiert
+                  - img [ref=e469]
+                - button "Legal Updates Überwacht" [ref=e471] [cursor=pointer]:
+                  - img [ref=e473]
+                  - generic [ref=e476]:
+                    - generic [ref=e477]: Legal Updates
+                    - generic [ref=e478]: Überwacht
+                  - img [ref=e481]
+            - generic [ref=e483]:
+              - generic [ref=e484]:
+                - generic [ref=e485]: —
+                - generic [ref=e486]: DSGVO
+              - generic [ref=e487]:
+                - generic [ref=e488]: —
+                - generic [ref=e489]: Cookie-Compliance
+              - generic [ref=e490]:
+                - generic [ref=e491]: —
+                - generic [ref=e492]: Barrierefreiheit
+              - generic [ref=e493]:
+                - generic [ref=e494]: —
+                - generic [ref=e495]: Legal
+        - region "Analyse & KI" [ref=e496]:
+          - generic [ref=e498]:
+            - generic [ref=e500]:
+              - generic [ref=e501]:
+                - img [ref=e503]
+                - generic [ref=e506]:
+                  - generic [ref=e507]: 📊 Analysierte Website
+                  - generic [ref=e508]: https://complyo.de
+                  - generic [ref=e509]:
+                    - generic [ref=e510]: https://complyo.de
+                    - generic [ref=e511]: vor weniger als 1 Minute
+              - generic [ref=e513]:
+                - button "Neu scannen" [ref=e514] [cursor=pointer]:
+                  - img [ref=e515]
+                  - text: Neu scannen
+                - button "PDF" [disabled] [ref=e520]:
+                  - img [ref=e521]
+                  - text: PDF
+            - heading "Compliance-Analyse Optimierungsmodus" [level=3] [ref=e526]:
+              - img [ref=e528]
+              - generic [ref=e530]: Compliance-Analyse
+              - generic [ref=e531]: Optimierungsmodus
+          - complementary "AI Compliance" [ref=e532]:
+            - generic [ref=e533]:
+              - generic [ref=e534]:
+                - img [ref=e536]
+                - generic [ref=e546]:
+                  - heading "AI Compliance Add-on" [level=3] [ref=e547]:
+                    - text: AI Compliance
+                    - generic [ref=e548]: Add-on
+                  - paragraph [ref=e549]: EU AI Act
+              - generic [ref=e550]:
+                - generic [ref=e551]:
+                  - img [ref=e552]
+                  - generic [ref=e554]:
+                    - generic [ref=e555]: Risiko-Klassifizierung
+                    - generic [ref=e556]: High, Limited, Minimal
+                - generic [ref=e557]:
+                  - img [ref=e558]
+                  - generic [ref=e561]:
+                    - generic [ref=e562]: Auto-Dokumentation
+                    - generic [ref=e563]: Reports & Analysen
+                - generic [ref=e564]:
+                  - img [ref=e565]
+                  - generic [ref=e568]:
+                    - generic [ref=e569]: Monitoring
+                    - generic [ref=e570]: Scans & Alerts
+              - generic [ref=e571]:
+                - generic [ref=e572]: 99€
+                - generic [ref=e573]: /Monat
+              - button "Add-on jetzt aktivieren" [ref=e574] [cursor=pointer]:
+                - img [ref=e575]
+                - text: Add-on jetzt aktivieren
+              - button "Mehr über AI Compliance erfahren →" [ref=e578] [cursor=pointer]
+        - region "Legal News" [ref=e579]:
+          - generic [ref=e580]:
+            - generic [ref=e581]:
+              - heading "Rechtliche Updates & News" [level=3] [ref=e582]:
+                - img [ref=e584]
+                - generic [ref=e588]: Rechtliche Updates & News
+              - generic [ref=e589]:
+                - button "Gesetzesänderungen2" [ref=e590] [cursor=pointer]:
+                  - img [ref=e591]
+                  - text: Gesetzesänderungen2
+                - button "Allgemeine News6" [ref=e594] [cursor=pointer]:
+                  - img [ref=e595]
+                  - text: Allgemeine News6
+            - generic [ref=e599]:
+              - generic [ref=e600]:
+                - generic [ref=e601]:
+                  - generic [ref=e603]:
+                    - generic [ref=e604]:
+                      - generic [ref=e605]: 🚨 CRITICAL
+                      - generic [ref=e606]: Aktion erforderlich
+                      - generic [ref=e607]: 🤖 Sehr sicher
+                    - heading "Barrierefreiheitsstärkungsgesetz tritt in Kraft" [level=4] [ref=e608]
+                    - generic [ref=e609]: bfsg • 23.02.
+                  - paragraph [ref=e610]: Ab 28. Juni 2025 müssen digitale Produkte und Dienstleistungen barrierefrei nach WCAG 2.1 Level AA sein.
+                  - generic [ref=e614]: 8.0/10
+                  - paragraph [ref=e616]:
+                    - text: 💡
+                    - strong [ref=e617]: "Bedeutung:"
+                    - text: Für den Nutzer bedeutet das, dass seine Website umfassend auf Barrierefreiheit geprüft und angepasst werden muss. Dies k...
+                  - button "Barrierefreiheit jetzt prüfen" [ref=e618] [cursor=pointer]:
+                    - img [ref=e619]
+                    - text: Barrierefreiheit jetzt prüfen
+                  - generic [ref=e621]:
+                    - button "Details" [ref=e622] [cursor=pointer]:
+                      - img [ref=e623]
+                      - text: Details
+                    - generic [ref=e626]:
+                      - button "Hilfreich" [ref=e627] [cursor=pointer]:
+                        - img [ref=e628]
+                      - button "Nicht hilfreich" [ref=e630] [cursor=pointer]:
+                        - img [ref=e631]
+                - generic [ref=e633]:
+                  - generic [ref=e635]:
+                    - generic [ref=e636]:
+                      - generic [ref=e637]: ℹ️ INFO
+                      - generic [ref=e638]: Aktion erforderlich
+                      - generic [ref=e639]: 🤖 Sehr sicher
+                    - 'heading "TMG § 5 Ergänzung: Impressumspflicht für Social Media" [level=4] [ref=e640]'
+                    - generic [ref=e641]: tmg • 16.02.
+                  - paragraph [ref=e642]: Unternehmen müssen nun auch in Social-Media-Profilen ein vollständiges Impressum hinterlegen.
+                  - generic [ref=e646]: 7.0/10
+                  - paragraph [ref=e648]:
+                    - text: 💡
+                    - strong [ref=e649]: "Bedeutung:"
+                    - text: Für den Nutzer bedeutet das, dass alle Social-Media-Kanäle (Facebook, Instagram, LinkedIn, TikTok, etc.) mit einem volls...
+                  - button "Impressum aktualisieren" [ref=e650] [cursor=pointer]:
+                    - img [ref=e651]
+                    - text: Impressum aktualisieren
+                  - generic [ref=e653]:
+                    - button "Details" [ref=e654] [cursor=pointer]:
+                      - img [ref=e655]
+                      - text: Details
+                    - generic [ref=e658]:
+                      - button "Hilfreich" [ref=e659] [cursor=pointer]:
+                        - img [ref=e660]
+                      - button "Nicht hilfreich" [ref=e662] [cursor=pointer]:
+                        - img [ref=e663]
+                - generic [ref=e665]:
+                  - generic [ref=e667]:
+                    - generic [ref=e668]:
+                      - generic [ref=e669]: ⚠️ WARNING
+                      - generic [ref=e670]: 🤖 Sehr sicher
+                    - 'heading "DSGVO Anpassung 2025: Neue Cookie-Consent Anforderungen" [level=4] [ref=e671]'
+                    - generic [ref=e672]: dsgvo • 28.02.
+                  - paragraph [ref=e673]: Ab 01.01.2026 gelten verschärfte Anforderungen für Cookie-Consent-Banner. Opt-Out Lösungen sind nicht mehr ausreichend.
+                  - paragraph [ref=e675]:
+                    - text: 💡
+                    - strong [ref=e676]: "Bedeutung:"
+                    - text: Für den Nutzer besteht aktuell kein Handlungsbedarf, da die angegebene Gesetzesänderung nicht valide erscheint....
+                  - button "Zur Kenntnis genommen" [ref=e677] [cursor=pointer]:
+                    - img [ref=e678]
+                    - text: Zur Kenntnis genommen
+                  - generic [ref=e680]:
+                    - button "Details" [ref=e681] [cursor=pointer]:
+                      - img [ref=e682]
+                      - text: Details
+                    - generic [ref=e685]:
+                      - button "Hilfreich" [ref=e686] [cursor=pointer]:
+                        - img [ref=e687]
+                      - button "Nicht hilfreich" [ref=e689] [cursor=pointer]:
+                        - img [ref=e690]
+              - button "Archiv anzeigen (ältere Änderungen)" [ref=e693] [cursor=pointer]:
+                - img [ref=e694]
+                - text: Archiv anzeigen (ältere Änderungen)
+        - region "Cookie Compliance" [ref=e697]:
+          - generic [ref=e698]:
+            - generic [ref=e700]:
+              - heading "Cookie-Compliance Management Neu DSGVO-konformes Cookie-Banner mit Consent-Management" [level=3] [ref=e701]:
+                - img [ref=e703]
+                - generic [ref=e705]:
+                  - generic [ref=e706]:
+                    - text: Cookie-Compliance Management
+                    - generic [ref=e707]: Neu
+                  - paragraph [ref=e708]: DSGVO-konformes Cookie-Banner mit Consent-Management
+              - button "Einrichten" [ref=e709] [cursor=pointer]:
+                - img [ref=e710]
+                - text: Einrichten
+            - generic [ref=e713]:
+              - generic [ref=e714]:
+                - generic [ref=e715]:
+                  - heading "Letzte 7 Tage" [level=3] [ref=e716]:
+                    - img [ref=e717]
+                    - text: Letzte 7 Tage
+                  - generic [ref=e719]:
+                    - generic [ref=e721]:
+                      - generic [ref=e722]: Opt-In-Rate
+                      - generic [ref=e723]: "--%"
+                    - generic [ref=e725]:
+                      - generic [ref=e726]: Consents
+                      - generic [ref=e727]: "0"
+                    - generic [ref=e728]:
+                      - generic [ref=e729]: Services
+                      - generic [ref=e730]: "20"
+                      - generic [ref=e731]: verfügbar
+                - generic [ref=e732]:
+                  - heading "Features" [level=3] [ref=e733]:
+                    - img [ref=e734]
+                    - text: Features
+                  - generic [ref=e736]:
+                    - generic [ref=e737]:
+                      - img [ref=e738]
+                      - generic [ref=e741]:
+                        - generic [ref=e742]: DSGVO & TTDSG konform
+                        - generic [ref=e743]: Rechtssichere Einwilligungen
+                    - generic [ref=e744]:
+                      - img [ref=e745]
+                      - generic [ref=e748]:
+                        - generic [ref=e749]: Content Blocker
+                        - generic [ref=e750]: YouTube, Google Maps, Analytics
+                    - generic [ref=e751]:
+                      - img [ref=e752]
+                      - generic [ref=e755]:
+                        - generic [ref=e756]: 20+ Service-Vorlagen
+                        - generic [ref=e757]: Google, Facebook, TikTok, etc.
+                    - generic [ref=e758]:
+                      - img [ref=e759]
+                      - generic [ref=e762]:
+                        - generic [ref=e763]: Vollständig anpassbar
+                        - generic [ref=e764]: Farben, Texte, Layout
+                    - generic [ref=e765]:
+                      - img [ref=e766]
+                      - generic [ref=e769]:
+                        - generic [ref=e770]: Consent-Statistiken
+                        - generic [ref=e771]: Opt-In-Rate Analytics
+                    - generic [ref=e772]:
+                      - img [ref=e773]
+                      - generic [ref=e776]:
+                        - generic [ref=e777]: WCAG 2.2 Level AA
+                        - generic [ref=e778]: Barrierefrei
+                - generic [ref=e779]:
+                  - heading "Integration" [level=3] [ref=e780]:
+                    - img [ref=e781]
+                    - text: Integration
+                  - generic [ref=e784]:
+                    - generic [ref=e785]:
+                      - code [ref=e787]: <!-- Complyo Cookie-Compliance Widget --> <script src="https://api.complyo.de/api/widgets/cookie-compliance.js" data-site-id="complyo-de" async ></script>
+                      - button [ref=e788] [cursor=pointer]:
+                        - img [ref=e789]
+                    - generic [ref=e792]:
+                      - button "Banner konfigurieren" [ref=e793] [cursor=pointer]:
+                        - img [ref=e794]
+                        - text: Banner konfigurieren
+                      - button "Dokumentation" [ref=e797] [cursor=pointer]:
+                        - img [ref=e798]
+                        - text: Dokumentation
+                    - generic [ref=e803]:
+                      - img [ref=e804]
+                      - generic [ref=e806]:
+                        - strong [ref=e807]: "Tipp:"
+                        - text: Das Cookie-Banner wird automatisch auf Ihrer Website angezeigt. Alle Einstellungen können im Dashboard angepasst werden.
+              - generic [ref=e809]:
+                - generic [ref=e810]:
+                  - img [ref=e812]
+                  - generic [ref=e815]:
+                    - generic [ref=e816]: Cookie-Compliance ist im AI Plan enthalten
+                    - generic [ref=e817]: Keine zusätzlichen Kosten - Vollständig integriert in Complyo
+                - button "Jetzt einrichten" [ref=e818] [cursor=pointer]:
+                  - text: Jetzt einrichten
+                  - img [ref=e819]

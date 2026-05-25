@@ -9,7 +9,8 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "accessibility:analyze": "node scripts/accessibility-analyzer.js",
-    "a11y": "node scripts/accessibility-analyzer.js"
+    "a11y": "node scripts/accessibility-analyzer.js",
+    "test:a11y": "npx playwright test tests/e2e/axe-accessibility.spec.ts"
   },
   "dependencies": {
     "@chakra-ui/react": "^2.8.2",
@@ -19,6 +20,7 @@
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-switch": "^1.2.6",
+    "@sentry/nextjs": "^10.53.1",
     "@tanstack/react-query": "^5.50.1",
     "@types/node": "^20.14.11",
     "@types/react": "^18.3.3",
@@ -33,6 +35,8 @@
     "framer-motion": "^11.2.12",
     "lucide-react": "^0.408.0",
     "next": "^14.2.32",
+    "next-auth": "^5.0.0-beta.28",
+    "next-themes": "^0.4.6",
     "postcss": "^8.4.39",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -43,9 +47,11 @@
     "tailwind-merge": "^2.4.0",
     "tailwindcss": "^3.4.6",
     "typescript": "^5.5.3",
+    "zod": "^4.4.3",
     "zustand": "^4.5.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/typography": "^0.5.16",
     "@types/dompurify": "^3.0.5",

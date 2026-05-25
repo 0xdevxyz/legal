@@ -205,15 +205,12 @@ export default function PrivacyPage() {
             
             <div className="space-y-4">
               <div className="border-l-4 border-blue-500 bg-blue-500/10 rounded-r-lg p-4">
-                <h3 className="text-lg font-semibold text-white mb-2">eRecht24 API</h3>
+                <h3 className="text-lg font-semibold text-white mb-2">Interner Rechtstexte-Generator</h3>
                 <p className="text-zinc-400 text-sm mb-2">
-                  <strong>Zweck:</strong> Generierung rechtssicherer Texte (Impressum, Datenschutzerklärung)
-                </p>
-                <p className="text-zinc-400 text-sm mb-2">
-                  <strong>Übermittelte Daten:</strong> Domain/URL, Firmendaten (nur wenn Sie diese eingeben)
+                  <strong>Zweck:</strong> Generierung und Aktualisierung rechtlicher Texte (Impressum, Datenschutzerklärung)
                 </p>
                 <p className="text-zinc-400 text-sm">
-                  <strong>Datenschutz:</strong> <a href="https://www.e-recht24.de/datenschutzerklaerung/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">https://www.e-recht24.de/datenschutzerklaerung/</a>
+                  <strong>Verarbeitete Daten:</strong> Domain/URL, Firmendaten (nur wenn Sie diese eingeben)
                 </p>
               </div>
 

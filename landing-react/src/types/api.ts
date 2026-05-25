@@ -44,3 +44,17 @@ export interface ApiResponse<T> {
   status: 'success' | 'error';
   message?: string;
 }
+
+export interface WaitlistJoinRequest {
+  email: string;
+  name?: string;
+  phone?: string;
+  consent: boolean;
+  website?: string;
+  source?: string;
+}
+
+export interface WaitlistJoinResponse {
+  status: 'pending_confirmation' | 'already_registered';
+  message: string;
+}

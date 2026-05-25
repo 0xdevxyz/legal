@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ComplianceAnalysis, ApiResponse } from '@/types/api';
+import { ComplianceAnalysis, ApiResponse, WaitlistJoinRequest, WaitlistJoinResponse } from '@/types/api';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de',
@@ -114,6 +114,13 @@ export const complianceApi = {
     const response = await api.get('/api/legal/news');
     return response.data;
   }
+};
+
+export const leadsApi = {
+  joinWaitlist: async (payload: WaitlistJoinRequest): Promise<WaitlistJoinResponse> => {
+    const response = await api.post<WaitlistJoinResponse>('/api/leads/waitlist', payload);
+    return response.data;
+  },
 };
 
 export default api;

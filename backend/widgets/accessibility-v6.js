@@ -18,7 +18,13 @@
   'use strict';
   
   const WIDGET_VERSION = '6.0.0';
-  const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://api.complyo.tech';
+  const _currentScript = document.currentScript || (function() {
+    const scripts = document.getElementsByTagName('script');
+    return scripts[scripts.length - 1];
+  })();
+  const API_BASE = (window.location.hostname === 'localhost')
+    ? 'http://localhost:8000'
+    : (_currentScript && _currentScript.getAttribute('data-api-base')) || 'https://api.complyo.de';
   
   // Multi-Language Translations
   const TRANSLATIONS = {
@@ -1399,11 +1405,14 @@
       this.isOpen = false;
       const panel = this.container.querySelector('.complyo-panel');
       const toggleBtn = this.container.querySelector('.complyo-toggle-btn');
-      
-      panel.hidden = true;
-      toggleBtn.setAttribute('aria-expanded', 'false');
-      // Toggle-Button wieder anzeigen
-      toggleBtn.style.display = 'flex';
+
+      if (panel) {
+        panel.hidden = true;
+      }
+      if (toggleBtn) {
+        toggleBtn.setAttribute('aria-expanded', 'false');
+        toggleBtn.style.display = 'flex';
+      }
     }
     
     loadPreferences() {

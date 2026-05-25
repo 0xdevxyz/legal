@@ -19,6 +19,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { getAuthToken } from '@/lib/storage';
+import { apiClient } from '@/lib/api-client';
 import {
   Dialog,
   DialogContent,
@@ -50,8 +52,6 @@ interface NotificationStats {
   action_required: number;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
-
 export default function LegalActionWidget() {
   const [notifications, setNotifications] = useState<LegalNotification[]>([]);
   const [stats, setStats] = useState<NotificationStats | null>(null);
@@ -65,33 +65,17 @@ export default function LegalActionWidget() {
 
   const loadData = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const [notifResponse, statsResponse] = await Promise.all([
-        fetch(`${API_URL}/api/legal-notifications/pending`, {
-          headers,
-          credentials: 'include',
-        }),
-        fetch(`${API_URL}/api/legal-notifications/stats`, {
-          headers,
-          credentials: 'include',
-        }),
+      const [notifData, statsData] = await Promise.all([
+        apiClient.get('/api/legal-notifications/pending'),
+        apiClient.get('/api/legal-notifications/stats'),
       ]);
 
-      if (notifResponse.ok) {
-        const data = await notifResponse.json();
-        setNotifications(data);
+      if (notifData) {
+        setNotifications(notifData as LegalNotification[]);
       }
 
-      if (statsResponse.ok) {
-        const data = await statsResponse.json();
-        setStats(data);
+      if (statsData) {
+        setStats(statsData as NotificationStats);
       }
     } catch (error) {
       console.error('Failed to load notifications:', error);
@@ -109,26 +93,12 @@ export default function LegalActionWidget() {
     if (!selectedNotification) return;
     
     try {
-      const token = localStorage.getItem('auth_token');
-      const headers: HeadersInit = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      
-      const response = await fetch(
-        `${API_URL}/api/legal-notifications/confirm/${selectedNotification.id}`,
-        {
-          method: 'POST',
-          headers,
-          credentials: 'include',
-        }
+      await apiClient.post(
+        `/api/legal-notifications/confirm/${selectedNotification.id}`
       );
-      
-      if (response.ok) {
-        setNotifications(prev => prev.filter(n => n.id !== selectedNotification.id));
-        setIsModalOpen(false);
-        loadData();
-      }
+      setNotifications(prev => prev.filter(n => n.id !== selectedNotification.id));
+      setIsModalOpen(false);
+      loadData();
     } catch (error) {
       console.error('Failed to confirm notification:', error);
     }
@@ -136,25 +106,9 @@ export default function LegalActionWidget() {
 
   const dismissNotification = async (id: number) => {
     try {
-      const token = localStorage.getItem('auth_token');
-      const headers: HeadersInit = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      
-      const response = await fetch(
-        `${API_URL}/api/legal-notifications/dismiss/${id}`,
-        {
-          method: 'POST',
-          headers,
-          credentials: 'include',
-        }
-      );
-      
-      if (response.ok) {
-        setNotifications(prev => prev.filter(n => n.id !== id));
-        loadData();
-      }
+      await apiClient.post(`/api/legal-notifications/dismiss/${id}`);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      loadData();
     } catch (error) {
       console.error('Failed to dismiss notification:', error);
     }

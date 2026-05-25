@@ -10,6 +10,8 @@ import stripe
 import os
 import logging
 import json
+import smtplib
+from email.mime.text import MIMEText
 
 from auth_service import AuthService
 from database_service import db_service
@@ -18,11 +20,34 @@ router = APIRouter(prefix="/api/addons", tags=["Add-Ons"])
 security = HTTPBearer()
 logger = logging.getLogger(__name__)
 
+SALES_EMAIL = os.getenv("SALES_EMAIL", "sales@complyo.de")
+
+def _notify_sales(subject: str, body: str) -> None:
+    """Send a plain-text notification email to the sales team. Silent on failure."""
+    smtp_host = os.getenv("SMTP_HOST", "")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USERNAME", "")
+    smtp_pass = os.getenv("SMTP_PASSWORD", "")
+    if not all([smtp_host, smtp_user, smtp_pass]):
+        logger.info(f"[DEMO] Sales notification (no SMTP): {subject} | {body}")
+        return
+    try:
+        msg = MIMEText(body, "plain", "utf-8")
+        msg["Subject"] = subject
+        msg["From"] = smtp_user
+        msg["To"] = SALES_EMAIL
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, [SALES_EMAIL], msg.as_string())
+    except Exception as e:
+        logger.error(f"Failed to send sales notification: {e}")
+
 async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Get current user ID from JWT token"""
     from auth_routes import get_current_user
     user = await get_current_user(credentials)
-    return user["user_id"]
+    return user["id"]
 
 # Stripe Configuration
 stripe.api_key = os.getenv("STRIPE_API_KEY", "")
@@ -80,6 +105,23 @@ MONTHLY_ADDONS = {
         "stripe_price_id": os.getenv("STRIPE_PRICE_PRIORITY_SUPPORT", "price_5678"),  # Set in Stripe Dashboard
         "badge": "PREMIUM",
         "compatible_plans": ["starter", "professional", "business", "enterprise"]
+    },
+    "agency_sites_extra": {
+        "name": "Extra Sites Paket",
+        "tagline": "25 weitere Client-Sites für Ihr Agentur-Dashboard",
+        "price_monthly": 200,
+        "currency": "eur",
+        "features": [
+            "25 zusätzliche verwaltete Sites",
+            "Gleiche Features wie Basis-Paket",
+            "Sofort aktiv nach Buchung",
+        ],
+        "limits_by_plan": {
+            "agency": {"extra_sites": 25},
+        },
+        "stripe_price_id": os.getenv("STRIPE_PRICE_AGENCY_SITES_EXTRA", "price_agency_extra"),
+        "badge": "ADD-ON",
+        "compatible_plans": ["agency"],
     }
 }
 
@@ -205,9 +247,10 @@ async def subscribe_to_addon(
         )
     
     # Get user email for Stripe
-    # Note: You should fetch user email from database
-    user_email = current_user.email  # Placeholder
-    
+    async with db_service.get_connection() as conn:
+        user_row = await conn.fetchrow("SELECT email FROM users WHERE id = $1", user_id)
+    user_email = user_row["email"] if user_row else ""
+
     # Determine limits based on user plan
     user_plan = data.user_plan or "professional"
     limits = addon.get("limits_by_plan", {}).get(user_plan, {})
@@ -266,8 +309,10 @@ async def purchase_onetime_addon(
     addon = ONETIME_ADDONS[addon_key]
     
     # Get user email
-    user_email = current_user.email  # Placeholder
-    
+    async with db_service.get_connection() as conn:
+        user_row = await conn.fetchrow("SELECT email FROM users WHERE id = $1", user_id)
+    user_email = user_row["email"] if user_row else ""
+
     # Create Stripe checkout session for one-time payment
     try:
         checkout_session = stripe.checkout.Session.create(
@@ -428,8 +473,21 @@ async def handle_addon_checkout_completed(session):
         logger.info(f"Created monthly add-on subscription: {addon_key} for user {user_id}")
     
     else:
-        # One-time purchase
-        # TODO: Handle one-time add-on purchase (e.g., send email to sales team)
+        # One-time purchase — notify sales team
+        addon_config = ONETIME_ADDONS.get(addon_key, {})
+        price = addon_config.get("price", 0)
+        customer_email = session.get("customer_details", {}).get("email", "unbekannt")
+        _notify_sales(
+            subject=f"Neue One-Time-Buchung: {addon_name}",
+            body=(
+                f"Neues One-Time-Addon gebucht:\n\n"
+                f"Addon: {addon_name} ({addon_key})\n"
+                f"Preis: {price}€\n"
+                f"User-ID: {user_id}\n"
+                f"Kunden-Email: {customer_email}\n"
+                f"Stripe Session: {session.get('id', 'n/a')}\n"
+            )
+        )
         logger.info(f"One-time add-on purchased: {addon_key} by user {user_id}")
 
 async def handle_addon_subscription_updated(subscription):

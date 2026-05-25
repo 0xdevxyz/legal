@@ -20,10 +20,6 @@ export const ComplyoCookieManager: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleOpenErecht24 = () => {
-    window.open('https://www.e-recht24.de/mitglieder/tools/cookie-consent-tool/', '_blank');
-  };
-
   return (
     <Card className="mb-6">
       <CardHeader>
@@ -40,7 +36,6 @@ export const ComplyoCookieManager: React.FC = () => {
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Linke Spalte: Info & Anleitung */}
           <div className="space-y-6">
-            {/* Warum eRecht24? */}
             <section>
               <div className="flex items-center gap-2 mb-4">
                 <Shield className="w-5 h-5 text-green-400" />
@@ -90,7 +85,7 @@ export const ComplyoCookieManager: React.FC = () => {
                   <div className="flex items-start gap-3">
                     <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="font-semibold text-white mb-1">Abmahnschutz inklusive</h4>
+                      <h4 className="font-semibold text-white mb-1">Compliance-Hinweis</h4>
                       <p className="text-sm text-gray-400">
                         Schützt vor teuren Abmahnungen durch fehlerhafte Cookie-Banner
                       </p>

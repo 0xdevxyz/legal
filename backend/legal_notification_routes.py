@@ -15,6 +15,12 @@ from legal_notification_service import legal_notification_service, init_legal_no
 router = APIRouter(prefix="/api/legal-notifications", tags=["Legal Notifications"])
 
 
+async def _ensure_db():
+    if db_service.pool is None:
+        await db_service.initialize()
+    return db_service
+
+
 class NotificationSettingsUpdate(BaseModel):
     email_enabled: Optional[bool] = None
     in_app_enabled: Optional[bool] = None
@@ -104,6 +110,7 @@ async def get_notification_settings(
     """Holt die Benachrichtigungseinstellungen des Users"""
     user_id = current_user.get("user_id")
     
+    await _ensure_db()
     async with db_service.pool.acquire() as conn:
         settings = await conn.fetchrow("""
             SELECT * FROM user_legal_notification_settings
@@ -132,6 +139,7 @@ async def update_notification_settings(
     """Aktualisiert die Benachrichtigungseinstellungen"""
     user_id = current_user.get("user_id")
     
+    await _ensure_db()
     async with db_service.pool.acquire() as conn:
         existing = await conn.fetchrow(
             "SELECT id FROM user_legal_notification_settings WHERE user_id = $1",
@@ -212,6 +220,7 @@ async def get_notification_stats(
     """Holt Statistiken über Benachrichtigungen"""
     user_id = current_user.get("user_id")
     
+    await _ensure_db()
     async with db_service.pool.acquire() as conn:
         stats = await conn.fetchrow("""
             SELECT 
@@ -219,8 +228,8 @@ async def get_notification_stats(
                 COUNT(*) FILTER (WHERE status = 'sent') as sent,
                 COUNT(*) FILTER (WHERE status = 'confirmed') as confirmed,
                 COUNT(*) FILTER (WHERE status = 'dismissed') as dismissed,
-                COUNT(*) FILTER (WHERE severity = 'critical' AND status IN ('pending', 'sent')) as critical_pending,
-                COUNT(*) FILTER (WHERE action_required = TRUE AND status IN ('pending', 'sent')) as action_required
+                0::bigint as critical_pending,
+                COUNT(*) FILTER (WHERE status IN ('pending', 'sent')) as action_required
             FROM legal_change_notifications
             WHERE user_id = $1
         """, user_id)

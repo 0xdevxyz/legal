@@ -68,7 +68,7 @@ async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depend
     try:
         from auth_routes import get_current_user
         user = await get_current_user(credentials)
-        return user["user_id"]
+        return user["id"]
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid authentication")
 

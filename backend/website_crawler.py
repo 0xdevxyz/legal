@@ -7,13 +7,15 @@ Mit Caching-Support für bessere Performance und geringere API-Kosten
 import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 from datetime import datetime, timedelta
 import asyncpg
 import json
 import re
 import logging
+import colorsys
+from ssrf_protection import validate_url, SSRFError
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +37,16 @@ class WebsiteCrawler:
             Dict mit Website-Struktur, CMS-Info, Compliance-Status
         """
         try:
-            logger.info(f"🕷️ Crawling website: {url}")
-            
-            # Normalisiere URL
+            logger.info(f"Crawling website: {url}")
+
+            # SSRF protection — validate URL before any network access
+            try:
+                url = validate_url(url)
+            except SSRFError as e:
+                logger.warning(f"SSRF blocked crawl for '{url}': {e}")
+                return self._get_fallback_structure(url)
+
+            # Normalisiere URL (validate_url already adds scheme if missing)
             if not url.startswith(('http://', 'https://')):
                 url = 'https://' + url
             
@@ -62,7 +71,8 @@ class WebsiteCrawler:
                 'scripts': self._extract_scripts(soup),
                 'footer': self._extract_footer(soup),
                 'navigation': self._extract_navigation(soup),
-                'technology_stack': self._detect_technology(soup, html_content)
+                'technology_stack': self._detect_technology(soup, html_content),
+                'brand_colors': self.extract_brand_colors(soup, html_content)
             }
             
             logger.info(f"✅ Crawling completed for {url}")
@@ -454,6 +464,117 @@ class WebsiteCrawler:
             return 'sidebar'
         return 'single-column'
     
+    def extract_brand_colors(self, soup: BeautifulSoup, html: str) -> Dict[str, Any]:
+        """
+        Extrahiert dominante Markenfarben der Website aus CSS-Variablen,
+        Inline-Styles und häufig verwendeten Farbwerten als Banner-Vorschlag.
+        
+        Returns:
+            Dict mit primary_color, accent_color, text_color, bg_color
+            sowie raw_candidates (alle gefundenen Farben nach Häufigkeit sortiert)
+        """
+        hex_pattern = re.compile(r'#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b')
+        rgb_pattern = re.compile(r'rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)')
+        css_var_color_pattern = re.compile(
+            r'--[a-zA-Z0-9_-]*(?:color|primary|accent|brand|main|highlight)[a-zA-Z0-9_-]*\s*:\s*(#[0-9a-fA-F]{3,6}|rgb\([^)]+\))',
+            re.IGNORECASE
+        )
+
+        color_freq: Dict[str, int] = {}
+
+        def _normalize_hex(h: str) -> str:
+            h = h.lstrip('#')
+            if len(h) == 3:
+                h = ''.join(c * 2 for c in h)
+            return '#' + h.lower()
+
+        def _rgb_to_hex(r: int, g: int, b: int) -> str:
+            return '#{:02x}{:02x}{:02x}'.format(r, g, b)
+
+        def _register(color: str, weight: int = 1) -> None:
+            color_freq[color] = color_freq.get(color, 0) + weight
+
+        NEAR_WHITE = {'#ffffff', '#fefefe', '#fdfdfd', '#f9f9f9', '#f8f8f8', '#f5f5f5', '#f0f0f0', '#eeeeee'}
+        NEAR_BLACK = {'#000000', '#010101', '#111111', '#1a1a1a', '#222222', '#333333'}
+
+        def _is_neutral(color: str) -> bool:
+            c = color.lower()
+            if c in NEAR_WHITE or c in NEAR_BLACK:
+                return True
+            try:
+                r = int(c[1:3], 16)
+                g = int(c[3:5], 16)
+                b = int(c[5:7], 16)
+                h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+                return s < 0.12
+            except Exception:
+                return False
+
+        # 1. CSS-Variablen (höchste Gewichtung — Entwickler definieren dort Markenfarben)
+        for match in css_var_color_pattern.finditer(html):
+            val = match.group(1).strip()
+            if val.startswith('#'):
+                _register(_normalize_hex(val), weight=5)
+            else:
+                rgb_m = rgb_pattern.match(val)
+                if rgb_m:
+                    _register(_rgb_to_hex(int(rgb_m.group(1)), int(rgb_m.group(2)), int(rgb_m.group(3))), weight=5)
+
+        # 2. Inline-Styles an semantisch relevanten Tags
+        semantic_tags = soup.find_all(['header', 'nav', 'button', 'a', 'h1', 'h2'])
+        for tag in semantic_tags[:200]:
+            style = tag.get('style', '')
+            for h in hex_pattern.findall(style):
+                _register(_normalize_hex(h), weight=3)
+            for rgb_m in rgb_pattern.finditer(style):
+                _register(_rgb_to_hex(int(rgb_m.group(1)), int(rgb_m.group(2)), int(rgb_m.group(3))), weight=3)
+
+        # 3. Alle Hex-Farben im HTML (niedrigste Gewichtung)
+        for h in hex_pattern.findall(html):
+            _register(_normalize_hex(h), weight=1)
+
+        # Sortiert nach Häufigkeit, Neutralfarben herausgefiltert
+        chromatic = sorted(
+            [(c, f) for c, f in color_freq.items() if not _is_neutral(c)],
+            key=lambda x: x[1],
+            reverse=True
+        )
+        chromatic_colors = [c for c, _ in chromatic]
+
+        # Fallback-Defaults
+        default_primary = '#7c3aed'
+        default_accent = '#8b5cf6'
+        default_text = '#333333'
+        default_bg = '#ffffff'
+
+        primary = chromatic_colors[0] if len(chromatic_colors) > 0 else default_primary
+        accent = chromatic_colors[1] if len(chromatic_colors) > 1 else default_accent
+
+        # Helle Hintergrundfarbe aus Near-White-Kandidaten
+        bg_candidates = sorted(
+            [(c, f) for c, f in color_freq.items() if c.lower() in NEAR_WHITE],
+            key=lambda x: x[1],
+            reverse=True
+        )
+        bg = bg_candidates[0][0] if bg_candidates else default_bg
+
+        # Dunkle Textfarbe aus Near-Black-Kandidaten
+        text_candidates = sorted(
+            [(c, f) for c, f in color_freq.items() if c.lower() in NEAR_BLACK],
+            key=lambda x: x[1],
+            reverse=True
+        )
+        text = text_candidates[0][0] if text_candidates else default_text
+
+        return {
+            'primary_color': primary,
+            'accent_color': accent,
+            'text_color': text,
+            'bg_color': bg,
+            'raw_candidates': chromatic_colors[:10],
+            'scraped': len(chromatic_colors) > 0
+        }
+
     def _get_fallback_structure(self, url: str) -> Dict[str, Any]:
         """Fallback-Struktur wenn Crawling fehlschlägt"""
         return {
