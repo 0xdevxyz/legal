@@ -111,6 +111,7 @@ services:
       context: ./landing-react
       dockerfile: Dockerfile.prod
     container_name: complyo-landing
+    init: true   # tini als PID 1 -> reapt verwaiste Kindprozesse (Zombie-Schutz)
     ports:
       - "127.0.0.1:3003:3000"
     environment:
@@ -138,6 +139,7 @@ services:
       context: ./dashboard-react
       dockerfile: Dockerfile.prod
     container_name: complyo-dashboard
+    init: true   # tini als PID 1 -> reapt verwaiste ssl_client-Kinder (Zombie-Schutz)
     ports:
       - "127.0.0.1:3001:3000"
     environment:
@@ -166,7 +168,8 @@ services:
     mem_limit: 512m
     memswap_limit: 512m
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
+      # /login liefert 200 ohne Redirect -> kein wget->HTTPS->ssl_client (Zombie-Quelle)
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/login"]
       interval: 30s
       timeout: 10s
       retries: 3
