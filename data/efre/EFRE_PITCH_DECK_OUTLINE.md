@@ -34,7 +34,7 @@ EFRE-Förderantrag 2025
 **Headline:** "KMU-Krise: 80% der Websites sind nicht rechtskonform"
 
 **Kernbotschaften (3 Bullet Points):**
-- **480.000 € durchschnittliches Bußgeld** bei DSGVO-Verstößen (2024)
+- **1.500–8.000 € pro Abmahnung** – Compliance-Verstöße treffen KMU jederzeit ohne Vorwarnung, oft mehrfach (gesetzlicher DSGVO-Bußgeldrahmen: bis 20 Mio € bzw. 4 % Umsatz)
 - **68% der KMU** haben keine Ressourcen für Compliance (bitkom 2024)
 - **Neue EU-Gesetze** (AI Act, BFSG, CSRD) überfordern kleine Unternehmen
 

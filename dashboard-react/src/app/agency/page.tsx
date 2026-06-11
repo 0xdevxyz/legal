@@ -42,14 +42,14 @@ interface AgencyStats {
 function SkeletonBox({ className }: { className?: string }) {
   return (
     <div
-      className={`animate-pulse bg-zinc-800 rounded-lg ${className ?? ''}`}
+      className={`animate-pulse dark:bg-zinc-800 bg-gray-100 rounded-lg ${className ?? ''}`}
     />
   );
 }
 
 function StatCardSkeleton() {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+    <div className="dark:bg-zinc-900 bg-white border dark:border-zinc-800 border-gray-200 rounded-xl p-6">
       <SkeletonBox className="h-4 w-24 mb-3" />
       <SkeletonBox className="h-8 w-16 mb-2" />
       <SkeletonBox className="h-3 w-20" />
@@ -59,7 +59,7 @@ function StatCardSkeleton() {
 
 function TableRowSkeleton() {
   return (
-    <tr className="border-t border-zinc-800">
+    <tr className="border-t dark:border-zinc-800 border-gray-200">
       <td className="px-6 py-4">
         <SkeletonBox className="h-4 w-40" />
       </td>
@@ -91,34 +91,34 @@ function StatCard({ label, value, sub, icon, accent }: StatCardProps) {
     blue: 'bg-blue-500/10 border-blue-500/20',
     green: 'bg-green-500/10 border-green-500/20',
     purple: 'bg-purple-500/10 border-purple-500/20',
-    orange: 'bg-orange-500/10 border-orange-500/20',
+    orange: 'bg-teal-500/10 border-teal-500/20',
   };
   const text: Record<string, string> = {
     blue: 'text-blue-400',
     green: 'text-green-400',
     purple: 'text-purple-400',
-    orange: 'text-orange-400',
+    orange: 'text-teal-400',
   };
   const iconBg: Record<string, string> = {
     blue: 'bg-blue-500/20',
     green: 'bg-green-500/20',
     purple: 'bg-purple-500/20',
-    orange: 'bg-orange-500/20',
+    orange: 'bg-teal-500/20',
   };
 
   return (
     <div
-      className={`border rounded-xl p-6 transition-all duration-200 hover:shadow-lg ${bg[accent] ?? 'bg-zinc-900 border-zinc-800'}`}
+      className={`border rounded-xl p-6 transition-all duration-200 hover:shadow-lg ${bg[accent] ?? 'dark:bg-zinc-900 bg-white dark:border-zinc-800 border-gray-200'}`}
     >
       <div className="flex items-start justify-between">
         <div>
-          <p className={`text-sm font-medium mb-1 ${text[accent] ?? 'text-zinc-400'}`}>
+          <p className={`text-sm font-medium mb-1 ${text[accent] ?? 'dark:text-zinc-400 text-gray-600'}`}>
             {label}
           </p>
-          <p className={`text-3xl font-bold ${text[accent] ?? 'text-white'}`}>{value}</p>
-          <p className={`text-xs mt-1 opacity-70 ${text[accent] ?? 'text-zinc-500'}`}>{sub}</p>
+          <p className={`text-3xl font-bold ${text[accent] ?? 'dark:text-white text-gray-900'}`}>{value}</p>
+          <p className={`text-xs mt-1 opacity-70 ${text[accent] ?? 'dark:text-zinc-500 text-gray-500'}`}>{sub}</p>
         </div>
-        <div className={`p-2 rounded-lg ${iconBg[accent] ?? 'bg-zinc-800'}`}>{icon}</div>
+        <div className={`p-2 rounded-lg ${iconBg[accent] ?? 'dark:bg-zinc-800 bg-gray-100'}`}>{icon}</div>
       </div>
     </div>
   );
@@ -137,14 +137,14 @@ function StatusBadge({ rate }: { rate: number }) {
   }
   if (rate >= 0.3) {
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-orange-500/20 text-orange-400 border border-orange-500/30">
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-teal-500/20 text-teal-400 border border-teal-500/30">
         <AlertCircle className="w-3 h-3" />
         Niedrig
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-700/50 text-zinc-400 border border-zinc-600/30">
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium dark:bg-zinc-700/50 bg-gray-200 dark:text-zinc-400 text-gray-600 border dark:border-zinc-600/30 border-gray-300">
       <AlertCircle className="w-3 h-3" />
       Inaktiv
     </span>
@@ -229,14 +229,14 @@ export default function AgencyPage() {
             <Building2 className="w-6 h-6 text-blue-400" />
           </div>
           <div>
-            <h3 className="text-white font-semibold text-lg mb-1">Agency Plan erforderlich</h3>
-            <p className="text-zinc-400 text-sm">
+            <h3 className="dark:text-white text-gray-900 font-semibold text-lg mb-1">Agency Plan erforderlich</h3>
+            <p className="dark:text-zinc-400 text-gray-600 text-sm">
               Verwalten Sie mehrere Client-Websites, erhalten Sie aggregierte Consent-Statistiken
               und nutzen Sie White-Label-Funktionen mit dem Agency Plan.
             </p>
-            <p className="mt-2 text-white font-bold text-xl">
-              299 €<span className="text-zinc-400 text-sm font-normal">/Monat</span>
-              <span className="ml-3 text-zinc-400 text-sm font-normal">oder 2.990 €/Jahr</span>
+            <p className="mt-2 dark:text-white text-gray-900 font-bold text-xl">
+              299 €<span className="dark:text-zinc-400 text-gray-600 text-sm font-normal">/Monat</span>
+              <span className="ml-3 dark:text-zinc-400 text-gray-600 text-sm font-normal">oder 2.990 €/Jahr</span>
             </p>
             <ul className="mt-3 space-y-1">
               {[
@@ -245,7 +245,7 @@ export default function AgencyPage() {
                 'White-Label Cookie-Banner',
                 'Prioritäts-Support',
               ].map((feat) => (
-                <li key={feat} className="flex items-center gap-2 text-xs text-zinc-300">
+                <li key={feat} className="flex items-center gap-2 text-xs dark:text-zinc-300 text-gray-700">
                   <CheckCircle className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
                   {feat}
                 </li>
@@ -273,7 +273,7 @@ export default function AgencyPage() {
 
   // ─── Loading skeleton ────────────────────────────────────────────────────────
   const LoadingSkeleton = () => (
-    <div className="min-h-full bg-zinc-950 p-6 lg:p-8">
+    <div className="px-4 sm:px-6 py-6">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <SkeletonBox className="h-8 w-56 mb-2" />
@@ -284,8 +284,8 @@ export default function AgencyPage() {
             <StatCardSkeleton key={i} />
           ))}
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-zinc-800">
+        <div className="dark:bg-zinc-900 bg-white border dark:border-zinc-800 border-gray-200 rounded-xl overflow-hidden">
+          <div className="px-6 py-4 border-b dark:border-zinc-800 border-gray-200">
             <SkeletonBox className="h-5 w-40" />
           </div>
           <table className="w-full">
@@ -302,16 +302,16 @@ export default function AgencyPage() {
 
   // ─── Error state ─────────────────────────────────────────────────────────────
   const ErrorState = () => (
-    <div className="min-h-full bg-zinc-950 flex items-center justify-center p-8">
+    <div className="px-4 sm:px-6 py-6 min-h-[60vh] flex items-center justify-center">
       <div className="text-center max-w-md">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-red-500/20 rounded-full mb-4">
           <AlertCircle className="w-8 h-8 text-red-400" />
         </div>
-        <h2 className="text-white text-xl font-semibold mb-2">Fehler beim Laden</h2>
-        <p className="text-zinc-400 text-sm mb-6">{error}</p>
+        <h2 className="dark:text-white text-gray-900 text-xl font-semibold mb-2">Fehler beim Laden</h2>
+        <p className="dark:text-zinc-400 text-gray-600 text-sm mb-6">{error}</p>
         <button
           onClick={fetchStats}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-lg transition-colors duration-200"
+          className="inline-flex items-center gap-2 px-5 py-2.5 dark:bg-zinc-800 bg-gray-100 hover:bg-zinc-700 dark:text-white text-gray-900 font-medium rounded-lg transition-colors duration-200"
         >
           <RefreshCw className="w-4 h-4" />
           Erneut versuchen
@@ -323,11 +323,11 @@ export default function AgencyPage() {
   // ─── Empty state ─────────────────────────────────────────────────────────────
   const EmptyState = () => (
     <div className="text-center py-16">
-      <div className="inline-flex items-center justify-center w-16 h-16 bg-zinc-800 rounded-full mb-4">
-        <Globe className="w-8 h-8 text-zinc-500" />
+      <div className="inline-flex items-center justify-center w-16 h-16 dark:bg-zinc-800 bg-gray-100 rounded-full mb-4">
+        <Globe className="w-8 h-8 dark:text-zinc-500 text-gray-500" />
       </div>
-      <h3 className="text-white font-semibold text-lg mb-2">Keine Websites vorhanden</h3>
-      <p className="text-zinc-500 text-sm max-w-sm mx-auto">
+      <h3 className="dark:text-white text-gray-900 font-semibold text-lg mb-2">Keine Websites vorhanden</h3>
+      <p className="dark:text-zinc-500 text-gray-500 text-sm max-w-sm mx-auto">
         Es wurden noch keine Client-Websites zu Ihrem Agency-Account hinzugefügt.
       </p>
     </div>
@@ -345,7 +345,7 @@ export default function AgencyPage() {
       <main
         role="main"
         aria-label="Agentur-Dashboard"
-        className="min-h-full bg-zinc-950 text-white p-6 lg:p-8"
+        className="px-4 sm:px-6 py-6"
       >
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
@@ -353,9 +353,9 @@ export default function AgencyPage() {
               <div className="p-2 bg-blue-500/20 rounded-lg">
                 <Building2 className="w-5 h-5 text-blue-400" />
               </div>
-              <h1 className="text-2xl font-bold text-white">Agentur-Dashboard</h1>
+              <h1 className="text-2xl font-bold dark:text-white text-gray-900">Agentur-Dashboard</h1>
             </div>
-            <p className="text-zinc-400 text-sm ml-[52px]">
+            <p className="dark:text-zinc-400 text-gray-600 text-sm ml-[52px]">
               Verwalten Sie Client-Websites und Consent-Metriken mit dem Agency Plan.
             </p>
           </div>
@@ -379,7 +379,7 @@ export default function AgencyPage() {
     <main
       role="main"
       aria-label="Agentur-Dashboard"
-      className="min-h-full bg-zinc-950 text-white p-6 lg:p-8"
+      className="px-4 sm:px-6 py-6"
     >
         <div className="max-w-7xl mx-auto">
           {/* ── Header ────────────────────────────────────────────────────────── */}
@@ -388,9 +388,9 @@ export default function AgencyPage() {
               <div className="p-2 bg-blue-500/20 rounded-lg">
                 <Building2 className="w-5 h-5 text-blue-400" />
               </div>
-              <h1 className="text-2xl font-bold text-white">Agentur-Dashboard</h1>
+              <h1 className="text-2xl font-bold dark:text-white text-gray-900">Agentur-Dashboard</h1>
             </div>
-            <p className="text-zinc-400 text-sm ml-[52px]">
+            <p className="dark:text-zinc-400 text-gray-600 text-sm ml-[52px]">
               Übersicht aller verwalteten Client-Websites und aggregierten Consent-Metriken
             </p>
           </div>
@@ -422,7 +422,7 @@ export default function AgencyPage() {
               label="Aktive Clients"
               value={activeClients}
               sub="Mit Consent-Aktivität"
-              icon={<Users className="w-5 h-5 text-orange-400" />}
+              icon={<Users className="w-5 h-5 text-teal-400" />}
               accent="orange"
             />
           </div>
@@ -435,7 +435,7 @@ export default function AgencyPage() {
           {/* Per-client grouped view (Phase 10 AGENCY-02) */}
           <div className="mb-8">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-white font-semibold text-lg">Kunden-Uebersicht</h2>
+              <h2 className="dark:text-white text-gray-900 font-semibold text-lg">Kunden-Uebersicht</h2>
               {clientsError && (
                 <span className="text-red-400 text-xs">{clientsError}</span>
               )}
@@ -443,15 +443,15 @@ export default function AgencyPage() {
             {clientsLoading ? (
               <div className="space-y-3">
                 {[0, 1, 2].map(i => (
-                  <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                  <div key={i} className="dark:bg-zinc-900 bg-white border dark:border-zinc-800 border-gray-200 rounded-xl p-6">
                     <SkeletonBox className="h-5 w-48 mb-2" />
                     <SkeletonBox className="h-3 w-32" />
                   </div>
                 ))}
               </div>
             ) : clients.length === 0 ? (
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center">
-                <p className="text-zinc-400 text-sm">
+              <div className="dark:bg-zinc-900 bg-white border dark:border-zinc-800 border-gray-200 rounded-xl p-8 text-center">
+                <p className="dark:text-zinc-400 text-gray-600 text-sm">
                   Noch keine Kunden zugeordnet. Weisen Sie Ihren Sites <code>client_name</code> zu, um sie hier gruppiert zu sehen.
                 </p>
               </div>
@@ -465,12 +465,12 @@ export default function AgencyPage() {
           </div>
 
           {/* ── Client table ──────────────────────────────────────────────────── */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
-              <h2 className="text-white font-semibold">Client-Websites im Überblick</h2>
+          <div className="dark:bg-zinc-900 bg-white border dark:border-zinc-800 border-gray-200 rounded-xl overflow-hidden">
+            <div className="px-6 py-4 border-b dark:border-zinc-800 border-gray-200 flex items-center justify-between">
+              <h2 className="dark:text-white text-gray-900 font-semibold">Client-Websites im Überblick</h2>
               <button
                 onClick={fetchStats}
-                className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors duration-200"
+                className="inline-flex items-center gap-1.5 text-xs dark:text-zinc-400 text-gray-600 hover:text-white transition-colors duration-200"
                 aria-label="Statistiken aktualisieren"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
@@ -484,17 +484,17 @@ export default function AgencyPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-800 text-left">
-                      <th className="px-6 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                    <tr className="border-b dark:border-zinc-800 border-gray-200 text-left">
+                      <th className="px-6 py-3 text-xs font-medium dark:text-zinc-400 text-gray-600 uppercase tracking-wider">
                         Website
                       </th>
-                      <th className="px-6 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider text-right">
+                      <th className="px-6 py-3 text-xs font-medium dark:text-zinc-400 text-gray-600 uppercase tracking-wider text-right">
                         Impressionen
                       </th>
-                      <th className="px-6 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider text-right">
+                      <th className="px-6 py-3 text-xs font-medium dark:text-zinc-400 text-gray-600 uppercase tracking-wider text-right">
                         Akzeptanzrate
                       </th>
-                      <th className="px-6 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider text-right">
+                      <th className="px-6 py-3 text-xs font-medium dark:text-zinc-400 text-gray-600 uppercase tracking-wider text-right">
                         Status
                       </th>
                     </tr>
@@ -505,17 +505,17 @@ export default function AgencyPage() {
                       return (
                         <tr
                           key={site.site_id}
-                          className="border-t border-zinc-800 hover:bg-zinc-800/50 transition-colors duration-150"
+                          className="border-t dark:border-zinc-800 border-gray-200 hover:bg-zinc-800/50 transition-colors duration-150"
                         >
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
-                              <div className="flex-shrink-0 w-7 h-7 bg-zinc-800 rounded-md flex items-center justify-center">
-                                <Globe className="w-3.5 h-3.5 text-zinc-400" />
+                              <div className="flex-shrink-0 w-7 h-7 dark:bg-zinc-800 bg-gray-100 rounded-md flex items-center justify-center">
+                                <Globe className="w-3.5 h-3.5 dark:text-zinc-400 text-gray-600" />
                               </div>
                               <div>
-                                <p className="text-white font-medium">{displayUrl}</p>
+                                <p className="dark:text-white text-gray-900 font-medium">{displayUrl}</p>
                                 {site.url && (
-                                  <p className="text-zinc-500 text-xs font-mono">{site.site_id}</p>
+                                  <p className="dark:text-zinc-500 text-gray-500 text-xs font-mono">{site.site_id}</p>
                                 )}
                               </div>
                               <a
@@ -529,17 +529,17 @@ export default function AgencyPage() {
                               </a>
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-zinc-300 text-right tabular-nums">
+                          <td className="px-6 py-4 dark:text-zinc-300 text-gray-700 text-right tabular-nums">
                             {site.total_impressions.toLocaleString('de-DE')}
                           </td>
-                          <td className="px-6 py-4 text-zinc-300 text-right tabular-nums">
+                          <td className="px-6 py-4 dark:text-zinc-300 text-gray-700 text-right tabular-nums">
                             <span
                               className={
                                 site.acceptance_rate >= 0.6
                                   ? 'text-green-400'
                                   : site.acceptance_rate >= 0.3
-                                  ? 'text-orange-400'
-                                  : 'text-zinc-500'
+                                  ? 'text-teal-400'
+                                  : 'dark:text-zinc-500 text-gray-500'
                               }
                             >
                               {(site.acceptance_rate * 100).toFixed(1)} %

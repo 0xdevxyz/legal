@@ -12,9 +12,10 @@ import re
 from typing import List, Dict, Any, Set, Optional
 import aiohttp
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 import logging
 from ssrf_protection import validate_url, SSRFError
+from compliance_engine.privacy_transfer_findings import detect_transfers
 
 logger = logging.getLogger(__name__)
 
@@ -382,11 +383,22 @@ class CookieScanner:
             
             # Detect services
             detected = self._detect_services(all_content, scripts, iframes, links, meta_tags)
-            
+
+            # Drittlandtransfer ohne Einwilligung (Google Fonts, reCAPTCHA, Maps,
+            # YouTube, Adobe/Monotype-Fonts) — abmahnfähig, KEIN Cookie-Problem.
+            # Erkennung gegen rohes HTML + alle Ressourcen-URLs (script/iframe/link)
+            # + Inhalt externer Stylesheets (fängt @import-Fonts in .css-Dateien).
+            external_css = await self._fetch_stylesheet_css(soup, url)
+            privacy_findings = detect_transfers(
+                html=html_content + '\n' + external_css,
+                request_urls=scripts + iframes + links,
+            )
+
             return {
                 'url': url,
                 'detected_services': list(detected['services']),
                 'confidence': detected['confidence'],
+                'privacy_findings': privacy_findings,
                 'scripts': scripts[:20],  # Limit for response size
                 'iframes': iframes[:20],
                 'scan_timestamp': self._get_timestamp()
@@ -419,6 +431,51 @@ class CookieScanner:
             logger.error(f"Error fetching {url}: {e}")
             return ''
     
+    async def _fetch_stylesheet_css(self, soup: BeautifulSoup, base_url: str) -> str:
+        """
+        Lädt externe Stylesheets (<link rel="stylesheet">) nach und gibt deren
+        CSS-Inhalt zurück. Schließt die Erkennungslücke, dass Drittland-Fonts
+        (z. B. Google Fonts) per `@import url(...)` INNERHALB einer externen
+        .css-Datei eingebunden sind und so im reinen HTTP-Scan unsichtbar wären.
+
+        Defensive Grenzen: max. Anzahl Stylesheets, Größen-Cap, SSRF-Schutz.
+        """
+        MAX_SHEETS = 8
+        MAX_BYTES_PER_SHEET = 300_000
+
+        hrefs: List[str] = []
+        for link in soup.find_all('link'):
+            rel = link.get('rel') or []
+            rel_str = ' '.join(rel).lower() if isinstance(rel, list) else str(rel).lower()
+            if 'stylesheet' in rel_str and link.get('href'):
+                hrefs.append(link['href'])
+        if not hrefs:
+            return ''
+
+        css_parts: List[str] = []
+        try:
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                for href in hrefs[:MAX_SHEETS]:
+                    abs_url = urljoin(base_url, href)
+                    # SSRF-Schutz: nur validierte, öffentliche URLs abrufen
+                    try:
+                        abs_url = validate_url(abs_url)
+                    except SSRFError:
+                        continue
+                    try:
+                        async with session.get(abs_url, allow_redirects=True) as resp:
+                            if resp.status != 200:
+                                continue
+                            chunk = await resp.content.read(MAX_BYTES_PER_SHEET)
+                            css_parts.append(chunk.decode('utf-8', errors='ignore'))
+                    except Exception as e:
+                        logger.debug(f"Stylesheet fetch failed for {abs_url}: {e}")
+                        continue
+        except Exception as e:
+            logger.warning(f"Stylesheet scan aborted: {e}")
+
+        return '\n'.join(css_parts)
+
     def _extract_scripts(self, soup: BeautifulSoup) -> List[str]:
         """Extracts all script sources"""
         scripts = []
@@ -526,6 +583,30 @@ class CookieScanner:
         from datetime import datetime
         return datetime.now().isoformat()
 
+    @staticmethod
+    def _merge_privacy_findings(
+        light: List[Dict[str, Any]], deep: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Vereinigt Transfer-Findings aus Light- und Deep-Scan. Pro Dienst-Key wird
+        das Deep-Finding bevorzugt (basiert auf echten Requests), Belege werden
+        zusammengeführt.
+        """
+        by_key: Dict[str, Dict[str, Any]] = {}
+        for f in light + deep:  # deep zuletzt → überschreibt light
+            key = f.get('key')
+            if key in by_key:
+                # Belege/Quellen mergen
+                merged_evidence = list(dict.fromkeys(
+                    by_key[key].get('evidence', []) + f.get('evidence', [])
+                ))[:5]
+                sources = set(by_key[key].get('source', '').split('+'))
+                sources.update(f.get('source', '').split('+'))
+                f = {**f, 'evidence': merged_evidence,
+                     'source': '+'.join(sorted(s for s in sources if s))}
+            by_key[key] = f
+        return list(by_key.values())
+
     async def scan_website_deep(self, url: str) -> Dict[str, Any]:
         """
         Führt einen Deep Scan mit Headless Browser durch
@@ -614,8 +695,15 @@ class CookieScanner:
                 # Summary
                 'summary': deep_result.get('summary', {}),
                 'service_details': deep_result.get('service_details', {}),
+
+                # Drittlandtransfer-Findings: Union aus Light + Deep (dedupe per key,
+                # Deep bevorzugt, da auf echten Requests basierend)
+                'privacy_findings': self._merge_privacy_findings(
+                    light_result.get('privacy_findings', []),
+                    deep_result.get('privacy_findings', []),
+                ),
             }
-            
+
             return combined
             
         except Exception as e:

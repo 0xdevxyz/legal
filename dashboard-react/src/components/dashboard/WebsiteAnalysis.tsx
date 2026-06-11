@@ -406,14 +406,14 @@ export const WebsiteAnalysis: React.FC = () => {
     <div className="space-y-6">
       {/* ✅ PROMINENTER WEBSITE-BANNER - IMMER SICHTBAR */}
       {currentWebsite && (
-        <div className="glass-strong rounded-2xl p-6 border-2 border-orange-500/30 mb-6">
+        <div className="glass-strong rounded-2xl p-6 border-2 border-[#25bac8]/30 mb-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-4 flex-1">
-              <div className="p-3 bg-orange-500/15 rounded-xl">
-                <Globe className="w-8 h-8 text-orange-400" />
+              <div className="p-3 rounded-xl" style={{ background: 'var(--lime-dim)' }}>
+                <Globe className="w-8 h-8" style={{ color: 'var(--lime)' }} />
               </div>
               <div className="flex-1">
-                <div className="text-xs font-semibold text-sky-400 mb-1 uppercase tracking-wider">📊 Analysierte Website</div>
+                <div className="text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--lime)' }}>📊 Analysierte Website</div>
                 <div className="text-2xl font-bold text-white mb-1">{currentWebsite.name || currentWebsite.url}</div>
                 <div className="flex items-center gap-3 text-sm text-zinc-400">
                   <span className="font-mono bg-zinc-900/70 px-3 py-1 rounded-lg border border-zinc-700">{currentWebsite.url}</span>
@@ -479,8 +479,8 @@ export const WebsiteAnalysis: React.FC = () => {
     <Card className="mb-8">
         <CardHeader>
           <CardTitle className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-sky-500/20 to-purple-500/20 rounded-xl">
-              <AlertTriangle className="w-6 h-6 text-sky-400" />
+            <div className="p-2.5 rounded-xl" style={{ background: 'var(--lime-dim)' }}>
+              <AlertTriangle className="w-6 h-6" style={{ color: 'var(--lime)' }} />
             </div>
             <span>Compliance-Analyse</span>
             {isInOptimizationMode && lockedOptimizationUrl && (
@@ -534,7 +534,7 @@ export const WebsiteAnalysis: React.FC = () => {
           <div>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                <span className="w-1 h-6 bg-gradient-to-b from-sky-500 to-purple-500 rounded-full"></span>
+                <span className="w-1 h-6 rounded-full" style={{ background: 'var(--lime)' }}></span>
                 Compliance-Analyse nach Kategorien
               </h3>
             </div>
@@ -568,20 +568,8 @@ export const WebsiteAnalysis: React.FC = () => {
                       className="w-full p-6 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
                     >
                       <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-xl bg-gradient-to-br ${
-                          pillar.color === 'blue'   ? 'from-sky-500/20 to-blue-500/20' :
-                          pillar.color === 'green'  ? 'from-green-500/20 to-emerald-500/20' :
-                          pillar.color === 'purple' ? 'from-purple-500/20 to-pink-500/20' :
-                          pillar.color === 'red'    ? 'from-red-500/20 to-rose-500/20' :
-                          'from-orange-500/20 to-red-500/20'
-                        }`}>
-                          <Icon className={`w-6 h-6 ${
-                            pillar.color === 'blue'   ? 'text-sky-400' :
-                            pillar.color === 'green'  ? 'text-green-400' :
-                            pillar.color === 'purple' ? 'text-purple-400' :
-                            pillar.color === 'red'    ? 'text-red-400' :
-                            'text-orange-400'
-                          }`} />
+                        <div className="p-3 rounded-xl" style={{ background: 'var(--lime-dim)' }}>
+                          <Icon className="w-6 h-6" style={{ color: 'var(--lime)' }} />
                         </div>
                         <div className="text-left">
                           <h4 className="text-lg font-bold text-white flex items-center gap-2">
@@ -597,18 +585,32 @@ export const WebsiteAnalysis: React.FC = () => {
                       </div>
                       
                       <div className="flex items-center gap-4">
-                        {/* Score */}
-                        <div className="text-right">
-                          <div className={`text-3xl font-bold ${
-                            pillar.score >= 80 ? 'text-green-400' : 
-                            pillar.score >= 60 ? 'text-yellow-400' : 
-                            'text-red-400'
-                          }`}>
-                            {pillar.score}
-                          </div>
-                          <div className="text-xs text-zinc-500">/100</div>
-                        </div>
-                        
+                        {/* Score ring (ORION) */}
+                        {(() => {
+                          const r = 26;
+                          const circ = 2 * Math.PI * r;
+                          const pct = Math.max(0, Math.min(100, pillar.score));
+                          const off = circ - (pct / 100) * circ;
+                          const ringColor = pillar.score >= 80 ? '#25bac8' : pillar.score >= 60 ? '#eab308' : '#ef4444';
+                          return (
+                            <div className="relative w-[68px] h-[68px] flex-shrink-0">
+                              <svg className="w-full h-full -rotate-90" viewBox="0 0 68 68">
+                                <circle cx="34" cy="34" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
+                                <circle
+                                  cx="34" cy="34" r={r} fill="none"
+                                  stroke={ringColor} strokeWidth="6" strokeLinecap="round"
+                                  strokeDasharray={circ} strokeDashoffset={off}
+                                  style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+                                />
+                              </svg>
+                              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                <span className="text-lg font-black text-white leading-none">{pillar.score}</span>
+                                <span className="text-[9px] text-zinc-500 leading-none mt-0.5">/100</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
                         {/* Chevron */}
                         <ChevronDown className={`w-5 h-5 text-zinc-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
                       </div>

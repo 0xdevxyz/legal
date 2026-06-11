@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { ComploaiGate } from '@/components/ai-compliance/ComploaiGate';
 
 export const metadata: Metadata = {
   title: 'AI Compliance - ComploAI Guard | Complyo',
@@ -10,6 +11,6 @@ export default function AIComplianceLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return <ComploaiGate>{children}</ComploaiGate>;
 }
 

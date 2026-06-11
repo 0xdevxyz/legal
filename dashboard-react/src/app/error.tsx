@@ -10,7 +10,7 @@ export default function GlobalError({
   reset: () => void
 }) {
   return (
-    <main className="min-h-screen bg-gray-900 text-white flex items-center justify-center px-4">
+    <main className="px-4 sm:px-6 py-6 flex items-center justify-center px-4">
       <div className="max-w-md w-full text-center">
         <div className="mb-6 flex justify-center">
           <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center">
@@ -18,7 +18,7 @@ export default function GlobalError({
           </div>
         </div>
         <h1 className="text-2xl font-bold mb-3">Etwas ist schiefgelaufen</h1>
-        <p className="text-gray-400 mb-8">
+        <p className="dark:text-gray-400 text-gray-600 mb-8">
           Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut oder kehren Sie zur Startseite zurueck.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -31,7 +31,7 @@ export default function GlobalError({
           </button>
           <a
             href="/"
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 dark:bg-zinc-800 bg-gray-100 hover:bg-gray-600 rounded-lg font-medium transition-colors"
           >
             <Home className="w-4 h-4" />
             Zur Startseite

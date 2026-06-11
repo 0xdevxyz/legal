@@ -93,7 +93,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
     {
       id: 1,
       question: "Bin ich wirklich in Gefahr, eine Abmahnung zu bekommen?",
-      answer: "Ja, leider. Über 70% aller deutschen Websites haben rechtliche Mängel. Abmahnungen sind ein lukratives Geschäft für spezialisierte Anwälte geworden. Die häufigsten Gründe: Fehlende/veraltete Datenschutzerklärung, falsche Cookie-Banner, fehlendes Impressum. Eine Abmahnung kann jederzeit und ohne Vorwarnung kommen - und kostet Sie durchschnittlich 4.000€ - 20.000€.",
+      answer: "Ja, leider. Über 70% aller deutschen Websites haben rechtliche Mängel. Abmahnungen sind ein lukratives Geschäft für spezialisierte Anwälte geworden. Die häufigsten Gründe: Fehlende/veraltete Datenschutzerklärung, falsche Cookie-Banner, fehlendes Impressum. Eine Abmahnung kann jederzeit und ohne Vorwarnung kommen - und kostet Sie im Schnitt 1.500€ - 5.000€, bei mehreren Verstößen auch deutlich mehr.",
       isOpen: false
     },
     {
@@ -951,7 +951,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
           </p>
           <div className="inline-block bg-red-900/30 border-2 border-red-500 px-6 py-3 rounded-lg">
             <p className="text-red-300 font-semibold">
-              ⚠️ Eine Abmahnung kostet Sie durchschnittlich <strong className="text-white">8.000€</strong> - und kann jederzeit kommen
+              ⚠️ Eine Abmahnung kostet Sie schnell <strong className="text-white">2.000€ - 5.000€</strong> - und kann jederzeit kommen
             </p>
           </div>
         </div>
@@ -1012,7 +1012,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
                 <div className="text-5xl font-bold mb-2">
                   49€<span className="text-2xl">/Monat</span>
                 </div>
-                <p className="text-gray-400 line-through text-sm">statt 8.000€ Abmahnung</p>
+                <p className="text-gray-400 line-through text-sm">statt mehreren tausend Euro Abmahnung</p>
                 <p className="text-green-400 font-semibold mt-2">Alle 4 Säulen inklusive</p>
               </div>
               
@@ -1119,7 +1119,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
               <ul className="text-left space-y-2 text-gray-300">
                 <li className="flex justify-between">
                   <span>1 Abmahnung (Durchschnitt):</span>
-                  <strong className="text-white">8.000€</strong>
+                  <strong className="text-white">3.000€</strong>
                 </li>
                 <li className="flex justify-between">
                   <span>Anwalt für Rechtstexte:</span>
@@ -1135,7 +1135,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
                 </li>
                 <li className="border-t border-red-500 pt-2 mt-2 flex justify-between text-xl">
                   <span className="font-bold">Gesamt:</span>
-                  <strong className="text-red-400">12.000€+</strong>
+                  <strong className="text-red-400">7.000€+</strong>
                 </li>
               </ul>
               <p className="text-red-300 text-sm mt-4 italic">
@@ -1414,7 +1414,7 @@ const ComplyoLandingPage: React.FC<ComplyoLandingProps> = ({ variant, sessionId 
             <p className="text-gray-300 text-sm">der deutschen Websites haben rechtliche Mängel</p>
           </div>
           <div className="bg-red-900/30 border-2 border-red-500 p-4 rounded-xl text-center">
-            <div className="text-3xl font-bold text-red-400 mb-1">8.000€</div>
+            <div className="text-3xl font-bold text-red-400 mb-1">3.000€</div>
             <p className="text-gray-300 text-sm">Durchschnittliche Kosten einer Abmahnung</p>
           </div>
           <div className="bg-red-900/30 border-2 border-red-500 p-4 rounded-xl text-center">

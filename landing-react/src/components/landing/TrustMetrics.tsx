@@ -24,8 +24,8 @@ export default function TrustMetrics() {
     },
     {
       icon: Shield,
-      value: '€250.000+',
-      label: 'Bußgeld vermieden',
+      value: 'bis 50.000€',
+      label: 'Bußgeldrisiko vermieden',
       description: 'Durch proaktive Compliance-Prüfung',
       color: 'from-purple-500 to-pink-500'
     }

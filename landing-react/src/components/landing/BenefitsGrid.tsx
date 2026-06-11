@@ -94,13 +94,13 @@ export default function BenefitsGrid() {
         <div className="mt-16 text-center">
           <div className="inline-block bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-8 border-2 border-blue-200">
             <div className="text-4xl font-bold text-gray-900 mb-2">
-              €250.000+
+              bis 50.000€
             </div>
             <div className="text-gray-600 mb-4">
-              Bußgelder durch Complyo vermieden
+              Bußgeld- &amp; Abmahnrisiko durch Complyo vermieden
             </div>
             <div className="text-sm text-gray-500">
-              Basierend auf durchschnittlichen DSGVO-Strafen für die erkannten Verstöße
+              Gesetzlicher Bußgeldrahmen für die erkannten Verstöße — in der Praxis meist 1.000€–8.000€ je Abmahnung
             </div>
           </div>
         </div>

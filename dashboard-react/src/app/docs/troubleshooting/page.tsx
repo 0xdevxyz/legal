@@ -57,14 +57,14 @@ const items = [
 
 export default function TroubleshootingPage() {
   return (
-    <div className="min-h-screen bg-zinc-900">
+    <div className="px-4 sm:px-6 py-6">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Header */}
         <div className="mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">
+          <h1 className="text-4xl font-bold dark:text-white text-gray-900 mb-4">
             Troubleshooting — Banner nicht sichtbar?
           </h1>
-          <p className="text-zinc-400 text-lg">
+          <p className="dark:text-zinc-400 text-gray-600 text-lg">
             Wenn das Cookie-Banner auf Ihrer Website nicht erscheint, prüfen Sie die folgenden
             häufigen Ursachen der Reihe nach.
           </p>
@@ -74,22 +74,22 @@ export default function TroubleshootingPage() {
           {items.map((item) => (
             <div
               key={item.number}
-              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex gap-5 items-start"
+              className="dark:bg-zinc-900 bg-white border dark:border-zinc-800 border-gray-200 rounded-2xl p-6 flex gap-5 items-start"
             >
               {/* Number badge */}
-              <span className="flex-shrink-0 w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-white font-bold text-lg">
+              <span className="flex-shrink-0 w-10 h-10 rounded-full dark:bg-zinc-800 bg-gray-100 border dark:border-zinc-700 border-gray-200 flex items-center justify-center dark:text-white text-gray-900 font-bold text-lg">
                 {item.number}
               </span>
 
               <div>
-                <h2 className="text-lg font-semibold text-white mb-1">{item.title}</h2>
-                <p className="text-zinc-400 text-sm leading-relaxed">{item.description}</p>
+                <h2 className="text-lg font-semibold dark:text-white text-gray-900 mb-1">{item.title}</h2>
+                <p className="dark:text-zinc-400 text-gray-600 text-sm leading-relaxed">{item.description}</p>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="mt-12 pt-6 border-t border-zinc-800 text-center text-zinc-500 text-sm">
+        <div className="mt-12 pt-6 border-t dark:border-zinc-800 border-gray-200 text-center dark:text-zinc-500 text-gray-500 text-sm">
           <a href="/dashboard" className="text-blue-400 hover:text-blue-300">
             ← Zurück zum Dashboard
           </a>

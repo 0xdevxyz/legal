@@ -142,7 +142,7 @@ export const ComplianceFlowWidget: React.FC = () => {
         {/* Left: OUTPUT block */}
         <div className="flex-shrink-0 flex flex-col items-center justify-center w-28">
           <div className="rounded-xl px-4 py-3 text-center" style={{ background: outputBg, border: `1px solid ${outputBorder}` }}>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-orange-500 mb-1">OUTPUT</div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--lime)' }}>OUTPUT</div>
             <div className="text-2xl font-black" style={{ color: outputScoreColor }}>{overallScore}</div>
             <div className="text-[10px] mt-0.5" style={{ color: textMuted }}>Gesamt</div>
           </div>
@@ -194,7 +194,7 @@ export const ComplianceFlowWidget: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <span className="status-led" style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}60` }} />
-                  <ChevronRight className="w-3 h-3 transition-colors group-hover:text-orange-500" style={{ color: chevronColor }} />
+                  <ChevronRight className="w-3 h-3 transition-colors group-hover:text-[#25bac8]" style={{ color: chevronColor }} />
                 </div>
               </button>
             );

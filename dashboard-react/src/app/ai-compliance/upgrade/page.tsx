@@ -62,8 +62,8 @@ export default function UpgradePage() {
   
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white p-8 flex items-center justify-center">
-        <div className="animate-pulse text-gray-400">Lade Add-ons...</div>
+      <div className="px-4 sm:px-6 py-6 flex items-center justify-center">
+        <div className="animate-pulse dark:text-gray-400 text-gray-600">Lade Add-ons...</div>
       </div>
     );
   }
@@ -72,7 +72,7 @@ export default function UpgradePage() {
   const hasPrioritySupport = myAddons.some(a => a.addon_key === 'priority_support' && a.status === 'active');
   
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
+    <div className="px-4 sm:px-6 py-6">
       <div className="max-w-6xl mx-auto">
         {/* Hero Section */}
         <div className="text-center mb-16">
@@ -89,7 +89,7 @@ export default function UpgradePage() {
             </span>
           </h1>
           
-          <p className="text-xl text-gray-400 max-w-3xl mx-auto">
+          <p className="text-xl dark:text-gray-400 text-gray-600 max-w-3xl mx-auto">
             Prüfen Sie Ihre KI-Systeme auf Compliance mit der EU KI-Verordnung.
             Automatische Risiko-Klassifizierung, Dokumentation und Reports.
           </p>
@@ -114,7 +114,7 @@ export default function UpgradePage() {
                 <h3 className="text-2xl font-bold mb-2">
                   {catalog.monthly_addons.comploai_guard.name}
                 </h3>
-                <p className="text-gray-400 mb-4">
+                <p className="dark:text-gray-400 text-gray-600 mb-4">
                   {catalog.monthly_addons.comploai_guard.tagline}
                 </p>
                 
@@ -122,7 +122,7 @@ export default function UpgradePage() {
                   <span className="text-4xl font-bold">
                     {catalog.monthly_addons.comploai_guard.price_monthly}€
                   </span>
-                  <span className="text-gray-400">/Monat</span>
+                  <span className="dark:text-gray-400 text-gray-600">/Monat</span>
                 </div>
                 
                 {catalog.monthly_addons.comploai_guard.discount_text && (
@@ -162,7 +162,7 @@ export default function UpgradePage() {
           
           {/* Priority Support */}
           {catalog?.monthly_addons?.priority_support && (
-            <div className="bg-gray-800 border-2 border-gray-700 rounded-2xl p-8 relative">
+            <div className="dark:bg-zinc-800 bg-white border-2 dark:border-zinc-700 border-gray-200 rounded-2xl p-8 relative">
               {catalog.monthly_addons.priority_support.badge && (
                 <div className="absolute top-4 right-4 px-3 py-1 bg-yellow-500 text-gray-900 rounded-full text-xs font-bold">
                   {catalog.monthly_addons.priority_support.badge}
@@ -177,7 +177,7 @@ export default function UpgradePage() {
                 <h3 className="text-2xl font-bold mb-2">
                   {catalog.monthly_addons.priority_support.name}
                 </h3>
-                <p className="text-gray-400 mb-4">
+                <p className="dark:text-gray-400 text-gray-600 mb-4">
                   {catalog.monthly_addons.priority_support.tagline}
                 </p>
                 
@@ -185,7 +185,7 @@ export default function UpgradePage() {
                   <span className="text-4xl font-bold">
                     {catalog.monthly_addons.priority_support.price_monthly}€
                   </span>
-                  <span className="text-gray-400">/Monat</span>
+                  <span className="dark:text-gray-400 text-gray-600">/Monat</span>
                 </div>
               </div>
               
@@ -201,7 +201,7 @@ export default function UpgradePage() {
               <button
                 onClick={() => handleSubscribe('priority_support')}
                 disabled={hasPrioritySupport || subscribing}
-                className="w-full px-6 py-4 bg-gray-700 hover:bg-gray-600 rounded-xl font-bold text-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-6 py-4 dark:bg-zinc-800 bg-gray-100 hover:bg-gray-600 rounded-xl font-bold text-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {hasPrioritySupport ? 'Bereits aktiviert' : 'Hinzufügen'}
               </button>
@@ -215,9 +215,9 @@ export default function UpgradePage() {
             <h2 className="text-2xl font-bold mb-6">Einmalige Services</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {Object.entries(catalog.onetime_addons).map(([key, addon]) => (
-                <div key={key} className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+                <div key={key} className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-6">
                   <h3 className="text-xl font-bold mb-2">{addon.name}</h3>
-                  <p className="text-sm text-gray-400 mb-4">{addon.description}</p>
+                  <p className="text-sm dark:text-gray-400 text-gray-600 mb-4">{addon.description}</p>
                   
                   <div className="text-2xl font-bold mb-4">
                     {addon.price.toLocaleString('de-DE')}€
@@ -225,7 +225,7 @@ export default function UpgradePage() {
                   
                   <div className="space-y-2 mb-6">
                     {addon.includes.slice(0, 3).map((item, idx) => (
-                      <div key={idx} className="text-sm text-gray-400 flex items-start gap-2">
+                      <div key={idx} className="text-sm dark:text-gray-400 text-gray-600 flex items-start gap-2">
                         <Check className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
                         <span>{item}</span>
                       </div>
@@ -246,13 +246,13 @@ export default function UpgradePage() {
         )}
         
         {/* FAQ */}
-        <div className="mt-16 bg-gray-800 border border-gray-700 rounded-xl p-8">
+        <div className="mt-16 dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-8">
           <h2 className="text-2xl font-bold mb-6">Häufig gestellte Fragen</h2>
           
           <div className="space-y-6">
             <div>
               <h3 className="font-semibold mb-2">Was ist der EU AI Act?</h3>
-              <p className="text-gray-400 text-sm">
+              <p className="dark:text-gray-400 text-gray-600 text-sm">
                 Die EU KI-Verordnung ist seit August 2024 in Kraft und reguliert den Einsatz von KI-Systemen 
                 in der EU. Unternehmen müssen ihre KI-Systeme klassifizieren und je nach Risiko umfangreiche 
                 Compliance-Anforderungen erfüllen.
@@ -261,7 +261,7 @@ export default function UpgradePage() {
             
             <div>
               <h3 className="font-semibold mb-2">Wer braucht ComploAI Guard?</h3>
-              <p className="text-gray-400 text-sm">
+              <p className="dark:text-gray-400 text-gray-600 text-sm">
                 Jedes Unternehmen, das KI-Systeme entwickelt oder einsetzt (z.B. Chatbots, HR-Tools, 
                 Empfehlungssysteme, Automatisierung) muss die AI Act Anforderungen erfüllen.
               </p>
@@ -269,7 +269,7 @@ export default function UpgradePage() {
             
             <div>
               <h3 className="font-semibold mb-2">Kann ich jederzeit kündigen?</h3>
-              <p className="text-gray-400 text-sm">
+              <p className="dark:text-gray-400 text-gray-600 text-sm">
                 Ja, alle monatlichen Add-ons können jederzeit gekündigt werden. Die Kündigung wird 
                 zum Ende des aktuellen Abrechnungszeitraums wirksam.
               </p>

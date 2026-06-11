@@ -128,7 +128,7 @@ export default function ModernHero() {
               className="mt-8 text-sm text-gray-500"
             >
               ✅ Über 2.500 deutsche Unternehmen vertrauen auf Complyo<br />
-              💰 Durchschnittlich 50.000€ Bußgeld vermieden
+              💰 Bis zu 50.000€ Bußgeld vermieden
             </motion.p>
           </motion.div>
 

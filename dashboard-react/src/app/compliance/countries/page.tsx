@@ -92,30 +92,30 @@ const countries: CountryInfo[] = [
 
 export default function ComplianceCountriesPage() {
   return (
-    <div className="min-h-screen bg-zinc-900 text-white p-8">
-      <h1 className="text-2xl font-bold mb-2 text-white">EU Compliance Vergleich</h1>
-      <p className="text-gray-400 mb-8 text-sm">
+    <div className="px-4 sm:px-6 py-6">
+      <h1 className="text-2xl font-bold mb-2 dark:text-white text-gray-900">EU Compliance Vergleich</h1>
+      <p className="dark:text-gray-400 text-gray-600 mb-8 text-sm">
         Cookie- und DSGVO-Anforderungen nach Land — Stand 2024/2025.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {countries.map((country) => (
-          <div key={country.code} className="bg-zinc-800 rounded-lg p-6 flex flex-col gap-3">
+          <div key={country.code} className="dark:bg-zinc-800 bg-gray-100 rounded-lg p-6 flex flex-col gap-3">
             <div className="flex items-center gap-3">
-              <span className="text-2xl font-bold text-white">{country.code}</span>
+              <span className="text-2xl font-bold dark:text-white text-gray-900">{country.code}</span>
               <div>
-                <p className="text-white font-semibold leading-tight">{country.name}</p>
-                <p className="text-gray-400 text-xs">{country.authority}</p>
+                <p className="dark:text-white text-gray-900 font-semibold leading-tight">{country.name}</p>
+                <p className="dark:text-gray-400 text-gray-600 text-xs">{country.authority}</p>
               </div>
             </div>
 
-            <span className="inline-block self-start bg-zinc-700 text-gray-300 text-xs px-2 py-0.5 rounded">
+            <span className="inline-block self-start bg-zinc-700 dark:text-gray-300 text-gray-700 text-xs px-2 py-0.5 rounded">
               {country.framework}
             </span>
 
             <ul className="space-y-2 mt-1">
               {country.specifics.map((point, i) => (
-                <li key={i} className="flex gap-2 text-sm text-gray-300">
+                <li key={i} className="flex gap-2 text-sm dark:text-gray-300 text-gray-700">
                   <span className="mt-0.5 text-gray-500 shrink-0">&#8250;</span>
                   <span>{point}</span>
                 </li>

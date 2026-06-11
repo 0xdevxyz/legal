@@ -92,8 +92,8 @@ export const MetricsCards: React.FC = () => {
       sublabel: scoreTrend.text,
       sublabelType: scoreTrend.type,
       icon: TrendingUp,
-      accent: '#22c55e',
-      accentBg: 'rgba(34,197,94,0.12)',
+      accent: '#25bac8',
+      accentBg: 'rgba(37,186,200,0.12)',
     },
     {
       title: 'Websites',
@@ -102,8 +102,8 @@ export const MetricsCards: React.FC = () => {
       sublabel: websiteLimitReached ? 'Limit erreicht' : `${websitesMax - metrics.websites} verfügbar`,
       sublabelType: websiteLimitReached ? 'negative' as const : 'neutral' as const,
       icon: Globe,
-      accent: '#38bdf8',
-      accentBg: 'rgba(56,189,248,0.12)',
+      accent: '#25bac8',
+      accentBg: 'rgba(37,186,200,0.12)',
     },
     {
       title: 'KI-Optimierungen',
@@ -112,8 +112,8 @@ export const MetricsCards: React.FC = () => {
       sublabel: aiFixesUnlimited ? 'Unbegrenzt' : (aiLimitReached ? 'Upgrade für mehr' : `${aiFixesMax - aiFixesUsed} verfügbar`),
       sublabelType: aiFixesUnlimited ? 'positive' as const : (aiLimitReached ? 'negative' as const : 'positive' as const),
       icon: Sparkles,
-      accent: '#a855f7',
-      accentBg: 'rgba(168,85,247,0.12)',
+      accent: '#25bac8',
+      accentBg: 'rgba(37,186,200,0.12)',
       onSublabelClick: aiLimitReached ? () => router.push('/subscription') : undefined,
     },
     {
@@ -129,7 +129,7 @@ export const MetricsCards: React.FC = () => {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 h-full content-start">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {cards.map((card, i) => {
         const Icon = card.icon;
         const sublabelColor =

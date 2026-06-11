@@ -182,7 +182,7 @@ INSERT INTO subscription_plans (
     'Alle 4 Compliance-Bereiche, 1 Domain',
     49, 490,
     1, 999, 3,
-    '["Cookie & DSGVO", "Barrierefreiheit", "Rechtliche Texte", "Monitoring & Scan", "eRecht24 Integration", "Priority Support", "API-Zugriff"]'::jsonb
+    '["Cookie & DSGVO", "Barrierefreiheit", "Rechtliche Texte", "Monitoring & Scan", "Priority Support", "API-Zugriff"]'::jsonb
 ),
 (
     'Expertenservice',

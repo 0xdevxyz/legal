@@ -33,6 +33,7 @@ import {
   FiCopy,
   FiCheck,
   FiRefreshCw,
+  FiAlertTriangle,
 } from 'react-icons/fi';
 import { useRouter } from 'next/navigation';
 
@@ -271,9 +272,14 @@ const CookieCompliancePage: React.FC = () => {
                           </Badge>
                         ))}
                       </HStack>
+                    ) : scanResult.privacy_findings?.length > 0 ? (
+                      <Text fontSize="sm" color="red.300">
+                        Achtung: Es wurden zwar keine Tracking-Cookies gesetzt, aber
+                        abmahnfähige Drittlandtransfers gefunden (siehe unten).
+                      </Text>
                     ) : (
                       <Text fontSize="sm" color="gray.400">
-                        Ihre Website benötigt möglicherweise keinen Cookie-Banner. 
+                        Ihre Website benötigt möglicherweise keinen Cookie-Banner.
                         Sie können im nächsten Schritt trotzdem Services manuell hinzufügen.
                       </Text>
                     )}
@@ -281,9 +287,60 @@ const CookieCompliancePage: React.FC = () => {
                 </CardBody>
               </Card>
             )}
+
+            {/* Drittlandtransfer ohne Einwilligung — abmahnfähig, KEIN Cookie-Problem.
+                Diese Dienste (z.B. extern geladene Google Fonts) setzen keine Cookies,
+                übertragen aber die IP-Adresse ohne Einwilligung in die USA. */}
+            {scanResult && scanResult.privacy_findings?.length > 0 && (
+              <Card bg="red.900" borderColor="red.500" borderWidth={2}>
+                <CardBody>
+                  <VStack align="start" spacing={4}>
+                    <HStack>
+                      <Icon as={FiAlertTriangle} color="red.300" boxSize={6} />
+                      <VStack align="start" spacing={0}>
+                        <Text fontWeight="bold" fontSize="lg" color="red.100">
+                          {scanResult.privacy_findings.length} abmahnfähige(r) DSGVO-Verstoß(e) gefunden
+                        </Text>
+                        <Text fontSize="sm" color="red.200">
+                          Drittlandtransfer ohne Einwilligung — kein Cookie-Banner hilft hier.
+                          {scanResult.privacy_risk_euro ? ` Geschätztes Risiko: bis ${scanResult.privacy_risk_euro.toLocaleString('de-DE')} €.` : ''}
+                        </Text>
+                      </VStack>
+                    </HStack>
+
+                    <VStack align="stretch" spacing={3} w="100%">
+                      {scanResult.privacy_findings.map((f: any) => (
+                        <Box key={f.key} bg="red.800" borderRadius="md" p={3}>
+                          <HStack mb={1} flexWrap="wrap" gap={2}>
+                            <Badge colorScheme="red" fontSize="sm">{f.name}</Badge>
+                            <Badge colorScheme="orange" variant="subtle" fontSize="xs">
+                              überträgt: {f.transmits}
+                            </Badge>
+                            {f.risk_euro ? (
+                              <Badge colorScheme="red" variant="outline" fontSize="xs">
+                                Risiko bis {Number(f.risk_euro).toLocaleString('de-DE')} €
+                              </Badge>
+                            ) : null}
+                          </HStack>
+                          <Text fontSize="sm" color="red.100" mb={2}>{f.description}</Text>
+                          <Text fontSize="sm" color="green.200">
+                            <b>Lösung:</b> {f.recommendation}
+                          </Text>
+                          {f.legal_basis ? (
+                            <Text fontSize="xs" color="red.300" mt={1}>
+                              Rechtsgrundlage: {f.legal_basis}
+                            </Text>
+                          ) : null}
+                        </Box>
+                      ))}
+                    </VStack>
+                  </VStack>
+                </CardBody>
+              </Card>
+            )}
           </VStack>
         );
-        
+
       case 2:
         return (
           <VStack spacing={6} align="stretch">

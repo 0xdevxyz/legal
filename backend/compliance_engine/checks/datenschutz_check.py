@@ -374,27 +374,24 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
         except ImportError:
             logger.warning("⚠️ HybridValidator nicht verfügbar - überspringe Deep-Analyse")
     
-    # Google Fonts extern geladen = DSGVO-Verstoß (LG München I, Az. 3 O 17493/20)
-    html_text = str(soup).lower()
-    if re.search(r'fonts\.googleapis\.com|fonts\.gstatic\.com', html_text):
+    html_raw = str(soup)
+    html_text = html_raw.lower()
+
+    # Drittlandtransfer ohne Einwilligung (Google Fonts, reCAPTCHA, Maps, YouTube,
+    # Adobe/Typekit ...) — cookielose IP-Übertragung in die USA, der klassische
+    # 100%-abmahnbare DSGVO-Verstoß, den ein reiner Cookie-Scanner nicht sieht.
+    # Einzige Quelle: compliance_engine/privacy_transfer_findings (SSOT).
+    from ..privacy_transfer_findings import detect_transfers
+    for finding in detect_transfers(html=html_raw):
         issues.append(asdict(DatenschutzIssue(
             category='datenschutz',
-            severity='critical',
-            title='Google Fonts extern geladen — DSGVO-Verstoß',
-            description=(
-                'Google Fonts wird von externen Google-Servern geladen (fonts.googleapis.com). '
-                'Dabei wird die IP-Adresse des Nutzers ohne Einwilligung an Google (USA) übertragen. '
-                'Das LG München I (Az. 3 O 17493/20) hat dies als DSGVO-Verstoß eingestuft '
-                'und Schadensersatz von 100€ pro Nutzer zugesprochen.'
-            ),
-            risk_euro=5000,
-            recommendation=(
-                'Laden Sie Google Fonts lokal (self-hosted) statt von Google-Servern. '
-                'Fonts herunterladen unter: https://google-webfonts-helper.herokuapp.com/ '
-                'und auf dem eigenen Webserver einbinden.'
-            ),
-            legal_basis='DSGVO Art. 6 Abs. 1, Art. 44 ff. (Drittlandtransfer), LG München I Az. 3 O 17493/20',
-            auto_fixable=False,
+            severity=finding['severity'],
+            title=finding['title'],
+            description=finding['description'],
+            risk_euro=finding['risk_euro'],
+            recommendation=finding['recommendation'],
+            legal_basis=finding['legal_basis'],
+            auto_fixable=finding['auto_fixable'],
             is_missing=False,
         )))
 

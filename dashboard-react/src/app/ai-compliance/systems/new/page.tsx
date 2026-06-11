@@ -95,12 +95,12 @@ export default function NewAISystemPage() {
   };
   
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
+    <div className="px-4 sm:px-6 py-6">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors"
+          className="flex items-center gap-2 dark:text-gray-400 text-gray-600 hover:text-white mb-6 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
           Zurück
@@ -110,7 +110,7 @@ export default function NewAISystemPage() {
           <h1 className="text-3xl font-bold mb-2">
             Neues KI-System hinzufügen
           </h1>
-          <p className="text-gray-400">
+          <p className="dark:text-gray-400 text-gray-600">
             Registrieren Sie ein KI-System für die EU AI Act Compliance-Prüfung
           </p>
         </div>
@@ -125,7 +125,7 @@ export default function NewAISystemPage() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Information */}
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 space-y-4">
+          <div className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-6 space-y-4">
             <h2 className="text-xl font-semibold mb-4">Grundinformationen</h2>
             
             {/* Name */}
@@ -138,7 +138,7 @@ export default function NewAISystemPage() {
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-100 border dark:border-zinc-700 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 placeholder="z.B. ChatBot für Kundenservice"
                 required
               />
@@ -153,7 +153,7 @@ export default function NewAISystemPage() {
                 id="ai-system-description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-100 border dark:border-zinc-700 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 rows={3}
                 placeholder="Kurze Beschreibung des KI-Systems und seiner Funktionsweise"
                 required
@@ -169,7 +169,7 @@ export default function NewAISystemPage() {
                 id="ai-system-purpose"
                 value={formData.purpose}
                 onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-100 border dark:border-zinc-700 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 rows={3}
                 placeholder="Wofür wird das KI-System eingesetzt? Welche Probleme löst es?"
                 required
@@ -186,7 +186,7 @@ export default function NewAISystemPage() {
                 type="text"
                 value={formData.vendor}
                 onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-100 border dark:border-zinc-700 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 placeholder="z.B. OpenAI, Google, Microsoft"
               />
             </div>
@@ -200,7 +200,7 @@ export default function NewAISystemPage() {
                 id="ai-system-domain"
                 value={formData.domain}
                 onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-100 border dark:border-zinc-700 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
                 <option value="">Bitte wählen...</option>
                 {domains.map(d => (
@@ -219,15 +219,15 @@ export default function NewAISystemPage() {
                 type="date"
                 value={formData.deployment_date}
                 onChange={(e) => setFormData({ ...formData, deployment_date: e.target.value })}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-100 border dark:border-zinc-700 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
           </div>
           
           {/* Data Types */}
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+          <div className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-6">
             <h2 className="text-xl font-semibold mb-4">Verarbeitete Datentypen</h2>
-            <p className="text-sm text-gray-400 mb-4">
+            <p className="text-sm dark:text-gray-400 text-gray-600 mb-4">
               Welche Art von Daten verarbeitet das KI-System?
             </p>
             
@@ -235,13 +235,13 @@ export default function NewAISystemPage() {
               {commonDataTypes.map(type => (
                 <label
                   key={type}
-                  className="flex items-center gap-2 p-3 bg-gray-700 border border-gray-600 rounded-lg cursor-pointer hover:border-purple-500 transition-colors"
+                  className="flex items-center gap-2 p-3 dark:bg-zinc-800 bg-gray-100 border dark:border-zinc-700 border-gray-200 rounded-lg cursor-pointer hover:border-purple-500 transition-colors"
                 >
                   <input
                     type="checkbox"
                     checked={formData.data_types?.includes(type)}
                     onChange={() => handleDataTypeToggle(type)}
-                    className="w-4 h-4 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500"
+                    className="w-4 h-4 text-purple-600 dark:bg-zinc-800 bg-gray-100 dark:border-zinc-700 border-gray-200 rounded focus:ring-purple-500"
                   />
                   <span className="text-sm capitalize">
                     {type.replace(/_/g, ' ')}
@@ -252,9 +252,9 @@ export default function NewAISystemPage() {
           </div>
           
           {/* Affected Persons */}
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+          <div className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-6">
             <h2 className="text-xl font-semibold mb-4">Betroffene Personen</h2>
-            <p className="text-sm text-gray-400 mb-4">
+            <p className="text-sm dark:text-gray-400 text-gray-600 mb-4">
               Welche Personengruppen sind von diesem KI-System betroffen?
             </p>
             
@@ -262,13 +262,13 @@ export default function NewAISystemPage() {
               {commonAffectedPersons.map(person => (
                 <label
                   key={person}
-                  className="flex items-center gap-2 p-3 bg-gray-700 border border-gray-600 rounded-lg cursor-pointer hover:border-purple-500 transition-colors"
+                  className="flex items-center gap-2 p-3 dark:bg-zinc-800 bg-gray-100 border dark:border-zinc-700 border-gray-200 rounded-lg cursor-pointer hover:border-purple-500 transition-colors"
                 >
                   <input
                     type="checkbox"
                     checked={formData.affected_persons?.includes(person)}
                     onChange={() => handleAffectedPersonToggle(person)}
-                    className="w-4 h-4 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500"
+                    className="w-4 h-4 text-purple-600 dark:bg-zinc-800 bg-gray-100 dark:border-zinc-700 border-gray-200 rounded focus:ring-purple-500"
                   />
                   <span className="text-sm capitalize">
                     {person.replace(/_/g, ' ')}
@@ -301,7 +301,7 @@ export default function NewAISystemPage() {
             <button
               type="button"
               onClick={() => router.back()}
-              className="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors font-medium"
+              className="px-6 py-3 dark:bg-zinc-800 bg-gray-100 hover:bg-gray-600 rounded-lg transition-colors font-medium"
             >
               Abbrechen
             </button>

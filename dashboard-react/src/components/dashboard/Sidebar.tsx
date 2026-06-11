@@ -14,19 +14,24 @@ import {
   ChevronLeft,
   ChevronRight,
   Shield,
+  Lock,
 } from 'lucide-react';
+import { useComploaiGuard } from '@/hooks/useComploaiGuard';
 
 interface SidebarItem {
   label: string;
   icon: React.ElementType;
   href: string;
+  // Gated behind the comploai_guard add-on; shown with a lock and routed to the
+  // upsell until the add-on is active.
+  requiresComploaiGuard?: boolean;
 }
 
 const NAV_ITEMS: SidebarItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
   { label: 'Cookie-Compliance', icon: Cookie, href: '/cookie-compliance' },
   { label: 'Barrierefreiheit', icon: Eye, href: '/accessibility/statement' },
-  { label: 'AI-Compliance', icon: Sparkles, href: '/ai-compliance' },
+  { label: 'AI-Compliance', icon: Sparkles, href: '/ai-compliance', requiresComploaiGuard: true },
   { label: 'Dokumente', icon: FileText, href: '/docs/cms' },
   { label: 'Agentur', icon: Building2, href: '/agency' },
 ];
@@ -44,6 +49,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   const router = useRouter();
   const pathname = usePathname();
+  const { hasComploaiGuard } = useComploaiGuard();
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
@@ -103,16 +109,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
+          const locked = item.requiresComploaiGuard && !hasComploaiGuard;
+          const target = locked ? '/ai-compliance/upgrade' : item.href;
           return (
             <button
               key={item.href}
-              onClick={() => router.push(item.href)}
+              onClick={() => router.push(target)}
               className={`sidebar-item w-full text-left${active ? ' active' : ''}`}
               title={collapsed ? item.label : undefined}
               aria-current={active ? 'page' : undefined}
             >
               <Icon className={`sidebar-item-icon flex-shrink-0 ${active ? 'text-orange-500' : ''}`} />
               <span className="sidebar-item-label">{item.label}</span>
+              {locked && !collapsed && (
+                <Lock className="w-3.5 h-3.5 ml-auto flex-shrink-0 text-zinc-500" aria-label="Add-on erforderlich" />
+              )}
             </button>
           );
         })}

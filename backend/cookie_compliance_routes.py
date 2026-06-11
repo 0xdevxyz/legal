@@ -1287,13 +1287,26 @@ async def scan_website(
         else:
             logger.warning(f"[Scan] ⚠️ persistence SKIPPED — empty site_id (url={url}, user_id={user_id})")
 
-        logger.warning(f"[Scan] DONE site_id={site_id} config_updated={config_updated} total_found={len(matched_services)}")
+        # Drittlandtransfer-Findings (abmahnfähig, KEIN Cookie-Problem) durchreichen.
+        # Diese erscheinen unabhängig davon, ob Banner-Cookies gefunden wurden —
+        # damit der Scanner bei extern geladenen Google Fonts & Co. nicht länger
+        # fälschlich "keine relevanten Cookies" meldet.
+        privacy_findings = scan_result.get('privacy_findings', [])
+        privacy_risk_euro = sum(f.get('risk_euro', 0) for f in privacy_findings)
+
+        logger.warning(
+            f"[Scan] DONE site_id={site_id} config_updated={config_updated} "
+            f"total_found={len(matched_services)} privacy_findings={len(privacy_findings)}"
+        )
         return {
             "success": True,
             "url": url,
             "site_id": site_id,
             "detected_services": matched_services,
             "total_found": len(matched_services),
+            "privacy_findings": privacy_findings,
+            "privacy_findings_count": len(privacy_findings),
+            "privacy_risk_euro": privacy_risk_euro,
             "config_updated": config_updated,
             "scan_timestamp": scan_result.get('scan_timestamp'),
             "raw_detection": {

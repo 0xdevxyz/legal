@@ -63,18 +63,11 @@ export default function Page() {
 
         <main role="main" aria-label="Hauptinhalt" className="px-4 sm:px-6 py-6 space-y-6 max-w-[1600px] mx-auto">
 
-          {/* Row 1: Domain input */}
-          <section aria-label="Website-Analyse">
-            <ErrorBoundary componentName="DomainHeroSection">
-              <DomainHeroSection />
-            </ErrorBoundary>
-          </section>
-
-          {/* Row 2: Compliance-Analyse (links) + Score & AI-Upgrade (rechts) */}
-          <section aria-label="Compliance-Analyse" className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+          {/* ORION Hero band: domain hero (2/3) + score cluster (1/3) */}
+          <section aria-label="Website-Analyse" className="grid grid-cols-1 xl:grid-cols-3 gap-5 items-stretch">
             <div className="xl:col-span-2">
-              <ErrorBoundary componentName="WebsiteAnalysis">
-                <WebsiteAnalysis />
+              <ErrorBoundary componentName="DomainHeroSection">
+                <DomainHeroSection />
               </ErrorBoundary>
             </div>
             <div className="xl:col-span-1 flex flex-col gap-5">
@@ -85,33 +78,40 @@ export default function Page() {
                 />
               </ErrorBoundary>
               <ErrorBoundary componentName="AIComplianceCard">
-                <AIComplianceCard user={user || undefined} />
+                <AIComplianceCard />
               </ErrorBoundary>
             </div>
           </section>
 
-          {/* Row 2b: Metrics Cards (full width) */}
+          {/* Metrics strip (full width) */}
           <section aria-label="Metriken">
             <ErrorBoundary componentName="MetricsCards">
               <MetricsCards />
             </ErrorBoundary>
           </section>
 
-          {/* Row 3: Compliance Flow Widget */}
+          {/* Findings: Compliance analysis */}
+          <section aria-label="Compliance-Analyse">
+            <ErrorBoundary componentName="WebsiteAnalysis">
+              <WebsiteAnalysis />
+            </ErrorBoundary>
+          </section>
+
+          {/* Compliance Flow Widget */}
           <section aria-label="Compliance Flow">
             <ErrorBoundary componentName="ComplianceFlowWidget">
               <ComplianceFlowWidget />
             </ErrorBoundary>
           </section>
 
-          {/* Row 4: Legal News */}
+          {/* Legal News */}
           <section aria-label="Legal News">
             <ErrorBoundary componentName="LegalNews">
               <LegalNews />
             </ErrorBoundary>
           </section>
 
-          {/* Row 5: Cookie Compliance */}
+          {/* Cookie Compliance */}
           <section aria-label="Cookie Compliance">
             <ErrorBoundary componentName="CookieComplianceWidget">
               <CookieComplianceWidget />

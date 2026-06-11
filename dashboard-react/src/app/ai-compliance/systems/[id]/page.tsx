@@ -128,11 +128,11 @@ export default function AISystemDetailPage() {
   
   if (loading || !system) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white p-8">
+      <div className="px-4 sm:px-6 py-6">
         <div className="max-w-6xl mx-auto">
           <div className="animate-pulse space-y-6">
-            <div className="h-8 bg-gray-800 rounded w-64" />
-            <div className="h-48 bg-gray-800 rounded" />
+            <div className="h-8 dark:bg-zinc-800 bg-white rounded w-64" />
+            <div className="h-48 dark:bg-zinc-800 bg-white rounded" />
           </div>
         </div>
       </div>
@@ -142,23 +142,23 @@ export default function AISystemDetailPage() {
   const latestScan = scans[0];
   
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
+    <div className="px-4 sm:px-6 py-6">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors"
+          className="flex items-center gap-2 dark:text-gray-400 text-gray-600 hover:text-white mb-6 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
           Zurück zur Übersicht
         </button>
         
         {/* System Header */}
-        <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+        <div className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-6 mb-6">
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1">
               <h1 className="text-3xl font-bold mb-2">{system.name}</h1>
-              <p className="text-gray-400">{system.description}</p>
+              <p className="dark:text-gray-400 text-gray-600">{system.description}</p>
             </div>
             
             <div className="flex items-center gap-3">
@@ -178,17 +178,17 @@ export default function AISystemDetailPage() {
           </div>
           
           {/* System Metadata */}
-          <div className="grid grid-cols-4 gap-4 pt-4 border-t border-gray-700">
+          <div className="grid grid-cols-4 gap-4 pt-4 border-t dark:border-zinc-700 border-gray-200">
             <div>
-              <div className="text-sm text-gray-400 mb-1">Anbieter</div>
+              <div className="text-sm dark:text-gray-400 text-gray-600 mb-1">Anbieter</div>
               <div className="font-medium">{system.vendor || 'Nicht angegeben'}</div>
             </div>
             <div>
-              <div className="text-sm text-gray-400 mb-1">Einsatzbereich</div>
+              <div className="text-sm dark:text-gray-400 text-gray-600 mb-1">Einsatzbereich</div>
               <div className="font-medium capitalize">{system.domain || 'Nicht angegeben'}</div>
             </div>
             <div>
-              <div className="text-sm text-gray-400 mb-1">Deployment</div>
+              <div className="text-sm dark:text-gray-400 text-gray-600 mb-1">Deployment</div>
               <div className="font-medium">
                 {system.deployment_date 
                   ? new Date(system.deployment_date).toLocaleDateString('de-DE')
@@ -196,7 +196,7 @@ export default function AISystemDetailPage() {
               </div>
             </div>
             <div>
-              <div className="text-sm text-gray-400 mb-1">Letzter Scan</div>
+              <div className="text-sm dark:text-gray-400 text-gray-600 mb-1">Letzter Scan</div>
               <div className="font-medium">
                 {system.last_assessment_date
                   ? new Date(system.last_assessment_date).toLocaleDateString('de-DE')
@@ -208,19 +208,19 @@ export default function AISystemDetailPage() {
         
         {/* Compliance Score Card */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 flex items-center justify-center">
+          <div className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-6 flex items-center justify-center">
             <ComplianceProgress score={system.compliance_score} size="lg" />
           </div>
           
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 col-span-2">
+          <div className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-6 col-span-2">
             <h3 className="text-lg font-semibold mb-4">Risiko-Bewertung</h3>
             {system.risk_reasoning ? (
-              <p className="text-gray-300 leading-relaxed">{system.risk_reasoning}</p>
+              <p className="dark:text-gray-300 text-gray-700 leading-relaxed">{system.risk_reasoning}</p>
             ) : (
-              <p className="text-gray-400 italic">Noch keine Risiko-Bewertung durchgeführt. Starten Sie einen Scan.</p>
+              <p className="dark:text-gray-400 text-gray-600 italic">Noch keine Risiko-Bewertung durchgeführt. Starten Sie einen Scan.</p>
             )}
             {system.confidence_score && (
-              <div className="mt-4 text-sm text-gray-400">
+              <div className="mt-4 text-sm dark:text-gray-400 text-gray-600">
                 Confidence Score: {(system.confidence_score * 100).toFixed(0)}%
               </div>
             )}
@@ -228,15 +228,15 @@ export default function AISystemDetailPage() {
         </div>
         
         {/* Tabs */}
-        <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
-          <div className="border-b border-gray-700">
+        <div className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl overflow-hidden">
+          <div className="border-b dark:border-zinc-700 border-gray-200">
             <div className="flex">
               <button
                 onClick={() => setActiveTab('overview')}
                 className={`px-6 py-3 font-medium transition-colors ${
                   activeTab === 'overview'
-                    ? 'bg-purple-600 text-white'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                    ? 'bg-purple-600 dark:text-white text-gray-900'
+                    : 'dark:text-gray-400 text-gray-600 hover:text-white hover:bg-gray-700'
                 }`}
               >
                 Übersicht
@@ -245,8 +245,8 @@ export default function AISystemDetailPage() {
                 onClick={() => setActiveTab('scans')}
                 className={`px-6 py-3 font-medium transition-colors ${
                   activeTab === 'scans'
-                    ? 'bg-purple-600 text-white'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                    ? 'bg-purple-600 dark:text-white text-gray-900'
+                    : 'dark:text-gray-400 text-gray-600 hover:text-white hover:bg-gray-700'
                 }`}
               >
                 Scan-Historie ({scans.length})
@@ -255,8 +255,8 @@ export default function AISystemDetailPage() {
                 onClick={() => setActiveTab('documentation')}
                 className={`px-6 py-3 font-medium transition-colors ${
                   activeTab === 'documentation'
-                    ? 'bg-purple-600 text-white'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                    ? 'bg-purple-600 dark:text-white text-gray-900'
+                    : 'dark:text-gray-400 text-gray-600 hover:text-white hover:bg-gray-700'
                 }`}
               >
                 Dokumentation
@@ -283,7 +283,7 @@ export default function AISystemDetailPage() {
                           <div key={idx} className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
                             <div className="font-medium text-green-400">{req.requirement}</div>
                             {req.evidence && (
-                              <div className="text-sm text-gray-400 mt-1">{req.evidence}</div>
+                              <div className="text-sm dark:text-gray-400 text-gray-600 mt-1">{req.evidence}</div>
                             )}
                           </div>
                         ))}
@@ -303,14 +303,14 @@ export default function AISystemDetailPage() {
                           <div key={idx} className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
                             <div className="font-medium text-red-400">{req.requirement}</div>
                             {req.reason && (
-                              <div className="text-sm text-gray-400 mt-1">{req.reason}</div>
+                              <div className="text-sm dark:text-gray-400 text-gray-600 mt-1">{req.reason}</div>
                             )}
                             {req.severity && (
                               <span className={`inline-block mt-2 text-xs px-2 py-1 rounded ${
                                 req.severity === 'critical' ? 'bg-red-500/20 text-red-400' :
-                                req.severity === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                                req.severity === 'high' ? 'bg-teal-500/20 text-[color:var(--lime)]' :
                                 req.severity === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                                'bg-gray-500/20 text-gray-400'
+                                'bg-gray-500/20 dark:text-gray-400 text-gray-600'
                               }`}>
                                 {req.severity.toUpperCase()}
                               </span>
@@ -327,7 +327,7 @@ export default function AISystemDetailPage() {
                   <div>
                     <h3 className="text-lg font-semibold mb-3">Empfehlungen</h3>
                     <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-                      <p className="text-gray-300 leading-relaxed whitespace-pre-line">
+                      <p className="dark:text-gray-300 text-gray-700 leading-relaxed whitespace-pre-line">
                         {latestScan.recommendations}
                       </p>
                     </div>
@@ -340,7 +340,7 @@ export default function AISystemDetailPage() {
               <div className="text-center py-12">
                 <Clock className="w-16 h-16 text-gray-600 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold mb-2">Noch kein Scan durchgeführt</h3>
-                <p className="text-gray-400 mb-6">
+                <p className="dark:text-gray-400 text-gray-600 mb-6">
                   Starten Sie einen Compliance-Scan, um detaillierte Ergebnisse zu sehen.
                 </p>
                 <button
@@ -357,13 +357,13 @@ export default function AISystemDetailPage() {
             {activeTab === 'scans' && (
               <div className="space-y-4">
                 {scans.map((scan) => (
-                  <div key={scan.scan_id} className="bg-gray-700 rounded-lg p-4">
+                  <div key={scan.scan_id} className="dark:bg-zinc-800 bg-gray-100 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <ComplianceProgress score={scan.compliance_score} size="sm" showLabel={false} />
                         <div>
                           <div className="font-medium">{scan.compliance_score}% Compliance</div>
-                          <div className="text-sm text-gray-400">
+                          <div className="text-sm dark:text-gray-400 text-gray-600">
                             {new Date(scan.created_at).toLocaleString('de-DE')}
                           </div>
                         </div>
@@ -371,13 +371,13 @@ export default function AISystemDetailPage() {
                       <AIRiskBadge category={scan.risk_category} size="sm" />
                     </div>
                     {scan.recommendations && (
-                      <p className="text-sm text-gray-400 line-clamp-2">{scan.recommendations}</p>
+                      <p className="text-sm dark:text-gray-400 text-gray-600 line-clamp-2">{scan.recommendations}</p>
                     )}
                   </div>
                 ))}
                 
                 {scans.length === 0 && (
-                  <div className="text-center py-12 text-gray-400">
+                  <div className="text-center py-12 dark:text-gray-400 text-gray-600">
                     Noch keine Scans vorhanden
                   </div>
                 )}
@@ -395,14 +395,14 @@ export default function AISystemDetailPage() {
                 
                 {/* Generate New Documents Section */}
                 <div>
-                  <h4 className="text-md font-medium text-gray-300 mb-4">Dokument automatisch generieren</h4>
+                  <h4 className="text-md font-medium dark:text-gray-300 text-gray-700 mb-4">Dokument automatisch generieren</h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {(['risk_assessment', 'technical_documentation', 'conformity_declaration'] as DocumentType[]).map((docType) => (
                       <button
                         key={docType}
                         onClick={() => handleGenerateDoc(docType)}
                         disabled={generating !== null}
-                        className="bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg p-4 text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="dark:bg-zinc-800 bg-gray-100 hover:bg-gray-600 border dark:border-zinc-700 border-gray-200 rounded-lg p-4 text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <div className="flex items-center gap-3 mb-2">
                           {generating === docType ? (
@@ -412,7 +412,7 @@ export default function AISystemDetailPage() {
                           )}
                           <span className="font-medium">{getDocumentTypeLabel(docType)}</span>
                         </div>
-                        <p className="text-sm text-gray-400">
+                        <p className="text-sm dark:text-gray-400 text-gray-600">
                           {docType === 'risk_assessment' && 'Risk Assessment Report nach Art. 9 AI Act'}
                           {docType === 'technical_documentation' && 'Technische Dokumentation nach Art. 11 AI Act'}
                           {docType === 'conformity_declaration' && 'EU-Konformitätserklärung nach Art. 47 AI Act'}
@@ -425,10 +425,10 @@ export default function AISystemDetailPage() {
                 {/* Generated Documents List */}
                 {generatedDocs.length > 0 && (
                   <div>
-                    <h4 className="text-md font-medium text-gray-300 mb-4">Alle Dokumente ({generatedDocs.length})</h4>
+                    <h4 className="text-md font-medium dark:text-gray-300 text-gray-700 mb-4">Alle Dokumente ({generatedDocs.length})</h4>
                     <div className="space-y-3">
                       {generatedDocs.map((doc) => (
-                        <div key={doc.id} className="bg-gray-700 rounded-lg p-4">
+                        <div key={doc.id} className="dark:bg-zinc-800 bg-gray-100 rounded-lg p-4">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                               <FileText className="w-5 h-5 text-purple-400" />
@@ -441,7 +441,7 @@ export default function AISystemDetailPage() {
                                     {doc.status === 'uploaded' ? 'Hochgeladen' : 'Generiert'}
                                   </span>
                                 </div>
-                                <div className="text-sm text-gray-400">
+                                <div className="text-sm dark:text-gray-400 text-gray-600">
                                   Version {doc.version} • {new Date(doc.created_at).toLocaleDateString('de-DE')}
                                 </div>
                               </div>
@@ -488,10 +488,10 @@ export default function AISystemDetailPage() {
                 
                 {/* Required Documentation */}
                 <div>
-                  <h4 className="text-md font-medium text-gray-300 mb-4">Erforderliche Dokumentation laut AI Act</h4>
+                  <h4 className="text-md font-medium dark:text-gray-300 text-gray-700 mb-4">Erforderliche Dokumentation laut AI Act</h4>
                   <div className="space-y-3">
                     {documentation.required?.map((doc: any, idx: number) => (
-                      <div key={idx} className="bg-gray-700 rounded-lg p-4">
+                      <div key={idx} className="dark:bg-zinc-800 bg-gray-100 rounded-lg p-4">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
@@ -503,7 +503,7 @@ export default function AISystemDetailPage() {
                                 </span>
                               )}
                             </div>
-                            <p className="text-sm text-gray-400">{doc.description}</p>
+                            <p className="text-sm dark:text-gray-400 text-gray-600">{doc.description}</p>
                           </div>
                         </div>
                       </div>
@@ -516,10 +516,10 @@ export default function AISystemDetailPage() {
                     <h3 className="text-lg font-semibold mb-4">Hochgeladene Dokumente</h3>
                     <div className="space-y-2">
                       {documentation.existing.map((doc: any) => (
-                        <div key={doc.id} className="bg-gray-700 rounded-lg p-3 flex items-center justify-between">
+                        <div key={doc.id} className="dark:bg-zinc-800 bg-gray-100 rounded-lg p-3 flex items-center justify-between">
                           <div>
                             <div className="font-medium">{doc.title}</div>
-                            <div className="text-sm text-gray-400">Version {doc.version} • {doc.status}</div>
+                            <div className="text-sm dark:text-gray-400 text-gray-600">Version {doc.version} • {doc.status}</div>
                           </div>
                           <button className="text-purple-400 hover:text-purple-300 text-sm">
                             Ansehen

@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { safeStorage } from '@/lib/storage';
+import { PageContainer, PageHeader } from '@/components/dashboard/PageShell';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
@@ -160,22 +161,23 @@ export default function SettingsPage() {
   };
 
   return (
-    <main role="main" aria-label="Einstellungen" className="min-h-screen bg-zinc-950 text-white">
-      <div className="max-w-4xl mx-auto px-4 py-10">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white">Einstellungen</h1>
-          <p className="text-zinc-400 text-sm mt-1">Verwalten Sie Ihr Profil, Benachrichtigungen und Datenschutz-Optionen.</p>
-        </div>
+    <PageContainer label="Einstellungen" width="1280">
+      <PageHeader
+        icon={User}
+        title="Einstellungen"
+        subtitle="Verwalten Sie Ihr Profil, Benachrichtigungen und Datenschutz-Optionen."
+      />
 
+      <div>
         {/* Feedback */}
         {success && (
-          <div className="mb-6 flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm">
+          <div className="mb-6 flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-green-600 dark:text-green-400 text-sm">
             <CheckCircle className="w-4 h-4 shrink-0" />
             {success}
           </div>
         )}
         {error && (
-          <div className="mb-6 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+          <div className="mb-6 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-600 dark:text-red-400 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
           </div>
@@ -185,31 +187,36 @@ export default function SettingsPage() {
           {/* Sidebar Navigation */}
           <aside className="lg:w-52 shrink-0">
             <nav className="flex flex-row lg:flex-col gap-1">
-              {TABS.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => setActiveTab(id)}
-                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-left ${
-                    activeTab === id
-                      ? 'bg-zinc-800 text-white'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
-                  }`}
-                >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  {label}
-                </button>
-              ))}
+              {TABS.map(({ id, label, icon: Icon }) => {
+                const active = activeTab === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => setActiveTab(id)}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-left ${
+                      active
+                        ? 'dark:bg-zinc-800 bg-gray-100 dark:text-white text-gray-900'
+                        : 'dark:text-zinc-400 text-gray-500 dark:hover:text-white hover:text-gray-900 dark:hover:bg-zinc-800/50 hover:bg-gray-100'
+                    }`}
+                    style={active ? { color: 'var(--lime)' } : undefined}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    {label}
+                  </button>
+                );
+              })}
             </nav>
 
             {/* Current Plan */}
-            <div className="mt-6 p-3 bg-zinc-900 border border-zinc-800 rounded-lg">
-              <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Ihr Plan</p>
-              <p className="text-sm font-semibold text-white">
+            <div className="mt-6 p-3 glass-card rounded-lg">
+              <p className="text-xs dark:text-zinc-500 text-gray-500 uppercase tracking-wider mb-1">Ihr Plan</p>
+              <p className="text-sm font-semibold dark:text-white text-gray-900">
                 {planLabel[user?.plan_type ?? 'free'] ?? user?.plan_type ?? 'Kostenlos'}
               </p>
               <button
                 onClick={() => router.push('/subscription')}
-                className="mt-2 text-xs text-orange-400 hover:text-orange-300 transition-colors"
+                className="mt-2 text-xs font-semibold transition-colors hover:opacity-80"
+                style={{ color: 'var(--lime)' }}
               >
                 Upgrade →
               </button>
@@ -221,49 +228,49 @@ export default function SettingsPage() {
 
             {/* ── Profil ── */}
             {activeTab === 'profil' && (
-              <Card className="bg-zinc-900 border-zinc-800">
+              <Card className="glass-card border-0">
                 <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2 text-base">
-                    <User className="w-4 h-4 text-orange-400" />
+                  <CardTitle className="dark:text-white text-gray-900 flex items-center gap-2 text-base">
+                    <User className="w-4 h-4 text-[color:var(--lime)]" />
                     Profil-Informationen
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label className="text-zinc-400 text-sm">Vollständiger Name</Label>
+                      <Label className="dark:text-zinc-400 text-gray-600 text-sm">Vollständiger Name</Label>
                       <Input
                         value={profile.full_name}
                         onChange={e => setProfile(p => ({ ...p, full_name: e.target.value }))}
-                        className="bg-zinc-800 border-zinc-700 text-white focus:border-orange-500"
+                        className="dark:bg-zinc-800 dark:border-zinc-700 dark:text-white bg-white border-gray-200 text-gray-900 focus:border-[color:var(--lime)]"
                         placeholder="Max Mustermann"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-zinc-400 text-sm">E-Mail (nicht änderbar)</Label>
+                      <Label className="dark:text-zinc-400 text-gray-600 text-sm">E-Mail (nicht änderbar)</Label>
                       <Input
                         value={profile.email}
                         disabled
-                        className="bg-zinc-800/50 border-zinc-700 text-zinc-500 cursor-not-allowed"
+                        className="dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-zinc-500 bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
                       />
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-zinc-400 text-sm flex items-center gap-1">
+                    <Label className="dark:text-zinc-400 text-gray-600 text-sm flex items-center gap-1">
                       <Building className="w-3.5 h-3.5" />
                       Unternehmen (optional)
                     </Label>
                     <Input
                       value={profile.company}
                       onChange={e => setProfile(p => ({ ...p, company: e.target.value }))}
-                      className="bg-zinc-800 border-zinc-700 text-white focus:border-orange-500"
+                      className="dark:bg-zinc-800 dark:border-zinc-700 dark:text-white bg-white border-gray-200 text-gray-900 focus:border-[color:var(--lime)]"
                       placeholder="Musterfirma GmbH"
                     />
                   </div>
                   <Button
                     onClick={handleSaveProfile}
                     disabled={saving}
-                    className="bg-orange-500 hover:bg-orange-600 text-white gap-2"
+                    className="bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950 gap-2"
                   >
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     Profil speichern
@@ -274,10 +281,10 @@ export default function SettingsPage() {
 
             {/* ── Benachrichtigungen ── */}
             {activeTab === 'benachrichtigungen' && (
-              <Card className="bg-zinc-900 border-zinc-800">
+              <Card className="glass-card border-0">
                 <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2 text-base">
-                    <Bell className="w-4 h-4 text-orange-400" />
+                  <CardTitle className="dark:text-white text-gray-900 flex items-center gap-2 text-base">
+                    <Bell className="w-4 h-4 text-[color:var(--lime)]" />
                     Benachrichtigungen
                   </CardTitle>
                 </CardHeader>
@@ -288,10 +295,10 @@ export default function SettingsPage() {
                     { key: 'email_weekly_report', label: 'Wöchentlicher Bericht', desc: 'Zusammenfassung Ihrer Compliance-Werte' },
                     { key: 'browser_alerts', label: 'Browser-Benachrichtigungen', desc: 'Push-Meldungen im Dashboard' },
                   ].map(({ key, label, desc }) => (
-                    <div key={key} className="flex items-center justify-between py-3 border-b border-zinc-800 last:border-0">
+                    <div key={key} className="flex items-center justify-between py-3 border-b dark:border-zinc-800 border-gray-200 last:border-0">
                       <div>
-                        <p className="text-sm font-medium text-white">{label}</p>
-                        <p className="text-xs text-zinc-500 mt-0.5">{desc}</p>
+                        <p className="text-sm font-medium dark:text-white text-gray-900">{label}</p>
+                        <p className="text-xs dark:text-zinc-500 text-gray-500 mt-0.5">{desc}</p>
                       </div>
                       <Switch
                         checked={notifications[key as keyof typeof notifications]}
@@ -302,7 +309,7 @@ export default function SettingsPage() {
                   <Button
                     onClick={handleSaveNotifications}
                     disabled={saving}
-                    className="bg-orange-500 hover:bg-orange-600 text-white gap-2"
+                    className="bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950 gap-2"
                   >
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     Einstellungen speichern
@@ -313,22 +320,22 @@ export default function SettingsPage() {
 
             {/* ── Sicherheit ── */}
             {activeTab === 'sicherheit' && (
-              <Card className="bg-zinc-900 border-zinc-800">
+              <Card className="glass-card border-0">
                 <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2 text-base">
-                    <Shield className="w-4 h-4 text-orange-400" />
+                  <CardTitle className="dark:text-white text-gray-900 flex items-center gap-2 text-base">
+                    <Shield className="w-4 h-4 text-[color:var(--lime)]" />
                     Passwort ändern
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-1.5">
-                    <Label className="text-zinc-400 text-sm">Aktuelles Passwort</Label>
+                    <Label className="dark:text-zinc-400 text-gray-600 text-sm">Aktuelles Passwort</Label>
                     <div className="relative">
                       <Input
                         type={showPassword ? 'text' : 'password'}
                         value={passwords.current}
                         onChange={e => setPasswords(p => ({ ...p, current: e.target.value }))}
-                        className="bg-zinc-800 border-zinc-700 text-white focus:border-orange-500 pr-10"
+                        className="dark:bg-zinc-800 dark:border-zinc-700 dark:text-white bg-white border-gray-200 text-gray-900 focus:border-[color:var(--lime)] pr-10"
                       />
                       <button
                         type="button"
@@ -341,44 +348,44 @@ export default function SettingsPage() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label className="text-zinc-400 text-sm">Neues Passwort</Label>
+                      <Label className="dark:text-zinc-400 text-gray-600 text-sm">Neues Passwort</Label>
                       <Input
                         type="password"
                         value={passwords.next}
                         onChange={e => setPasswords(p => ({ ...p, next: e.target.value }))}
-                        className="bg-zinc-800 border-zinc-700 text-white focus:border-orange-500"
+                        className="dark:bg-zinc-800 dark:border-zinc-700 dark:text-white bg-white border-gray-200 text-gray-900 focus:border-[color:var(--lime)]"
                         placeholder="Min. 8 Zeichen"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-zinc-400 text-sm">Passwort bestätigen</Label>
+                      <Label className="dark:text-zinc-400 text-gray-600 text-sm">Passwort bestätigen</Label>
                       <Input
                         type="password"
                         value={passwords.confirm}
                         onChange={e => setPasswords(p => ({ ...p, confirm: e.target.value }))}
-                        className={`bg-zinc-800 border-zinc-700 text-white focus:border-orange-500 ${
+                        className={`dark:bg-zinc-800 dark:border-zinc-700 dark:text-white bg-white border-gray-200 text-gray-900 focus:border-[color:var(--lime)] ${
                           passwords.confirm && passwords.next !== passwords.confirm ? 'border-red-500' : ''
                         }`}
                       />
                     </div>
                   </div>
                   {passwords.confirm && passwords.next !== passwords.confirm && (
-                    <p className="text-xs text-red-400">Passwörter stimmen nicht überein.</p>
+                    <p className="text-xs text-red-600 dark:text-red-400">Passwörter stimmen nicht überein.</p>
                   )}
                   <Button
                     onClick={handleChangePassword}
                     disabled={saving || !passwords.current || !passwords.next}
-                    className="bg-orange-500 hover:bg-orange-600 text-white gap-2"
+                    className="bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950 gap-2"
                   >
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
                     Passwort ändern
                   </Button>
 
                   {/* Session Info */}
-                  <div className="mt-4 pt-4 border-t border-zinc-800">
-                    <h3 className="text-sm font-medium text-white mb-2">Anmeldung</h3>
-                    <p className="text-xs text-zinc-500">
-                      Eingeloggt als: <span className="text-zinc-300">{user?.email}</span>
+                  <div className="mt-4 pt-4 border-t dark:border-zinc-800 border-gray-200">
+                    <h3 className="text-sm font-medium dark:text-white text-gray-900 mb-2">Anmeldung</h3>
+                    <p className="text-xs dark:text-zinc-500 text-gray-500">
+                      Eingeloggt als: <span className="dark:text-zinc-300 text-gray-700">{user?.email}</span>
                     </p>
                   </div>
                 </CardContent>
@@ -388,21 +395,21 @@ export default function SettingsPage() {
             {/* ── Datenschutz ── */}
             {activeTab === 'datenschutz' && (
               <div className="space-y-4">
-                <Card className="bg-zinc-900 border-zinc-800">
+                <Card className="glass-card border-0">
                   <CardHeader>
-                    <CardTitle className="text-white flex items-center gap-2 text-base">
-                      <Download className="w-4 h-4 text-orange-400" />
+                    <CardTitle className="dark:text-white text-gray-900 flex items-center gap-2 text-base">
+                      <Download className="w-4 h-4 text-[color:var(--lime)]" />
                       Daten-Export (DSGVO Art. 20)
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-zinc-400 mb-4">
+                    <p className="text-sm dark:text-zinc-400 text-gray-600 mb-4">
                       Laden Sie alle Ihre gespeicherten Daten als JSON-Datei herunter. Dies entspricht Ihrem Recht auf Datenportabilität gemäß DSGVO Art. 20.
                     </p>
                     <Button
                       onClick={handleExportData}
                       variant="outline"
-                      className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2"
+                      className="dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 border-gray-300 text-gray-700 hover:bg-gray-100 gap-2"
                     >
                       <Download className="w-4 h-4" />
                       Daten exportieren
@@ -410,7 +417,7 @@ export default function SettingsPage() {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-zinc-900 border-red-900/30">
+                <Card className="glass-card border border-red-500/30">
                   <CardHeader>
                     <CardTitle className="text-red-400 flex items-center gap-2 text-base">
                       <Trash2 className="w-4 h-4" />
@@ -418,7 +425,7 @@ export default function SettingsPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-zinc-400 mb-4">
+                    <p className="text-sm dark:text-zinc-400 text-gray-600 mb-4">
                       Löscht Ihren Account und alle zugehörigen Daten unwiderruflich. Diese Aktion kann nicht rückgängig gemacht werden.
                     </p>
                     <Button
@@ -441,6 +448,6 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
-    </main>
+    </PageContainer>
   );
 }

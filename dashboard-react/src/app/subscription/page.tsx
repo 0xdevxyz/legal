@@ -9,6 +9,7 @@ import {
   Loader2, AlertCircle, CheckCircle, Zap, Star, Building2, X, RefreshCw
 } from 'lucide-react';
 import apiClient from '@/lib/api';
+import { PageContainer, PageHeader } from '@/components/dashboard/PageShell';
 
 const PLAN_LABELS: Record<string, string> = {
   free: 'Kostenlos', single: 'Einzelne Säule', pro: 'Pro-Paket',
@@ -223,9 +224,11 @@ export default function SubscriptionPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-zinc-950">
-        <Loader2 className="w-8 h-8 animate-spin text-orange-400" />
-      </main>
+      <PageContainer label="Abonnement wird geladen">
+        <div className="flex items-center justify-center py-32">
+          <Loader2 className="w-8 h-8 animate-spin" style={{ color: 'var(--lime)' }} />
+        </div>
+      </PageContainer>
     );
   }
 
@@ -236,23 +239,23 @@ export default function SubscriptionPage() {
 
   const colorMap: Record<string, string> = {
     blue: 'from-blue-500/20 to-blue-600/10 border-blue-500/40',
-    orange: 'from-orange-500/20 to-orange-600/10 border-orange-500/60',
+    orange: 'from-[var(--lime)]/20 to-[var(--lime-bright)]/10 border-[color:var(--lime)]/60',
     purple: 'from-purple-500/20 to-purple-600/10 border-purple-500/40',
   };
   const btnMap: Record<string, string> = {
     blue: 'bg-blue-600 hover:bg-blue-700',
-    orange: 'bg-orange-500 hover:bg-orange-600',
+    orange: 'bg-[var(--lime)] hover:bg-[var(--lime-bright)]',
     purple: 'bg-purple-600 hover:bg-purple-700',
   };
 
   return (
-    <main role="main" aria-label="Abonnement-Verwaltung" className="min-h-screen bg-zinc-950 text-white">
-      <div className="max-w-4xl mx-auto px-4 py-10">
-
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold">Abo & Rechnung</h1>
-          <p className="text-zinc-400 text-sm mt-1">Verwalten Sie Ihr Abonnement und Ihre Zahlungsmethoden.</p>
-        </div>
+    <PageContainer label="Abonnement-Verwaltung" width="1280">
+      <PageHeader
+        icon={CreditCard}
+        title="Abo & Rechnung"
+        subtitle="Verwalten Sie Ihr Abonnement und Ihre Zahlungsmethoden."
+      />
+      <div>
 
         {error && (
           <div className="mb-6 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
@@ -301,11 +304,11 @@ export default function SubscriptionPage() {
         )}
 
         {/* Current Plan Card */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 mb-6">
+        <div className="dark:bg-zinc-900 bg-white border dark:border-zinc-800 border-gray-200 rounded-xl p-6 mb-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <p className="text-xs uppercase tracking-widest text-zinc-500 mb-1">Ihr aktueller Plan</p>
-              <h2 className="text-xl font-bold text-white">{planLabel}</h2>
+              <p className="text-xs uppercase tracking-widest dark:text-zinc-500 text-gray-500 mb-1">Ihr aktueller Plan</p>
+              <h2 className="text-xl font-bold dark:text-white text-gray-900">{planLabel}</h2>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               {sub?.has_subscription && (
@@ -320,7 +323,7 @@ export default function SubscriptionPage() {
                 </span>
               )}
               {isFreePlan && (
-                <span className="px-3 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">
+                <span className="px-3 py-1 rounded-full text-xs font-medium dark:bg-zinc-800 bg-gray-100 dark:text-zinc-400 text-gray-600 border dark:border-zinc-700 border-gray-200">
                   Kostenlos
                 </span>
               )}
@@ -330,7 +333,7 @@ export default function SubscriptionPage() {
           {/* Active Modules */}
           {!isFreePlan && (
             <div className="mt-5">
-              <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Aktive Module</p>
+              <p className="text-xs dark:text-zinc-500 text-gray-500 uppercase tracking-wider mb-3">Aktive Module</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {Object.entries(MODULE_META).map(([id, { label, icon: Icon }]) => {
                   const active = activeModuleIds.includes(id);
@@ -338,7 +341,7 @@ export default function SubscriptionPage() {
                     <div key={id} className={`flex items-center gap-2 p-3 rounded-lg border text-sm ${
                       active
                         ? 'border-green-700/50 bg-green-900/10 text-green-300'
-                        : 'border-zinc-800 text-zinc-600'
+                        : 'dark:border-zinc-800 border-gray-200 dark:text-zinc-600 text-gray-500'
                     }`}>
                       <Icon className="w-4 h-4 shrink-0" />
                       <span className="text-xs">{label}</span>
@@ -357,7 +360,7 @@ export default function SubscriptionPage() {
                 <button
                   onClick={handlePortal}
                   disabled={portalLoading}
-                  className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border border-zinc-700"
+                  className="flex items-center gap-2 dark:bg-zinc-800 bg-gray-100 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border dark:border-zinc-700 border-gray-200"
                 >
                   {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
                   Zahlung & Rechnungen
@@ -365,7 +368,7 @@ export default function SubscriptionPage() {
                 </button>
                 <button
                   onClick={() => setShowPlans(s => !s)}
-                  className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                  className="flex items-center gap-2 bg-[var(--lime)] hover:bg-[var(--lime-bright)] px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
                 >
                   <Zap className="w-4 h-4" />
                   Plan upgraden
@@ -374,7 +377,7 @@ export default function SubscriptionPage() {
             ) : (
               <button
                 onClick={() => setShowPlans(true)}
-                className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 px-5 py-2.5 rounded-lg text-sm font-bold transition-colors"
+                className="flex items-center gap-2 bg-[var(--lime)] hover:bg-[var(--lime-bright)] px-5 py-2.5 rounded-lg text-sm font-bold transition-colors"
               >
                 <Zap className="w-4 h-4" />
                 Plan auswählen & upgraden
@@ -387,9 +390,9 @@ export default function SubscriptionPage() {
         {showPlans && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">Pläne vergleichen</h2>
+              <h2 className="text-lg font-semibold dark:text-white text-gray-900">Pläne vergleichen</h2>
               {sub?.has_subscription && (
-                <button onClick={() => setShowPlans(false)} className="text-zinc-500 hover:text-zinc-300">
+                <button onClick={() => setShowPlans(false)} className="dark:text-zinc-500 text-gray-500 hover:text-zinc-300">
                   <X className="w-5 h-5" />
                 </button>
               )}
@@ -406,7 +409,7 @@ export default function SubscriptionPage() {
                   }`}>
                     {plan.highlight && !isDowngrade && (
                       <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <span className="bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                        <span className="bg-[var(--lime)] dark:text-white text-gray-900 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
                           <Star className="w-3 h-3" /> Beliebteste
                         </span>
                       </div>
@@ -414,21 +417,21 @@ export default function SubscriptionPage() {
 
                     <div className="mb-4">
                       <Icon className={`w-7 h-7 mb-3 ${
-                        plan.color === 'orange' ? 'text-orange-400' :
+                        plan.color === 'orange' ? 'text-[color:var(--lime)]' :
                         plan.color === 'blue' ? 'text-blue-400' : 'text-purple-400'
                       }`} />
-                      <h3 className="font-bold text-white text-base">{plan.name}</h3>
-                      <p className="text-zinc-400 text-xs mt-0.5">{plan.description}</p>
+                      <h3 className="font-bold dark:text-white text-gray-900 text-base">{plan.name}</h3>
+                      <p className="dark:text-zinc-400 text-gray-600 text-xs mt-0.5">{plan.description}</p>
                     </div>
 
                     <div className="mb-5">
-                      <span className="text-3xl font-bold text-white">{plan.price}€</span>
-                      <span className="text-zinc-400 text-sm">/{plan.period}</span>
+                      <span className="text-3xl font-bold dark:text-white text-gray-900">{plan.price}€</span>
+                      <span className="dark:text-zinc-400 text-gray-600 text-sm">/{plan.period}</span>
                     </div>
 
                     <ul className="space-y-2 mb-6 flex-1">
                       {plan.features.map(f => (
-                        <li key={f} className="flex items-start gap-2 text-sm text-zinc-300">
+                        <li key={f} className="flex items-start gap-2 text-sm dark:text-zinc-300 text-gray-700">
                           <CheckCircle className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
                           {f}
                         </li>
@@ -439,7 +442,7 @@ export default function SubscriptionPage() {
                       <button
                         onClick={handlePortal}
                         disabled={portalLoading}
-                        className="w-full py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 disabled:opacity-60"
+                        className="w-full py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 dark:text-zinc-300 text-gray-700 disabled:opacity-60"
                       >
                         {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
                         Downgrade via Portal
@@ -450,8 +453,8 @@ export default function SubscriptionPage() {
                         disabled={isCurrentPlan || upgradeLoading === plan.id}
                         className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
                           isCurrentPlan
-                            ? 'bg-zinc-700 text-zinc-400 cursor-default'
-                            : `${btnMap[plan.color]} text-white`
+                            ? 'bg-zinc-700 dark:text-zinc-400 text-gray-600 cursor-default'
+                            : `${btnMap[plan.color]} dark:text-white text-gray-900`
                         } disabled:opacity-60`}
                       >
                         {upgradeLoading === plan.id
@@ -468,11 +471,11 @@ export default function SubscriptionPage() {
             </div>
 
             {sub?.has_subscription && (PLAN_RANK[currentPlanType] ?? 0) > 0 && (
-              <div className="mt-4 p-3 bg-zinc-800/60 border border-zinc-700/50 rounded-lg flex items-start gap-2.5 text-xs text-zinc-400">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-zinc-500" />
+              <div className="mt-4 p-3 bg-zinc-800/60 border border-zinc-700/50 rounded-lg flex items-start gap-2.5 text-xs dark:text-zinc-400 text-gray-600">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 dark:text-zinc-500 text-gray-500" />
                 <span>
                   Downgrade auf einen niedrigeren Plan? Nutze den{' '}
-                  <button onClick={handlePortal} className="text-orange-400 hover:text-orange-300 underline underline-offset-2">
+                  <button onClick={handlePortal} className="text-[color:var(--lime)] hover:text-[color:var(--lime-bright)] underline underline-offset-2">
                     Stripe Billing-Portal
                   </button>
                   {' '}— Änderungen werden zum nächsten Abrechnungsdatum wirksam.
@@ -480,7 +483,7 @@ export default function SubscriptionPage() {
               </div>
             )}
 
-            <p className="text-center text-xs text-zinc-600 mt-2">
+            <p className="text-center text-xs dark:text-zinc-600 text-gray-500 mt-2">
               Alle Pläne beinhalten eine 14-Tage Kündigungsfrist · Zahlung via Stripe · SSL-verschlüsselt
             </p>
           </div>
@@ -488,11 +491,11 @@ export default function SubscriptionPage() {
 
         <button
           onClick={() => router.push('/')}
-          className="mt-8 text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
+          className="mt-8 dark:text-zinc-500 text-gray-500 hover:text-zinc-300 text-sm transition-colors"
         >
           ← Zurück zum Dashboard
         </button>
       </div>
-    </main>
+    </PageContainer>
   );
 }

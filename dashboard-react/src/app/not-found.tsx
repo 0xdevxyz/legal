@@ -2,7 +2,7 @@ import { Search, Home, ArrowLeft } from 'lucide-react';
 
 export default function NotFound() {
   return (
-    <main className="min-h-screen bg-gray-900 text-white flex items-center justify-center px-4">
+    <main className="px-4 sm:px-6 py-6 flex items-center justify-center px-4">
       <div className="max-w-md w-full text-center">
         <div className="mb-6">
           <span className="text-8xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
@@ -10,7 +10,7 @@ export default function NotFound() {
           </span>
         </div>
         <h1 className="text-2xl font-bold mb-3">Seite nicht gefunden</h1>
-        <p className="text-gray-400 mb-8">
+        <p className="dark:text-gray-400 text-gray-600 mb-8">
           Die angeforderte Seite existiert nicht oder wurde verschoben.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -23,7 +23,7 @@ export default function NotFound() {
           </a>
           <a
             href="javascript:history.back()"
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 dark:bg-zinc-800 bg-gray-100 hover:bg-gray-600 rounded-lg font-medium transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurueck

@@ -66,13 +66,13 @@ export default function AICompliancePage() {
   
   if (loading) {
     return (
-      <main role="main" aria-label="AI Compliance Dashboard wird geladen" className="min-h-screen bg-gray-900 text-white p-8">
+      <main role="main" aria-label="AI Compliance Dashboard wird geladen" className="px-4 sm:px-6 py-6">
         <div className="max-w-7xl mx-auto">
           <div className="animate-pulse space-y-6">
-            <div className="h-8 bg-gray-800 rounded w-64" />
+            <div className="h-8 dark:bg-zinc-800 bg-white rounded w-64" />
             <div className="grid grid-cols-4 gap-4">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-32 bg-gray-800 rounded" />
+                <div key={i} className="h-32 dark:bg-zinc-800 bg-white rounded" />
               ))}
             </div>
           </div>
@@ -82,7 +82,7 @@ export default function AICompliancePage() {
   }
   
   return (
-    <main role="main" aria-label="AI Compliance Dashboard" className="min-h-screen bg-gray-900 text-white p-8">
+    <main role="main" aria-label="AI Compliance Dashboard" className="px-4 sm:px-6 py-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <header className="flex items-center justify-between mb-8">
@@ -90,7 +90,7 @@ export default function AICompliancePage() {
             <h1 className="text-3xl font-bold mb-2">
               AI Compliance Dashboard
             </h1>
-            <p className="text-gray-400">
+            <p className="dark:text-gray-400 text-gray-600">
               EU AI Act Compliance für Ihre KI-Systeme
             </p>
           </div>
@@ -115,49 +115,49 @@ export default function AICompliancePage() {
         {stats && (
           <section aria-label="Statistik-Übersicht" className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             {/* Total Systems */}
-            <article className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+            <article className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-6">
               <div className="flex items-center justify-between mb-3">
                 <div className="p-2 bg-purple-500/20 rounded-lg">
                   <Sparkles className="w-6 h-6 text-purple-400" />
                 </div>
                 <span className="text-3xl font-bold">{stats.total_systems}</span>
               </div>
-              <div className="text-sm text-gray-400">KI-Systeme</div>
+              <div className="text-sm dark:text-gray-400 text-gray-600">KI-Systeme</div>
             </article>
             
             {/* Average Compliance */}
-            <article className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+            <article className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-6">
               <div className="flex items-center justify-between mb-3">
                 <div className="p-2 bg-green-500/20 rounded-lg">
                   <Shield className="w-6 h-6 text-green-400" />
                 </div>
                 <span className="text-3xl font-bold">{stats.average_compliance_score}%</span>
               </div>
-              <div className="text-sm text-gray-400">Ø Compliance</div>
+              <div className="text-sm dark:text-gray-400 text-gray-600">Ø Compliance</div>
             </article>
             
             {/* Scans Last 30 Days */}
-            <article className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+            <article className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-6">
               <div className="flex items-center justify-between mb-3">
                 <div className="p-2 bg-blue-500/20 rounded-lg">
                   <TrendingUp className="w-6 h-6 text-blue-400" />
                 </div>
                 <span className="text-3xl font-bold">{stats.scans_last_30_days}</span>
               </div>
-              <div className="text-sm text-gray-400">Scans (30 Tage)</div>
+              <div className="text-sm dark:text-gray-400 text-gray-600">Scans (30 Tage)</div>
             </article>
             
             {/* Risk Distribution */}
-            <article className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+            <article className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-6">
               <div className="flex items-center justify-between mb-3">
-                <div className="p-2 bg-orange-500/20 rounded-lg">
-                  <Clock className="w-6 h-6 text-orange-400" />
+                <div className="p-2 bg-teal-500/20 rounded-lg">
+                  <Clock className="w-6 h-6 text-[color:var(--lime)]" />
                 </div>
                 <span className="text-3xl font-bold">
                   {stats.risk_distribution?.high || 0}
                 </span>
               </div>
-              <div className="text-sm text-gray-400">Hochrisiko-Systeme</div>
+              <div className="text-sm dark:text-gray-400 text-gray-600">Hochrisiko-Systeme</div>
             </article>
           </section>
         )}
@@ -167,12 +167,12 @@ export default function AICompliancePage() {
           <h2 className="text-xl font-semibold mb-4">Ihre KI-Systeme</h2>
           
           {systems.length === 0 ? (
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-12 text-center">
+            <div className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-12 text-center">
               <Sparkles className="w-16 h-16 text-gray-600 mx-auto mb-4" />
               <h3 className="text-xl font-semibold mb-2">
                 Noch keine KI-Systeme registriert
               </h3>
-              <p className="text-gray-400 mb-6">
+              <p className="dark:text-gray-400 text-gray-600 mb-6">
                 Fügen Sie Ihr erstes KI-System hinzu, um mit der Compliance-Prüfung zu beginnen.
               </p>
               <button
@@ -198,13 +198,13 @@ export default function AICompliancePage() {
         
         {/* Risk Distribution Chart */}
         {stats && stats.total_systems > 0 && (
-          <section aria-label="Risiko-Verteilung" className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+          <section aria-label="Risiko-Verteilung" className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-6">
             <h3 className="text-lg font-semibold mb-4">Risiko-Verteilung</h3>
             <div className="grid grid-cols-4 gap-4">
               {Object.entries(stats.risk_distribution || {}).map(([category, count]) => (
                 <div key={category} className="text-center">
                   <div className="text-2xl font-bold mb-1">{count}</div>
-                  <div className="text-sm text-gray-400 capitalize">{category}</div>
+                  <div className="text-sm dark:text-gray-400 text-gray-600 capitalize">{category}</div>
                 </div>
               ))}
             </div>

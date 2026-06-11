@@ -23,6 +23,8 @@ from datetime import datetime
 from urllib.parse import urlparse
 import logging
 
+from compliance_engine.privacy_transfer_findings import detect_transfers
+
 logger = logging.getLogger(__name__)
 
 # Check if playwright is available
@@ -316,6 +318,12 @@ class HeadlessCookieScanner:
                     'by_category': self._group_requests_by_category(third_party_requests),
                     'unique_domains': list(set(r['domain'] for r in third_party_requests))[:50],
                 },
+
+                # Drittlandtransfer ohne Einwilligung — aus den ECHTEN ausgehenden
+                # Requests ermittelt (robusteste Quelle, fängt auch @import/JS-Loads).
+                'privacy_findings': detect_transfers(
+                    request_urls=[r['url'] for r in third_party_requests]
+                ),
                 
                 # Scripts & Iframes
                 'scripts': scripts[:30],

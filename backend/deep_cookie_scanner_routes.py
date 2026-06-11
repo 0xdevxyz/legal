@@ -17,6 +17,9 @@ from typing import Optional, Dict, Any
 
 from dependencies import get_current_user
 from database_service import db_service
+from compliance_engine.privacy_transfer_findings import detect_transfers
+
+import json
 
 router = APIRouter(prefix="/api/v2", tags=["deep-cookie-scanner"])
 
@@ -226,6 +229,10 @@ async def get_scan_status(
     elif scan["status"] == "failed":
         response["error"] = scan["error_message"]
     elif scan["status"] == "completed":
+        # Drittlandtransfer-Findings aus den ECHTEN beobachteten Requests ableiten
+        # (Google Fonts, reCAPTCHA, Maps, YouTube, Adobe-Fonts) — abmahnfähig.
+        privacy_findings = _privacy_findings_from_requests(scan["requests"])
+
         # Return full results
         response.update({
             "total_cookies": scan["total_cookies"],
@@ -236,9 +243,31 @@ async def get_scan_status(
             "requests": scan["requests"],
             "categorized": scan["categorized"],
             "scan_duration_seconds": scan["scan_duration_seconds"],
+            "privacy_findings": privacy_findings,
+            "privacy_findings_count": len(privacy_findings),
+            "privacy_risk_euro": sum(f.get("risk_euro", 0) for f in privacy_findings),
         })
-    
+
     return response
+
+
+def _privacy_findings_from_requests(requests_raw) -> list:
+    """
+    Extrahiert Request-URLs aus dem gespeicherten requests-Feld (JSON-String oder
+    bereits geparste Liste) und ermittelt die Drittlandtransfer-Findings.
+    """
+    if not requests_raw:
+        return []
+    requests = requests_raw
+    if isinstance(requests, str):
+        try:
+            requests = json.loads(requests)
+        except (ValueError, TypeError):
+            return []
+    if not isinstance(requests, list):
+        return []
+    urls = [r.get("url", "") for r in requests if isinstance(r, dict)]
+    return detect_transfers(request_urls=urls)
 
 
 @router.get("/deep-cookie-scan/{scan_id}/export")

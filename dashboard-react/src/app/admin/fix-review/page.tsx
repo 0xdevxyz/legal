@@ -94,7 +94,7 @@ export default function FixReviewPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6">
+    <div className="px-4 sm:px-6 py-6">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -135,11 +135,11 @@ export default function FixReviewPage() {
             </div>
 
             {loading && !queue && (
-              <div className="p-8 text-center text-gray-400 text-sm">Laden…</div>
+              <div className="p-8 text-center dark:text-gray-400 text-gray-600 text-sm">Laden…</div>
             )}
 
             {queue?.items.length === 0 && (
-              <div className="p-8 text-center text-gray-400 text-sm">
+              <div className="p-8 text-center dark:text-gray-400 text-gray-600 text-sm">
                 Keine offenen Reviews
               </div>
             )}
@@ -176,7 +176,7 @@ export default function FixReviewPage() {
                       {item.fix_type}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs dark:text-gray-400 text-gray-600 mt-1">
                     {new Date(item.applied_at).toLocaleString("de-DE")}
                   </p>
                   <FailedStages log={item.quality_gate_log} />
@@ -188,7 +188,7 @@ export default function FixReviewPage() {
           {/* Detail panel */}
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
             {!selected ? (
-              <div className="p-10 text-center text-gray-400 text-sm">
+              <div className="p-10 text-center dark:text-gray-400 text-gray-600 text-sm">
                 Fix aus der Liste wählen
               </div>
             ) : (
@@ -224,7 +224,7 @@ export default function FixReviewPage() {
                           <span className="font-medium text-gray-800 dark:text-gray-200">
                             Stufe {s.stage}: {s.name}
                           </span>
-                          <span className="ml-auto text-xs text-gray-400">
+                          <span className="ml-auto text-xs dark:text-gray-400 text-gray-600">
                             {s.duration_ms}ms
                           </span>
                         </div>
@@ -248,7 +248,7 @@ export default function FixReviewPage() {
                   <button
                     onClick={() => doAction(selected.id, "approve")}
                     disabled={loading}
-                    className="w-full py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+                    className="w-full py-2.5 rounded-lg bg-green-600 hover:bg-green-700 dark:text-white text-gray-900 text-sm font-medium transition-colors disabled:opacity-50"
                   >
                     Fix freigeben
                   </button>
@@ -264,7 +264,7 @@ export default function FixReviewPage() {
                     <button
                       onClick={() => doAction(selected.id, "reject")}
                       disabled={loading || rejectReason.trim().length < 5}
-                      className="w-full py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+                      className="w-full py-2.5 rounded-lg bg-red-600 hover:bg-red-700 dark:text-white text-gray-900 text-sm font-medium transition-colors disabled:opacity-50"
                     >
                       Fix ablehnen
                     </button>

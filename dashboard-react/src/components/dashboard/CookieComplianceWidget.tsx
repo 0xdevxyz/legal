@@ -92,8 +92,8 @@ export const CookieComplianceWidget: React.FC = () => {
       <CardHeader>
         <div className="flex items-center justify-between flex-wrap gap-3">
           <CardTitle className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-orange-500/20 to-red-500/20 rounded-xl">
-              <Cookie className="w-6 h-6 text-orange-400" />
+            <div className="p-2.5 rounded-xl" style={{ background: 'var(--lime-dim)' }}>
+              <Cookie className="w-6 h-6" style={{ color: 'var(--lime)' }} />
             </div>
             <div>
               <span className="flex items-center gap-2">
@@ -248,7 +248,7 @@ export const CookieComplianceWidget: React.FC = () => {
               <div className="flex flex-col gap-2">
                 <Button
                   onClick={handleOpenSettings}
-                  className="w-full gap-2 bg-orange-500 hover:bg-orange-600"
+                  className="w-full gap-2 bg-[#25bac8] hover:bg-[#45d6e2] text-zinc-950"
                 >
                   <Settings className="w-4 h-4" />
                   Banner konfigurieren

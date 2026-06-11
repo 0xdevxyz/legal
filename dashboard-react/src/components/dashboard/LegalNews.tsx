@@ -340,8 +340,8 @@ export const LegalNews: React.FC = () => {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-xl">
-              <Scale className="w-6 h-6 text-purple-400" />
+            <div className="p-2.5 bg-[#25bac8]/15 rounded-xl">
+              <Scale className="w-6 h-6" style={{ color: 'var(--lime)' }} />
             </div>
             <span>Rechtliche Updates</span>
           </CardTitle>
@@ -360,8 +360,8 @@ export const LegalNews: React.FC = () => {
     <Card className="w-full">
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-3">
-          <div className="p-2.5 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-xl">
-            <Scale className="w-6 h-6 text-purple-400" />
+          <div className="p-2.5 bg-[#25bac8]/15 rounded-xl">
+            <Scale className="w-6 h-6" style={{ color: 'var(--lime)' }} />
           </div>
           <span>Rechtliche Updates & News</span>
         </CardTitle>
@@ -372,7 +372,7 @@ export const LegalNews: React.FC = () => {
             onClick={() => setActiveTab('updates')}
             className={`flex-1 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
               activeTab === 'updates'
-                ? 'bg-purple-500/15 text-purple-400 border-2 border-purple-500/50 shadow-lg shadow-purple-500/10'
+                ? 'bg-[#25bac8]/15 text-[#25bac8] border-2 border-[#25bac8]/50 shadow-lg shadow-[#25bac8]/10'
                 : 'bg-zinc-900/50 border border-zinc-800/50 text-zinc-400 hover:bg-zinc-800/60 hover:text-white hover:border-zinc-700/60'
             }`}
           >
@@ -388,14 +388,14 @@ export const LegalNews: React.FC = () => {
             onClick={() => setActiveTab('news')}
             className={`flex-1 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
               activeTab === 'news'
-                ? 'bg-sky-500/15 text-sky-400 border-2 border-sky-500/50 shadow-lg shadow-sky-500/10'
+                ? 'bg-[#25bac8]/15 text-[#25bac8] border-2 border-[#25bac8]/50 shadow-lg shadow-[#25bac8]/10'
                 : 'bg-zinc-900/50 border border-zinc-800/50 text-zinc-400 hover:bg-zinc-800/60 hover:text-white hover:border-zinc-700/60'
             }`}
           >
             <Newspaper className="w-4 h-4 inline mr-2" />
             Allgemeine News
             {newsData.length > 0 && (
-              <span className="ml-2 bg-sky-500 text-white text-xs px-2 py-1 rounded-full font-bold">
+              <span className="ml-2 bg-[#25bac8] text-zinc-950 text-xs px-2 py-1 rounded-full font-bold">
                 {newsData.length}
               </span>
             )}
@@ -660,7 +660,7 @@ export const LegalNews: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-start justify-between p-6 border-b border-gray-700 bg-gradient-to-r from-purple-900/30 to-blue-900/30">
+            <div className="flex items-start justify-between p-6 border-b border-gray-700 bg-[#25bac8]/[0.06]">
               <div className="flex-1 pr-4">
                 <div className="flex items-center gap-2 mb-3">
                   {selectedUpdate.classification?.confidence && (
@@ -913,7 +913,7 @@ export const LegalNews: React.FC = () => {
                   href={selectedArticle.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                  className="px-4 py-2 bg-[#25bac8] hover:bg-[#45d6e2] text-zinc-950 font-bold rounded-lg transition-colors flex items-center gap-2"
                   onClick={(e) => e.stopPropagation()}
                 >
                   Zum Original-Artikel

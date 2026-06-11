@@ -455,7 +455,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                     }
                   }}
                   disabled={!altTextValue.trim() || altTextSaved}
-                  className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded-lg transition-colors"
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-[#25bac8] hover:bg-[#45d6e2] disabled:bg-gray-300 text-zinc-950 text-sm font-bold rounded-lg transition-colors"
                 >
                   {altTextSaved ? <Check className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                   {altTextSaved ? 'Gespeichert' : 'Alt-Text speichern'}
@@ -560,7 +560,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                   </ul>
                   <button
                     onClick={() => router.push('/cookie-compliance')}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold rounded-lg hover:from-orange-600 hover:to-red-600 transition-all shadow-lg shadow-orange-500/25"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#25bac8] text-zinc-950 font-bold rounded-lg hover:bg-[#45d6e2] transition-all shadow-lg shadow-[#25bac8]/25"
                   >
                     <Cookie className="w-5 h-5" />
                     Cookie-Compliance einrichten
@@ -601,7 +601,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                         window.dispatchEvent(new CustomEvent('complyo:scroll-to-pillar', { detail: { pillarId: 'accessibility' } }));
                       }
                     }}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-sky-500 to-blue-500 text-white font-semibold rounded-lg hover:from-sky-600 hover:to-blue-600 transition-all text-sm"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-[#25bac8] text-zinc-950 font-bold rounded-lg hover:bg-[#45d6e2] transition-all text-sm"
                   >
                     <Eye className="w-4 h-4" />
                     Zur Barrierefreiheit-Lösung
@@ -683,7 +683,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                   </ol>
                   <button
                     onClick={() => setShowAIPreview(true)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all text-sm"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-[#25bac8] text-zinc-950 font-bold rounded-lg hover:bg-[#45d6e2] transition-all text-sm"
                   >
                     <Sparkles className="w-4 h-4" />
                     KI-Fix starten
@@ -842,7 +842,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                 Unser Team setzt diesen Fix professionell für Sie um.
               </p>
             </div>
-            <button className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-semibold whitespace-nowrap">
+            <button className="bg-[#25bac8] hover:bg-[#45d6e2] text-zinc-950 px-6 py-2 rounded-lg font-bold whitespace-nowrap">
               Service buchen
             </button>
           </div>

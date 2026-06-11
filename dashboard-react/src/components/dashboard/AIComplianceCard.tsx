@@ -5,18 +5,12 @@ import { Brain, Shield, FileText, TrendingUp, ArrowRight, Sparkles } from 'lucid
 import { Badge } from '@/components/ui/badge';
 import { useRouter } from 'next/navigation';
 import { getAIComplianceStats } from '@/lib/ai-compliance-api';
+import { useComploaiGuard } from '@/hooks/useComploaiGuard';
 import type { AIComplianceStats } from '@/types/ai-compliance';
 
-interface AIComplianceCardProps {
-  user?: {
-    addons?: string[];
-    plan_type?: string;
-  };
-}
-
-export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
+export const AIComplianceCard: React.FC = () => {
   const router = useRouter();
-  const hasAddon = user?.addons?.includes('comploai_guard');
+  const { hasComploaiGuard: hasAddon } = useComploaiGuard();
   const [aiStats, setAiStats] = useState<AIComplianceStats | null>(null);
 
   useEffect(() => {
@@ -31,8 +25,8 @@ export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
       <div className="glass-strong rounded-2xl p-5 sticky top-24 space-y-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-gradient-to-br from-purple-500/20 to-indigo-500/20 rounded-lg">
-              <Brain className="w-5 h-5 text-purple-400" />
+            <div className="p-2 rounded-lg" style={{ background: 'var(--lime-dim)' }}>
+              <Brain className="w-5 h-5" style={{ color: 'var(--lime)' }} />
             </div>
             <div>
               <h3 className="text-sm font-bold text-white">AI Compliance</h3>
@@ -52,7 +46,7 @@ export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
             <div className="text-xs text-zinc-400">AI-Systeme</div>
           </div>
           <div className="glass-card p-3 rounded-xl">
-            <div className="text-2xl font-bold text-purple-400">
+            <div className="text-2xl font-bold text-[#25bac8]">
               {aiStats ? `${aiStats.average_compliance_score}%` : '—'}
             </div>
             <div className="text-xs text-zinc-400">Compliance</div>
@@ -72,7 +66,7 @@ export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
 
         <button
           onClick={() => router.push('/ai-compliance')}
-          className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all text-sm shadow-lg"
+          className="w-full bg-[#25bac8] hover:bg-[#45d6e2] text-zinc-950 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all text-sm shadow-lg"
         >
           Übersicht
           <ArrowRight className="w-4 h-4" />
@@ -84,8 +78,8 @@ export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
   return (
     <div className="glass-strong rounded-2xl p-5 sticky top-24 hover:glass-effect transition-all">
       <div className="flex items-center gap-2 mb-4">
-        <div className="p-2 bg-gradient-to-br from-purple-500/20 to-indigo-500/20 rounded-lg">
-          <Brain className="w-5 h-5 text-purple-400" />
+        <div className="p-2 rounded-lg" style={{ background: 'var(--lime-dim)' }}>
+          <Brain className="w-5 h-5" style={{ color: 'var(--lime)' }} />
         </div>
         <div>
           <h3 className="text-sm font-bold text-white flex items-center gap-1">
@@ -98,7 +92,7 @@ export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
 
       <div className="space-y-2.5 mb-4">
         <div className="flex items-start gap-2">
-          <Shield className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+          <Shield className="w-4 h-4 text-[#25bac8] flex-shrink-0 mt-0.5" />
           <div>
             <div className="text-xs font-medium text-white">Risiko-Klassifizierung</div>
             <div className="text-xs text-zinc-500">High, Limited, Minimal</div>
@@ -106,7 +100,7 @@ export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
         </div>
 
         <div className="flex items-start gap-2">
-          <FileText className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+          <FileText className="w-4 h-4 text-[#25bac8] flex-shrink-0 mt-0.5" />
           <div>
             <div className="text-xs font-medium text-white">Auto-Dokumentation</div>
             <div className="text-xs text-zinc-500">Reports & Analysen</div>
@@ -114,7 +108,7 @@ export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
         </div>
 
         <div className="flex items-start gap-2">
-          <TrendingUp className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+          <TrendingUp className="w-4 h-4 text-[#25bac8] flex-shrink-0 mt-0.5" />
           <div>
             <div className="text-xs font-medium text-white">Monitoring</div>
             <div className="text-xs text-zinc-500">Scans & Alerts</div>
@@ -129,7 +123,7 @@ export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
 
       <button
         onClick={() => router.push('/ai-compliance/upgrade')}
-        className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all text-sm"
+        className="w-full bg-[#25bac8] hover:bg-[#45d6e2] text-zinc-950 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all text-sm"
       >
         <Sparkles className="w-4 h-4" />
         Add-on jetzt aktivieren
@@ -138,7 +132,7 @@ export const AIComplianceCard: React.FC<AIComplianceCardProps> = ({ user }) => {
       <div className="mt-3 text-center">
         <button
           onClick={() => router.push('/ai-compliance')}
-          className="text-sm text-purple-400 hover:text-purple-300 font-medium underline"
+          className="text-sm text-[#25bac8] hover:text-[#45d6e2] font-medium underline"
         >
           Mehr über AI Compliance erfahren →
         </button>

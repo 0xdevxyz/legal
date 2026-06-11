@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, TrendingUp, Bot, Globe, RefreshCw, Lock, Info, X, Zap } from 'lucide-react';
+import { Search, TrendingUp, Bot, Globe, RefreshCw, Lock, Info, X, Zap, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDashboardStore } from '@/stores/dashboard';
 import { analyzeWebsite, getTrackedWebsites } from '@/lib/api';
@@ -15,7 +15,7 @@ interface DomainHeroSectionProps {
 export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
   onAnalyze
 }) => {
-  const { currentWebsite, metrics, updateMetrics, setCurrentWebsite, isInOptimizationMode, lockedOptimizationUrl, pendingRescanContext, setPendingRescanContext } = useDashboardStore();
+  const { currentWebsite, updateMetrics, setCurrentWebsite, isInOptimizationMode, lockedOptimizationUrl, pendingRescanContext, setPendingRescanContext } = useDashboardStore();
   const { showToast } = useToast();
   const [url, setUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -26,8 +26,6 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
     details?: string;
     suggestions?: string[];
   } | null>(null);
-
-  const score = currentWebsite?.complianceScore ?? metrics.totalScore ?? 0;
 
   // Store-Listener: Rescan-Kontext von Legal News empfangen
   useEffect(() => {
@@ -225,34 +223,26 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
   };
 
 
-  const getScoreColor = (score: number): string => {
-    if (score >= 90) return 'text-green-400';
-    if (score >= 70) return 'text-yellow-400';
-    if (score >= 50) return 'text-orange-400';
-    return 'text-red-400';
-  };
-
-  const getScoreGradient = (score: number): string => {
-    if (score >= 90) return 'from-green-500 to-emerald-600';
-    if (score >= 70) return 'from-yellow-500 to-orange-500';
-    if (score >= 50) return 'from-orange-500 to-red-500';
-    return 'from-red-500 to-red-700';
-  };
-
   return (
-    <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="h-full">
       {/* Hero Section */}
-      <div className="relative glass-strong rounded-3xl p-8 lg:p-14 overflow-hidden">
+      <div className="relative h-full glass-strong rounded-3xl p-8 lg:p-12 overflow-hidden">
         {/* Animated Background Gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-orange-500/8 via-transparent to-orange-500/5 opacity-60"></div>
-        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-orange-500/3 to-transparent"></div>
-        
+        <div className="absolute inset-0 bg-gradient-to-br from-[#25bac8]/10 via-transparent to-[#25bac8]/5 opacity-70"></div>
+        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-[#25bac8]/[0.04] to-transparent"></div>
+
         <div className="relative grid lg:grid-cols-2 gap-10 items-center">
           {/* Left: Domain Input & Info */}
           <div className="space-y-6">
-            <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-6 leading-tight tracking-tight">
+            <div
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold mb-4"
+              style={{ background: 'var(--lime-dim)', color: 'var(--lime)' }}
+            >
+              <Bot className="w-3.5 h-3.5" /> KI-geprüft
+            </div>
+            <h1 className="text-4xl lg:text-5xl font-black text-gray-900 dark:text-white mb-5 leading-[1.05] tracking-tight">
               Website-Compliance
-              <span className="block mt-2 text-orange-500">
+              <span className="block mt-2" style={{ color: 'var(--lime)' }}>
                 auf 100% optimieren
               </span>
             </h1>
@@ -307,7 +297,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                 )}
                 <div className="flex flex-col sm:flex-row gap-3 w-full">
                 <div className="flex-1 relative group">
-                  <Globe className="absolute left-5 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-400 group-focus-within:text-sky-400 transition-colors" />
+                  <Globe className="absolute left-5 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-400 group-focus-within:text-[#25bac8] transition-colors" />
                   <label htmlFor="website-url-input" className="sr-only">Website-URL eingeben</label>
                   <input
                     type="text"
@@ -321,7 +311,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                     onKeyPress={(e) => e.key === 'Enter' && handleAnalyze()}
                     placeholder="ihre-domain.de eingeben"
                     aria-label="Website-URL zur Compliance-Analyse eingeben"
-                    className="w-full pl-14 pr-5 py-4 bg-white dark:bg-zinc-900/50 backdrop-blur-sm border-2 border-gray-200 dark:border-zinc-700/50 rounded-2xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/50 text-lg transition-all shadow-sm dark:shadow-none"
+                    className="w-full pl-14 pr-5 py-4 bg-white dark:bg-zinc-900/50 backdrop-blur-sm border-2 border-gray-200 dark:border-zinc-700/50 rounded-2xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#25bac8]/50 focus:border-[#25bac8]/50 text-lg transition-all shadow-sm dark:shadow-none"
                     disabled={isAnalyzing}
                   />
                 </div>
@@ -329,7 +319,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                   size="lg"
                   onClick={() => handleAnalyze()}
                   disabled={isAnalyzing || !url.trim()}
-                  className="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-8 py-6 text-lg shadow-lg shadow-orange-500/25 hover:shadow-xl hover:shadow-orange-500/30 transition-all rounded-2xl disabled:opacity-40"
+                  className="bg-[#25bac8] hover:bg-[#45d6e2] text-zinc-950 font-bold px-8 py-6 text-lg shadow-lg shadow-[#25bac8]/25 hover:shadow-xl hover:shadow-[#25bac8]/30 transition-all rounded-2xl disabled:opacity-40"
                 >
                   {isAnalyzing ? (
                     <>
@@ -392,8 +382,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                 <div className="glass-card rounded-2xl p-4 border border-zinc-700/50 animate-fade-in">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center">
-                        <Globe className="w-5 h-5 text-orange-400" />
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--lime-dim)' }}>
+                        <Globe className="w-5 h-5" style={{ color: 'var(--lime)' }} />
                       </div>
                       <div>
                         <p className="text-xs text-gray-500 dark:text-zinc-400 mb-0.5">Aktuell analysiert</p>
@@ -416,103 +406,36 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
             </div>
           </div>
 
-          {/* Right: Score Display & CTA */}
-          <div className="flex flex-col items-center justify-center">
-            {currentWebsite ? (
-              <>
-                {/* Score Display */}
-                <div className="relative mb-10">
-                  {/* Circular Progress mit Glassmorphism */}
-                  <div className="relative w-72 h-72">
-                    {/* Glow Effect */}
-                    <div className="absolute inset-0 bg-orange-500/15 rounded-full blur-2xl"></div>
-                    
-                    <svg className="w-full h-full transform -rotate-90 relative z-10">
-                      {/* Background Circle */}
-                      <circle
-                        cx="144"
-                        cy="144"
-                        r="120"
-                        stroke="rgba(255,255,255,0.05)"
-                        strokeWidth="20"
-                        fill="none"
-                        className="score-circle-track"
-                      />
-                      {/* Progress Circle */}
-                      <circle
-                        cx="144"
-                        cy="144"
-                        r="120"
-                        stroke="url(#scoreGradient)"
-                        strokeWidth="20"
-                        fill="none"
-                        strokeDasharray={`${(score / 100) * 753.98} 753.98`}
-                        strokeLinecap="round"
-                        className="transition-all duration-1000 ease-out drop-shadow-lg"
-                      />
-                      <defs>
-                        <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor={score >= 90 ? '#10B981' : score >= 70 ? '#FBBF24' : '#EF4444'} />
-                          <stop offset="100%" stopColor={score >= 90 ? '#059669' : score >= 70 ? '#F97316' : '#DC2626'} />
-                        </linearGradient>
-                      </defs>
-                    </svg>
-
-                    {/* Score Number */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <div className="text-xs text-gray-500 dark:text-zinc-500 uppercase tracking-wider mb-2">
-                        {currentWebsite.url}
-                      </div>
-                      <div className={`text-7xl font-black ${getScoreColor(score)} tracking-tight`}>
-                        {score}
-                      </div>
-                      <div className="text-2xl text-gray-400 dark:text-zinc-400 font-light">/100</div>
-                      <div className="text-sm text-gray-500 dark:text-zinc-500 mt-1 font-medium">Compliance-Score</div>
-                    </div>
-                  </div>
+          {/* Right: compliance visual — score lives in the ComplianceGauge cluster.
+              [3D-VISUAL-SLOT] replaced by a generated lime-glass render in phase 4. */}
+          <div className="flex items-center justify-center">
+            <div className="relative w-64 h-64 lg:w-80 lg:h-80" aria-hidden="true">
+              {/* lime glow */}
+              <div className="absolute inset-0 rounded-full blur-3xl" style={{ background: 'rgba(37,186,200,0.14)' }} />
+              {/* core gradient orb */}
+              <div
+                className="absolute inset-6 rounded-full"
+                style={{ background: 'radial-gradient(circle at 35% 30%, rgba(37,186,200,0.45), rgba(37,186,200,0.05) 58%, transparent 72%)' }}
+              />
+              {/* concentric rings */}
+              <div className="absolute inset-2 rounded-full border border-[#25bac8]/25 animate-pulse" />
+              <div className="absolute inset-12 rounded-full border border-[#25bac8]/15 animate-pulse" style={{ animationDelay: '0.2s' }} />
+              <div className="absolute inset-20 rounded-full border border-[#25bac8]/10 animate-pulse" style={{ animationDelay: '0.4s' }} />
+              {/* center mark */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="p-7 rounded-[2rem] bg-zinc-900/50 backdrop-blur-md border border-white/[0.06] shadow-2xl">
+                  <ShieldCheck className="w-16 h-16 lg:w-20 lg:h-20" style={{ color: 'var(--lime)' }} strokeWidth={1.5} />
                 </div>
-
-                {/* Score Info Text */}
-                {score < 100 ? (
-                  <p className="text-sm text-gray-500 dark:text-zinc-400 mt-5 text-center">
-                    Noch <strong className="text-gray-900 dark:text-white font-semibold">{100 - score} Punkte</strong> bis zum Compliance-Ziel
-                  </p>
-                ) : (
-                  <div className="flex items-center gap-2 text-green-400 mt-5">
-                    <TrendingUp className="w-5 h-5" />
-                    <p className="text-sm font-semibold">100% Compliance erreicht!</p>
-                  </div>
-                )}
-              </>
-            ) : (
-              /* Empty State */
-              <div className="text-center py-12">
-                <div className="w-56 h-56 mx-auto mb-8 relative">
-                  <div className="absolute inset-0 bg-orange-500/10 rounded-full animate-pulse"></div>
-                  <div className="absolute inset-6 bg-orange-500/5 rounded-full animate-pulse delay-75"></div>
-                  <div className="absolute inset-12 bg-orange-500/5 rounded-full animate-pulse delay-150"></div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="p-6 bg-zinc-900/50 rounded-full backdrop-blur-sm">
-                      <Globe className="w-20 h-20 text-gray-300 dark:text-zinc-600" />
-                    </div>
-                  </div>
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-                  Bereit für Ihre erste Analyse?
-                </h3>
-                <p className="text-gray-500 dark:text-zinc-400 text-sm">
-                  Geben Sie oben eine Domain ein, um zu starten
-                </p>
               </div>
-            )}
+            </div>
           </div>
         </div>
 
         {/* Features Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-10 pt-8 border-t border-white/5">
           <div className="flex items-center gap-4 p-4 rounded-2xl glass-card hover:glass-strong transition-all group">
-            <div className="bg-orange-500/15 p-3.5 rounded-xl group-hover:scale-110 transition-transform">
-              <TrendingUp className="w-6 h-6 text-orange-400" />
+            <div className="p-3.5 rounded-xl group-hover:scale-110 transition-transform" style={{ background: 'var(--lime-dim)' }}>
+              <TrendingUp className="w-6 h-6 text-[#25bac8]" />
             </div>
             <div>
               <h4 className="text-gray-900 dark:text-white font-semibold text-sm">KI-gestützt</h4>
@@ -520,8 +443,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-4 p-4 rounded-2xl glass-card hover:glass-strong transition-all group">
-            <div className="bg-orange-500/15 p-3.5 rounded-xl group-hover:scale-110 transition-transform">
-              <Globe className="w-6 h-6 text-orange-400" />
+            <div className="p-3.5 rounded-xl group-hover:scale-110 transition-transform" style={{ background: 'var(--lime-dim)' }}>
+              <Globe className="w-6 h-6 text-[#25bac8]" />
             </div>
             <div>
               <h4 className="text-gray-900 dark:text-white font-semibold text-sm">20+ Prüfpunkte</h4>
@@ -529,8 +452,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-4 p-4 rounded-2xl glass-card hover:glass-strong transition-all group">
-            <div className="bg-orange-500/15 p-3.5 rounded-xl group-hover:scale-110 transition-transform">
-              <Bot className="w-6 h-6 text-orange-400" />
+            <div className="p-3.5 rounded-xl group-hover:scale-110 transition-transform" style={{ background: 'var(--lime-dim)' }}>
+              <Bot className="w-6 h-6 text-[#25bac8]" />
             </div>
             <div>
               <h4 className="text-gray-900 dark:text-white font-semibold text-sm">Risiko-Radar</h4>

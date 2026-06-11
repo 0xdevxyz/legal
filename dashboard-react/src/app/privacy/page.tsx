@@ -125,7 +125,7 @@ export default function PrivacyPage() {
           {/* Section 3: Cookies */}
           <section className="glass-card rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
-              <Cookie className="w-6 h-6 text-orange-400" />
+              <Cookie className="w-6 h-6 text-teal-400" />
               <h2 className="text-2xl font-bold text-white">3. Cookies & Lokale Speicherung</h2>
             </div>
             

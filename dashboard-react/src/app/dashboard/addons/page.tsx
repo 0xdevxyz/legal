@@ -14,7 +14,7 @@ const ADDON_META: Record<string, { icon: React.ElementType; color: string }> = {
 function AddonCard({ addon, onCancel }: { addon: Addon; onCancel: (key: string) => void }) {
   const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const meta = ADDON_META[addon.addon_key] ?? { icon: Shield, color: 'text-gray-400' };
+  const meta = ADDON_META[addon.addon_key] ?? { icon: Shield, color: 'dark:text-gray-400 text-gray-600' };
   const Icon = meta.icon;
 
   const handleCancel = async () => {
@@ -28,19 +28,19 @@ function AddonCard({ addon, onCancel }: { addon: Addon; onCancel: (key: string) 
   const startedDate = new Date(addon.started_at).toLocaleDateString('de-DE');
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 flex flex-col gap-4">
+    <div className="dark:bg-zinc-800 bg-white border dark:border-zinc-700 border-gray-200 rounded-xl p-6 flex flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 dark:bg-zinc-800 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
             <Icon className={`w-5 h-5 ${meta.color}`} />
           </div>
           <div>
             <div className="font-semibold">{addon.addon_name}</div>
-            <div className="text-sm text-gray-400">seit {startedDate}</div>
+            <div className="text-sm dark:text-gray-400 text-gray-600">seit {startedDate}</div>
           </div>
         </div>
         <div className="text-right flex-shrink-0">
-          <div className="text-lg font-bold">{addon.price_monthly}€<span className="text-sm font-normal text-gray-400">/Mo</span></div>
+          <div className="text-lg font-bold">{addon.price_monthly}€<span className="text-sm font-normal dark:text-gray-400 text-gray-600">/Mo</span></div>
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
             addon.status === 'active'
               ? 'bg-green-500/20 text-green-400'
@@ -74,7 +74,7 @@ function AddonCard({ addon, onCancel }: { addon: Addon; onCancel: (key: string) 
               </button>
               <button
                 onClick={() => setConfirming(false)}
-                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-sm rounded-lg transition-colors"
+                className="px-3 py-1.5 dark:bg-zinc-800 bg-gray-100 hover:bg-gray-600 text-sm rounded-lg transition-colors"
               >
                 Abbrechen
               </button>
@@ -82,7 +82,7 @@ function AddonCard({ addon, onCancel }: { addon: Addon; onCancel: (key: string) 
           ) : (
             <button
               onClick={handleCancel}
-              className="px-3 py-1.5 text-sm text-gray-400 hover:text-red-400 border border-gray-700 hover:border-red-700 rounded-lg transition-colors"
+              className="px-3 py-1.5 text-sm dark:text-gray-400 text-gray-600 hover:text-red-400 border dark:border-zinc-700 border-gray-200 hover:border-red-700 rounded-lg transition-colors"
             >
               Kündigen
             </button>
@@ -136,7 +136,7 @@ export default function AddonsPage() {
   const inactiveAddons = addons.filter(a => a.status !== 'active');
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
+    <div className="px-4 sm:px-6 py-6">
       <div className="max-w-3xl mx-auto">
 
         {/* Success Banner */}
@@ -145,7 +145,7 @@ export default function AddonsPage() {
             <CheckCircle className="w-6 h-6 text-green-400 flex-shrink-0 mt-0.5" />
             <div>
               <div className="font-semibold text-green-300">Zahlung erfolgreich!</div>
-              <div className="text-sm text-gray-400 mt-1">
+              <div className="text-sm dark:text-gray-400 text-gray-600 mt-1">
                 Ihr Add-on wurde aktiviert. Es kann einige Sekunden dauern bis es hier erscheint.
               </div>
             </div>
@@ -158,7 +158,7 @@ export default function AddonsPage() {
             <XCircle className="w-6 h-6 text-yellow-400 flex-shrink-0 mt-0.5" />
             <div>
               <div className="font-semibold text-yellow-300">Checkout abgebrochen</div>
-              <div className="text-sm text-gray-400 mt-1">
+              <div className="text-sm dark:text-gray-400 text-gray-600 mt-1">
                 Es wurde nichts berechnet. Sie können jederzeit ein Add-on aktivieren.
               </div>
             </div>
@@ -170,8 +170,8 @@ export default function AddonsPage() {
           <div>
             <h1 className="text-3xl font-bold">Meine Add-ons</h1>
             {totalCost > 0 && (
-              <p className="text-gray-400 mt-1">
-                Monatliche Gesamtkosten: <span className="text-white font-semibold">{totalCost}€</span>
+              <p className="dark:text-gray-400 text-gray-600 mt-1">
+                Monatliche Gesamtkosten: <span className="dark:text-white text-gray-900 font-semibold">{totalCost}€</span>
               </p>
             )}
           </div>
@@ -192,7 +192,7 @@ export default function AddonsPage() {
         )}
 
         {loading ? (
-          <div className="flex items-center justify-center py-20 text-gray-400">
+          <div className="flex items-center justify-center py-20 dark:text-gray-400 text-gray-600">
             <Loader2 className="w-6 h-6 animate-spin mr-3" />
             Lade Add-ons...
           </div>
@@ -201,7 +201,7 @@ export default function AddonsPage() {
         ) : activeAddons.length === 0 && inactiveAddons.length === 0 ? (
           <div className="text-center py-20">
             <Shield className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400 mb-6">Sie haben noch keine Add-ons aktiviert.</p>
+            <p className="dark:text-gray-400 text-gray-600 mb-6">Sie haben noch keine Add-ons aktiviert.</p>
             <button
               onClick={() => router.push('/ai-compliance/upgrade')}
               className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-xl font-medium transition-colors"
@@ -213,7 +213,7 @@ export default function AddonsPage() {
           <div className="space-y-8">
             {activeAddons.length > 0 && (
               <section>
-                <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Aktiv</h2>
+                <h2 className="text-sm font-semibold dark:text-gray-400 text-gray-600 uppercase tracking-wider mb-4">Aktiv</h2>
                 <div className="space-y-4">
                   {activeAddons.map(addon => (
                     <AddonCard key={addon.id} addon={addon} onCancel={handleCancel} />
@@ -224,7 +224,7 @@ export default function AddonsPage() {
 
             {inactiveAddons.length > 0 && (
               <section>
-                <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Inaktiv</h2>
+                <h2 className="text-sm font-semibold dark:text-gray-400 text-gray-600 uppercase tracking-wider mb-4">Inaktiv</h2>
                 <div className="space-y-4">
                   {inactiveAddons.map(addon => (
                     <AddonCard key={addon.id} addon={addon} onCancel={handleCancel} />

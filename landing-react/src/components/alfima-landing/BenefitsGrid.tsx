@@ -72,8 +72,8 @@ export default function BenefitsGrid() {
 
         <div className="mt-16 text-center">
           <div className="inline-flex flex-col gap-2 rounded-3xl bg-gradient-to-r from-cyan-500/10 to-blue-500/5 px-8 py-6 text-left shadow-2xl">
-            <div className="text-5xl font-bold text-white">50.000€+</div>
-            <p className="text-sm text-white/70">Durchschnittliche Ersparnis bei vermiedenen Bußgeldern</p>
+            <div className="text-5xl font-bold text-white">bis 50.000€</div>
+            <p className="text-sm text-white/70">Vermiedenes Bußgeld- &amp; Abmahnrisiko</p>
             <p className="text-xs uppercase tracking-[0.4em] text-white/60">pro Jahr & Unternehmen</p>
           </div>
         </div>

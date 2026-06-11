@@ -127,11 +127,11 @@ export default function DeepCookieScannerPage() {
   }, [pollInterval]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 pt-20 pb-12">
+    <div className="px-4 sm:px-6 py-6">
       <div className="max-w-4xl mx-auto px-4">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Deep Cookie Scanner</h1>
-          <p className="text-zinc-400">
+          <h1 className="text-4xl font-bold dark:text-white text-gray-900 mb-2">Deep Cookie Scanner</h1>
+          <p className="dark:text-zinc-400 text-gray-600">
             Scan your website for all cookies, tracking pixels, and analytics services
           </p>
         </div>
@@ -139,13 +139,13 @@ export default function DeepCookieScannerPage() {
         <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4 mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-zinc-400">Scans this month</p>
-              <p className="text-2xl font-bold text-white">
+              <p className="text-sm dark:text-zinc-400 text-gray-600">Scans this month</p>
+              <p className="text-2xl font-bold dark:text-white text-gray-900">
                 {usage.scans_used} / {usage.scans_limit}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-sm text-zinc-400">Remaining</p>
+              <p className="text-sm dark:text-zinc-400 text-gray-600">Remaining</p>
               <p className="text-2xl font-bold text-blue-400">
                 {Math.max(0, usage.scans_limit - usage.scans_used)}
               </p>
@@ -174,14 +174,14 @@ export default function DeepCookieScannerPage() {
               value={inputUrl}
               onChange={(e) => setInputUrl(e.target.value)}
               disabled={isLoading}
-              className="flex-1 px-4 py-3 bg-zinc-700/50 border border-zinc-600/50 rounded-lg text-white placeholder-zinc-500
+              className="flex-1 px-4 py-3 bg-zinc-700/50 border border-zinc-600/50 rounded-lg dark:text-white text-gray-900 placeholder-zinc-500
                          focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20
                          disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <button
               type="submit"
               disabled={isLoading || usage.scans_used >= usage.scans_limit}
-              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 dark:text-white text-gray-900 rounded-lg font-semibold
                          hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed
                          transition flex items-center gap-2"
             >
@@ -189,7 +189,7 @@ export default function DeepCookieScannerPage() {
               Scan starten
             </button>
           </div>
-          <p className="text-sm text-zinc-500 mt-2">
+          <p className="text-sm dark:text-zinc-500 text-gray-500 mt-2">
             Scan takes ~3 minutes. We detect all cookies and classify them by service.
           </p>
         </form>
@@ -199,8 +199,8 @@ export default function DeepCookieScannerPage() {
             <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-6">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <p className="text-sm text-zinc-400">Scanning: {currentScan.url}</p>
-                  <p className="text-lg font-semibold text-white mt-1">
+                  <p className="text-sm dark:text-zinc-400 text-gray-600">Scanning: {currentScan.url}</p>
+                  <p className="text-lg font-semibold dark:text-white text-gray-900 mt-1">
                     {currentScan.status === 'pending' && 'Queued...'}
                     {currentScan.status === 'running' && 'Scanning in progress'}
                     {currentScan.status === 'completed' && 'Scan completed'}
@@ -228,7 +228,7 @@ export default function DeepCookieScannerPage() {
                       style={{ width: `${currentScan.progress_percent || 0}%` }}
                     />
                   </div>
-                  <p className="text-xs text-zinc-400 mt-2">
+                  <p className="text-xs dark:text-zinc-400 text-gray-600 mt-2">
                     {currentScan.progress_percent || 0}% complete
                   </p>
                 </div>
@@ -243,22 +243,22 @@ export default function DeepCookieScannerPage() {
               <>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
-                    <p className="text-sm text-zinc-400">Total Cookies</p>
-                    <p className="text-3xl font-bold text-white mt-2">{currentScan.total_cookies}</p>
+                    <p className="text-sm dark:text-zinc-400 text-gray-600">Total Cookies</p>
+                    <p className="text-3xl font-bold dark:text-white text-gray-900 mt-2">{currentScan.total_cookies}</p>
                   </div>
                   <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
-                    <p className="text-sm text-zinc-400">Services Detected</p>
+                    <p className="text-sm dark:text-zinc-400 text-gray-600">Services Detected</p>
                     <p className="text-3xl font-bold text-purple-400 mt-2">{currentScan.unique_services}</p>
                   </div>
                   <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
-                    <p className="text-sm text-zinc-400">Tracking Requests</p>
+                    <p className="text-sm dark:text-zinc-400 text-gray-600">Tracking Requests</p>
                     <p className="text-3xl font-bold text-blue-400 mt-2">{currentScan.total_requests}</p>
                   </div>
                 </div>
 
                 {exportData && (
                   <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-6">
-                    <h2 className="text-xl font-bold text-white mb-4">Detected Services</h2>
+                    <h2 className="text-xl font-bold dark:text-white text-gray-900 mb-4">Detected Services</h2>
                     <div className="space-y-3">
                       {exportData.services.map((service, idx) => (
                         <div
@@ -267,7 +267,7 @@ export default function DeepCookieScannerPage() {
                         >
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
-                              <h3 className="font-semibold text-white">{service.name}</h3>
+                              <h3 className="font-semibold dark:text-white text-gray-900">{service.name}</h3>
                               <span
                                 className={`text-xs px-2 py-1 rounded ${
                                   service.category === 'necessary'
@@ -282,20 +282,20 @@ export default function DeepCookieScannerPage() {
                                 {service.category}
                               </span>
                             </div>
-                            <p className="text-sm text-zinc-400 mt-1">{service.description}</p>
-                            <div className="flex gap-4 mt-2 text-xs text-zinc-500">
+                            <p className="text-sm dark:text-zinc-400 text-gray-600 mt-1">{service.description}</p>
+                            <div className="flex gap-4 mt-2 text-xs dark:text-zinc-500 text-gray-500">
                               <span>{service.total_cookies} cookies</span>
                               <span>{service.total_requests} requests</span>
                             </div>
                             {service.cookies.length > 0 && (
                               <div className="mt-2 flex flex-wrap gap-1">
                                 {service.cookies.slice(0, 5).map((cookie, i) => (
-                                  <span key={i} className="text-xs bg-zinc-600/50 text-zinc-300 px-2 py-1 rounded">
+                                  <span key={i} className="text-xs bg-zinc-600/50 dark:text-zinc-300 text-gray-700 px-2 py-1 rounded">
                                     {cookie}
                                   </span>
                                 ))}
                                 {service.cookies.length > 5 && (
-                                  <span className="text-xs bg-zinc-600/50 text-zinc-400 px-2 py-1 rounded">
+                                  <span className="text-xs bg-zinc-600/50 dark:text-zinc-400 text-gray-600 px-2 py-1 rounded">
                                     +{service.cookies.length - 5} more
                                   </span>
                                 )}
@@ -328,7 +328,7 @@ export default function DeepCookieScannerPage() {
                       a.click();
                       window.URL.revokeObjectURL(url);
                     }}
-                    className="flex-1 px-4 py-3 bg-zinc-700/50 border border-zinc-600/50 text-white rounded-lg
+                    className="flex-1 px-4 py-3 bg-zinc-700/50 border border-zinc-600/50 dark:text-white text-gray-900 rounded-lg
                              font-semibold hover:bg-zinc-600/50 transition flex items-center justify-center gap-2"
                   >
                     <Download className="w-4 h-4" />
@@ -339,7 +339,7 @@ export default function DeepCookieScannerPage() {
                       setCurrentScan(null);
                       setExportData(null);
                     }}
-                    className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 dark:text-white text-gray-900 rounded-lg
                              font-semibold hover:from-blue-700 hover:to-purple-700 transition"
                   >
                     Neuen Scan starten

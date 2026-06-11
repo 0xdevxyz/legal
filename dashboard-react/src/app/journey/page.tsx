@@ -80,7 +80,7 @@ export default function JourneyPage() {
         <div className="flex flex-col justify-center items-center h-screen text-center">
             <CheckCircle className="h-16 w-16 text-green-500 mb-4" />
             <h1 className="text-2xl font-bold mb-2">Kein aktiver Workflow gefunden.</h1>
-            <p className="text-gray-400 mb-6">Starten Sie eine neue Journey, um Ihre Compliance-Reise zu beginnen.</p>
+            <p className="dark:text-gray-400 text-gray-600 mb-6">Starten Sie eine neue Journey, um Ihre Compliance-Reise zu beginnen.</p>
             <Button onClick={handleStartJourney} disabled={startJourneyMutation.isPending}>
                 {startJourneyMutation.isPending ? 'Starte...' : 'Neue Journey starten'}
             </Button>
@@ -93,7 +93,7 @@ export default function JourneyPage() {
       <Card className="max-w-2xl mx-auto">
         <CardHeader>
           <CardTitle className="text-2xl font-bold">{currentStep.title}</CardTitle>
-          <p className="text-gray-400">{currentStep.description}</p>
+          <p className="dark:text-gray-400 text-gray-600">{currentStep.description}</p>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">

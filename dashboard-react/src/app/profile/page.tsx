@@ -6,6 +6,7 @@ import { Shield, User, CreditCard, Lock, Mail, Building, Save, AlertCircle, Chec
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api-client';
+import { PageContainer, PageHeader } from '@/components/dashboard/PageShell';
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -94,20 +95,15 @@ export default function ProfilePage() {
   };
 
   return (
-    <main role="main" aria-label="Profil und Einstellungen" className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-blue-900 to-purple-900 py-12">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="flex items-center gap-3 mb-2">
-            <Shield className="w-8 h-8 text-blue-400" />
-            <h1 className="text-3xl font-bold">Profil & Einstellungen</h1>
-          </div>
-          <p className="text-gray-300">Verwalten Sie Ihre persönlichen Daten und Rechnungsinformationen</p>
-        </div>
-      </header>
+    <PageContainer label="Profil und Einstellungen" width="960">
+      <PageHeader
+        icon={User}
+        title="Profil & Einstellungen"
+        subtitle="Verwalten Sie Ihre persönlichen Daten und Rechnungsinformationen"
+      />
 
       {/* Content */}
-      <section aria-label="Profil-Verwaltung" className="max-w-4xl mx-auto px-4 py-8">
+      <section aria-label="Profil-Verwaltung">
         {/* Success/Error Messages */}
         {successMessage && (
           <div className="mb-6 p-4 bg-green-900/30 border border-green-500 rounded-lg flex items-center gap-2 text-green-200">
@@ -123,13 +119,13 @@ export default function ProfilePage() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-gray-700">
+        <div className="flex gap-2 mb-6 border-b dark:border-zinc-800 border-gray-200">
           <button
             onClick={() => setActiveTab('profile')}
             className={`px-4 py-3 font-semibold transition-colors flex items-center gap-2 ${
               activeTab === 'profile'
-                ? 'text-blue-400 border-b-2 border-blue-400'
-                : 'text-gray-400 hover:text-gray-300'
+                ? 'text-[color:var(--lime)] border-b-2 border-[color:var(--lime)]'
+                : 'dark:text-zinc-400 text-gray-500 dark:hover:text-zinc-300 hover:text-gray-700'
             }`}
           >
             <User className="w-4 h-4" />
@@ -139,8 +135,8 @@ export default function ProfilePage() {
             onClick={() => setActiveTab('billing')}
             className={`px-4 py-3 font-semibold transition-colors flex items-center gap-2 ${
               activeTab === 'billing'
-                ? 'text-blue-400 border-b-2 border-blue-400'
-                : 'text-gray-400 hover:text-gray-300'
+                ? 'text-[color:var(--lime)] border-b-2 border-[color:var(--lime)]'
+                : 'dark:text-zinc-400 text-gray-500 dark:hover:text-zinc-300 hover:text-gray-700'
             }`}
           >
             <CreditCard className="w-4 h-4" />
@@ -150,8 +146,8 @@ export default function ProfilePage() {
             onClick={() => setActiveTab('password')}
             className={`px-4 py-3 font-semibold transition-colors flex items-center gap-2 ${
               activeTab === 'password'
-                ? 'text-blue-400 border-b-2 border-blue-400'
-                : 'text-gray-400 hover:text-gray-300'
+                ? 'text-[color:var(--lime)] border-b-2 border-[color:var(--lime)]'
+                : 'dark:text-zinc-400 text-gray-500 dark:hover:text-zinc-300 hover:text-gray-700'
             }`}
           >
             <Lock className="w-4 h-4" />
@@ -167,7 +163,7 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label htmlFor="profile-email" className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="profile-email" className="block text-sm font-medium mb-2 dark:text-zinc-300 text-gray-700">
                   <Mail className="w-4 h-4 inline mr-2" />
                   E-Mail
                 </label>
@@ -176,12 +172,12 @@ export default function ProfilePage() {
                   type="email"
                   value={profileData.email}
                   onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-lg dark:bg-zinc-800 dark:text-white dark:border-zinc-700 bg-white text-gray-900 border-gray-200 focus:border-[color:var(--lime)] focus:outline-none"
                 />
               </div>
 
               <div>
-                <label htmlFor="profile-full-name" className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="profile-full-name" className="block text-sm font-medium mb-2 dark:text-zinc-300 text-gray-700">
                   <User className="w-4 h-4 inline mr-2" />
                   Vollständiger Name
                 </label>
@@ -190,12 +186,12 @@ export default function ProfilePage() {
                   type="text"
                   value={profileData.full_name}
                   onChange={(e) => setProfileData({ ...profileData, full_name: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-lg dark:bg-zinc-800 dark:text-white dark:border-zinc-700 bg-white text-gray-900 border-gray-200 focus:border-[color:var(--lime)] focus:outline-none"
                 />
               </div>
 
               <div>
-                <label htmlFor="profile-company" className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="profile-company" className="block text-sm font-medium mb-2 dark:text-zinc-300 text-gray-700">
                   <Building className="w-4 h-4 inline mr-2" />
                   Firma (optional)
                 </label>
@@ -204,14 +200,14 @@ export default function ProfilePage() {
                   type="text"
                   value={profileData.company}
                   onChange={(e) => setProfileData({ ...profileData, company: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-lg dark:bg-zinc-800 dark:text-white dark:border-zinc-700 bg-white text-gray-900 border-gray-200 focus:border-[color:var(--lime)] focus:outline-none"
                 />
               </div>
 
               <Button
                 onClick={handleSaveProfile}
                 disabled={isSaving}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                className="w-full bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950"
               >
                 <Save className="w-4 h-4 mr-2" />
                 {isSaving ? 'Speichern...' : 'Profil speichern'}
@@ -226,12 +222,12 @@ export default function ProfilePage() {
               <CardTitle>Rechnungsdaten</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-gray-400 mb-4">
+              <p className="text-sm dark:text-zinc-400 text-gray-500 mb-4">
                 Diese Daten werden für Ihre Rechnungen verwendet
               </p>
 
               <div>
-                <label htmlFor="billing-company-name" className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="billing-company-name" className="block text-sm font-medium mb-2 dark:text-zinc-300 text-gray-700">
                   Firmenname *
                 </label>
                 <input
@@ -239,13 +235,13 @@ export default function ProfilePage() {
                   type="text"
                   value={billingData.company_name}
                   onChange={(e) => setBillingData({ ...billingData, company_name: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-lg dark:bg-zinc-800 dark:text-white dark:border-zinc-700 bg-white text-gray-900 border-gray-200 focus:border-[color:var(--lime)] focus:outline-none"
                   required
                 />
               </div>
 
               <div>
-                <label htmlFor="billing-vat-id" className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="billing-vat-id" className="block text-sm font-medium mb-2 dark:text-zinc-300 text-gray-700">
                   USt-IdNr. (optional)
                 </label>
                 <input
@@ -254,12 +250,12 @@ export default function ProfilePage() {
                   value={billingData.vat_id}
                   onChange={(e) => setBillingData({ ...billingData, vat_id: e.target.value })}
                   placeholder="DE123456789"
-                  className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-lg dark:bg-zinc-800 dark:text-white dark:border-zinc-700 bg-white text-gray-900 border-gray-200 focus:border-[color:var(--lime)] focus:outline-none"
                 />
               </div>
 
               <div>
-                <label htmlFor="billing-street" className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="billing-street" className="block text-sm font-medium mb-2 dark:text-zinc-300 text-gray-700">
                   Straße & Hausnummer *
                 </label>
                 <input
@@ -268,14 +264,14 @@ export default function ProfilePage() {
                   value={billingData.street}
                   onChange={(e) => setBillingData({ ...billingData, street: e.target.value })}
                   placeholder="Musterstraße 123"
-                  className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-lg dark:bg-zinc-800 dark:text-white dark:border-zinc-700 bg-white text-gray-900 border-gray-200 focus:border-[color:var(--lime)] focus:outline-none"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="billing-postal-code" className="block text-sm font-medium mb-2 text-gray-300">
+                  <label htmlFor="billing-postal-code" className="block text-sm font-medium mb-2 dark:text-zinc-300 text-gray-700">
                     PLZ *
                   </label>
                   <input
@@ -284,13 +280,13 @@ export default function ProfilePage() {
                     value={billingData.postal_code}
                     onChange={(e) => setBillingData({ ...billingData, postal_code: e.target.value })}
                     placeholder="12345"
-                    className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-lg dark:bg-zinc-800 dark:text-white dark:border-zinc-700 bg-white text-gray-900 border-gray-200 focus:border-[color:var(--lime)] focus:outline-none"
                     required
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="billing-city" className="block text-sm font-medium mb-2 text-gray-300">
+                  <label htmlFor="billing-city" className="block text-sm font-medium mb-2 dark:text-zinc-300 text-gray-700">
                     Stadt *
                   </label>
                   <input
@@ -299,21 +295,21 @@ export default function ProfilePage() {
                     value={billingData.city}
                     onChange={(e) => setBillingData({ ...billingData, city: e.target.value })}
                     placeholder="Berlin"
-                    className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-lg dark:bg-zinc-800 dark:text-white dark:border-zinc-700 bg-white text-gray-900 border-gray-200 focus:border-[color:var(--lime)] focus:outline-none"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="billing-country" className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="billing-country" className="block text-sm font-medium mb-2 dark:text-zinc-300 text-gray-700">
                   Land *
                 </label>
                 <select
                   id="billing-country"
                   value={billingData.country}
                   onChange={(e) => setBillingData({ ...billingData, country: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-lg dark:bg-zinc-800 dark:text-white dark:border-zinc-700 bg-white text-gray-900 border-gray-200 focus:border-[color:var(--lime)] focus:outline-none"
                 >
                   <option value="Deutschland">Deutschland</option>
                   <option value="Österreich">Österreich</option>
@@ -324,7 +320,7 @@ export default function ProfilePage() {
               <Button
                 onClick={handleSaveBilling}
                 disabled={isSaving}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                className="w-full bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950"
               >
                 <Save className="w-4 h-4 mr-2" />
                 {isSaving ? 'Speichern...' : 'Rechnungsdaten speichern'}
@@ -340,7 +336,7 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label htmlFor="password-current" className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="password-current" className="block text-sm font-medium mb-2 dark:text-zinc-300 text-gray-700">
                   Aktuelles Passwort
                 </label>
                 <input
@@ -348,12 +344,12 @@ export default function ProfilePage() {
                   type="password"
                   value={passwordData.current_password}
                   onChange={(e) => setPasswordData({ ...passwordData, current_password: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-lg dark:bg-zinc-800 dark:text-white dark:border-zinc-700 bg-white text-gray-900 border-gray-200 focus:border-[color:var(--lime)] focus:outline-none"
                 />
               </div>
 
               <div>
-                <label htmlFor="password-new" className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="password-new" className="block text-sm font-medium mb-2 dark:text-zinc-300 text-gray-700">
                   Neues Passwort
                 </label>
                 <input
@@ -362,12 +358,12 @@ export default function ProfilePage() {
                   value={passwordData.new_password}
                   onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
                   placeholder="Mindestens 8 Zeichen"
-                  className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-lg dark:bg-zinc-800 dark:text-white dark:border-zinc-700 bg-white text-gray-900 border-gray-200 focus:border-[color:var(--lime)] focus:outline-none"
                 />
               </div>
 
               <div>
-                <label htmlFor="password-confirm" className="block text-sm font-medium mb-2 text-gray-300">
+                <label htmlFor="password-confirm" className="block text-sm font-medium mb-2 dark:text-zinc-300 text-gray-700">
                   Passwort bestätigen
                 </label>
                 <input
@@ -376,14 +372,14 @@ export default function ProfilePage() {
                   value={passwordData.confirm_password}
                   onChange={(e) => setPasswordData({ ...passwordData, confirm_password: e.target.value })}
                   placeholder="Neues Passwort wiederholen"
-                  className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-lg dark:bg-zinc-800 dark:text-white dark:border-zinc-700 bg-white text-gray-900 border-gray-200 focus:border-[color:var(--lime)] focus:outline-none"
                 />
               </div>
 
               <Button
                 onClick={handleChangePassword}
                 disabled={isSaving}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                className="w-full bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950"
               >
                 <Lock className="w-4 h-4 mr-2" />
                 {isSaving ? 'Ändern...' : 'Passwort ändern'}
@@ -392,7 +388,7 @@ export default function ProfilePage() {
           </Card>
         )}
       </section>
-    </main>
+    </PageContainer>
   );
 }
 
