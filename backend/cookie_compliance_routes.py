@@ -455,8 +455,21 @@ async def get_my_config(
         row = await db_pool.fetchrow(query, user_id)
         
         if not row:
-            # ✅ Wenn registered_site_id existiert, erstelle automatisch eine Config
+            # ✅ Verwaiste Config (user_id IS NULL) beanspruchen, falls eine zur
+            #    registrierten Website passende Zeile existiert (z.B. durch einen
+            #    früheren Scan ohne user_id). Verhindert die Ersteinrichtungs-Schleife.
             if registered_site_id:
+                claimed = await db_pool.execute("""
+                    UPDATE cookie_banner_configs
+                    SET user_id = $1, updated_at = NOW()
+                    WHERE site_id = $2 AND user_id IS NULL
+                """, user_id, registered_site_id)
+                if claimed and claimed != "UPDATE 0":
+                    logger.info(f"Claimed orphaned config {registered_site_id} for user {user_id}")
+                    row = await db_pool.fetchrow(query, user_id)
+
+            # ✅ Wenn registered_site_id existiert, erstelle automatisch eine Config
+            if not row and registered_site_id:
                 logger.info(f"Creating default config for site_id: {registered_site_id}")
                 
                 # Hole die Website-URL
@@ -1153,6 +1166,7 @@ async def delete_expired_consents(
 async def scan_website(
     request: Request,
     data: Dict[str, str],
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
@@ -1182,13 +1196,30 @@ async def scan_website(
                 site_id = hostname.replace('.', '-').lower()
             except:
                 site_id = 'unknown-site'
-        
-        print(f"[Scan] Scanning {url} for site_id: {site_id}")
-        
+
+        # ✅ Authentifizierten User ermitteln (optional): Die gespeicherte Config
+        #    MUSS dem User zugeordnet werden (user_id), sonst findet /my-config sie
+        #    nicht (filtert auf user_id) und die Ersteinrichtung läuft in eine Schleife.
+        user_id = None
+        try:
+            user = await get_current_user_optional(credentials)
+            if user:
+                user_id = await get_user_id_from_token(user)
+                # An die registrierte Website binden (1 Account = 1 Website),
+                # damit nicht unter einer abweichenden site_id eine Waisen-Config entsteht.
+                registered_site_id = await get_user_website_site_id(user_id)
+                if registered_site_id:
+                    site_id = registered_site_id
+        except Exception as e:
+            logger.warning(f"[Scan] Could not resolve user_id (anonymous scan): {e}")
+
+        logger.warning(f"[Scan] START url={url} site_id={site_id} user_id={user_id}")
+
         # Scan website
         scan_result = await cookie_scanner.scan_website(url)
-        
+
         if scan_result.get('error'):
+            logger.warning(f"[Scan] scanner returned error for {url}: {scan_result.get('error')}")
             return {
                 "success": False,
                 "error": scan_result['error'],
@@ -1230,27 +1261,33 @@ async def scan_website(
             )
             
             if existing:
-                # Update existierende Config mit gefundenen Services
-                await db_pool.execute("""
+                # Update existierende Config mit gefundenen Services.
+                # user_id heilen, falls die Zeile zuvor verwaist angelegt wurde.
+                res = await db_pool.execute("""
                     UPDATE cookie_banner_configs SET
                         services = $2::jsonb,
                         scan_completed_at = NOW(),
                         last_scan_url = $3,
+                        user_id = COALESCE(user_id, $4),
                         updated_at = NOW()
                     WHERE site_id = $1
-                """, site_id, json.dumps(service_keys_found), url)
+                """, site_id, json.dumps(service_keys_found), url, user_id)
                 config_updated = True
-                print(f"[Scan] ✅ Config updated for {site_id} with {len(service_keys_found)} services")
+                logger.warning(f"[Scan] ✅ UPDATE site_id={site_id} result={res} services={len(service_keys_found)}")
             else:
-                # Erstelle neue Config mit gefundenen Services
-                await db_pool.execute("""
+                # Erstelle neue Config mit gefundenen Services (inkl. user_id,
+                # damit /my-config sie zuverlässig findet).
+                res = await db_pool.execute("""
                     INSERT INTO cookie_banner_configs (
-                        site_id, services, scan_completed_at, last_scan_url, is_active
-                    ) VALUES ($1, $2::jsonb, NOW(), $3, true)
-                """, site_id, json.dumps(service_keys_found), url)
+                        site_id, user_id, services, scan_completed_at, last_scan_url, is_active
+                    ) VALUES ($1, $2, $3::jsonb, NOW(), $4, true)
+                """, site_id, user_id, json.dumps(service_keys_found), url)
                 config_updated = True
-                print(f"[Scan] ✅ New config created for {site_id} with {len(service_keys_found)} services")
-        
+                logger.warning(f"[Scan] ✅ INSERT site_id={site_id} result={res} services={len(service_keys_found)}")
+        else:
+            logger.warning(f"[Scan] ⚠️ persistence SKIPPED — empty site_id (url={url}, user_id={user_id})")
+
+        logger.warning(f"[Scan] DONE site_id={site_id} config_updated={config_updated} total_found={len(matched_services)}")
         return {
             "success": True,
             "url": url,

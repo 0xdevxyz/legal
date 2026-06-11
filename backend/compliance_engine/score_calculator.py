@@ -38,16 +38,54 @@ class ScoreCalculator:
     - Gesamtscore: gewichteter Mittelwert über Säulen
     """
 
-    FORMULA_VERSION = "v2.0"
+    FORMULA_VERSION = "v3.0"
 
-    # Pillar-Gewichte (Summe = 1.0)
-    PILLAR_WEIGHTS: Dict[str, float] = {
-        "accessibility": 0.15,   # BFSG ab 06/2025 verpflichtend
-        "gdpr":          0.25,   # Kernanforderung, höchste Bußgelder
-        "legal":         0.20,   # Impressum/AGB = TMG-Pflicht
-        "cookies":       0.20,   # TTDSG + EuGH C-673/17
-        "security":      0.15,   # DSGVO Art. 32 technische Schutzmaßnahmen
-        "shop":          0.05,   # Nur E-Commerce-relevant
+    # ========================================================================
+    # 4 SÄULEN — einzige kanonische Definition (Frontend + Backend identisch)
+    #
+    # Bewusste Design-Entscheidungen:
+    #   - Sicherheit (CSP/HSTS/Header) ist KEINE eigene Säule, sondern
+    #     technische Schutzmaßnahme nach DSGVO Art. 32 → fällt in "gdpr".
+    #   - Shop-Themen (Widerruf, Preisangaben, AGB-Shop) sind rechtliche
+    #     Pflichttexte → fallen in "legal". Shop-Checks werden ohnehin nur
+    #     bei erkanntem Shop erzeugt (detect_shop), sonst irrelevant.
+    #   - Alle 4 Säulen werden GLEICH gewichtet (siehe calculate_overall_score),
+    #     damit der Gesamtscore für den Nutzer nachvollziehbar bleibt.
+    # ========================================================================
+    PILLAR_IDS = ["accessibility", "gdpr", "legal", "cookies"]
+
+    # Kategorie → Säule. Reihenfolge = Priorität (erste Übereinstimmung gewinnt).
+    # Default für unbekannte Kategorien: "legal" (rechtliche Auffangsäule).
+    PILLAR_CATEGORY_KEYWORDS = [
+        ("accessibility", [
+            "barriere", "accessibility", "wcag", "aria", "alt_text", "alt-text",
+            "kontrast", "contrast", "tastat",
+        ]),
+        ("cookies", [
+            "cookie", "consent", "tcf", "tracking", "ttdsg",
+        ]),
+        ("gdpr", [
+            "datenschutz", "dsgvo", "gdpr", "privacy", "personenbezogen",
+            "datenverarbeitung", "avv",
+            # Sicherheit = DSGVO Art. 32 (technische Schutzmaßnahmen)
+            "security", "sicherheit", "csp", "content-security", "hsts",
+            "x-frame", "header", "ssl", "tls", "https",
+        ]),
+        ("legal", [
+            "impressum", "agb", "legal", "rechtlich", "tmg", "uwg",
+            "widerruf", "preisangaben", "preisangabe", "pangv", "preis",
+            # Shop-Pflichttexte zählen rechtlich
+            "shop", "contact", "kontakt", "social_media", "social",
+            "urheberrecht", "markenrecht",
+        ]),
+    ]
+
+    # Anzeigenamen der Säulen (für Reports/Logs)
+    PILLAR_LABELS = {
+        "accessibility": "Barrierefreiheit",
+        "gdpr":          "Datenschutz",
+        "legal":         "Rechtssichere Texte",
+        "cookies":       "Cookie-Compliance",
     }
 
     # Severity-Abzüge pro Pillar-Issue (v2.0)
@@ -138,25 +176,49 @@ class ScoreCalculator:
         return max(0, score)
 
     @staticmethod
-    def calculate_overall_score(pillar_scores: Dict[str, int]) -> int:
+    def categorize(category: str) -> str:
         """
-        Berechne gewichteten Gesamt-Score aus Säulen-Scores (v2.0).
+        Ordne eine Issue-Kategorie genau einer der 4 Säulen zu.
+
+        Garantie: JEDE Kategorie landet in genau einer Säule (kein Issue
+        fällt durchs Raster). Unbekannte Kategorien → "legal".
 
         Args:
-            pillar_scores: {"gdpr": 100, "legal": 85, "cookies": 70, ...}
+            category: Roh-Kategorie eines Issues (z.B. "security", "shop")
 
         Returns:
-            int: Gewichteter Gesamtscore 0-100
+            str: Säulen-ID aus PILLAR_IDS
         """
-        total = 0.0
-        total_weight = 0.0
-        for pillar, weight in ScoreCalculator.PILLAR_WEIGHTS.items():
-            score = pillar_scores.get(pillar, 100)  # Fehlende Säule = 100 (keine Issues)
-            total += score * weight
-            total_weight += weight
-        if total_weight == 0:
-            return 0
-        return round(total / total_weight)
+        cat = (category or "").lower()
+        for pillar_id, keywords in ScoreCalculator.PILLAR_CATEGORY_KEYWORDS:
+            if any(keyword in cat for keyword in keywords):
+                return pillar_id
+        return "legal"  # rechtliche Auffangsäule
+
+    @staticmethod
+    def calculate_overall_score(pillar_scores: Dict[str, int]) -> int:
+        """
+        Berechne Gesamt-Score als GLEICH gewichteten Mittelwert der 4 Säulen (v3.0).
+
+        Bewusst gleich gewichtet: ein Säulen-Wert von 100,100,100,70 ergibt so
+        (100+100+100+70)/4 = 93 — für den Nutzer nachvollziehbar. Eine schwache
+        Säule senkt den Gesamtscore proportional, statt ihn (wie früher über eine
+        globale Issue-Zählung) unerklärlich zu drücken.
+
+        Args:
+            pillar_scores: {"accessibility": 100, "gdpr": 100, "legal": 100, "cookies": 70}
+                           Fehlende Säulen werden als 100 (keine Issues) gewertet.
+
+        Returns:
+            int: Gesamtscore 0-100
+        """
+        scores = [
+            pillar_scores.get(pillar, 100)
+            for pillar in ScoreCalculator.PILLAR_IDS
+        ]
+        if not scores:
+            return 100
+        return round(sum(scores) / len(scores))
 
     @staticmethod
     def _has_tcf_compliant_status(issues: List[ComplianceIssue]) -> bool:
@@ -176,48 +238,62 @@ class ScoreCalculator:
         return False
     
     @staticmethod
-    def calculate_pillar_scores(issues: List[ComplianceIssue]) -> Dict[str, float]:
+    def calculate_pillar_scores(issues: List[ComplianceIssue]) -> Dict[str, int]:
         """
-        Berechne Scores pro Compliance-Säule
-        
-        Säulen:
-        - Datenschutz (DSGVO, TTDSG)
-        - Cookies (TTDSG Cookies, TCF)
-        - Impressum/AGB
-        - Barrierefreiheit (BFSG)
-        
+        Berechne Scores pro Compliance-Säule (v3.0) — 4 Säulen, vollständige
+        Kategorie-Abdeckung über ScoreCalculator.categorize().
+
+        Säulen (IDs identisch zu Frontend):
+        - accessibility  (Barrierefreiheit / BFSG)
+        - gdpr           (Datenschutz / DSGVO inkl. Sicherheit Art. 32)
+        - legal          (Impressum, AGB, Shop-Pflichttexte, UWG …)
+        - cookies        (Cookie-Banner / TTDSG / TCF)
+
+        Jede Säule: max(0, 100 - (critical×25 + warning×8)),
+        fehlendes Kern-Element (is_missing) → 0.
+
         Returns:
-            Dict mit pillar_name → score (0-100)
+            Dict mit pillar_id → score (0-100, int). Säulen ohne Issues = 100.
         """
-        pillars = {
-            "datenschutz": [],      # datenschutz, dsgvo, ttdsg, legality
-            "cookies": [],          # cookie, tcf, tracking
-            "impressum": [],        # impressum, agb, datenschutz-erklaerung
-            "barrierefreiheit": []  # accessibility, aria, alt_text
-        }
-        
-        # Issues in Säulen sortieren
+        buckets: Dict[str, list] = {pillar: [] for pillar in ScoreCalculator.PILLAR_IDS}
+
         for issue in issues:
-            category = issue.category.lower()
-            
-            if any(c in category for c in ["datenschutz", "dsgvo", "ttdsg", "legality"]):
-                pillars["datenschutz"].append(issue)
-            elif any(c in category for c in ["cookie", "tcf", "tracking"]):
-                pillars["cookies"].append(issue)
-            elif any(c in category for c in ["impressum", "agb", "datenschutz-erklaerung"]):
-                pillars["impressum"].append(issue)
-            elif any(c in category for c in ["accessibility", "aria", "alt_text", "contrast"]):
-                pillars["barrierefreiheit"].append(issue)
-        
-        # Score pro Säule
-        pillar_scores = {}
-        for pillar_name, pillar_issues in pillars.items():
-            if not pillar_issues:
-                pillar_scores[pillar_name] = 100.0  # Keine Issues → 100%
-            else:
-                pillar_scores[pillar_name] = ScoreCalculator.calculate_compliance_score(pillar_issues)
-        
+            pillar = ScoreCalculator.categorize(issue.category)
+            buckets[pillar].append(issue)
+
+        pillar_scores: Dict[str, int] = {}
+        for pillar_id, pillar_issues in buckets.items():
+            critical_count = sum(1 for i in pillar_issues if i.severity == "critical")
+            warning_count = sum(1 for i in pillar_issues if i.severity == "warning")
+            has_missing_core = any(getattr(i, "is_missing", False) for i in pillar_issues)
+            pillar_scores[pillar_id] = ScoreCalculator.calculate_pillar_score(
+                critical_count=critical_count,
+                warning_count=warning_count,
+                has_missing_core=has_missing_core,
+            )
+
         return pillar_scores
+
+    @staticmethod
+    def compute(issues: List[ComplianceIssue]) -> Dict[str, Any]:
+        """
+        Einziger Einstiegspunkt für vollständige Score-Berechnung (v3.0).
+
+        Liefert Säulen-Scores UND den daraus gleichgewichtet gemittelten
+        Gesamtscore in EINEM konsistenten Aufruf — so können Gesamt und
+        Säulen nie auseinanderlaufen.
+
+        Returns:
+            {
+                "overall_score": int,                  # = Mittelwert der Säulen
+                "pillar_scores": {pillar_id: int, ...} # 4 Säulen
+            }
+        """
+        pillar_scores = ScoreCalculator.calculate_pillar_scores(issues)
+        return {
+            "overall_score": ScoreCalculator.calculate_overall_score(pillar_scores),
+            "pillar_scores": pillar_scores,
+        }
     
     @staticmethod
     def get_score_breakdown(issues: List[ComplianceIssue]) -> Dict[str, Any]:
@@ -241,28 +317,23 @@ class ScoreCalculator:
         critical = [i for i in issues if i.severity == "critical"]
         warning = [i for i in issues if i.severity == "warning"]
         info = [i for i in issues if i.severity == "info"]
-        
-        base_score = 100 - (len(critical) * 20 + len(warning) * 5)
-        
-        bonuses = []
-        if ScoreCalculator._has_tcf_compliant_status(issues):
-            bonuses.append("tcf_complete")
-            base_score += 5
-        
-        final_score = ScoreCalculator.calculate_compliance_score(issues)
-        
+
+        pillar_scores = ScoreCalculator.calculate_pillar_scores(issues)
+        overall = ScoreCalculator.calculate_overall_score(pillar_scores)
+
         return {
-            "overall_score": final_score,
+            "overall_score": overall,
             "base_issues": {
                 "critical_count": len(critical),
                 "warning_count": len(warning),
                 "info_count": len(info),
                 "total_issues": len(issues)
             },
-            "base_score": max(0, min(100, base_score)),
-            "bonuses_applied": bonuses,
-            "pillar_scores": ScoreCalculator.calculate_pillar_scores(issues),
-            "formula_used": "100 - (critical*20 + warning*5) + bonuses [capped 0-100]"
+            "pillar_scores": pillar_scores,
+            "formula_used": (
+                "Gesamtscore = Mittelwert(4 Säulen); "
+                "Säule = max(0, 100 - (critical*25 + warning*8))"
+            )
         }
 
 

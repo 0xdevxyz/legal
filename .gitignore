@@ -142,3 +142,4 @@ docker-compose*.yml
    *.key
    *.pem
 .env
+graphify-out/

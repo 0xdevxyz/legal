@@ -337,11 +337,11 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             pillar_scores = _calculate_pillar_scores(structured_issues)
             logger.info(f"✅ Säulen-Scores berechnet: {[(p.pillar, p.score) for p in pillar_scores]}")
             
-            # Gesamtscore = gewichteter Mittelwert über alle Säulen (ScoreCalculator SSOT v2.0)
+            # Gesamtscore = gleichgewichteter Mittelwert der 4 Säulen (ScoreCalculator SSOT v3.0)
             from compliance_engine.score_calculator import ScoreCalculator as _SC
             _pillar_score_map = {p.pillar: p.score for p in pillar_scores}
             overall_compliance_score = _SC.calculate_overall_score(_pillar_score_map)
-            logger.info(f"✅ Gesamt-Compliance-Score (gewichtet v2.0): {overall_compliance_score}/100 | Säulen: {_pillar_score_map}")
+            logger.info(f"✅ Gesamt-Compliance-Score (gleichgewichtet v3.0): {overall_compliance_score}/100 | Säulen: {_pillar_score_map}")
             
             # ✅ PERSISTENCE: Save website and scan to database
             from main_production import db_pool
@@ -524,29 +524,21 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
 
 def _calculate_pillar_scores(issues: List[ComplianceIssue]) -> List[PillarScore]:
     """
-    Berechnet Säulen-Scores — delegiert an ScoreCalculator (SSOT v2.0).
-    Formel: max(0, 100 - (critical × 25 + warning × 8)), fehlendes Kern-Element → 0.
-    Gesamtscore wird über PILLAR_WEIGHTS gewichtet (siehe ScoreCalculator).
+    Berechnet die 4 Säulen-Scores — delegiert an ScoreCalculator (SSOT v3.0).
+    Säule: max(0, 100 - (critical × 25 + warning × 8)), fehlendes Kern-Element → 0.
+    Sicherheit → gdpr (Art. 32), Shop → legal. Gesamtscore = gleichgewichteter
+    Mittelwert der 4 Säulen (siehe ScoreCalculator.calculate_overall_score).
     """
     from compliance_engine.score_calculator import ScoreCalculator
 
-    pillar_mapping = {
-        'accessibility': ['barrierefreiheit', 'kontraste', 'tastaturbedienung'],
-        'gdpr':          ['datenschutz', 'tracking', 'datenverarbeitung', 'avv'],
-        'legal':         ['impressum', 'agb', 'contact', 'uwg'],
-        'cookies':       ['cookies'],
-        'security':      ['security'],
-        'shop':          ['shop', 'widerrufsbelehrung', 'preisangaben'],
-    }
+    # 4 Säulen (SSOT v3.0): Sicherheit → gdpr, Shop → legal.
+    # Vollständige Kategorie-Abdeckung über ScoreCalculator.categorize().
+    buckets = {pillar: [] for pillar in ScoreCalculator.PILLAR_IDS}
+    for issue in issues:
+        buckets[ScoreCalculator.categorize(issue.category)].append(issue)
 
     pillar_scores = []
-
-    for pillar, categories in pillar_mapping.items():
-        pillar_issues = [
-            issue for issue in issues
-            if issue.category.lower() in categories
-        ]
-
+    for pillar, pillar_issues in buckets.items():
         has_missing_core = any(getattr(issue, 'is_missing', False) for issue in pillar_issues)
         critical_count = sum(1 for i in pillar_issues if i.severity == 'critical')
         warning_count  = sum(1 for i in pillar_issues if i.severity == 'warning')

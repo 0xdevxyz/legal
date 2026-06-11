@@ -905,7 +905,12 @@ class ScanRequest(BaseModel):
     follow_links: int = 0
 
 
-@router.post("/api/cookie-compliance/scan")
+# NOTE: Pfad umbenannt von "/api/cookie-compliance/scan", um die Routen-Kollision
+# mit cookie_compliance_routes.scan_website aufzulösen. Dieser Background-Handler
+# beschattete den Wizard-Endpoint (schreibt in die nicht existente Tabelle
+# cookie_scan_results und persistiert NICHTS in cookie_banner_configs) und führte
+# zur Endlosschleife der Cookie-Ersteinrichtung.
+@router.post("/api/cookie-compliance/scan-background")
 async def trigger_cookie_scan(
     body: ScanRequest,
     background_tasks: BackgroundTasks,

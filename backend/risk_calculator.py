@@ -316,7 +316,7 @@ class RiskCalculator:
         # - Kritische Issues: 100% des Risikos (höchste Priorität)
         # - Warning Issues: 50% des Risikos (werden oft zusammen abgemahnt)
         # - Info Issues: 20% des Risikos (selten einzeln abgemahnt)
-        # - Maximum: Realistisches Maximum für eine Abmahnung (50.000€)
+        # - Maximum: Realistisches Gesamtrisiko für eine KMU-Website (~25.000€)
         
         critical_total_min = sum(r['risk_min'] for r in critical_risks)
         critical_total_max = sum(r['risk_max'] for r in critical_risks)
@@ -331,12 +331,13 @@ class RiskCalculator:
         total_max = int(critical_total_max + warning_total_max + info_total_max)
         
         # ✅ Begrenze auf realistische Maximalwerte
-        # Eine einzelne Abmahnung liegt typischerweise zwischen 2.000€ und 50.000€
-        # Bei mehreren Issues kann es mehrere Abmahnungen geben, aber nicht unrealistisch hoch
-        if total_max > 200000:  # Mehr als 200k€ ist unrealistisch
-            total_max = 200000
-            if total_min > 100000:
-                total_min = 100000
+        # Eine einzelne Abmahnung kostet in der Praxis meist 1.000€ - 8.000€ (Streitwert + Anwaltskosten).
+        # Bei mehreren Verstößen summieren sich Abmahnungen/Bußgelder, bleiben für eine
+        # KMU-Website aber im realistischen Rahmen — kein utopisches Konzern-Bußgeld.
+        if total_max > 25000:  # Mehr als 25k€ ist für eine KMU-Website unrealistisch
+            total_max = 25000
+            if total_min > 10000:
+                total_min = 10000
         
         return {
             'total_risk_min': total_min,

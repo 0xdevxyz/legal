@@ -150,7 +150,8 @@ class SolutionGenerator:
             why_legal=(
                 "Eine Datenschutzerklärung ist nach Art. 13 DSGVO verpflichtend, sobald "
                 "personenbezogene Daten erhoben werden (z.B. durch Kontaktformulare, Cookies, "
-                "Analytics). Verstöße können Bußgelder bis 20 Mio. € oder 4% des Jahresumsatzes nach sich ziehen."
+                "Analytics). Der gesetzliche Bußgeldrahmen reicht bis 20 Mio. € oder 4% des Jahresumsatzes; "
+                "bei KMU-Websites liegen Abmahnungen und Bußgelder in der Praxis meist bei 1.000€ - 8.000€."
             ),
             what=(
                 "Ihre Website hat keine oder keine vollständige Datenschutzerklärung. "

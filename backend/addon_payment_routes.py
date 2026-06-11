@@ -85,7 +85,7 @@ MONTHLY_ADDONS = {
         },
         "stripe_price_id": os.getenv("STRIPE_PRICE_COMPLOAI_GUARD", "price_1234"),  # Set in Stripe Dashboard
         "badge": "NEW",
-        "discount_text": "Spare bis zu 35 Mio. € Strafe",
+        "discount_text": "Spare bis zu 50.000€ Bußgeld",
         "compatible_plans": ["starter", "professional", "business", "enterprise"]
     },
     "priority_support": {

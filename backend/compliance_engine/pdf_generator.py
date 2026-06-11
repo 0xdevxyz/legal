@@ -306,6 +306,7 @@ class ComplianceReportGenerator:
         pillar_names = {
             'dsgvo': 'DSGVO & Datenschutz',
             'datenschutz': 'DSGVO & Datenschutz',
+            'gdpr': 'DSGVO & Datenschutz',
             'cookies': 'Cookie-Compliance',
             'ttdsg': 'Cookie-Compliance',
             'barrierefreiheit': 'Barrierefreiheit (BFSG)',
@@ -359,32 +360,32 @@ class ComplianceReportGenerator:
         return content
     
     def _calculate_pillar_scores(self, issues: List[Dict]) -> Dict:
-        pillars = {
-            'dsgvo': {'score': 100, 'issues': 0},
-            'cookies': {'score': 100, 'issues': 0},
-            'barrierefreiheit': {'score': 100, 'issues': 0},
-            'impressum': {'score': 100, 'issues': 0}
-        }
-        
+        """4 Säulen (SSOT v3.0) — delegiert an ScoreCalculator.categorize()."""
+        from compliance_engine.score_calculator import ScoreCalculator
+
+        buckets = {pillar: [] for pillar in ScoreCalculator.PILLAR_IDS}
         for issue in issues:
-            category = issue.get('category', '').lower()
-            severity = issue.get('severity', 'warning').lower()
-            
-            penalty = 15 if severity in ['critical', 'error'] else 8
-            
-            if 'dsgvo' in category or 'datenschutz' in category or 'privacy' in category:
-                pillars['dsgvo']['score'] = max(0, pillars['dsgvo']['score'] - penalty)
-                pillars['dsgvo']['issues'] += 1
-            elif 'cookie' in category or 'ttdsg' in category:
-                pillars['cookies']['score'] = max(0, pillars['cookies']['score'] - penalty)
-                pillars['cookies']['issues'] += 1
-            elif 'barriere' in category or 'accessibility' in category or 'wcag' in category:
-                pillars['barrierefreiheit']['score'] = max(0, pillars['barrierefreiheit']['score'] - penalty)
-                pillars['barrierefreiheit']['issues'] += 1
-            elif 'impressum' in category or 'legal' in category:
-                pillars['impressum']['score'] = max(0, pillars['impressum']['score'] - penalty)
-                pillars['impressum']['issues'] += 1
-        
+            pillar = ScoreCalculator.categorize(issue.get('category', ''))
+            buckets[pillar].append(issue)
+
+        pillars = {}
+        for pillar_id, pillar_issues in buckets.items():
+            critical_count = sum(
+                1 for i in pillar_issues
+                if i.get('severity', 'warning').lower() in ['critical', 'error']
+            )
+            warning_count = len(pillar_issues) - critical_count
+            score = ScoreCalculator.calculate_pillar_score(
+                critical_count=critical_count,
+                warning_count=warning_count,
+                has_missing_core=any(i.get('is_missing', False) for i in pillar_issues),
+            )
+            pillars[pillar_id] = {
+                'score': score,
+                'issues': len(pillar_issues),
+                'label': ScoreCalculator.PILLAR_LABELS.get(pillar_id, pillar_id),
+            }
+
         return pillars
     
     def _create_detailed_findings(self, analysis_data: Dict[str, Any]) -> List:

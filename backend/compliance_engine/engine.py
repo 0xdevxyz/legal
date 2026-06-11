@@ -496,10 +496,10 @@ class AIComplianceEngine:
 
     def _calculate_overall_score(self, issues: List[ComplianceIssue]) -> float:
         """
-        ✅ FIX: Nutze zentrale ScoreCalculator Funktion
-        Verhindert mehrfache inkompatible Formeln
+        ✅ FIX v3.0: Gesamtscore = Mittelwert der 4 Säulen (eine Quelle!)
+        Verhindert, dass Gesamt- und Säulen-Scores auseinanderlaufen.
         """
-        return float(ScoreCalculator.calculate_compliance_score(issues))
+        return float(ScoreCalculator.compute(issues)["overall_score"])
 
     def _get_priority_actions(self, issues: List[ComplianceIssue]) -> List[str]:
         """Bestimmt prioritäre Aktionen"""
