@@ -33,6 +33,9 @@ from compliance_engine.checks import (
 )
 from compliance_engine.browser_renderer import smart_fetch_html, detect_client_rendering
 
+# Import declarative (data-driven) checks — automatisch befüllbar durch den Legal-Change-Monitor
+from compliance_engine.declarative_check_runner import run_declarative_checks
+
 # Import Legal Update Integration
 from compliance_engine.legal_update_integration import legal_update_integration
 
@@ -131,6 +134,7 @@ class ComplianceScanner:
             cookie_task = check_cookie_compliance(url, soup, self.session)
             agb_task = check_agb_compliance(url, soup, self.session)
             shop_task = check_shop_compliance(url, soup, self.session)
+            declarative_task = run_declarative_checks(url, soup, self.session)
             uwg_task = check_uwg_compliance(url, soup, self.session)
             ssl_task = self._check_ssl_security(url, main_page_headers)
             contact_task = self._check_contact_data(url, soup)
@@ -138,17 +142,17 @@ class ComplianceScanner:
 
             results = await asyncio.gather(
                 barriere_task, impressum_task, datenschutz_task, cookie_task,
-                agb_task, shop_task, uwg_task,
+                agb_task, shop_task, declarative_task, uwg_task,
                 ssl_task, contact_task, social_task,
                 return_exceptions=True
             )
 
             barriere_issues, impressum_issues, datenschutz_issues, cookie_issues, \
-                agb_issues, shop_issues, uwg_issues, \
+                agb_issues, shop_issues, declarative_issues, uwg_issues, \
                 ssl_issues, contact_issues, social_issues = results
 
             for check_issues in [barriere_issues, impressum_issues, datenschutz_issues,
-                                  cookie_issues, agb_issues, shop_issues, uwg_issues,
+                                  cookie_issues, agb_issues, shop_issues, declarative_issues, uwg_issues,
                                   ssl_issues, contact_issues, social_issues]:
                 if isinstance(check_issues, Exception):
                     logger.warning(f"Check failed (non-critical): {check_issues}")
@@ -181,8 +185,11 @@ class ComplianceScanner:
             # Anreicherung mit KI-Compliance-Beschreibungen (interner Generator)
             issues = await self._enrich_with_internal_descriptions(issues)
             
-            # ✅ FIX: Nutze zentrale Score-Calculator Funktion (keine mehrfachen Formeln!)
-            compliance_score = ScoreCalculator.calculate_compliance_score(issues)
+            # ✅ FIX v3.0: Gesamtscore = Mittelwert der 4 Säulen (eine Quelle!)
+            # So können Gesamtscore und Säulen-Scores nie auseinanderlaufen.
+            _scores = ScoreCalculator.compute(issues)
+            compliance_score = _scores["overall_score"]
+            _pillar_scores = _scores["pillar_scores"]
             
             # Calculate overall risk
             total_risk_euro = sum(issue.risk_euro for issue in issues)
@@ -205,7 +212,7 @@ class ComplianceScanner:
                 "issues": [asdict(issue) for issue in issues],
                 "pillar_scores": [
                     {"pillar": pillar, "score": round(score)}
-                    for pillar, score in ScoreCalculator.calculate_pillar_scores(issues).items()
+                    for pillar, score in _pillar_scores.items()
                 ],
                 "recommendations": self._generate_recommendations(issues),
                 "next_steps": self._generate_next_steps(issues),

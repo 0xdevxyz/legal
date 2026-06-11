@@ -576,35 +576,22 @@ async def _apply_fix_automatically(fix_id: int, user_id: int, fix_row: Any):
 
 
 async def _run_legal_monitoring():
-    """Background Task: Führt Legal Change Monitoring durch"""
+    """
+    Background Task: Vollständiger Legal-Change-Durchlauf.
+
+    Nutzt monitor_and_persist() — also die KOMPLETTE Pipeline:
+    Erkennung → legal_updates → Regel-Versionierung → Rechtstext-Regeneration →
+    automatische Erzeugung deklarativer Website-Prüfungen (compliance_checks).
+    """
     start_time = datetime.now()
-    
+
     try:
-        changes = await legal_monitor.monitor_legal_changes()
-        
-        # Speichere neue Änderungen
+        summary = await legal_monitor.monitor_and_persist()
+        detected = summary.get("detected", 0)
+        checks_created = sum(1 for c in summary.get("generated_checks", []) if c.get("created"))
+
+        # Log
         async with db_service.pool.acquire() as conn:
-            for change in changes:
-                await conn.execute(
-                    """
-                    INSERT INTO legal_changes (
-                        id, title, description, affected_areas, severity,
-                        effective_date, source, source_url, requirements
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                    ON CONFLICT (id) DO NOTHING
-                    """,
-                    change.id,
-                    change.title,
-                    change.description,
-                    [area.value for area in change.affected_areas],
-                    change.severity.value,
-                    change.effective_date,
-                    change.source,
-                    change.source_url,
-                    change.requirements
-                )
-            
-            # Log
             execution_time = (datetime.now() - start_time).total_seconds()
             await conn.execute(
                 """
@@ -612,11 +599,12 @@ async def _run_legal_monitoring():
                     changes_detected, status, execution_time_seconds
                 ) VALUES ($1, 'completed', $2)
                 """,
-                len(changes),
+                detected,
                 execution_time
             )
-        
-        print(f"✅ Legal monitoring completed. {len(changes)} changes detected.")
+
+        print(f"✅ Legal monitoring completed. {detected} changes detected, "
+              f"{summary.get('new_saved', 0)} new, {checks_created} new checks generated.")
         
     except Exception as e:
         print(f"❌ Legal monitoring failed: {e}")
@@ -631,4 +619,130 @@ async def _run_legal_monitoring():
                 str(e),
                 execution_time
             )
+
+
+# ===========================================================================
+# Declarative Compliance Checks — Admin Review Queue
+# ===========================================================================
+# Vom Legal-Change-Monitor automatisch erzeugte Website-Prüfungen landen (in der
+# Testphase) als 'pending_review'. Hier gibt der Admin das finale GO ('active')
+# oder verwirft sie ('disabled'). Voll-Automatik via AUTO_ACTIVATE_GENERATED_CHECKS.
+
+import compliance_engine.declarative_check_runner as _dcr
+
+
+def _check_row_to_dict(row) -> Dict[str, Any]:
+    d = dict(row)
+    for k in ("applies_when", "detection"):
+        v = d.get(k)
+        if isinstance(v, str):
+            try:
+                d[k] = json.loads(v)
+            except Exception:
+                pass
+    for k in ("effective_date", "created_at", "updated_at", "reviewed_at"):
+        if d.get(k) is not None:
+            d[k] = d[k].isoformat()
+    return d
+
+
+@router.get("/checks")
+async def list_compliance_checks(
+    status: Optional[str] = None,
+    admin: dict = Depends(require_admin),
+):
+    """Listet deklarative Compliance-Checks (optional nach status gefiltert)."""
+    query = """
+        SELECT id, slug, category, title, description, recommendation, legal_basis,
+               severity, risk_euro, applies_when, detection, effective_date,
+               status, auto_generated, source_legal_update_id, generation_notes,
+               version, reviewed_by, reviewed_at, created_at, updated_at
+        FROM compliance_checks
+    """
+    params = []
+    if status:
+        query += " WHERE status = $1"
+        params.append(status)
+    query += " ORDER BY (status = 'pending_review') DESC, created_at DESC"
+
+    async with db_service.pool.acquire() as conn:
+        rows = await conn.fetch(query, *params)
+    return {"checks": [_check_row_to_dict(r) for r in rows], "count": len(rows)}
+
+
+@router.get("/checks/pending")
+async def list_pending_compliance_checks(admin: dict = Depends(require_admin)):
+    """Review-Queue: alle auf das Admin-GO wartenden Auto-Checks."""
+    async with db_service.pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, slug, category, title, description, recommendation, legal_basis,
+                   severity, risk_euro, applies_when, detection, effective_date,
+                   status, auto_generated, source_legal_update_id, generation_notes,
+                   created_at
+            FROM compliance_checks
+            WHERE status = 'pending_review'
+            ORDER BY created_at DESC
+            """
+        )
+    return {"pending": [_check_row_to_dict(r) for r in rows], "count": len(rows)}
+
+
+@router.post("/checks/{check_id}/activate")
+async def activate_compliance_check(
+    check_id: int,
+    admin: dict = Depends(require_admin),
+):
+    """Admin-GO: schaltet einen Check scharf ('active') und leert den Registry-Cache."""
+    async with db_service.pool.acquire() as conn:
+        slug = await conn.fetchval(
+            """
+            UPDATE compliance_checks
+            SET status = 'active',
+                reviewed_by = $2,
+                reviewed_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1 AND status <> 'active'
+            RETURNING slug
+            """,
+            check_id,
+            str(admin.get("email") or admin.get("id") or "admin"),
+        )
+    if not slug:
+        raise HTTPException(status_code=404, detail="Check nicht gefunden oder bereits aktiv")
+
+    # Registry sofort neu laden, damit der nächste Scan den Check nutzt
+    if _dcr.declarative_check_registry:
+        await _dcr.declarative_check_registry.get_active_checks(force_refresh=True)
+
+    return {"success": True, "slug": slug, "status": "active"}
+
+
+@router.post("/checks/{check_id}/dismiss")
+async def dismiss_compliance_check(
+    check_id: int,
+    admin: dict = Depends(require_admin),
+):
+    """Verwirft einen Check ('disabled')."""
+    async with db_service.pool.acquire() as conn:
+        slug = await conn.fetchval(
+            """
+            UPDATE compliance_checks
+            SET status = 'disabled',
+                reviewed_by = $2,
+                reviewed_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING slug
+            """,
+            check_id,
+            str(admin.get("email") or admin.get("id") or "admin"),
+        )
+    if not slug:
+        raise HTTPException(status_code=404, detail="Check nicht gefunden")
+
+    if _dcr.declarative_check_registry:
+        await _dcr.declarative_check_registry.get_active_checks(force_refresh=True)
+
+    return {"success": True, "slug": slug, "status": "disabled"}
 

@@ -181,6 +181,30 @@ class LegalChangeMonitor:
             logger.error(f"on_legal_change: Re-Generation fehlgeschlagen: {e}", exc_info=True)
             return {"error": str(e)}
 
+    async def _generate_declarative_check(self, change: "LegalChange", legal_update_id) -> Dict[str, Any]:
+        """
+        Erzeugt aus einer Gesetzesänderung eine deklarative Website-Prüfung
+        (compliance_checks) via LLM. Neue Checks landen je nach Env-Flag als
+        'pending_review' (Admin-GO) oder 'active'.
+        """
+        if not self.db_pool:
+            return {"created": False, "reason": "no db_pool"}
+        try:
+            from compliance_engine.check_generator import generate_check_for_legal_update
+            legal_update_dict = {
+                "id": legal_update_id,
+                "title": change.title,
+                "description": change.description,
+                "requirements": change.requirements,
+                "effective_date": change.effective_date,
+            }
+            return await generate_check_for_legal_update(
+                self.db_pool, legal_update_dict, self._call_ai_api
+            )
+        except Exception as e:
+            logger.error(f"_generate_declarative_check failed: {e}", exc_info=True)
+            return {"created": False, "reason": str(e)}
+
     async def monitor_and_persist(self) -> Dict[str, Any]:
         """
         Kompletter Durchlauf: Überwachen → DB speichern → Pipeline auslösen → Re-Generation.
@@ -202,6 +226,7 @@ class LegalChangeMonitor:
             "new_saved": 0,
             "pipeline_results": [],
             "regeneration_results": [],
+            "generated_checks": [],
         }
 
         if not self.db_pool:
@@ -238,14 +263,22 @@ class LegalChangeMonitor:
                 regen_result["legal_update_id"] = saved_id
                 summary["regeneration_results"].append(regen_result)
 
+                # NEU: Aus der Änderung automatisch eine deklarative Website-Prüfung
+                # erzeugen (schließt die Lücke "neues Gesetz -> neue Prüfung").
+                check_result = await self._generate_declarative_check(change, saved_id)
+                check_result["legal_update_id"] = saved_id
+                summary["generated_checks"].append(check_result)
+
             except Exception as e:
                 logger.error(f"monitor_and_persist: Fehler bei change '{change.title}': {e}", exc_info=True)
 
+        _checks_created = sum(1 for c in summary["generated_checks"] if c.get("created"))
         logger.info(
             f"monitor_and_persist: {summary['detected']} detected, "
             f"{summary['new_saved']} new, "
             f"{len(summary['pipeline_results'])} pipeline runs, "
-            f"{len(summary['regeneration_results'])} regen runs"
+            f"{len(summary['regeneration_results'])} regen runs, "
+            f"{_checks_created} new compliance checks"
         )
         return summary
 

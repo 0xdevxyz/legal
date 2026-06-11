@@ -335,7 +335,8 @@ async def init_db():
         backend_dir = os.path.dirname(__file__)
         new_schema_files = [
             'init_legal_updates.sql',
-            'init_score_history.sql'
+            'init_score_history.sql',
+            'init_compliance_checks.sql'
         ]
         
         for filename in new_schema_files:
@@ -577,6 +578,11 @@ async def startup_event():
     from compliance_engine.legal_update_integration import init_legal_update_integration
     init_legal_update_integration(db_pool)
     logger.info("⚖️ Legal Update Integration initialized")
+
+    # Initialize declarative (data-driven) compliance check registry
+    from compliance_engine.declarative_check_runner import init_declarative_check_registry
+    init_declarative_check_registry(db_pool)
+    logger.info("🧩 Declarative compliance check registry initialized")
     
     # Initialize Legal Change Monitor
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
