@@ -531,35 +531,39 @@ class DatabaseService:
         Check if user has access to a specific module (cookie, accessibility, etc.)
         """
         try:
+            # user_modules.user_id is an integer column; callers (JWT claims)
+            # pass it as a string, which asyncpg rejects for an int4 param.
+            uid = int(user_id)
             async with self.get_connection() as conn:
                 query = """
-                    SELECT 1 FROM user_modules 
-                    WHERE user_id = $1 AND module_id = $2 
+                    SELECT 1 FROM user_modules
+                    WHERE user_id = $1 AND module_id = $2
                     AND status = 'active'
                     AND (expires_at IS NULL OR expires_at > NOW())
                 """
-                result = await conn.fetchrow(query, user_id, module_id)
+                result = await conn.fetchrow(query, uid, module_id)
                 return result is not None
-        
+
         except Exception as e:
             logger.error(f"Error checking user module: {e}")
             return False
-    
+
     async def get_user_modules(self, user_id: str) -> List[str]:
         """
         Get list of active module IDs for a user
         """
         try:
+            uid = int(user_id)
             async with self.get_connection() as conn:
                 query = """
-                    SELECT module_id FROM user_modules 
-                    WHERE user_id = $1 
+                    SELECT module_id FROM user_modules
+                    WHERE user_id = $1
                     AND status = 'active'
                     AND (expires_at IS NULL OR expires_at > NOW())
                 """
-                rows = await conn.fetch(query, user_id)
+                rows = await conn.fetch(query, uid)
                 return [row['module_id'] for row in rows]
-        
+
         except Exception as e:
             logger.error(f"Error getting user modules: {e}")
             return []

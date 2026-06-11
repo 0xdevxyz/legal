@@ -437,7 +437,7 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                             
                             post_process_result = await processor.process_scan_results(
                                 scan_id=scan_id,
-                                user_id=str(user_id_uuid),
+                                user_id=str(user_id),
                                 scan_data={
                                     'issues': [
                                         {

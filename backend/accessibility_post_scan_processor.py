@@ -5,9 +5,11 @@ Verarbeitet Barrierefreiheits-Issues nach einem Scan und generiert Alt-Texte
 """
 
 import asyncpg
+import json
 import logging
 from typing import List, Dict, Any, Optional
 from accessibility_fix_saver import AccessibilityFixSaver
+from site_id_utils import derive_site_id
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,11 @@ class AccessibilityPostScanProcessor:
             
             # 1. Extrahiere Barrierefreiheits-Issues
             accessibility_issues = self._extract_accessibility_issues(scan_data)
-            
+
+            # Brücke zur Barrierefreiheitserklärung: Stand immer aktualisieren —
+            # auch bei 0 Befunden, damit die Erklärung den aktuellen Scan widerspiegelt.
+            await self._save_statement_package(user_id, site_url, accessibility_issues)
+
             if not accessibility_issues:
                 logger.info(f"✅ No accessibility issues found for {site_url}")
                 return {
@@ -112,6 +118,54 @@ class AccessibilityPostScanProcessor:
                 "error": str(e)
             }
     
+    async def _save_statement_package(
+        self,
+        user_id: str,
+        site_url: str,
+        accessibility_issues: List[Dict[str, Any]]
+    ) -> None:
+        """
+        Schreibt eine Zusammenfassung der gefundenen Barrierefreiheits-Issues nach
+        accessibility_fix_packages. Die Barrierefreiheitserklärung liest genau diese
+        Zeile (über site_id + user_id) und stellt so den echten Scan-Stand dar.
+
+        fix_package-Format entspricht dem, was generate_statement erwartet:
+        summary.total_issues + Issue-Beschreibungen in manual_guides.
+        """
+        site_id = derive_site_id(site_url)
+        guides = []
+        for issue in accessibility_issues:
+            desc = (issue.get('description') or issue.get('title') or '').strip()
+            if desc:
+                guides.append({'description': desc})
+
+        fix_package = {
+            'summary': {'total_issues': len(accessibility_issues)},
+            'manual_guides': guides,
+            'source': 'scan',
+        }
+
+        try:
+            async with self.db_pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO accessibility_fix_packages
+                        (user_id, site_id, site_url, fix_package, created_at)
+                    VALUES ($1, $2, $3, $4, NOW())
+                    ON CONFLICT (user_id, site_id) DO UPDATE
+                        SET fix_package = EXCLUDED.fix_package,
+                            site_url    = EXCLUDED.site_url,
+                            updated_at  = NOW()
+                    """,
+                    str(user_id), site_id, site_url, json.dumps(fix_package),
+                )
+            logger.info(
+                f"📝 Statement-Paket gespeichert: {site_url} "
+                f"(site_id={site_id}, {len(accessibility_issues)} Issues)"
+            )
+        except Exception as e:
+            logger.error(f"❌ Statement-Paket konnte nicht gespeichert werden: {e}")
+
     def _extract_accessibility_issues(
         self,
         scan_data: Dict[str, Any]

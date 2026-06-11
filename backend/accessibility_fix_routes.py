@@ -17,8 +17,10 @@ from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 import logging
 import io
+import json
 from datetime import datetime
 from jinja2 import Environment, select_autoescape
+from site_id_utils import derive_site_id
 
 from compliance_engine.feature_engine import (
     FeatureEngine, FeatureId, StructuredIssue,
@@ -526,11 +528,25 @@ async def generate_statement(
 
     if row:
         display_url = row.get("site_url") or display_url
+        # JSONB kommt ohne registrierten Codec als String aus asyncpg zurück.
         package = row.get("fix_package") or {}
-        summary = package.get("summary", {}) if isinstance(package, dict) else {}
-        total = int(summary.get("total_issues", 0) or 0)
+        if isinstance(package, str):
+            try:
+                package = json.loads(package)
+            except (ValueError, TypeError):
+                package = {}
+        if not isinstance(package, dict):
+            package = {}
+
+        summary = package.get("summary", {})
+        total = int(summary.get("total_issues", 0) or 0) if isinstance(summary, dict) else 0
         if total == 0:
-            conformity_text = "Diese Website ist vollständig konform mit WCAG 2.1 Level AA / EN 301 549."
+            # Ein automatischer Scan kann keine vollständige Konformität bescheinigen
+            # (deckt nur einen Teil der WCAG-Kriterien ab) — daher ehrliche Formulierung.
+            conformity_text = (
+                "Die automatisierte Prüfung hat keine Abweichungen von WCAG 2.1 Level AA / "
+                "EN 301 549 festgestellt. Eine vollständige manuelle Bewertung steht noch aus."
+            )
         else:
             conformity_text = (
                 f"Diese Website ist teilweise konform mit WCAG 2.1 Level AA / EN 301 549. "
@@ -845,17 +861,18 @@ async def save_fix_package_to_db(user_id: str, site_url: str, fix_package: Dict[
         logger.warning("Database not available, skipping save")
         return
     
-    site_id = site_url.replace('https://', '').replace('http://', '')
-    site_id = site_id.replace('/', '-').replace('.', '-')[:50]
-    
+    # Gleiche Ableitung wie das Frontend (generateSiteId), damit die
+    # Barrierefreiheitserklärung diese Zeile findet.
+    site_id = derive_site_id(site_url)
+
     try:
         async with db_pool.acquire() as conn:
             await conn.execute("""
                 INSERT INTO accessibility_fix_packages (user_id, site_id, site_url, fix_package, created_at)
                 VALUES ($1, $2, $3, $4, NOW())
-                ON CONFLICT (user_id, site_id) 
+                ON CONFLICT (user_id, site_id)
                 DO UPDATE SET fix_package = $4, updated_at = NOW()
-            """, user_id, site_id, site_url, fix_package)
+            """, str(user_id), site_id, site_url, json.dumps(fix_package))
         
         logger.info(f"✅ Fix package saved for {site_url}")
     
