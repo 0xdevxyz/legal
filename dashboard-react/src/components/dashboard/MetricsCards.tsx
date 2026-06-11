@@ -57,6 +57,7 @@ export const MetricsCards: React.FC = () => {
 
   const aiFixesUsed = apiMetrics?.aiFixesUsed ?? 0;
   const aiFixesMax = apiMetrics?.aiFixesMax ?? 1;
+  const aiFixesUnlimited = aiFixesMax < 0; // -1 = unbegrenzt (bezahlte Pläne)
   const websitesMax = apiMetrics?.websitesMax ?? 1;
 
   const getScoreTrend = () => {
@@ -77,7 +78,7 @@ export const MetricsCards: React.FC = () => {
 
   const scoreTrend = getScoreTrend();
   const criticalTrend = getCriticalTrend();
-  const aiLimitReached = aiFixesUsed >= aiFixesMax;
+  const aiLimitReached = !aiFixesUnlimited && aiFixesUsed >= aiFixesMax;
   const websiteLimitReached = metrics.websites >= websitesMax;
 
   const animScore = useAnimatedNumber(metrics.totalScore);
@@ -106,10 +107,10 @@ export const MetricsCards: React.FC = () => {
     },
     {
       title: 'KI-Optimierungen',
-      value: aiFixesUsed,
-      suffix: `/${aiFixesMax}`,
-      sublabel: aiLimitReached ? 'Upgrade für mehr' : `${aiFixesMax - aiFixesUsed} verfügbar`,
-      sublabelType: aiLimitReached ? 'negative' as const : 'positive' as const,
+      value: aiFixesUnlimited ? '∞' : aiFixesUsed,
+      suffix: aiFixesUnlimited ? '' : `/${aiFixesMax}`,
+      sublabel: aiFixesUnlimited ? 'Unbegrenzt' : (aiLimitReached ? 'Upgrade für mehr' : `${aiFixesMax - aiFixesUsed} verfügbar`),
+      sublabelType: aiFixesUnlimited ? 'positive' as const : (aiLimitReached ? 'negative' as const : 'positive' as const),
       icon: Sparkles,
       accent: '#a855f7',
       accentBg: 'rgba(168,85,247,0.12)',

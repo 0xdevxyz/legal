@@ -107,7 +107,9 @@ async def generate_fix(
             )
         
         user_id = int(current_user['id'])
-        plan_type = current_user.get('plan', 'free')
+        # WICHTIG: get_user_by_id liefert den Key 'plan_type' (nicht 'plan').
+        # Vorher las dies 'plan' -> immer 'free' -> selbst Pro-Nutzer wurden nach 1 Fix paywalled.
+        plan_type = current_user.get('plan_type') or 'free'
         
         logger.info(f"🔧 Fix-Generierung gestartet: user_id={user_id}, issue_id={fix_request.issue_id}, category={fix_request.issue_category}, plan={plan_type}")
         
@@ -144,8 +146,11 @@ async def generate_fix(
             # Check Fix Limit (Freemium Model)
             fixes_used = user_limits.get('fixes_used', 0) or 0
             fixes_limit = user_limits.get('fixes_limit', 1) or 1
-            
-            if fixes_used >= fixes_limit:
+
+            # Bezahlte Pläne haben unbegrenzte KI-Fixes; nur Free-Nutzer unterliegen dem 1-Fix-Freemium-Limit.
+            is_paid_plan = plan_type not in (None, '', 'free')
+
+            if not is_paid_plan and fixes_used >= fixes_limit:
                 # Limit reached -> Paywall
                 raise HTTPException(
                     status_code=402,  # Payment Required
@@ -154,7 +159,7 @@ async def generate_fix(
                         "message": "Sie haben Ihr Limit für kostenlose Fixes erreicht. Bitte upgraden Sie, um weitere Fixes zu generieren.",
                         "fixes_used": fixes_used,
                         "fixes_limit": fixes_limit,
-                        "plan_type": user_limits.get('plan_type', 'free')
+                        "plan_type": plan_type
                     }
                 )
             
@@ -199,7 +204,7 @@ async def generate_fix(
                 'first_fix': first_fix,
                 'money_back_warning': first_fix,
                 'plan_type': plan_type,
-                'fixes_remaining': fixes_limit - (fixes_used + 1)
+                'fixes_remaining': -1 if is_paid_plan else (fixes_limit - (fixes_used + 1))
             }
             
         except Exception as gen_error:

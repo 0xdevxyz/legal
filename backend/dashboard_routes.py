@@ -127,7 +127,9 @@ async def get_dashboard_metrics(user: Dict[str, Any] = Depends(get_current_user)
             # Website-Limit kanonisch aus dem Plan ableiten (DB-Spalte kann veraltet/-1/3 sein).
             websites_max = PLAN_WEBSITES_MAX.get(plan_type, 1)
             ai_fixes_used = user_limits['ai_fixes_count'] if user_limits else 0
-            ai_fixes_max = user_limits['ai_fixes_max'] if user_limits else 1
+            # Bezahlte Pläne: unbegrenzte KI-Optimierungen (-1 = unbegrenzt). Nur Free hat das 1-Fix-Freemium-Limit.
+            is_paid_plan = plan_type not in (None, '', 'free')
+            ai_fixes_max = -1 if is_paid_plan else (user_limits['ai_fixes_max'] if user_limits else 1)
             
             return DashboardMetrics(
                 totalScore=avg_score,
