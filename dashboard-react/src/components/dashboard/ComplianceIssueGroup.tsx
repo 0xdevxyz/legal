@@ -28,7 +28,7 @@ interface IssueGroup {
 
 interface ComplianceIssueGroupProps {
   group: IssueGroup;
-  planType: 'free' | 'ai' | 'expert';
+  planType: 'free' | 'paid' | 'expert';
   websiteUrl?: string;
   scanId?: string;
   onStartFix?: (issueId: string) => void;

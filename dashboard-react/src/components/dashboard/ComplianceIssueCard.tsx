@@ -74,7 +74,7 @@ const getFixTypeForIssue = (issue: ComplianceIssue): 'code' | 'text' | 'guide' =
 
 interface ComplianceIssueCardProps {
   issue: ComplianceIssue;
-  planType: 'free' | 'ai' | 'expert';
+  planType: 'free' | 'paid' | 'expert';
   websiteUrl?: string;
   scanId?: string;
   onStartFix?: (issueId: string) => void;
@@ -567,7 +567,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                     <ExternalLink className="w-4 h-4" />
                   </button>
                   <p className="text-xs text-orange-600 mt-2 text-center">
-                    ✨ Im AI Plan enthalten - keine Zusatzkosten!
+                    ✨ Teil deiner Cookie-Säule – keine Zusatzkosten!
                   </p>
                 </div>
               </div>
@@ -776,14 +776,14 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       )}
 
       {/* AI-Fix Section */}
-      {issue.auto_fixable && !isAnalysisOnly && (planType === 'free' || planType === 'ai' || planType === 'expert') && (
+      {issue.auto_fixable && !isAnalysisOnly && (planType === 'free' || planType === 'paid' || planType === 'expert') && (
         <div className="mt-4 space-y-3">
           {/* Plan-Hinweis für Free-Nutzer — BEVOR sie klicken */}
           {planType === 'free' && (
             <div className="flex items-center gap-2 px-3 py-2 bg-zinc-100 border border-zinc-300 rounded-lg">
               <Lock className="w-4 h-4 text-zinc-500 flex-shrink-0" />
               <span className="text-xs text-zinc-600">
-                KI-Fix erfordert <strong>AI Plan</strong> — Klick zeigt Upgrade-Optionen
+                KI-Fix erfordert einen kostenpflichtigen Plan — Klick zeigt Upgrade-Optionen
               </span>
             </div>
           )}

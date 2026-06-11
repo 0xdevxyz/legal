@@ -119,7 +119,7 @@ async def create_checkout(request: Request, data: CreateCheckoutRequest):
         mock_session_id      = f"cs_test_dev_{uuid.uuid4().hex[:24]}"
         mock_subscription_id = f"sub_dev_{uuid.uuid4().hex[:24]}"
 
-        _websites_max = 25 if plan_type == 'agency' else -1
+        _websites_max = 25 if plan_type == 'agency' else 1
 
         async with db_pool.acquire() as conn:
             # user_limits aktualisieren
@@ -333,7 +333,7 @@ async def _handle_checkout_completed(session: Dict[str, Any]):
         subscription_id = session.get('subscription', '')
 
         logger.info(f"Checkout completed: user={user_id}, plan={plan_type}, modules={active_modules}")
-        _websites_max = 25 if plan_type == 'agency' else -1
+        _websites_max = 25 if plan_type == 'agency' else 1
 
         async with db_pool.acquire() as conn:
             # user_limits aktualisieren

@@ -18,6 +18,12 @@ dashboard_router = APIRouter(prefix="/api/v2/dashboard", tags=["dashboard"])
 db_pool = None
 auth_service = None
 
+# Kanonisches Website-Limit pro Plan: 1 Seite überall, 25 nur im Agentur-Modus.
+# (Es gibt KEINE 3-Seiten-Option.) SSOT — deckt sich mit stripe_routes.PLAN_WEBSITES_MAX.
+PLAN_WEBSITES_MAX = {
+    "free": 1, "single": 1, "pro": 1, "agency": 25, "expert": 1, "update": 1,
+}
+
 class DashboardMetrics(BaseModel):
     totalScore: int
     websites: int
@@ -29,7 +35,7 @@ class DashboardMetrics(BaseModel):
     # Neue Felder für AI-Fix-Limits
     aiFixesUsed: Optional[int] = 0
     aiFixesMax: Optional[int] = 1
-    websitesMax: Optional[int] = 3
+    websitesMax: Optional[int] = 1
     # Trend-Daten
     scoreTrend: Optional[float] = None  # Prozentuale Änderung zum Vormonat
     criticalTrend: Optional[int] = None  # Absolute Änderung kritischer Issues
@@ -116,8 +122,10 @@ async def get_dashboard_metrics(user: Dict[str, Any] = Depends(get_current_user)
                 user_id
             )
             
-            scans_available = 100 if (user_limits and user_limits['plan_type'] == 'ai') else 999
-            websites_max = user_limits['websites_max'] if user_limits else 3
+            plan_type = user_limits['plan_type'] if user_limits else 'free'
+            scans_available = 999
+            # Website-Limit kanonisch aus dem Plan ableiten (DB-Spalte kann veraltet/-1/3 sein).
+            websites_max = PLAN_WEBSITES_MAX.get(plan_type, 1)
             ai_fixes_used = user_limits['ai_fixes_count'] if user_limits else 0
             ai_fixes_max = user_limits['ai_fixes_max'] if user_limits else 1
             
@@ -149,7 +157,7 @@ async def get_dashboard_metrics(user: Dict[str, Any] = Depends(get_current_user)
             totalRiskEuro=0,
             aiFixesUsed=0,
             aiFixesMax=1,
-            websitesMax=3,
+            websitesMax=1,
             scoreTrend=None,
             criticalTrend=None
         )

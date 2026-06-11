@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect as useEffectAlias } from 'react';
-import { Globe, RefreshCw, AlertTriangle, AlertCircle, CheckCircle, Bot, Download, Eye, Shield, FileText, Cookie, ChevronDown, ListChecks, Lock } from 'lucide-react';
+import { Globe, RefreshCw, AlertTriangle, AlertCircle, CheckCircle, Bot, Download, Eye, Shield, FileText, Cookie, ChevronDown, ListChecks } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/button';
@@ -38,7 +38,12 @@ export const WebsiteAnalysis: React.FC = () => {
   const pillarRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const rawPlanType = user?.plan_type || 'free';
-  const planType: 'free' | 'ai' | 'expert' = (['free','ai','expert'].includes(rawPlanType) ? rawPlanType : 'free') as 'free' | 'ai' | 'expert';
+  // Reale Pläne (single/pro/agency/expert/update) auf Fix-Zugriffsstufen abbilden:
+  // expert = Done-for-you (Service buchen), jeder andere bezahlte Plan = Self-Service KI-Fixes, sonst free.
+  const planType: 'free' | 'paid' | 'expert' =
+    rawPlanType === 'expert' ? 'expert'
+    : rawPlanType !== 'free' ? 'paid'
+    : 'free';
 
   const isCurrentSiteLocked = isInOptimizationMode &&
     lockedOptimizationUrl &&
@@ -261,7 +266,9 @@ export const WebsiteAnalysis: React.FC = () => {
   const complianceScore = analysisData?.compliance_score ?? currentWebsite?.complianceScore ?? 0;
   const totalRisk = analysisData?.total_risk_euro || (analysisData as any)?.estimated_risk_euro || '0€';
 
-  // Gruppiere Issues nach Kategorien (4 Säulen)
+  // 4 Säulen (SSOT v3.0 — identisch zum Backend ScoreCalculator):
+  //  - Sicherheit (CSP/HSTS/Header) = DSGVO Art. 32 → fällt in "gdpr"
+  //  - Shop-Pflichttexte (Widerruf, Preisangaben) → fallen in "legal"
   const pillars = [
     {
       id: 'accessibility',
@@ -269,23 +276,25 @@ export const WebsiteAnalysis: React.FC = () => {
       icon: Eye,
       color: 'blue',
       description: 'WCAG 2.1 AA Konformität',
-      keywords: ['accessibility', 'wcag', 'barrierefreiheit', 'alt', 'kontrast', 'tastat']
+      keywords: ['accessibility', 'wcag', 'barrierefreiheit', 'barriere', 'alt', 'kontrast', 'contrast', 'tastat']
     },
     {
       id: 'gdpr',
-      name: 'DSGVO',
+      name: 'Datenschutz',
       icon: Shield,
       color: 'green',
-      description: 'Datenschutz-Compliance',
-      keywords: ['gdpr', 'dsgvo', 'datenschutz', 'privacy', 'personenbezogen']
+      description: 'DSGVO inkl. technischer Sicherheit (Art. 32)',
+      keywords: ['gdpr', 'dsgvo', 'datenschutz', 'privacy', 'personenbezogen', 'avv',
+        'security', 'sicherheit', 'csp', 'content-security', 'hsts', 'x-frame', 'header', 'ssl', 'tls']
     },
     {
       id: 'legal',
       name: 'Rechtssichere Texte',
       icon: FileText,
       color: 'purple',
-      description: 'Impressum, AGB, Widerrufsrecht',
-      keywords: ['impressum', 'agb', 'legal', 'widerruf', 'rechtlich', 'tmg']
+      description: 'Impressum, AGB, Widerruf, Preisangaben, Shop',
+      keywords: ['impressum', 'agb', 'legal', 'rechtlich', 'tmg', 'uwg', 'widerruf',
+        'preisangaben', 'preis', 'pangv', 'shop', 'kontakt', 'contact', 'social']
     },
     {
       id: 'cookies',
@@ -293,23 +302,19 @@ export const WebsiteAnalysis: React.FC = () => {
       icon: Cookie,
       color: 'orange',
       description: 'Cookie-Banner & Consent',
-      keywords: ['cookie', 'consent', 'tracking', 'ttdsg']
-    },
-    {
-      id: 'security',
-      name: 'Sicherheits-Header',
-      icon: Lock,
-      color: 'red',
-      description: 'CSP, HSTS & HTTP-Header',
-      keywords: ['security', 'csp', 'content-security-policy', 'hsts', 'x-frame', 'header', 'strict-transport']
+      keywords: ['cookie', 'consent', 'tracking', 'tcf', 'ttdsg']
     }
   ];
 
   const categorizeIssue = (issue: ComplianceIssue): string => {
     const text = `${issue.title} ${issue.description} ${issue.category}`.toLowerCase();
 
-    for (const pillar of pillars) {
-      if (pillar.keywords.some(keyword => text.includes(keyword))) {
+    // Reihenfolge der Säulen = Priorität (erste Übereinstimmung gewinnt),
+    // damit z.B. "tracking" zuerst Cookies und nicht versehentlich Legal trifft.
+    const ordered = ['accessibility', 'cookies', 'gdpr', 'legal'];
+    for (const id of ordered) {
+      const pillar = pillars.find(p => p.id === id);
+      if (pillar && pillar.keywords.some(keyword => text.includes(keyword))) {
         return pillar.id;
       }
     }
@@ -333,17 +338,12 @@ export const WebsiteAnalysis: React.FC = () => {
       score = backendPillarScore.score;
 
     } else if (pillarIssues.length > 0) {
-      // Fallback: Client-seitige Berechnung mit VERSCHÄRFTER Formel
+      // Fallback: identische Formel wie Backend ScoreCalculator (SSOT v3.0)
+      // Säule = max(0, 100 - (critical*25 + warning*8))
       const criticalCount = pillarIssues.filter(i => i.severity === 'critical').length;
       const warningCount = pillarIssues.filter(i => i.severity === 'warning').length;
-      
-      // WICHTIG: Verschärfte Formel wie Backend!
-      // CRITICAL = -60, WARNING = -15, max 40 bei critical > 0
-      score = 100 - (criticalCount * 60 + warningCount * 15);
-      if (criticalCount > 0) {
-        score = Math.min(score, 40);
-      }
-      score = Math.max(0, score);
+
+      score = Math.max(0, 100 - (criticalCount * 25 + warningCount * 8));
     }
     
     return {

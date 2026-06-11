@@ -169,13 +169,13 @@ export interface FixResult {
   };
   first_fix: boolean;
   money_back_warning: boolean;
-  plan_type: 'ai' | 'expert';
+  plan_type: 'free' | 'single' | 'pro' | 'agency' | 'expert' | 'update';
 }
 
 export interface UserLimits {
   success: boolean;
   limits: {
-    plan_type: 'ai' | 'expert';
+    plan_type: 'free' | 'single' | 'pro' | 'agency' | 'expert' | 'update';
     websites_count: number;
     websites_max: number;
     exports_this_month: number;

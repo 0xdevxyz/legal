@@ -286,10 +286,10 @@ export const CookieComplianceWidget: React.FC = () => {
               </div>
               <div>
                 <div className="text-sm font-semibold text-white">
-                  Cookie-Compliance ist im AI Plan enthalten
+                  Cookie-Compliance ist eine deiner Compliance-Säulen
                 </div>
                 <div className="text-xs text-gray-400">
-                  Keine zusätzlichen Kosten - Vollständig integriert in Complyo
+                  Im Pro-Paket & Agentur-Plan enthalten – oder als einzelne Säule buchbar
                 </div>
               </div>
             </div>

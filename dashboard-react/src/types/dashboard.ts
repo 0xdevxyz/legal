@@ -21,7 +21,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  plan: 'ki' | 'expert';
+  plan: 'free' | 'single' | 'pro' | 'agency' | 'expert' | 'update';
   subscriptionStatus: 'active' | 'inactive' | 'cancelled';
 }
 

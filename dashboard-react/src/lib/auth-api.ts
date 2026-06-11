@@ -16,7 +16,7 @@ export interface RegisterRequest {
   password: string;
   full_name: string;
   company?: string;
-  plan?: 'ki' | 'expert';
+  plan?: 'free' | 'single' | 'pro' | 'agency' | 'expert' | 'update';
 }
 
 export interface AuthResponse {
@@ -71,7 +71,7 @@ export async function register(data: RegisterRequest): Promise<AuthResponse> {
     },
     body: JSON.stringify({
       ...data,
-      plan: data.plan || 'ki',
+      plan: data.plan || 'free',
     }),
   });
 

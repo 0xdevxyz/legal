@@ -57,7 +57,7 @@ export const MetricsCards: React.FC = () => {
 
   const aiFixesUsed = apiMetrics?.aiFixesUsed ?? 0;
   const aiFixesMax = apiMetrics?.aiFixesMax ?? 1;
-  const websitesMax = apiMetrics?.websitesMax ?? 3;
+  const websitesMax = apiMetrics?.websitesMax ?? 1;
 
   const getScoreTrend = () => {
     const trend = apiMetrics?.scoreTrend;

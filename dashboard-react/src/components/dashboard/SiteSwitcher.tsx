@@ -36,8 +36,9 @@ export function SiteSwitcher() {
     ? activeSite.url.replace(/^https?:\/\//, '').replace(/\/$/, '')
     : '—';
 
-  const planLimit = user?.plan_limits?.websites_max ?? 25;
-  const atLimit = planLimit !== -1 && sites.length >= planLimit;
+  // Kanonisch aus dem Plan: 25 nur im Agentur-Modus, sonst 1 Seite. (Keine 3-Seiten-Option.)
+  const planLimit = user?.plan_type === 'agency' ? 25 : 1;
+  const atLimit = sites.length >= planLimit;
 
   const handleAdd = async () => {
     if (!newUrl.trim()) return;

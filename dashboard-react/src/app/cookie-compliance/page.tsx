@@ -197,8 +197,8 @@ export default function CookieCompliancePage() {
     );
   }
 
-  // Paywall: Cookie-Modul erforderlich (inkl. in Pro/Agency Plan)
-  const hasCookieModule = user?.active_modules?.includes('cookie') || ['pro', 'agency'].includes(user?.plan_type ?? '');
+  // Paywall: Cookie-Modul erforderlich (Backend setzt es bei pro/agency/expert/update automatisch)
+  const hasCookieModule = user?.active_modules?.includes('cookie') || ['pro', 'agency', 'expert', 'update'].includes(user?.plan_type ?? '');
   if (!hasCookieModule) {
     return (
       <main role="main" className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4">

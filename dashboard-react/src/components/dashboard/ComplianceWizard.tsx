@@ -18,7 +18,7 @@ import { ComplianceIssueCard } from './ComplianceIssueCard';
 interface ComplianceWizardProps {
   issues: any[];
   groups?: any[];
-  planType: 'free' | 'ai' | 'expert';
+  planType: 'free' | 'paid' | 'expert';
   websiteUrl?: string;
   scanId?: string;
   onComplete?: () => void;
