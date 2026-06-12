@@ -147,6 +147,10 @@ from alt_text_routes import router as alt_text_router
 from deep_cookie_scanner_routes import router as deep_cookie_scanner_router
 import deep_cookie_scanner_routes as _deep_cookie_scanner_routes
 
+# Knowledge Base - Rechts-Updates & Gesetzes-Vault (reads the Obsidian vault
+# populated by the daily knowledge_updater cron; backed by backend/knowledge engine)
+from knowledge_routes import router as knowledge_router
+
 # Models for new endpoints
 class AnalyzeRequest(BaseModel):
     url: str
@@ -335,6 +339,7 @@ async def init_db():
         backend_dir = os.path.dirname(__file__)
         new_schema_files = [
             'init_legal_updates.sql',
+            'init_tracked_websites_rescan.sql',
             'init_score_history.sql',
             'init_compliance_checks.sql'
         ]
@@ -567,6 +572,7 @@ async def startup_event():
     app.include_router(alt_text_router)  # Alt-Text AI Generation - NEW
     app.include_router(deep_cookie_scanner_router)  # Deep Cookie Scanner - Premium Feature
     app.include_router(legal_document_router)  # AUDIT-19: DPA Generator
+    app.include_router(knowledge_router)  # Knowledge Base - Rechts-Updates & Gesetzes-Vault
     
     # Initialize Alt-Text routes
     import alt_text_routes

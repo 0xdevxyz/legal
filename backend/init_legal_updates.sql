@@ -17,18 +17,34 @@ CREATE TABLE IF NOT EXISTS legal_updates (
 
 -- User Legal Notifications Table
 -- Speichert welcher User welche Updates gesehen/bearbeitet hat
+--
+-- HINWEIS: Eine frühere Version definierte website_id als INTEGER mit FK auf
+-- tracked_websites(id). tracked_websites.id ist jedoch UUID -> der FK ließ sich
+-- nicht implementieren, wodurch die Tabelle defekt (0 Spalten) zurückblieb.
+-- Eine solche defekte Tabelle wird hier einmalig verworfen und korrekt neu erstellt.
+-- Spalten (notification_type, is_read, website_id UUID) entsprechen dem, was der
+-- Code erwartet (legal_update_integration.py / legal_notification_service.py).
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_legal_notifications')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_legal_notifications') THEN
+        DROP TABLE user_legal_notifications;
+        RAISE NOTICE 'Defekte (spaltenlose) user_legal_notifications verworfen, wird neu erstellt';
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS user_legal_notifications (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     legal_update_id INTEGER REFERENCES legal_updates(id) ON DELETE CASCADE,
-    website_id INTEGER REFERENCES tracked_websites(id) ON DELETE CASCADE,
-    read BOOLEAN DEFAULT false,
+    website_id UUID REFERENCES tracked_websites(id) ON DELETE CASCADE,
+    notification_type VARCHAR(50) DEFAULT 'rescan_required',
+    is_read BOOLEAN DEFAULT false,
     action_taken BOOLEAN DEFAULT false,  -- Hat User darauf reagiert? (z.B. neu gescannt)
     created_at TIMESTAMP DEFAULT NOW(),
     read_at TIMESTAMP,
     action_at TIMESTAMP,
-    
+
     CONSTRAINT unique_user_update UNIQUE(user_id, legal_update_id, website_id)
 );
 
@@ -40,7 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_legal_updates_action_required ON legal_updates(ac
 
 CREATE INDEX IF NOT EXISTS idx_user_notifications_user ON user_legal_notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_notifications_update ON user_legal_notifications(legal_update_id);
-CREATE INDEX IF NOT EXISTS idx_user_notifications_read ON user_legal_notifications(read);
+CREATE INDEX IF NOT EXISTS idx_user_notifications_read ON user_legal_notifications(is_read);
 
 -- Kommentare
 COMMENT ON TABLE legal_updates IS 'Gesetzesänderungen und rechtliche Updates von eRecht24 oder manuell';

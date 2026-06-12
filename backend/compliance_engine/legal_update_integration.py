@@ -264,21 +264,26 @@ class LegalUpdateIntegration:
         """
         try:
             async with self.db_pool.acquire() as conn:
-                # Finde User mit Scans in den betroffenen Kategorien
+                # Finde User mit aktiven Websites und kürzlichem Scan-Verlauf.
+                # WICHTIG: tracked_websites.id ist UUID, scan_history.website_id ist
+                # INTEGER -> ein direkter Join tw.id = sh.website_id schlägt mit
+                # "operator does not exist: uuid = integer" fehl. Stattdessen wird die
+                # Scan-Aktualität über die (integer) user_id per EXISTS geprüft.
                 users_to_notify = await conn.fetch("""
-                    SELECT DISTINCT 
-                        u.id as user_id,
+                    SELECT DISTINCT
+                        u.id   as user_id,
                         u.email,
-                        tw.id as website_id,
-                        tw.url,
-                        sh.id as scan_id
+                        tw.id  as website_id,
+                        tw.url
                     FROM users u
-                    JOIN tracked_websites tw ON u.id = tw.user_id
-                    JOIN scan_history sh ON tw.id = sh.website_id
-                    WHERE 
-                        sh.scan_date >= NOW() - INTERVAL '30 days'
-                        AND tw.status = 'active'
-                    ORDER BY u.id, sh.scan_date DESC
+                    JOIN tracked_websites tw ON tw.user_id = u.id
+                    WHERE tw.status = 'active'
+                      AND EXISTS (
+                          SELECT 1 FROM scan_history sh
+                          WHERE sh.user_id = u.id
+                            AND sh.scan_date >= NOW() - INTERVAL '30 days'
+                      )
+                    ORDER BY u.id
                 """)
                 
                 # Erstelle Notifications

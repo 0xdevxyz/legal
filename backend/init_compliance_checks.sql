@@ -103,17 +103,27 @@ VALUES (
 )
 ON CONFLICT (slug) DO NOTHING;
 
--- Risiko-Matrix-Eintrag für konsistente Risikodaten (eigene Kategorie, kein Overlap)
+-- Risiko-Matrix-Eintrag für konsistente Risikodaten (eigene Kategorie, kein Overlap).
 -- Idempotent via NOT EXISTS, da die Migration bei jedem Startup läuft.
-INSERT INTO compliance_risk_matrix
-    (issue_category, severity, market, risk_min_eur, risk_max_eur, bussgeld_max_eur,
-     legal_basis, description, effective_date)
-SELECT
-    'widerrufsbutton', 'warning', 'DE', 1500, 3500, NULL,
-    '§ 356a BGB (ab 19.06.2026), RL (EU) 2023/2673',
-    'Fehlender elektronischer Widerrufsbutton im Online-Handel.',
-    DATE '2026-06-19'
-WHERE NOT EXISTS (
-    SELECT 1 FROM compliance_risk_matrix
-    WHERE issue_category = 'widerrufsbutton' AND market = 'DE'
-);
+--
+-- WICHTIG: In einen DO-Block mit EXCEPTION-Handler gekapselt. Frühere Versionen
+-- nutzten Spaltennamen (issue_category/market/risk_min_eur/effective_date), die im
+-- realen compliance_risk_matrix-Schema NICHT existieren. Da das gesamte Init-File in
+-- EINER Transaktion läuft, rollte diese fehlschlagende INSERT die zuvor erstellte
+-- Tabelle compliance_checks mit zurück → Tabelle wurde nie angelegt. Der Handler
+-- macht diesen optionalen Seed best-effort, sodass die Tabellenerstellung immer hält.
+DO $$
+BEGIN
+    INSERT INTO compliance_risk_matrix
+        (category, issue_type, severity, min_risk_euro, max_risk_euro, legal_basis, description)
+    SELECT
+        'shop', 'widerrufsbutton', 'medium', 1500, 3500,
+        '§ 356a BGB (ab 19.06.2026), RL (EU) 2023/2673',
+        'Fehlender elektronischer Widerrufsbutton im Online-Handel.'
+    WHERE NOT EXISTS (
+        SELECT 1 FROM compliance_risk_matrix
+        WHERE category = 'shop' AND issue_type = 'widerrufsbutton'
+    );
+EXCEPTION WHEN others THEN
+    RAISE NOTICE 'compliance_risk_matrix seed (widerrufsbutton) übersprungen: %', SQLERRM;
+END $$;

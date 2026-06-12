@@ -20,7 +20,9 @@ KNOWLEDGE_CRON="0 7 * * * cd $PROJECT_DIR && DATABASE_URL='$DATABASE_URL' OPENAI
 GVL_CRON="0 3 * * * cd $PROJECT_DIR && DATABASE_URL='$DATABASE_URL' /usr/bin/python3 cronjobs/tcf_gvl_sync.py >> /var/log/complyo-tcf-gvl-sync.log 2>&1"
 
 # Create crontab entry - Legal Change Monitor (daily at 05:00) — full pipeline incl. auto-generated checks
-LEGAL_MONITOR_CRON="0 5 * * * cd $PROJECT_DIR && DATABASE_URL='$DATABASE_URL' OPENROUTER_API_KEY='$OPENROUTER_API_KEY' /usr/bin/python3 cronjobs/legal_change_monitor_cron.py >> /var/log/complyo-legal-monitor.log 2>&1"
+# Läuft im Backend-Container; DATABASE_URL/OPENROUTER_API_KEY/AUTO_ACTIVATE_GENERATED_CHECKS
+# werden aus der Container-Umgebung (docker-compose environment) geerbt.
+LEGAL_MONITOR_CRON="0 5 * * * docker exec complyo-backend python3 /app/cronjobs/legal_change_monitor_cron.py >> /var/log/complyo-legal-monitor.log 2>&1"
 
 # Check if crontab entry already exists
 if crontab -l 2>/dev/null | grep -q "fetch_news.py"; then

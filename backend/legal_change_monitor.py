@@ -11,6 +11,7 @@ Features:
 
 import os
 import json
+import re
 import httpx
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
@@ -491,7 +492,7 @@ Antworte im JSON-Format:
         }
         
         payload = {
-            "model": "anthropic/claude-3.5-sonnet",
+            "model": os.getenv("OPENROUTER_LEGAL_MODEL", "anthropic/claude-sonnet-4.5"),
             "messages": [
                 {
                     "role": "system",
@@ -566,41 +567,85 @@ Antworte im JSON-Format:
 }}
 
 Fokussiere auf Änderungen, die KONKRETE Auswirkungen auf Websites haben.
+
+WICHTIG: Antworte AUSSCHLIESSLICH mit dem puren JSON-Objekt — keine Einleitung,
+keine Erklärung, keine Markdown-Codeblöcke, kein Text davor oder danach.
+Wenn keine relevanten Änderungen vorliegen, antworte mit {{"changes": []}}.
 """
     
+    @staticmethod
+    def _extract_json(text: str) -> str:
+        """
+        Holt das JSON-Objekt aus einer LLM-Antwort, auch wenn es in
+        ```json ... ``` Fences steckt oder von Prosa umgeben ist.
+        """
+        if not text:
+            return text
+        # 1) Inhalt eines Markdown-Codefence bevorzugen (greedy bis zum schließenden Fence)
+        fence = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+        if fence:
+            text = fence.group(1)
+        # 2) Vom ersten { bis zum letzten } greifen
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            return text[start : end + 1]
+        return text
+
+    def _change_from_dict(self, change_data: Dict[str, Any]) -> Optional["LegalChange"]:
+        """Baut ein LegalChange aus einem Dict; gibt None bei ungültigen Daten zurück."""
+        try:
+            return LegalChange(
+                id=change_data['id'],
+                title=change_data['title'],
+                description=change_data['description'],
+                affected_areas=[LegalArea(area) for area in change_data['affected_areas']],
+                severity=ChangeSeverity(change_data['severity']),
+                effective_date=datetime.fromisoformat(change_data['effective_date']),
+                source=change_data['source'],
+                source_url=change_data['source_url'],
+                requirements=change_data['requirements'],
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to parse legal change: {e}")
+            return None
+
     def _parse_legal_changes(self, json_response: str) -> List[LegalChange]:
         """
-        Parsed die KI-Antwort zu LegalChange-Objekten
+        Parsed die KI-Antwort zu LegalChange-Objekten.
+
+        Robust gegen LLM-Eigenheiten: extrahiert JSON aus Fences/Prosa und fällt
+        bei invalidem Gesamt-JSON auf Pro-Objekt-Salvage zurück (ein fehlerhaftes
+        Objekt verwirft nicht mehr die ganze Antwort).
         """
+        extracted = self._extract_json(json_response)
+
+        # Pfad A: Gesamt-JSON parsen
         try:
-            data = json.loads(json_response)
-            changes = []
-            
-            for change_data in data.get('changes', []):
-                try:
-                    change = LegalChange(
-                        id=change_data['id'],
-                        title=change_data['title'],
-                        description=change_data['description'],
-                        affected_areas=[
-                            LegalArea(area) for area in change_data['affected_areas']
-                        ],
-                        severity=ChangeSeverity(change_data['severity']),
-                        effective_date=datetime.fromisoformat(change_data['effective_date']),
-                        source=change_data['source'],
-                        source_url=change_data['source_url'],
-                        requirements=change_data['requirements']
-                    )
-                    changes.append(change)
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed to parse legal change: {e}")
-                    continue
-            
+            data = json.loads(extracted)
+            changes = [c for c in (self._change_from_dict(cd) for cd in data.get('changes', [])) if c]
             return changes
-            
         except Exception as e:
-            logger.error(f"❌ Failed to parse legal changes: {e}")
-            return []
+            logger.warning(f"⚠️ Gesamt-JSON ungültig ({e}) — versuche Pro-Objekt-Salvage")
+
+        # Pfad B: Salvage — einzelne {...}-Objekte im changes-Array bergen
+        changes = []
+        for obj_match in re.finditer(r"\{[^{}]*\}", extracted, re.DOTALL):
+            snippet = obj_match.group(0)
+            if '"title"' not in snippet or '"affected_areas"' not in snippet:
+                continue
+            try:
+                change = self._change_from_dict(json.loads(snippet))
+                if change:
+                    changes.append(change)
+            except Exception:
+                continue
+
+        if changes:
+            logger.info(f"✅ Salvage: {len(changes)} Änderungen aus invalidem JSON geborgen")
+        else:
+            logger.error("❌ Failed to parse legal changes: auch Salvage ergab 0 Objekte")
+        return changes
 
 
 # Globale Instanz

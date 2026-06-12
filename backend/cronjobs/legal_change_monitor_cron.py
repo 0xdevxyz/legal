@@ -22,13 +22,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# stdout reicht: im Container-Betrieb leitet die Crontab-Zeile stdout host-seitig
+# nach /var/log/complyo-legal-monitor.log um. Ein In-Container-FileHandler auf
+# /var/log scheitert (nicht beschreibbar) — daher nur best-effort ergänzen.
+_log_handlers = [logging.StreamHandler()]
+try:
+    _log_handlers.append(logging.FileHandler("/var/log/complyo-legal-monitor.log", mode="a"))
+except OSError:
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("/var/log/complyo-legal-monitor.log", mode="a"),
-    ],
+    handlers=_log_handlers,
 )
 logger = logging.getLogger("legal_change_monitor_cron")
 
