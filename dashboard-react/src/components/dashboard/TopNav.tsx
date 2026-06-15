@@ -26,6 +26,12 @@ import {
   Menu,
   X,
   Lock,
+  Route,
+  ScanLine,
+  Globe,
+  ListChecks,
+  Package,
+  BookOpen,
 } from 'lucide-react';
 
 interface NavItem {
@@ -39,14 +45,22 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
+  { label: 'Journey', icon: Route, href: '/journey' },
   { label: 'Cookies', icon: Cookie, href: '/cookie-compliance' },
+  { label: 'Deep Scan', icon: ScanLine, href: '/deep-cookie-scanner' },
   { label: 'Barrierefreiheit', icon: Eye, href: '/accessibility/statement' },
   { label: 'AI-Compliance', icon: Sparkles, href: '/ai-compliance', requiresComploaiGuard: true },
   { label: 'Dokumente', icon: FileText, href: '/docs/cms' },
   { label: 'Agentur', icon: Building2, href: '/agency' },
 ];
 
+// Secondary destinations — surfaced in the avatar dropdown and the mobile drawer
+// (the desktop top bar stays lean). These pages were previously unreachable.
 const ACCOUNT_ITEMS: NavItem[] = [
+  { label: 'Rechts-Wissen', icon: BookOpen, href: '/knowledge' },
+  { label: 'Alt-Text Review', icon: ListChecks, href: '/accessibility/review' },
+  { label: 'EU-Vergleich', icon: Globe, href: '/compliance/countries' },
+  { label: 'Add-ons', icon: Package, href: '/dashboard/addons' },
   { label: 'Einstellungen', icon: Settings, href: '/settings' },
   { label: 'Abo & Rechnung', icon: CreditCard, href: '/subscription' },
 ];

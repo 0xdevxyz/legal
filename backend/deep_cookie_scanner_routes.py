@@ -18,10 +18,30 @@ from typing import Optional, Dict, Any
 from dependencies import get_current_user
 from database_service import db_service
 from compliance_engine.privacy_transfer_findings import detect_transfers
+from compliance_engine.deep_cookie_scanner import DeepCookieScanner
 
 import json
+import logging
+from dataclasses import asdict
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v2", tags=["deep-cookie-scanner"])
+
+
+def _as_obj(val, default):
+    """
+    JSONB-Felder kommen ohne registrierten Codec als String aus asyncpg zurück.
+    Parst Strings defensiv zu Python-Objekten; lässt bereits geparste Werte durch.
+    """
+    if val is None:
+        return default
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except (ValueError, TypeError):
+            return default
+    return val
 
 db_pool = None
 
@@ -138,8 +158,8 @@ async def start_deep_scan(
         current_month
     )
     
-    # 6. Queue background job (e.g., via Celery, RQ, or asyncio task)
-    # asyncio.create_task(background_scan_job(scan_id, url))
+    # 6. Background-Job starten (asyncio Task) — führt den echten Playwright-Scan aus
+    asyncio.create_task(background_scan_job(scan_id, url))
     
     # 7. Log event
     await connection.execute(
@@ -233,15 +253,15 @@ async def get_scan_status(
         # (Google Fonts, reCAPTCHA, Maps, YouTube, Adobe-Fonts) — abmahnfähig.
         privacy_findings = _privacy_findings_from_requests(scan["requests"])
 
-        # Return full results
+        # Return full results (JSONB-Felder defensiv parsen)
         response.update({
             "total_cookies": scan["total_cookies"],
             "unique_services": scan["unique_services"],
             "total_requests": scan["total_requests"],
-            "services_detected": scan["services_detected"],
-            "cookies": scan["cookies"],
-            "requests": scan["requests"],
-            "categorized": scan["categorized"],
+            "services_detected": _as_obj(scan["services_detected"], []),
+            "cookies": _as_obj(scan["cookies"], []),
+            "requests": _as_obj(scan["requests"], []),
+            "categorized": _as_obj(scan["categorized"], {}),
             "scan_duration_seconds": scan["scan_duration_seconds"],
             "privacy_findings": privacy_findings,
             "privacy_findings_count": len(privacy_findings),
@@ -316,8 +336,8 @@ async def export_scan_for_configurator(
     if not scan:
         raise HTTPException(status_code=404, detail="Completed scan not found")
     
-    categorized = scan["categorized"]
-    
+    categorized = _as_obj(scan["categorized"], {})
+
     # Transform to service-centric format for configurator
     services = []
     
@@ -397,75 +417,80 @@ def _get_service_description(service_name: str) -> str:
     return descriptions.get(service_name, f"External service: {service_name}")
 
 
-# Example background job (pseudocode)
-"""
 async def background_scan_job(scan_id: int, url: str):
-    connection = await get_db_connection()
-    
+    """
+    Führt den echten Deep-Scan (Playwright) aus und persistiert das Ergebnis.
+    Läuft als asyncio-Task NACH dem Request → nutzt den Modul-DB-Pool
+    (in main_production via `_deep_cookie_scanner_routes.db_pool = db_pool` gesetzt),
+    nicht die request-gebundene Dependency.
+    """
+    if not db_pool:
+        logger.error(f"[DeepScan {scan_id}] Kein DB-Pool verfügbar — Abbruch")
+        return
+
     try:
-        # Update status to running
-        await connection.execute(
-            "UPDATE deep_cookie_scans SET status = 'running' WHERE id = $1",
-            scan_id
-        )
-        
-        # Initialize browser and scanner
-        browser = await launch_headless_browser()
-        scanner = DeepCookieScanner(scan_id, url, browser)
-        
-        # Execute scan
+        async with db_pool.acquire() as connection:
+            await connection.execute(
+                "UPDATE deep_cookie_scans SET status = 'running' WHERE id = $1",
+                scan_id,
+            )
+
+        # Echter Scan (DeepCookieScanner startet Playwright selbst)
+        scanner = DeepCookieScanner(scan_id, url)
         result = await scanner.scan()
-        
-        # Save results
-        await connection.execute(
-            '''
-            UPDATE deep_cookie_scans SET
-                status = 'completed',
-                cookies = $2,
-                requests = $3,
-                storage = $4,
-                categorized = $5,
-                total_cookies = $6,
-                unique_services = $7,
-                total_requests = $8,
-                services_detected = $9,
-                scan_duration_seconds = $10,
-                last_updated = NOW()
-            WHERE id = $1
-            ''',
-            scan_id,
-            json.dumps([asdict(c) for c in result.cookies]),
-            json.dumps([asdict(r) for r in result.requests]),
-            json.dumps(result.storage),
-            json.dumps(result.categorized),
-            result.total_cookies,
-            result.unique_services,
-            result.total_requests,
-            result.services_detected,
-            result.scan_duration_seconds,
-        )
-        
-        # Log completion
-        await connection.execute(
-            "INSERT INTO deep_scan_history (scan_id, event_type) VALUES ($1, 'completed')",
-            scan_id
-        )
-        
+
+        if getattr(result, "error", None):
+            raise RuntimeError(result.error)
+
+        async with db_pool.acquire() as connection:
+            await connection.execute(
+                """
+                UPDATE deep_cookie_scans SET
+                    status = 'completed',
+                    cookies = $2,
+                    requests = $3,
+                    storage = $4,
+                    categorized = $5,
+                    total_cookies = $6,
+                    unique_services = $7,
+                    total_requests = $8,
+                    services_detected = $9,
+                    scan_duration_seconds = $10,
+                    last_updated = NOW()
+                WHERE id = $1
+                """,
+                scan_id,
+                json.dumps([asdict(c) for c in result.cookies]),
+                json.dumps([asdict(r) for r in result.requests]),
+                json.dumps(result.storage),
+                json.dumps(result.categorized),
+                result.total_cookies,
+                result.unique_services,
+                result.total_requests,
+                json.dumps(result.services_detected),  # JSONB-Spalte → dumpen
+                result.scan_duration_seconds,
+            )
+            await connection.execute(
+                "INSERT INTO deep_scan_history (scan_id, event_type) VALUES ($1, 'completed')",
+                scan_id,
+            )
+        logger.info(f"[DeepScan {scan_id}] ✅ completed — {result.total_requests} requests, "
+                    f"{result.total_cookies} cookies, {result.unique_services} services")
+
     except Exception as e:
-        # Update status to failed
-        await connection.execute(
-            "UPDATE deep_cookie_scans SET status = 'failed', error_message = $2 WHERE id = $1",
-            scan_id,
-            str(e)
-        )
-        
-        # Log failure
-        await connection.execute(
-            "INSERT INTO deep_scan_history (scan_id, event_type, event_data) VALUES ($1, 'failed', $2)",
-            scan_id,
-            json.dumps({"error": str(e)})
-        )
-"""
+        logger.error(f"[DeepScan {scan_id}] ❌ failed: {e}")
+        try:
+            async with db_pool.acquire() as connection:
+                await connection.execute(
+                    "UPDATE deep_cookie_scans SET status = 'failed', error_message = $2 WHERE id = $1",
+                    scan_id, str(e),
+                )
+                await connection.execute(
+                    "INSERT INTO deep_scan_history (scan_id, event_type, event_data) VALUES ($1, 'failed', $2)",
+                    scan_id, json.dumps({"error": str(e)}),
+                )
+        except Exception as inner:
+            logger.error(f"[DeepScan {scan_id}] konnte Fehlerstatus nicht speichern: {inner}")
 """
 Additional API endpoint for Scanner Import Panel
 
@@ -641,8 +666,8 @@ async def get_scan_statistics(
         "marketing": 0,
     }
     
-    categorized = scan["categorized"] or {}
-    
+    categorized = _as_obj(scan["categorized"], {})
+
     for service, data in categorized.items():
         # Get category from categorization logic
         category = _determine_category(

@@ -18,6 +18,16 @@ import json
 import re
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
+import logging
+
+logger = logging.getLogger(__name__)
+
+try:
+    from playwright.async_api import async_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+    logger.warning("Playwright nicht verfügbar — DeepCookieScanner kann nicht scannen.")
 
 # Note: Would use pyppeteer or async-driver in production
 # For MVP, showing the architecture
@@ -130,47 +140,104 @@ class DeepCookieScanner:
 
     async def scan(self) -> ScanResult:
         """
-        Execute full scan: navigate, intercept, simulate, collect
+        Echter Scan via Playwright: Browser starten, Requests + Cookies +
+        Storage erfassen, Nutzer-Interaktion simulieren, Ergebnis kompilieren.
         """
         self.start_time = datetime.utcnow()
-        
-        try:
-            # 1. Navigate to URL and set up interception
-            await self._setup_interception()
-            
-            # 2. Navigate to page (triggers all initial scripts)
-            await self._navigate_page()
-            
-            # 3. Simulate user interactions to trigger lazy tracking
-            await self._simulate_user_interaction()
-            
-            # 4. Compile and categorize results
-            result = await self._compile_results()
-            
+
+        if not PLAYWRIGHT_AVAILABLE:
+            result = ScanResult(scan_id=self.scan_id, url=self.url)
+            result.error = "Playwright nicht verfügbar"
             return result
+
+        url = self.url if self.url.startswith(("http://", "https://")) else f"https://{self.url}"
+
+        try:
+            async with async_playwright() as pw:
+                browser = await pw.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage",
+                          "--disable-blink-features=AutomationControlled"],
+                )
+                context = await browser.new_context(
+                    viewport={"width": 1920, "height": 1080},
+                    user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+                    locale="de-DE",
+                )
+                page = await context.new_page()
+
+                # Alle ausgehenden Requests erfassen (XHR, Script, Img, Font, ...)
+                page.on("request", self._on_request)
+
+                # Navigieren (löst initiale Skripte/Tracker aus)
+                try:
+                    await page.goto(url, wait_until="networkidle", timeout=30000)
+                except Exception as e:
+                    logger.warning(f"Navigation langsam/teilweise für {url}: {e}")
+
+                # Lazy-Tracker durch Interaktion triggern
+                await self._simulate_user_interaction(page)
+
+                # Cookies aus dem Browser-Context (echte gesetzte Cookies)
+                try:
+                    for c in await context.cookies():
+                        cookie = Cookie(
+                            name=c.get("name", ""),
+                            domain=c.get("domain", ""),
+                            path=c.get("path", "/"),
+                            secure=c.get("secure", False),
+                            httpOnly=c.get("httpOnly", False),
+                            sameSite=c.get("sameSite", "Lax"),
+                            expires=str(c.get("expires", "")),
+                            service=self._identify_service("https://" + c.get("domain", "").lstrip(".")),
+                        )
+                        self.cookies.append(cookie)
+                        if cookie.service:
+                            self.services_detected.add(cookie.service)
+                except Exception as e:
+                    logger.warning(f"Cookie-Erfassung fehlgeschlagen: {e}")
+
+                # Storage erfassen
+                try:
+                    self.storage["localStorage"] = await page.evaluate(
+                        "() => Object.fromEntries(Object.entries(localStorage))"
+                    ) or {}
+                    self.storage["sessionStorage"] = await page.evaluate(
+                        "() => Object.fromEntries(Object.entries(sessionStorage))"
+                    ) or {}
+                except Exception as e:
+                    logger.debug(f"Storage-Erfassung fehlgeschlagen: {e}")
+
+                await context.close()
+                await browser.close()
+
+            return await self._compile_results()
+
         except Exception as e:
-            # Return failed result
+            logger.error(f"Deep-Scan fehlgeschlagen für {url}: {e}")
             result = ScanResult(
                 scan_id=self.scan_id,
                 url=self.url,
-                scan_duration_seconds=int((datetime.utcnow() - self.start_time).total_seconds())
+                scan_duration_seconds=int((datetime.utcnow() - self.start_time).total_seconds()),
             )
             result.error = str(e)
             return result
 
-    async def _setup_interception(self):
-        """
-        Set up browser-level interception for:
-        - HTTP response headers (Set-Cookie)
-        - Network requests (XHR, Fetch, Img, etc.)
-        - Storage APIs (localStorage, sessionStorage)
-        """
-        # In production, use pyppeteer.Browser.setRequestInterception()
-        # Example pseudocode:
-        # await self.browser.client.send("Network.enable")
-        # await self.browser.client.send("Network.setUserAgentOverride", ...)
-        # self.browser.on('response', self._intercept_response)
-        pass
+    def _on_request(self, request):
+        """Sync-Handler für page.on('request') — erfasst jeden Request."""
+        try:
+            service = self._identify_service(request.url)
+            self.requests.append(Request(
+                url=request.url,
+                method=request.method,
+                type=request.resource_type,
+                service=service,
+            ))
+            if service:
+                self.services_detected.add(service)
+        except Exception:
+            pass
 
     async def _intercept_response(self, response):
         """
@@ -276,20 +343,18 @@ class DeepCookieScanner:
         })();
         """
 
-    async def _simulate_user_interaction(self):
+    async def _simulate_user_interaction(self, page):
         """
-        Simulate user interactions to trigger lazy-loaded trackers:
-        - Scroll to bottom
-        - Hover over elements
-        - Click buttons
-        - Wait for AJAX requests
+        Simuliert Nutzer-Interaktion, um lazy geladene Tracker auszulösen:
+        Scrollen + kurze Wartezeit für nachladende AJAX-/Consent-Skripte.
         """
-        # Pseudocode:
-        # await page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
-        # await page.hover("body > *")
-        # await page.click("button")
-        # await page.waitForNavigation({waitUntil: "networkidle2", timeout: 5000})
-        pass
+        try:
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await asyncio.sleep(2)
+            await page.evaluate("window.scrollTo(0, 0)")
+            await asyncio.sleep(1)
+        except Exception as e:
+            logger.debug(f"User-Interaktion-Simulation übersprungen: {e}")
 
     async def _compile_results(self) -> ScanResult:
         """

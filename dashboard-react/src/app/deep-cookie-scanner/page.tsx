@@ -25,6 +25,20 @@ interface ScanResult {
   scan_duration_seconds?: number;
   progress_percent?: number;
   error?: string;
+  privacy_findings?: PrivacyFinding[];
+  privacy_findings_count?: number;
+  privacy_risk_euro?: number;
+}
+
+interface PrivacyFinding {
+  key: string;
+  name: string;
+  transmits: string;
+  severity: string;
+  risk_euro: number;
+  description: string;
+  recommendation: string;
+  legal_basis: string;
 }
 
 interface ExportData {
@@ -255,6 +269,41 @@ export default function DeepCookieScannerPage() {
                     <p className="text-3xl font-bold text-blue-400 mt-2">{currentScan.total_requests}</p>
                   </div>
                 </div>
+
+                {currentScan.privacy_findings && currentScan.privacy_findings.length > 0 && (
+                  <div className="bg-red-900/40 border-2 border-red-500/60 rounded-lg p-6">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-2xl">⚠️</span>
+                      <h2 className="text-xl font-bold text-red-200">
+                        {currentScan.privacy_findings.length} abmahnfähige(r) DSGVO-Verstoß(e)
+                      </h2>
+                    </div>
+                    <p className="text-sm text-red-300 mb-4">
+                      Drittlandtransfer ohne Einwilligung — kein Cookie-Banner hilft hier.
+                      {currentScan.privacy_risk_euro ? ` Geschätztes Risiko: bis ${currentScan.privacy_risk_euro.toLocaleString('de-DE')} €.` : ''}
+                    </p>
+                    <div className="space-y-3">
+                      {currentScan.privacy_findings.map((f) => (
+                        <div key={f.key} className="bg-red-800/40 rounded-lg p-4">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <span className="font-semibold text-red-100">{f.name}</span>
+                            <span className="text-xs bg-orange-500/20 text-orange-200 px-2 py-0.5 rounded">überträgt: {f.transmits}</span>
+                            {f.risk_euro ? (
+                              <span className="text-xs border border-red-400/50 text-red-200 px-2 py-0.5 rounded">
+                                bis {Number(f.risk_euro).toLocaleString('de-DE')} €
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-sm text-red-100 mb-2">{f.description}</p>
+                          <p className="text-sm text-green-200"><b>Lösung:</b> {f.recommendation}</p>
+                          {f.legal_basis ? (
+                            <p className="text-xs text-red-300/80 mt-1">Rechtsgrundlage: {f.legal_basis}</p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {exportData && (
                   <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-6">

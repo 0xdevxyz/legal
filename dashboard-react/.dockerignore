@@ -1,0 +1,17 @@
+# Build artifacts & caches — must NOT leak into the Docker build context.
+# A local .next/cache (webpack persistent cache) otherwise gets COPYd in via
+# `COPY . .` and makes `next build` reuse stale compiled modules, producing
+# images that don't reflect source changes.
+.next
+node_modules
+npm-debug.log*
+
+# VCS / local tooling
+.git
+.gitignore
+.dockerignore
+
+# Env files (provided at runtime, not baked into the image)
+.env
+.env.local
+.env.*.local
