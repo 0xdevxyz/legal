@@ -50,7 +50,7 @@ _postgres_health_gauge = _PGauge("complyo_postgres_health", "Postgres health (1=
 _5xx_errors_total = _PCounter("complyo_5xx_total", "5xx errors", ["endpoint"])
 from compliance_engine.scanner import ComplianceScanner
 from compliance_engine.workflow_engine import workflow_engine, UserSkillLevel
-from compliance_engine.workflow_integration import WorkflowIntegration
+from compliance_engine.workflow_integration import WorkflowIntegration, init_workflow_integration
 from compliance_engine.pdf_generator import pdf_generator
 from compliance_engine.score_calculator import ScoreCalculator
 from compliance_engine.deep_scanner import DeepScanner
@@ -389,9 +389,10 @@ async def startup_event():
     # Initialize email service
     print(f"✅ Email service initialized ({'DEMO MODE' if email_service.demo_mode else 'SMTP MODE'})")
     
-    # Initialize workflow integration with the db_pool
+    # Initialize workflow integration with the db_pool. Wire up the shared
+    # singleton so workflow_engine (which imports it) uses the same db_pool.
     global workflow_integration_instance
-    workflow_integration_instance = WorkflowIntegration(db_pool)
+    workflow_integration_instance = init_workflow_integration(db_pool)
     
     # Initialize Stripe service
     global stripe_service
@@ -1168,11 +1169,19 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
             )
             
             if tracked_site:
+                # Scanner liefert pillar_scores als Liste [{"pillar": ..., "score": ...}].
+                # Frühere Version las nicht existente *_score-Keys → score_history
+                # speicherte Säulen dauerhaft als 0. Hier aus der Liste in ein Dict mappen.
+                _pillar_list = scan_result.get("pillar_scores") or []
+                _by_pillar = {
+                    p.get("pillar"): p.get("score", 0)
+                    for p in _pillar_list if isinstance(p, dict)
+                }
                 pillar_scores = {
-                    "accessibility": scan_result.get("accessibility_score", 0),
-                    "gdpr": scan_result.get("gdpr_score", 0),
-                    "legal": scan_result.get("legal_score", 0),
-                    "cookies": scan_result.get("cookie_score", 0),
+                    "accessibility": _by_pillar.get("accessibility", 0),
+                    "gdpr": _by_pillar.get("gdpr", 0),
+                    "legal": _by_pillar.get("legal", 0),
+                    "cookies": _by_pillar.get("cookies", 0),
                     "critical_issues": scan_result.get("critical_issues", 0)
                 }
                 await connection.execute(

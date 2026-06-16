@@ -7,7 +7,7 @@ Prüft Website auf Barrierefreiheitsstärkungsgesetz-Compliance
 
 from bs4 import BeautifulSoup
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, is_dataclass
 import re
 from urllib.parse import urljoin, urlparse
 import logging
@@ -386,7 +386,11 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
             is_missing=False,
         ))
 
-    return [asdict(issue) for issue in issues]
+    # issues enthält gemischt BarrierefreiheitIssue-Instanzen UND bereits per asdict()
+    # konvertierte Dicts (AUDIT-09…13 liefern Dicts). asdict() auf ein Dict wirft
+    # TypeError und ließ bisher den GESAMTEN Check abstürzen → Barrierefreiheit fiel
+    # im Scanner stumm weg (Säule defaultete auf 100, "Widget vorhanden").
+    return [asdict(issue) if is_dataclass(issue) else issue for issue in issues]
 
 async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIssue | None:
     """
