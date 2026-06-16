@@ -45,14 +45,17 @@ export const WebsiteAnalysis: React.FC = () => {
     : rawPlanType !== 'free' ? 'paid'
     : 'free';
 
-  const isCurrentSiteLocked = isInOptimizationMode &&
+  // Agentur/Expert: jede getrackte Seite ist voll optimierbar → kein Single-Lock.
+  const isAgency = rawPlanType === 'agency' || rawPlanType === 'expert';
+
+  const isCurrentSiteLocked = isAgency || (isInOptimizationMode &&
     lockedOptimizationUrl &&
     currentWebsite?.url &&
     (currentWebsite.url === lockedOptimizationUrl ||
      currentWebsite.url.includes(lockedOptimizationUrl) ||
-     lockedOptimizationUrl.includes(currentWebsite.url));
+     lockedOptimizationUrl.includes(currentWebsite.url)));
 
-  const isAnalysisOnly = !!(isInOptimizationMode && lockedOptimizationUrl && !isCurrentSiteLocked);
+  const isAnalysisOnly = !isAgency && !!(isInOptimizationMode && lockedOptimizationUrl && !isCurrentSiteLocked);
   
   // ✅ PERSISTENCE: Lade letzte Scan-Ergebnisse beim Mount
   const { data: latestScanData, isLoading: isLoadingLatestScan } = useLatestScan();
@@ -63,8 +66,12 @@ export const WebsiteAnalysis: React.FC = () => {
     currentWebsite?.url || null // ← CRITICAL FIX: null statt undefined
   );
   
-  // Priorität: DB (latestScan) > Fetched > Store (localStorage-Cache)
-  const analysisData = latestScanData || fetchedAnalysisData || storedAnalysisData;
+  // Priorität: DB (latestScan) > Fetched > Store (localStorage-Cache).
+  // Bei Agentur NICHT den global letzten Scan bevorzugen — sonst überschreibt er
+  // beim Seitenwechsel die per-Domain-Analyse der aktiven Seite.
+  const analysisData = isAgency
+    ? (fetchedAnalysisData || storedAnalysisData)
+    : (latestScanData || fetchedAnalysisData || storedAnalysisData);
   
   // ✅ DEBUG: Log final analysisData
   React.useEffect(() => {
@@ -259,7 +266,23 @@ export const WebsiteAnalysis: React.FC = () => {
             auto_fixable: category === 'impressum' || category === 'datenschutz' || category === 'cookies'
           } as ComplianceIssue;
         }
-        return issue as ComplianceIssue;
+        // Objekt-Issue (von Check-Modulen): id sicherstellen.
+        // Manche Check-Module (z. B. Cookie/AGB) liefern keine id mit — ohne id
+        // bricht der KI-Fix mit "Ungültige Issue-ID" ab. Fallback wie im Backend:
+        // Slug aus Kategorie + Titel.
+        const obj = issue as ComplianceIssue;
+        if (!obj.id || typeof obj.id !== 'string') {
+          const cat = (obj.category || 'compliance').toLowerCase();
+          const slug = (obj.title || obj.description || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, '')
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 4)
+            .join('-');
+          obj.id = `${cat}-${slug}`.slice(0, 50) || `issue-${index}`;
+        }
+        return obj;
       })
     : [];
   
@@ -276,7 +299,7 @@ export const WebsiteAnalysis: React.FC = () => {
       icon: Eye,
       color: 'blue',
       description: 'WCAG 2.1 AA Konformität',
-      keywords: ['accessibility', 'wcag', 'barrierefreiheit', 'barriere', 'alt', 'kontrast', 'contrast', 'tastat']
+      keywords: ['accessibility', 'wcag', 'aria', 'barrierefreiheit', 'barriere', 'alt-text', 'alt_text', 'kontrast', 'contrast', 'tastat']
     },
     {
       id: 'gdpr',
@@ -307,11 +330,26 @@ export const WebsiteAnalysis: React.FC = () => {
   ];
 
   const categorizeIssue = (issue: ComplianceIssue): string => {
-    const text = `${issue.title} ${issue.description} ${issue.category}`.toLowerCase();
-
     // Reihenfolge der Säulen = Priorität (erste Übereinstimmung gewinnt),
     // damit z.B. "tracking" zuerst Cookies und nicht versehentlich Legal trifft.
     const ordered = ['accessibility', 'cookies', 'gdpr', 'legal'];
+
+    // 1. PRIMÄR: nur über das category-Feld zuordnen — identisch zum Backend
+    //    (ScoreCalculator.categorize). So kann ein Wort wie "Inhalt" nicht über den
+    //    Teilstring "alt" ein Datenschutz-Issue fälschlich in Barrierefreiheit kippen.
+    const cat = (issue.category || '').toLowerCase();
+    if (cat) {
+      for (const id of ordered) {
+        const pillar = pillars.find(p => p.id === id);
+        if (pillar && pillar.keywords.some(keyword => cat.includes(keyword))) {
+          return pillar.id;
+        }
+      }
+    }
+
+    // 2. FALLBACK (nur für Legacy-String-Issues ohne brauchbares category-Feld):
+    //    Titel/Beschreibung heranziehen.
+    const text = `${issue.title} ${issue.description}`.toLowerCase();
     for (const id of ordered) {
       const pillar = pillars.find(p => p.id === id);
       if (pillar && pillar.keywords.some(keyword => text.includes(keyword))) {

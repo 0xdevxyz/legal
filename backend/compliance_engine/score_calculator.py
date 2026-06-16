@@ -265,7 +265,15 @@ class ScoreCalculator:
         for pillar_id, pillar_issues in buckets.items():
             critical_count = sum(1 for i in pillar_issues if i.severity == "critical")
             warning_count = sum(1 for i in pillar_issues if i.severity == "warning")
-            has_missing_core = any(getattr(i, "is_missing", False) for i in pillar_issues)
+            # is_missing wird von vielen Checks auch auf einzelne Warning-Sub-Findings
+            # gesetzt ("Widerrufsmöglichkeit fehlt", "Ablehnen-Button fehlt" …). Nur ein
+            # komplett fehlendes KERN-Element (Impressum, Datenschutz, Cookie-Banner,
+            # A11y-Widget) soll die Säule auf 0 ziehen — solche Issues sind immer
+            # critical. Sonst kollabiert jede Säule mit einer einzelnen "fehlt"-Warnung.
+            has_missing_core = any(
+                getattr(i, "is_missing", False) and i.severity == "critical"
+                for i in pillar_issues
+            )
             pillar_scores[pillar_id] = ScoreCalculator.calculate_pillar_score(
                 critical_count=critical_count,
                 warning_count=warning_count,
