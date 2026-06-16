@@ -14,9 +14,14 @@ import {
   CreditCard,
   ArrowRight,
   ExternalLink,
+  Plus,
+  Loader2,
+  Trash2,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import apiClient from '@/lib/api';
+import apiClient, { saveTrackedWebsite, deleteTrackedWebsite } from '@/lib/api';
+import { useActiveSite } from '@/contexts/ActiveSiteContext';
 import { ClientGroup } from '@/components/agency/ClientGroup';
 import { AgencyLogoUpload } from '@/components/agency/AgencyLogoUpload';
 import { getAgencyClients, type AgencyClient } from '@/lib/agency-api';
@@ -30,11 +35,12 @@ interface SiteStat {
 }
 
 interface AgencyStats {
-  total_sites: number;
-  total_impressions: number;
-  overall_acceptance_rate: number;
-  active_clients?: number;
   sites: SiteStat[];
+  totals: {
+    total_impressions: number;
+    acceptance_rate: number;
+    site_count: number;
+  };
 }
 
 // ─── Skeleton helpers ────────────────────────────────────────────────────────
@@ -151,11 +157,246 @@ function StatusBadge({ rate }: { rate: number }) {
   );
 }
 
+// ─── Projekte (Tracked Websites) ───────────────────────────────────────────────
+// Erlaubt es Agenturen, im Agentur-Tab weitere Projekte anzulegen und direkt zum
+// Scoring/Optimieren zu springen.
+
+function ProjectsCard() {
+  const router = useRouter();
+  const { sites, activeSite, setActiveSite, isLoading, refresh } = useActiveSite();
+  const [newUrl, setNewUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [deletingId, setDeletingId] = useState<string | number | null>(null);
+  const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null);
+
+  const PLAN_LIMIT = 25;
+  const atLimit = sites.length >= PLAN_LIMIT;
+
+  const startCheckout = async (plan: string) => {
+    setCheckoutPlan(plan);
+    setError('');
+    try {
+      const res = await apiClient.post('/api/stripe/create-checkout', {
+        plan,
+        billing_period: 'monthly',
+        success_url: `${window.location.origin}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${window.location.origin}/agency`,
+      });
+      if (res.data.checkout_url) {
+        window.location.href = res.data.checkout_url;
+      } else {
+        setError(res.data.detail || 'Checkout konnte nicht gestartet werden.');
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || 'Fehler beim Starten des Checkouts.');
+    } finally {
+      setCheckoutPlan(null);
+    }
+  };
+
+  const handleAdd = async () => {
+    if (!newUrl.trim() || saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      let url = newUrl.trim();
+      if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+      const site = await saveTrackedWebsite(url, 0);
+      await refresh();
+      setActiveSite(site);
+      setNewUrl('');
+    } catch (err: any) {
+      setError(err?.message ?? 'Projekt konnte nicht angelegt werden.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleOptimize = (site: (typeof sites)[number]) => {
+    setActiveSite(site);
+    router.push('/');
+  };
+
+  const handleDelete = async (id: string | number) => {
+    setDeletingId(id);
+    setError('');
+    try {
+      await deleteTrackedWebsite(id);
+      await refresh();
+    } catch (err: any) {
+      setError(err?.message ?? 'Projekt konnte nicht gelöscht werden.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return (
+    <div className="mb-8 dark:bg-zinc-900 bg-white border dark:border-zinc-800 border-gray-200 rounded-xl overflow-hidden">
+      <div className="px-6 py-4 border-b dark:border-zinc-800 border-gray-200 flex items-center justify-between">
+        <div>
+          <h2 className="dark:text-white text-gray-900 font-semibold">Meine Projekte</h2>
+          <p className="dark:text-zinc-500 text-gray-500 text-xs mt-0.5">
+            Websites anlegen, scannen und optimieren · {sites.length}/{PLAN_LIMIT}
+          </p>
+        </div>
+      </div>
+
+      {/* Add form */}
+      <div className="px-6 py-4 border-b dark:border-zinc-800 border-gray-200">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <label htmlFor="agency-new-project" className="sr-only">Website-URL</label>
+          <input
+            id="agency-new-project"
+            type="url"
+            inputMode="url"
+            placeholder="https://beispiel.de"
+            value={newUrl}
+            disabled={atLimit}
+            onChange={(e) => setNewUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+            className="flex-1 px-3 py-2.5 text-sm rounded-lg dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 dark:text-white text-gray-900 placeholder:dark:text-zinc-500 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+          />
+          <button
+            onClick={handleAdd}
+            disabled={saving || atLimit || !newUrl.trim()}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors duration-200 whitespace-nowrap"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Projekt anlegen
+          </button>
+        </div>
+        {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+      </div>
+
+      {/* Upsell: erscheint, sobald das 25-Projekte-Limit erreicht ist */}
+      {atLimit && (
+        <div className="px-6 py-5 border-b dark:border-zinc-800 border-gray-200 bg-gradient-to-r from-blue-500/5 via-purple-500/5 to-blue-500/5">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="p-2 bg-blue-500/20 rounded-lg flex-shrink-0">
+              <Building2 className="w-5 h-5 text-blue-400" />
+            </div>
+            <div>
+              <h3 className="dark:text-white text-gray-900 font-semibold">
+                Limit erreicht – alle {PLAN_LIMIT} Projekte belegt
+              </h3>
+              <p className="dark:text-zinc-400 text-gray-600 text-sm mt-0.5">
+                Erweitere dein Kontingent, um weitere Websites zu ranken und zu optimieren.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Option 1: Einzelplan +1 Seite */}
+            <div className="rounded-xl border dark:border-zinc-700 border-gray-200 dark:bg-zinc-900/60 bg-white p-4 flex flex-col">
+              <p className="dark:text-white text-gray-900 font-semibold">Einzelplan</p>
+              <p className="dark:text-zinc-400 text-gray-600 text-xs mt-0.5 flex-1">
+                Eine weitere Website hinzufügen.
+              </p>
+              <p className="my-3 dark:text-white text-gray-900 font-bold text-2xl">
+                19 €<span className="dark:text-zinc-400 text-gray-600 text-sm font-normal">/Monat</span>
+              </p>
+              <button
+                onClick={() => startCheckout('agency_extra')}
+                disabled={checkoutPlan !== null}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg dark:bg-zinc-800 bg-gray-100 hover:bg-zinc-700 dark:text-white text-gray-900 font-semibold text-sm transition-colors disabled:opacity-60"
+              >
+                {checkoutPlan === 'agency_extra' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                +1 Website
+              </button>
+            </div>
+
+            {/* Option 2: Agency Plan 2 +25 Seiten */}
+            <div className="relative rounded-xl border border-blue-500/40 bg-gradient-to-br from-blue-500/10 to-purple-500/10 p-4 flex flex-col">
+              <span className="absolute -top-2.5 right-3 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                Bester Wert
+              </span>
+              <p className="dark:text-white text-gray-900 font-semibold">Agency Plan 2</p>
+              <p className="dark:text-zinc-400 text-gray-600 text-xs mt-0.5 flex-1">
+                Weitere 25 Websites auf einmal.
+              </p>
+              <p className="my-3 dark:text-white text-gray-900 font-bold text-2xl">
+                299 €<span className="dark:text-zinc-400 text-gray-600 text-sm font-normal">/Monat</span>
+              </p>
+              <button
+                onClick={() => startCheckout('agency2')}
+                disabled={checkoutPlan !== null}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition-colors disabled:opacity-60"
+              >
+                {checkoutPlan === 'agency2' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                +25 Websites
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* List */}
+      {isLoading ? (
+        <div className="px-6 py-8 flex items-center justify-center dark:text-zinc-500 text-gray-500 text-sm gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" /> Projekte werden geladen…
+        </div>
+      ) : sites.length === 0 ? (
+        <div className="px-6 py-8 text-center dark:text-zinc-500 text-gray-500 text-sm">
+          Noch keine Projekte. Lege oben deine erste Website an.
+        </div>
+      ) : (
+        <ul className="divide-y dark:divide-zinc-800 divide-gray-200">
+          {sites.map((site) => {
+            const label = site.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+            const score = site.last_score ?? site.compliance_score ?? null;
+            const isActive = activeSite?.id === site.id;
+            return (
+              <li key={site.id} className="px-6 py-4 flex items-center gap-3 hover:bg-zinc-800/30 transition-colors duration-150">
+                <div className="flex-shrink-0 w-8 h-8 dark:bg-zinc-800 bg-gray-100 rounded-md flex items-center justify-center">
+                  <Globe className="w-4 h-4 dark:text-zinc-400 text-gray-600" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="dark:text-white text-gray-900 font-medium truncate">{label}</p>
+                  <p className="dark:text-zinc-500 text-gray-500 text-xs">
+                    {site.scan_count > 0 ? `${site.scan_count} Scans` : 'Noch nicht gescannt'}
+                    {isActive && ' · aktiv'}
+                  </p>
+                </div>
+                {score != null && (
+                  <span
+                    className={`text-sm font-semibold tabular-nums shrink-0 ${
+                      score >= 80 ? 'text-green-400' : score >= 50 ? 'text-teal-400' : 'dark:text-zinc-500 text-gray-500'
+                    }`}
+                  >
+                    {score}%
+                  </span>
+                )}
+                <button
+                  onClick={() => handleOptimize(site)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors shrink-0"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Ranken &amp; optimieren
+                </button>
+                <button
+                  onClick={() => handleDelete(site.id)}
+                  disabled={deletingId === site.id}
+                  aria-label={`${label} entfernen`}
+                  className="p-2 rounded-lg dark:text-zinc-500 text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0 disabled:opacity-50"
+                >
+                  {deletingId === site.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AgencyPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { sites: managedSites } = useActiveSite();
   const [stats, setStats] = useState<AgencyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -369,11 +610,13 @@ export default function AgencyPage() {
     return <ErrorState />;
   }
 
-  const totalSites = stats?.total_sites ?? 0;
-  const totalImpressions = stats?.total_impressions ?? 0;
-  const overallRate = stats?.overall_acceptance_rate ?? 0;
-  const activeClients = stats?.active_clients ?? stats?.sites?.filter((s) => (s.acceptance_rate ?? 0) > 0).length ?? 0;
+  const totalImpressions = stats?.totals?.total_impressions ?? 0;
+  const overallRate = stats?.totals?.acceptance_rate ?? 0;
   const sites = stats?.sites ?? [];
+  // Gesamte Websites = tatsächlich verwaltete Projekte (nicht nur Sites mit Consent-Daten)
+  const totalSites = managedSites.length;
+  // Aktive Clients = verwaltete Sites mit mindestens einem Scan
+  const activeClients = managedSites.filter((s) => (s.scan_count ?? 0) > 0).length;
 
   return (
     <main
@@ -421,11 +664,14 @@ export default function AgencyPage() {
             <StatCard
               label="Aktive Clients"
               value={activeClients}
-              sub="Mit Consent-Aktivität"
+              sub="Mit Scan-Aktivität"
               icon={<Users className="w-5 h-5 text-teal-400" />}
               accent="orange"
             />
           </div>
+
+          {/* ── Projekte: anlegen / ranken / optimieren (unter den Kennzahlen) ── */}
+          <ProjectsCard />
 
           {/* Agency logo upload (Phase 10 AGENCY-03) */}
           <div className="mb-6">

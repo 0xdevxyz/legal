@@ -10,6 +10,7 @@ GET    /api/v2/deep-cookie-scan/{scan_id}/export - Export for Cookie Configurato
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import asyncpg
 import asyncio
 from datetime import datetime
@@ -62,8 +63,31 @@ async def check_premium_plan(user_id: int, connection) -> bool:
     return result in ["pro", "premium", "agency", "enterprise", "complete"]
 
 
+# Das monatliche Deep-Scan-Kontingent entspricht der Anzahl freigeschalteter
+# Websites (user_limits.websites_max). Daraus ergibt sich automatisch:
+#   pro = 1, agency = 25, agency2 = 50 (Agency + Add-on, additiv).
+# Add-ons (agency_extra/agency2) erhöhen websites_max, plan_type bleibt 'agency'
+# — deshalb wird hier websites_max statt plan_type ausgewertet.
+DEFAULT_SCAN_LIMIT = 1
+UNLIMITED_SCAN_LIMIT = 999999
+
+
+async def resolve_scan_limit(user_id: int, connection) -> int:
+    """Ermittelt das monatliche Scan-Limit aus dem freigeschalteten Website-Kontingent."""
+    websites_max = await connection.fetchval(
+        "SELECT websites_max FROM user_limits WHERE user_id = $1",
+        user_id
+    )
+    if websites_max is None:
+        return DEFAULT_SCAN_LIMIT
+    if websites_max < 0:  # -1 = unbegrenzt (Master-Account)
+        return UNLIMITED_SCAN_LIMIT
+    return websites_max
+
+
 async def check_scan_limit(user_id: int, connection) -> Dict[str, int]:
     current_month = datetime.utcnow().strftime("%Y-%m")
+    scans_limit = await resolve_scan_limit(user_id, connection)
 
     usage = await connection.fetchrow(
         "SELECT scans_used, scans_limit FROM deep_scan_usage "
@@ -73,7 +97,6 @@ async def check_scan_limit(user_id: int, connection) -> Dict[str, int]:
     )
 
     if not usage:
-        scans_limit = 5
         await connection.execute(
             "INSERT INTO deep_scan_usage (user_id, current_month, scans_used, scans_limit) "
             "VALUES ($1, $2, 0, $3)",
@@ -84,26 +107,40 @@ async def check_scan_limit(user_id: int, connection) -> Dict[str, int]:
         return {"scans_used": 0, "scans_limit": scans_limit, "can_scan": True}
 
     scans_used = usage["scans_used"]
-    scans_limit = usage["scans_limit"]
+    # Limit an den aktuellen Plan angleichen (z. B. nach Upgrade auf Agency),
+    # ohne den bereits verbrauchten Zähler zurückzusetzen.
+    if usage["scans_limit"] != scans_limit:
+        await connection.execute(
+            "UPDATE deep_scan_usage SET scans_limit = $3 "
+            "WHERE user_id = $1 AND current_month = $2",
+            user_id,
+            current_month,
+            scans_limit
+        )
+
     can_scan = scans_used < scans_limit
 
     return {"scans_used": scans_used, "scans_limit": scans_limit, "can_scan": can_scan}
 
 
+class StartScanRequest(BaseModel):
+    url: str
+    website_id: Optional[str] = None
+
+
 @router.post("/deep-cookie-scan/start")
 async def start_deep_scan(
-    url: str,
-    website_id: Optional[str] = None,
+    body: StartScanRequest,
     current_user: Dict = Depends(get_current_user),
     connection: asyncpg.Connection = Depends(get_db_connection),
 ):
     """
     Start a new deep cookie scan
-    
-    Request:
+
+    Request body (JSON):
         url: str - Website URL to scan
         website_id: Optional[str] - Tracked website ID for linking
-    
+
     Response:
         {
             "scan_id": 123,
@@ -112,6 +149,8 @@ async def start_deep_scan(
             "estimated_duration_seconds": 180
         }
     """
+    url = body.url
+    website_id = body.website_id
     user_id = current_user["id"]
     
     # 1. Check if user has premium plan
@@ -178,6 +217,25 @@ async def start_deep_scan(
             "scans_used": usage["scans_used"] + 1,
             "scans_limit": usage["scans_limit"]
         }
+    }
+
+
+@router.get("/deep-cookie-scan/usage")
+async def get_scan_usage(
+    current_user: Dict = Depends(get_current_user),
+    connection: asyncpg.Connection = Depends(get_db_connection),
+):
+    """
+    Aktuelles monatliches Scan-Kontingent des Nutzers (plan-abhängig).
+    Dient dem Frontend dazu, den korrekten Zähler/Limit schon vor dem
+    ersten Scan anzuzeigen.
+    """
+    user_id = current_user["id"]
+    usage = await check_scan_limit(int(user_id), connection)
+    return {
+        "scans_used": usage["scans_used"],
+        "scans_limit": usage["scans_limit"],
+        "can_scan": usage["can_scan"],
     }
 
 

@@ -3,6 +3,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AlertCircle, Loader2, CheckCircle2, AlertTriangle, Download, Plus } from 'lucide-react';
 import Link from 'next/link';
+import axios from 'axios';
+import { apiClient } from '@/lib/api-client';
+
+function errorDetail(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err)) {
+    const detail = err.response?.data?.detail;
+    if (typeof detail === 'string') return detail;
+    if (err.message) return err.message;
+  }
+  return err instanceof Error ? err.message : fallback;
+}
 
 interface Service {
   name: string;
@@ -54,7 +65,7 @@ export default function DeepCookieScannerPage() {
   const [currentScan, setCurrentScan] = useState<ScanResult | null>(null);
   const [exportData, setExportData] = useState<ExportData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [usage, setUsage] = useState({ scans_used: 0, scans_limit: 5 });
+  const [usage, setUsage] = useState({ scans_used: 0, scans_limit: 1 });
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
 
   const handleStartScan = async (e: React.FormEvent) => {
@@ -68,30 +79,24 @@ export default function DeepCookieScannerPage() {
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/v2/deep-cookie-scan/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: inputUrl }),
-      });
+      const data = await apiClient.post<{
+        scan_id: number;
+        message?: string;
+        usage: { scans_used: number; scans_limit: number };
+      }>('/api/v2/deep-cookie-scan/start', { url: inputUrl });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to start scan');
-      }
-
-      const data = await response.json();
       setCurrentScan({
         scan_id: data.scan_id,
         status: 'pending',
         url: data.message || inputUrl,
         progress_percent: 0,
       });
-      setUsage(data.usage);
+      if (data.usage) setUsage(data.usage);
       setInputUrl('');
 
       pollScanStatus(data.scan_id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(errorDetail(err, 'Failed to start scan'));
       setIsLoading(false);
     }
   };
@@ -99,10 +104,7 @@ export default function DeepCookieScannerPage() {
   const pollScanStatus = useCallback((scanId: number) => {
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`/api/v2/deep-cookie-scan/${scanId}`);
-        if (!response.ok) throw new Error('Failed to fetch scan status');
-
-        const data = await response.json();
+        const data = await apiClient.get<ScanResult>(`/api/v2/deep-cookie-scan/${scanId}`);
         setCurrentScan(data);
 
         if (data.status === 'completed') {
@@ -125,9 +127,7 @@ export default function DeepCookieScannerPage() {
 
   const fetchExportData = async (scanId: number) => {
     try {
-      const response = await fetch(`/api/v2/deep-cookie-scan/${scanId}/export`);
-      if (!response.ok) throw new Error('Failed to fetch export data');
-      const data = await response.json();
+      const data = await apiClient.get<ExportData>(`/api/v2/deep-cookie-scan/${scanId}/export`);
       setExportData(data);
     } catch (err) {
       console.error('Export fetch error:', err);
@@ -139,6 +139,18 @@ export default function DeepCookieScannerPage() {
       if (pollInterval) clearInterval(pollInterval);
     };
   }, [pollInterval]);
+
+  // Plan-abhängiges Kontingent schon vor dem ersten Scan laden
+  useEffect(() => {
+    apiClient
+      .get<{ scans_used: number; scans_limit: number }>('/api/v2/deep-cookie-scan/usage')
+      .then((data) => {
+        if (data) setUsage({ scans_used: data.scans_used, scans_limit: data.scans_limit });
+      })
+      .catch(() => {
+        /* Anzeige bleibt beim Default — kein blockierender Fehler */
+      });
+  }, []);
 
   return (
     <div className="px-4 sm:px-6 py-6">
