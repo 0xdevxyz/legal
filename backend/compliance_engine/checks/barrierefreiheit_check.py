@@ -227,66 +227,10 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
         alt_issues = await _check_alt_texts_enhanced(url, soup, session)
         issues.extend(alt_issues)
 
-        # WCAG 3.1.1: Sprache nicht gesetzt
-        html_tag = soup.find('html')
-        if not html_tag or not html_tag.get('lang'):
-            issues.append(BarrierefreiheitIssue(
-                category='barrierefreiheit',
-                severity='critical',
-                title='WCAG 3.1.1: Sprache der Seite nicht angegeben (lang-Attribut fehlt)',
-                description='Das <html>-Tag hat kein lang-Attribut. Screenreader können die Sprache '
-                           'nicht korrekt erkennen.',
-                risk_euro=1000,
-                recommendation='Fügen Sie lang="de" (oder die jeweilige Sprache) zum <html>-Tag hinzu.',
-                legal_basis='WCAG 2.1 Level A (3.1.1), BFSG §12',
-                auto_fixable=True,
-                is_missing=False
-            ))
-
-        # WCAG 4.1.2: Inputs ohne Label
-        inputs_without_label = []
-        for inp in soup.find_all(['input', 'select', 'textarea']):
-            inp_id = inp.get('id')
-            inp_type = inp.get('type', '').lower()
-            if inp_type in ('hidden', 'submit', 'button', 'reset'):
-                continue
-            has_label = (
-                inp.get('aria-label') or
-                inp.get('aria-labelledby') or
-                inp.get('title') or
-                (inp_id and soup.find('label', attrs={'for': inp_id}))
-            )
-            if not has_label:
-                inputs_without_label.append(inp)
-        if inputs_without_label:
-            issues.append(BarrierefreiheitIssue(
-                category='barrierefreiheit',
-                severity='warning',
-                title=f'WCAG 4.1.2: {len(inputs_without_label)} Formularfeld(er) ohne Label',
-                description=f'{len(inputs_without_label)} Eingabefeld(er) haben kein zugehöriges Label. '
-                           'Screenreader können den Zweck des Felds nicht vermitteln.',
-                risk_euro=1500,
-                recommendation='Verknüpfen Sie jedes Formularfeld mit einem <label for="...">-Element oder aria-label.',
-                legal_basis='WCAG 2.1 Level A (4.1.2), BFSG §12',
-                auto_fixable=False,
-                is_missing=False
-            ))
-
-        # WCAG 1.3.1: Keine semantischen HTML5-Strukturelemente
-        has_semantic = bool(soup.find(['main', 'nav', 'header', 'footer', 'aside', 'article', 'section']))
-        if not has_semantic:
-            issues.append(BarrierefreiheitIssue(
-                category='barrierefreiheit',
-                severity='warning',
-                title='WCAG 1.3.1: Keine semantischen HTML5-Strukturelemente gefunden',
-                description='Die Seite verwendet keine semantischen HTML5-Elemente (main, nav, header, footer). '
-                           'Dies erschwert die Navigation mit Screenreadern.',
-                risk_euro=1000,
-                recommendation='Verwenden Sie semantische HTML5-Elemente zur Strukturierung der Seite.',
-                legal_basis='WCAG 2.1 Level A (1.3.1), BFSG §12',
-                auto_fixable=False,
-                is_missing=False
-            ))
+        # Hinweis: WCAG 3.1.1 (lang), 4.1.2 (Input-Labels) und 1.3.1 (semantisches
+        # HTML) werden weiter unten in den IMMER laufenden Struktur-Checks geprüft
+        # (_check_aria_labels, _check_semantic_html, lang-Check) — hier bewusst
+        # NICHT zusätzlich, um Doppelzählung in Score/Risiko zu vermeiden.
 
     else:
         # Widget vorhanden — führe detaillierte Checks durch
@@ -844,8 +788,7 @@ async def _check_aria_labels(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
         aria_label = inp.get('aria-label', '').strip()
         aria_labelledby = inp.get('aria-labelledby', '').strip()
         title = inp.get('title', '').strip()
-        placeholder = inp.get('placeholder', '').strip()
-        
+
         # Check if there's a <label for="..."> element
         has_label = False
         if input_id:
@@ -862,7 +805,9 @@ async def _check_aria_labels(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
                     break
                 parent = parent.parent
         
-        if not any([has_label, aria_label, aria_labelledby, title]) and not placeholder:
+        # Hinweis: placeholder zählt bewusst NICHT als Label (WCAG 3.3.2/4.1.2 –
+        # ein Platzhalter ersetzt kein <label>/aria-label).
+        if not any([has_label, aria_label, aria_labelledby, title]):
             inputs_without_label.append(input_type)
     
     if inputs_without_label:
