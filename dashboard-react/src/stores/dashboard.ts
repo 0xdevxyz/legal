@@ -10,10 +10,11 @@ export interface RescanContext {
   triggered_at: string;
 }
 
-// localStorage hat nur ~5 MB. Scan-Ergebnisse mit base64-Screenshots können weit
-// größer sein → setItem wirft "QuotaExceededError: The quota has been exceeded."
-// Diese Helper fangen das ab (App darf nie crashen) und speichern bei Bedarf eine
-// abgespeckte Variante. Die vollständigen Daten bleiben im In-Memory-State.
+// Kleiner, quota-sicherer localStorage-Schreibhelfer (nur noch für winzige
+// UI-State-Werte wie den Optimierungs-Lock genutzt — NICHT für Scan-Daten).
+// Scan-Ergebnisse werden bewusst NICHT mehr im localStorage gecacht: Quelle ist
+// die DB (scan_history via /api/scans/latest). Das vermeidet den früheren
+// QuotaExceededError und hält die Persistenz an einer Stelle (DB).
 function safeSetItem(key: string, value: string): boolean {
   try {
     if (typeof localStorage === 'undefined') return false;
@@ -22,35 +23,6 @@ function safeSetItem(key: string, value: string): boolean {
   } catch {
     return false;
   }
-}
-
-// Schwere Felder pro Issue (base64-Bilder / HTML) für die Persistenz entfernen.
-function slimIssueForStorage(issue: any): any {
-  if (!issue || typeof issue !== 'object') return issue;
-  const { screenshot_url, element_html, fix_code, ...rest } = issue;
-  return rest;
-}
-
-function persistAnalysis(data: ComplianceAnalysis | null): void {
-  if (typeof localStorage === 'undefined') return;
-  if (!data) {
-    try { localStorage.removeItem('complyo_last_analysis'); } catch { /* ignore */ }
-    return;
-  }
-  const issues = Array.isArray((data as any).issues) ? (data as any).issues : [];
-  // Mehrere Versuche, vom vollständigen bis zum stark reduzierten Payload:
-  const candidates: Array<() => string> = [
-    () => JSON.stringify(data),
-    () => JSON.stringify({ ...data, issues: issues.map(slimIssueForStorage) }),
-    () => JSON.stringify({ ...data, issues: issues.map(slimIssueForStorage), positive_checks: [], issue_groups: [], ungrouped_issues: [] }),
-  ];
-  for (const build of candidates) {
-    let payload: string;
-    try { payload = build(); } catch { continue; }
-    if (safeSetItem('complyo_last_analysis', payload)) return;
-  }
-  // Selbst die schlanke Variante passt nicht → alten Stand entfernen, nicht crashen.
-  try { localStorage.removeItem('complyo_last_analysis'); } catch { /* ignore */ }
 }
 
 interface DashboardStore extends DashboardState {
@@ -102,15 +74,15 @@ export const useDashboardStore = create<DashboardStore>()(
 
     // Actions
     setCurrentWebsite: (website) => {
-      if (website) {
-        safeSetItem('complyo_current_website', JSON.stringify(website));
-      }
+      // Keine localStorage-Persistenz mehr — die getrackte Website kommt aus der DB
+      // (/api/v2/websites). In-Memory-State genügt für die laufende Session.
       return set({ currentWebsite: website });
     },
 
     setAnalysisData: (data) => {
-      // Persistenz quota-sicher (volle Daten bleiben im In-Memory-State unten).
-      persistAnalysis(data);
+      // Bewusst KEINE localStorage-Persistenz: Scan-Ergebnisse leben in der DB
+      // (scan_history, geladen via /api/scans/latest). localStorage war nur ein
+      // fragiler Cache (Quota). In-Memory-State für die laufende Session genügt.
       return set({
         analysisData: data,
         metrics: {

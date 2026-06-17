@@ -72,32 +72,9 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
         return;
       }
       
-      // 1. Versuche localStorage zu laden (nach Refresh)
-      if (typeof localStorage !== 'undefined') {
-        const savedWebsite = localStorage.getItem('complyo_current_website');
-        const savedAnalysis = localStorage.getItem('complyo_last_analysis');
-        
-        if (savedWebsite) {
-          try {
-            const website = JSON.parse(savedWebsite);
-            const analysisData = savedAnalysis ? JSON.parse(savedAnalysis) : null;
-            
-            console.log('✅ Lade Website aus localStorage nach Refresh:', website.url);
-            setCurrentWebsite(website);
-            
-            if (analysisData) {
-              const { setAnalysisData } = useDashboardStore.getState();
-              setAnalysisData(analysisData);
-              console.log('✅ Lade Analysedaten aus localStorage');
-            }
-            return; // Early exit — keine API-Abfrage nötig
-          } catch (e) {
-            console.error('localStorage parse error:', e);
-          }
-        }
-      }
-      
-      // 2. Fallback: API abfragen
+      // Website aus der DB laden (Quelle der Wahrheit, /api/v2/websites).
+      // Die Scan-/Analyse-Daten lädt WebsiteAnalysis separat über /api/scans/latest
+      // (DB) in den Store — es gibt bewusst kein localStorage-Caching mehr.
       try {
         const websites = await getTrackedWebsites();
         if (websites && websites.length > 0) {
