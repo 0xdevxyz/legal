@@ -17,8 +17,11 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-REVIEW_MODEL = "moonshotai/kimi-k2-thinking"
-SOLUTION_MODEL = "moonshotai/kimi-k2-thinking"
+# v4.0: Umstellung auf Claude — moonshotai/kimi-k2-thinking lieferte über OpenRouter
+# leeren Inhalt (content=None) → KI-Review/Lösungen liefen ins Leere. Claude Haiku 4.5
+# ist schnell, günstig und auf dem vorhandenen OpenRouter-Key verfügbar. Per ENV override.
+REVIEW_MODEL = os.getenv("COMPLYO_REVIEW_MODEL", "anthropic/claude-haiku-4.5")
+SOLUTION_MODEL = os.getenv("COMPLYO_SOLUTION_MODEL", "anthropic/claude-haiku-4.5")
 # Verifikationsmodell (v4.0): schnell/günstig, empfohlen Claude Haiku 4.5 via OpenRouter.
 # Override per ENV; Fallback auf das bereits konfigurierte REVIEW_MODEL, falls das
 # Anthropic-Modell über den OpenRouter-Key nicht verfügbar ist.

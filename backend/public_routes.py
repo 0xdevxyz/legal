@@ -18,7 +18,7 @@ from datetime import datetime
 from compliance_engine.scanner import ComplianceScanner
 from compliance_engine.priority_engine import priority_engine
 from compliance_engine.solution_generator import solution_generator
-from ai_review_engine import run_ai_review_pass
+from ai_review_engine import run_ai_review_pass, SOLUTION_MODEL
 from compliance_engine.cookie_analyzer import cookie_analyzer
 from website_crawler import WebsiteCrawler
 from auth_routes import get_current_user
@@ -862,7 +862,7 @@ Antworte auf Deutsch, maximal 300 Wörter."""
                     "X-Title": "Complyo Compliance Scanner"
                 },
                 json={
-                    "model": "moonshotai/kimi-k2-thinking",
+                    "model": SOLUTION_MODEL,
                     "messages": [
                         {
                             "role": "user",
@@ -889,7 +889,7 @@ Antworte auf Deutsch, maximal 300 Wörter."""
                                 title=issue_title,
                                 description=issue_description,
                                 solution=ai_solution,
-                                model="moonshotai/kimi-k2-thinking"
+                                model=SOLUTION_MODEL
                             )
                         except Exception as e:
                             logger.error(f"❌ Failed to cache solution: {e}")

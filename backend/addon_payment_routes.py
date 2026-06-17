@@ -15,6 +15,7 @@ from email.mime.text import MIMEText
 
 from auth_service import AuthService
 from database_service import db_service
+from dependencies import get_current_user
 
 router = APIRouter(prefix="/api/addons", tags=["Add-Ons"])
 security = HTTPBearer()
@@ -43,11 +44,13 @@ def _notify_sales(subject: str, body: str) -> None:
     except Exception as e:
         logger.error(f"Failed to send sales notification: {e}")
 
-async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Get current user ID from JWT token"""
-    from auth_routes import get_current_user
-    user = await get_current_user(credentials)
-    return user["id"]
+async def get_current_user_id(current_user: dict = Depends(get_current_user)):
+    """
+    Get current user ID. Nutzt die kanonische Auth-Dependency korrekt via Depends
+    (vorher wurde get_current_user manuell mit 'credentials' aufgerufen, wodurch der
+    request-Parameter falsch belegt war → 'Depends' object has no attribute 'credentials').
+    """
+    return current_user["id"]
 
 # Stripe Configuration
 stripe.api_key = os.getenv("STRIPE_API_KEY", "")
