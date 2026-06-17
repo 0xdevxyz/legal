@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup
 from compliance_engine.checks.impressum_check import _looks_like_impressum
 from compliance_engine.checks.datenschutz_check import _looks_like_datenschutz
 from compliance_engine.checks.cookie_check import check_cookie_compliance
+from compliance_engine.scanner import ComplianceScanner
 
 
 class TestSoft404Impressum:
@@ -67,3 +68,38 @@ class TestTrackingDetection:
         issues = _run(check_cookie_compliance("https://example.de", soup, None))
         severities = {i['severity'] for i in issues}
         assert 'critical' not in severities
+
+
+class TestCmsDetection:
+    def test_detects_wordpress(self):
+        html = '<html><head><link href="/wp-content/themes/x/style.css"></head><body>x</body></html>'
+        soup = BeautifulSoup(html, "html.parser")
+        assert ComplianceScanner._detect_cms(soup) == "WordPress"
+
+    def test_detects_via_generator_meta(self):
+        html = '<html><head><meta name="generator" content="WordPress 6.5"></head><body></body></html>'
+        soup = BeautifulSoup(html, "html.parser")
+        assert ComplianceScanner._detect_cms(soup) == "WordPress"
+
+    def test_no_cms_returns_none(self):
+        soup = BeautifulSoup("<html><body>plain</body></html>", "html.parser")
+        assert ComplianceScanner._detect_cms(soup) is None
+
+
+class TestPlaceholderDetection:
+    def test_detects_under_construction(self):
+        soup = BeautifulSoup("<html><title>Under Construction</title><body>coming soon</body></html>", "html.parser")
+        is_ph, kind = ComplianceScanner._detect_placeholder(soup)
+        assert is_ph is True
+
+    def test_detects_maintenance(self):
+        soup = BeautifulSoup("<html><body>Wartungsmodus aktiv, wir sind bald zurück</body></html>", "html.parser")
+        is_ph, kind = ComplianceScanner._detect_placeholder(soup)
+        assert is_ph is True
+        assert kind == "Wartungs"
+
+    def test_real_page_not_placeholder(self):
+        body = "<body>" + "<a href='/x'>Link</a>" * 10 + "<p>" + ("Echter Inhalt. " * 60) + "</p></body>"
+        soup = BeautifulSoup(f"<html><title>Firma GmbH</title>{body}</html>", "html.parser")
+        is_ph, _ = ComplianceScanner._detect_placeholder(soup)
+        assert is_ph is False

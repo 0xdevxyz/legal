@@ -114,10 +114,44 @@ class ComplianceScanner:
             # Fetch main page
             main_page = await self._fetch_page(url)
             if not main_page:
-                return self._create_error_response(url, "Website nicht erreichbar")
-            
+                return self._create_error_response(
+                    url, "Website nicht erreichbar (Verbindungsfehler/Timeout).",
+                    reason="unreachable",
+                )
+
+            status_code = main_page.get('status_code', 0)
             soup = BeautifulSoup(main_page['content'], 'html.parser')
             main_page_headers = main_page.get('headers', {})
+
+            # 🚧 Nicht scanbar: HTTP-Fehlerstatus → Hinweis statt irreführendem Score.
+            # Grundsystem (CMS) trotzdem aus dem ausgelieferten HTML erkennen.
+            if status_code >= 400:
+                cms = self._detect_cms(soup, main_page_headers)
+                if status_code in (502, 503, 504):
+                    reason, notice = "maintenance", (
+                        f"Die Website ist aktuell nicht erreichbar (HTTP {status_code}, "
+                        f"vermutlich Wartungsmodus). Ein vollständiger Compliance-Scan ist "
+                        f"erst nach Wiederherstellung möglich."
+                    )
+                elif status_code in (401, 403):
+                    reason, notice = "blocked", (
+                        f"Zugriff verweigert (HTTP {status_code}). Die Seite ist passwort-/"
+                        f"firewall-geschützt und konnte nicht gescannt werden."
+                    )
+                elif status_code == 404:
+                    reason, notice = "not_found", (
+                        f"Seite nicht gefunden (HTTP 404). Bitte prüfen Sie die URL."
+                    )
+                else:
+                    reason, notice = "http_error", (
+                        f"Die Website antwortete mit HTTP {status_code} und konnte nicht "
+                        f"vollständig gescannt werden."
+                    )
+                if cms:
+                    notice += f" Erkanntes Grundsystem: {cms}."
+                return self._create_error_response(
+                    url, notice, reason=reason, status_code=status_code, detected_cms=cms,
+                )
 
             # Render once if browser is needed, share HTML across all checks
             rendered_html = main_page['content']
@@ -126,6 +160,22 @@ class ComplianceScanner:
                 rendered_html, _ = await smart_fetch_html(url, main_page['content'])
                 logger.info("✅ Single browser render complete")
                 soup = BeautifulSoup(rendered_html, 'html.parser')
+
+            # 🔎 Grundsystem (CMS) + Produktiv-Status erkennen
+            detected_cms = self._detect_cms(soup, main_page_headers)
+            is_placeholder, placeholder_kind = self._detect_placeholder(soup)
+            scan_notice = None
+            if is_placeholder:
+                scan_notice = (
+                    f"Die Seite befindet sich offenbar im {placeholder_kind}-Modus "
+                    f"(Platzhalter-/Baustellenseite). Das Scan-Ergebnis spiegelt nur diese "
+                    f"Seite wider — ein vollständiger Scan nach Go-Live wird empfohlen."
+                )
+                if detected_cms:
+                    scan_notice += (
+                        f" Grundsystem erkannt: {detected_cms} — nach Veröffentlichung sind "
+                        f"i.d.R. Cookie-Banner und Datenschutzerklärung erforderlich."
+                    )
 
             # Run all compliance checks in parallel using pre-rendered soup
             # barrierefreiheit: no session = single-page only (avoids multi-page scan)
@@ -260,7 +310,11 @@ class ComplianceScanner:
                 "next_steps": self._generate_next_steps(issues),
                 "has_accessibility_widget": has_accessibility_widget,
                 "tcf_data": tcf_data,
-                "score_breakdown": ScoreCalculator.get_score_breakdown(issues)
+                "score_breakdown": ScoreCalculator.get_score_breakdown(issues),
+                # v4.0: Produktiv-Status & Grundsystem
+                "detected_cms": detected_cms,
+                "is_placeholder": is_placeholder,
+                "scan_notice": scan_notice,
             }
             
             # 🆕 LEGAL UPDATE INTEGRATION: Anwendung aktueller Gesetzesänderungen
@@ -288,19 +342,23 @@ class ComplianceScanner:
             return self._create_error_response(url, f"Scanner-Fehler: {str(e)}")
     
     async def _fetch_page(self, url: str) -> Optional[Dict[str, Any]]:
-        """Fetch webpage content with error handling"""
+        """
+        Fetch webpage content. Gibt Status UND Inhalt zurück (auch bei 4xx/5xx,
+        damit der Aufrufer 'nicht scanbar'-Fälle erkennen und das Grundsystem
+        analysieren kann). None nur bei echtem Verbindungsfehler.
+        """
         try:
             async with self.session.get(url) as response:
-                if response.status == 200:
+                try:
                     content = await response.text()
-                    return {
-                        'url': url,
-                        'status_code': response.status,
-                        'content': content,
-                        'headers': dict(response.headers)
-                    }
-                else:
-                    return None
+                except Exception:
+                    content = ""
+                return {
+                    'url': url,
+                    'status_code': response.status,
+                    'content': content,
+                    'headers': dict(response.headers),
+                }
         except Exception:
             return None
     
@@ -667,17 +725,82 @@ class ComplianceScanner:
             logger.warning(f"Beschreibungs-Anreicherung fehlgeschlagen: {e}")
             return issues
     
-    def _create_error_response(self, url: str, error_message: str) -> Dict[str, Any]:
-        """Create error response structure"""
+    @staticmethod
+    def _detect_cms(soup, headers: dict = None) -> Optional[str]:
+        """
+        Erkennt das Grundsystem (CMS) aus HTML-Signaturen und HTTP-Headern.
+        Wichtig auch bei Platzhalter-/Fehlerseiten: das darunterliegende System
+        (z.B. WordPress) bestimmt, welche Compliance-Pflichten nach Go-Live gelten.
+        """
+        html = str(soup).lower()
+        headers = {k.lower(): str(v).lower() for k, v in (headers or {}).items()}
+
+        # Generator-Meta auslesen
+        generator = ""
+        gen_tag = soup.find("meta", attrs={"name": re.compile(r"generator", re.I)})
+        if gen_tag and gen_tag.get("content"):
+            generator = gen_tag.get("content", "").lower()
+
+        signatures = [
+            ("WordPress", ["wp-content", "wp-includes", "/wp-json", "wp-emoji", "wordpress"]),
+            ("Shopify",   ["cdn.shopify.com", "shopify.theme", "x-shopify"]),
+            ("Wix",       ["static.wixstatic.com", "wix.com", "_wix"]),
+            ("Jimdo",     ["jimdo", "jimstatic.com"]),
+            ("Typo3",     ["typo3", "/typo3conf/"]),
+            ("Joomla",    ["/media/jui/", "joomla", "com_content"]),
+            ("Drupal",    ["drupal-settings-json", "/sites/default/files", "drupal"]),
+            ("Webflow",   ["webflow", "assets.website-files.com"]),
+            ("Squarespace", ["squarespace", "static1.squarespace.com"]),
+        ]
+        haystack = html + " " + generator + " " + " ".join(headers.values())
+        for name, markers in signatures:
+            if any(m in haystack for m in markers):
+                return name
+        return None
+
+    @staticmethod
+    def _detect_placeholder(soup) -> "tuple[bool, str]":
+        """
+        Erkennt Platzhalter-/Baustellen-/Coming-Soon-Seiten (HTTP 200, aber kein
+        produktiver Inhalt). Gibt (is_placeholder, art) zurück.
+        """
+        title = (soup.title.get_text() if soup.title else "").lower()
+        body_text = soup.get_text(" ", strip=True).lower()
+
+        patterns = {
+            "Wartungs": ["wartungsmodus", "wartungsarbeiten", "maintenance", "under maintenance", "kurzfristig nicht verfügbar"],
+            "Baustellen": ["under construction", "im aufbau", "baustelle", "seite im aufbau", "website is being built"],
+            "Coming-Soon": ["coming soon", "demnächst", "in kürze online", "launching soon", "bald verfügbar", "wir sind bald für sie da"],
+        }
+        haystack = f"{title} {body_text}"
+        for kind, kws in patterns.items():
+            if any(kw in haystack for kw in kws):
+                return True, kind
+
+        # Sehr wenig Inhalt + kaum Links → wahrscheinlich Platzhalter
+        if len(body_text) < 400 and len(soup.find_all("a", href=True)) <= 2:
+            return True, "Platzhalter"
+        return False, ""
+
+    def _create_error_response(
+        self, url: str, error_message: str,
+        reason: str = "error", status_code: int = 0,
+        detected_cms: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create error response structure (mit Klassifizierung für klare UI-Hinweise)."""
         return {
             "url": url,
             "scan_timestamp": datetime.now(),
             "error": True,
             "error_message": error_message,
+            "error_reason": reason,        # unreachable|maintenance|blocked|not_found|http_error
+            "status_code": status_code,
+            "not_scannable": True,
+            "detected_cms": detected_cms,
             "compliance_score": 0,
             "total_risk_euro": 0,
             "issues": [],
-            "recommendations": [f"Fehler beim Scannen: {error_message}"]
+            "recommendations": [error_message],
         }
 
 # Async context manager usage example:

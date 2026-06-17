@@ -522,6 +522,28 @@ export const WebsiteAnalysis: React.FC = () => {
         </ErrorBoundary>
       )}
 
+    {/* ✅ v4.0: Hinweis bei Platzhalter-/Baustellenseiten + erkanntem Grundsystem */}
+    {(analysisData as any)?.scan_notice && (
+      <div className="mb-6 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-5">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="w-6 h-6 text-amber-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-base font-bold text-amber-300 mb-1">
+              Hinweis zum Scan
+              {(analysisData as any)?.detected_cms && (
+                <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200">
+                  Grundsystem: {(analysisData as any).detected_cms}
+                </span>
+              )}
+            </h4>
+            <p className="text-sm text-amber-100/90 leading-relaxed">
+              {(analysisData as any).scan_notice}
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
+
     <Card className="mb-8">
         <CardHeader>
           <CardTitle className="flex items-center gap-3">

@@ -96,6 +96,9 @@ class AnalysisResponse(BaseModel):
     issue_groups: Optional[List[Dict[str, Any]]] = []  # ✅ NEU: Gruppierte Issues
     grouping_stats: Optional[Dict[str, Any]] = {}  # ✅ NEU: Gruppierungs-Statistiken
     has_accessibility_widget: Optional[bool] = False  # ✅ NEU: Widget-Status
+    detected_cms: Optional[str] = None  # v4.0: erkanntes Grundsystem (z.B. WordPress)
+    is_placeholder: Optional[bool] = False  # v4.0: Platzhalter-/Baustellenseite
+    scan_notice: Optional[str] = None  # v4.0: Hinweis (z.B. Maintenance/Go-Live)
     riskAmount: str
     score: int
     scan_duration_ms: Optional[int] = None
@@ -180,20 +183,48 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             if scan_result.get("error"):
                 # ❌ NO MOCK DATA! Return clear error to user
                 error_message = scan_result.get('error_message', 'Website konnte nicht gescannt werden')
-                logger.error(f"Scanner failed for {url}: {error_message}")
-                
+                reason = scan_result.get('error_reason', 'unreachable')
+                status_code_seen = scan_result.get('status_code', 0)
+                detected_cms = scan_result.get('detected_cms')
+                logger.error(f"Scanner failed for {url}: [{reason}] {error_message}")
+
+                # Klassifizierte Überschrift + passende Hinweise je nach Ursache
+                _titles = {
+                    "maintenance": f"Die Website '{url}' ist im Wartungsmodus.",
+                    "blocked":     f"Der Zugriff auf '{url}' wurde blockiert.",
+                    "not_found":   f"Unter '{url}' wurde keine Seite gefunden.",
+                    "http_error":  f"Die Website '{url}' lieferte einen Fehler.",
+                    "unreachable": f"Die Website '{url}' konnte nicht erreicht werden.",
+                }
+                _suggestions = {
+                    "maintenance": [
+                        "Die Seite ist vorübergehend offline (z.B. Wartung) — bitte nach Wiederherstellung erneut scannen.",
+                        *( [f"Erkanntes Grundsystem: {detected_cms} — nach Go-Live sind Cookie-Banner & Datenschutzerklärung zu prüfen."] if detected_cms else [] ),
+                    ],
+                    "blocked": [
+                        "Die Seite ist passwort- oder firewall-geschützt.",
+                        "Prüfen Sie, ob unser Scanner (User-Agent 'Complyo-Scanner') zugelassen ist.",
+                    ],
+                    "not_found": [
+                        "Prüfen Sie die URL (z.B. 'example.com' statt 'example').",
+                        "Versuchen Sie es mit/ohne 'www.'-Prefix.",
+                    ],
+                }
                 raise HTTPException(
                     status_code=400,
                     detail={
-                        "error": "WEBSITE_NOT_REACHABLE",
-                        "message": f"Die Website '{url}' konnte nicht erreicht werden.",
+                        "error": "WEBSITE_NOT_SCANNABLE",
+                        "reason": reason,
+                        "status_code": status_code_seen,
+                        "detected_cms": detected_cms,
+                        "message": _titles.get(reason, _titles["unreachable"]),
                         "details": error_message,
-                        "suggestions": [
+                        "suggestions": _suggestions.get(reason, [
                             "Prüfen Sie, ob die URL korrekt ist (z.B. 'example.com' statt 'example')",
                             "Stellen Sie sicher, dass die Website online ist",
                             "Versuchen Sie es mit 'www.' Prefix (z.B. 'www.example.com')",
-                            "Prüfen Sie, ob die Website eine Firewall hat, die unseren Scanner blockiert"
-                        ]
+                            "Prüfen Sie, ob die Website eine Firewall hat, die unseren Scanner blockiert",
+                        ]),
                     }
                 )
             
@@ -437,7 +468,10 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                             'positive_checks': positive_checks,
                             'pillar_scores': [{'pillar': p.pillar, 'score': p.score, 'status': p.status} for p in pillar_scores],
                             'issue_groups': scan_result.get('issue_groups', []),
-                            'grouping_stats': scan_result.get('grouping_stats', {})
+                            'grouping_stats': scan_result.get('grouping_stats', {}),
+                            'detected_cms': scan_result.get('detected_cms'),
+                            'is_placeholder': scan_result.get('is_placeholder', False),
+                            'scan_notice': scan_result.get('scan_notice'),
                         }),
                         overall_compliance_score,
                         total_risk_data.get('total_risk_max', 0),
@@ -506,6 +540,10 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 pillar_scores=pillar_scores,  # ✅ NEU: Säulen-Scores
                 issue_groups=issue_groups,  # ✅ NEU: Gruppierte Issues (immer Liste)
                 grouping_stats=grouping_stats,  # ✅ NEU: Gruppierungs-Statistiken (immer Dict)
+                has_accessibility_widget=scan_result.get("has_accessibility_widget", False),
+                detected_cms=scan_result.get("detected_cms"),
+                is_placeholder=scan_result.get("is_placeholder", False),
+                scan_notice=scan_result.get("scan_notice"),
                 riskAmount=total_risk_data['total_risk_range'],
                 score=overall_compliance_score,  # ✅ Durchschnitt statt Scanner-Score
                 scan_duration_ms=scan_result.get("scan_duration_ms"),

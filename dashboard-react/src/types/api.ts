@@ -108,6 +108,9 @@ export interface ComplianceAnalysis {
   issues: ComplianceIssue[];
   positive_checks?: PositiveCheck[]; // NEW: Was funktioniert bereits
   has_accessibility_widget?: boolean; // ✅ NEU: Widget-Status vom Scanner
+  detected_cms?: string | null; // v4.0: erkanntes Grundsystem (z.B. WordPress)
+  is_placeholder?: boolean; // v4.0: Platzhalter-/Baustellenseite
+  scan_notice?: string | null; // v4.0: Hinweis (Maintenance/Go-Live)
   recommendations: string[];
   next_steps: any[]; // Can be typed more strictly if needed
   issue_groups?: IssueGroup[]; // ✅ NEU: Gruppierte Issues
