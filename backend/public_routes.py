@@ -164,6 +164,7 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 logger.warning(f"Legal Update Cache refresh fehlgeschlagen (non-critical): {e}")
         
         # Perform compliance scan and crawl in parallel
+        scan_result = None  # für Fallback im except: erfolgreicher Scan darf nicht verloren gehen
         try:
             crawler = WebsiteCrawler(timeout=10)
             async with ComplianceScanner() as scanner:
@@ -556,9 +557,19 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             return response_data
             
         except Exception as scanner_error:
-            # ❌ NO MOCK DATA! Return clear error to user
             logger.error(f"Scanner error for {url}: {scanner_error}", exc_info=True)
-            
+
+            # ✅ Resilienz: Wenn der SCAN selbst erfolgreich war, aber ein nachgelagerter
+            # Schritt (AI-Review/Quota/externer Dienst/Persistenz) scheitert, darf das den
+            # Scan NICHT als "nicht erreichbar" maskieren — Ergebnis trotzdem ausliefern.
+            if (isinstance(scan_result, dict) and not scan_result.get("error")
+                    and scan_result.get("issues") is not None):
+                try:
+                    logger.warning("⚠️ Liefere Scan-Ergebnis trotz Enrichment-Fehler aus (degraded).")
+                    return _minimal_response_from_scan(url, scan_result)
+                except Exception as fb_err:
+                    logger.error(f"Fallback-Response fehlgeschlagen: {fb_err}", exc_info=True)
+
             raise HTTPException(
                 status_code=400,
                 detail={
@@ -582,6 +593,82 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             status_code=500,
             detail="Fehler bei der Website-Analyse. Bitte versuchen Sie es erneut."
         )
+
+def _minimal_response_from_scan(url: str, scan_result: Dict[str, Any]) -> "AnalysisResponse":
+    """
+    Baut eine vollständige AnalysisResponse direkt aus dem (erfolgreichen) Scanner-
+    Ergebnis — als Fallback, wenn ein nachgelagerter Enrichment-Schritt scheitert.
+    So bekommt der Nutzer das Scan-Ergebnis statt einer irreführenden Fehlermeldung.
+    """
+    from compliance_engine.score_calculator import ScoreCalculator
+
+    raw_issues = scan_result.get("issues", []) or []
+    issues: List[ComplianceIssue] = []
+    for i in raw_issues[:30]:
+        if not isinstance(i, dict):
+            continue
+        cat = i.get("category", "compliance")
+        title = (i.get("title") or i.get("description") or "")[:100]
+        slug = "-".join("".join(c if c.isalnum() or c.isspace() else "" for c in title.lower()).split()[:4])
+        sev = i.get("severity", "warning")
+        risk = i.get("risk_euro", 1000) or 0
+        issues.append(ComplianceIssue(
+            id=f"{cat}-{slug}"[:50],
+            category=cat,
+            severity=sev,
+            title=title,
+            description=i.get("description", ""),
+            risk_euro_min=risk,
+            risk_euro_max=risk,
+            risk_range=f"{risk:,}€".replace(",", "."),
+            legal_basis=i.get("legal_basis", "Gesetzliche Anforderung"),
+            location=IssueLocation(
+                area=_determine_issue_area(cat),
+                hint=f"{_determine_issue_area(cat)} prüfen",
+            ),
+            solution=_generate_solution(cat),
+            recommendation=i.get("recommendation") or None,
+            auto_fixable=i.get("auto_fixable", False),
+            is_missing=i.get("is_missing", False),
+            effort=i.get("effort") or _classify_effort(sev, i.get("auto_fixable", False), i.get("is_missing", False)),
+        ))
+
+    pillar_scores: List[PillarScore] = []
+    for p in (scan_result.get("pillar_scores", []) or []):
+        pid = p.get("pillar")
+        p_issues = [x for x in issues if ScoreCalculator.categorize(x.category) == pid]
+        pillar_scores.append(PillarScore(
+            pillar=pid,
+            score=p.get("score", 0),
+            issues_count=len(p_issues),
+            critical_count=sum(1 for x in p_issues if x.severity == "critical"),
+            warning_count=sum(1 for x in p_issues if x.severity == "warning"),
+            status=p.get("status", "compliant"),
+        ))
+
+    overall = scan_result.get("compliance_score", 0)
+    risk_total = scan_result.get("total_risk_euro", 0) or 0
+    risk_str = f"{risk_total:,}€".replace(",", ".")
+    return AnalysisResponse(
+        success=True,
+        url=scan_result.get("url", url),
+        compliance_score=overall,
+        estimated_risk_euro=risk_str,
+        issues=issues,
+        positive_checks=[],
+        pillar_scores=pillar_scores,
+        issue_groups=[],
+        grouping_stats={},
+        has_accessibility_widget=scan_result.get("has_accessibility_widget", False),
+        detected_cms=scan_result.get("detected_cms"),
+        is_placeholder=scan_result.get("is_placeholder", False),
+        scan_notice=scan_result.get("scan_notice"),
+        riskAmount=risk_str,
+        score=overall,
+        scan_duration_ms=scan_result.get("scan_duration_ms"),
+        timestamp=datetime.now().isoformat(),
+    )
+
 
 def _classify_effort(severity, auto_fixable: bool, is_missing: bool) -> str:
     """Bearbeitungsaufwand eines Issues — delegiert an ScoreCalculator (SSOT v4.0)."""
