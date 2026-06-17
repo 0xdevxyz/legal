@@ -23,6 +23,43 @@ const isCookieIssue = (issue: ComplianceIssue): boolean => {
   return category.includes('cookie') || title.includes('cookie') || title.includes('consent');
 };
 
+// Hilfsfunktion: Hat dieses Issue eine dedizierte Complyo-Lösung?
+// (Cookie-Compliance-Seite, Barrierefreiheits-Widget, Datenschutz-/Impressum-Generator)
+// Für diese Issues ist der generische KI-Fix redundant — die konkreten
+// Handlungsanweisungen oben mit eigenem Button sind die richtige Lösung.
+const usesDedicatedSolution = (issue: ComplianceIssue): boolean => {
+  const category = issue.category?.toLowerCase() || '';
+  const title = issue.title?.toLowerCase() || '';
+
+  // Cookies → integrierte Cookie-Compliance-Lösung (/cookie-compliance)
+  if (isCookieIssue(issue)) return true;
+
+  // Barrierefreiheit → Complyo Widget fixt automatisch
+  if (
+    category.includes('barriere') ||
+    category.includes('accessibility') ||
+    title.includes('wcag') ||
+    title.includes('aria') ||
+    title.includes('kontrast') ||
+    title.includes('alt-text')
+  ) return true;
+
+  // DSGVO / Datenschutz / Impressum → interner Generator
+  if (
+    category.includes('dsgvo') ||
+    category.includes('gdpr') ||
+    category.includes('datenschutz') ||
+    category.includes('impressum') ||
+    title.includes('dsgvo') ||
+    title.includes('personenbezogen') ||
+    title.includes('verarbeitung') ||
+    title.includes('datenschutz') ||
+    title.includes('impressum')
+  ) return true;
+
+  return false;
+};
+
 const extractDomain = (url: string): string => {
   try {
     const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
@@ -382,6 +419,42 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
 
       {/* Beschreibung */}
       <p className="text-gray-700 mb-4 leading-relaxed">{issue.description}</p>
+
+      {/* Empfohlene Maßnahme — issue-spezifische Handlungsempfehlung vom Check.
+          Immer sichtbar, sobald vorhanden. Garantiert, dass jedes Problem (auch
+          DSA-/KI-/Drittland-Hinweise) einen konkreten Lösungsweg zeigt, statt nur
+          die Problembeschreibung. */}
+      {issue.recommendation && (
+        <div className="bg-white rounded-lg p-4 border border-[#25bac8]/40 mb-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-[#25bac8]/15 rounded-lg flex-shrink-0">
+              <Sparkles className="w-5 h-5 text-[#1a8a95]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                <h4 className="font-semibold text-gray-800">Empfohlene Maßnahme</h4>
+                {issue.effort && (() => {
+                  const cfg: Record<string, { label: string; cls: string }> = {
+                    gering:  { label: 'Aufwand: gering',  cls: 'bg-emerald-100 text-emerald-700' },
+                    mittel:  { label: 'Aufwand: mittel',  cls: 'bg-amber-100 text-amber-700' },
+                    experte: { label: 'Experte nötig',    cls: 'bg-red-100 text-red-700' },
+                  };
+                  const e = cfg[issue.effort] || cfg.mittel;
+                  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${e.cls}`}>{e.label}</span>;
+                })()}
+              </div>
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                {issue.recommendation}
+              </p>
+              {issue.legal_basis && issue.legal_basis !== 'Gesetzliche Anforderung' && (
+                <p className="text-xs text-gray-500 mt-2">
+                  <span className="font-medium">Rechtsgrundlage:</span> {issue.legal_basis}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Alt-Text Editor — nur für Bilder ohne Alt-Text */}
       {issue.image_src && (
@@ -775,8 +848,11 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         </div>
       )}
 
-      {/* AI-Fix Section */}
-      {issue.auto_fixable && !isAnalysisOnly && (planType === 'free' || planType === 'paid' || planType === 'expert') && (
+      {/* AI-Fix Section — nur für Issues OHNE dedizierte Complyo-Lösung.
+          Cookies/Barrierefreiheit/DSGVO/Impressum haben oben eigene Anleitungs-
+          und Routing-Buttons; der generische KI-Fix ist dort redundant (und war
+          für Cookie-Issues mangels issue.id sogar fehlerhaft). */}
+      {issue.auto_fixable && !isAnalysisOnly && !usesDedicatedSolution(issue) && (planType === 'free' || planType === 'paid' || planType === 'expert') && (
         <div className="mt-4 space-y-3">
           {/* Plan-Hinweis für Free-Nutzer — BEVOR sie klicken */}
           {planType === 'free' && (

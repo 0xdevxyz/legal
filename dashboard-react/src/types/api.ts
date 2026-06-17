@@ -27,6 +27,7 @@ export interface ComplianceIssue {
   solution: IssueSolution;
   auto_fixable: boolean;
   is_missing?: boolean;
+  effort?: 'gering' | 'mittel' | 'experte';
   ai_explanation?: string;
   image_src?: string;
   suggested_alt?: string;

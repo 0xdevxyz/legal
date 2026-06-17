@@ -70,9 +70,11 @@ class ComplianceIssue(BaseModel):
     legal_basis: str
     location: IssueLocation
     solution: IssueSolution
+    recommendation: Optional[str] = None  # ✅ Konkrete, issue-spezifische Handlungsempfehlung vom Check
     ai_solution: Optional[str] = None  # ✅ Individuelle KI-generierte Lösung
     auto_fixable: bool
     is_missing: bool = False  # True wenn komplettes Hauptelement fehlt (für 0-Score-Logik)
+    effort: str = "mittel"  # v4.0: Bearbeitungsaufwand — gering | mittel | experte
 
 class PillarScore(BaseModel):
     """Score für eine Compliance-Säule"""
@@ -81,6 +83,7 @@ class PillarScore(BaseModel):
     issues_count: int
     critical_count: int
     warning_count: int
+    status: str = "compliant"  # v4.0: compliant | partial | non_compliant | unverified
 
 class AnalysisResponse(BaseModel):
     success: bool
@@ -229,10 +232,17 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                             solution=_generate_solution_for_issue(
                                 category=issue.get('category', 'compliance'),
                                 title=issue.get('title', ''),
-                                description=issue.get('description', '')
+                                description=issue.get('description', ''),
+                                recommendation=issue.get('recommendation', '')
                             ),
+                            recommendation=issue.get('recommendation') or None,
                             auto_fixable=issue.get('auto_fixable', False),
-                            is_missing=issue.get('is_missing', False)  # ✅ is_missing von Check-Modulen übernehmen
+                            is_missing=issue.get('is_missing', False),  # ✅ is_missing von Check-Modulen übernehmen
+                            effort=issue.get('effort') or _classify_effort(
+                                issue.get('severity'),
+                                issue.get('auto_fixable', False),
+                                issue.get('is_missing', False),
+                            ),
                         )
                         structured_issues.append(structured_issue)
                     else:
@@ -263,7 +273,13 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                                 hint=f"{_determine_issue_area(risk_data['category'])} fehlt oder ist fehlerhaft"
                             ),
                             solution=_generate_solution(risk_data['category']),
-                            auto_fixable=risk_data['category'] in ['impressum', 'datenschutz', 'cookies', 'agb']
+                            recommendation=(issue.get('recommendation') if isinstance(issue, dict) else None) or None,
+                            auto_fixable=risk_data['category'] in ['impressum', 'datenschutz', 'cookies', 'agb'],
+                            effort=_classify_effort(
+                                risk_data['severity'],
+                                risk_data['category'] in ['impressum', 'datenschutz', 'cookies', 'agb'],
+                                False,
+                            ),
                         )
                         structured_issues.append(structured_issue)
             
@@ -408,12 +424,18 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                                     'title': i.title,
                                     'description': i.description,
                                     'risk_euro_min': i.risk_euro_min,
-                                    'risk_euro_max': i.risk_euro_max
+                                    'risk_euro_max': i.risk_euro_max,
+                                    'recommendation': i.recommendation,
+                                    'legal_basis': i.legal_basis,
+                                    'auto_fixable': i.auto_fixable,
+                                    'is_missing': i.is_missing,
+                                    'effort': i.effort,
+                                    'ai_solution': i.ai_solution,
                                 }
                                 for i in structured_issues
                             ],
                             'positive_checks': positive_checks,
-                            'pillar_scores': [{'pillar': p.pillar, 'score': p.score} for p in pillar_scores],
+                            'pillar_scores': [{'pillar': p.pillar, 'score': p.score, 'status': p.status} for p in pillar_scores],
                             'issue_groups': scan_result.get('issue_groups', []),
                             'grouping_stats': scan_result.get('grouping_stats', {})
                         }),
@@ -522,39 +544,46 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             detail="Fehler bei der Website-Analyse. Bitte versuchen Sie es erneut."
         )
 
+def _classify_effort(severity, auto_fixable: bool, is_missing: bool) -> str:
+    """Bearbeitungsaufwand eines Issues — delegiert an ScoreCalculator (SSOT v4.0)."""
+    from compliance_engine.score_calculator import ScoreCalculator
+    return ScoreCalculator.classify_effort(
+        severity=severity or "warning",
+        auto_fixable=bool(auto_fixable),
+        is_missing=bool(is_missing),
+    )
+
+
 def _calculate_pillar_scores(issues: List[ComplianceIssue]) -> List[PillarScore]:
     """
-    Berechnet die 4 Säulen-Scores — delegiert an ScoreCalculator (SSOT v3.0).
-    Säule: max(0, 100 - (critical × 25 + warning × 8)), fehlendes Kern-Element → 0.
-    Sicherheit → gdpr (Art. 32), Shop → legal. Gesamtscore = gleichgewichteter
-    Mittelwert der 4 Säulen (siehe ScoreCalculator.calculate_overall_score).
+    Berechnet die 4 Säulen-Scores — delegiert vollständig an die evidenz-basierte
+    Engine ScoreCalculator.compute_with_status (SSOT v4.0). EINE Quelle für Score
+    UND Status, damit Backend, Scanner und Frontend nie auseinanderlaufen.
+
+    Säule: max(0, 100 - (critical × 25 + warning × 8)), fehlendes Kern-Element → 0,
+    ungeprüfte Säule → Status "unverified". Sicherheit → gdpr (Art. 32), Shop → legal.
     """
     from compliance_engine.score_calculator import ScoreCalculator
 
-    # 4 Säulen (SSOT v3.0): Sicherheit → gdpr, Shop → legal.
-    # Vollständige Kategorie-Abdeckung über ScoreCalculator.categorize().
+    result = ScoreCalculator.compute_with_status(issues)
+    pillar_status = result["pillar_status"]
+    pillar_score_map = result["pillar_scores"]
+
+    # Issue-Zählung pro Säule (für die UI-Detailanzeige)
     buckets = {pillar: [] for pillar in ScoreCalculator.PILLAR_IDS}
     for issue in issues:
         buckets[ScoreCalculator.categorize(issue.category)].append(issue)
 
     pillar_scores = []
-    for pillar, pillar_issues in buckets.items():
-        has_missing_core = any(getattr(issue, 'is_missing', False) for issue in pillar_issues)
-        critical_count = sum(1 for i in pillar_issues if i.severity == 'critical')
-        warning_count  = sum(1 for i in pillar_issues if i.severity == 'warning')
-
-        score = ScoreCalculator.calculate_pillar_score(
-            critical_count=critical_count,
-            warning_count=warning_count,
-            has_missing_core=has_missing_core,
-        )
-
+    for pillar in ScoreCalculator.PILLAR_IDS:
+        pillar_issues = buckets[pillar]
         pillar_scores.append(PillarScore(
             pillar=pillar,
-            score=score,
+            score=pillar_score_map[pillar],
             issues_count=len(pillar_issues),
-            critical_count=critical_count,
-            warning_count=warning_count,
+            critical_count=sum(1 for i in pillar_issues if i.severity == 'critical'),
+            warning_count=sum(1 for i in pillar_issues if i.severity == 'warning'),
+            status=pillar_status[pillar],
         ))
 
     return pillar_scores
@@ -762,9 +791,38 @@ Antworte auf Deutsch, maximal 300 Wörter."""
         logger.error(f"❌ KI-Lösung Generation failed: {e}")
         return None
 
-def _generate_solution_for_issue(category: str, title: str = '', description: str = '') -> IssueSolution:
-    """Generiert issue-spezifische Lösungsvorschläge basierend auf Kategorie UND konkretem Titel"""
-    
+def _recommendation_to_steps(recommendation: str) -> List[str]:
+    """Zerlegt einen Empfehlungstext in einzelne, nummerierte Handlungsschritte.
+
+    Viele Checks (v.a. die datengetriebenen Legal-Change-Checks) liefern eine
+    präzise, issue-spezifische Empfehlung. Diese ist als Lösung deutlich besser
+    als ein generischer Kategorie-Fallback. Wir splitten an Aufzählungen
+    (1), (2) ... bzw. an Satzgrenzen, damit das Frontend saubere Schritte zeigt.
+    """
+    text = (recommendation or '').strip()
+    if not text:
+        return []
+    # Aufzählungen im Stil "(1) ... (2) ..." aufbrechen
+    parts = re.split(r'\s*\(\d+\)\s*', text)
+    parts = [p.strip(' .;,') for p in parts if p.strip(' .;,')]
+    if len(parts) > 1:
+        return parts
+    # sonst an Satzgrenzen splitten (max. 6 Schritte)
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    return sentences[:6] if sentences else [text]
+
+
+def _generate_solution_for_issue(category: str, title: str = '', description: str = '',
+                                 recommendation: str = '') -> IssueSolution:
+    """Generiert issue-spezifische Lösungsvorschläge basierend auf Kategorie UND konkretem Titel.
+
+    Hat der Check selbst eine konkrete Empfehlung geliefert (z.B. datengetriebene
+    Legal-Change-Checks wie DSA-Werbekennzeichnung oder KI-Transparenzhinweis),
+    nutzen wir diese als Lösungsschritte — statt eines generischen Kategorie-
+    Fallbacks, der das eigentliche Problem nicht trifft.
+    """
+
     title_lower = title.lower()
     desc_lower = description.lower()
     
@@ -1038,6 +1096,12 @@ Name / Datum / Unterschrift</p>''',
     # AVV (Auftragsverarbeitungsvertrag)
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     if category == 'avv' or 'avv' in title_lower or 'auftragsverarbeit' in title_lower or 'datenverarbeit' in title_lower:
+        # Drittland-/Transfer-spezifische Checks (z.B. US-Dienste ohne
+        # Rechtsgrundlage) liefern eine passgenaue Empfehlung — diese schlägt
+        # den generischen AVV-Vertragstext.
+        rec_steps = _recommendation_to_steps(recommendation)
+        if rec_steps:
+            return IssueSolution(code_snippet='', steps=rec_steps)
         return IssueSolution(
             code_snippet='''<!-- Datenschutzerklärung: Auftragsverarbeiter nennen -->
 <h2>Auftragsverarbeitung</h2>
@@ -1318,6 +1382,14 @@ Art. 28 DSGVO abgeschlossen:</p>
                 ]
             )
         
+        # Spezifische Datenschutz-Checks (z.B. DSA-Werbekennzeichnung,
+        # KI-Transparenzhinweis, US-Drittlandtransfer) liefern eine präzise
+        # Empfehlung mit — diese ist die richtige Lösung, nicht der generische
+        # "Datenschutzerklärung anlegen"-Hinweis.
+        rec_steps = _recommendation_to_steps(recommendation)
+        if rec_steps:
+            return IssueSolution(code_snippet='', steps=rec_steps)
+
         return IssueSolution(
             code_snippet='''<!-- Datenschutzerklärung Footer-Link -->
 <footer>
@@ -1472,6 +1544,14 @@ RewriteRule ^(.*)$ https://%1/$1 [R=301,L]''',
             ]
         )
     
+    # Fallback: Wenn der Check eine konkrete, issue-spezifische Empfehlung
+    # mitgeliefert hat (z.B. datengetriebene Legal-Change-Checks wie
+    # DSA-Werbekennzeichnung oder KI-Transparenzhinweis), nutze diese als
+    # Lösungsschritte — sie trifft das Problem genauer als der Kategorie-Default.
+    rec_steps = _recommendation_to_steps(recommendation)
+    if rec_steps:
+        return IssueSolution(code_snippet='', steps=rec_steps)
+
     # Fallback für andere Kategorien
     return _generate_solution(category)
 

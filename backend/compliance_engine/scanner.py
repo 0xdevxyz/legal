@@ -70,6 +70,7 @@ class ComplianceIssue:
     fix_code: Optional[str] = None  # Vorgeschlagener Fix-Code
     suggested_alt: Optional[str] = None  # AI-generierter Alt-Text
     image_src: Optional[str] = None  # Bild-URL
+    effort: str = ""  # Bearbeitungsaufwand (v4.0): gering | mittel | experte
     metadata: Dict = None  # Zusätzliche Metadaten
     
     def __post_init__(self):
@@ -151,6 +152,23 @@ class ComplianceScanner:
                 agb_issues, shop_issues, declarative_issues, uwg_issues, \
                 ssl_issues, contact_issues, social_issues = results
 
+            # ✅ v4.0 evidenz-basiert: Wenn der PRIMÄR-Check einer Säule abstürzt
+            # (Exception, Seite nicht auswertbar), liegt KEINE Evidenz vor → die
+            # Säule gilt als "ungeprüft" und darf NICHT als 100 (bestanden)
+            # durchrutschen. Mapping Primär-Check → Säule:
+            primary_check_by_pillar = {
+                "accessibility": barriere_issues,
+                "legal":         impressum_issues,
+                "gdpr":          datenschutz_issues,
+                "cookies":       cookie_issues,
+            }
+            unverified_pillars = {
+                pillar for pillar, res in primary_check_by_pillar.items()
+                if isinstance(res, Exception)
+            }
+            if unverified_pillars:
+                logger.warning(f"⚠️ Ungeprüfte Säulen (Primär-Check fehlgeschlagen): {unverified_pillars}")
+
             for check_issues in [barriere_issues, impressum_issues, datenschutz_issues,
                                   cookie_issues, agb_issues, shop_issues, declarative_issues, uwg_issues,
                                   ssl_issues, contact_issues, social_issues]:
@@ -184,12 +202,31 @@ class ComplianceScanner:
             
             # Anreicherung mit KI-Compliance-Beschreibungen (interner Generator)
             issues = await self._enrich_with_internal_descriptions(issues)
-            
-            # ✅ FIX v3.0: Gesamtscore = Mittelwert der 4 Säulen (eine Quelle!)
-            # So können Gesamtscore und Säulen-Scores nie auseinanderlaufen.
-            _scores = ScoreCalculator.compute(issues)
+
+            # 🤖 v4.0 KI-Verifikation: NUR ungeprüfte Säulen gegen den realen
+            # Seiteninhalt prüfen (Kostenkontrolle). Ergebnis fließt VOR dem Scoring
+            # zurück: bestätigt-konform → Säule wird geprüft+ok, bestätigt-fehlend →
+            # critical is_missing-Issue. Schlägt die KI fehl, bleibt die Säule UNVERIFIED.
+            if unverified_pillars:
+                issues, unverified_pillars = await self._ai_verify_unverified_pillars(
+                    soup, issues, unverified_pillars
+                )
+
+            # ✅ v4.0 Klassifizierung: Bearbeitungsaufwand pro Issue (für Hinweise/Priorisierung)
+            for _issue in issues:
+                if not _issue.effort:
+                    _issue.effort = ScoreCalculator.classify_effort(
+                        severity=_issue.severity,
+                        auto_fixable=_issue.auto_fixable,
+                        is_missing=_issue.is_missing,
+                    )
+
+            # ✅ FIX v4.0: Evidenz-basierter Gesamtscore = Mittelwert der 4 Säulen,
+            # ungeprüfte Säulen zählen NICHT als bestanden (Status UNVERIFIED).
+            _scores = ScoreCalculator.compute_with_status(issues, unverified_pillars)
             compliance_score = _scores["overall_score"]
             _pillar_scores = _scores["pillar_scores"]
+            _pillar_status = _scores["pillar_status"]
             
             # Calculate overall risk
             total_risk_euro = sum(issue.risk_euro for issue in issues)
@@ -211,9 +248,14 @@ class ComplianceScanner:
                 "total_issues": len(issues),
                 "issues": [asdict(issue) for issue in issues],
                 "pillar_scores": [
-                    {"pillar": pillar, "score": round(score)}
+                    {
+                        "pillar": pillar,
+                        "score": round(score),
+                        "status": _pillar_status.get(pillar),
+                    }
                     for pillar, score in _pillar_scores.items()
                 ],
+                "pillar_status": _pillar_status,
                 "recommendations": self._generate_recommendations(issues),
                 "next_steps": self._generate_next_steps(issues),
                 "has_accessibility_widget": has_accessibility_widget,
@@ -550,6 +592,70 @@ class ComplianceScanner:
         
         return steps
     
+    # Säule → (Kategorie, Anzeigename) für KI-bestätigte Mangel-Issues
+    _PILLAR_ISSUE_META = {
+        "legal":         ("impressum",       "Pflichtangaben (Impressum/Rechtstexte)"),
+        "gdpr":          ("datenschutz",     "Datenschutzerklärung"),
+        "cookies":       ("cookies",         "Cookie-Consent"),
+        "accessibility": ("barrierefreiheit", "Barrierefreiheit"),
+    }
+
+    async def _ai_verify_unverified_pillars(self, soup, issues, unverified_pillars):
+        """
+        KI-Verifikation der ungeprüften Säulen gegen den realen Seitentext.
+        Gibt (issues, verbleibende_unverified_pillars) zurück.
+
+        - KI bestätigt konform  → Säule aus unverified entfernen (zählt als geprüft).
+        - KI bestätigt fehlend  → critical is_missing-Issue ergänzen (Säule = 0).
+        - KI nicht verfügbar    → Säule bleibt unverified (kein Risiko, Scan läuft weiter).
+        """
+        try:
+            from ai_review_engine import ai_verify_pillar
+        except Exception:
+            return issues, unverified_pillars
+
+        page_text = soup.get_text(" ", strip=True)
+        still_unverified = set(unverified_pillars)
+
+        for pillar in list(unverified_pillars):
+            meta = self._PILLAR_ISSUE_META.get(pillar)
+            if not meta:
+                continue
+            category, label = meta
+            try:
+                verdict = await ai_verify_pillar(pillar, page_text)
+            except Exception as e:
+                logger.warning(f"⚠️ KI-Verifikation '{pillar}' fehlgeschlagen: {e}")
+                verdict = None
+
+            if not verdict:
+                continue  # bleibt UNVERIFIED
+
+            if verdict["compliant"]:
+                still_unverified.discard(pillar)
+                logger.info(f"✅ KI bestätigt Säule '{pillar}' als konform (conf={verdict['confidence']})")
+            else:
+                still_unverified.discard(pillar)
+                missing = ", ".join(verdict.get("missing", [])) or verdict.get("reason", "")
+                issues.append(ComplianceIssue(
+                    category=category,
+                    severity="critical",
+                    title=f"{label} fehlt oder unzureichend (KI-geprüft)",
+                    description=(
+                        f"Die KI-Prüfung des Seiteninhalts ergab, dass die Anforderung nicht erfüllt ist. "
+                        f"{verdict.get('reason', '')}".strip()
+                    ),
+                    risk_euro=3000,
+                    recommendation=f"Ergänzen/vervollständigen Sie: {missing}" if missing else "Inhalt vervollständigen.",
+                    legal_basis="DSGVO / DDG / BFSG",
+                    auto_fixable=False,
+                    is_missing=True,
+                    metadata={"ai_verified": True, "confidence": verdict.get("confidence")},
+                ))
+                logger.info(f"⚠️ KI bestätigt Säule '{pillar}' als NICHT konform")
+
+        return issues, still_unverified
+
     async def _enrich_with_internal_descriptions(self, issues: List[ComplianceIssue]) -> List[ComplianceIssue]:
         """
         Anreicherung der technisch erkannten Issues mit KI-generierten Compliance-Beschreibungen.

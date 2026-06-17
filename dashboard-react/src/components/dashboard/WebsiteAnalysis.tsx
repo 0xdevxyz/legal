@@ -370,7 +370,7 @@ export const WebsiteAnalysis: React.FC = () => {
     );
     
     let score = 100; // Default wenn keine Issues
-    
+
     if (backendPillarScore) {
       // ✅ BESTE OPTION: Backend-Score verwenden!
       score = backendPillarScore.score;
@@ -383,11 +383,19 @@ export const WebsiteAnalysis: React.FC = () => {
 
       score = Math.max(0, 100 - (criticalCount * 25 + warningCount * 8));
     }
-    
+
+    // ✅ v4.0 evidenz-basiert: Status vom Backend übernehmen, sonst aus Score ableiten.
+    // 'unverified' = konnte nicht geprüft werden → NIE als grün/bestanden darstellen.
+    const criticalCount = pillarIssues.filter(i => i.severity === 'critical').length;
+    const status: string =
+      backendPillarScore?.status ||
+      (criticalCount > 0 ? 'non_compliant' : pillarIssues.length > 0 ? 'partial' : 'compliant');
+
     return {
       ...pillar,
       issues: pillarIssues,
-      score: Math.round(score)
+      score: Math.round(score),
+      status,
     };
   });
 
@@ -610,8 +618,23 @@ export const WebsiteAnalysis: React.FC = () => {
                           <Icon className="w-6 h-6" style={{ color: 'var(--lime)' }} />
                         </div>
                         <div className="text-left">
-                          <h4 className="text-lg font-bold text-white flex items-center gap-2">
+                          <h4 className="text-lg font-bold text-white flex items-center gap-2 flex-wrap">
                             {pillar.name}
+                            {/* ✅ v4.0: evidenz-basierter Status-Badge */}
+                            {(() => {
+                              const cfg: Record<string, { label: string; cls: string }> = {
+                                compliant:     { label: '✓ Bestanden',    cls: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' },
+                                partial:       { label: 'Teilweise',      cls: 'bg-amber-500/15 text-amber-400 border border-amber-500/30' },
+                                non_compliant: { label: '✗ Nicht erfüllt', cls: 'bg-red-500/15 text-red-400 border border-red-500/30' },
+                                unverified:    { label: '? Ungeprüft',    cls: 'bg-zinc-500/15 text-zinc-300 border border-zinc-500/40' },
+                              };
+                              const s = cfg[(pillar as any).status] || cfg.compliant;
+                              return (
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.cls}`}>
+                                  {s.label}
+                                </span>
+                              );
+                            })()}
                             {issueCount > 0 && (
                               <Badge variant={criticalCount > 0 ? 'critical' : 'warning'}>
                                 {issueCount} Issue{issueCount !== 1 ? 's' : ''}
@@ -627,9 +650,13 @@ export const WebsiteAnalysis: React.FC = () => {
                         {(() => {
                           const r = 26;
                           const circ = 2 * Math.PI * r;
+                          const isUnverified = (pillar as any).status === 'unverified';
                           const pct = Math.max(0, Math.min(100, pillar.score));
-                          const off = circ - (pct / 100) * circ;
-                          const ringColor = pillar.score >= 80 ? '#25bac8' : pillar.score >= 60 ? '#eab308' : '#ef4444';
+                          // Ungeprüft: voller neutraler Ring, kein irreführender 0%-Wert
+                          const off = isUnverified ? 0 : circ - (pct / 100) * circ;
+                          const ringColor = isUnverified
+                            ? '#71717a' // zinc-500
+                            : pillar.score >= 80 ? '#25bac8' : pillar.score >= 60 ? '#eab308' : '#ef4444';
                           return (
                             <div className="relative w-[68px] h-[68px] flex-shrink-0">
                               <svg className="w-full h-full -rotate-90" viewBox="0 0 68 68">
@@ -642,8 +669,14 @@ export const WebsiteAnalysis: React.FC = () => {
                                 />
                               </svg>
                               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-lg font-black text-white leading-none">{pillar.score}</span>
-                                <span className="text-[9px] text-zinc-500 leading-none mt-0.5">/100</span>
+                                {isUnverified ? (
+                                  <span className="text-2xl font-black text-zinc-300 leading-none" title="Konnte nicht geprüft werden">?</span>
+                                ) : (
+                                  <>
+                                    <span className="text-lg font-black text-white leading-none">{pillar.score}</span>
+                                    <span className="text-[9px] text-zinc-500 leading-none mt-0.5">/100</span>
+                                  </>
+                                )}
                               </div>
                             </div>
                           );

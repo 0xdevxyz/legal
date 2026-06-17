@@ -106,10 +106,51 @@ async def check_datenschutz_compliance_smart(url: str, html: str = None, session
         return await check_datenschutz_compliance(url, soup, session)
 
 
+def _looks_like_datenschutz(text: str) -> bool:
+    """
+    Inhalts-Heuristik gegen Soft-404 / Catch-all: Sieht der Seitentext wirklich
+    wie eine Datenschutzerklärung aus? Erfordert einen DSGVO-Schlüsselbegriff UND
+    mindestens ein typisches inhaltliches Pflichtmerkmal.
+    """
+    if not text:
+        return False
+    low = text.lower()
+    keyword = any(k in low for k in (
+        'datenschutz', 'privacy policy', 'data protection', 'dsgvo', 'gdpr',
+    ))
+    if not keyword:
+        return False
+    markers = (
+        'verantwortlich', 'personenbezogene daten', 'rechtsgrundlage',
+        'art. 6', 'betroffenenrechte', 'auskunftsrecht', 'speicherdauer',
+        'verarbeitung', 'aufsichtsbehörde',
+    )
+    return sum(1 for m in markers if m in low) >= 2
+
+
+async def _fetch_candidate_text(candidate_url: str, session, ssl_context) -> "tuple[int, str] | None":
+    """Lädt eine Kandidaten-URL und gibt (status, text) zurück; None bei Fehler."""
+    try:
+        if session:
+            async with session.get(candidate_url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
+                return resp.status, (await resp.text() if resp.status == 200 else "")
+        else:
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(connector=connector) as tmp:
+                async with tmp.get(candidate_url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
+                    return resp.status, (await resp.text() if resp.status == 200 else "")
+    except Exception:
+        return None
+
+
 async def _check_datenschutz_url_exists(base_url: str, session=None) -> bool:
     """
     Prüft direkt bekannte Datenschutz-Pfade per HTTP-Request.
     Fallback für clientseitig gerenderte Seiten (Next.js, React SPA).
+
+    ⚠️ Soft-404-Guard (v4.0): HTTP 200 allein ist KEIN Nachweis. Catch-all-Probe
+    + Inhaltsprüfung verhindern, dass Parking-/Catch-all-Seiten fälschlich als
+    "Datenschutz vorhanden" zählen.
     """
     from urllib.parse import urlparse
     import ssl
@@ -118,30 +159,26 @@ async def _check_datenschutz_url_exists(base_url: str, session=None) -> bool:
     parsed = urlparse(base_url)
     base = f"{parsed.scheme}://{parsed.netloc}"
 
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+    probe = await _fetch_candidate_text(base + '/__complyo_probe_404__', session, ssl_context)
+    if probe and probe[0] == 200 and len(probe[1].strip()) > 200:
+        logger.info("⚠️ Catch-all-Domain erkannt — prüfe Datenschutz-Inhalt strikt")
+
     candidate_paths = [
         '/datenschutz', '/datenschutzerklaerung', '/privacy', '/privacy-policy',
         '/dsgvo', '/data-protection', '/datenschutz-erklaerung'
     ]
 
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
-
     for path in candidate_paths:
         candidate_url = base + path
-        try:
-            if session:
-                async with session.get(candidate_url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
-                    if resp.status == 200:
-                        logger.info(f"✅ Datenschutz-URL direkt gefunden: {candidate_url}")
-                        return True
-            else:
-                connector = aiohttp.TCPConnector(ssl=ssl_context)
-                async with aiohttp.ClientSession(connector=connector) as tmp:
-                    async with tmp.get(candidate_url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
-                        if resp.status == 200:
-                            logger.info(f"✅ Datenschutz-URL direkt gefunden: {candidate_url}")
-                            return True
-        except Exception:
+        result = await _fetch_candidate_text(candidate_url, session, ssl_context)
+        if not result or result[0] != 200:
             continue
+        if _looks_like_datenschutz(result[1]):
+            logger.info(f"✅ Datenschutz-URL mit validem Inhalt gefunden: {candidate_url}")
+            return True
+        logger.info(f"↪️ {candidate_url} liefert 200, aber Inhalt ist keine Datenschutzerklärung — ignoriert")
 
     return False
 

@@ -176,21 +176,40 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None) -
                     has_cookie_banner = True
                     break
     
-    # Tracking-Erkennung — wird sowohl ohne als auch mit Banner benötigt
+    # Tracking-Erkennung — wird sowohl ohne als auch mit Banner benötigt.
+    # v4.0: deckt jetzt auch GTM-Container, inline-Snippets, Pixel und bekannte
+    # Third-Party-Hosts ab (nicht nur <script src>), um False Negatives zu senken.
     has_tracking = False
     tracking_patterns = [
-        r'google-analytics',
-        r'googletagmanager',
-        r'facebook.*pixel',
-        r'hotjar',
-        r'matomo',
-        r'analytics',
-        r'tracking',
+        r'google-analytics', r'googletagmanager', r'gtag\(', r'gtag/js',
+        r'\bdatalayer\b', r'ga\(\s*[\'"]create', r'_gaq',
+        r'facebook.*pixel', r'connect\.facebook\.net', r'fbq\(',
+        r'hotjar', r'\bhj\(', r'matomo', r'piwik',
+        r'doubleclick', r'googlesyndication', r'google-adservices',
+        r'clarity\.ms', r'cdn\.segment', r'mixpanel', r'amplitude',
+        r'fullstory', r'mouseflow', r'plausible', r'\.tiktok\.com',
+        r'linkedin\.com/(px|insight)', r'snap\.licdn', r'criteo',
+        r'taboola', r'outbrain', r'bing.*uet', r'pinterest.*tag',
+        r'analytics', r'tracking', r'gtm\.js', r'gtm-',
     ]
-    for script in scripts:
-        src = script.get('src', '').lower()
-        for pattern in tracking_patterns:
-            if re.search(pattern, src, re.I):
+    # 1. <script src> + 2. inline-Script-Inhalt (alle <script>, nicht nur src)
+    for script in soup.find_all('script'):
+        haystack = (script.get('src', '') + ' ' + (script.string or '')).lower()
+        if any(re.search(pattern, haystack, re.I) for pattern in tracking_patterns):
+            has_tracking = True
+            break
+
+    # 3. Third-Party-Embeds (iframes/img-Pixel) zu bekannten Tracking-Hosts
+    if not has_tracking:
+        third_party_hosts = (
+            'doubleclick.net', 'google-analytics.com', 'googletagmanager.com',
+            'facebook.com/tr', 'connect.facebook.net', 'hotjar.com',
+            'clarity.ms', 'segment.com', 'youtube.com/embed', 'maps.googleapis',
+            'fonts.googleapis',
+        )
+        for el in soup.find_all(['iframe', 'img', 'link'], src=True) + soup.find_all('link', href=True):
+            ref = (el.get('src') or el.get('href') or '').lower()
+            if any(host in ref for host in third_party_hosts):
                 has_tracking = True
                 break
 

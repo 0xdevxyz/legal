@@ -18,7 +18,7 @@ from dataclasses import dataclass
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from compliance_engine.score_calculator import ScoreCalculator
+from compliance_engine.score_calculator import ScoreCalculator, PillarStatus
 
 
 @dataclass
@@ -98,3 +98,66 @@ class TestBaseline:
         result = ScoreCalculator.compute([])
         assert result["overall_score"] == 100
         assert all(v == 100 for v in result["pillar_scores"].values())
+
+
+class TestEvidenceBasedV4:
+    """
+    v4.0 evidenz-basiert: Abwesenheit von Erkennung ist KEIN Nachweis von
+    Compliance. Reproduziert u.a. das spedition-mahn.de-Problem (leere Seite
+    bekam fälschlich 49 %).
+    """
+
+    def test_empty_site_scores_near_zero(self):
+        # Seite ohne Impressum/Datenschutz/Cookie-Banner/A11y: jede Säule emittiert
+        # ein fehlendes Kern-Element (critical + is_missing).
+        issues = [
+            _Issue("impressum", "critical", is_missing=True),
+            _Issue("datenschutz", "critical", is_missing=True),
+            _Issue("cookies", "critical", is_missing=True),
+            _Issue("barrierefreiheit", "critical", is_missing=True),
+        ]
+        result = ScoreCalculator.compute(issues)
+        assert result["overall_score"] == 0
+        assert all(v == 0 for v in result["pillar_scores"].values())
+        assert all(s == PillarStatus.NON_COMPLIANT for s in result["pillar_status"].values())
+
+    def test_unverified_pillar_is_not_counted_as_passed(self):
+        # Cookie-Säule konnte nicht geprüft werden (Check abgestürzt) und hat keine
+        # Evidenz → 0 Credit + Status unverified, NICHT 100.
+        result = ScoreCalculator.compute_with_status([], unverified_pillars={"cookies"})
+        assert result["pillar_status"]["cookies"] == PillarStatus.UNVERIFIED
+        assert result["pillar_scores"]["cookies"] == 0
+        # 3 Säulen bestanden (100), 1 ungeprüft (0) → (100+100+100+0)/4 = 75
+        assert result["overall_score"] == 75
+
+    def test_unverified_pillar_with_evidence_uses_issues(self):
+        # Liegt trotz "unverified"-Flag echte Evidenz (Issue) vor, gewinnt die Evidenz.
+        issues = [_Issue("cookies", "critical", is_missing=True)]
+        result = ScoreCalculator.compute_with_status(issues, unverified_pillars={"cookies"})
+        assert result["pillar_status"]["cookies"] == PillarStatus.NON_COMPLIANT
+        assert result["pillar_scores"]["cookies"] == 0
+
+    def test_effort_classification(self):
+        SC = ScoreCalculator
+        # auto-fixable → gering, egal welche Severity
+        assert SC.classify_effort("critical", auto_fixable=True) == SC.EFFORT_LOW
+        # komplett fehlendes Kern-Element (critical+is_missing) → experte
+        assert SC.classify_effort("critical", is_missing=True) == SC.EFFORT_EXPERT
+        # critical ohne Autofix → experte
+        assert SC.classify_effort("critical") == SC.EFFORT_EXPERT
+        # warning → mittel
+        assert SC.classify_effort("warning") == SC.EFFORT_MEDIUM
+        # info → gering
+        assert SC.classify_effort("info") == SC.EFFORT_LOW
+
+    def test_status_derivation(self):
+        issues = [
+            _Issue("datenschutz", "warning"),   # gdpr partial
+            _Issue("impressum", "critical", is_missing=True),  # legal non_compliant
+        ]
+        result = ScoreCalculator.compute(issues)
+        status = result["pillar_status"]
+        assert status["gdpr"] == PillarStatus.PARTIAL
+        assert status["legal"] == PillarStatus.NON_COMPLIANT
+        assert status["accessibility"] == PillarStatus.COMPLIANT  # keine Issues, geprüft
+        assert status["cookies"] == PillarStatus.COMPLIANT
