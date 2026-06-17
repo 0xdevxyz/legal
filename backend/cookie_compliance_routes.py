@@ -3,22 +3,21 @@ Cookie Compliance Routes
 API endpoints for Cookie-Consent-Management
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Response, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, Request, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
 import asyncpg
 import hashlib
 import re
-import uuid
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 import json
 import logging
 from fastapi.responses import StreamingResponse
 import io
+import csv
 from cookie_scanner_service import cookie_scanner
 from file_storage_service import file_storage
-from functools import wraps
 from agency_report_generator import AgencyReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -683,7 +682,7 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
         
         # ✅ Füge scan_completed Status hinzu
         config['scan_completed'] = config.get('scan_completed_at') is not None
-        
+
         # Convert datetime to ISO string
         if config.get('scan_completed_at'):
             config['scan_completed_at'] = config['scan_completed_at'].isoformat()
@@ -691,7 +690,13 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
             config['created_at'] = config['created_at'].isoformat()
         if config.get('updated_at'):
             config['updated_at'] = config['updated_at'].isoformat()
-        
+
+        # 🔒 Laufzeit-Lizenzprüfung: Wurde die Website im Dashboard entfernt,
+        # signalisiert license_active=false → der Banner zeigt einen Hinweis
+        # statt zu funktionieren (Anti-Missbrauch gegen optimieren+löschen).
+        from license_check import site_has_active_license
+        config['license_active'] = await site_has_active_license(db_pool, site_id)
+
         return {
             "success": True,
             "data": config
@@ -1135,6 +1140,83 @@ async def get_consent_logs(
     except Exception as e:
         print(f"Error getting consent logs: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get logs: {str(e)}")
+
+@router.get("/api/cookie-compliance/consents/{site_id}/export")
+async def export_consent_logs_csv(
+    site_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Export consent logs as CSV for DSGVO proof-of-consent documentation (Art. 7).
+
+    Authenticated + requires the Cookie module. Excel-compatible UTF-8 (BOM),
+    semicolon-separated. Contains pseudonymized data only (hashed IP, truncated UA).
+    """
+    user = await get_current_user_required(credentials)
+    await require_module(user, 'cookie')
+    try:
+        query = """
+            SELECT id, visitor_id, consent_categories, services_accepted,
+                   ip_address_hash, user_agent, language, banner_shown,
+                   revision_id, timestamp
+            FROM cookie_consent_logs
+            WHERE site_id = $1
+            ORDER BY timestamp DESC
+        """
+        rows = await db_pool.fetch(query, site_id)
+
+        buf = io.StringIO()
+        writer = csv.writer(buf, delimiter=';')
+        writer.writerow([
+            'ID', 'Zeitstempel (UTC)', 'Visitor-ID', 'Notwendig', 'Funktional',
+            'Statistik', 'Marketing', 'Akzeptierte Services', 'IP-Hash',
+            'User-Agent', 'Sprache', 'Banner angezeigt', 'Konfig-Revision'
+        ])
+        for r in rows:
+            cats = r['consent_categories']
+            if isinstance(cats, str):
+                try:
+                    cats = json.loads(cats)
+                except Exception:
+                    cats = {}
+            cats = cats or {}
+            services = r['services_accepted']
+            if isinstance(services, str):
+                try:
+                    services = json.loads(services)
+                except Exception:
+                    services = None
+            services_str = ', '.join(services) if isinstance(services, list) else ''
+            writer.writerow([
+                r['id'],
+                r['timestamp'].isoformat() if r['timestamp'] else '',
+                r['visitor_id'] or '',
+                'ja' if cats.get('necessary') else 'nein',
+                'ja' if cats.get('functional') else 'nein',
+                'ja' if cats.get('analytics') else 'nein',
+                'ja' if cats.get('marketing') else 'nein',
+                services_str,
+                r['ip_address_hash'] or '',
+                r['user_agent'] or '',
+                r['language'] or '',
+                'ja' if r['banner_shown'] else 'nein',
+                r['revision_id'] if r['revision_id'] is not None else ''
+            ])
+
+        # Prepend BOM so Excel renders UTF-8 (umlauts) correctly.
+        csv_bytes = ('﻿' + buf.getvalue()).encode('utf-8')
+        filename = f"consent-log_{site_id}_{date.today().isoformat()}.csv"
+        return StreamingResponse(
+            io.BytesIO(csv_bytes),
+            media_type='text/csv',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error exporting consent logs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to export: {str(e)}")
 
 # ============================================================================
 # Utility Endpoints

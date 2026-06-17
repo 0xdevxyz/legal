@@ -209,7 +209,16 @@
             if (this.siteId && this.siteId !== 'demo-site') {
                 await this.loadServerConfig();
             }
-            
+
+            // 🔒 Lizenzprüfung: Wurde die Website im Dashboard entfernt, zeigen wir
+            // statt des funktionsfähigen Banners einen Hinweis an den Betreiber.
+            if (this.config.licenseActive === false) {
+                console.warn('[Complyo] Keine aktive Lizenz für diese Website – Banner deaktiviert.');
+                this.renderLicenseNotice();
+                return;
+            }
+
+
             // ✅ Phase 2: Check Geo-Restriction
             if (this.config.geo_restriction_enabled && this.config.geo_countries?.length > 0) {
                 const shouldShow = await this.checkGeoRestriction();
@@ -243,6 +252,34 @@
             }
         }
         
+        /**
+         * 🔒 Lizenz-Hinweis: Wird angezeigt, wenn für diese Website keine aktive
+         * Lizenz mehr besteht (Website wurde im Complyo-Dashboard entfernt).
+         */
+        renderLicenseNotice() {
+            const show = () => {
+                if (document.getElementById('complyo-license-notice')) return;
+                const bar = document.createElement('div');
+                bar.id = 'complyo-license-notice';
+                bar.setAttribute('role', 'alert');
+                bar.style.cssText = [
+                    'position:fixed', 'left:0', 'right:0', 'bottom:0', 'z-index:2147483647',
+                    'background:#1f2937', 'color:#f9fafb', 'padding:14px 18px',
+                    'font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif',
+                    'text-align:center', 'box-shadow:0 -2px 12px rgba(0,0,0,.25)'
+                ].join(';');
+                bar.textContent =
+                    'Für dieses Cookie-Banner besteht keine aktive Lizenz. ' +
+                    'Bitte wenden Sie sich an Ihren Administrator.';
+                document.body.appendChild(bar);
+            };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', show);
+            } else {
+                show();
+            }
+        }
+
         /**
          * ✅ Phase 2: Geo-Restriction Check
          */
@@ -515,6 +552,8 @@
             this.config.showBranding = serverConfig.show_branding !== false;
             this.config.services = serverConfig.services || [];
             this.config.isActiveFromServer = serverConfig.is_active === true;
+            // 🔒 Lizenzstatus vom Server (false = Website im Dashboard entfernt)
+            this.config.licenseActive = serverConfig.license_active !== false;
             this.configHash = serverConfig.config_hash || null;
 
             // Konfigurierbare Legal-Links (Task 2.5)
@@ -1382,21 +1421,25 @@
                     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
                 }
                 
+                /* DSGVO/DSK: "Ablehnen" muss gleichwertig zu "Akzeptieren" sein
+                   (gleiche Größe, gleiche visuelle Gewichtung). Daher ebenfalls
+                   gefüllt mit Schatten – kein schwächerer Outline-Button. */
                 .complyo-btn-secondary {
-                    background: white;
-                    color: ${primaryColor};
-                    border: 2px solid ${primaryColor};
-                }
-                
-                .complyo-btn-secondary:hover {
-                    background: ${primaryColor};
+                    background: #4b5563;
                     color: white;
+                    border: none;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+                }
+
+                .complyo-btn-secondary:hover {
+                    background: #374151;
                     transform: translateY(-1px);
                     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
                 }
-                
+
                 .complyo-btn-secondary:active {
                     transform: translateY(0);
+                    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
                 }
                 
                 .complyo-btn-link {

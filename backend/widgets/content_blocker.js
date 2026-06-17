@@ -25,8 +25,13 @@
     // ========================================================================
     
     const VERSION = '2.0.0';
-    
-    // Blocked domains by category
+    const API_BASE = 'https://api.complyo.de';
+
+    // Blocked domains by category.
+    // Built-in fallback list; at runtime this is enriched with the domains of
+    // ALL services from the Complyo service catalogue (see loadServiceDomains)
+    // so that every configurable tracker is blocked before consent — not just
+    // the hard-coded ones.
     const BLOCKED_DOMAINS = {
         analytics: [
             'google-analytics.com',
@@ -164,21 +169,99 @@
             }
         }
         
-        onDOMReady() {
+        async onDOMReady() {
             // Check if consent already exists
             this.consent = this.loadConsentFromStorage();
-            
+
             if (this.consent) {
                 // Consent already given - unblock immediately
                 console.log('[Complyo Content Blocker] Consent found, unblocking...');
                 this.unblockContent();
             } else {
-                // No consent yet - block everything
+                // No consent yet - block everything immediately with the
+                // built-in domain list (fast, synchronous).
                 console.log('[Complyo Content Blocker] No consent, blocking content...');
                 this.blockAllContent();
-                
+
                 // Watch for dynamically added content
                 this.observeDOM();
+
+                // Enrich the block list with the full service catalogue, then
+                // re-scan so trackers that aren't in the built-in list (e.g.
+                // less common analytics/marketing tools) are also blocked.
+                await this.loadServiceDomains();
+                this.blockAllContent();
+            }
+
+            // 🔒 Lizenzprüfung: Ohne aktive Lizenz (Website im Dashboard entfernt)
+            // darf NICHT blockiert werden – sonst bliebe z. B. Google Maps kaputt.
+            this.enforceLicense();
+        }
+
+        // Loads the domain→category mapping for ALL services from the Complyo
+        // catalogue and merges it into BLOCKED_DOMAINS. This closes the gap
+        // where only ~68 hard-coded domains were blocked while 200+ services
+        // are configurable. Fail-open: on error the built-in list stays in use.
+        async loadServiceDomains() {
+            try {
+                const res = await fetch(`${API_BASE}/api/cookie-compliance/services`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const services = (data && data.services) || [];
+                let added = 0;
+                services.forEach(svc => {
+                    let tpl = svc.template;
+                    if (typeof tpl === 'string') {
+                        try { tpl = JSON.parse(tpl); } catch (e) { tpl = null; }
+                    }
+                    const category = (tpl && tpl.category) || svc.category;
+                    const domains = (tpl && tpl.domains) || [];
+                    // 'necessary' services never need blocking.
+                    if (!category || category === 'necessary') return;
+                    if (!BLOCKED_DOMAINS[category]) BLOCKED_DOMAINS[category] = [];
+                    domains.forEach(d => {
+                        const dom = String(d).toLowerCase().trim();
+                        if (dom && !BLOCKED_DOMAINS[category].includes(dom)) {
+                            BLOCKED_DOMAINS[category].push(dom);
+                            added++;
+                        }
+                    });
+                });
+                if (added > 0) {
+                    console.log(`[Complyo Content Blocker] Block list enriched with ${added} service domain(s)`);
+                }
+            } catch (e) {
+                // fail-open – keep built-in list
+                console.warn('[Complyo Content Blocker] Could not load service domains:', e);
+            }
+        }
+
+        getSiteIdFromScript() {
+            const scripts = document.querySelectorAll('script[data-site-id]');
+            if (scripts.length > 0) {
+                return scripts[scripts.length - 1].getAttribute('data-site-id');
+            }
+            return null;
+        }
+
+        // Hebt die Blockierung vollständig auf, wenn keine aktive Lizenz besteht.
+        // Fail-open: bei Fehlern/Demo bleibt das normale Verhalten erhalten.
+        async enforceLicense() {
+            try {
+                const siteId = this.getSiteIdFromScript();
+                if (!siteId || siteId === 'demo-site' || siteId === 'demo') return;
+                const res = await fetch(`https://api.complyo.de/api/cookie-compliance/config/${siteId}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const licenseInactive = data && data.data && data.data.license_active === false;
+                if (licenseInactive) {
+                    console.warn('[Complyo Content Blocker] Keine aktive Lizenz – Blockierung wird vollständig aufgehoben.');
+                    // Volle Freigabe, damit alle eingebetteten Inhalte normal laden
+                    this.consent = { necessary: true, functional: true, analytics: true, marketing: true };
+                    this.unblockContent();
+                }
+            } catch (e) {
+                // fail-open – im Zweifel normales Blockierverhalten beibehalten
             }
         }
         
@@ -317,20 +400,42 @@
                         });
                         
                         console.log(`[Complyo] Blocked ${service.name}: ${src}`);
+                    } else if (iframe.parentNode) {
+                        // Generic embed: show the same click-to-load placeholder
+                        // as for known video/map services (Borlabs-style), with a
+                        // friendly name derived from the host.
+                        let host = src;
+                        try { host = new URL(src).hostname.replace(/^www\./, ''); } catch (e) {}
+                        const genericService = {
+                            name: host || 'Externer Inhalt',
+                            icon: '🔒',
+                            generic: true
+                        };
+                        const placeholder = this.createVisualPlaceholder(iframe, genericService, category);
+                        iframe.parentNode.replaceChild(placeholder, iframe);
+
+                        this.blockedElements.set(placeholder, {
+                            type: 'iframe',
+                            category: category,
+                            original: iframe,
+                            service: genericService
+                        });
+
+                        console.log(`[Complyo] Blocked iframe (placeholder): ${src} (${category})`);
                     } else {
-                        // Generic blocking
+                        // Detached iframe – fall back to plain hiding.
                         iframe.removeAttribute('src');
                         iframe.setAttribute('data-complyo-consent', category);
                         iframe.setAttribute('data-complyo-src', src);
                         iframe.setAttribute('data-complyo-blocked', 'true');
                         iframe.style.display = 'none';
-                        
+
                         this.blockedElements.set(iframe, {
                             type: 'iframe',
                             category: category,
                             originalSrc: src
                         });
-                        
+
                         console.log(`[Complyo] Blocked iframe: ${src} (${category})`);
                     }
                 }
@@ -571,7 +676,7 @@
                     }
                 </style>
                 <div class="complyo-placeholder-icon">${service.icon}</div>
-                <div class="complyo-placeholder-title">${service.name} Video</div>
+                <div class="complyo-placeholder-title">${service.generic ? service.name : service.name + ' Video'}</div>
                 <div class="complyo-placeholder-text">
                     Zum Laden dieses Inhalts ist Ihre Zustimmung erforderlich.
                 </div>
