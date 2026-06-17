@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict, field, is_dataclass
 import re
+import asyncio
 from urllib.parse import urljoin, urlparse
 import logging
 import aiohttp
@@ -104,6 +105,95 @@ class BarrierefreiheitIssue:
     suggested_alt: Optional[str] = None  # NEU: AI-generierter Alt-Text
     image_src: Optional[str] = None  # NEU: Bild-URL
     metadata: Dict[str, Any] = field(default_factory=dict)  # NEU: Zusätzliche Metadaten
+
+
+# ============================================================================
+# axe-core Integration: echte WCAG-2.1-AA-Engine auf gerendertem DOM
+# ============================================================================
+
+_WCAG_CRIT_RE = re.compile(r'(\d\.\d+\.\d+)')
+# Kriterien, die nur axe verlässlich auf dem gerenderten DOM messen kann
+# (echte Farbkontraste). Hier bekommt axe immer Vorrang vor der Heuristik.
+_CONTRAST_CRITERIA = {'1.4.3', '1.4.6', '1.4.11'}
+
+
+async def _run_axe_core_safe(url: str, timeout: float = 35.0) -> Optional[List[Dict[str, Any]]]:
+    """
+    Führt den axe-core-Scan (Playwright + axe-core) auf der gerenderten Seite aus.
+
+    Returns:
+        Liste strukturierter Issues bei Erfolg, sonst None.
+        Fail-open: Jeder Fehler/Timeout/fehlende Abhängigkeit → None, d.h. der
+        Scan verhält sich exakt wie zuvor (nur Heuristik) und stürzt nie ab.
+    """
+    try:
+        from ..axe_scanner import run_axe_scan
+        result, axe_issues = await asyncio.wait_for(run_axe_scan(url), timeout=timeout)
+        # _create_empty_result() setzt by_impact={"error": ...} bei Fehlern
+        if isinstance(result.by_impact, dict) and "error" in result.by_impact:
+            logger.warning(f"⚠️ axe-core lieferte kein valides Ergebnis: {result.by_impact.get('error')}")
+            return None
+        logger.info(f"✅ axe-core: {result.total_violations} Violations → {len(axe_issues)} Issues")
+        return axe_issues
+    except ImportError:
+        logger.warning("⚠️ axe-core/Playwright nicht verfügbar – Scan läuft heuristisch weiter")
+        return None
+    except asyncio.TimeoutError:
+        logger.warning(f"⚠️ axe-core Timeout nach {timeout}s für {url} – heuristisch weiter")
+        return None
+    except Exception as e:
+        logger.warning(f"⚠️ axe-core fehlgeschlagen ({type(e).__name__}: {e}) – heuristisch weiter")
+        return None
+
+
+def _issue_field(issue, name: str, default=""):
+    """Liest ein Feld aus einem Issue, egal ob Dataclass oder Dict."""
+    if is_dataclass(issue):
+        return getattr(issue, name, default)
+    if isinstance(issue, dict):
+        return issue.get(name, default)
+    return default
+
+
+def _heuristic_wcag_criteria(issue) -> set:
+    """Extrahiert die abgedeckten WCAG-Kriterien aus Titel + legal_basis."""
+    text = f"{_issue_field(issue, 'title')} {_issue_field(issue, 'legal_basis')}"
+    return set(_WCAG_CRIT_RE.findall(text))
+
+
+def _is_manual_contrast_hint(issue) -> bool:
+    """Der heuristische 'bitte manuell prüfen'-Kontrast-Hinweis."""
+    title = _issue_field(issue, 'title') or ''
+    category = _issue_field(issue, 'category') or ''
+    return category == 'kontraste' or 'Kontrast-Prüfung empfohlen' in title
+
+
+def _merge_axe_into_heuristic(heuristic_issues: list, axe_issues: List[Dict[str, Any]]) -> list:
+    """
+    Führt axe-Issues mit den Heuristik-Issues zusammen.
+
+    Regeln:
+    - Kontrast besitzt axe immer (echte Messung ersetzt den manuellen Hinweis).
+    - Für andere Kriterien wird ein axe-Issue verworfen, wenn die Heuristik das
+      Kriterium bereits meldet (vermeidet Doppelzählung in Score/Risiko).
+    - Alle übrigen axe-Issues (neue Kriterien) werden ergänzt → echte Mehr-Abdeckung.
+    """
+    covered = set()
+    for it in heuristic_issues:
+        covered |= _heuristic_wcag_criteria(it)
+
+    # Manuellen Kontrast-Hinweis entfernen – axe liefert jetzt echte Werte
+    merged = [it for it in heuristic_issues if not _is_manual_contrast_hint(it)]
+
+    for ax in axe_issues:
+        crit = set((ax.get('metadata') or {}).get('wcag_criteria') or [])
+        if crit & _CONTRAST_CRITERIA:
+            merged.append(ax)                 # axe besitzt Kontrast
+        elif crit and crit.issubset(covered):
+            continue                          # Heuristik deckt dieses Kriterium bereits ab
+        else:
+            merged.append(ax)                 # neues Kriterium → echte Mehr-Abdeckung
+    return merged
 
 async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, session=None) -> List[Dict[str, Any]]:
     """
@@ -386,8 +476,17 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
             is_missing=False,
         ))
 
+    # ── axe-core: echte WCAG-2.1-AA-Engine auf dem gerenderten DOM ──────────
+    # Ergänzt die HTML-Heuristik um real berechnete Kriterien (Kontrast 1.4.3,
+    # Fokus-Sichtbarkeit 2.4.7, ARIA-Validität, Heading-Order u.v.m.).
+    # Fail-open: schlägt axe fehl/fehlt Playwright, bleibt das Ergebnis exakt
+    # wie zuvor (nur Heuristik).
+    axe_issues = await _run_axe_core_safe(url)
+    if axe_issues is not None:
+        issues = _merge_axe_into_heuristic(issues, axe_issues)
+
     # issues enthält gemischt BarrierefreiheitIssue-Instanzen UND bereits per asdict()
-    # konvertierte Dicts (AUDIT-09…13 liefern Dicts). asdict() auf ein Dict wirft
+    # konvertierte Dicts (AUDIT-09…13 + axe liefern Dicts). asdict() auf ein Dict wirft
     # TypeError und ließ bisher den GESAMTEN Check abstürzen → Barrierefreiheit fiel
     # im Scanner stumm weg (Säule defaultete auf 100, "Widget vorhanden").
     return [asdict(issue) if is_dataclass(issue) else issue for issue in issues]
@@ -1201,13 +1300,19 @@ async def check_barrierefreiheit_enhanced(
             axe_result, axe_issues = await run_axe_scan(url)
             
             # Dedupliziere: Nur axe-Issues hinzufügen, die nicht schon gefunden wurden
-            existing_selectors = {issue.get('selector') for issue in all_issues if issue.get('selector')}
-            
+            def _selector_of(issue):
+                meta = issue.get('metadata') or {}
+                return meta.get('selector') or issue.get('selector')
+
+            existing_selectors = {s for s in (_selector_of(i) for i in all_issues) if s}
+
             for issue in axe_issues:
-                selector = issue.get('selector', '')
+                selector = _selector_of(issue)
                 if selector and selector not in existing_selectors:
                     all_issues.append(issue)
                     existing_selectors.add(selector)
+                elif not selector:
+                    all_issues.append(issue)
             
             logger.info(f"✅ axe-core Check: {len(axe_issues)} Issues ({axe_result.total_violations} Violations)")
         except ImportError:

@@ -15,7 +15,6 @@ import logging
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
-from urllib.parse import urljoin, urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -403,34 +402,54 @@ class AxeScanner:
             Liste von Issue-Dictionaries
         """
         issues = []
-        
+
+        # Pro Regel die betroffenen Knoten deckeln, damit ein einzelner
+        # Massen-Verstoß (z. B. 80 Elemente mit zu wenig Kontrast) nicht den
+        # Score und die Risiko-Summe sprengt.
+        MAX_NODES_PER_RULE = 10
+
         for violation in scan_result.violations:
+            extra = max(0, len(violation.nodes) - MAX_NODES_PER_RULE)
             # Für jeden betroffenen Node ein Issue
-            for node in violation.nodes:
+            for idx, node in enumerate(violation.nodes[:MAX_NODES_PER_RULE]):
                 severity = self._impact_to_severity(violation.impact)
-                
+
+                # target ist eine Liste von Selektoren → ersten als String verwenden
+                target = node.get("target") or []
+                selector = target[0] if target else ""
+
+                wcag_str = ", ".join(violation.wcag_criteria) if violation.wcag_criteria else "Name, Role, Value"
+                failure = (node.get("failureSummary") or violation.help or "").strip()
+
+                description = violation.description
+                if idx == 0 and extra > 0:
+                    description = f"{description} (und {extra} weitere Element(e) mit demselben Problem)"
+
                 issues.append({
-                    "id": f"{violation.id}_{hash(node.get('target', []))}"[:32],
-                    "title": violation.help,
-                    "description": violation.description,
                     "category": "barrierefreiheit",
                     "severity": severity,
-                    "feature_id": violation.feature_id,
-                    "wcag_criteria": violation.wcag_criteria,
-                    "legal_basis": f"WCAG 2.1 ({', '.join(violation.wcag_criteria)})",
-                    "page_url": scan_result.url,
-                    "selector": node.get("target", [""])[0] if node.get("target") else "",
-                    "element_html": node.get("html", ""),
-                    "recommendation": node.get("failureSummary", ""),
+                    "title": violation.help or violation.id,
+                    "description": description,
+                    "risk_euro": self._impact_to_risk_euro(violation.impact),
+                    "recommendation": failure,
+                    "legal_basis": f"WCAG 2.1 ({wcag_str}), BFSG §12",
                     "auto_fixable": violation.feature_id in ["ALT_TEXT", "CONTRAST", "FOCUS", "LANDMARKS"],
+                    "is_missing": False,
+                    "element_html": node.get("html", ""),
                     "metadata": {
+                        "source": "axe-core",
                         "axe_rule_id": violation.id,
                         "axe_impact": violation.impact,
                         "axe_help_url": violation.help_url,
-                        "axe_tags": violation.tags
-                    }
+                        "axe_tags": violation.tags,
+                        "wcag_criteria": violation.wcag_criteria,
+                        "feature_id": violation.feature_id,
+                        "selector": selector,
+                        "page_url": scan_result.url,
+                        "extra_affected": extra if idx == 0 else 0,
+                    },
                 })
-        
+
         return issues
     
     def _impact_to_severity(self, impact: str) -> str:
@@ -442,6 +461,16 @@ class AxeScanner:
             "minor": "info"
         }
         return mapping.get(impact, "warning")
+
+    def _impact_to_risk_euro(self, impact: str) -> int:
+        """Schätzt das Bußgeld-/Abmahnrisiko je axe-Impact (für Score & Reporting)."""
+        mapping = {
+            "critical": 2000,
+            "serious": 1500,
+            "moderate": 800,
+            "minor": 300,
+        }
+        return mapping.get(impact, 800)
 
 
 # Globale Instanz
