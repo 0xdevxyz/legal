@@ -198,7 +198,8 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 }
                 _suggestions = {
                     "maintenance": [
-                        "Die Seite ist vorübergehend offline (z.B. Wartung) — bitte nach Wiederherstellung erneut scannen.",
+                        "Eine Compliance-Prüfung ist nur bei produktiv erreichbaren Seiten möglich — bitte nach Wiederherstellung erneut scannen.",
+                        "Hinweis: Auch Wartungs-/Baustellenseiten müssen bereits ein Impressum und einen Link zur Datenschutzerklärung bereitstellen.",
                         *( [f"Erkanntes Grundsystem: {detected_cms} — nach Go-Live sind Cookie-Banner & Datenschutzerklärung zu prüfen."] if detected_cms else [] ),
                     ],
                     "blocked": [

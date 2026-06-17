@@ -130,8 +130,11 @@ class ComplianceScanner:
                 if status_code in (502, 503, 504):
                     reason, notice = "maintenance", (
                         f"Die Website ist aktuell nicht erreichbar (HTTP {status_code}, "
-                        f"vermutlich Wartungsmodus). Ein vollständiger Compliance-Scan ist "
-                        f"erst nach Wiederherstellung möglich."
+                        f"vermutlich Wartungsmodus) und kann daher derzeit nicht auf "
+                        f"Compliance geprüft werden. Eine Prüfung ist nur bei produktiv "
+                        f"erreichbaren Seiten möglich — bitte wiederholen Sie den Scan nach "
+                        f"Wiederherstellung. Hinweis: Auch Wartungsseiten müssen bereits ein "
+                        f"Impressum und einen Link zur Datenschutzerklärung bereitstellen."
                     )
                 elif status_code in (401, 403):
                     reason, notice = "blocked", (
@@ -167,14 +170,20 @@ class ComplianceScanner:
             scan_notice = None
             if is_placeholder:
                 scan_notice = (
-                    f"Die Seite befindet sich offenbar im {placeholder_kind}-Modus "
-                    f"(Platzhalter-/Baustellenseite). Das Scan-Ergebnis spiegelt nur diese "
-                    f"Seite wider — ein vollständiger Scan nach Go-Live wird empfohlen."
+                    f"Diese Seite befindet sich aktuell im {placeholder_kind}-Modus "
+                    f"(Platzhalter-/Baustellenseite) und kann daher noch nicht vollständig "
+                    f"auf Compliance geprüft werden. Eine vollständige Prüfung ist nur bei "
+                    f"produktiv geschalteten (live erreichbaren) Seiten möglich — bitte "
+                    f"wiederholen Sie den Scan, sobald die Website online ist. "
+                    f"Wichtig: Auch Wartungs- und Baustellenseiten müssen bereits ein "
+                    f"Impressum sowie einen Link zur Datenschutzerklärung bereitstellen, "
+                    f"sobald sie öffentlich erreichbar sind."
                 )
                 if detected_cms:
                     scan_notice += (
                         f" Grundsystem erkannt: {detected_cms} — nach Veröffentlichung sind "
-                        f"i.d.R. Cookie-Banner und Datenschutzerklärung erforderlich."
+                        f"zusätzlich i.d.R. ein Cookie-Banner und eine vollständige "
+                        f"Datenschutzerklärung erforderlich."
                     )
 
             # Run all compliance checks in parallel using pre-rendered soup
