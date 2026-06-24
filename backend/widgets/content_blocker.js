@@ -171,6 +171,16 @@
         // ====================================================================
         
         init() {
+            // Auf der Complyo-App SELBST nicht blockieren: das Dashboard lädt
+            // Firebase/Stripe/Google u.a. sowie Next.js-Navigations-Chunks
+            // dynamisch. Würde der createElement-Hook die blockieren, bricht die
+            // App (Auth/Navigation) und springt zurück aufs Dashboard.
+            const host = (location.hostname || '').toLowerCase();
+            if (/^(app|dashboard)\.complyo\.(de|tech)$/.test(host)) {
+                console.log('[Complyo Content Blocker] Complyo-App erkannt – Blocking deaktiviert.');
+                return;
+            }
+
             // Listen for consent events
             window.addEventListener('complyoConsent', (e) => {
                 this.consent = e.detail.categories;
@@ -884,6 +894,13 @@
             const full = url.toLowerCase();
             let host = '';
             try { host = new URL(url, location.href).hostname.toLowerCase(); } catch (e) { host = ''; }
+
+            // Erstanbieter-Ressourcen (same-origin) NIE blockieren – eigene
+            // Scripts/Stylesheets/Navigations-Chunks der Seite. Tracker sind
+            // per Definition Drittanbieter.
+            if (host && host === (location.hostname || '').toLowerCase()) {
+                return null;
+            }
 
             // Priorität: marketing > analytics > functional. Domains, die in
             // mehreren Kategorien stehen (z.B. tiktok.com, youtube.com), werden
