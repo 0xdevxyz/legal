@@ -3,7 +3,7 @@
  * Plugin Name: Complyo Compliance
  * Plugin URI: https://complyo.tech
  * Description: DSGVO-konformes Cookie-Banner und Accessibility-Widget. Konfiguration über app.complyo.tech.
- * Version: 2.1.0
+ * Version: 2.2.0
  * Author: Complyo
  * Author URI: https://complyo.tech
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('COMPLYO_VERSION',        '2.1.0');
+define('COMPLYO_VERSION',        '2.2.0');
 define('COMPLYO_API_BASE',       'https://api.complyo.de');
 define('COMPLYO_APP_URL',        'https://app.complyo.tech');
 define('COMPLYO_PLUGIN_DIR',     plugin_dir_path(__FILE__));
@@ -30,8 +30,10 @@ define('COMPLYO_OPTION_A11Y',    'complyo_enable_accessibility');
 define('COMPLYO_OPTION_TCF',     'complyo_enable_tcf');
 define('COMPLYO_OPTION_SCANNER', 'complyo_enable_scanner');
 define('COMPLYO_OPTION_LOCAL_FONTS', 'complyo_enable_local_fonts');
+define('COMPLYO_OPTION_INLINE_BLOCKER', 'complyo_enable_inline_blocker');
 
 require_once COMPLYO_PLUGIN_DIR . 'includes/class-complyo-local-fonts.php';
+require_once COMPLYO_PLUGIN_DIR . 'includes/class-complyo-inline-blocker.php';
 
 class Complyo_Compliance {
 
@@ -71,6 +73,9 @@ class Complyo_Compliance {
 
         // Google Fonts lokal laden (DSGVO) – eigene Klasse
         Complyo_Local_Fonts::get_instance();
+
+        // Server-seitiges Inline-Script-Blocking – eigene Klasse
+        Complyo_Inline_Blocker::get_instance();
     }
 
     // =========================================================================
@@ -95,6 +100,9 @@ class Complyo_Compliance {
         }
         if (get_option(COMPLYO_OPTION_LOCAL_FONTS) === false) {
             update_option(COMPLYO_OPTION_LOCAL_FONTS, '0');
+        }
+        if (get_option(COMPLYO_OPTION_INLINE_BLOCKER) === false) {
+            update_option(COMPLYO_OPTION_INLINE_BLOCKER, '0');
         }
     }
 
@@ -282,6 +290,7 @@ class Complyo_Compliance {
         register_setting('complyo_settings_group', COMPLYO_OPTION_TCF,      $args_flag);
         register_setting('complyo_settings_group', COMPLYO_OPTION_SCANNER,  $args_flag);
         register_setting('complyo_settings_group', COMPLYO_OPTION_LOCAL_FONTS, $args_flag);
+        register_setting('complyo_settings_group', COMPLYO_OPTION_INLINE_BLOCKER, $args_flag);
     }
 
     public function admin_enqueue_scripts($hook) {
@@ -307,6 +316,7 @@ class Complyo_Compliance {
         $enable_tcf    = get_option(COMPLYO_OPTION_TCF, '0');
         $enable_scanner = get_option(COMPLYO_OPTION_SCANNER, '1');
         $enable_fonts   = get_option(COMPLYO_OPTION_LOCAL_FONTS, '0');
+        $enable_inline  = get_option(COMPLYO_OPTION_INLINE_BLOCKER, '0');
         $fonts_count    = Complyo_Local_Fonts::get_instance()->localized_count();
         $app_url      = COMPLYO_APP_URL;
         $api_base     = COMPLYO_API_BASE;
@@ -447,6 +457,22 @@ class Complyo_Compliance {
                                     <?php if ($fonts_count > 0) : ?>
                                         <br><strong><?php printf(esc_html__('%d lokalisierte Font-Stylesheets.', 'complyo-compliance'), (int) $fonts_count); ?></strong>
                                     <?php endif; ?>
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><?php esc_html_e('Inline-Tracker blockieren', 'complyo-compliance'); ?></th>
+                            <td>
+                                <label>
+                                    <input type="checkbox"
+                                           name="<?php echo esc_attr(COMPLYO_OPTION_INLINE_BLOCKER); ?>"
+                                           value="1"
+                                           <?php checked($enable_inline, '1'); ?> />
+                                    <?php esc_html_e('Inline-Tracking-Snippets server-seitig vor Consent neutralisieren', 'complyo-compliance'); ?>
+                                </label>
+                                <p class="description">
+                                    <?php esc_html_e('Neutralisiert direkt im HTML eingebettete Tracker (Google Analytics/gtag, Meta Pixel, Hotjar, Matomo, LinkedIn, TikTok, Pinterest, Bing, Clarity), die client-seitig nicht zuverlässig stoppbar sind. Nach Einwilligung werden sie automatisch nachgeladen.', 'complyo-compliance'); ?>
+                                    <br><em><?php esc_html_e('Empfohlen, aber nach dem Aktivieren bitte Seite + zentrale Funktionen testen (konservativ kuratierte Muster).', 'complyo-compliance'); ?></em>
                                 </p>
                             </td>
                         </tr>
