@@ -381,17 +381,18 @@ class Complyo_Compliance {
                             </td>
                         </tr>
                         <tr>
-                            <th scope="row"><?php esc_html_e('IAB TCF 2.2', 'complyo-compliance'); ?></th>
+                            <th scope="row"><?php esc_html_e('IAB TCF 2.2 (Coming Soon)', 'complyo-compliance'); ?></th>
                             <td>
                                 <label>
                                     <input type="checkbox"
                                            name="<?php echo esc_attr(COMPLYO_OPTION_TCF); ?>"
                                            value="1"
                                            <?php checked($enable_tcf, '1'); ?> />
-                                    <?php esc_html_e('IAB Transparency & Consent Framework 2.2 aktivieren (für Google Ads / Programmatic Advertising)', 'complyo-compliance'); ?>
+                                    <?php esc_html_e('IAB Transparency & Consent Framework 2.2 (in Vorbereitung – noch nicht produktiv nutzen)', 'complyo-compliance'); ?>
                                 </label>
                                 <p class="description">
-                                    <?php esc_html_e('Pflicht wenn Google Ads, DV360 oder andere IAB-Vendoren eingesetzt werden.', 'complyo-compliance'); ?>
+                                    <strong><?php esc_html_e('Coming Soon:', 'complyo-compliance'); ?></strong>
+                                    <?php esc_html_e('Complyo ist noch nicht als IAB-registriertes CMP zertifiziert. Diese Option aktiviert vorerst nur einen Test-Stub (cmpId 0) und ist KEIN Ersatz für ein registriertes TCF-CMP – für Google Ads / DV360 / Programmatic noch nicht verwenden.', 'complyo-compliance'); ?>
                                 </p>
                                 <div class="complyo-notice-adsense">
                                     <strong><?php esc_html_e('Sie nutzen Google AdSense?', 'complyo-compliance'); ?></strong><br>
