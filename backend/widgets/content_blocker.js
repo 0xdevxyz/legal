@@ -397,7 +397,10 @@
         blockAllContent() {
             // Block scripts
             this.blockScripts();
-            
+
+            // Server-seitig neutralisierte Inline-Scripts erfassen (für Unblock)
+            this.blockInlineScripts();
+
             // Block iframes
             this.blockIframes();
             
@@ -464,6 +467,28 @@
             });
         }
         
+        /**
+         * Inline-Tracking-Scripts, die das WP-Plugin server-seitig auf
+         * type="text/plain" + data-complyo-consent="<kategorie>" gesetzt hat,
+         * für die spätere Freigabe registrieren. (Reine Client-Seite kann bereits
+         * ausgeführte Inline-Scripts nicht zurücknehmen – daher die Neutralisierung
+         * im Markup, hier nur Tracking + Unblock.)
+         */
+        blockInlineScripts() {
+            const scripts = document.querySelectorAll('script[type="text/plain"][data-complyo-consent]');
+            scripts.forEach(s => {
+                if (s.hasAttribute('data-complyo-inline-processed')) return;
+                // Externe (mit data-complyo-src) werden via unblockScript behandelt.
+                if (!s.getAttribute('data-complyo-src')) {
+                    const category = s.getAttribute('data-complyo-consent');
+                    if (category && !this.hasConsent(category)) {
+                        this.blockedElements.set(s, { type: 'inline-script', category: category });
+                    }
+                }
+                s.setAttribute('data-complyo-inline-processed', 'true');
+            });
+        }
+
         blockIframes() {
             const iframes = document.querySelectorAll('iframe[src]');
             
@@ -578,8 +603,14 @@
             const elements = document.querySelectorAll('[data-complyo-consent]');
             
             elements.forEach(element => {
+                // <script>-Elemente gehören blockScripts()/blockInlineScripts() –
+                // hier NICHT als 'data-attribute' registrieren, sonst wird die
+                // inline-script-Registrierung überschrieben und nie wieder
+                // ausgeführt (kein Unblock-Handler für 'data-attribute').
+                if (element.tagName === 'SCRIPT') return;
+
                 const category = element.getAttribute('data-complyo-consent');
-                
+
                 if (!this.hasConsent(category)) {
                     // Already blocked via attribute
                     this.blockedElements.set(element, {
@@ -662,6 +693,8 @@
                 this.unblockImage(element, data);
             } else if (type === 'stylesheet') {
                 this.unblockStylesheet(element, data);
+            } else if (type === 'inline-script') {
+                this.unblockInlineScript(element, data);
             }
 
             // Remove from blocked list
@@ -718,6 +751,20 @@
                 element.removeAttribute('data-complyo-src');
                 element.removeAttribute('data-complyo-blocked');
             }
+        }
+
+        unblockInlineScript(element, data) {
+            if (!element.parentNode) return;
+            const script = document.createElement('script');
+            script.type = 'text/javascript';
+            Array.from(element.attributes).forEach(attr => {
+                if (!attr.name.startsWith('data-complyo') && attr.name !== 'type') {
+                    script.setAttribute(attr.name, attr.value);
+                }
+            });
+            // Inline-Code 1:1 übernehmen → wird beim Einfügen ausgeführt.
+            script.text = element.textContent || '';
+            element.parentNode.replaceChild(script, element);
         }
 
         unblockStylesheet(element, data) {
@@ -1100,6 +1147,8 @@
          */
         detectAdBlocker() {
             return new Promise((resolve) => {
+                // Beim frühen Init (vor <body>) keinen AdBlock-Test fahren.
+                if (!document.body) { resolve(false); return; }
                 // Method 1: Check if common ad-block targeted elements are hidden
                 const testAd = document.createElement('div');
                 testAd.innerHTML = '&nbsp;';

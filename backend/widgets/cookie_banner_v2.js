@@ -1901,7 +1901,7 @@
                     </div>
                     ${this.config.showBranding ? `
                         <div class="complyo-branding">
-                            Powered by <a href="https://complyo.tech" target="_blank" rel="noopener">Complyo</a>
+                            Powered by <a href="https://complyo.de" target="_blank" rel="noopener">Complyo</a>
                         </div>
                     ` : ''}
                 </div>
@@ -2093,7 +2093,9 @@
                     position: fixed;
                     inset: 0;
                     background: rgba(0, 0, 0, 0.5);
-                    z-index: 999998;
+                    /* MUSS über dem Banner liegen (Box-Layout = 1000000), sonst
+                       erscheinen die Detail-Einstellungen HINTER dem Banner. */
+                    z-index: 2147483646;
                     opacity: 0;
                     transition: opacity 0.3s ease;
                 }
@@ -2111,7 +2113,8 @@
                     max-height: 90vh;
                     display: flex;
                     flex-direction: column;
-                    z-index: 999999;
+                    /* über Banner (1000000) UND eigenem Backdrop (…646) */
+                    z-index: 2147483647;
                     opacity: 0;
                     transition: all 0.3s ease;
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
