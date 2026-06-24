@@ -179,6 +179,26 @@
                         }
                         originalSetAttribute.call(this, name, value);
                     };
+                    // el.src = … (so injizieren GA/GTM/Meta real) ebenfalls abfangen
+                    const srcDesc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+                    if (srcDesc && srcDesc.set && srcDesc.get) {
+                        Object.defineProperty(element, 'src', {
+                            configurable: true,
+                            enumerable: true,
+                            get: function() { return srcDesc.get.call(this); },
+                            set: function(value) {
+                                if (self.shouldBlockScript(value)) {
+                                    console.log('[Complyo] 🚫 Blocked script:', value);
+                                    originalSetAttribute.call(this, 'type', 'text/plain');
+                                    originalSetAttribute.call(this, 'data-complyo-src', value);
+                                    originalSetAttribute.call(this, 'data-complyo-blocked', 'true');
+                                    self.state.blockedElements.push(this);
+                                    return;
+                                }
+                                srcDesc.set.call(this, value);
+                            }
+                        });
+                    }
                 }
 
                 // Dynamisch erzeugte <link rel="stylesheet"> / <link as="font">:
