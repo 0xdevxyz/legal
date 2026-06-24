@@ -3,7 +3,7 @@
  * Plugin Name: Complyo Compliance
  * Plugin URI: https://complyo.tech
  * Description: DSGVO-konformes Cookie-Banner und Accessibility-Widget. Konfiguration über app.complyo.tech.
- * Version: 2.0.0
+ * Version: 2.1.0
  * Author: Complyo
  * Author URI: https://complyo.tech
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('COMPLYO_VERSION',        '2.0.0');
+define('COMPLYO_VERSION',        '2.1.0');
 define('COMPLYO_API_BASE',       'https://api.complyo.de');
 define('COMPLYO_APP_URL',        'https://app.complyo.tech');
 define('COMPLYO_PLUGIN_DIR',     plugin_dir_path(__FILE__));
@@ -29,6 +29,9 @@ define('COMPLYO_OPTION_COOKIE',  'complyo_enable_cookie_banner');
 define('COMPLYO_OPTION_A11Y',    'complyo_enable_accessibility');
 define('COMPLYO_OPTION_TCF',     'complyo_enable_tcf');
 define('COMPLYO_OPTION_SCANNER', 'complyo_enable_scanner');
+define('COMPLYO_OPTION_LOCAL_FONTS', 'complyo_enable_local_fonts');
+
+require_once COMPLYO_PLUGIN_DIR . 'includes/class-complyo-local-fonts.php';
 
 class Complyo_Compliance {
 
@@ -65,6 +68,9 @@ class Complyo_Compliance {
         add_filter('autoptimize_filter_js_exclude', array($this, 'exclude_from_autoptimize'));
         add_filter('litespeed_optimize_js_excludes',    array($this, 'exclude_from_litespeed'));
         add_filter('sgo_js_async_execution_exclusions',  array($this, 'exclude_from_siteground'));
+
+        // Google Fonts lokal laden (DSGVO) – eigene Klasse
+        Complyo_Local_Fonts::get_instance();
     }
 
     // =========================================================================
@@ -86,6 +92,9 @@ class Complyo_Compliance {
         }
         if (get_option(COMPLYO_OPTION_SCANNER) === false) {
             update_option(COMPLYO_OPTION_SCANNER, '1');
+        }
+        if (get_option(COMPLYO_OPTION_LOCAL_FONTS) === false) {
+            update_option(COMPLYO_OPTION_LOCAL_FONTS, '0');
         }
     }
 
@@ -272,6 +281,7 @@ class Complyo_Compliance {
         register_setting('complyo_settings_group', COMPLYO_OPTION_A11Y,     $args_flag);
         register_setting('complyo_settings_group', COMPLYO_OPTION_TCF,      $args_flag);
         register_setting('complyo_settings_group', COMPLYO_OPTION_SCANNER,  $args_flag);
+        register_setting('complyo_settings_group', COMPLYO_OPTION_LOCAL_FONTS, $args_flag);
     }
 
     public function admin_enqueue_scripts($hook) {
@@ -296,9 +306,27 @@ class Complyo_Compliance {
         $enable_a11y   = get_option(COMPLYO_OPTION_A11Y, '0');
         $enable_tcf    = get_option(COMPLYO_OPTION_TCF, '0');
         $enable_scanner = get_option(COMPLYO_OPTION_SCANNER, '1');
+        $enable_fonts   = get_option(COMPLYO_OPTION_LOCAL_FONTS, '0');
+        $fonts_count    = Complyo_Local_Fonts::get_instance()->localized_count();
         $app_url      = COMPLYO_APP_URL;
         $api_base     = COMPLYO_API_BASE;
         ?>
+        <?php if (isset($_GET['complyo_fonts'])) :
+            $cf_found     = isset($_GET['cf_found'])     ? (int) $_GET['cf_found']     : 0;
+            $cf_localized = isset($_GET['cf_localized']) ? (int) $_GET['cf_localized'] : 0;
+            $cf_errors    = isset($_GET['cf_errors'])    ? (int) $_GET['cf_errors']    : 0; ?>
+            <div class="notice notice-<?php echo $cf_errors > 0 ? 'warning' : 'success'; ?> is-dismissible">
+                <p><?php
+                    printf(
+                        esc_html__('Google Fonts lokalisiert: %1$d gefunden, %2$d lokal gespeichert, %3$d Fehler.', 'complyo-compliance'),
+                        $cf_found, $cf_localized, $cf_errors
+                    );
+                    if ($cf_localized > 0) {
+                        echo ' ' . esc_html__('Bitte ggf. Caching-Plugin-Cache leeren.', 'complyo-compliance');
+                    }
+                ?></p>
+            </div>
+        <?php endif; ?>
         <div class="wrap complyo-wrap">
             <div class="complyo-header">
                 <h1>Complyo Compliance</h1>
@@ -403,11 +431,43 @@ class Complyo_Compliance {
                                 </label>
                             </td>
                         </tr>
+                        <tr>
+                            <th scope="row"><?php esc_html_e('Google Fonts lokal', 'complyo-compliance'); ?></th>
+                            <td>
+                                <label>
+                                    <input type="checkbox"
+                                           name="<?php echo esc_attr(COMPLYO_OPTION_LOCAL_FONTS); ?>"
+                                           value="1"
+                                           <?php checked($enable_fonts, '1'); ?> />
+                                    <?php esc_html_e('Google Fonts lokal ausliefern (kein Request an Google – DSGVO, LG München)', 'complyo-compliance'); ?>
+                                </label>
+                                <p class="description">
+                                    <?php esc_html_e('Externe Google-Fonts-Stylesheets werden auf den eigenen Server kopiert und in der Seite ersetzt. Damit verlässt vor dem Consent keine IP-Adresse die Website an Google.', 'complyo-compliance'); ?>
+                                    <?php if ($fonts_count > 0) : ?>
+                                        <br><strong><?php printf(esc_html__('%d lokalisierte Font-Stylesheets.', 'complyo-compliance'), (int) $fonts_count); ?></strong>
+                                    <?php endif; ?>
+                                </p>
+                            </td>
+                        </tr>
                     </table>
                 </div>
 
                 <?php submit_button(__('Einstellungen speichern', 'complyo-compliance')); ?>
             </form>
+
+            <?php if ($enable_fonts === '1') : ?>
+            <div class="complyo-card">
+                <h2><?php esc_html_e('Google Fonts lokalisieren', 'complyo-compliance'); ?></h2>
+                <p class="description">
+                    <?php esc_html_e('Lädt die aktuell auf der Startseite eingebundenen Google Fonts herunter und speichert sie lokal. Neue Fonts auf anderen Seiten werden automatisch im Hintergrund nachgezogen.', 'complyo-compliance'); ?>
+                </p>
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                    <input type="hidden" name="action" value="complyo_localize_fonts" />
+                    <?php wp_nonce_field('complyo_localize_fonts'); ?>
+                    <?php submit_button(__('Google Fonts jetzt lokalisieren', 'complyo-compliance'), 'secondary', 'submit', false); ?>
+                </form>
+            </div>
+            <?php endif; ?>
 
             <div class="complyo-card complyo-card-info">
                 <h2><?php esc_html_e('Eingebundene Scripts', 'complyo-compliance'); ?></h2>
