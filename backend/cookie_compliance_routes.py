@@ -167,14 +167,24 @@ class ConsentLog(BaseModel):
         return v.strip()
 
 class BannerTexts(BaseModel):
-    title: str
-    description: str
-    accept_all: str
-    reject_all: str
-    accept_selected: str
-    settings: str
-    privacy_policy: str
-    imprint: str
+    # Alle Felder optional + extra erlaubt: Der Banner-Text wird je nach
+    # Sprache/Scan mit unterschiedlichen Schluesseln gespeichert (z.B.
+    # privacy_link/imprint_link statt privacy_policy/imprint, plus Kategorie-
+    # Texte analytics/marketing/...). Ein strenges Schema fuehrte dazu, dass
+    # jeder erneute Speichern-Vorgang mit HTTP 422 abgewiesen wurde und z.B.
+    # Layout-/Positionsaenderungen nie persistiert wurden. Texte sind reine
+    # Anzeige-Strings — sie duerfen die Speicherung niemals blockieren.
+    title: Optional[str] = ""
+    description: Optional[str] = ""
+    accept_all: Optional[str] = ""
+    reject_all: Optional[str] = ""
+    accept_selected: Optional[str] = ""
+    settings: Optional[str] = ""
+    privacy_policy: Optional[str] = ""
+    imprint: Optional[str] = ""
+
+    class Config:
+        extra = "allow"
 
 class BannerConfig(BaseModel):
     site_id: str = Field(..., min_length=1, max_length=255)
@@ -235,9 +245,49 @@ class ClientAssignRequest(BaseModel):
     client_name: Optional[str] = Field(None, max_length=255)
     client_email: Optional[str] = Field(None, max_length=255)
 
+class CustomServiceInput(BaseModel):
+    """Customer-defined cookie service (Borlabs-style custom cookies)."""
+    name: str = Field(..., min_length=1, max_length=255)
+    category: str = Field(default="functional", max_length=50)
+    provider: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    domains: List[str] = []
+    cookies: List[str] = []
+    legal_basis: Optional[str] = None
+    privacy_url: Optional[str] = None
+    cookie_lifetime: Optional[str] = Field(None, max_length=100)
+
+    @validator('category')
+    def validate_category(cls, v):
+        allowed = {'necessary', 'functional', 'analytics', 'marketing'}
+        if v not in allowed:
+            raise ValueError(f"category must be one of {allowed}")
+        return v
+
+    @validator('domains', 'cookies', pre=True)
+    def clean_list(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, str):
+            v = [v]
+        return [str(x).strip() for x in v if str(x).strip()]
+
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
+def _as_list(val) -> List[str]:
+    """Normalize a JSONB column (str or list) into a list of strings."""
+    if val is None:
+        return []
+    if isinstance(val, str):
+        try:
+            val = json.loads(val)
+        except Exception:
+            return [val] if val.strip() else []
+    if isinstance(val, list):
+        return [str(x) for x in val]
+    return []
 
 def hash_ip_address(ip: str) -> str:
     """Hash IP address with SHA256 for privacy"""
@@ -911,14 +961,16 @@ async def update_config_partial(
 async def get_available_services(
     category: Optional[str] = None,
     plan: Optional[str] = None,
+    site_id: Optional[str] = None,
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
     Get available cookie service templates
-    
+
     Query params:
     - category: Filter by category (analytics, marketing, functional, necessary)
     - plan: Filter by required plan (ai, expert)
+    - site_id: If given, the site's custom services are appended (is_custom=true)
     """
     try:
         query = """
@@ -947,9 +999,55 @@ async def get_available_services(
         query += " ORDER BY category, name"
         
         rows = await db_pool.fetch(query, *params)
-        
+
         services = [dict(row) for row in rows]
-        
+
+        # Append the site's custom services (shaped like catalogue rows).
+        # Wrapped defensively so a missing table never breaks the catalogue.
+        if site_id:
+            try:
+                custom_rows = await db_pool.fetch(
+                    """
+                    SELECT service_key, name, category, provider, description,
+                           domains, cookies, legal_basis, privacy_url, cookie_lifetime
+                    FROM cookie_custom_services
+                    WHERE site_id = $1 AND is_active = true
+                    ORDER BY category, name
+                    """,
+                    site_id,
+                )
+                for cr in custom_rows:
+                    cr = dict(cr)
+                    if category and cr['category'] != category:
+                        continue
+                    domains = _as_list(cr.get('domains'))
+                    cookies = _as_list(cr.get('cookies'))
+                    services.append({
+                        "id": None,
+                        "service_key": cr['service_key'],
+                        "name": cr['name'],
+                        "category": cr['category'],
+                        "provider": cr.get('provider'),
+                        "description": cr.get('description'),
+                        "cookies": cookies,
+                        "template": {
+                            "id": cr['service_key'],
+                            "name": cr['name'],
+                            "category": cr['category'],
+                            "domains": domains,
+                            "cookies": cookies,
+                            "legal_basis": cr.get('legal_basis'),
+                            "privacy_policy_url": cr.get('privacy_url'),
+                            "cookie_lifetime": cr.get('cookie_lifetime'),
+                        },
+                        "plan_required": "ai",
+                        "is_active": True,
+                        "privacy_url": cr.get('privacy_url'),
+                        "is_custom": True,
+                    })
+            except Exception as ce:
+                logger.warning(f"Custom services unavailable for {site_id}: {ce}")
+
         # Group by category
         grouped = {}
         for service in services:
@@ -957,14 +1055,14 @@ async def get_available_services(
             if cat not in grouped:
                 grouped[cat] = []
             grouped[cat].append(service)
-        
+
         return {
             "success": True,
             "total": len(services),
             "services": services,
             "grouped": grouped
         }
-        
+
     except Exception as e:
         print(f"Error getting services: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get services: {str(e)}")
@@ -1002,6 +1100,155 @@ async def get_service_detail(
     except Exception as e:
         print(f"Error getting service: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get service: {str(e)}")
+
+# ============================================================================
+# Custom Services Endpoints (kundeneigene Dienst-Definitionen)
+# ============================================================================
+
+def _slugify(name: str) -> str:
+    slug = re.sub(r'[^a-z0-9]+', '_', (name or '').lower()).strip('_')
+    return slug or 'service'
+
+@router.get("/api/cookie-compliance/custom-services/{site_id}")
+async def list_custom_services(
+    site_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """List the site's custom service definitions."""
+    user = await get_current_user_required(credentials)
+    await require_module(user, 'cookie')
+    try:
+        rows = await db_pool.fetch(
+            """
+            SELECT service_key, name, category, provider, description,
+                   domains, cookies, legal_basis, privacy_url, cookie_lifetime,
+                   is_active, created_at, updated_at
+            FROM cookie_custom_services
+            WHERE site_id = $1
+            ORDER BY category, name
+            """,
+            site_id,
+        )
+        data = []
+        for r in rows:
+            r = dict(r)
+            r['domains'] = _as_list(r.get('domains'))
+            r['cookies'] = _as_list(r.get('cookies'))
+            data.append(r)
+        return {"success": True, "total": len(data), "data": data}
+    except asyncpg.UndefinedTableError:
+        return {"success": True, "total": 0, "data": []}
+    except Exception as e:
+        logger.error(f"Error listing custom services: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list custom services: {str(e)}")
+
+@router.post("/api/cookie-compliance/custom-services/{site_id}")
+async def create_custom_service(
+    site_id: str,
+    payload: CustomServiceInput,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """Create a custom service for a site. service_key is derived from the name."""
+    user = await get_current_user_required(credentials)
+    await require_module(user, 'cookie')
+    try:
+        user_id = None
+        try:
+            user_id = await get_user_id_from_token(user)
+        except Exception:
+            pass
+
+        base_key = f"custom_{_slugify(payload.name)}"
+        # Ensure uniqueness within the site
+        existing = await db_pool.fetch(
+            "SELECT service_key FROM cookie_custom_services WHERE site_id = $1 AND service_key LIKE $2",
+            site_id, base_key + '%',
+        )
+        existing_keys = {r['service_key'] for r in existing}
+        service_key = base_key
+        i = 2
+        while service_key in existing_keys:
+            service_key = f"{base_key}_{i}"
+            i += 1
+
+        row = await db_pool.fetchrow(
+            """
+            INSERT INTO cookie_custom_services
+                (site_id, user_id, service_key, name, category, provider, description,
+                 domains, cookies, legal_basis, privacy_url, cookie_lifetime)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12)
+            RETURNING service_key
+            """,
+            site_id, user_id, service_key, payload.name, payload.category,
+            payload.provider, payload.description,
+            json.dumps(payload.domains), json.dumps(payload.cookies),
+            payload.legal_basis, payload.privacy_url, payload.cookie_lifetime,
+        )
+        return {"success": True, "service_key": row['service_key']}
+    except asyncpg.UndefinedTableError:
+        raise HTTPException(status_code=503, detail="Custom-Services-Tabelle noch nicht eingerichtet.")
+    except Exception as e:
+        logger.error(f"Error creating custom service: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create custom service: {str(e)}")
+
+@router.put("/api/cookie-compliance/custom-services/{site_id}/{service_key}")
+async def update_custom_service(
+    site_id: str,
+    service_key: str,
+    payload: CustomServiceInput,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """Update an existing custom service."""
+    user = await get_current_user_required(credentials)
+    await require_module(user, 'cookie')
+    try:
+        result = await db_pool.execute(
+            """
+            UPDATE cookie_custom_services
+            SET name=$3, category=$4, provider=$5, description=$6,
+                domains=$7::jsonb, cookies=$8::jsonb, legal_basis=$9,
+                privacy_url=$10, cookie_lifetime=$11, updated_at=now()
+            WHERE site_id=$1 AND service_key=$2
+            """,
+            site_id, service_key, payload.name, payload.category, payload.provider,
+            payload.description, json.dumps(payload.domains), json.dumps(payload.cookies),
+            payload.legal_basis, payload.privacy_url, payload.cookie_lifetime,
+        )
+        if result.endswith('0'):
+            raise HTTPException(status_code=404, detail="Custom service not found")
+        return {"success": True, "service_key": service_key}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating custom service: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update custom service: {str(e)}")
+
+@router.delete("/api/cookie-compliance/custom-services/{site_id}/{service_key}")
+async def delete_custom_service(
+    site_id: str,
+    service_key: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """Delete a custom service."""
+    user = await get_current_user_required(credentials)
+    await require_module(user, 'cookie')
+    try:
+        result = await db_pool.execute(
+            "DELETE FROM cookie_custom_services WHERE site_id=$1 AND service_key=$2",
+            site_id, service_key,
+        )
+        if result.endswith('0'):
+            raise HTTPException(status_code=404, detail="Custom service not found")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting custom service: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete custom service: {str(e)}")
 
 # ============================================================================
 # Statistics Endpoints
