@@ -506,7 +506,7 @@
             }
             
             try {
-                const servicesResponse = await fetch(`${API_BASE}/api/cookie-compliance/services`);
+                const servicesResponse = await fetch(`${API_BASE}/api/cookie-compliance/services?site_id=${encodeURIComponent(this.siteId)}`);
                 if (servicesResponse.ok) {
                     const servicesData = await servicesResponse.json();
                     if (servicesData.success && servicesData.services) {
@@ -1836,7 +1836,17 @@
             // Create banner
             const banner = document.createElement('div');
             banner.className = isBox ? 'complyo-box-layout' : 'complyo-banner-layout';
-            banner.classList.add(`complyo-position-${this.config.position}`);
+            // Position-Klasse KOHÄRENT aus dem Layout ableiten. Der Dashboard-
+            // Layout-Picker setzte historisch nur `layout` und ließ `position`
+            // unangetastet, sodass z.B. layout='banner_bottom' mit einer
+            // veralteten position='center' gespeichert sein kann — für diese
+            // Kombi gibt es KEINE CSS-Regel (kein top/bottom, kein .show) und der
+            // Banner bliebe unsichtbar. Darum hier hart aus dem Layout ableiten.
+            let position = this.config.position;
+            if (layout === 'banner_bottom') position = 'bottom';
+            else if (layout === 'banner_top') position = 'top';
+            else if (isBox) position = 'center';
+            banner.classList.add(`complyo-position-${position}`);
             banner.id = 'complyo-banner';
             
             // Content

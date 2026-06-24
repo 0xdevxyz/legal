@@ -164,7 +164,16 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
               {layouts.map(({ key, label, preview }) => (
                 <button
                   key={key}
-                  onClick={() => updateConfig('layout', key)}
+                  onClick={() => setConfig((prev: any) => ({
+                    ...prev,
+                    layout: key,
+                    // position kohärent zum Layout halten — sonst rendert das
+                    // Widget z.B. 'banner_bottom' mit veraltetem position:'center'
+                    // ohne passende CSS-Regel (unsichtbar/falsch positioniert).
+                    position: key === 'banner_top' ? 'top'
+                            : key === 'box_modal' ? 'center'
+                            : 'bottom',
+                  }))}
                   className={`p-3 rounded-lg border-2 transition-all duration-200 ${
                     config.layout === key
                       ? 'border-orange-500 bg-orange-500/10 shadow-lg shadow-orange-500/20'
