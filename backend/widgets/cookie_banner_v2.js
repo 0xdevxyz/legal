@@ -810,7 +810,8 @@
                             necessary: true,
                             functional: consent.functional || false,
                             analytics: consent.analytics || false,
-                            marketing: consent.marketing || false
+                            marketing: consent.marketing || false,
+                            third_country_consent: consent.third_country || false
                         },
                         services_accepted: consent.services || [],
                         language: navigator.language.split('-')[0],
@@ -1943,10 +1944,11 @@
                 functional: true,
                 analytics: true,
                 marketing: true,
+                third_country: true,
                 services: this.config.services,
                 timestamp: new Date().toISOString()
             };
-            
+
             // Track A/B test result
             if (this.abTest) {
                 this.trackABTestResult('accept_all');
@@ -1962,10 +1964,11 @@
                 functional: false,
                 analytics: false,
                 marketing: false,
+                third_country: false,
                 services: [],
                 timestamp: new Date().toISOString()
             };
-            
+
             // Track A/B test result
             if (this.abTest) {
                 this.trackABTestResult('reject_all');
@@ -1987,10 +1990,11 @@
                 functional: selections.functional || false,
                 analytics: selections.analytics || false,
                 marketing: selections.marketing || false,
+                third_country: selections.thirdCountry || false,
                 services: selections.services || [],
                 timestamp: new Date().toISOString()
             };
-            
+
             console.log('[Complyo] Saving consent:', consent);
             
             // Track A/B test result
@@ -2045,14 +2049,16 @@
                     necessary: true,
                     functional: this.consent.functional || false,
                     analytics: this.consent.analytics || false,
-                    marketing: this.consent.marketing || false
+                    marketing: this.consent.marketing || false,
+                    thirdCountry: this.consent.third_country || false
                 };
             } else {
                 this.categorySelections = {
                     necessary: true,
                     functional: false,
                     analytics: false,
-                    marketing: false
+                    marketing: false,
+                    thirdCountry: false
                 };
             }
             
@@ -2290,6 +2296,13 @@
                 }
                 .cps-item:last-child {
                     border-bottom: none;
+                }
+                .cps-thirdcountry-item {
+                    background: #fff7ed;
+                    border-left: 3px solid #f59e0b;
+                }
+                .cps-thirdcountry-item .cps-item-title::before {
+                    content: "🌍 ";
                 }
                 .cps-item-header {
                     display: flex;
@@ -2611,7 +2624,27 @@
                     <button class="cps-action-btn" id="cps-deselect-all">○ Alle abwählen</button>
                 </div>
             `;
-            
+
+            // Art. 49 Abs. 1 lit. a DSGVO — gesonderte Einwilligung in die
+            // Datenverarbeitung in unsicheren Drittländern (z. B. USA). Eigener
+            // Toggle, weil dies eine separate, informierte Einwilligung erfordert.
+            html += `
+                <div class="cps-item cps-thirdcountry-item" data-category="thirdCountry">
+                    <div class="cps-item-header">
+                        <div class="cps-item-checkbox">
+                            <input type="checkbox"
+                                   id="cps-third-country"
+                                   data-category="thirdCountry"
+                                   ${this.categorySelections.thirdCountry ? 'checked' : ''}>
+                        </div>
+                        <div class="cps-item-content">
+                            <h3 class="cps-item-title">Datenverarbeitung in unsicheren Drittländern</h3>
+                            <p class="cps-item-desc">Einige Services verarbeiten Daten in Ländern außerhalb der EU/des EWR ohne anerkanntes Datenschutzniveau (z.&nbsp;B. USA). Mit dieser gesonderten Einwilligung nach Art.&nbsp;49 Abs.&nbsp;1 lit.&nbsp;a DSGVO stimmst du dieser Übermittlung ausdrücklich zu. Sie ist freiwillig und jederzeit widerrufbar.</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+
             categories.forEach(cat => {
                 const services = this.serviceDetails[cat.key] || [];
                 const isChecked = this.categorySelections[cat.key];

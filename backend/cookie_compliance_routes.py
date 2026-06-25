@@ -183,6 +183,10 @@ class ConsentCategories(BaseModel):
     functional: bool = False
     analytics: bool = False
     marketing: bool = False
+    # Art. 49 Abs. 1 lit. a DSGVO — gesonderte Einwilligung in die
+    # Datenverarbeitung in unsicheren Drittländern. Wird im JSONB-Feld
+    # consent_categories mitprotokolliert (kein Schema-Migrationsbedarf).
+    third_country_consent: bool = False
 
 class ConsentLog(BaseModel):
     site_id: str = Field(..., min_length=1, max_length=255)
