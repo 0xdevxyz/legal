@@ -178,13 +178,22 @@ async def serve_accessibility_widget(request: Request, version: str = "6"):
         content = f.read()
     
     # Return as JavaScript with correct MIME type
+    etag = f'"{hashlib.md5(content.encode()).hexdigest()}"'
     headers = {
-        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=3600',
+        # no-cache = darf gecacht werden, MUSS aber bei jedem Load per ETag
+        # revalidiert werden. So erscheinen Widget-Updates sofort, während
+        # unveraenderte Inhalte als 304 (ohne Body) kommen → kaum Mehr-Traffic.
+        # (Vorher: max-age=86400 → bis zu 24h alter Stand beim Kunden.)
+        'Cache-Control': 'no-cache, must-revalidate',
         'Access-Control-Allow-Origin': '*',
         'X-Complyo-Widget-Version': '6.1.0',
-        'ETag': f'"{hashlib.md5(content.encode()).hexdigest()}"',
+        'ETag': etag,
         'Vary': 'Accept-Encoding',
     }
+
+    # Conditional GET: unveraenderte Datei → 304 Not Modified ohne Body
+    if request.headers.get('if-none-match') == etag:
+        return Response(status_code=304, headers=headers)
 
     accept_encoding = request.headers.get('Accept-Encoding', '')
     if 'gzip' in accept_encoding:
