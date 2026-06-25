@@ -3,7 +3,7 @@
  * Plugin Name: Complyo Compliance
  * Plugin URI: https://complyo.tech
  * Description: DSGVO-konformes Cookie-Banner und Accessibility-Widget. Konfiguration über app.complyo.tech.
- * Version: 2.4.0
+ * Version: 2.5.0
  * Author: Complyo
  * Author URI: https://complyo.tech
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('COMPLYO_VERSION',        '2.4.0');
+define('COMPLYO_VERSION',        '2.5.0');
 define('COMPLYO_API_BASE',       'https://api.complyo.de');
 define('COMPLYO_APP_URL',        'https://app.complyo.tech');
 define('COMPLYO_PLUGIN_DIR',     plugin_dir_path(__FILE__));
@@ -33,9 +33,11 @@ define('COMPLYO_OPTION_LOCAL_FONTS', 'complyo_enable_local_fonts');
 define('COMPLYO_OPTION_INLINE_BLOCKER', 'complyo_enable_inline_blocker');
 define('COMPLYO_OPTION_A11Y_STATEMENT', 'complyo_a11y_statement_url');
 define('COMPLYO_OPTION_A11Y_FEEDBACK',  'complyo_a11y_feedback');
+define('COMPLYO_OPTION_A11Y_SOURCE_FIX', 'complyo_a11y_source_fix');
 
 require_once COMPLYO_PLUGIN_DIR . 'includes/class-complyo-local-fonts.php';
 require_once COMPLYO_PLUGIN_DIR . 'includes/class-complyo-inline-blocker.php';
+require_once COMPLYO_PLUGIN_DIR . 'includes/class-complyo-a11y-remediation.php';
 
 class Complyo_Compliance {
 
@@ -84,6 +86,9 @@ class Complyo_Compliance {
 
         // Server-seitiges Inline-Script-Blocking – eigene Klasse
         Complyo_Inline_Blocker::get_instance();
+
+        // Serverseitige Alt-Text-Remediation (Quelle + Render-Fallback) – eigene Klasse
+        Complyo_A11y_Remediation::get_instance();
     }
 
     // =========================================================================
@@ -115,7 +120,12 @@ class Complyo_Compliance {
     }
 
     public function deactivate() {
-        // Optionen bleiben erhalten, damit die Konfiguration bei Re-Aktivierung erhalten bleibt
+        // Optionen bleiben erhalten, damit die Konfiguration bei Re-Aktivierung erhalten bleibt.
+        // Geplanten Alt-Text-Sync-Cron aber entfernen.
+        $ts = wp_next_scheduled(Complyo_A11y_Remediation::CRON_HOOK);
+        if ($ts) {
+            wp_unschedule_event($ts, Complyo_A11y_Remediation::CRON_HOOK);
+        }
     }
 
     public function load_textdomain() {
@@ -386,6 +396,7 @@ class Complyo_Compliance {
             'default'           => '',
         ));
         register_setting('complyo_settings_group', COMPLYO_OPTION_A11Y_FEEDBACK, $args_string);
+        register_setting('complyo_settings_group', COMPLYO_OPTION_A11Y_SOURCE_FIX, $args_flag);
     }
 
     public function admin_enqueue_scripts($hook) {
@@ -410,6 +421,8 @@ class Complyo_Compliance {
         $enable_a11y   = get_option(COMPLYO_OPTION_A11Y, '0');
         $a11y_statement = get_option(COMPLYO_OPTION_A11Y_STATEMENT, '');
         $a11y_feedback  = get_option(COMPLYO_OPTION_A11Y_FEEDBACK, '');
+        $a11y_source_fix = get_option(COMPLYO_OPTION_A11Y_SOURCE_FIX, '0');
+        $a11y_last_sync  = (int) get_option('complyo_a11y_last_sync', 0);
         $enable_tcf    = get_option(COMPLYO_OPTION_TCF, '0');
         $enable_scanner = get_option(COMPLYO_OPTION_SCANNER, '1');
         $enable_fonts   = get_option(COMPLYO_OPTION_LOCAL_FONTS, '0');
@@ -557,6 +570,29 @@ class Complyo_Compliance {
                                 </p>
                                 <p class="description">
                                     <?php esc_html_e('Diese Links erscheinen im Widget unter „Rechtliches & Barrierefreiheit“. Der Haftungs-Hinweis und die Schlichtungsstelle BGG werden automatisch angezeigt.', 'complyo-compliance'); ?>
+                                </p>
+                                <hr style="margin:16px 0;">
+                                <label>
+                                    <input type="checkbox"
+                                           name="<?php echo esc_attr(COMPLYO_OPTION_A11Y_SOURCE_FIX); ?>"
+                                           value="1"
+                                           <?php checked($a11y_source_fix, '1'); ?> />
+                                    <strong><?php esc_html_e('Alt-Texte serverseitig an der Quelle anwenden (empfohlen)', 'complyo-compliance'); ?></strong>
+                                </label>
+                                <p class="description">
+                                    <?php esc_html_e('Holt freigegebene KI-Alt-Texte stündlich von Complyo und schreibt sie in die Mediathek (_wp_attachment_image_alt) sowie in Inhalts-Bilder ohne Alt – echte Quell-Korrektur statt nur Overlay. Vorhandene Alt-Texte werden nie überschrieben.', 'complyo-compliance'); ?>
+                                    <?php if ($a11y_source_fix === '1') : ?>
+                                        <br>
+                                        <?php if ($a11y_last_sync > 0) : ?>
+                                            <strong><?php printf(esc_html__('Letzter Sync: %s', 'complyo-compliance'), esc_html(date_i18n('d.m.Y H:i', $a11y_last_sync))); ?></strong>
+                                        <?php else : ?>
+                                            <strong><?php esc_html_e('Noch kein Sync gelaufen.', 'complyo-compliance'); ?></strong>
+                                        <?php endif; ?>
+                                        <br>
+                                        <a href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=complyo_a11y_sync'), 'complyo_a11y_sync')); ?>" class="button button-secondary" style="margin-top:6px;">
+                                            <?php esc_html_e('Jetzt synchronisieren', 'complyo-compliance'); ?>
+                                        </a>
+                                    <?php endif; ?>
                                 </p>
                             </td>
                         </tr>
