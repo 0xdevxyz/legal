@@ -25,7 +25,8 @@ class AccessibilityFixSaver:
         site_id: str,
         scan_id: str,
         user_id: str,  # UUID als String
-        fixes: List[Dict[str, Any]]
+        fixes: List[Dict[str, Any]],
+        status: str = 'pending'  # Human-in-the-loop: NICHT mehr Auto-Approve
     ) -> int:
         """
         Speichert AI-generierte Alt-Texte in die Datenbank
@@ -106,7 +107,7 @@ class AccessibilityFixSaver:
                             fix.get('page_title', ''),
                             fix.get('surrounding_text', ''),
                             fix.get('element_html', ''),
-                            'approved'  # Auto-approve für jetzt
+                            status  # Standard: 'pending' → erst nach Review live
                         )
                         
                         saved_count += 1
@@ -175,6 +176,80 @@ class AccessibilityFixSaver:
             logger.info(f"📦 Loaded {len(fixes)} alt-text fixes for site_id={site_id}")
             return fixes
     
+    async def set_status(
+        self,
+        fix_id: int,
+        status: str,
+        custom_alt: Optional[str] = None,
+        user_id: Optional[str] = None
+    ) -> bool:
+        """
+        Setzt den Status eines Fixes (approve/reject/deploy). Optionaler user_id-Check.
+        status ∈ ('pending','approved','rejected','deployed').
+        Gibt True zurück, wenn eine Zeile aktualisiert wurde.
+        """
+        async with self.db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT id, user_id FROM accessibility_alt_text_fixes WHERE id = $1",
+                fix_id
+            )
+            if not row:
+                return False
+            if user_id is not None and row['user_id'] is not None and str(row['user_id']) != str(user_id):
+                raise PermissionError("not authorized for this fix")
+
+            approved_at = "NOW()" if status == 'approved' else "approved_at"
+            if custom_alt is not None:
+                await conn.execute(
+                    f"""
+                    UPDATE accessibility_alt_text_fixes
+                    SET status = $1, suggested_alt = $2, approved_at = {approved_at}, updated_at = NOW()
+                    WHERE id = $3
+                    """,
+                    status, custom_alt, fix_id
+                )
+            else:
+                await conn.execute(
+                    f"""
+                    UPDATE accessibility_alt_text_fixes
+                    SET status = $1, approved_at = {approved_at}, updated_at = NOW()
+                    WHERE id = $2
+                    """,
+                    status, fix_id
+                )
+            return True
+
+    async def get_review_queue(
+        self,
+        site_id: str,
+        status: str = 'pending'
+    ) -> List[Dict[str, Any]]:
+        """Alt-Text-Fixes für die Review-Ansicht (Dashboard)."""
+        async with self.db_pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, page_url, image_src, image_filename, suggested_alt,
+                       confidence, surrounding_text, status, created_at
+                FROM accessibility_alt_text_fixes
+                WHERE site_id = $1 AND status = $2
+                ORDER BY confidence DESC, created_at DESC
+                """,
+                site_id, status
+            )
+            return [
+                {
+                    "id": r['id'],
+                    "page_url": r['page_url'],
+                    "image_src": r['image_src'],
+                    "image_filename": r['image_filename'],
+                    "suggested_alt": r['suggested_alt'],
+                    "confidence": float(r['confidence']) if r['confidence'] else 0.0,
+                    "surrounding_text": r['surrounding_text'],
+                    "status": r['status'],
+                }
+                for r in rows
+            ]
+
     async def get_stats_for_site(
         self,
         site_id: str
