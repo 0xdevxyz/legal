@@ -210,7 +210,8 @@
       await this.loadAndApplyAltTexts();
       this.setupKeyboardShortcuts();
       this.startVisibilityWatcher(); // KRITISCH: Widget-Sichtbarkeit ständig überwachen
-      
+      this.startPositionWatcher(); // Theme-Scroll-to-Top-Button erkennen & links daneben ausweichen
+
       console.log(`🎨 Complyo Accessibility Widget v${WIDGET_VERSION} initialized`);
     }
     
@@ -232,7 +233,109 @@
         }
       }, 500);
     }
-    
+
+    // Erkennt einen fixierten Theme-Button unten rechts (z. B. Scroll-to-Top) und
+    // setzt das Widget links daneben auf gleiche Höhe. Wird keiner gefunden, bleibt
+    // das Widget am Standardplatz unten rechts (20/20).
+    startPositionWatcher() {
+      // Nur für die Standard-Ecke unten rechts relevant
+      if ((this.config.position || 'bottom-right') !== 'bottom-right') return;
+
+      const apply = () => this.positionWidget();
+      // Initial + nach vollständigem Laden
+      apply();
+      window.addEventListener('load', apply, { once: true });
+      // Theme-Top-Buttons erscheinen oft erst beim Scrollen → reagieren
+      let raf = null;
+      const onScrollResize = () => {
+        if (raf) return;
+        raf = requestAnimationFrame(() => { raf = null; apply(); });
+      };
+      window.addEventListener('scroll', onScrollResize, { passive: true });
+      window.addEventListener('resize', onScrollResize, { passive: true });
+      // Sicherheitsnetz: ein paar verzögerte Durchläufe für spät injizierte Buttons
+      setTimeout(apply, 800);
+      setTimeout(apply, 2500);
+    }
+
+    positionWidget() {
+      const widget = this.container || document.getElementById('complyo-a11y-widget');
+      if (!widget) return;
+      // Während das Panel offen ist nicht verschieben
+      if (this.isOpen) return;
+
+      const GAP = 12;            // Abstand zum Theme-Button
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const topBtn = this.findCornerButton();
+
+      // Sanftes Umpositionieren ab dem zweiten Durchlauf (kein Slide beim ersten Render)
+      if (this._positioned) {
+        widget.style.transition = 'right 0.2s ease, bottom 0.2s ease';
+      }
+      this._positioned = true;
+
+      if (topBtn) {
+        const r = topBtn.getBoundingClientRect();
+        // Links neben den Button, Unterkanten bündig
+        const right = Math.max(Math.round(vw - r.left + GAP), 20);
+        const bottom = Math.max(Math.round(vh - r.bottom), 0);
+        widget.style.right = right + 'px';
+        widget.style.bottom = bottom + 'px';
+        widget.dataset.complyoDodge = '1';
+      } else {
+        widget.style.right = '20px';
+        widget.style.bottom = '20px';
+        widget.dataset.complyoDodge = '0';
+      }
+    }
+
+    // Sucht den fixierten "nach oben"-Button des Themes in der unteren rechten Ecke.
+    findCornerButton() {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      const isOwn = (el) =>
+        el.id === 'complyo-a11y-widget' || el.closest('#complyo-a11y-widget') ||
+        el.id === 'complyo-cookie-settings-btn' || el.closest('#complyo-cookie-settings-btn');
+
+      const inCorner = (el) => {
+        if (!el || el.nodeType !== 1 || isOwn(el)) return false;
+        let cs;
+        try { cs = getComputedStyle(el); } catch (e) { return false; }
+        if (cs.position !== 'fixed' && cs.position !== 'sticky') return false;
+        if (cs.visibility === 'hidden' || cs.display === 'none' || parseFloat(cs.opacity || '1') === 0) return false;
+        const r = el.getBoundingClientRect();
+        if (r.width < 16 || r.height < 16 || r.width > 96 || r.height > 96) return false; // nur kleine Buttons
+        const nearRight = (vw - r.right) <= 90 && r.right <= vw + 6;
+        const nearBottom = (vh - r.bottom) <= 160 && r.bottom <= vh + 6;
+        return nearRight && nearBottom;
+      };
+
+      // 1) Häufige Selektoren für Scroll-to-Top-Buttons
+      const SELECTORS = [
+        '[class*="scroll-top" i]', '[class*="scrolltop" i]', '[class*="scroll-to-top" i]',
+        '[class*="back-to-top" i]', '[class*="backtotop" i]', '[class*="back_to_top" i]',
+        '[id*="scroll-top" i]', '[id*="scrolltop" i]', '[id*="scrollup" i]',
+        '[id*="back-to-top" i]', '[id*="backtotop" i]',
+        '[aria-label*="nach oben" i]', '[aria-label*="scroll to top" i]', '[aria-label*="back to top" i]',
+        '[title*="nach oben" i]', '[title*="scroll to top" i]', '[title*="back to top" i]',
+        'a[href="#top"]', 'a[href="#"]'
+      ];
+      let candidates = [];
+      try { candidates = Array.from(document.querySelectorAll(SELECTORS.join(','))); } catch (e) {}
+      const hit = candidates.find(inCorner);
+      if (hit) return hit;
+
+      // 2) Generischer, begrenzter Scan über fixierte Elemente unten rechts
+      const all = document.body ? document.body.querySelectorAll('*') : [];
+      const max = Math.min(all.length, 4000); // Performance-Grenze
+      for (let i = 0; i < max; i++) {
+        if (inCorner(all[i])) return all[i];
+      }
+      return null;
+    }
+
     getSiteIdFromScript() {
       const scripts = document.querySelectorAll('script[data-site-id]');
       if (scripts.length > 0) {
