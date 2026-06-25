@@ -24,7 +24,7 @@
     // Configuration & Constants
     // ========================================================================
     
-    const VERSION = '2.0.0';
+    const VERSION = '2.1.0';
     const API_BASE = 'https://api.complyo.de';
     const CONSENT_STORAGE_KEY = 'complyo_cookie_consent';
     const CONSENT_DATE_KEY = 'complyo_consent_date';
@@ -1223,6 +1223,11 @@
                     border-top: 1px solid rgba(255, 255, 255, 0.2);
                     opacity: 0;
                     transition: opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                    /* Höhe begrenzen, damit der Bottom/Top-Banner bei langem
+                       Beschreibungstext nicht den gesamten Viewport ausfüllt,
+                       sondern ein Streifen bleibt und bei Bedarf scrollt. */
+                    max-height: 85vh;
+                    overflow-y: auto;
                 }
                 
                 .complyo-banner-layout.complyo-position-bottom {
@@ -3163,9 +3168,23 @@
         setupSettingsLinks() {
             // Aktiviere alle existierenden Links mit data-complyo-settings
             document.querySelectorAll('[data-complyo-settings], [href="#cookie-settings"], [href="#datenschutz-einstellungen"]').forEach(link => {
+                if (link.dataset.complyoBound === '1') return;
+                link.dataset.complyoBound = '1';
                 link.addEventListener('click', (e) => {
                     e.preventDefault();
                     this.openSettings();
+                });
+                link.style.cursor = 'pointer';
+            });
+
+            // Aktiviere Widerruf-Links: löscht die Einwilligung und lädt neu,
+            // sodass der Banner erneut erscheint (z.B. via WP-Shortcode im Footer/Menü)
+            document.querySelectorAll('[data-complyo-revoke], [href="#cookie-widerrufen"]').forEach(link => {
+                if (link.dataset.complyoBound === '1') return;
+                link.dataset.complyoBound = '1';
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.revokeConsent();
                 });
                 link.style.cursor = 'pointer';
             });

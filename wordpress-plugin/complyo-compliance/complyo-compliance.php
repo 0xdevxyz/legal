@@ -3,7 +3,7 @@
  * Plugin Name: Complyo Compliance
  * Plugin URI: https://complyo.tech
  * Description: DSGVO-konformes Cookie-Banner und Accessibility-Widget. Konfiguration über app.complyo.tech.
- * Version: 2.2.0
+ * Version: 2.3.0
  * Author: Complyo
  * Author URI: https://complyo.tech
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('COMPLYO_VERSION',        '2.2.0');
+define('COMPLYO_VERSION',        '2.3.0');
 define('COMPLYO_API_BASE',       'https://api.complyo.de');
 define('COMPLYO_APP_URL',        'https://app.complyo.tech');
 define('COMPLYO_PLUGIN_DIR',     plugin_dir_path(__FILE__));
@@ -62,6 +62,12 @@ class Complyo_Compliance {
 
         // Banner + A11y am Ende von <body> (niedrige Priorität = spät)
         add_action('wp_footer', array($this, 'output_banner_script'), 1);
+
+        // Shortcodes: Cookie-Einstellungen anzeigen/widerrufen (Footer/Menü)
+        add_shortcode('complyo_cookie_settings', array($this, 'shortcode_cookie_settings'));
+        add_shortcode('complyo_cookie_revoke',   array($this, 'shortcode_cookie_revoke'));
+        // Menüs rendern standardmäßig keine Shortcodes – nachrüsten:
+        add_filter('wp_nav_menu_items', array($this, 'do_shortcode_in_menu'), 10, 2);
 
         // Caching-Plugin-Kompatibilität
         add_filter('rocket_exclude_js',         array($this, 'exclude_from_rocket'));
@@ -206,6 +212,81 @@ class Complyo_Compliance {
         }
 
         echo "<!-- End Complyo Compliance Widgets -->\n\n";
+    }
+
+    // =========================================================================
+    // Shortcodes
+    // =========================================================================
+
+    /**
+     * [complyo_cookie_settings] – Link/Button, der die Cookie-Einstellungen
+     * öffnet (aktuelle Auswahl ansehen und ändern).
+     *
+     * Attribute:
+     *   text  – Beschriftung (Standard: "Cookie-Einstellungen")
+     *   class – zusätzliche CSS-Klassen
+     *   style – "link" (Standard) oder "button"
+     *
+     * Beispiel: [complyo_cookie_settings text="Cookie-Einstellungen ändern"]
+     */
+    public function shortcode_cookie_settings($atts) {
+        $atts = shortcode_atts(array(
+            'text'  => __('Cookie-Einstellungen', 'complyo-compliance'),
+            'class' => '',
+            'style' => 'link',
+        ), $atts, 'complyo_cookie_settings');
+
+        return $this->render_consent_link('settings', $atts);
+    }
+
+    /**
+     * [complyo_cookie_revoke] – Link/Button, der die erteilte Einwilligung
+     * widerruft und den Banner erneut anzeigt.
+     *
+     * Attribute: text, class, style (wie oben)
+     * Beispiel: [complyo_cookie_revoke text="Cookies widerrufen"]
+     */
+    public function shortcode_cookie_revoke($atts) {
+        $atts = shortcode_atts(array(
+            'text'  => __('Cookies widerrufen', 'complyo-compliance'),
+            'class' => '',
+            'style' => 'link',
+        ), $atts, 'complyo_cookie_revoke');
+
+        return $this->render_consent_link('revoke', $atts);
+    }
+
+    /**
+     * Erzeugt das Markup für die Consent-Shortcodes. Das Banner-Script bindet
+     * Klicks automatisch über die data-Attribute (CSP-sicher, kein inline-JS).
+     */
+    private function render_consent_link($action, $atts) {
+        $data_attr = ($action === 'revoke') ? 'data-complyo-revoke' : 'data-complyo-settings';
+
+        $classes = 'complyo-consent-link';
+        if ($atts['style'] === 'button') {
+            $classes .= ' complyo-consent-button';
+        }
+        if (!empty($atts['class'])) {
+            $classes .= ' ' . $atts['class'];
+        }
+
+        return sprintf(
+            '<a href="#" %s="true" class="%s" style="cursor:pointer;">%s</a>',
+            esc_attr($data_attr),
+            esc_attr(trim($classes)),
+            esc_html($atts['text'])
+        );
+    }
+
+    /**
+     * Erlaubt die Verwendung der Shortcodes direkt in WordPress-Menüs.
+     */
+    public function do_shortcode_in_menu($items, $args) {
+        if (strpos($items, '[complyo_cookie_') !== false) {
+            $items = do_shortcode($items);
+        }
+        return $items;
     }
 
     // =========================================================================
