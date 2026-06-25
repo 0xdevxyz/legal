@@ -592,8 +592,11 @@
           </div>
         </div>
         
+        <!-- Backdrop für das Text-Modal (klick schließt) -->
+        <div class="complyo-modal-backdrop" id="complyo-modal-backdrop" hidden></div>
+
         <!-- Text Settings Modal mit Schiebereglern -->
-        <div class="complyo-settings-modal" id="complyo-text-settings-modal" hidden>
+        <div class="complyo-settings-modal" id="complyo-text-settings-modal" role="dialog" aria-modal="true" hidden>
           <div class="complyo-modal-header">
             <h3 data-i18n="textSettings">Text Settings</h3>
             <button class="complyo-modal-close" data-modal="text-settings" aria-label="Schließen">✕</button>
@@ -727,6 +730,12 @@
           this.closeModal(btn.dataset.modal);
         });
       });
+
+      // Backdrop-Klick schließt das Text-Modal
+      const modalBackdrop = this.container.querySelector('#complyo-modal-backdrop');
+      if (modalBackdrop) {
+        modalBackdrop.addEventListener('click', () => this.closeModal('text-settings'));
+      }
       
       // Slider Event Listeners (Live Preview)
       this.container.querySelectorAll('.complyo-slider').forEach(slider => {
@@ -864,15 +873,19 @@
     
     openModal(modalName) {
       const modal = document.getElementById(`complyo-${modalName}-modal`);
+      const backdrop = document.getElementById('complyo-modal-backdrop');
       if (modal) {
         modal.hidden = false;
+        if (backdrop) backdrop.hidden = false;
       }
     }
-    
+
     closeModal(modalName) {
       const modal = document.getElementById(`complyo-${modalName}-modal`);
+      const backdrop = document.getElementById('complyo-modal-backdrop');
       if (modal) {
         modal.hidden = true;
+        if (backdrop) backdrop.hidden = true;
       }
     }
     
@@ -2002,6 +2015,16 @@
         }
         
         /* ===== TEXT SETTINGS MODAL ===== */
+        .complyo-modal-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(17, 24, 39, 0.45);
+          /* Gleiche z-Ebene wie Panel/Modal; DOM-Reihenfolge (Panel → Backdrop → Modal)
+             legt den Backdrop über das Panel und das Modal über den Backdrop. */
+          z-index: 2147483647 !important;
+          animation: fadeIn 0.2s ease-out;
+        }
+
         .complyo-settings-modal {
           position: fixed;
           top: 50%;
@@ -2009,14 +2032,21 @@
           transform: translate(-50%, -50%);
           width: 480px;
           max-width: calc(100vw - 32px);
-          max-height: 80vh;
+          max-height: 85vh;
           background: var(--c-surface);
           border: 1px solid var(--c-border);
           border-radius: var(--c-radius);
           box-shadow: var(--c-shadow);
+          display: flex;
+          flex-direction: column;
           overflow: hidden;
-          z-index: 999999;
-          animation: fadeIn 0.2s ease-in;
+          z-index: 2147483647 !important;
+          animation: modalIn 0.2s ease-out;
+        }
+
+        @keyframes modalIn {
+          from { opacity: 0; transform: translate(-50%, -50%) scale(0.97); }
+          to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         }
         
         .complyo-modal-header {
@@ -2057,14 +2087,15 @@
         }
         
         .complyo-modal-content {
-          padding: 24px;
+          padding: 20px;
           overflow-y: auto;
-          max-height: calc(80vh - 80px);
+          flex: 1 1 auto;
+          min-height: 0;
         }
-        
+
         /* Slider Groups */
         .complyo-slider-group {
-          margin-bottom: 28px;
+          margin-bottom: 18px;
         }
         
         .complyo-slider-group label {
@@ -2144,21 +2175,24 @@
         /* Button Group */
         .complyo-button-group {
           display: flex;
+          flex-wrap: wrap;
           gap: 8px;
           margin-top: 8px;
         }
-        
+
         .complyo-align-btn {
-          flex: 1;
-          padding: 10px 16px;
-          border: 2px solid var(--c-border);
-          background: white;
+          flex: 1 1 auto;
+          min-width: 0;
+          padding: 10px 12px;
+          border: 1px solid var(--c-border);
+          background: var(--c-surface);
           border-radius: 8px;
           font-size: 13px;
           font-weight: 500;
           color: var(--c-text-mid);
           cursor: pointer;
-          transition: all 0.2s;
+          transition: border-color 0.18s, color 0.18s, background 0.18s;
+          white-space: nowrap;
         }
         
         .complyo-align-btn:hover {
@@ -2388,6 +2422,11 @@
 
           .complyo-feature-grid {
             grid-template-columns: repeat(2, 1fr);
+          }
+
+          /* Ausrichtungs-Buttons 2x2 statt abgeschnitten einreihig */
+          .complyo-align-btn {
+            flex: 1 1 calc(50% - 4px);
           }
 
           /* Page-Structure-Overlay vollflächig statt neben dem Panel */
