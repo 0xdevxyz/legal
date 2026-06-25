@@ -136,8 +136,43 @@ async def get_user_website_site_id(user_id: Any) -> Optional[str]:
             hostname = hostname.replace('www.', '')
             site_id = hostname.replace('.', '-').lower()
             return site_id
-        
+
         return None
+
+
+def _url_to_site_id(url: str) -> Optional[str]:
+    """Hostname-basierte site_id aus einer URL (z.B. https://complyo.de -> complyo-de)."""
+    if not url:
+        return None
+    from urllib.parse import urlparse
+    parsed = urlparse(url if '://' in url else f'https://{url}')
+    hostname = (parsed.netloc or parsed.path).replace('www.', '')
+    if not hostname:
+        return None
+    return hostname.replace('.', '-').lower()
+
+
+async def get_user_site_ids(user_id: Any) -> set:
+    """Alle site_ids, die dem User gehören (tracked_websites + eigene Configs).
+
+    Agentur-/Expert-Pläne verwalten MEHRERE Websites. Die einzelne primäre
+    Website (get_user_website_site_id) reicht daher nicht, um zu prüfen, ob der
+    User eine bestimmte site_id konfigurieren darf — sonst landen Saves auf der
+    falschen Seite bzw. werden auf eine einzige Seite gezwungen.
+    """
+    if not db_pool:
+        return set()
+    site_ids: set = set()
+    async with db_pool.acquire() as conn:
+        for r in await conn.fetch("SELECT url FROM tracked_websites WHERE user_id = $1", user_id):
+            sid = _url_to_site_id(r['url'])
+            if sid:
+                site_ids.add(sid)
+        # Bereits angelegte eigene Configs ebenfalls als gültig betrachten
+        for r in await conn.fetch("SELECT site_id FROM cookie_banner_configs WHERE user_id = $1", user_id):
+            if r['site_id']:
+                site_ids.add(r['site_id'])
+    return site_ids
 
 # ============================================================================
 # Pydantic Models
@@ -196,7 +231,12 @@ class BannerConfig(BaseModel):
     button_style: str = Field(default="rounded")
     position: str = Field(default="bottom")
     width_mode: str = Field(default="full")
-    texts: Dict[str, BannerTexts]
+    # WICHTIG: texts als plain dict (NICHT Dict[str, BannerTexts]).
+    # Pydantic v2 würde die Werte sonst in BannerTexts-Model-Instanzen wandeln,
+    # die json.dumps(config.texts) beim Speichern mit TypeError ("Object of type
+    # BannerTexts is not JSON serializable") abbricht → POST /config liefert 500
+    # und KEINE Banner-Einstellung (Layout/Position/Texte) wird je persistiert.
+    texts: Dict[str, Dict[str, Any]]
     services: List[str] = []
     show_on_pages: Dict[str, Any] = {"all": True, "exclude": []}
     geo_restriction: Dict[str, Any] = {"enabled": False, "countries": []}
@@ -486,13 +526,15 @@ async def get_my_config(
         registered_site_id = await get_user_website_site_id(user_id)
         
         query = """
-            SELECT 
+            SELECT
                 id, site_id, user_id,
                 layout, primary_color, accent_color, text_color, bg_color,
                 button_style, position, width_mode,
                 texts, services, show_on_pages, geo_restriction,
                 auto_block_scripts, respect_dnt, cookie_lifetime_days,
                 show_branding, custom_logo_url,
+                consent_mode_enabled, consent_mode_default, gtm_enabled, gtm_container_id,
+                privacy_policy_url, cookie_policy_url, imprint_url,
                 is_active, created_at, updated_at,
                 scan_completed_at, last_scan_url
             FROM cookie_banner_configs
@@ -500,7 +542,7 @@ async def get_my_config(
             ORDER BY created_at DESC
             LIMIT 1
         """
-        
+
         row = await db_pool.fetchrow(query, user_id)
         
         if not row:
@@ -606,7 +648,9 @@ async def get_my_config(
             config['show_on_pages'] = json.loads(config['show_on_pages'])
         if isinstance(config.get('geo_restriction'), str):
             config['geo_restriction'] = json.loads(config['geo_restriction'])
-        
+        if isinstance(config.get('consent_mode_default'), str):
+            config['consent_mode_default'] = json.loads(config['consent_mode_default'])
+
         config['scan_completed'] = config.get('scan_completed_at') is not None
         
         # Convert datetime to ISO string
@@ -643,19 +687,21 @@ async def get_banner_config(
     """
     try:
         query = """
-            SELECT 
+            SELECT
                 id, site_id, user_id,
                 layout, primary_color, accent_color, text_color, bg_color,
                 button_style, position, width_mode,
                 texts, services, show_on_pages, geo_restriction,
                 auto_block_scripts, respect_dnt, cookie_lifetime_days,
                 show_branding, custom_logo_url,
+                consent_mode_enabled, consent_mode_default, gtm_enabled, gtm_container_id,
+                privacy_policy_url, cookie_policy_url, imprint_url,
                 is_active, created_at, updated_at,
                 scan_completed_at, last_scan_url
             FROM cookie_banner_configs
             WHERE site_id = $1 AND is_active = true
         """
-        
+
         row = await db_pool.fetchrow(query, site_id)
         
         if not row:
@@ -708,6 +754,18 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
                     "cookie_lifetime_days": 365,
                     "show_branding": True,
                     "custom_logo_url": None,
+                    "consent_mode_enabled": True,
+                    "consent_mode_default": {
+                        "ad_storage": "denied",
+                        "analytics_storage": "denied",
+                        "ad_user_data": "denied",
+                        "ad_personalization": "denied"
+                    },
+                    "gtm_enabled": False,
+                    "gtm_container_id": None,
+                    "privacy_policy_url": None,
+                    "cookie_policy_url": None,
+                    "imprint_url": None,
                     "revision": 1,
                     "is_active": False,  # ✅ FIX: Default ist FALSE - Banner nur zeigen wenn im Backend konfiguriert!
                     "scan_completed": False,
@@ -729,7 +787,9 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
             config['show_on_pages'] = json.loads(config['show_on_pages'])
         if isinstance(config.get('geo_restriction'), str):
             config['geo_restriction'] = json.loads(config['geo_restriction'])
-        
+        if isinstance(config.get('consent_mode_default'), str):
+            config['consent_mode_default'] = json.loads(config['consent_mode_default'])
+
         # ✅ Füge scan_completed Status hinzu
         config['scan_completed'] = config.get('scan_completed_at') is not None
 
@@ -777,13 +837,18 @@ async def create_or_update_config(
         # Modul-Check: User muss Cookie-Modul gebucht haben
         await require_module(user, 'cookie')
         
-        # Prüfe, ob die site_id zur registrierten Website des Users gehört
-        registered_site_id = await get_user_website_site_id(user_id)
-        
-        if registered_site_id and config.site_id != registered_site_id:
-            logger.warning(f"User {user_id} tried to configure site_id '{config.site_id}' but registered site is '{registered_site_id}'")
-            # Verwende die registrierte site_id statt der übergebenen
-            config.site_id = registered_site_id
+        # Ownership-Prüfung (Multi-Site-fähig): Die site_id muss dem User gehören.
+        # Agentur/Expert verwalten mehrere Websites — daher NICHT auf die einzelne
+        # primäre Website zwingen, sondern gegen ALLE Sites des Users prüfen.
+        # Schützt zugleich vor Cross-Tenant-Writes auf fremde site_ids.
+        owned_site_ids = await get_user_site_ids(user_id)
+        if owned_site_ids and config.site_id not in owned_site_ids:
+            fallback = await get_user_website_site_id(user_id) or next(iter(owned_site_ids))
+            logger.warning(
+                f"User {user_id} tried to configure foreign site_id '{config.site_id}'. "
+                f"Falling back to '{fallback}'."
+            )
+            config.site_id = fallback
         
         # Check if config exists
         check_query = "SELECT id FROM cookie_banner_configs WHERE site_id = $1"
@@ -799,7 +864,11 @@ async def create_or_update_config(
                     services = $11, show_on_pages = $12, geo_restriction = $13,
                     auto_block_scripts = $14, respect_dnt = $15,
                     cookie_lifetime_days = $16, show_branding = $17,
-                    custom_logo_url = $18, updated_at = NOW()
+                    custom_logo_url = $18,
+                    consent_mode_enabled = $19, gtm_container_id = $20,
+                    privacy_policy_url = $21, cookie_policy_url = $22, imprint_url = $23,
+                    user_id = COALESCE(user_id, $24),
+                    updated_at = NOW()
                 WHERE site_id = $1
                 RETURNING id, revision
             """
@@ -823,7 +892,13 @@ async def create_or_update_config(
                 config.respect_dnt,
                 config.cookie_lifetime_days,
                 config.show_branding,
-                config.custom_logo_url
+                config.custom_logo_url,
+                config.consent_mode_enabled,
+                config.gtm_container_id,
+                config.privacy_policy_url,
+                config.cookie_policy_url,
+                config.imprint_url,
+                user_id
             )
 
             return {
@@ -840,12 +915,14 @@ async def create_or_update_config(
                     text_color, bg_color, button_style, position, width_mode,
                     texts, services, show_on_pages, geo_restriction,
                     auto_block_scripts, respect_dnt, cookie_lifetime_days,
-                    show_branding, custom_logo_url
+                    show_branding, custom_logo_url,
+                    consent_mode_enabled, gtm_container_id,
+                    privacy_policy_url, cookie_policy_url, imprint_url
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
                 RETURNING id, revision
             """
-            
+
             result = await db_pool.fetchrow(
                 insert_query,
                 config.site_id,
@@ -866,7 +943,12 @@ async def create_or_update_config(
                 config.respect_dnt,
                 config.cookie_lifetime_days,
                 config.show_branding,
-                config.custom_logo_url
+                config.custom_logo_url,
+                config.consent_mode_enabled,
+                config.gtm_container_id,
+                config.privacy_policy_url,
+                config.cookie_policy_url,
+                config.imprint_url
             )
             
             return {
