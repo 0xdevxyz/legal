@@ -20,7 +20,7 @@ import json
 import httpx
 import logging
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from enum import Enum
 from dataclasses import dataclass, asdict, field
 

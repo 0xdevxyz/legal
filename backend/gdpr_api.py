@@ -3,9 +3,9 @@ GDPR API Endpoints for Data Rights Management
 Implements GDPR Articles 17 (Right to Erasure) and 20 (Data Portability)
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel, EmailStr
-from typing import Dict, Any, Optional
+from typing import Optional
 import logging
 import os
 from gdpr_retention_service import gdpr_service
@@ -237,10 +237,8 @@ async def admin_get_cleanup_status(
     """
     Admin endpoint to get GDPR cleanup and deletion statistics
     """
-    # Simple admin authentication
-    if False:  # replaced by _verify_admin() below
-        raise HTTPException(status_code=401, detail="Unauthorized admin access")
-    
+    _verify_admin(admin_api_key)
+
     try:
         stats = gdpr_service.get_deletion_statistics()
         
@@ -274,10 +272,8 @@ async def admin_run_manual_cleanup(
     """
     Admin endpoint to manually trigger GDPR cleanup process
     """
-    # Simple admin authentication
-    if False:  # replaced by _verify_admin() below
-        raise HTTPException(status_code=401, detail="Unauthorized admin access")
-    
+    _verify_admin(admin_api_key)
+
     try:
         logger.info("Manual GDPR cleanup triggered by admin")
         

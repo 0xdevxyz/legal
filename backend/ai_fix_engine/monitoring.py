@@ -11,7 +11,7 @@ import json
 import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from enum import Enum
 
 

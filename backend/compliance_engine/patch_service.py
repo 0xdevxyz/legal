@@ -13,7 +13,6 @@ import os
 import re
 import asyncio
 import aiohttp
-import json
 import time
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
@@ -22,11 +21,11 @@ from enum import Enum
 import logging
 
 from .feature_engine import (
-    FeatureEngine, FeatureId, StructuredIssue, 
-    AutoFixLevel, Difficulty, FixType, feature_engine
+    FeatureId, StructuredIssue, 
+    Difficulty, FixType, feature_engine
 )
 from .prompts.bfsg_prompts import (
-    BFSGPromptBuilder, PromptTemplate, PromptContext,
+    PromptTemplate, PromptContext,
     bfsg_prompt_builder
 )
 

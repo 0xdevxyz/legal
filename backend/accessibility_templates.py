@@ -3,7 +3,7 @@ Accessibility Code Templates
 Verschiedene WCAG-konforme Code-Vorlagen zum Wechseln
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 class AccessibilityTemplates:
     """Manager für Accessibility Code-Templates"""

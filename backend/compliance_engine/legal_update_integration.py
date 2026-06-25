@@ -3,10 +3,9 @@ Legal Update Integration für Compliance Scanner
 Bindet aktuelle Gesetzesänderungen in Scans und Fixes ein
 """
 
-import asyncio
 import logging
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from .rule_versioning_service import RuleVersioningService
 

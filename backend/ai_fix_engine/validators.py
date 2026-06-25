@@ -10,12 +10,10 @@ Validierung von AI-generierten Fixes:
 © 2025 Complyo.tech
 """
 
-import json
 import re
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 import html.parser
-import jsonschema
 from jsonschema import validate, ValidationError
 
 

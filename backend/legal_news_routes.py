@@ -2,7 +2,7 @@
 Legal News API Routes für Complyo
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 from pydantic import BaseModel
 import logging

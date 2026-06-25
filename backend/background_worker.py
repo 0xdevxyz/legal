@@ -6,8 +6,6 @@ Processes fix-jobs asynchronously using the UnifiedFixEngine with real AI
 import asyncio
 import asyncpg
 import json
-import os
-from datetime import datetime
 from typing import Optional, Dict, Any
 import logging
 

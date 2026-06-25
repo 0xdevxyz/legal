@@ -5,13 +5,11 @@ Fokus auf: DSGVO, ePrivacy, AI Act, Digital Services Act
 """
 
 import aiohttp
-import asyncio
 import asyncpg
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import xml.etree.ElementTree as ET
 import logging
-import re
 
 logger = logging.getLogger(__name__)
 

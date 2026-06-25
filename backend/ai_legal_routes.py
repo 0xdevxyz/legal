@@ -19,7 +19,6 @@ import json
 
 from auth_routes import get_current_user
 from dependencies import require_admin
-from database_service import DatabaseService
 
 logger = logging.getLogger(__name__)
 

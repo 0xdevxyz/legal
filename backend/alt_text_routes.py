@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 import logging
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -275,7 +274,7 @@ async def scan_images_for_alt_text(
     from compliance_engine.browser_renderer import smart_fetch_html
     from bs4 import BeautifulSoup
     from compliance_engine.ai_alt_text_generator import AIAltTextGenerator
-    from urllib.parse import urljoin, urlparse
+    from urllib.parse import urljoin
     
     try:
         user_id = current_user.get("user_id") or current_user.get("id")

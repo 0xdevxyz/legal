@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { ComplianceIssue, FixResult } from '@/types/api';
-import { generateFix } from '@/lib/api';
+import { generateFix, generateLegalText, type LegalDocumentType } from '@/lib/api';
 import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie, Lock, Image as ImageIcon, Pencil, Eye, ArrowRight } from 'lucide-react';
 import { StripePaywallModal } from './StripePaywallModal';
 import { ConfirmFixModal } from './ConfirmFixModal';
@@ -15,6 +15,7 @@ import { UnifiedFixButton } from './UnifiedFixButton';
 import { useRouter } from 'next/navigation';
 import { useDashboardStore } from '@/stores/dashboard';
 import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Hilfsfunktion: Ist es ein Cookie-Problem?
 const isCookieIssue = (issue: ComplianceIssue): boolean => {
@@ -130,6 +131,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   const router = useRouter();
   const createFixJob = useCreateFixJob();
   const { isInOptimizationMode, lockedOptimizationUrl } = useDashboardStore();
+  const { user } = useAuth();
   
   // KI-Fix immer verfügbar — Lock-Status nur als Hinweis, nicht als Blockade
   const canOptimize = true;
@@ -220,14 +222,22 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
     if (isLegalText) {
       setIsFixing(true);
       try {
-        const textType = issue.title.toLowerCase().includes('impressum') ? 'imprint' : 'privacy_policy';
-        const endpoint = textType === 'imprint' 
-          ? '/api/legal-texts/imprint'
-          : '/api/legal-texts/privacy';
+        const textType: LegalDocumentType = issue.title.toLowerCase().includes('impressum') ? 'imprint' : 'privacy';
 
-        const data = await apiClient.get(`${endpoint}`, { language: 'de' } as any) as any;
+        if (!user?.company && !user?.full_name) {
+          showToast('Bitte hinterlegen Sie zuerst Ihre Firmendaten im Profil.', 'error');
+          return;
+        }
 
-        if (!data) {
+        const data = await generateLegalText(textType, {
+          user_data: {
+            company_name: user.company || user.full_name,
+            email: user.email,
+          },
+          language: 'de',
+        });
+
+        if (!data?.html_content) {
           throw new Error('Generierung fehlgeschlagen');
         }
 
@@ -235,7 +245,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         // ✅ SSR-Check
         if (typeof document !== 'undefined') {
           const filename = textType === 'imprint' ? 'impressum.html' : 'datenschutzerklaerung.html';
-          const blob = new Blob([data.html], { type: 'text/html;charset=utf-8' });
+          const blob = new Blob([data.html_content], { type: 'text/html;charset=utf-8' });
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;

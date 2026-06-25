@@ -3,7 +3,7 @@ import stripe
 import json
 import logging
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, HTTPException, status, Request
 from pydantic import BaseModel
 from typing import List, Dict, Any
 

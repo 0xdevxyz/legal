@@ -10,24 +10,22 @@ Endpoints:
 - POST /api/v2/accessibility/generate-statement - BFSG Barrierefreiheitserklärung generieren (AUDIT-05)
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 import logging
-import io
 import json
 from datetime import datetime
 from jinja2 import Environment, select_autoescape
 from site_id_utils import derive_site_id
 
 from compliance_engine.feature_engine import (
-    FeatureEngine, FeatureId, StructuredIssue,
-    AutoFixLevel, Difficulty, FixType, feature_engine
+    feature_engine
 )
 from compliance_engine.patch_service import (
-    PatchService, FixPackage, PatchResult, patch_service
+    patch_service
 )
 from accessibility_patch_generator import AccessibilityPatchGenerator
 

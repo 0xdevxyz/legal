@@ -4,12 +4,8 @@ Lädt Global Vendor List (GVL) und analysiert Vendor Consents
 """
 
 import httpx
-import json
-import base64
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
-import os
-import asyncio
 
 # Cache für GVL (Global Vendor List)
 _gvl_cache = None

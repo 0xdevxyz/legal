@@ -4,14 +4,12 @@ Endpoints for serving and managing widgets
 """
 
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Depends
-from fastapi.responses import FileResponse, Response, JSONResponse, StreamingResponse
+from fastapi.responses import Response, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import os
-from datetime import datetime
 import time
 import gzip
-import io
 import hashlib
 import asyncpg
 import json
@@ -366,8 +364,19 @@ async def get_widget_config(site_id: str):
         except Exception as e:
             _logger.warning(f"[Widget Config] Could not load config for {site_id}: {e}")
 
+    # 🔒 Laufzeit-Lizenzprüfung: Wurde die Website im Dashboard entfernt, ist die
+    # Lizenz entzogen → das Barrierefreiheits-Widget rendert dann nicht mehr.
+    license_active = True
+    if db_pool:
+        try:
+            from license_check import site_has_active_license
+            license_active = await site_has_active_license(db_pool, site_id)
+        except Exception as e:
+            _logger.warning(f"[Widget Config] License check failed for {site_id}: {e}")
+
     return {
         "success": True,
+        "license_active": license_active,
         "config": default_config,
     }
 
@@ -380,10 +389,10 @@ async def get_widget_snippet(widget_type: str, site_id: str):
     base_url = "https://api.complyo.de"
     
     snippets = {
-        "cookie-consent": f'<script src="{base_url}/api/widgets/cookie-consent.js" data-site-id="{site_id}"></script>',
+        "cookie-consent": f'<script src="{base_url}/api/widgets/cookie-compliance.js" data-site-id="{site_id}"></script>',
         "accessibility": f'<script src="{base_url}/api/widgets/accessibility.js" data-site-id="{site_id}" data-complyo-a11y></script>',
         "all": f'''<!-- Complyo Widgets -->
-<script src="{base_url}/api/widgets/cookie-consent.js" data-site-id="{site_id}"></script>
+<script src="{base_url}/api/widgets/cookie-compliance.js" data-site-id="{site_id}"></script>
 <script src="{base_url}/api/widgets/accessibility.js" data-site-id="{site_id}" data-complyo-a11y></script>'''
     }
     

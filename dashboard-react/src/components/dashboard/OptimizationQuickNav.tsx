@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useRouter, usePathname } from 'next/navigation';
 import { getTrackedWebsites } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 /**
  * OptimizationQuickNav
@@ -19,8 +20,11 @@ import { getTrackedWebsites } from '@/lib/api';
 export const OptimizationQuickNav: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
+  const { user } = useAuth();
+  // Agentur/Expert kennen keinen Single-Domain-Lock → keine Lock-Leiste.
+  const isAgency = user?.plan_type === 'agency' || user?.plan_type === 'expert';
   const [isLoading, setIsLoading] = useState(false);
-  const { 
+  const {
     currentWebsite,
     lockedOptimizationUrl,
     isInOptimizationMode,
@@ -40,8 +44,9 @@ export const OptimizationQuickNav: React.FC = () => {
   // 1. Im Optimierungsmodus
   // 2. Eine URL gelockt ist
   // 3. NICHT auf der gelockten Seite (oder auf einer Unterseite)
-  const showQuickNav = isInOptimizationMode && 
-    lockedOptimizationUrl && 
+  const showQuickNav = !isAgency &&
+    isInOptimizationMode &&
+    lockedOptimizationUrl &&
     !isCurrentSiteLocked;
 
   if (!showQuickNav) {

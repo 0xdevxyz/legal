@@ -4,7 +4,6 @@ Versendet E-Mail-Benachrichtigungen bei wichtigen Gesetzesänderungen
 mit Nutzer-Bestätigungsflow (Double-Opt-In für Aktionen)
 """
 
-import asyncio
 import asyncpg
 import secrets
 from datetime import datetime, timedelta

@@ -4,9 +4,7 @@ Handles scheduled scans and notification processing
 """
 
 import asyncio
-import os
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
 import logging
 
 logger = logging.getLogger(__name__)

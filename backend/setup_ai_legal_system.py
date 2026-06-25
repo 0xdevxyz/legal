@@ -103,7 +103,6 @@ async def test_feedback_learning(db_url: str):
     print("\n🧠 Teste Feedback Learning System...")
     
     try:
-        from database_service import DatabaseService
         from ai_feedback_learning import AIFeedbackLearning
         
         # Mock DB Service (für Test)

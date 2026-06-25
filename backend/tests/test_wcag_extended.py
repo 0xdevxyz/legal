@@ -7,7 +7,6 @@ import os
 sys.path.insert(0, '/app')
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pytest
 from bs4 import BeautifulSoup
 from compliance_engine.checks.barrierefreiheit_check import (
     _check_touch_targets,

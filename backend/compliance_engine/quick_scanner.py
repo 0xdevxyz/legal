@@ -7,7 +7,6 @@ import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
 from typing import Dict, List, Any, Optional
-from urllib.parse import urlparse
 from datetime import datetime
 import ssl
 import certifi

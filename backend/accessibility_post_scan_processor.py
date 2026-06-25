@@ -7,7 +7,7 @@ Verarbeitet Barrierefreiheits-Issues nach einem Scan und generiert Alt-Texte
 import asyncpg
 import json
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from accessibility_fix_saver import AccessibilityFixSaver
 from site_id_utils import derive_site_id
 

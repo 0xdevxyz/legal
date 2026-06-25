@@ -7,12 +7,11 @@ Unterstützt zwei Modi:
 2. Deep Scan (Headless Browser) - Vollständig mit Cookie/Storage-Erkennung
 """
 
-import asyncio
 import re
 from typing import List, Dict, Any, Set, Optional
 import aiohttp
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urljoin
 import logging
 from ssrf_protection import validate_url, SSRFError
 from compliance_engine.privacy_transfer_findings import detect_transfers

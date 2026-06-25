@@ -7,7 +7,7 @@ import asyncio
 import base64
 import os
 from typing import Dict, List, Any, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 import logging
 from playwright.async_api import async_playwright, Browser, Page
 import re

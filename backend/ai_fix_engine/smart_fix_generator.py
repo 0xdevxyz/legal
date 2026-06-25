@@ -4,7 +4,6 @@ Generates various types of fixes: Code, Text, Widget, Guided Setup
 Legal texts via internal KI-Generator (knowledge/laws/ + Templates) — no external API dependency.
 """
 
-import os
 from typing import Dict, List, Any, Optional
 import json
 from datetime import datetime

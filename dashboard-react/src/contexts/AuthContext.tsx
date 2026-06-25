@@ -52,6 +52,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { data: session, status, update } = useSession();
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [hasTriedUpdate, setHasTriedUpdate] = useState(false);
+  const [hasSyncedPlan, setHasSyncedPlan] = useState(false);
 
   const isLoading = status === 'loading';
   const isAuthenticated = status === 'authenticated';
@@ -98,6 +99,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsAuthReady(true);
     }
   }, [status, session?.accessToken, (session as any)?.error, hasTriedUpdate]);
+
+  // Plan/Rolle einmal pro Mount frisch aus dem Backend ziehen. Damit erhält ein
+  // bereits eingeloggter User mit veraltetem JWT (z. B. nach Stripe-Zahlung) den
+  // aktuellen plan_type — auch nach jedem Reload, ohne sich neu einloggen zu müssen.
+  useEffect(() => {
+    if (isAuthReady && isAuthenticated && session?.accessToken && !hasSyncedPlan) {
+      setHasSyncedPlan(true);
+      update();
+    }
+  }, [isAuthReady, isAuthenticated, session?.accessToken, hasSyncedPlan, update]);
 
   const login = async (email: string, password: string) => {
     const result = await signIn('credentials', {

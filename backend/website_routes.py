@@ -179,7 +179,6 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                         scraped_bg = '#ffffff'
                         try:
                             from website_crawler import WebsiteCrawler
-                            import aiohttp
                             from bs4 import BeautifulSoup
                             from ssrf_protection import validate_url, SSRFError
                             _crawl_url = data.url if data.url.startswith('http') else f'https://{data.url}'
@@ -319,26 +318,50 @@ async def delete_website(website_id: str, user=Depends(get_current_user)):
             
             if not website:
                 raise HTTPException(status_code=404, detail="Website not found")
-            
-            if website["is_primary"]:
+
+            # Plan-Typ bestimmen: Einzel-Pläne haben eine dauerhaft verknüpfte
+            # Primärseite (Single-Domain-Lock). Agentur/Expert verwalten mehrere
+            # Seiten frei und dürfen jede Seite — auch die primäre — entfernen.
+            plan_row = await conn.fetchrow(
+                "SELECT plan_type FROM user_limits WHERE user_id = $1", user_id
+            )
+            plan_type = (plan_row["plan_type"] if plan_row else None) or "free"
+            is_agency = plan_type in ("agency", "expert")
+
+            if website["is_primary"] and not is_agency:
                 raise HTTPException(
                     status_code=403,
                     detail="Die primäre Website kann nicht gelöscht werden. Diese Verknüpfung ist dauerhaft. Bitte kontaktieren Sie den Support unter support@complyo.tech für Änderungen."
                 )
-            
+
             # Delete website
             await conn.execute("""
                 DELETE FROM tracked_websites
                 WHERE id = $1
             """, website_uuid)
-            
+
+            # War die gelöschte Seite primär (nur bei Agentur/Expert möglich),
+            # eine verbleibende Seite zur neuen Primärseite befördern, damit das
+            # Dashboard weiterhin eine Standardseite hat.
+            if website["is_primary"]:
+                await conn.execute("""
+                    UPDATE tracked_websites
+                    SET is_primary = TRUE
+                    WHERE id = (
+                        SELECT id FROM tracked_websites
+                        WHERE user_id = $1
+                        ORDER BY created_at ASC
+                        LIMIT 1
+                    )
+                """, user_id)
+
             # Update user_limits.websites_count
             await conn.execute("""
                 UPDATE user_limits
                 SET websites_count = websites_count - 1
                 WHERE user_id = $1
             """, user_id)
-            
+
             return {"success": True, "message": "Website deleted"}
             
     except HTTPException:

@@ -82,6 +82,10 @@ class ScoreCalculator:
         ("gdpr", [
             "datenschutz", "dsgvo", "gdpr", "privacy", "personenbezogen",
             "datenverarbeitung", "avv",
+            # Social-Media-Plugins übertragen ohne Consent personenbezogene
+            # Daten (IP) an Dritte → DSGVO Art. 6 / EuGH Fashion ID (C-40/17),
+            # gehört in die Datenschutz-Säule, NICHT zu "Rechtssichere Texte".
+            "social_media", "social",
             # Sicherheit = DSGVO Art. 32 (technische Schutzmaßnahmen)
             "security", "sicherheit", "csp", "content-security", "hsts",
             "x-frame", "header", "ssl", "tls", "https",
@@ -90,7 +94,7 @@ class ScoreCalculator:
             "impressum", "agb", "legal", "rechtlich", "tmg", "uwg",
             "widerruf", "preisangaben", "preisangabe", "pangv", "preis",
             # Shop-Pflichttexte zählen rechtlich
-            "shop", "contact", "kontakt", "social_media", "social",
+            "shop", "contact", "kontakt",
             "urheberrecht", "markenrecht",
         ]),
     ]

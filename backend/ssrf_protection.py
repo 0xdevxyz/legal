@@ -15,7 +15,6 @@ Blocked targets:
 import ipaddress
 import socket
 import logging
-import re
 from urllib.parse import urlparse
 from typing import Optional
 

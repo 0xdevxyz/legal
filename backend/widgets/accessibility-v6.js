@@ -172,7 +172,15 @@
     
     async init() {
       console.log(`🚀 Initializing Complyo Widget v${WIDGET_VERSION} with site-id: ${this.config.siteId}`);
-      
+
+      // 🔒 Lizenzprüfung: Wurde die Website im Complyo-Dashboard entfernt, ist die
+      // Lizenz entzogen → das Widget wird nicht gerendert und funktioniert nicht.
+      const licensed = await this.checkLicense();
+      if (!licensed) {
+        console.warn('[Complyo] Keine aktive Lizenz für diese Website – Barrierefreiheits-Widget deaktiviert.');
+        return;
+      }
+
       this.loadPreferences();
       this.injectCSS(); // CSS ZUERST injizieren!
       this.renderToolbar();
@@ -209,6 +217,21 @@
         return scripts[scripts.length - 1].getAttribute('data-site-id');
       }
       return 'demo';
+    }
+
+    // 🔒 Prüft, ob für diese Website noch eine aktive Lizenz besteht.
+    // Fail-open: bei Fehlern/Demo wird das Widget normal angezeigt.
+    async checkLicense() {
+      try {
+        const siteId = this.config.siteId;
+        if (!siteId || siteId === 'demo') return true;
+        const res = await fetch(`${API_BASE}/api/widgets/config/${siteId}`);
+        if (!res.ok) return true;
+        const data = await res.json();
+        return data.license_active !== false;
+      } catch (e) {
+        return true;
+      }
     }
     
     generateSessionId() {

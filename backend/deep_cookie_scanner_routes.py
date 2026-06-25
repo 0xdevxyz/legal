@@ -9,15 +9,13 @@ GET    /api/v2/deep-cookie-scan/{scan_id}/export - Export for Cookie Configurato
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import asyncpg
 import asyncio
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 
 from dependencies import get_current_user
-from database_service import db_service
 from compliance_engine.privacy_transfer_findings import detect_transfers
 from compliance_engine.deep_cookie_scanner import DeepCookieScanner
 

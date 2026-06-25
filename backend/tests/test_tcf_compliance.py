@@ -3,7 +3,6 @@ Tests für TCF 2.2 Compliance Checker
 """
 
 import pytest
-import asyncio
 from bs4 import BeautifulSoup
 from compliance_engine.checks.tcf_check import check_tcf_compliance, detect_cmp_from_scripts, validate_tc_string_format
 from compliance_engine.tcf_vendor_analyzer import tcf_vendor_analyzer

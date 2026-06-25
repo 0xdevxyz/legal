@@ -51,13 +51,40 @@ export const authConfig: NextAuthConfig = {
         token.error = undefined;
       }
 
-      if (trigger === "update" && session) {
-        const merged = { ...token, ...session };
-        if (session.accessTokenExpiresAt) {
-          merged.accessTokenExpiresAt = session.accessTokenExpiresAt;
+      if (trigger === "update") {
+        // Plan/Rolle/Module frisch aus dem Backend ziehen, damit Planwechsel
+        // (z. B. nach Stripe-Checkout) ins JWT übernommen werden und einen
+        // Seiten-Reload überleben. Ohne das bleibt plan_type auf dem Wert vom
+        // Login stehen → Agentur-Paywall trotz bezahltem Abo.
+        if (token.accessToken) {
+          try {
+            const res = await fetch(`${API_URL}/api/auth/session-info`, {
+              headers: { Authorization: `Bearer ${token.accessToken as string}` },
+            });
+            if (res.ok) {
+              const fresh = await res.json();
+              token.plan_type = fresh.plan_type ?? token.plan_type;
+              token.role = fresh.role ?? token.role;
+              token.active_modules = fresh.active_modules ?? token.active_modules;
+              token.onboarding_completed = fresh.onboarding_completed ?? token.onboarding_completed;
+              token.company = fresh.company ?? token.company;
+              token.full_name = fresh.full_name ?? token.full_name;
+            }
+          } catch {
+            // Backend nicht erreichbar — bestehende Token-Werte behalten
+          }
         }
-        merged.error = undefined;
-        return merged;
+
+        // Explizite Overrides aus update(...) anwenden (z. B. optimistisches
+        // onboarding_completed-Flag), nachdem die frischen Backend-Werte gesetzt sind.
+        if (session) {
+          Object.assign(token, session);
+          if ((session as any).accessTokenExpiresAt) {
+            token.accessTokenExpiresAt = (session as any).accessTokenExpiresAt;
+          }
+        }
+        token.error = undefined;
+        return token;
       }
 
       const expiresAt = token.accessTokenExpiresAt as number | undefined;

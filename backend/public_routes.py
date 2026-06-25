@@ -5,7 +5,7 @@ Provides website analysis without requiring authentication
 
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 import logging
 import json
@@ -17,9 +17,7 @@ import socket
 from datetime import datetime
 from compliance_engine.scanner import ComplianceScanner
 from compliance_engine.priority_engine import priority_engine
-from compliance_engine.solution_generator import solution_generator
 from ai_review_engine import run_ai_review_pass, SOLUTION_MODEL
-from compliance_engine.cookie_analyzer import cookie_analyzer
 from website_crawler import WebsiteCrawler
 from auth_routes import get_current_user
 from accessibility_post_scan_processor import AccessibilityPostScanProcessor

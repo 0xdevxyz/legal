@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useRouter } from 'next/navigation';
 import { getTrackedWebsites } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface OptimizationModeLockProps {
   onLock?: (url: string) => void;
@@ -27,6 +28,9 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
   hasInteracted = false
 }) => {
   const router = useRouter();
+  const { user } = useAuth();
+  // Agentur/Expert verwalten mehrere Seiten → kein Single-Domain-Lock.
+  const isAgency = user?.plan_type === 'agency' || user?.plan_type === 'expert';
   const {
     currentWebsite,
     analysisData,
@@ -41,14 +45,21 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
   const [isLoadingBack, setIsLoadingBack] = useState(false);
 
   useEffect(() => {
-    if (typeof localStorage !== 'undefined') {
-      const savedUrl = localStorage.getItem('complyo_locked_optimization_url');
-      const savedMode = localStorage.getItem('complyo_optimization_mode');
-      if (savedUrl && savedMode === 'true' && !isInOptimizationMode) {
-        lockForOptimization(savedUrl);
-      }
+    if (typeof localStorage === 'undefined') return;
+    // Agentur/Expert: eventuell vorhandene Alt-Lock-Keys (z. B. nach einem
+    // Upgrade vom Einzel-Plan) entfernen, damit kein Lock reaktiviert wird.
+    if (isAgency) {
+      localStorage.removeItem('complyo_locked_optimization_url');
+      localStorage.removeItem('complyo_optimization_mode');
+      return;
     }
-  }, []);
+    const savedUrl = localStorage.getItem('complyo_locked_optimization_url');
+    const savedMode = localStorage.getItem('complyo_optimization_mode');
+    if (savedUrl && savedMode === 'true' && !isInOptimizationMode) {
+      lockForOptimization(savedUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAgency]);
 
   const handleLock = () => {
     if (!currentWebsite?.url) return;
@@ -63,6 +74,12 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
     (currentWebsite.url === lockedOptimizationUrl ||
      currentWebsite.url.includes(lockedOptimizationUrl) ||
      lockedOptimizationUrl.includes(currentWebsite.url));
+
+  // Agentur/Expert: gesamtes Single-Domain-Lock-UI ausblenden — jede Seite ist
+  // frei optimierbar, ein „dauerhaft verknüpfen"-Hinweis irritiert hier nur.
+  if (isAgency) {
+    return null;
+  }
 
   if (!currentWebsite?.url || !analysisData) {
     return null;

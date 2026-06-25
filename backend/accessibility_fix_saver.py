@@ -8,7 +8,6 @@ import asyncpg
 import hashlib
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 

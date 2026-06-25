@@ -2,10 +2,10 @@
 Add-On Payment Routes - ComploAI Guard & Priority Support
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.security import HTTPBearer
 from pydantic import BaseModel
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 import stripe
 import os
 import logging
@@ -13,7 +13,6 @@ import json
 import smtplib
 from email.mime.text import MIMEText
 
-from auth_service import AuthService
 from database_service import db_service
 from dependencies import get_current_user
 

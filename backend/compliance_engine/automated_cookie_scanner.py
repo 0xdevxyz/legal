@@ -9,10 +9,8 @@ import asyncio
 import hashlib
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)

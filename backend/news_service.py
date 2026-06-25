@@ -6,7 +6,7 @@ Parst RSS-Feeds von Rechts- und Datenschutz-Quellen
 import feedparser
 import asyncio
 import asyncpg
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 import re
 from bs4 import BeautifulSoup

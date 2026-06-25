@@ -3,13 +3,13 @@ A/B Testing Routes for Cookie Banner
 API endpoints for managing and evaluating A/B tests
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 import asyncpg
 import hashlib
 import json
-from datetime import datetime, date
+from datetime import date
 import math
 
 router = APIRouter(prefix="/api/ab-tests", tags=["A/B Testing"])

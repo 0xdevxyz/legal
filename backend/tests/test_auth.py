@@ -1,9 +1,8 @@
-import pytest
 import os
 os.environ.setdefault("JWT_SECRET", "test-secret-key-for-testing-only")
 os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost/test")
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 class TestAuthService:
     def test_create_access_token(self):
@@ -21,7 +20,6 @@ class TestAuthService:
     
     def test_verify_token_valid(self):
         from auth_service import AuthService
-        import jwt
         service = AuthService.__new__(AuthService)
         service.jwt_secret = "test-secret"
         service.jwt_issuer = "https://complyo.tech"

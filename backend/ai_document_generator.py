@@ -6,7 +6,7 @@ Generiert vollständige rechtssichere Dokumente mit OpenRouter/Claude
 import aiohttp
 import asyncpg
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
 import logging
 

@@ -23,6 +23,10 @@ export function ActiveSiteProvider({ children }: { children: React.ReactNode }) 
   const [activeSite, setActiveSiteState] = useState<TrackedWebsite | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const restoreLockFromPrimary = useDashboardStore(s => s.restoreLockFromPrimary);
+  const setCurrentWebsite = useDashboardStore(s => s.setCurrentWebsite);
+
+  // Agentur/Expert verwalten mehrere Seiten → kein Single-Domain-Lock.
+  const isAgency = user?.plan_type === 'agency' || user?.plan_type === 'expert';
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -36,8 +40,9 @@ export function ActiveSiteProvider({ children }: { children: React.ReactNode }) 
       const primary = data.find(s => s.is_primary) ?? data[0] ?? null;
       setActiveSiteState(saved ?? primary);
 
-      // Optimization lock aus DB-Primärseite wiederherstellen (überlebt Cache-Leerung)
-      if (primary?.url) {
+      // Optimization lock NUR für Einzel-Seiten-Pläne aus der Primärseite
+      // wiederherstellen. Agenturen optimieren jede Seite frei (kein Lock).
+      if (!isAgency && primary?.url) {
         restoreLockFromPrimary(primary.url);
       }
     } catch {
@@ -45,11 +50,25 @@ export function ActiveSiteProvider({ children }: { children: React.ReactNode }) 
     } finally {
       setIsLoading(false);
     }
-  }, [user, restoreLockFromPrimary]);
+  }, [user, isAgency, restoreLockFromPrimary]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // Bei Agentur folgt die analysierte/optimierte Seite dem aktiven Projekt:
+  // activeSite (SiteSwitcher / ProjectsCard) → currentWebsite (Dashboard-Store).
+  useEffect(() => {
+    if (!isAgency || !activeSite) return;
+    setCurrentWebsite({
+      id: String(activeSite.id),
+      url: activeSite.url,
+      name: activeSite.url.replace(/^https?:\/\//, '').replace(/\/$/, ''),
+      lastScan: activeSite.last_scan_date || '',
+      complianceScore: activeSite.last_score ?? 0,
+      status: 'completed',
+    });
+  }, [isAgency, activeSite, setCurrentWebsite]);
 
   const setActiveSite = useCallback((site: TrackedWebsite) => {
     setActiveSiteState(site);

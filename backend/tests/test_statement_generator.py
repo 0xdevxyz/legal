@@ -9,8 +9,7 @@ Covers AUDIT-05 verification criteria:
 - Security: Jinja2 autoescape prevents XSS
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 import sys

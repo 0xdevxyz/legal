@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from bs4 import BeautifulSoup
 
 import ai_review_engine
-from compliance_engine.scanner import ComplianceScanner, ComplianceIssue
+from compliance_engine.scanner import ComplianceScanner
 
 
 def _run(coro):

@@ -419,7 +419,8 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
     # 100%-abmahnbare DSGVO-Verstoß, den ein reiner Cookie-Scanner nicht sieht.
     # Einzige Quelle: compliance_engine/privacy_transfer_findings (SSOT).
     from ..privacy_transfer_findings import detect_transfers
-    for finding in detect_transfers(html=html_raw):
+    transfer_findings = detect_transfers(html=html_raw)
+    for finding in transfer_findings:
         issues.append(asdict(DatenschutzIssue(
             category='datenschutz',
             severity=finding['severity'],
@@ -498,6 +499,35 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
                     auto_fixable=False,
                     is_missing=False,
                 )))
+
+    # AVV-Pflicht (DSGVO Art. 28): Sobald externe Dienstleister personenbezogene
+    # Daten im Auftrag verarbeiten (Drittland-Transfers, US-Dienste, eingebundene
+    # Tools), ist ein Auftragsverarbeitungsvertrag erforderlich. Das lässt sich
+    # extern nicht verifizieren → informativer Hinweis (kein Score-Abzug).
+    if transfer_findings or found_us_services:
+        detected_processors = sorted({
+            *(f.get('title', '').split('(')[0].strip() for f in transfer_findings),
+            *found_us_services,
+        })
+        issues.append(asdict(DatenschutzIssue(
+            category='avv',
+            severity='info',
+            title='Auftragsverarbeitungsverträge (AVV) erforderlich',
+            description=(
+                'Es wurden externe Dienste erkannt, die personenbezogene Daten im Auftrag '
+                'verarbeiten könnten: ' + ', '.join(detected_processors[:6]) + '. '
+                'Für jeden Auftragsverarbeiter ist ein Vertrag nach Art. 28 DSGVO abzuschließen.'
+            ),
+            risk_euro=0,
+            recommendation=(
+                'Schließen Sie mit jedem eingesetzten Dienstleister einen '
+                'Auftragsverarbeitungsvertrag (AVV) ab und führen Sie ein Verzeichnis von '
+                'Verarbeitungstätigkeiten (Art. 30 DSGVO).'
+            ),
+            legal_basis='DSGVO Art. 28, Art. 30',
+            auto_fixable=False,
+            is_missing=False,
+        )))
 
     return issues
 

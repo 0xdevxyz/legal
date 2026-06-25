@@ -4,8 +4,8 @@ Provides comprehensive admin interface for GDPR-compliant lead management
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from typing import Optional
+from datetime import datetime
 import logging
 import os
 from database_service import db_service

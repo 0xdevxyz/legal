@@ -11,11 +11,11 @@ Kein "Abmahnschutz"-Versprechen. Klarer Disclaimer auf allen Responses.
 """
 
 import logging
-from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
-from fastapi import APIRouter, HTTPException, Query
+from typing import Optional
+from datetime import datetime
+from fastapi import APIRouter, Query
 
-from legal_disclaimer import DISCLAIMER_SHORT, DISCLAIMER_LONG
+from legal_disclaimer import DISCLAIMER_SHORT
 
 logger = logging.getLogger(__name__)
 

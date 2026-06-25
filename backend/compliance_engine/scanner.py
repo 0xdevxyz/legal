@@ -7,10 +7,9 @@ import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
 from typing import Dict, List, Any, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 import re
 from datetime import datetime
-import json
 from dataclasses import dataclass, asdict
 import ssl
 import certifi
@@ -21,17 +20,15 @@ logger = logging.getLogger(__name__)
 # Import modulare Checks
 from compliance_engine.checks import (
     check_impressum_compliance,
-    check_impressum_compliance_smart,
     check_datenschutz_compliance,
-    check_datenschutz_compliance_smart,
     check_cookie_compliance,
     check_barrierefreiheit_compliance,
-    check_barrierefreiheit_compliance_smart,
     check_agb_compliance,
     check_shop_compliance,
     check_uwg_compliance,
 )
 from compliance_engine.browser_renderer import smart_fetch_html, detect_client_rendering
+from compliance_engine.checks.cookie_check import consent_render_needed
 
 # Import declarative (data-driven) checks — automatisch befüllbar durch den Legal-Change-Monitor
 from compliance_engine.declarative_check_runner import run_declarative_checks
@@ -156,13 +153,28 @@ class ComplianceScanner:
                     url, notice, reason=reason, status_code=status_code, detected_cms=cms,
                 )
 
-            # Render once if browser is needed, share HTML across all checks
+            # Render once if browser is needed, share HTML across all checks.
+            # Zusätzlich zum klassischen CSR-Trigger wird auch gerendert, wenn ein
+            # (i.d.R. JS-injizierter) Cookie-Banner/Consent/Tracking vermutet wird,
+            # der im statischen HTML nicht sichtbar ist — sonst können dessen echte
+            # Buttons nicht funktional geprüft werden (Custom-Banner & Fehlkonfig.).
             rendered_html = main_page['content']
-            if detect_client_rendering(main_page['content'])[0]:
-                logger.info("🌐 Browser rendering needed — fetching once for all checks")
-                rendered_html, _ = await smart_fetch_html(url, main_page['content'])
-                logger.info("✅ Single browser render complete")
-                soup = BeautifulSoup(rendered_html, 'html.parser')
+            consent_buttons = None  # Button-Metriken aus dem Render (Dark-Pattern-Prüfung)
+            needs_render = detect_client_rendering(main_page['content'])[0]
+            render_reason = "client-side rendering"
+            if not needs_render and consent_render_needed(soup):
+                needs_render = True
+                render_reason = "consent/cookie-banner detection"
+            if needs_render:
+                logger.info(f"🌐 Browser rendering needed ({render_reason}) — fetching once for all checks")
+                try:
+                    rendered_html, render_meta = await smart_fetch_html(url, main_page['content'], force=True)
+                    logger.info("✅ Single browser render complete")
+                    soup = BeautifulSoup(rendered_html, 'html.parser')
+                    if isinstance(render_meta, dict):
+                        consent_buttons = render_meta.get('consent_buttons')
+                except Exception as e:
+                    logger.warning(f"⚠️ Browser render failed ({e}); fallback auf statisches HTML")
 
             # 🔎 Grundsystem (CMS) + Produktiv-Status erkennen
             detected_cms = self._detect_cms(soup, main_page_headers)
@@ -191,7 +203,7 @@ class ComplianceScanner:
             barriere_task = check_barrierefreiheit_compliance(url, soup, None)
             impressum_task = check_impressum_compliance(url, soup, self.session)
             datenschutz_task = check_datenschutz_compliance(url, soup, self.session)
-            cookie_task = check_cookie_compliance(url, soup, self.session)
+            cookie_task = check_cookie_compliance(url, soup, self.session, consent_buttons=consent_buttons)
             agb_task = check_agb_compliance(url, soup, self.session)
             shop_task = check_shop_compliance(url, soup, self.session)
             declarative_task = run_declarative_checks(url, soup, self.session)
@@ -509,6 +521,49 @@ class ComplianceScanner:
                     recommendation='Setzen Sie: X-Frame-Options: SAMEORIGIN oder frame-ancestors in der CSP.',
                 ))
 
+            # Hosting-Standort (DSGVO Art. 44 / Art. 28): Erkennbare US-Cloud-/CDN-
+            # Marker in den Response-Headern deuten auf Datenverarbeitung außerhalb
+            # der EU hin. Verlässlich extern nur über Header indizierbar → info,
+            # damit der Nutzer Hosting-Standort und AVV mit dem Anbieter prüft.
+            us_host_markers = {
+                'CloudFront (AWS)':   ['x-amz-cf-id', 'x-amz-cf-pop'],
+                'Amazon S3/AWS':      ['x-amz-request-id', 'x-amz-id-2'],
+                'Vercel':             ['x-vercel-id', 'x-vercel-cache'],
+                'Netlify':            ['x-nf-request-id'],
+                'GitHub Pages':       ['x-github-request-id'],
+                'Google Cloud':       ['x-goog-generation', 'x-guploader-uploadid'],
+                'Heroku':             ['x-heroku-dynos-in-use'],
+            }
+            detected_hosts = [
+                name for name, keys in us_host_markers.items()
+                if any(k in headers_lower for k in keys)
+            ]
+            # 'Server'-Header zusätzlich auswerten (z. B. AmazonS3, Vercel)
+            server_hdr = headers_lower.get('server', '').lower()
+            for name, needle in (('Amazon S3/AWS', 'amazons3'), ('Vercel', 'vercel'), ('Google Cloud', 'gws')):
+                if needle in server_hdr and name not in detected_hosts:
+                    detected_hosts.append(name)
+
+            if detected_hosts:
+                issues.append(ComplianceIssue(
+                    category='datenschutz',
+                    severity='info',
+                    title='Hosting/CDN außerhalb der EU prüfen',
+                    description=(
+                        'Die Response-Header deuten auf einen US-/Nicht-EU-Anbieter hin: '
+                        f'{", ".join(detected_hosts)}. Werden dort personenbezogene Daten '
+                        '(inkl. Server-Logs mit IP) verarbeitet, ist dies ein Drittlandtransfer '
+                        'und erfordert eine Rechtsgrundlage sowie einen AVV.'
+                    ),
+                    risk_euro=0,
+                    legal_basis='DSGVO Art. 44 ff., Art. 28',
+                    recommendation=(
+                        'Prüfen Sie den tatsächlichen Verarbeitungsstandort, schließen Sie einen '
+                        'AVV mit dem Anbieter ab und dokumentieren Sie die Transfer-Grundlage '
+                        '(EU-US DPF / SCCs). Alternativ: EU-Hosting wählen.'
+                    ),
+                ))
+
         return issues
 
     async def _check_contact_data(self, base_url: str, soup: BeautifulSoup) -> List[ComplianceIssue]:
@@ -565,8 +620,110 @@ class ComplianceScanner:
                 ),
             ))
 
+        # ── Formular-Datenschutz (DSGVO Art. 13 bei Datenerhebung) ──────────
+        # Erhebt ein Formular personenbezogene Daten, muss am Erhebungspunkt auf
+        # die Datenschutzerklärung hingewiesen werden (Art. 13). Wir prüfen pro
+        # Formular, ob es personenbezogene Felder hat UND ob ein Datenschutz-/
+        # Einwilligungs-Bezug im Formular selbst erkennbar ist (Checkbox oder
+        # Datenschutz-/Einwilligungs-Hinweis). Newsletter-Anmeldungen werden
+        # zusätzlich auf Double-Opt-In/Einwilligung hingewiesen.
+        personal_field_names = (
+            'name', 'mail', 'email', 'e-mail', 'tel', 'phone', 'telefon',
+            'nachricht', 'message', 'betreff', 'subject', 'anrede', 'vorname',
+            'nachname', 'adresse', 'address', 'strasse', 'plz', 'ort',
+        )
+        form_privacy_flagged = False
+        newsletter_flagged = False
+
+        for form in soup.find_all('form'):
+            form_text = form.get_text(' ', strip=True).lower()
+            form_html = str(form).lower()
+
+            inputs = form.find_all(['input', 'textarea', 'select'])
+            input_types = {(i.get('type') or '').lower() for i in form.find_all('input')}
+            has_textarea = bool(form.find('textarea'))
+            has_email_field = 'email' in input_types or bool(
+                re.search(r'name=["\'][^"\']*(mail|email)', form_html)
+            )
+
+            # Personenbezogenes Formular? (Such-/Filterleisten ausschließen)
+            is_search = (
+                'search' in input_types
+                or (form.get('role') or '').lower() == 'search'
+                or 'search' in (form.get('class') and ' '.join(form.get('class')).lower() or '')
+            )
+            collects_personal = (
+                not is_search
+                and (
+                    has_textarea
+                    or has_email_field
+                    or 'tel' in input_types
+                    or any(
+                        kw in (i.get('name') or '').lower() or kw in (i.get('id') or '').lower()
+                        or kw in (i.get('placeholder') or '').lower()
+                        for i in inputs for kw in personal_field_names
+                    )
+                )
+            )
+            if not collects_personal:
+                continue
+
+            is_newsletter = bool(re.search(
+                r'newsletter|abonnier|subscribe|anmeld.*(news|verteiler)|verteiler',
+                form_text + ' ' + form_html
+            ))
+            has_privacy_ref = bool(re.search(
+                r'datenschutz|privacy|einwillig|consent|zustimm', form_html
+            )) or bool(form.find('input', attrs={'type': 'checkbox'}))
+
+            # (#4) Newsletter ohne erkennbaren Einwilligungs-/DOI-Bezug
+            if is_newsletter and not newsletter_flagged:
+                newsletter_flagged = True
+                if not has_privacy_ref:
+                    issues.append(ComplianceIssue(
+                        category='datenschutz',
+                        severity='warning',
+                        title='Newsletter-Anmeldung ohne erkennbare Einwilligung',
+                        description=(
+                            'Es wurde eine Newsletter-/E-Mail-Anmeldung gefunden, aber kein '
+                            'Einwilligungs-Bezug (Checkbox / Datenschutz-Hinweis) im Formular. '
+                            'Newsletter-Versand erfordert eine nachweisbare Einwilligung und '
+                            'ein Double-Opt-In-Verfahren (Bestätigungsmail).'
+                        ),
+                        risk_euro=2000,
+                        legal_basis='DSGVO Art. 6 Abs. 1 lit. a, Art. 7; § 7 UWG',
+                        recommendation=(
+                            'Ergänzen Sie eine aktive Einwilligungs-Checkbox mit Verweis auf die '
+                            'Datenschutzerklärung und richten Sie ein Double-Opt-In ein '
+                            '(Bestätigungs-Mail, deren Klick protokolliert wird).'
+                        ),
+                    ))
+                continue
+
+            # (#3) Personenbezogenes Formular ohne Datenschutz-Hinweis am Erhebungspunkt
+            if collects_personal and not has_privacy_ref and not form_privacy_flagged:
+                form_privacy_flagged = True
+                issues.append(ComplianceIssue(
+                    category='datenschutz',
+                    severity='warning',
+                    title='Formular ohne Datenschutzhinweis (Art. 13)',
+                    description=(
+                        'Ein Formular erhebt personenbezogene Daten, ohne dass am Erhebungspunkt '
+                        'ein Datenschutz-Hinweis oder eine Einwilligungs-Checkbox erkennbar ist. '
+                        'Nach DSGVO Art. 13 müssen Betroffene bereits bei der Datenerhebung über '
+                        'die Verarbeitung informiert werden.'
+                    ),
+                    risk_euro=1500,
+                    legal_basis='DSGVO Art. 13',
+                    recommendation=(
+                        'Fügen Sie direkt am Formular einen kurzen Datenschutzhinweis mit Link zur '
+                        'Datenschutzerklärung hinzu (ggf. zusätzlich eine Einwilligungs-Checkbox, '
+                        'wenn keine andere Rechtsgrundlage greift).'
+                    ),
+                ))
+
         return issues
-    
+
     async def _check_social_media_plugins(self, base_url: str, soup: BeautifulSoup) -> List[ComplianceIssue]:
         """
         Prüft auf eingebettete Social-Media-Plugins die ohne Consent Daten übertragen.
@@ -574,10 +731,13 @@ class ComplianceScanner:
         """
         issues = []
 
+        # ⚠️ YouTube wird hier NICHT geprüft — Video-Embeds (inkl. korrektem
+        # youtube-nocookie-Ausschluss) deckt privacy_transfer_findings als
+        # eigenständiges Datenschutz-Issue ab. Doppelte Erfassung würde sonst
+        # ein Issue in zwei Säulen erzeugen und youtube-nocookie fälschlich flaggen.
         social_patterns = {
             'Facebook': [r'facebook\.com/plugins', r'connect\.facebook\.net', r'facebook\.com/tr'],
             'Twitter/X': [r'platform\.twitter\.com', r'syndication\.twitter\.com'],
-            'YouTube': [r'youtube\.com/embed', r'youtube-nocookie\.com', r'ytimg\.com'],
             'Instagram': [r'instagram\.com/embed', r'cdninstagram\.com'],
             'LinkedIn': [r'platform\.linkedin\.com', r'snap\.licdn\.com'],
             'TikTok': [r'tiktok\.com/embed', r'analytics\.tiktok\.com'],
