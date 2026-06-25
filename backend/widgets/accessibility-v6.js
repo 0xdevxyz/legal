@@ -83,7 +83,13 @@
       alignDefault: 'Standard',
       alignLeft: 'Linksbündig',
       alignCenter: 'Zentriert',
-      alignRight: 'Rechtsbündig'
+      alignRight: 'Rechtsbündig',
+      // Rechtliches / Barrierefreiheit
+      legalTitle: 'Rechtliches & Barrierefreiheit',
+      legalDisclaimer: 'Diese Hilfsfunktionen erleichtern die Bedienung dieser Website. Sie ersetzen jedoch keine vollständige Barrierefreiheit im Sinne des BFSG bzw. der WCAG.',
+      a11yStatement: 'Barrierefreiheitserklärung',
+      reportBarrier: 'Barriere melden',
+      conciliationBody: 'Schlichtungsstelle BGG'
     },
     en: {
       title: 'Accessibility Menu (CTRL+U)',
@@ -140,7 +146,13 @@
       alignDefault: 'Default',
       alignLeft: 'Left',
       alignCenter: 'Center',
-      alignRight: 'Right'
+      alignRight: 'Right',
+      // Legal / accessibility
+      legalTitle: 'Legal & Accessibility',
+      legalDisclaimer: 'These assistive features make this website easier to use. They do not, however, replace full accessibility as required by the EAA/BFSG or WCAG.',
+      a11yStatement: 'Accessibility statement',
+      reportBarrier: 'Report a barrier',
+      conciliationBody: 'Conciliation body (BGG)'
     }
   };
   
@@ -152,7 +164,11 @@
         position: config.position || 'bottom-right',
         language: config.language || 'de'
       };
-      
+
+      // Rechts-/Barrierefreiheits-Konfig (pro Seite via Script-Attribute, optional
+      // zentral über den Config-Endpoint ergänzt – siehe checkLicense()).
+      this.config.legal = this.readLegalConfig(config.legal);
+
       // Simplified features for tile-based UI
       this.features = {
         // Toggle Features (Tiles)
@@ -337,11 +353,37 @@
     }
 
     getSiteIdFromScript() {
+      const el = this.getScriptEl();
+      return el ? el.getAttribute('data-site-id') : 'demo';
+    }
+
+    // Das einbindende <script>-Tag (zur Konfiguration via data-Attribute)
+    getScriptEl() {
       const scripts = document.querySelectorAll('script[data-site-id]');
-      if (scripts.length > 0) {
-        return scripts[scripts.length - 1].getAttribute('data-site-id');
-      }
-      return 'demo';
+      return scripts.length ? scripts[scripts.length - 1] : null;
+    }
+
+    // Rechts-Konfig aus Script-Attributen lesen. Reihenfolge: expliziter Override
+    // (programmatische Initialisierung) > data-Attribute > Standard.
+    readLegalConfig(override = {}) {
+      const el = this.getScriptEl();
+      const attr = (n) => ((el && el.getAttribute(n)) || '').trim();
+      return {
+        statementUrl: override.statementUrl || attr('data-a11y-statement-url'),
+        feedback:     override.feedback     || attr('data-a11y-feedback'),
+        // Schlichtungsstelle BGG ist die offizielle DE-Stelle; per Attribut abschalt-/änderbar
+        conciliationEnabled: (override.conciliation || attr('data-a11y-conciliation') || 'on') !== 'off',
+        conciliationName: override.conciliationName || attr('data-a11y-conciliation-name') || 'Schlichtungsstelle BGG',
+        conciliationUrl:  override.conciliationUrl  || attr('data-a11y-conciliation-url')  || 'https://www.schlichtungsstelle-bgg.de'
+      };
+    }
+
+    // "Barriere melden"-Ziel: E-Mail oder URL → korrektes href
+    feedbackHref(v) {
+      if (!v) return '';
+      if (/^(https?:|mailto:|tel:)/i.test(v)) return v;
+      if (v.includes('@')) return 'mailto:' + v;
+      return v;
     }
 
     // 🔒 Prüft, ob für diese Website noch eine aktive Lizenz besteht.
@@ -353,6 +395,11 @@
         const res = await fetch(`${API_BASE}/api/widgets/config/${siteId}`);
         if (!res.ok) return true;
         const data = await res.json();
+        // Optionale zentrale Rechts-Konfig aus dem Dashboard übernehmen.
+        // Script-Attribute haben Vorrang (nur leere Felder werden gefüllt).
+        const L = this.config.legal;
+        if (!L.statementUrl && data.accessibility_statement_url) L.statementUrl = data.accessibility_statement_url;
+        if (!L.feedback && data.accessibility_feedback) L.feedback = data.accessibility_feedback;
         return data.license_active !== false;
       } catch (e) {
         return true;
@@ -665,6 +712,13 @@
             <button class="complyo-btn-reset" id="complyo-reset-all" data-i18n="resetAllSettings">
               Reset All Settings
             </button>
+            <details class="complyo-legal">
+              <summary data-i18n="legalTitle">Rechtliches &amp; Barrierefreiheit</summary>
+              <div class="complyo-legal-body">
+                <p class="complyo-legal-disclaimer" data-i18n="legalDisclaimer"></p>
+                <div class="complyo-legal-links" id="complyo-legal-links"></div>
+              </div>
+            </details>
             <div class="complyo-footer-info">
               <span class="complyo-version">Complyo Widget v${WIDGET_VERSION}</span>
             </div>
@@ -785,10 +839,38 @@
       // (CSS filter auf parent erstellt neuen containing block für position:fixed)
       document.documentElement.appendChild(container);
       this.container = container;
-      
+
       this.setupEventListeners();
+      this.populateLegalLinks();
     }
-    
+
+    // Baut die Rechts-Links (Erklärung, Barriere melden, Schlichtungsstelle) je nach Konfig.
+    populateLegalLinks() {
+      const wrap = this.container.querySelector('#complyo-legal-links');
+      if (!wrap) return;
+      const L = this.config.legal || {};
+      const items = [];
+      if (L.statementUrl) {
+        items.push({ href: L.statementUrl, label: this.t('a11yStatement'), external: true });
+      }
+      const fb = this.feedbackHref(L.feedback);
+      if (fb) {
+        items.push({ href: fb, label: this.t('reportBarrier'), external: !/^mailto:|^tel:/i.test(fb) });
+      }
+      if (L.conciliationEnabled && L.conciliationUrl) {
+        items.push({ href: L.conciliationUrl, label: L.conciliationName || this.t('conciliationBody'), external: true });
+      }
+      wrap.innerHTML = '';
+      items.forEach(it => {
+        const a = document.createElement('a');
+        a.className = 'complyo-legal-link';
+        a.href = it.href;
+        if (it.external) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+        a.textContent = it.label;
+        wrap.appendChild(a);
+      });
+    }
+
     setupEventListeners() {
       const panel = this.container.querySelector('.complyo-panel');
       const toggleBtn = this.container.querySelector('.complyo-toggle-btn');
@@ -1923,7 +2005,48 @@
           font-size: 11px;
           color: var(--c-text-muted);
         }
-        
+
+        /* ===== RECHTLICHES / BARRIEREFREIHEIT ===== */
+        .complyo-legal {
+          font-size: 12px;
+          color: var(--c-text-muted);
+        }
+        .complyo-legal > summary {
+          cursor: pointer;
+          list-style: none;
+          font-weight: 600;
+          color: var(--c-text-mid);
+          padding: 6px 0;
+          user-select: none;
+        }
+        .complyo-legal > summary::-webkit-details-marker { display: none; }
+        .complyo-legal > summary::before {
+          content: '▸';
+          display: inline-block;
+          margin-right: 6px;
+          transition: transform 0.15s ease;
+        }
+        .complyo-legal[open] > summary::before { transform: rotate(90deg); }
+        .complyo-legal-body {
+          padding: 4px 0 2px;
+        }
+        .complyo-legal-disclaimer {
+          margin: 0 0 8px;
+          line-height: 1.5;
+          color: var(--c-text-muted);
+        }
+        .complyo-legal-links {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .complyo-legal-link {
+          color: var(--c-accent);
+          text-decoration: underline;
+          font-weight: 500;
+        }
+        .complyo-legal-link:hover { color: var(--c-accent-hover); }
+
         /* ===== OVERLAYS ===== */
         [hidden] {
           display: none !important;

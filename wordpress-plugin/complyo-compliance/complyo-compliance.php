@@ -3,7 +3,7 @@
  * Plugin Name: Complyo Compliance
  * Plugin URI: https://complyo.tech
  * Description: DSGVO-konformes Cookie-Banner und Accessibility-Widget. Konfiguration über app.complyo.tech.
- * Version: 2.3.0
+ * Version: 2.4.0
  * Author: Complyo
  * Author URI: https://complyo.tech
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('COMPLYO_VERSION',        '2.3.0');
+define('COMPLYO_VERSION',        '2.4.0');
 define('COMPLYO_API_BASE',       'https://api.complyo.de');
 define('COMPLYO_APP_URL',        'https://app.complyo.tech');
 define('COMPLYO_PLUGIN_DIR',     plugin_dir_path(__FILE__));
@@ -31,6 +31,8 @@ define('COMPLYO_OPTION_TCF',     'complyo_enable_tcf');
 define('COMPLYO_OPTION_SCANNER', 'complyo_enable_scanner');
 define('COMPLYO_OPTION_LOCAL_FONTS', 'complyo_enable_local_fonts');
 define('COMPLYO_OPTION_INLINE_BLOCKER', 'complyo_enable_inline_blocker');
+define('COMPLYO_OPTION_A11Y_STATEMENT', 'complyo_a11y_statement_url');
+define('COMPLYO_OPTION_A11Y_FEEDBACK',  'complyo_a11y_feedback');
 
 require_once COMPLYO_PLUGIN_DIR . 'includes/class-complyo-local-fonts.php';
 require_once COMPLYO_PLUGIN_DIR . 'includes/class-complyo-inline-blocker.php';
@@ -201,10 +203,16 @@ class Complyo_Compliance {
         }
 
         if ($enable_a11y === '1') {
+            $a11y_statement = get_option(COMPLYO_OPTION_A11Y_STATEMENT, '');
+            $a11y_feedback  = get_option(COMPLYO_OPTION_A11Y_FEEDBACK, '');
+            $statement_attr = $a11y_statement !== '' ? ' data-a11y-statement-url="' . esc_url($a11y_statement) . '"' : '';
+            $feedback_attr  = $a11y_feedback  !== '' ? ' data-a11y-feedback="' . esc_attr($a11y_feedback) . '"' : '';
             echo '<script src="' . $api . '/api/widgets/accessibility.js"'
                 . ' data-site-id="' . $site_id . '"'
                 . ' data-auto-fix="true"'
                 . ' data-show-toolbar="true"'
+                . $statement_attr
+                . $feedback_attr
                 . ' data-cfasync="false"'
                 . ' data-no-optimize="1"'
                 . ' async'
@@ -372,6 +380,12 @@ class Complyo_Compliance {
         register_setting('complyo_settings_group', COMPLYO_OPTION_SCANNER,  $args_flag);
         register_setting('complyo_settings_group', COMPLYO_OPTION_LOCAL_FONTS, $args_flag);
         register_setting('complyo_settings_group', COMPLYO_OPTION_INLINE_BLOCKER, $args_flag);
+        register_setting('complyo_settings_group', COMPLYO_OPTION_A11Y_STATEMENT, array(
+            'type'              => 'string',
+            'sanitize_callback' => 'esc_url_raw',
+            'default'           => '',
+        ));
+        register_setting('complyo_settings_group', COMPLYO_OPTION_A11Y_FEEDBACK, $args_string);
     }
 
     public function admin_enqueue_scripts($hook) {
@@ -394,6 +408,8 @@ class Complyo_Compliance {
         $site_id      = $this->get_site_id();
         $enable_cookie = get_option(COMPLYO_OPTION_COOKIE, '1');
         $enable_a11y   = get_option(COMPLYO_OPTION_A11Y, '0');
+        $a11y_statement = get_option(COMPLYO_OPTION_A11Y_STATEMENT, '');
+        $a11y_feedback  = get_option(COMPLYO_OPTION_A11Y_FEEDBACK, '');
         $enable_tcf    = get_option(COMPLYO_OPTION_TCF, '0');
         $enable_scanner = get_option(COMPLYO_OPTION_SCANNER, '1');
         $enable_fonts   = get_option(COMPLYO_OPTION_LOCAL_FONTS, '0');
@@ -521,6 +537,27 @@ class Complyo_Compliance {
                                            <?php checked($enable_a11y, '1'); ?> />
                                     <?php esc_html_e('WCAG 2.2 Level AA Barrierefreiheits-Widget aktivieren', 'complyo-compliance'); ?>
                                 </label>
+                                <p style="margin-top:12px;">
+                                    <label for="complyo_a11y_statement_url"><strong><?php esc_html_e('Barrierefreiheitserklärung (URL)', 'complyo-compliance'); ?></strong></label><br>
+                                    <input type="url"
+                                           id="complyo_a11y_statement_url"
+                                           name="<?php echo esc_attr(COMPLYO_OPTION_A11Y_STATEMENT); ?>"
+                                           value="<?php echo esc_attr($a11y_statement); ?>"
+                                           class="regular-text"
+                                           placeholder="https://ihre-domain.de/barrierefreiheit" />
+                                </p>
+                                <p style="margin-top:8px;">
+                                    <label for="complyo_a11y_feedback"><strong><?php esc_html_e('Barriere melden – Kontakt (E-Mail oder URL)', 'complyo-compliance'); ?></strong></label><br>
+                                    <input type="text"
+                                           id="complyo_a11y_feedback"
+                                           name="<?php echo esc_attr(COMPLYO_OPTION_A11Y_FEEDBACK); ?>"
+                                           value="<?php echo esc_attr($a11y_feedback); ?>"
+                                           class="regular-text"
+                                           placeholder="barrierefreiheit@ihre-domain.de" />
+                                </p>
+                                <p class="description">
+                                    <?php esc_html_e('Diese Links erscheinen im Widget unter „Rechtliches & Barrierefreiheit“. Der Haftungs-Hinweis und die Schlichtungsstelle BGG werden automatisch angezeigt.', 'complyo-compliance'); ?>
+                                </p>
                             </td>
                         </tr>
                         <tr>
