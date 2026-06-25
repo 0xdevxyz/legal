@@ -53,9 +53,50 @@
             
             // Load existing consent
             this.loadConsent();
-            
+
+            // Auf Consent aus dem Banner reagieren. Der Banner feuert
+            // 'complyoConsent' (window + document), ruft aber NICHT direkt
+            // updateConsent() auf. Ohne diesen Listener blieben die im <head>
+            // synchron blockierten Font-/CSS-<link>s nach "Akzeptieren" mit
+            // media="not all" hängen → die Schrift lud erst nach Seiten-Reload.
+            const onConsent = (e) => this.applyConsentFromEvent(e);
+            window.addEventListener('complyoConsent', onConsent);
+            document.addEventListener('complyoConsent', onConsent);
+
             this.state.initialized = true;
             console.log('[Complyo] ✅ Cookie Blocker initialized');
+        },
+
+        /**
+         * Consent-Event des Banners verarbeiten: Kategorien in das interne
+         * Consent-Format überführen und blockierte Elemente (insb. Google-Fonts-
+         * Stylesheets) SOFORT wieder freigeben – ohne Page-Reload.
+         */
+        applyConsentFromEvent: function(e) {
+            const detail = (e && e.detail) || {};
+            const cats   = detail.categories || {};
+
+            const accepted = !!(cats.functional || cats.analytics || cats.marketing);
+            const consent = {
+                accepted: accepted,
+                consent_categories: {
+                    necessary:  true,
+                    functional: cats.functional === true,
+                    analytics:  cats.analytics  === true,
+                    marketing:  cats.marketing  === true
+                }
+            };
+
+            this.state.consent = consent;
+
+            // Freigeben, was jetzt erlaubt ist (Fonts/CSS = funktional). Bei reiner
+            // Ablehnung Tracking-Cookies entfernen.
+            this.unblockElements();
+            if (!accepted) {
+                this.deleteCookies();
+            }
+
+            console.log('[Complyo] Consent via Banner-Event übernommen:', consent);
         },
         
         /**

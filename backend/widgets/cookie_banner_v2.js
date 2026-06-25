@@ -1201,7 +1201,7 @@
                 .complyo-cookie-banner {
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
                     font-size: 14px;
-                    line-height: 1.6;
+                    line-height: 1.45;
                     box-sizing: border-box;
                 }
                 
@@ -1286,10 +1286,10 @@
                     background: ${bgColor};
                     color: ${textColor};
                     border-radius: 12px;
-                    padding: 48px 52px;
-                    max-width: 720px;
+                    padding: 28px 32px;
+                    max-width: 520px;
                     width: 92%;
-                    max-height: 88vh;
+                    max-height: 85vh;
                     overflow-y: auto;
                     box-shadow: 0 24px 72px rgba(0, 0, 0, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1);
                     z-index: 1000000;
@@ -1332,21 +1332,21 @@
                 }
                 
                 .complyo-title {
-                    margin: 0 0 28px 0;
-                    font-size: 26px;
+                    margin: 0 0 14px 0;
+                    font-size: 21px;
                     font-weight: 700;
                     color: ${textColor};
                     text-align: center;
                     letter-spacing: -0.02em;
-                    line-height: 1.3;
+                    line-height: 1.25;
                 }
-                
+
                 .complyo-description {
-                    margin: 0 0 18px 0;
+                    margin: 0 0 12px 0;
                     color: ${textColor};
                     opacity: 0.88;
-                    line-height: 1.75;
-                    font-size: 15px;
+                    line-height: 1.5;
+                    font-size: 14px;
                     text-align: left;
                     white-space: pre-line;
                 }
@@ -1377,14 +1377,14 @@
                 .complyo-actions {
                     display: flex;
                     flex-direction: column;
-                    gap: 14px;
-                    margin-top: 36px;
+                    gap: 10px;
+                    margin-top: 22px;
                 }
-                
+
                 .complyo-btn {
-                    padding: 17px 32px;
+                    padding: 13px 26px;
                     border: none;
-                    font-size: 16px;
+                    font-size: 15px;
                     font-weight: 600;
                     cursor: pointer;
                     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1705,8 +1705,8 @@
                 
                 /* Footer Links */
                 .complyo-footer {
-                    margin-top: 32px;
-                    padding-top: 24px;
+                    margin-top: 20px;
+                    padding-top: 14px;
                     border-top: 1px solid rgba(0, 0, 0, 0.08);
                     display: flex;
                     justify-content: center;
@@ -1753,19 +1753,19 @@
                     }
                     
                     .complyo-box-layout {
-                        padding: 36px 28px;
+                        padding: 24px 22px;
                         width: 94%;
                         max-height: 90vh;
                     }
-                    
+
                     .complyo-title {
-                        font-size: 22px;
-                        margin-bottom: 22px;
+                        font-size: 20px;
+                        margin-bottom: 14px;
                     }
-                    
+
                     .complyo-description {
                         font-size: 14px;
-                        line-height: 1.7;
+                        line-height: 1.5;
                     }
                     
                     .complyo-age-notice {
@@ -1779,13 +1779,13 @@
                     }
                     
                     .complyo-actions {
-                        margin-top: 28px;
-                        gap: 12px;
+                        margin-top: 18px;
+                        gap: 10px;
                     }
-                    
+
                     .complyo-footer {
-                        margin-top: 28px;
-                        padding-top: 20px;
+                        margin-top: 16px;
+                        padding-top: 12px;
                         font-size: 13px;
                         gap: 12px;
                     }
