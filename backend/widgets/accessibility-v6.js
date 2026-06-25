@@ -259,7 +259,7 @@
       
       container.innerHTML = `
         <button class="complyo-toggle-btn" aria-label="Barrierefreiheit öffnen" aria-expanded="false" title="Barrierefreiheit (CTRL+U)">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <!-- Universal Accessibility Symbol -->
             <circle cx="12" cy="12" r="10"/>
             <circle cx="12" cy="8" r="1.5" fill="currentColor"/>
@@ -1512,29 +1512,31 @@
         }
         
         .complyo-widget-bottom-right {
-          bottom: 100px;
-          right: 30px;
+          bottom: 20px;
+          right: 20px;
         }
-        
+
         /* ===== TOGGLE BUTTON ===== */
+        /* Maße/Form/Position passend zum Cookie-Settings-Button (links): 48x48, radius 12px, 20px Abstand */
         .complyo-toggle-btn {
-          width: 64px;
-          height: 64px;
-          border-radius: 50%;
+          width: 48px;
+          height: 48px;
+          border-radius: 12px;
           background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
           color: white;
           border: none;
-          box-shadow: 0 4px 20px rgba(67, 97, 238, 0.4);
+          box-shadow: 0 4px 14px rgba(67, 97, 238, 0.4);
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.3s ease;
+          padding: 0;
+          transition: all 0.2s ease;
         }
-        
+
         .complyo-toggle-btn:hover {
-          transform: scale(1.1);
-          box-shadow: 0 6px 24px rgba(67, 97, 238, 0.5);
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(67, 97, 238, 0.5);
         }
         
         /* ===== PANEL ===== */
