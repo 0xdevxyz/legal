@@ -212,6 +212,39 @@ async def serve_accessibility_widget(request: Request, version: str = "6"):
     )
 
 
+@router.get("/api/widgets/a11y-fixes.js")
+async def serve_a11y_remediation_widget(request: Request):
+    """
+    Runtime-Alt-Text-Remediation für React/Vue/Angular/SPAs (Channel #3).
+    Wendet freigegebene KI-Alt-Texte ins Live-DOM an + MutationObserver.
+    """
+    widget_path = os.path.join(WIDGET_DIR, 'a11y_remediation.js')
+    if not os.path.exists(widget_path):
+        raise HTTPException(status_code=404, detail="Widget not found")
+
+    with open(widget_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    etag = f'"{hashlib.md5(content.encode()).hexdigest()}"'
+    headers = {
+        # Wie accessibility.js: per ETag revalidieren statt lange cachen.
+        'Cache-Control': 'no-cache, must-revalidate',
+        'Access-Control-Allow-Origin': '*',
+        'ETag': etag,
+        'Vary': 'Accept-Encoding',
+    }
+    if request.headers.get('if-none-match') == etag:
+        return Response(status_code=304, headers=headers)
+
+    accept_encoding = request.headers.get('Accept-Encoding', '')
+    if 'gzip' in accept_encoding:
+        compressed = gzip.compress(content.encode('utf-8'))
+        headers['Content-Encoding'] = 'gzip'
+        return Response(content=compressed, media_type='application/javascript', headers=headers)
+
+    return Response(content=content, media_type='application/javascript', headers=headers)
+
+
 @router.post("/api/widgets/track")
 async def track_widget_event(event: WidgetTrackingEvent):
     """
