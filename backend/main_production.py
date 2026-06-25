@@ -389,6 +389,26 @@ async def init_db():
                 except Exception as e:
                     print(f"⚠️ Warning applying {filename}: {e}")
 
+        # Pflicht-Migrationen aus migrations/ idempotent sicherstellen (self-healing
+        # bei jedem Deploy). Bewusst KEIN Blind-Apply des gesamten Ordners: nur
+        # kuratierte, idempotente Dateien (CREATE ... IF NOT EXISTS / CREATE OR REPLACE).
+        # Andere Migrationen (z. B. complete_migration.sql) sind NICHT idempotent.
+        migrations_dir = os.path.join(backend_dir, 'migrations')
+        ensure_migrations = [
+            'create_accessibility_alt_text_fixes.sql',
+            'create_alt_text_review_queue.sql',
+            'create_accessibility_fix_packages.sql',
+        ]
+        for filename in ensure_migrations:
+            filepath = os.path.join(migrations_dir, filename)
+            if os.path.exists(filepath):
+                try:
+                    print(f"⚙️ Ensuring migration: {filename}")
+                    await execute_sql_from_file(connection, filepath)
+                    print(f"✅ {filename} ensured")
+                except Exception as e:
+                    print(f"⚠️ Warning ensuring {filename}: {e}")
+
 async def close_db():
     global db_pool
     if db_pool:

@@ -136,7 +136,8 @@ SELECT
     atf.deployed_at,
     sh.compliance_score as scan_score
 FROM accessibility_alt_text_fixes atf
-LEFT JOIN users u ON atf.user_id = u.id
+-- user_id ist UUID, users.id ist hier INTEGER → Text-Cast, damit der View nicht bricht
+LEFT JOIN users u ON u.id::text = atf.user_id::text
 LEFT JOIN scan_history sh ON atf.scan_id = sh.scan_id
 ORDER BY atf.created_at DESC;
 
