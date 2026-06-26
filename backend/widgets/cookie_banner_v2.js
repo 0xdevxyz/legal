@@ -1732,18 +1732,41 @@
                 /* Branding */
                 .complyo-branding {
                     margin-top: 16px;
-                    text-align: center;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 7px;
                     font-size: 12px;
-                    opacity: 0.6;
                 }
-                
-                .complyo-branding a {
-                    color: ${primaryColor};
+
+                .complyo-branding-prefix {
+                    color: ${textColor};
+                    opacity: 0.55;
+                }
+
+                .complyo-branding-link {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
                     text-decoration: none;
+                    transition: opacity 0.2s ease;
                 }
-                
-                .complyo-branding a:hover {
-                    text-decoration: underline;
+
+                .complyo-branding-link:hover {
+                    opacity: 0.8;
+                }
+
+                .complyo-branding-logo {
+                    width: 16px;
+                    height: auto;
+                    color: ${primaryColor};
+                    flex-shrink: 0;
+                }
+
+                .complyo-branding-word {
+                    color: ${textColor};
+                    font-weight: 600;
+                    letter-spacing: 0.2px;
                 }
                 
                 /* Responsive */
@@ -1907,7 +1930,14 @@
                     </div>
                     ${this.config.showBranding ? `
                         <div class="complyo-branding">
-                            Powered by <a href="https://complyo.de" target="_blank" rel="noopener">Complyo</a>
+                            <span class="complyo-branding-prefix">Powered by</span>
+                            <a class="complyo-branding-link" href="https://complyo.de" target="_blank" rel="noopener" aria-label="Complyo">
+                                <svg class="complyo-branding-logo" viewBox="0 0 30 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                                    <path d="M15 2 L26 6 V16.5 C26 23.5 21 28.5 15 30.5 C9 28.5 4 23.5 4 16.5 V6 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                    <path d="M19.2 10.6 C18.2 9.9 16.7 9.5 15 9.5 C12 9.5 9.5 11.5 9.5 14 C9.5 16.5 12 18.5 15 18.5 C16.7 18.5 18.2 18.1 19.2 17.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span class="complyo-branding-word">Complyo</span>
+                            </a>
                         </div>
                     ` : ''}
                 </div>
