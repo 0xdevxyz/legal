@@ -45,7 +45,12 @@ class AccessibilityPostScanProcessor:
         """
         try:
             logger.info(f"🔍 Processing accessibility scan for {site_url}")
-            
+
+            # Stabile, domain-abgeleitete Site-ID. WICHTIG: Die Channels (WP-Plugin,
+            # HTML-CLI, SPA-Runtime) fragen Fixes mit GENAU dieser ID ab. Früher wurde
+            # unter scan_id gespeichert → Channel-Lookup lief ins Leere (stiller No-Op).
+            stable_site_id = derive_site_id(site_url)
+
             # 1. Extrahiere Barrierefreiheits-Issues
             accessibility_issues = self._extract_accessibility_issues(scan_data)
 
@@ -53,11 +58,25 @@ class AccessibilityPostScanProcessor:
             # auch bei 0 Befunden, damit die Erklärung den aktuellen Scan widerspiegelt.
             await self._save_statement_package(user_id, site_url, accessibility_issues)
 
+            # Auto-sichere, dokumentweite Fixes (Stufe 1) ableiten & persistieren —
+            # Teil des vereinheitlichten Fix-Manifests. Unabhängig von Alt-Texten.
+            document_fixes = self._derive_document_fixes(accessibility_issues, site_url)
+            doc_saved = 0
+            if document_fixes:
+                doc_saved = await self.fix_saver.save_document_fixes(
+                    site_id=stable_site_id,
+                    scan_id=scan_id,
+                    user_id=user_id,
+                    fixes=document_fixes,
+                )
+                logger.info(f"🧩 Persisted {doc_saved} document-level fixes for {stable_site_id}")
+
             if not accessibility_issues:
                 logger.info(f"✅ No accessibility issues found for {site_url}")
                 return {
                     "success": True,
                     "alt_texts_generated": 0,
+                    "document_fixes_generated": doc_saved,
                     "message": "Keine Barrierefreiheits-Issues gefunden"
                 }
             
@@ -92,9 +111,10 @@ class AccessibilityPostScanProcessor:
             
             logger.info(f"✨ Generated {len(alt_text_fixes)} AI alt-texts")
             
-            # 4. Speichere in Datenbank
+            # 4. Speichere in Datenbank — unter der STABILEN site_id (nicht scan_id!),
+            #    damit die Channels die Fixes per Domain-site_id wiederfinden.
             saved_count = await self.fix_saver.save_alt_text_fixes(
-                site_id=scan_id,  # Verwende scan_id als site_id
+                site_id=stable_site_id,
                 scan_id=scan_id,
                 user_id=user_id,
                 fixes=alt_text_fixes
@@ -165,6 +185,98 @@ class AccessibilityPostScanProcessor:
             )
         except Exception as e:
             logger.error(f"❌ Statement-Paket konnte nicht gespeichert werden: {e}")
+
+    def _derive_document_fixes(
+        self,
+        accessibility_issues: List[Dict[str, Any]],
+        site_url: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Leitet AUTO-SICHERE, dokumentweite Fixes (Stufe 1) deterministisch aus den
+        erkannten Issues ab. Bewusst konservativ: nur Fixes, die ohne menschliches
+        Urteil unbedenklich anwendbar sind und von den Channels guarded angewendet
+        werden (nur setzen, wenn am Ziel noch nicht vorhanden).
+
+        Mapping Issue-Signal -> Fix:
+          - fehlendes <html lang>      (WCAG 3.1.1) -> html-lang   {value: 'de'}
+          - fehlender Skip-Link        (WCAG 2.4.1) -> skip-link   {target, label}
+          - fehlende <main>-Landmark   (WCAG 1.3.1) -> landmark-main
+          - nicht sichtbarer Fokus     (WCAG 2.4.7) -> css-rule    (:focus outline)
+
+        Jeder Typ wird maximal EINMAL erzeugt (dokumentweit, nicht je Element).
+        """
+        # Sprache aus der Domain/Markt ableiten: Default 'de' (Komplyo = DE-Markt).
+        lang_value = 'de'
+
+        # Alle Issue-Texte zu einem durchsuchbaren Blob zusammenfassen.
+        def _text(issue: Dict[str, Any]) -> str:
+            return ' '.join([
+                str(issue.get('title', '')),
+                str(issue.get('description', '')),
+                str(issue.get('type', '')),
+                str(issue.get('id', '')),
+                ' '.join(str(w) for w in (issue.get('wcag_criteria') or [])),
+            ]).lower()
+
+        blob = ' \n '.join(_text(i) for i in accessibility_issues)
+
+        fixes: List[Dict[str, Any]] = []
+
+        def has(*needles: str) -> bool:
+            return any(n in blob for n in needles)
+
+        # 3.1.1 Sprache der Seite — fehlendes/leeres lang-Attribut
+        if has('lang-attribut', 'lang attribute', 'html-lang', 'html lang',
+               'sprache der seite', 'language of page', 'wcag311', '3.1.1'):
+            fixes.append({
+                'fix_type': 'html-lang',
+                'payload': {'value': lang_value},
+                'wcag_criterion': '3.1.1',
+                'confidence': 1.0,
+                'page_url': site_url,
+                'source': 'scan',
+            })
+
+        # 2.4.1 Blöcke umgehen — fehlender Skip-Link
+        if has('skip-link', 'skip link', 'sprunglink', 'zum inhalt springen',
+               'bypass blocks', 'blöcke umgehen', 'wcag241', '2.4.1'):
+            fixes.append({
+                'fix_type': 'skip-link',
+                'payload': {'target': '#main', 'label': 'Zum Inhalt springen'},
+                'wcag_criterion': '2.4.1',
+                'confidence': 1.0,
+                'page_url': site_url,
+                'source': 'scan',
+            })
+
+        # 1.3.1 Info & Beziehungen — fehlende <main>-Landmark
+        if has('landmark', 'main-landmark', 'hauptinhalt-bereich', 'region',
+               'main region', '<main>'):
+            fixes.append({
+                'fix_type': 'landmark-main',
+                'payload': {'target': '#main'},
+                'wcag_criterion': '1.3.1',
+                'confidence': 0.9,
+                'page_url': site_url,
+                'source': 'scan',
+            })
+
+        # 2.4.7 Fokus sichtbar — kein sichtbarer Fokus-Indikator
+        if has('fokus', 'focus visible', 'focus-visible', 'sichtbarer fokus',
+               'fokus-indikator', 'outline', 'wcag247', '2.4.7'):
+            fixes.append({
+                'fix_type': 'css-rule',
+                'payload': {
+                    'selector': 'a:focus, button:focus, input:focus, select:focus, textarea:focus, [tabindex]:focus',
+                    'declarations': 'outline: 2px solid #1a73e8 !important; outline-offset: 2px !important;',
+                },
+                'wcag_criterion': '2.4.7',
+                'confidence': 0.85,
+                'page_url': site_url,
+                'source': 'scan',
+            })
+
+        return fixes
 
     def _extract_accessibility_issues(
         self,

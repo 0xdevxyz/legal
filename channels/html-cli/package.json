@@ -10,7 +10,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "start": "node complyo-a11y.mjs"
+    "start": "node complyo-a11y.mjs",
+    "test": "node --test"
   },
   "license": "UNLICENSED",
   "private": true

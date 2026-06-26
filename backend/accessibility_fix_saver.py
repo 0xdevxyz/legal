@@ -250,6 +250,122 @@ class AccessibilityFixSaver:
                 for r in rows
             ]
 
+    # =========================================================================
+    # Dokumentweite Fixes (Fix-Manifest) — lang / skip-link / landmarks / css
+    # =========================================================================
+
+    async def save_document_fixes(
+        self,
+        site_id: str,
+        scan_id: str,
+        user_id: str,
+        fixes: List[Dict[str, Any]],
+        status: str = 'approved'
+    ) -> int:
+        """
+        Speichert auto-sichere, dokumentweite Fixes (Stufe 1).
+
+        Args:
+            site_id: STABILE, domain-abgeleitete Site-ID (derive_site_id) – muss
+                     identisch zu der sein, mit der die Channels das Manifest abfragen.
+            fixes: Liste von Dicts mit:
+                   {"fix_type": "html-lang", "payload": {"value": "de"},
+                    "wcag_criterion": "3.1.1", "confidence": 1.0,
+                    "page_url": "...", "source": "scan"}
+
+        Returns:
+            Anzahl gespeicherter/aktualisierter Fixes.
+        """
+        if not fixes:
+            return 0
+
+        import json as _json
+        saved = 0
+        async with self.db_pool.acquire() as conn:
+            async with conn.transaction():
+                for fix in fixes:
+                    fix_type = fix.get('fix_type')
+                    if not fix_type:
+                        continue
+                    try:
+                        await conn.execute(
+                            """
+                            INSERT INTO accessibility_document_fixes (
+                                site_id, scan_id, user_id, page_url,
+                                fix_type, payload, wcag_criterion, confidence,
+                                source, status, approved_at, created_at, updated_at
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                                      CASE WHEN $10 = 'approved' THEN NOW() ELSE NULL END,
+                                      NOW(), NOW())
+                            ON CONFLICT (site_id, fix_type)
+                            DO UPDATE SET
+                                payload = EXCLUDED.payload,
+                                wcag_criterion = EXCLUDED.wcag_criterion,
+                                confidence = EXCLUDED.confidence,
+                                scan_id = EXCLUDED.scan_id,
+                                page_url = EXCLUDED.page_url,
+                                source = EXCLUDED.source,
+                                updated_at = NOW()
+                            """,
+                            site_id,
+                            scan_id,
+                            user_id,
+                            fix.get('page_url', ''),
+                            fix_type,
+                            _json.dumps(fix.get('payload', {})),
+                            fix.get('wcag_criterion'),
+                            fix.get('confidence', 1.0),
+                            fix.get('source', 'scan'),
+                            status,
+                        )
+                        saved += 1
+                    except Exception as e:
+                        logger.error(f"Error saving document fix {fix_type} for {site_id}: {e}")
+                        continue
+
+        logger.info(f"✅ Saved {saved}/{len(fixes)} document fixes for site_id={site_id}")
+        return saved
+
+    async def get_document_fixes_for_site(
+        self,
+        site_id: str,
+        status: Optional[str] = 'approved'
+    ) -> List[Dict[str, Any]]:
+        """Lädt dokumentweite Fixes für das Manifest."""
+        import json as _json
+        async with self.db_pool.acquire() as conn:
+            query = """
+                SELECT fix_type, payload, wcag_criterion, confidence, source, status, page_url
+                FROM accessibility_document_fixes
+                WHERE site_id = $1
+            """
+            params = [site_id]
+            if status:
+                query += " AND status = $2"
+                params.append(status)
+            query += " ORDER BY fix_type"
+            rows = await conn.fetch(query, *params)
+
+            result = []
+            for r in rows:
+                payload = r['payload']
+                if isinstance(payload, str):
+                    try:
+                        payload = _json.loads(payload)
+                    except Exception:
+                        payload = {}
+                result.append({
+                    "fix_type": r['fix_type'],
+                    "payload": payload or {},
+                    "wcag_criterion": r['wcag_criterion'],
+                    "confidence": float(r['confidence']) if r['confidence'] is not None else 1.0,
+                    "source": r['source'],
+                    "status": r['status'],
+                    "page_url": r['page_url'],
+                })
+            logger.info(f"📦 Loaded {len(result)} document fixes for site_id={site_id}")
+            return result
+
     async def get_stats_for_site(
         self,
         site_id: str

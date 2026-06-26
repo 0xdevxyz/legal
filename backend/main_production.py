@@ -398,6 +398,7 @@ async def init_db():
             'create_accessibility_alt_text_fixes.sql',
             'create_alt_text_review_queue.sql',
             'create_accessibility_fix_packages.sql',
+            'create_accessibility_document_fixes.sql',
         ]
         for filename in ensure_migrations:
             filepath = os.path.join(migrations_dir, filename)

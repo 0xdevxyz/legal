@@ -21,6 +21,7 @@ if (!defined('ABSPATH')) {
 class Complyo_A11y_Remediation {
 
     const OPTION_MAP       = 'complyo_a11y_alt_map';   // [normalisierter_dateiname => alt-text]
+    const OPTION_DOC       = 'complyo_a11y_doc_fixes'; // dokumentweite Fixes (lang/skip-link/css)
     const OPTION_LAST_SYNC = 'complyo_a11y_last_sync'; // unix timestamp
     const CRON_HOOK        = 'complyo_a11y_sync_event';
 
@@ -50,6 +51,9 @@ class Complyo_A11y_Remediation {
         // Render-Fallbacks (nur Frontend).
         add_filter('wp_get_attachment_image_attributes', array($this, 'filter_attachment_attributes'), 20, 2);
         add_filter('the_content', array($this, 'filter_content_images'), 20);
+
+        // Dokumentweite Fixes (lang/skip-link/css) im Output-Buffer der gesamten Seite.
+        add_action('template_redirect', array($this, 'maybe_start_buffer'), 1);
     }
 
     private function is_enabled() {
@@ -109,8 +113,9 @@ class Complyo_A11y_Remediation {
             return 0;
         }
 
+        // Vereinheitlichtes Fix-Manifest (Alt-Texte + dokumentweite Fixes).
         $url = trailingslashit(COMPLYO_API_BASE)
-            . 'api/accessibility/alt-text-fixes?site_id=' . rawurlencode($site_id) . '&approved_only=true';
+            . 'api/accessibility/fix-manifest/' . rawurlencode($site_id);
 
         $res = wp_remote_get($url, array('timeout' => 15));
         if (is_wp_error($res) || (int) wp_remote_retrieve_response_code($res) !== 200) {
@@ -118,8 +123,22 @@ class Complyo_A11y_Remediation {
         }
 
         $body = json_decode(wp_remote_retrieve_body($res), true);
-        if (!is_array($body) || empty($body['fixes']) || !is_array($body['fixes'])) {
-            // Leeres Ergebnis ist gültig (nichts freigegeben) – Map leeren, Zeitstempel setzen.
+
+        // Dokumentweite Fixes immer aktualisieren (auch wenn leer).
+        $this->store_document_fixes(is_array($body) ? $body : array());
+
+        // Rückwärtskompatibel: Manifest nutzt "alt_texts", Alt-Endpoint nutzte "fixes".
+        $alt_list = array();
+        if (is_array($body)) {
+            if (!empty($body['alt_texts']) && is_array($body['alt_texts'])) {
+                $alt_list = $body['alt_texts'];
+            } elseif (!empty($body['fixes']) && is_array($body['fixes'])) {
+                $alt_list = $body['fixes'];
+            }
+        }
+
+        if (empty($alt_list)) {
+            // Kein Alt-Text freigegeben – Map leeren, Zeitstempel setzen.
             update_option(self::OPTION_MAP, array());
             update_option(self::OPTION_LAST_SYNC, time());
             return 0;
@@ -128,7 +147,7 @@ class Complyo_A11y_Remediation {
         $map = array();
         $persisted = 0;
 
-        foreach ($body['fixes'] as $fix) {
+        foreach ($alt_list as $fix) {
             $alt = $this->extract_alt($fix);
             $src = isset($fix['image_src']) ? (string) $fix['image_src'] : '';
             $fname = isset($fix['image_filename']) ? (string) $fix['image_filename'] : '';
@@ -189,6 +208,154 @@ class Complyo_A11y_Remediation {
         }
         update_post_meta($attachment_id, '_wp_attachment_image_alt', $alt);
         return 1;
+    }
+
+    /**
+     * Normalisiert die dokumentweiten Fixes aus dem Manifest in eine kompakte
+     * Option, die der Output-Buffer ohne erneuten HTTP-Call konsumiert.
+     */
+    private function store_document_fixes($body) {
+        $doc = array('lang' => null, 'skip' => null, 'css' => array());
+
+        if (!empty($body['document_fixes']) && is_array($body['document_fixes'])) {
+            foreach ($body['document_fixes'] as $f) {
+                $type    = isset($f['fix_type']) ? $f['fix_type'] : '';
+                $payload = isset($f['payload']) && is_array($f['payload']) ? $f['payload'] : array();
+                if ($type === 'html-lang' && !empty($payload['value'])) {
+                    $doc['lang'] = sanitize_text_field($payload['value']);
+                } elseif ($type === 'skip-link') {
+                    $doc['skip'] = array(
+                        'target' => isset($payload['target']) ? sanitize_text_field($payload['target']) : '#main',
+                        'label'  => isset($payload['label']) ? sanitize_text_field($payload['label']) : 'Zum Inhalt springen',
+                    );
+                }
+            }
+        }
+
+        if (!empty($body['css_rules']) && is_array($body['css_rules'])) {
+            foreach ($body['css_rules'] as $r) {
+                if (!empty($r['selector']) && !empty($r['declarations'])) {
+                    $doc['css'][] = array(
+                        // CSS-Selektor/Deklarationen kommen aus dem freigegebenen Manifest;
+                        // strip_tags verhindert ein </style>-Ausbrechen.
+                        'selector'     => trim(strip_tags((string) $r['selector'])),
+                        'declarations' => trim(strip_tags((string) $r['declarations'])),
+                    );
+                }
+            }
+        }
+
+        update_option(self::OPTION_DOC, $doc);
+    }
+
+    private function get_document_fixes() {
+        $doc = get_option(self::OPTION_DOC, array());
+        if (!is_array($doc)) {
+            $doc = array();
+        }
+        return wp_parse_args($doc, array('lang' => null, 'skip' => null, 'css' => array()));
+    }
+
+    // =========================================================================
+    // Output-Buffer-Rewriter: lang / skip-link / css für die gesamte Seite
+    // =========================================================================
+
+    public function maybe_start_buffer() {
+        // Niemals im Admin/Feed/REST/AJAX puffern.
+        if (is_admin() || is_feed()
+            || (defined('REST_REQUEST') && REST_REQUEST)
+            || (function_exists('wp_doing_ajax') && wp_doing_ajax())) {
+            return;
+        }
+        $doc = $this->get_document_fixes();
+        if (empty($doc['lang']) && empty($doc['skip']) && empty($doc['css'])) {
+            return; // nichts zu tun → keinen Buffer aufmachen.
+        }
+        ob_start(array($this, 'rewrite_buffer'));
+    }
+
+    /**
+     * Wendet die dokumentweiten Fixes guarded auf die fertige Seite an.
+     * @param string $html
+     * @return string
+     */
+    public function rewrite_buffer($html) {
+        if (!is_string($html) || $html === '' || stripos($html, '<html') === false) {
+            return $html;
+        }
+        $doc = $this->get_document_fixes();
+
+        // 1) lang am <html> ergänzen, falls nicht gesetzt.
+        if (!empty($doc['lang'])) {
+            $lang = $doc['lang'];
+            $html = preg_replace_callback('/<html\b([^>]*)>/i', function ($m) use ($lang) {
+                if (preg_match('/\blang\s*=/i', $m[1])) {
+                    return $m[0]; // vorhandenes lang nie überschreiben
+                }
+                return '<html' . $m[1] . ' lang="' . esc_attr($lang) . '">';
+            }, $html, 1);
+        }
+
+        // 2) Skip-Link nach <body> einfügen, falls noch keiner existiert.
+        $inject_skip = false;
+        if (!empty($doc['skip']) && stripos($html, 'data-complyo-skip-link') === false
+            && preg_match('/<body\b[^>]*>/i', $html)) {
+            $target_id = $this->resolve_skip_target($html, $doc['skip']['target']);
+            if ($target_id !== '') {
+                // Ziel-<main> ggf. mit id versehen.
+                if ($target_id === 'complyo-main') {
+                    $html = preg_replace_callback('/<main\b([^>]*)>/i', function ($m) {
+                        if (preg_match('/\bid\s*=/i', $m[1])) {
+                            return $m[0];
+                        }
+                        return '<main' . $m[1] . ' id="complyo-main">';
+                    }, $html, 1);
+                }
+                $label = esc_html($doc['skip']['label']);
+                $link  = '<a href="#' . esc_attr($target_id) . '" class="complyo-skip-link" data-complyo-skip-link="1">' . $label . '</a>';
+                $html  = preg_replace('/(<body\b[^>]*>)/i', '$1' . "\n" . $link, $html, 1);
+                $inject_skip = true;
+            }
+        }
+
+        // 3) <style> (Skip-Link-Styling + freigegebene CSS-Regeln) vor </head>.
+        $need_style = $inject_skip || !empty($doc['css']);
+        if ($need_style && stripos($html, 'id="complyo-a11y-style"') === false) {
+            $css = '';
+            if ($inject_skip) {
+                $css .= '.complyo-skip-link{position:absolute;left:-9999px;top:0;z-index:100000;'
+                    . 'background:#1a73e8;color:#fff;padding:8px 16px;border-radius:0 0 4px 0;'
+                    . 'text-decoration:none;font:14px/1.4 sans-serif;}'
+                    . '.complyo-skip-link:focus{left:0;}';
+            }
+            foreach ($doc['css'] as $r) {
+                $css .= $r['selector'] . '{' . $r['declarations'] . '}';
+            }
+            $style = '<style id="complyo-a11y-style">' . $css . '</style>';
+            if (stripos($html, '</head>') !== false) {
+                $html = preg_replace('/<\/head>/i', $style . "\n</head>", $html, 1);
+            }
+        }
+
+        return $html;
+    }
+
+    /**
+     * Findet ein auflösbares Ziel für den Skip-Link.
+     * @return string id ('' = kein Ziel → keinen Link injizieren).
+     */
+    private function resolve_skip_target($html, $preferred) {
+        $wanted = ltrim((string) $preferred, '#');
+        if ($wanted !== '' && preg_match('/id\s*=\s*["\']' . preg_quote($wanted, '/') . '["\']/i', $html)) {
+            return $wanted;
+        }
+        if (preg_match('/<main\b([^>]*)>/i', $html, $m)) {
+            if (preg_match('/id\s*=\s*("([^"]*)"|\'([^\']*)\')/i', $m[1], $idm)) {
+                return $idm[2] !== '' ? $idm[2] : $idm[3];
+            }
+            return 'complyo-main'; // <main> ohne id → wir vergeben eine.
+        }
+        return '';
     }
 
     // =========================================================================

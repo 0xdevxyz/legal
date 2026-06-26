@@ -578,6 +578,70 @@ async def get_alt_text_fixes_for_widget(site_id: str):
         )
 
 
+@router.get("/api/accessibility/fix-manifest/{site_id}")
+async def get_fix_manifest(site_id: str, request: Request):
+    """
+    Vereinheitlichtes Fix-Manifest für ALLE Auslieferungskanäle
+    (WordPress-Plugin / HTML-CLI / SPA-Runtime).
+
+    Bündelt content-adressiert die freigegebenen, auto-sicheren Fixes einer Site:
+      - alt_texts:      KI-Alt-Texte je Bild (image_url_hash / filename / src)
+      - document_fixes: dokumentweite Fixes (html-lang, skip-link, landmarks, css)
+
+    Nur Status 'approved' wird ausgeliefert. Die Channels wenden die Fixes guarded
+    an (nur setzen, wenn am Ziel noch nicht vorhanden) — nie etwas überschreiben.
+    """
+    _logger = logging.getLogger(__name__)
+    alt_texts = []
+    document_fixes = []
+
+    if db_pool:
+        try:
+            fix_saver = AccessibilityFixSaver(db_pool)
+            alt_texts = await fix_saver.get_fixes_for_site(site_id, status='approved')
+            document_fixes = await fix_saver.get_document_fixes_for_site(site_id, status='approved')
+        except Exception as e:
+            _logger.error(f"[Fix-Manifest] Fehler beim Laden für {site_id}: {e}")
+            return JSONResponse(
+                content={"success": False, "site_id": site_id, "error": str(e),
+                         "alt_texts": [], "document_fixes": []},
+                headers={'Access-Control-Allow-Origin': '*'}
+            )
+    else:
+        _logger.warning(f"[Fix-Manifest] DB-Pool nicht verfügbar für {site_id}")
+
+    # CSS-Regeln aus document_fixes herausziehen (Channels mögen es getrennt).
+    css_rules = [
+        f["payload"] for f in document_fixes
+        if f.get("fix_type") == "css-rule" and isinstance(f.get("payload"), dict)
+    ]
+
+    manifest = {
+        "success": True,
+        "version": "1.0.0",
+        "site_id": site_id,
+        "alt_texts": alt_texts,
+        "document_fixes": [f for f in document_fixes if f.get("fix_type") != "css-rule"],
+        "css_rules": css_rules,
+        "counts": {
+            "alt_texts": len(alt_texts),
+            "document_fixes": len(document_fixes),
+        },
+    }
+
+    # ETag für effiziente Revalidierung (Channels cachen per If-None-Match).
+    etag = '"' + hashlib.md5(json.dumps(manifest, sort_keys=True, default=str).encode()).hexdigest() + '"'
+    headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache, must-revalidate',
+        'ETag': etag,
+    }
+    if request.headers.get('if-none-match') == etag:
+        return Response(status_code=304, headers=headers)
+
+    return JSONResponse(content=manifest, headers=headers)
+
+
 @router.post("/api/accessibility/patches/generate")
 async def generate_accessibility_patches(
     site_id: str,
