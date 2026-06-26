@@ -3,14 +3,93 @@ Complyo Live Validator
 Validates if fixes have been implemented correctly via targeted re-scans
 """
 
-from typing import Dict, Any, Optional
+import re
+from typing import Dict, Any, Optional, List, Set
 from compliance_engine.scanner import ComplianceScanner
+
+# WCAG-Erfolgskriterium, z.B. "2.4.4", "1.1.1". Prinzip ist immer 1–4, SC max 2-stellig.
+# \b verhindert, dass Datumsangaben wie "8.06.2025" fälschlich matchen.
+_WCAG_RE = re.compile(r'\b([1-4]\.\d{1,2}\.\d{1,2})\b')
 
 
 class LiveValidator:
     """
     Performs targeted validation of specific compliance fixes
     """
+
+    # =========================================================================
+    # WCAG-kriteriengenaue Re-Scan-Verifikation (axe-basiert)
+    # =========================================================================
+
+    @staticmethod
+    def _extract_wcag(issue: Dict[str, Any]) -> Set[str]:
+        """Liest alle WCAG-Erfolgskriterien aus einem Issue (legal_basis + metadata)."""
+        found: Set[str] = set()
+        # 1) metadata.wcag_criteria (axe-Pfad liefert das strukturiert)
+        meta = issue.get('metadata') or {}
+        for c in (meta.get('wcag_criteria') or []):
+            for m in _WCAG_RE.findall(str(c)):
+                found.add(m)
+        # 2) Freitext-Felder (Heuristik-Pfad nennt WCAG im legal_basis/title)
+        for field in ('legal_basis', 'title', 'description', 'id'):
+            val = issue.get(field)
+            if val:
+                found.update(_WCAG_RE.findall(str(val)))
+        return found
+
+    async def rescan_accessibility(
+        self,
+        website_url: str,
+        target_criteria: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Führt einen echten Re-Scan (axe + Heuristik auf gerendertem DOM) aus und
+        meldet WCAG-KRITERIENGENAU, welche der adressierten Kriterien jetzt gelöst
+        sind ('issue weg') und welche noch offen sind.
+
+        Args:
+            website_url: zu prüfende URL (nach Fix-Anwendung/Deploy).
+            target_criteria: Liste der Kriterien, die man behoben haben will
+                             (z.B. ["2.4.4","3.1.1"]). None = nur Ist-Zustand melden.
+
+        Returns:
+            {
+              "success", "compliance_score",
+              "present_criteria": [...],          # noch vorhandene a11y-Kriterien
+              "resolved":  [...],                 # target ∩ nicht mehr vorhanden
+              "unresolved":[...],                 # target ∩ noch vorhanden
+              "all_resolved": bool,
+              "accessibility_issue_count"
+            }
+        """
+        async with ComplianceScanner() as scanner:
+            scan_result = await scanner.scan_website(website_url)
+
+        issues = scan_result.get("issues", []) or []
+        present: Set[str] = set()
+        a11y_count = 0
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            category = str(issue.get("category", "")).lower()
+            if "barriere" in category or "accessibility" in category:
+                a11y_count += 1
+                present |= self._extract_wcag(issue)
+
+        targets = [c.strip() for c in (target_criteria or []) if c and c.strip()]
+        resolved = [c for c in targets if c not in present]
+        unresolved = [c for c in targets if c in present]
+
+        return {
+            "success": True,
+            "website_url": website_url,
+            "compliance_score": scan_result.get("compliance_score", 0),
+            "present_criteria": sorted(present),
+            "resolved": resolved,
+            "unresolved": unresolved,
+            "all_resolved": len(unresolved) == 0,
+            "accessibility_issue_count": a11y_count,
+        }
     
     async def validate_fix(self, issue_id: str, website_url: str, issue_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """

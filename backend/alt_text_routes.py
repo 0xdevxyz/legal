@@ -54,6 +54,11 @@ class ApproveLinkRequest(BaseModel):
     custom_label: Optional[str] = None
 
 
+class RescanRequest(BaseModel):
+    site_url: str
+    criteria: Optional[List[str]] = None   # z.B. ["2.4.4","3.1.1"]; None = nur Ist-Zustand
+
+
 def _filename_from_url(url: str) -> str:
     try:
         path = urlparse(url).path
@@ -273,6 +278,29 @@ async def accessibility_worklist(
     except Exception as e:
         logger.error(f"Error loading accessibility worklist: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/rescan")
+async def rescan_accessibility(
+    request: RescanRequest,
+    current_user: Dict[str, Any] = Depends(get_required_user)
+):
+    """
+    Echter Re-Scan (axe + Heuristik auf gerendertem DOM) zur WCAG-kriteriengenauen
+    Verifikation nach Fix-Anwendung: belegt, welche adressierten Kriterien jetzt
+    gelöst sind ('issue weg') und welche noch offen sind — statt grober Heuristik.
+    """
+    from compliance_engine.live_validator import LiveValidator
+    try:
+        validator = LiveValidator()
+        result = await validator.rescan_accessibility(
+            website_url=request.site_url,
+            target_criteria=request.criteria,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Accessibility rescan failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Re-Scan fehlgeschlagen: {str(e)}")
 
 
 @router.post("/scan-images")

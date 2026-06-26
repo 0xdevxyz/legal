@@ -59,6 +59,11 @@ WP wendet Link-aria im Output-Buffer an (ganze Seite inkl. Navigation).
 ## Verifikation
 - E2E-Re-Scan offline ohne Browser: `channels/html-cli/test/rescan.test.mjs` (`node --test`).
   Fixture mit Verstößen → `patchHtml` → heuristischer Re-Scan = 0 adressierte Verstöße. Guard- + Back-Compat-Tests.
+- **Echter Re-Scan (axe/Playwright)** `backend/compliance_engine/live_validator.py::rescan_accessibility`:
+  scannt die Live-URL, extrahiert WCAG-Kriterien kriteriengenau (Regex `[1-4]\.\d+\.\d+`, datumssicher)
+  und meldet `resolved`/`unresolved`/`all_resolved` ggü. den adressierten Kriterien. Endpoint:
+  `POST /api/accessibility/rescan {site_url, criteria?}`. Im Container gegen example.com verifiziert
+  (Chromium/axe laufen). Älterer grober Endpoint `/api/v2/fixes/validate` bleibt unberührt.
 
 ## Status der Bausteine
 - 🟢 **Fix-Manifest + alt_texts + document_fixes + alle 3 Channels** (Commit 85f832f, deployed)
@@ -69,7 +74,9 @@ WP wendet Link-aria im Output-Buffer an (ganze Seite inkl. Navigation).
   Vorschläge sind heuristisch aus Kontext; Auslieferung erst nach Review (Block 2).
 - 🟢 **Block 2 — Dashboard-Worklist/Review-UI**: Review-Endpoints (`/worklist`, `/link-review-queue`,
   `/approve-link`) + `dashboard-react`-Seite mit Approve/Reject + Zählern. tsc grün.
-- 🔵 **Block 3 — Echter Playwright-Re-Scan**: `LiveValidator` an `ComplianceScanner` (axe) andocken.
+- 🟢 **Block 3 — Echter Playwright-Re-Scan**: `LiveValidator.rescan_accessibility` an `ComplianceScanner`
+  (axe) angedockt, WCAG-kriteriengenau + datumssicher; Endpoint `POST /api/accessibility/rescan`;
+  im Container gegen example.com verifiziert.
 
 ## Bewusste Grenzen
 - Alt-Text-Generierung im Processor ist noch heuristisch (KI-Vision-Pfad existiert separat in `alt_text_routes.py`).
