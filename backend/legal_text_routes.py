@@ -139,6 +139,72 @@ async def _get_generator(request) -> LegalTextGenerator:
     return get_legal_text_generator(db_pool)
 
 
+async def _build_complyo_context(db_pool, user_id: int) -> Optional[dict]:
+    """Leitet aus den aktiven Complyo-Konfigurationen ab, welche Dienste beim
+    Kunden laufen, damit der Datenschutz-Passus nur die tatsächlich aktiven
+    Dienste beschreibt (modular). Gibt None zurück, wenn KEIN Complyo-Dienst
+    aktiv ist — dann erscheint kein Passus.
+    """
+    import json as _json
+
+    # 1) Cookie-Consent-Banner (autoritative Quelle: cookie_banner_configs)
+    row = None
+    try:
+        row = await db_pool.fetchrow(
+            """
+            SELECT cookie_lifetime_days, services
+            FROM cookie_banner_configs
+            WHERE user_id = $1 AND is_active = true
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            user_id,
+        )
+    except Exception as e:
+        logger.warning(f"Cookie-Banner-Status nicht ermittelbar (user={user_id}): {e}")
+
+    # 2) A11y-Runtime-Fixer: ein vorhandenes accessibility_fix_package bedeutet,
+    #    dass der Kunde den Complyo-Barrierefreiheits-Assistenten einsetzt, der das
+    #    Skript zur Laufzeit von api.complyo.de nachlädt (Channel #3). user_id ist
+    #    dort VARCHAR — daher als Text vergleichen.
+    a11y_active = False
+    try:
+        a11y_active = bool(
+            await db_pool.fetchval(
+                "SELECT 1 FROM accessibility_fix_packages WHERE user_id = $1 LIMIT 1",
+                str(user_id),
+            )
+        )
+    except Exception as e:
+        logger.warning(f"A11y-Status nicht ermittelbar (user={user_id}): {e}")
+
+    cookie_active = row is not None
+    if not cookie_active and not a11y_active:
+        return None
+
+    services = row.get("services") if row else None
+    if isinstance(services, str):
+        try:
+            services = _json.loads(services)
+        except (ValueError, TypeError):
+            services = []
+    services = services or []
+
+    # Drittland-Gating (Art. 49): True, sobald ein konfigurierter Dienst
+    # personenbezogene Daten in ein unsicheres Drittland überträgt.
+    third_country = any(
+        isinstance(s, dict) and s.get("requires_third_country_consent")
+        for s in services
+    )
+
+    return {
+        "cookie_banner_active": cookie_active,
+        "cookie_lifetime_days": int((row.get("cookie_lifetime_days") if row else None) or 365),
+        "a11y_widget_active": a11y_active,
+        "third_country_services_enabled": third_country,
+    }
+
+
 @router.get("/{doc_type}", response_model=LegalTextResponse)
 async def get_legal_text(
     doc_type: str,
@@ -194,8 +260,10 @@ async def generate_legal_text(
         if dt == DocumentType.IMPRINT:
             result = await generator.generate_imprint(user_id, user_data, body.language)
         elif dt == DocumentType.PRIVACY:
+            complyo_context = await _build_complyo_context(db_pool, user_id)
             result = await generator.generate_privacy_policy(
-                user_id, user_data, body.services_used, body.language
+                user_id, user_data, body.services_used, body.language,
+                complyo_context=complyo_context,
             )
         elif dt == DocumentType.TOS:
             result = await generator.generate_tos(

@@ -37,6 +37,7 @@ except ImportError:  # pragma: no cover
     aiohttp = None
 
 from legal_disclaimer import DISCLAIMER_LONG, DISCLAIMER_HTML
+from complyo_privacy_clause import build_complyo_privacy_clause
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,7 @@ class LegalTextGenerator:
         language: str = "de",
         legal_update_id: Optional[str] = None,
         regeneration_trigger: str = "manual",
+        complyo_context: Optional[Dict[str, Any]] = None,
     ) -> GeneratedDocument:
         template = self._load_template(DocumentType.PRIVACY, language)
         laws_context = self._load_laws_context(["DSGVO", "TTDSG"], language)
@@ -134,9 +136,28 @@ class LegalTextGenerator:
             enriched_data["services_used"] = ", ".join(services_used)
         elif "services_used" not in enriched_data:
             enriched_data["services_used"] = ""
+
+        # Complyo-Passus: explizit übergebener Kontext hat Vorrang; andernfalls
+        # aus persistierten user_data lesen, damit das Auto-Update
+        # (regenerate_affected_users) den Abschnitt identisch reproduziert.
+        if complyo_context is None:
+            complyo_context = enriched_data.get("complyo_context")
+        if complyo_context:
+            enriched_data["complyo_context"] = complyo_context
+
         prompt = self._build_prompt(template, enriched_data, laws_context, DocumentType.PRIVACY)
+        if complyo_context:
+            # Verhindert, dass die KI einen eigenen, abweichenden Abschnitt zum
+            # Consent-Tool erzeugt — der Complyo-Passus wird deterministisch angehängt.
+            prompt += (
+                "\n\nWICHTIG: Erstelle KEINEN eigenen Abschnitt zum eingesetzten "
+                "Cookie-/Consent-Management-Tool oder zum Barrierefreiheits-Assistenten "
+                "— dieser wird separat ergänzt.\n"
+            )
+
         html = await self._call_ai(prompt)
-        html_with_disclaimer = html + DISCLAIMER_HTML
+        complyo_clause = build_complyo_privacy_clause(complyo_context) if complyo_context else ""
+        html_with_disclaimer = html + complyo_clause + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.PRIVACY, language, html_with_disclaimer,
             legal_update_id, regeneration_trigger, user_data=enriched_data
@@ -154,7 +175,11 @@ class LegalTextGenerator:
             is_active=True,
             generated_at=datetime.now().isoformat(),
             disclaimer=DISCLAIMER_LONG,
-            metadata={"services": services_used or [], "user_data_hash": self._hash(user_data)},
+            metadata={
+                "services": services_used or [],
+                "complyo_clause": bool(complyo_context),
+                "user_data_hash": self._hash(user_data),
+            },
         )
 
     async def generate_tos(
