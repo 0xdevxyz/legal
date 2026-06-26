@@ -38,6 +38,7 @@ except ImportError:  # pragma: no cover
 
 from legal_disclaimer import DISCLAIMER_LONG, DISCLAIMER_HTML
 from complyo_privacy_clause import build_complyo_privacy_clause
+from third_country_clause import build_third_country_clause
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,17 @@ class LegalTextGenerator:
         if complyo_context:
             enriched_data["complyo_context"] = complyo_context
 
+        # Drittland-Abschnitt deterministisch aus der SSOT (Art. 49 / Art. 44 ff.),
+        # damit Länderliste und Rechtsgrundlage nicht der KI-Varianz unterliegen.
+        # Beim Auto-Update kommt services_used=None — dann aus den persistierten
+        # user_data (komma-separiert) rekonstruieren, damit der Abschnitt identisch
+        # reproduziert wird statt zu verschwinden.
+        effective_services = services_used
+        if effective_services is None:
+            persisted = enriched_data.get("services_used") or ""
+            effective_services = [s.strip() for s in persisted.split(",") if s.strip()]
+        third_country_clause = build_third_country_clause(effective_services)
+
         prompt = self._build_prompt(template, enriched_data, laws_context, DocumentType.PRIVACY)
         if complyo_context:
             # Verhindert, dass die KI einen eigenen, abweichenden Abschnitt zum
@@ -154,10 +166,18 @@ class LegalTextGenerator:
                 "Cookie-/Consent-Management-Tool oder zum Barrierefreiheits-Assistenten "
                 "— dieser wird separat ergänzt.\n"
             )
+        if third_country_clause:
+            # Doppelten/abweichenden Drittland-Abschnitt der KI vermeiden — der
+            # juristische Wortlaut wird deterministisch angehängt.
+            prompt += (
+                "\n\nWICHTIG: Erstelle KEINEN eigenen, aufgezählten Abschnitt zur "
+                "Datenübermittlung in Drittländer für die genannten Dienste — dieser "
+                "wird mit geprüftem Wortlaut separat ergänzt.\n"
+            )
 
         html = await self._call_ai(prompt)
         complyo_clause = build_complyo_privacy_clause(complyo_context) if complyo_context else ""
-        html_with_disclaimer = html + complyo_clause + DISCLAIMER_HTML
+        html_with_disclaimer = html + complyo_clause + third_country_clause + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.PRIVACY, language, html_with_disclaimer,
             legal_update_id, regeneration_trigger, user_data=enriched_data

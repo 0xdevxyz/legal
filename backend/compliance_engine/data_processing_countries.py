@@ -247,6 +247,32 @@ def countries_for(
     return list(PROVIDER_COUNTRIES.get(company, []))
 
 
+def third_country_breakdown(service_names: Iterable[str]) -> List[Dict]:
+    """
+    Für eine Liste von Service-Anzeigenamen (z. B. ["Google Analytics 4",
+    "Hotjar", "Crisp"]) die Teilmenge, die in unsicheren Drittländern verarbeitet:
+
+        [{"name": "Google Analytics 4", "unsafe_country_names": ["Vereinigte Staaten"]}, ...]
+
+    Auflösung über den Anbieternamen (Teilstring-Match gegen PROVIDER_ALIASES).
+    Dedupliziert nach Name. Genutzt vom Datenschutzerklärungs-Generator, um den
+    Art.-49-Abschnitt deterministisch zu erzeugen.
+    """
+    seen: set[str] = set()
+    out: List[Dict] = []
+    for name in service_names:
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        info = country_processing_info(provider=name)
+        if info and info["requires_special_consent"]:
+            out.append({
+                "name": name,
+                "unsafe_country_names": info["unsafe_country_names"],
+            })
+    return out
+
+
 def country_processing_info(
     *, service_key: str = "", provider_company: str = "", provider: str = ""
 ) -> Optional[Dict]:

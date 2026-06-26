@@ -45,6 +45,10 @@ interface Service {
     [key: string]: any;
   } | null;
   plan_required: string;
+  // Art. 49 DSGVO — vom Backend (_enrich_third_country) angereichert
+  requires_third_country_consent?: boolean;
+  unsafe_third_country_names?: string[];
+  data_processing_countries?: Array<{ code: string; name: string; safe: boolean }>;
 }
 
 interface ServiceManagerProps {
@@ -670,10 +674,22 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
               </div>
             </div>
             
-            {/* Category Badge */}
-            <Badge variant="secondary" className={`${colors.badge} text-xs flex-shrink-0`}>
-              {service.category}
-            </Badge>
+            {/* Badges: Kategorie + ggf. Art.49-Drittland */}
+            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+              <Badge variant="secondary" className={`${colors.badge} text-xs`}>
+                {service.category}
+              </Badge>
+              {service.requires_third_country_consent && (
+                <span title={`Datenverarbeitung in unsicheren Drittländern (Art. 49 DSGVO): ${(service.unsafe_third_country_names || []).join(', ')}`}>
+                  <Badge
+                    variant="secondary"
+                    className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[10px]"
+                  >
+                    🌍 Drittland (Art. 49)
+                  </Badge>
+                </span>
+              )}
+            </div>
           </div>
           
           {/* Description */}
@@ -724,8 +740,21 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
                 </div>
               )}
 
-              {/* Data Processing Countries */}
-              {(service.template?.data_processing_countries?.length ?? 0) > 0 && (
+              {/* Data Processing Countries — Backend-angereichert (mit Sicher/Unsicher),
+                  Fallback auf alte template-Liste (reine String-Namen) */}
+              {(service.data_processing_countries?.length ?? 0) > 0 ? (
+                <div>
+                  <p className="text-xs font-semibold text-gray-300 mb-1">Datenverarbeitung in:</p>
+                  <p className="text-xs text-gray-400">
+                    {service.data_processing_countries!.map(c => c.name).join(', ')}
+                  </p>
+                  {(service.unsafe_third_country_names?.length ?? 0) > 0 && (
+                    <p className="text-xs text-amber-400 mt-1">
+                      ⚠ Unsichere Drittländer (Art. 49 DSGVO): {service.unsafe_third_country_names!.join(', ')}
+                    </p>
+                  )}
+                </div>
+              ) : (service.template?.data_processing_countries?.length ?? 0) > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-gray-300 mb-1">Datenverarbeitung in:</p>
                   <p className="text-xs text-gray-400">
@@ -749,6 +778,7 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
               {/* Fallback when nothing available */}
               {!(service.template?.cookies?.length) &&
                !(service.cookies?.length) &&
+               !(service.data_processing_countries?.length) &&
                !(service.template?.data_processing_countries?.length) &&
                !service.template?.privacy_policy_url &&
                !service.privacy_url &&
