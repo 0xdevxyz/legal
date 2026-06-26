@@ -1377,13 +1377,14 @@
                 /* Two-Column-Layout: Text links, Buttons rechts daneben */
                 .complyo-main {
                     display: flex;
-                    align-items: flex-start;
-                    gap: 28px;
+                    align-items: center;
+                    gap: 0;
                 }
 
                 .complyo-text {
                     flex: 1 1 auto;
                     min-width: 0;
+                    padding-right: 36px;
                 }
 
                 .complyo-main .complyo-title {
@@ -1400,8 +1401,9 @@
                     display: flex;
                     flex-direction: column;
                     gap: 10px;
-                    flex: 0 0 240px;
-                    align-self: stretch;
+                    flex: 0 0 250px;
+                    padding-left: 36px;
+                    border-left: 1px solid rgba(0, 0, 0, 0.09);
                 }
 
                 .complyo-btn {
@@ -1829,9 +1831,15 @@
                         gap: 18px;
                     }
 
+                    .complyo-text {
+                        padding-right: 0;
+                    }
+
                     .complyo-actions {
                         flex: 1 1 auto;
                         gap: 10px;
+                        padding-left: 0;
+                        border-left: none;
                     }
 
                     .complyo-footer {
