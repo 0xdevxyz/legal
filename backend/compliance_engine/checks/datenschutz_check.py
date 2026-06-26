@@ -183,12 +183,79 @@ async def _check_datenschutz_url_exists(base_url: str, session=None) -> bool:
     return False
 
 
-async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=None) -> List[Dict[str, Any]]:
+async def _collect_linked_css(url: str, soup: BeautifulSoup, session=None,
+                              max_files: int = 10, max_bytes: int = 700_000) -> str:
+    """
+    Lädt die SAME-ORIGIN <link rel=stylesheet>-Dateien der Seite und gibt deren
+    CSS-Text gebündelt zurück.
+
+    Hintergrund: Drittanbieter-Ressourcen mit IP-Transfer (v.a. Google Fonts via
+    @font-face/@import) stehen häufig NICHT im HTML, sondern erst im CSS der Seite
+    — typisch bei Avada/WordPress (fusion-styles), wo die fonts.gstatic.com-URLs
+    in der dynamisch generierten Theme-CSS liegen. Ohne diese Quelle übersieht die
+    Drittlandtransfer-Erkennung den Klassiker „Google Fonts extern geladen".
+    """
+    from urllib.parse import urljoin, urlparse
+    own = urlparse(url).netloc.lower()
+    if own.startswith('www.'):
+        own = own[4:]
+
+    hrefs = []
+    for link in soup.find_all('link', href=True):
+        rels = ' '.join(link.get('rel', [])).lower() if link.get('rel') else ''
+        if 'stylesheet' not in rels:
+            continue
+        href = (link.get('href') or '').strip()
+        if not href:
+            continue
+        if href.startswith('//'):
+            href = 'https:' + href
+        full = urljoin(url, href)
+        host = urlparse(full).netloc.lower()
+        if host.startswith('www.'):
+            host = host[4:]
+        # Nur eigene CSS-Dateien holen. Fremd-gehostete CSS ist selbst bereits ein
+        # Drittanbieter-Request und wird über die URL direkt erkannt.
+        if not host or host != own:
+            continue
+        if full not in hrefs:
+            hrefs.append(full)
+
+    hrefs = hrefs[:max_files]
+    if not hrefs:
+        return ""
+
+    close_session = False
+    if session is None:
+        import ssl
+        import certifi
+        ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_ctx))
+        close_session = True
+
+    chunks = []
+    try:
+        for h in hrefs:
+            try:
+                async with session.get(h, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        chunks.append((await resp.text())[:max_bytes])
+            except Exception:
+                continue
+    finally:
+        if close_session:
+            await session.close()
+    return "\n".join(chunks)
+
+
+async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=None,
+                                       request_urls: List[str] = None) -> List[Dict[str, Any]]:
     """
     Prüft Datenschutzerklärung-Compliance
-    
+
     1. Datenschutz-Link vorhanden (im gerenderten HTML oder als direkt erreichbare URL)
     2. Datenschutzerklärung-Inhalte (wenn erreichbar)
+    3. Drittlandtransfer ohne Einwilligung (HTML + verlinkte CSS + echte Requests)
     """
     issues = []
     
@@ -418,8 +485,21 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
     # Adobe/Typekit ...) — cookielose IP-Übertragung in die USA, der klassische
     # 100%-abmahnbare DSGVO-Verstoß, den ein reiner Cookie-Scanner nicht sieht.
     # Einzige Quelle: compliance_engine/privacy_transfer_findings (SSOT).
+    #
+    # Erkennung gegen drei Quellen, damit JS-/CSS-versteckte Transfers nicht
+    # durchrutschen:
+    #   1) HTML der Seite
+    #   2) Inhalt der verlinkten Same-Origin-CSS (Google Fonts liegen oft als
+    #      @font-face in der Theme-CSS, nicht im HTML — z.B. Avada/fusion-styles)
+    #   3) tatsächlich beobachtete Netzwerk-Requests aus dem Headless-Render
     from ..privacy_transfer_findings import detect_transfers
-    transfer_findings = detect_transfers(html=html_raw)
+    try:
+        css_text = await _collect_linked_css(url, soup, session)
+    except Exception as e:
+        logger.warning(f"⚠️ CSS-Sammlung für Transfer-Erkennung fehlgeschlagen: {e}")
+        css_text = ""
+    transfer_haystack = html_raw if not css_text else (html_raw + "\n" + css_text)
+    transfer_findings = detect_transfers(html=transfer_haystack, request_urls=request_urls)
     for finding in transfer_findings:
         issues.append(asdict(DatenschutzIssue(
             category='datenschutz',

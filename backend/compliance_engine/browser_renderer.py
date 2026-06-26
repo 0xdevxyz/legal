@@ -86,6 +86,19 @@ class BrowserRenderer:
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Complyo-Scanner/2.0'
                 })
 
+                # Echte ausgehende Requests mitschneiden — Basis für die
+                # Drittlandtransfer-Erkennung (fängt JS-/CSS-injizierte Ressourcen
+                # wie Google Fonts, reCAPTCHA, Maps, die im HTML nicht stehen).
+                request_urls: list = []
+
+                def _on_request(req):
+                    try:
+                        request_urls.append(req.url)
+                    except Exception:
+                        pass
+
+                page.on('request', _on_request)
+
                 start_time = asyncio.get_event_loop().time()
 
                 try:
@@ -126,6 +139,8 @@ class BrowserRenderer:
                     'final_url': page.url,
                     'title': await page.title(),
                     'consent_buttons': consent_buttons,
+                    # dedupliziert, Reihenfolge erhalten
+                    'request_urls': list(dict.fromkeys(request_urls)),
                     **rendering_info
                 }
 

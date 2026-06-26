@@ -183,6 +183,7 @@ class ComplianceScanner:
             # Buttons nicht funktional geprüft werden (Custom-Banner & Fehlkonfig.).
             rendered_html = main_page['content']
             consent_buttons = None  # Button-Metriken aus dem Render (Dark-Pattern-Prüfung)
+            render_request_urls = None  # echte Netzwerk-Requests (Drittlandtransfer-Erkennung)
             needs_render = detect_client_rendering(main_page['content'])[0]
             render_reason = "client-side rendering"
             if not needs_render and consent_render_needed(soup):
@@ -196,6 +197,7 @@ class ComplianceScanner:
                     soup = BeautifulSoup(rendered_html, 'html.parser')
                     if isinstance(render_meta, dict):
                         consent_buttons = render_meta.get('consent_buttons')
+                        render_request_urls = render_meta.get('request_urls')
                 except Exception as e:
                     logger.warning(f"⚠️ Browser render failed ({e}); fallback auf statisches HTML")
 
@@ -225,7 +227,7 @@ class ComplianceScanner:
             # barrierefreiheit: no session = single-page only (avoids multi-page scan)
             barriere_task = check_barrierefreiheit_compliance(url, soup, None)
             impressum_task = check_impressum_compliance(url, soup, self.session)
-            datenschutz_task = check_datenschutz_compliance(url, soup, self.session)
+            datenschutz_task = check_datenschutz_compliance(url, soup, self.session, request_urls=render_request_urls)
             cookie_task = check_cookie_compliance(url, soup, self.session, consent_buttons=consent_buttons)
             agb_task = check_agb_compliance(url, soup, self.session)
             shop_task = check_shop_compliance(url, soup, self.session)
@@ -796,7 +798,7 @@ class ComplianceScanner:
             ))
 
         return issues
-    
+
     def _generate_recommendations(self, issues: List[ComplianceIssue]) -> List[str]:
         """Generate prioritized recommendations based on issues found"""
         recommendations = []
