@@ -36,7 +36,7 @@ const DEFAULT_CONFIG = {
   consent_mode_enabled: true,
   gtm_container_id: '',
   privacy_policy_url: '/datenschutz',
-  cookie_policy_url: '/cookie-richtlinie',
+  cookie_policy_url: '',
   imprint_url: '/impressum',
   texts: {
     de: {
@@ -388,9 +388,9 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
           <CardContent className="space-y-3">
             {[
               { label: 'Datenschutz-URL',  key: 'privacy_policy_url',  placeholder: '/datenschutz' },
-              { label: 'Cookie-Policy-URL', key: 'cookie_policy_url',  placeholder: '/cookie-richtlinie' },
+              { label: 'Cookie-Policy-URL', key: 'cookie_policy_url',  placeholder: 'Leer lassen = von Complyo gehostet', hint: 'Wenn leer, zeigt der „Über Cookies"-Link automatisch auf eine von Complyo gehostete Cookie-Richtlinie aus Ihren konfigurierten Diensten.' },
               { label: 'Impressum-URL',     key: 'imprint_url',        placeholder: '/impressum' },
-            ].map(({ label, key, placeholder }) => (
+            ].map(({ label, key, placeholder, hint }) => (
               <div key={key} className="space-y-1">
                 <Label className="text-xs text-gray-300">{label}</Label>
                 <Input
@@ -399,6 +399,7 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                   placeholder={placeholder}
                   className="bg-gray-700 border-gray-600 text-white text-sm placeholder:text-gray-500"
                 />
+                {hint && <p className="text-[11px] text-gray-400 leading-snug">{hint}</p>}
               </div>
             ))}
           </CardContent>
