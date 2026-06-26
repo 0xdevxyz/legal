@@ -199,11 +199,15 @@ async def start_deep_scan(
     asyncio.create_task(background_scan_job(scan_id, url))
     
     # 7. Log event
+    # event_data ist JSONB; der Pool hat keinen JSON-Codec registriert
+    # (asyncpg.create_pool ohne set_type_codec) → Wert MUSS als JSON-String
+    # übergeben werden, sonst wirft asyncpg. (Gleiche Konvention wie im
+    # background_scan_job, der json.dumps nutzt.)
     await connection.execute(
         "INSERT INTO deep_scan_history (scan_id, event_type, event_data) "
         "VALUES ($1, 'started', $2)",
         scan_id,
-        {"url": url, "initiated_at": datetime.utcnow().isoformat()}
+        json.dumps({"url": url, "initiated_at": datetime.utcnow().isoformat()})
     )
     
     return {
