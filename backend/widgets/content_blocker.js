@@ -110,7 +110,14 @@
             'hs-analytics.net'
         ]
     };
-    
+
+    // Domains von Services, die Daten in unsicheren Drittländern verarbeiten
+    // (Art. 49 Abs. 1 lit. a DSGVO). Wird zur Laufzeit aus dem Service-Katalog
+    // befüllt (requires_third_country_consent === true). Solche Services werden
+    // NUR freigeschaltet, wenn zusätzlich zur Kategorie die gesonderte
+    // Drittland-Einwilligung vorliegt.
+    const THIRD_COUNTRY_DOMAINS = [];
+
     // Service-specific patterns for visual placeholders
     const VIDEO_SERVICES = {
         youtube: {
@@ -322,6 +329,10 @@
                             BLOCKED_DOMAINS[category].push(dom);
                             added++;
                         }
+                        // Drittland-Service? Domain zusätzlich für das Art.49-Gating merken.
+                        if (dom && svc.requires_third_country_consent && !THIRD_COUNTRY_DOMAINS.includes(dom)) {
+                            THIRD_COUNTRY_DOMAINS.push(dom);
+                        }
                     });
                 });
                 if (added > 0) {
@@ -371,7 +382,8 @@
                         necessary: true,
                         functional: consent.functional || false,
                         analytics: consent.analytics || false,
-                        marketing: consent.marketing || false
+                        marketing: consent.marketing || false,
+                        third_country: consent.third_country || false
                     };
                 }
             } catch (error) {
@@ -677,8 +689,15 @@
             // Unblock all elements
             this.blockedElements.forEach((data, element) => {
                 const category = data.category;
-                
-                if (this.hasConsent(category)) {
+                // URL aus allen Block-Varianten ableiten: direkte Quelle, oder
+                // — bei Platzhaltern (Video/Map/Script) — vom Original-DOM-Node.
+                const url = data.originalSrc || data.originalHref ||
+                    (data.original && (data.original.src || data.original.href)) || '';
+
+                // Freischalten nur, wenn die Kategorie eingewilligt ist UND —
+                // falls der Service in einem unsicheren Drittland verarbeitet —
+                // zusätzlich die gesonderte Art.49-Einwilligung vorliegt.
+                if (this.hasConsent(category) && this.thirdCountryAllowed(url)) {
                     this.unblockElement(element, data);
                 }
             });
@@ -965,8 +984,30 @@
             if (category === 'necessary') {
                 return true;
             }
-            
+
             return this.consent[category] === true;
+        }
+
+        /**
+         * Verarbeitet die Ziel-URL Daten in einem unsicheren Drittland?
+         * (Service mit requires_third_country_consent — Domain in THIRD_COUNTRY_DOMAINS.)
+         */
+        requiresThirdCountryConsent(url) {
+            if (!url || THIRD_COUNTRY_DOMAINS.length === 0) return false;
+            const full = String(url).toLowerCase();
+            let host = '';
+            try { host = new URL(url, location.href).hostname.toLowerCase(); } catch (e) { host = ''; }
+            return THIRD_COUNTRY_DOMAINS.some(domain => this.matchesDomain(host, full, domain));
+        }
+
+        /**
+         * Darf eine ggf. drittland-relevante URL geladen werden? True, wenn die
+         * URL kein unsicheres Drittland berührt ODER die gesonderte
+         * Art.49-Einwilligung erteilt wurde.
+         */
+        thirdCountryAllowed(url) {
+            if (!this.requiresThirdCountryConsent(url)) return true;
+            return !!(this.consent && this.consent.third_country === true);
         }
         
         // ====================================================================

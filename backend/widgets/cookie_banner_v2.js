@@ -1125,7 +1125,8 @@
                         necessary: true,
                         functional: consent.functional || false,
                         analytics: consent.analytics || false,
-                        marketing: consent.marketing || false
+                        marketing: consent.marketing || false,
+                        third_country: consent.third_country || false
                     },
                     services: consent.services || [],
                     // ✅ Include Google Consent Mode status

@@ -160,6 +160,21 @@ PROVIDER_COUNTRIES: Dict[str, List[str]] = {
     "automattic": _AUTOMATTIC_GLOBAL,
 }
 
+# Anbieter-Namen (Freitext aus DB/Scan) → Unternehmens-Schlüssel. Wird genutzt,
+# wenn der service_key unbekannt ist; Matching per Teilstring (case-insensitive).
+PROVIDER_ALIASES: Dict[str, str] = {
+    "google": "google", "youtube": "google", "doubleclick": "google",
+    "meta": "meta", "facebook": "meta", "instagram": "meta", "whatsapp": "meta",
+    "microsoft": "microsoft", "bing": "microsoft", "clarity": "microsoft", "linkedin": "linkedin",
+    "adobe": "adobe", "typekit": "adobe", "monotype": "monotype", "fonts.com": "monotype",
+    "hotjar": "hotjar", "tiktok": "tiktok", "bytedance": "tiktok", "snap": "snapchat",
+    "hubspot": "hubspot", "intercom": "intercom", "segment": "segment",
+    "amplitude": "amplitude", "mixpanel": "mixpanel", "logrocket": "logrocket",
+    "fullstory": "fullstory", "vimeo": "vimeo", "crisp": "crisp", "drift": "drift",
+    "automattic": "automattic", "gravatar": "automattic", "jetpack": "automattic",
+    "wordpress.com": "automattic", "wordpress.org": "automattic", "wp.com": "automattic",
+}
+
 # Bekannte Drittanbieter-Dienst-Schlüssel (aus privacy_transfer_findings /
 # automated_cookie_scanner) → Anbieter-Unternehmen in PROVIDER_COUNTRIES.
 SERVICE_PROVIDER: Dict[str, str] = {
@@ -198,17 +213,42 @@ def split_countries(codes: Iterable[str]) -> Dict[str, List[str]]:
     return {"safe": safe, "unsafe": unsafe}
 
 
-def countries_for(*, service_key: str = "", provider_company: str = "") -> List[str]:
+def resolve_company(*, service_key: str = "", provider: str = "") -> str:
     """
-    Verarbeitungsländer für einen Dienst-Schlüssel ODER ein Anbieter-Unternehmen.
-    Leere Liste, wenn nichts hinterlegt ist (dann ist keine Aussage möglich).
+    Ermittelt den Unternehmens-Schlüssel aus service_key (bevorzugt) oder dem
+    Freitext-Anbieternamen. Leerer String, wenn nichts passt.
     """
-    company = provider_company.lower() or SERVICE_PROVIDER.get(service_key, "")
+    if service_key and service_key in SERVICE_PROVIDER:
+        return SERVICE_PROVIDER[service_key]
+    p = (provider or "").lower()
+    if not p:
+        return ""
+    # exakter Unternehmens-Token zuerst, dann Aliase (jeweils Teilstring-Match)
+    for company in PROVIDER_COUNTRIES:
+        if company in p:
+            return company
+    for alias, company in PROVIDER_ALIASES.items():
+        if alias in p:
+            return company
+    return ""
+
+
+def countries_for(
+    *, service_key: str = "", provider_company: str = "", provider: str = ""
+) -> List[str]:
+    """
+    Verarbeitungsländer für einen Dienst-Schlüssel, ein Anbieter-Unternehmen
+    ODER einen Freitext-Anbieternamen. Leere Liste, wenn nichts hinterlegt ist.
+    """
+    company = (
+        provider_company.lower()
+        or resolve_company(service_key=service_key, provider=provider)
+    )
     return list(PROVIDER_COUNTRIES.get(company, []))
 
 
 def country_processing_info(
-    *, service_key: str = "", provider_company: str = ""
+    *, service_key: str = "", provider_company: str = "", provider: str = ""
 ) -> Optional[Dict]:
     """
     Liefert die aufbereitete Drittland-Information für einen Dienst:
@@ -224,7 +264,9 @@ def country_processing_info(
 
     None, wenn für den Dienst/Anbieter keine Länder hinterlegt sind.
     """
-    codes = countries_for(service_key=service_key, provider_company=provider_company)
+    codes = countries_for(
+        service_key=service_key, provider_company=provider_company, provider=provider
+    )
     if not codes:
         return None
 

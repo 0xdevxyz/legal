@@ -19,6 +19,26 @@ import csv
 from cookie_scanner_service import cookie_scanner
 from file_storage_service import file_storage
 from agency_report_generator import AgencyReportGenerator
+from compliance_engine.data_processing_countries import country_processing_info
+
+
+def _enrich_third_country(service: dict) -> dict:
+    """
+    Reichert einen Service-Dict um Drittland-Infos an:
+    requires_third_country_consent (Art. 49), unsafe_third_country_names und
+    data_processing_countries. No-op, wenn für den Anbieter nichts hinterlegt ist.
+    """
+    info = country_processing_info(
+        service_key=service.get("service_key", "") or "",
+        provider=service.get("provider", "") or "",
+    )
+    if info:
+        service["requires_third_country_consent"] = info["requires_special_consent"]
+        service["unsafe_third_country_names"] = info["unsafe_country_names"]
+        service["data_processing_countries"] = info["countries_named"]
+    else:
+        service["requires_third_country_consent"] = False
+    return service
 
 logger = logging.getLogger(__name__)
 
@@ -1133,6 +1153,10 @@ async def get_available_services(
                     })
             except Exception as ce:
                 logger.warning(f"Custom services unavailable for {site_id}: {ce}")
+
+        # Drittland-Flag pro Service (Art. 49) anhängen — für Banner-Anzeige
+        # und Content-Blocker-Gating.
+        services = [_enrich_third_country(s) for s in services]
 
         # Group by category
         grouped = {}
