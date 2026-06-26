@@ -12,8 +12,10 @@ import hashlib
 import re
 from datetime import datetime, date
 import json
+import os
+import html as _html
 import logging
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
 import io
 import csv
 from cookie_scanner_service import cookie_scanner
@@ -788,7 +790,7 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
                     "gtm_enabled": False,
                     "gtm_container_id": None,
                     "privacy_policy_url": None,
-                    "cookie_policy_url": None,
+                    "cookie_policy_url": public_cookie_policy_url(site_id),
                     "imprint_url": None,
                     "revision": 1,
                     "is_active": False,  # ✅ FIX: Default ist FALSE - Banner nur zeigen wenn im Backend konfiguriert!
@@ -816,6 +818,11 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
 
         # ✅ Füge scan_completed Status hinzu
         config['scan_completed'] = config.get('scan_completed_at') is not None
+
+        # "Über Cookies"-Link: Wenn der Kunde keine eigene Cookie-Richtlinie-URL
+        # gesetzt hat, auf die von Complyo gehostete öffentliche Seite zeigen.
+        if not config.get('cookie_policy_url'):
+            config['cookie_policy_url'] = public_cookie_policy_url(site_id)
 
         # Convert datetime to ISO string
         if config.get('scan_completed_at'):
@@ -2717,6 +2724,111 @@ async def update_forwarding_config(
 # Phase 5: Cookie Policy Generator, Revision System, Import/Export
 # ============================================================================
 
+# Öffentliche Basis-URL, unter der die gehostete Cookie-Richtlinie erreichbar ist.
+# Das Widget verlinkt "Über Cookies" hierauf, wenn der Kunde keine eigene URL setzt.
+COOKIE_POLICY_BASE_URL = os.getenv("PUBLIC_API_BASE", "https://api.complyo.de").rstrip("/")
+
+
+def public_cookie_policy_url(site_id: str) -> str:
+    """Gehostete, öffentlich abrufbare Cookie-Richtlinie für eine site_id."""
+    return f"{COOKIE_POLICY_BASE_URL}/cookie-richtlinie/{site_id}"
+
+
+def _parse_service_cookies(raw) -> list:
+    """cookie_services.cookies ist JSONB; ohne json-Codec kommt es als str zurück."""
+    if not raw:
+        return []
+    parsed = raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            return []
+    return parsed if isinstance(parsed, list) else []
+
+
+async def _load_cookie_policy(db_pool: asyncpg.Pool, site_id: str, lang: str = "de"):
+    """
+    Lädt die aktive Banner-Config + konfigurierte Dienste und baut ein
+    strukturiertes Cookie-Policy-Dict. Gemeinsame Quelle für JSON- und HTML-Ausgabe.
+
+    Returns: (policy: dict, configured: bool)
+    """
+    de = (lang == "de")
+    config_query = """
+        SELECT c.*,
+               array_agg(s.name ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)        AS service_names,
+               array_agg(s.category ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)    AS service_categories,
+               array_agg(s.provider ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)    AS service_providers,
+               array_agg(s.description ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL) AS service_descriptions,
+               array_agg(s.cookies ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)     AS service_cookies
+        FROM cookie_banner_configs c
+        LEFT JOIN LATERAL jsonb_array_elements_text(c.services) AS svc_key ON true
+        LEFT JOIN cookie_services s ON s.service_key = svc_key
+        WHERE c.site_id = $1 AND c.is_active = true
+        GROUP BY c.id
+    """
+    row = await db_pool.fetchrow(config_query, site_id)
+
+    policy = {
+        "title": "Cookie-Richtlinie" if de else "Cookie Policy",
+        "last_updated": datetime.now().isoformat(),
+        "site_id": site_id,
+        "website": (row.get("last_scan_url") if row else None),
+        "privacy_policy_url": (row.get("privacy_policy_url") if row else None),
+        "imprint_url": (row.get("imprint_url") if row else None),
+        "sections": [],
+    }
+
+    if not row:
+        policy["sections"] = [
+            {
+                "title": "Einleitung" if de else "Introduction",
+                "content": "Diese Website verwendet Cookies und ähnliche Technologien, um die Benutzererfahrung zu verbessern." if de else "This website uses cookies and similar technologies to improve user experience.",
+            },
+            {
+                "title": "Ihre Rechte" if de else "Your Rights",
+                "content": "Sie können Ihre Einwilligung jederzeit widerrufen." if de else "You can withdraw your consent at any time.",
+            },
+        ]
+        return policy, False
+
+    policy["sections"].append({
+        "title": "Einleitung" if de else "Introduction",
+        "content": "Diese Website verwendet Cookies und ähnliche Technologien, um die Benutzererfahrung zu verbessern und bestimmte Funktionen bereitzustellen." if de else "This website uses cookies and similar technologies to improve user experience and provide certain features.",
+    })
+
+    categories = {
+        "necessary": {"name": "Notwendig" if de else "Necessary", "services": []},
+        "functional": {"name": "Funktional" if de else "Functional", "services": []},
+        "analytics": {"name": "Statistik" if de else "Statistics", "services": []},
+        "marketing": {"name": "Marketing", "services": []},
+    }
+
+    if row['service_names'] and row['service_names'][0]:
+        for i, name in enumerate(row['service_names']):
+            if name:
+                cat = row['service_categories'][i] if row['service_categories'] else 'functional'
+                if cat in categories:
+                    categories[cat]["services"].append({
+                        "name": name,
+                        "provider": row['service_providers'][i] if row['service_providers'] else "",
+                        "description": row['service_descriptions'][i] if row['service_descriptions'] else "",
+                        "cookies": _parse_service_cookies(row['service_cookies'][i] if row['service_cookies'] else None),
+                    })
+
+    for cat_key, cat_data in categories.items():
+        if cat_data["services"]:
+            policy["sections"].append({"title": cat_data["name"], "services": cat_data["services"]})
+
+    policy["sections"].append({
+        "title": "Ihre Rechte" if de else "Your Rights",
+        "content": "Sie können Ihre Einwilligung jederzeit widerrufen, indem Sie auf den Cookie-Einstellungen-Link klicken." if de else "You can withdraw your consent at any time by clicking the cookie settings link.",
+    })
+
+    return policy, True
+
+
 @router.get("/api/cookie-compliance/policy/{site_id}")
 async def generate_cookie_policy(
     site_id: str,
@@ -2724,100 +2836,154 @@ async def generate_cookie_policy(
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
-    Generate cookie policy document from configured services
+    Generate cookie policy document from configured services (JSON).
     """
     try:
-        config_query = """
-            SELECT c.*,
-                   array_agg(s.name ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)        AS service_names,
-                   array_agg(s.category ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)    AS service_categories,
-                   array_agg(s.provider ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)    AS service_providers,
-                   array_agg(s.description ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL) AS service_descriptions,
-                   array_agg(s.cookies ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)     AS service_cookies
-            FROM cookie_banner_configs c
-            LEFT JOIN LATERAL jsonb_array_elements_text(c.services) AS svc_key ON true
-            LEFT JOIN cookie_services s ON s.service_key = svc_key
-            WHERE c.site_id = $1 AND c.is_active = true
-            GROUP BY c.id
-        """
-        row = await db_pool.fetchrow(config_query, site_id)
-        
-        if not row:
-            policy = {
-                "title": "Cookie-Richtlinie" if lang == "de" else "Cookie Policy",
-                "last_updated": datetime.now().isoformat(),
-                "site_id": site_id,
-                "sections": [
-                    {
-                        "title": "Einleitung" if lang == "de" else "Introduction",
-                        "content": "Diese Website verwendet Cookies und ähnliche Technologien, um die Benutzererfahrung zu verbessern." if lang == "de" else "This website uses cookies and similar technologies to improve user experience."
-                    },
-                    {
-                        "title": "Ihre Rechte" if lang == "de" else "Your Rights",
-                        "content": "Sie können Ihre Einwilligung jederzeit widerrufen." if lang == "de" else "You can withdraw your consent at any time."
-                    }
-                ]
-            }
-            return {"success": True, "policy": policy, "format": "json", "configured": False}
-        
-        # Build policy document
-        policy = {
-            "title": "Cookie-Richtlinie" if lang == "de" else "Cookie Policy",
-            "last_updated": datetime.now().isoformat(),
-            "site_id": site_id,
-            "sections": []
-        }
-        
-        # Introduction
-        policy["sections"].append({
-            "title": "Einleitung" if lang == "de" else "Introduction",
-            "content": "Diese Website verwendet Cookies und ähnliche Technologien, um die Benutzererfahrung zu verbessern und bestimmte Funktionen bereitzustellen." if lang == "de" else "This website uses cookies and similar technologies to improve user experience and provide certain features."
-        })
-        
-        # Categorize services
-        categories = {
-            "necessary": {"name": "Notwendig", "services": []},
-            "functional": {"name": "Funktional", "services": []},
-            "analytics": {"name": "Statistik", "services": []},
-            "marketing": {"name": "Marketing", "services": []}
-        }
-        
-        if row['service_names'] and row['service_names'][0]:
-            for i, name in enumerate(row['service_names']):
-                if name:
-                    cat = row['service_categories'][i] if row['service_categories'] else 'functional'
-                    if cat in categories:
-                        categories[cat]["services"].append({
-                            "name": name,
-                            "provider": row['service_providers'][i] if row['service_providers'] else "",
-                            "description": row['service_descriptions'][i] if row['service_descriptions'] else "",
-                            "cookies": row['service_cookies'][i] if row['service_cookies'] else []
-                        })
-        
-        for cat_key, cat_data in categories.items():
-            if cat_data["services"]:
-                section = {
-                    "title": cat_data["name"],
-                    "services": cat_data["services"]
-                }
-                policy["sections"].append(section)
-        
-        # Rights section
-        policy["sections"].append({
-            "title": "Ihre Rechte" if lang == "de" else "Your Rights",
-            "content": "Sie können Ihre Einwilligung jederzeit widerrufen, indem Sie auf den Cookie-Einstellungen-Link klicken." if lang == "de" else "You can withdraw your consent at any time by clicking the cookie settings link."
-        })
-        
-        return {
-            "success": True,
-            "policy": policy,
-            "format": "json",
-            "configured": True
-        }
+        policy, configured = await _load_cookie_policy(db_pool, site_id, lang)
+        return {"success": True, "policy": policy, "format": "json", "configured": configured}
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Policy generation failed: {str(e)}")
+
+
+def _render_cookie_policy_html(policy: dict, lang: str = "de") -> str:
+    """Rendert das Policy-Dict als eigenständige, öffentlich anzeigbare HTML-Seite."""
+    de = (lang == "de")
+    esc = _html.escape
+    site_id = policy.get("site_id", "")
+    website = policy.get("website") or site_id
+
+    try:
+        stamp = datetime.fromisoformat(policy["last_updated"]).strftime("%d.%m.%Y")
+    except Exception:
+        stamp = policy.get("last_updated", "")
+
+    blocks = []
+    for section in policy.get("sections", []):
+        title = esc(section.get("title", ""))
+        if section.get("content"):
+            blocks.append(f'<section><h2>{title}</h2><p>{esc(section["content"])}</p></section>')
+            continue
+        # Service-Kategorie mit Dienst-/Cookie-Tabelle
+        rows = []
+        for svc in section.get("services", []):
+            cookie_items = []
+            for c in svc.get("cookies", []):
+                if isinstance(c, dict):
+                    parts = [str(c.get("name") or c.get("key") or "")]
+                    if c.get("duration") or c.get("expiry"):
+                        parts.append(str(c.get("duration") or c.get("expiry")))
+                    if c.get("purpose") or c.get("description"):
+                        parts.append(str(c.get("purpose") or c.get("description")))
+                    cookie_items.append(" – ".join(p for p in parts if p))
+                else:
+                    cookie_items.append(str(c))
+            cookies_html = esc(", ".join(ci for ci in cookie_items if ci)) or "—"
+            rows.append(
+                "<tr>"
+                f"<td>{esc(svc.get('name',''))}</td>"
+                f"<td>{esc(svc.get('provider',''))}</td>"
+                f"<td>{esc(svc.get('description',''))}</td>"
+                f"<td>{cookies_html}</td>"
+                "</tr>"
+            )
+        thead = (
+            "<thead><tr><th>Dienst</th><th>Anbieter</th><th>Zweck</th><th>Cookies</th></tr></thead>"
+            if de else
+            "<thead><tr><th>Service</th><th>Provider</th><th>Purpose</th><th>Cookies</th></tr></thead>"
+        )
+        blocks.append(
+            f'<section><h2>{title}</h2>'
+            f'<div class="table-wrap"><table>{thead}<tbody>{"".join(rows)}</tbody></table></div></section>'
+        )
+
+    legal_basis = (
+        "<section><h2>Rechtsgrundlage</h2><p>Das Speichern und Auslesen von Cookies erfolgt nach "
+        "§ 25 TDDDG. Technisch notwendige Cookies sind ohne Einwilligung zulässig "
+        "(Art. 6 Abs. 1 lit. f DSGVO); alle übrigen Cookies setzen wir nur mit Ihrer "
+        "Einwilligung (Art. 6 Abs. 1 lit. a DSGVO).</p></section>"
+    ) if de else (
+        "<section><h2>Legal basis</h2><p>Storing and reading cookies is based on Art. 6 GDPR. "
+        "Strictly necessary cookies do not require consent; all other cookies are only set with your consent.</p></section>"
+    )
+
+    extra_links = []
+    if policy.get("privacy_policy_url"):
+        label = "Datenschutzerklärung" if de else "Privacy Policy"
+        extra_links.append(f'<a href="{esc(policy["privacy_policy_url"])}">{label}</a>')
+    if policy.get("imprint_url"):
+        label = "Impressum" if de else "Imprint"
+        extra_links.append(f'<a href="{esc(policy["imprint_url"])}">{label}</a>')
+    links_html = (" · ".join(extra_links)) if extra_links else ""
+
+    stand_label = "Stand" if de else "Last updated"
+    intro_controller = (
+        f"<p class=\"muted\">{('Diese Cookie-Richtlinie gilt für' if de else 'This cookie policy applies to')} "
+        f"<strong>{esc(website)}</strong>.</p>"
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="{esc(lang)}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{esc(policy.get('title',''))}</title>
+<style>
+  :root {{ color-scheme: light; }}
+  * {{ box-sizing: border-box; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         line-height: 1.6; color: #1f2937; background: #f8fafc; margin: 0; padding: 2rem 1rem; }}
+  .container {{ max-width: 860px; margin: 0 auto; background: #fff; border-radius: 14px;
+               box-shadow: 0 4px 24px rgba(0,0,0,.06); padding: 2.5rem; }}
+  h1 {{ font-size: 1.9rem; margin: 0 0 .25rem; }}
+  h2 {{ font-size: 1.25rem; margin: 2rem 0 .75rem; color: #111827; }}
+  p {{ margin: .5rem 0; }}
+  .muted {{ color: #6b7280; font-size: .9rem; }}
+  .table-wrap {{ overflow-x: auto; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: .5rem; }}
+  th, td {{ text-align: left; padding: .55rem .6rem; border: 1px solid #e5e7eb; vertical-align: top; }}
+  th {{ background: #f9fafb; font-weight: 600; }}
+  .footer {{ margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;
+            font-size: .85rem; color: #6b7280; }}
+  .footer a {{ color: #4f46e5; text-decoration: none; }}
+  .footer a:hover {{ text-decoration: underline; }}
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>{esc(policy.get('title',''))}</h1>
+    <p class="muted">{stand_label}: {esc(stamp)}</p>
+    {intro_controller}
+    {''.join(blocks)}
+    {legal_basis}
+    <div class="footer">
+      {links_html}{(' · ' if links_html else '')}<span>Cookie-Compliance by Complyo</span>
+    </div>
+  </div>
+</body>
+</html>"""
+
+
+@router.get("/cookie-richtlinie/{site_id}", response_class=HTMLResponse)
+async def public_cookie_policy_page(
+    site_id: str,
+    lang: str = "de",
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Öffentlich abrufbare Cookie-Richtlinie als HTML-Seite.
+    Ziel des "Über Cookies"-Links im Cookie-Banner. Kein Login erforderlich.
+    """
+    try:
+        policy, _configured = await _load_cookie_policy(db_pool, site_id, lang)
+        html_out = _render_cookie_policy_html(policy, lang)
+        return HTMLResponse(content=html_out, headers={"Cache-Control": "public, max-age=300"})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Cookie policy page failed: {str(e)}")
 
 
 @router.get("/api/cookie-compliance/revisions/{site_id}")
