@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Save, Eye, EyeOff, Check, Palette, Type, Settings2, Sparkles, Link, Globe, Clock } from 'lucide-react';
+import { Save, Eye, EyeOff, Check, Palette, Type, Settings2, Sparkles, Link, Globe, Clock, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -13,10 +13,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { apiClient as httpApiClient } from '@/lib/api-client';
 
 interface CookieBannerDesignerProps {
   config: any;
   siteId: string;
+  websiteUrl?: string;
   onSave: (config: any) => Promise<boolean>;
 }
 
@@ -63,6 +65,7 @@ const DEFAULT_CONFIG = {
 const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
   config: initialConfig,
   siteId,
+  websiteUrl,
   onSave,
 }) => {
   const [config, setConfig] = useState({ ...DEFAULT_CONFIG, ...(initialConfig || {}) });
@@ -71,6 +74,38 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
   const [showPreview, setShowPreview] = useState(true);
   const [saved, setSaved] = useState(false);
   const [textLang, setTextLang] = useState<'de' | 'en'>('de');
+  const [extracting, setExtracting] = useState(false);
+  const [extractMsg, setExtractMsg] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(null);
+
+  // Liest die Markenfarben der Website live aus und übernimmt sie in die
+  // Vorschau. Gespeichert wird erst beim bewussten Klick auf „Speichern".
+  const extractColors = async () => {
+    const url = websiteUrl || config.last_scan_url || (config.site_id || siteId || '').replace(/-/g, '.');
+    if (!url) {
+      setExtractMsg({ type: 'error', text: 'Keine Website-URL gefunden.' });
+      return;
+    }
+    setExtracting(true);
+    setExtractMsg(null);
+    try {
+      const data = await httpApiClient.post('/api/cookie-compliance/extract-colors', { url }) as any;
+      if (data?.success && data.colors) {
+        setConfig((prev: any) => ({ ...prev, ...data.colors }));
+        setColorPreset('custom');
+        setExtractMsg(
+          data.scraped
+            ? { type: 'success', text: `Farben von ${url} übernommen — zum Übernehmen speichern.` }
+            : { type: 'info', text: 'Keine eindeutigen Markenfarben gefunden — Standardvorschlag beibehalten.' }
+        );
+      } else {
+        setExtractMsg({ type: 'error', text: 'Farben konnten nicht ausgelesen werden.' });
+      }
+    } catch (err: any) {
+      setExtractMsg({ type: 'error', text: err?.response?.data?.detail || 'Farben konnten nicht ausgelesen werden.' });
+    } finally {
+      setExtracting(false);
+    }
+  };
 
   useEffect(() => {
     if (initialConfig) {
@@ -204,6 +239,31 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Farben automatisch von der Website auslesen */}
+            <div className="space-y-2">
+              <Button
+                onClick={extractColors}
+                disabled={extracting}
+                variant="outline"
+                className="w-full border-orange-500/40 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20 hover:text-orange-200"
+              >
+                {extracting ? (
+                  <><div className="w-4 h-4 border-2 border-orange-300/30 border-t-orange-300 rounded-full animate-spin mr-2"></div>Liest Farben aus…</>
+                ) : (
+                  <><Wand2 className="w-4 h-4 mr-2" />Farben von Website auslesen</>
+                )}
+              </Button>
+              {extractMsg && (
+                <p className={`text-xs ${
+                  extractMsg.type === 'success' ? 'text-green-400'
+                  : extractMsg.type === 'error' ? 'text-red-400'
+                  : 'text-gray-400'
+                }`}>
+                  {extractMsg.text}
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
               {Object.entries(colorPresets).map(([key, preset]) => (
                 <button

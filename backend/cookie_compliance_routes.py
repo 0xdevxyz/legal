@@ -840,6 +840,88 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
         print(f"Error getting banner config: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get configuration: {str(e)}")
 
+class ExtractColorsRequest(BaseModel):
+    url: str = Field(..., description="URL der Website, deren Markenfarben ausgelesen werden sollen")
+
+
+@router.post("/api/cookie-compliance/extract-colors")
+async def extract_colors(
+    payload: ExtractColorsRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """
+    Liest die dominanten Markenfarben einer Website live aus und gibt sie als
+    Banner-Vorschlag zurück — OHNE die Konfiguration zu speichern. Der Nutzer
+    übernimmt die Farben im Designer und speichert sie erst bewusst.
+
+    Spiegelt das Scraping-Pattern aus website_routes.py (Erstanlage einer Site).
+    """
+    # Auth + Modul-Check: nur zahlende Cookie-Kunden dürfen scrapen.
+    user = await get_current_user_required(credentials)
+    await require_module(user, 'cookie')
+
+    try:
+        from website_crawler import WebsiteCrawler
+        from bs4 import BeautifulSoup
+        from ssrf_protection import validate_url, SSRFError
+        import aiohttp
+
+        crawl_url = payload.url if payload.url.startswith('http') else f'https://{payload.url}'
+        try:
+            crawl_url = validate_url(crawl_url)
+        except SSRFError:
+            raise HTTPException(status_code=400, detail="URL ist nicht erlaubt (SSRF-Schutz).")
+
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(
+                crawl_url,
+                headers={'User-Agent': 'Mozilla/5.0 (compatible; ComplyoBot/1.0)'},
+                allow_redirects=True
+            ) as resp:
+                if resp.status != 200:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"Website nicht erreichbar (HTTP {resp.status})."
+                    )
+                html = await resp.text()
+
+        soup = BeautifulSoup(html, 'lxml')
+        colors = WebsiteCrawler().extract_brand_colors(soup, html)
+
+        if not colors.get('scraped'):
+            return {
+                "success": True,
+                "scraped": False,
+                "message": "Keine eindeutigen Markenfarben gefunden — Standardvorschlag beibehalten.",
+                "colors": {
+                    "primary_color": colors['primary_color'],
+                    "accent_color": colors['accent_color'],
+                    "text_color": colors['text_color'],
+                    "bg_color": colors['bg_color'],
+                },
+            }
+
+        logger.info(f"✅ Farben live gescrapt für {payload.url}: {colors['primary_color']} / {colors['accent_color']}")
+        return {
+            "success": True,
+            "scraped": True,
+            "colors": {
+                "primary_color": colors['primary_color'],
+                "accent_color": colors['accent_color'],
+                "text_color": colors['text_color'],
+                "bg_color": colors['bg_color'],
+            },
+            "candidates": colors.get('raw_candidates', []),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Live-Farb-Scraping fehlgeschlagen für {payload.url}: {e}")
+        raise HTTPException(status_code=500, detail=f"Farben konnten nicht ausgelesen werden: {type(e).__name__}")
+
+
 @router.post("/api/cookie-compliance/config")
 async def create_or_update_config(
     config: BannerConfig,

@@ -653,6 +653,7 @@ export default function CookieCompliancePage() {
                 <CookieBannerDesigner
                   config={config}
                   siteId={siteId}
+                  websiteUrl={websiteUrl}
                   onSave={saveConfig}
                 />
               </TabsContent>
