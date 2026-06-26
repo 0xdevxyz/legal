@@ -1288,7 +1288,7 @@
                     color: ${textColor};
                     border-radius: 12px;
                     padding: 28px 32px;
-                    max-width: 520px;
+                    max-width: 760px;
                     width: 92%;
                     max-height: 85vh;
                     overflow-y: auto;
@@ -1374,12 +1374,34 @@
                     border-radius: 4px;
                 }
                 
+                /* Two-Column-Layout: Text links, Buttons rechts daneben */
+                .complyo-main {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 28px;
+                }
+
+                .complyo-text {
+                    flex: 1 1 auto;
+                    min-width: 0;
+                }
+
+                .complyo-main .complyo-title {
+                    text-align: left;
+                }
+
+                .complyo-main .complyo-description:last-child,
+                .complyo-main .complyo-age-notice:last-child {
+                    margin-bottom: 0;
+                }
+
                 /* Buttons - Clean & Professional */
                 .complyo-actions {
                     display: flex;
                     flex-direction: column;
                     gap: 10px;
-                    margin-top: 22px;
+                    flex: 0 0 240px;
+                    align-self: stretch;
                 }
 
                 .complyo-btn {
@@ -1802,8 +1824,13 @@
                         font-size: 15px;
                     }
                     
+                    .complyo-main {
+                        flex-direction: column;
+                        gap: 18px;
+                    }
+
                     .complyo-actions {
-                        margin-top: 18px;
+                        flex: 1 1 auto;
                         gap: 10px;
                     }
 
@@ -1887,40 +1914,44 @@
 
             banner.innerHTML = `
                 <div class="complyo-content">
-                    <h2 id="complyo-banner-title" class="complyo-title">${sanitizeText(t.title)}</h2>
-                    <p id="complyo-banner-desc" class="complyo-description">
-                        ${sanitizeText(t.description)}
-                    </p>
-                    <p class="complyo-description">
-                        ${sanitizeText(t.description2)}
-                    </p>
-                    ${t.ageNotice ? `
-                        <div class="complyo-age-notice">
-                            ${sanitizeText(t.ageNotice)}
+                    <div class="complyo-main">
+                        <div class="complyo-text">
+                            <h2 id="complyo-banner-title" class="complyo-title">${sanitizeText(t.title)}</h2>
+                            <p id="complyo-banner-desc" class="complyo-description">
+                                ${sanitizeText(t.description)}
+                            </p>
+                            <p class="complyo-description">
+                                ${sanitizeText(t.description2)}
+                            </p>
+                            ${t.ageNotice ? `
+                                <div class="complyo-age-notice">
+                                    ${sanitizeText(t.ageNotice)}
+                                </div>
+                            ` : ''}
                         </div>
-                    ` : ''}
-                    <div class="complyo-actions">
-                        <button 
-                            id="complyo-accept-all" 
-                            class="complyo-btn complyo-btn-primary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
-                            aria-label="${sanitizeText(t.acceptAll)}"
-                        >
-                            ${sanitizeText(t.acceptAll)}
-                        </button>
-                        <button 
-                            id="complyo-reject-all" 
-                            class="complyo-btn complyo-btn-secondary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
-                            aria-label="${sanitizeText(t.continueWithout)}"
-                        >
-                            ${sanitizeText(t.continueWithout)}
-                        </button>
-                        <button 
-                            id="complyo-settings" 
-                            class="complyo-btn complyo-btn-link"
-                            aria-label="${sanitizeText(t.settingsLink)}"
-                        >
-                            ${sanitizeText(t.settingsLink)}
-                        </button>
+                        <div class="complyo-actions">
+                            <button
+                                id="complyo-accept-all"
+                                class="complyo-btn complyo-btn-primary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
+                                aria-label="${sanitizeText(t.acceptAll)}"
+                            >
+                                ${sanitizeText(t.acceptAll)}
+                            </button>
+                            <button
+                                id="complyo-reject-all"
+                                class="complyo-btn complyo-btn-secondary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
+                                aria-label="${sanitizeText(t.continueWithout)}"
+                            >
+                                ${sanitizeText(t.continueWithout)}
+                            </button>
+                            <button
+                                id="complyo-settings"
+                                class="complyo-btn complyo-btn-link"
+                                aria-label="${sanitizeText(t.settingsLink)}"
+                            >
+                                ${sanitizeText(t.settingsLink)}
+                            </button>
+                        </div>
                     </div>
                     <div class="complyo-footer">
                         <a href="${privacyUrl}" target="_blank" rel="noopener">${sanitizeText(t.privacyPolicy)}</a>
