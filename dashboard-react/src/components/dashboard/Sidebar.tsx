@@ -56,7 +56,7 @@ const NAV_ITEMS: NavItem[] = [
 // Secondary destinations — surfaced in the avatar popover and the mobile drawer.
 const ACCOUNT_ITEMS: NavItem[] = [
   { label: 'Rechts-Wissen', icon: BookOpen, href: '/knowledge' },
-  { label: 'Alt-Text Review', icon: ListChecks, href: '/accessibility/review' },
+  { label: 'A11y-Worklist', icon: ListChecks, href: '/accessibility/worklist' },
   { label: 'EU-Vergleich', icon: Globe, href: '/compliance/countries' },
   { label: 'Add-ons', icon: Package, href: '/dashboard/addons' },
   { label: 'Einstellungen', icon: Settings, href: '/settings' },

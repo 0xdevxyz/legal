@@ -36,6 +36,15 @@ Alle Pflicht-Migrationen sind im self-healing Runner registriert: `backend/main_
   generiert Alt-Texte (heuristisch, TODO KI), leitet document_fixes deterministisch aus Scan-Issues ab,
   holt bei 2.4.4-Befund die Seite und generiert link_fixes (pending). Schreibt unter stabiler site_id.
 - **Manifest-Endpoint** `backend/widget_routes.py` → `get_fix_manifest`. `/alt-text-fixes` bleibt back-compat.
+- **Review-Endpoints** `backend/alt_text_routes.py` (Router `/api/accessibility`, Auth required):
+  `GET /alt-text-review-queue`, `POST /approve-alt-text`, `POST /generate-alt-texts`, `POST /scan-images`,
+  `GET /link-review-queue`, `POST /approve-link`, `GET /worklist` (vereinheitlicht: ein Call für die UI).
+
+## Frontend (dashboard-react, App Router)
+- **Worklist-Seite** `src/app/accessibility/worklist/page.tsx` + Komponente
+  `src/components/accessibility/AccessibilityWorklist.tsx`: listet Alt-Text- und Link-Vorschläge
+  (Approve/Reject, Label editierbar) und zeigt dokumentweite Fixes read-only; Zähler „zu prüfen / live“.
+  site_id via `generateSiteId(activeSite.url)` (= Backend `derive_site_id`). Sidebar: „A11y-Worklist“.
 
 ## Channels (Adapter)
 | Channel | Datei | Konsumiert Manifest | Setzt |
@@ -58,7 +67,8 @@ WP wendet Link-aria im Output-Buffer an (ganze Seite inkl. Navigation).
   (holt Seite, findet vage Links, generiert Label-Vorschlag, persistiert `pending`/HITL) +
   Manifest `link_fixes` (v1.1.0) + alle 3 Channels setzen aria-label (guarded) + E2E-Test grün.
   Vorschläge sind heuristisch aus Kontext; Auslieferung erst nach Review (Block 2).
-- 🔵 **Block 2 — Dashboard-Worklist/Review-UI**: Review-Endpoints (list/approve/reject) + `dashboard-react`-Seite.
+- 🟢 **Block 2 — Dashboard-Worklist/Review-UI**: Review-Endpoints (`/worklist`, `/link-review-queue`,
+  `/approve-link`) + `dashboard-react`-Seite mit Approve/Reject + Zählern. tsc grün.
 - 🔵 **Block 3 — Echter Playwright-Re-Scan**: `LiveValidator` an `ComplianceScanner` (axe) andocken.
 
 ## Bewusste Grenzen

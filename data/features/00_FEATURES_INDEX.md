@@ -14,6 +14,6 @@
 
 | Feature | Doc | Status | Stand |
 |---|---|---|---|
-| Barrierefreiheits-Remediation (Fix-Manifest + Channels + Link-Zweck) | [accessibility-remediation.md](accessibility-remediation.md) | 🟡 in Arbeit (Block 1 live; Block 2/3 offen) | 2026-06-26 |
+| Barrierefreiheits-Remediation (Fix-Manifest + Channels + Link-Zweck + Worklist) | [accessibility-remediation.md](accessibility-remediation.md) | 🟡 in Arbeit (Block 1+2 live; Block 3 offen) | 2026-06-26 |
 
 <!-- Neue Features als Zeile ergänzen. Doc-Datei = data/features/<kebab-name>.md -->

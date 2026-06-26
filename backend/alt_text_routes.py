@@ -48,6 +48,12 @@ class ApproveAltTextRequest(BaseModel):
     custom_alt: Optional[str] = None
 
 
+class ApproveLinkRequest(BaseModel):
+    fix_id: int          # SERIAL id aus accessibility_link_fixes
+    approved: bool
+    custom_label: Optional[str] = None
+
+
 def _filename_from_url(url: str) -> str:
     try:
         path = urlparse(url).path
@@ -177,6 +183,95 @@ async def approve_alt_text(
         raise
     except Exception as e:
         logger.error(f"Error approving alt-text: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/link-review-queue")
+async def link_review_queue(
+    site_id: str = Query(..., description="Site ID"),
+    status: str = Query("pending", description="pending | approved | rejected | deployed"),
+    current_user: Dict[str, Any] = Depends(get_required_user)
+):
+    """Liste der Link-Zweck-Fixes (WCAG 2.4.4) zum Review (Dashboard)."""
+    try:
+        saver = AccessibilityFixSaver(db_pool)
+        items = await saver.get_link_fixes_for_site(site_id, status=status)
+        return {"success": True, "items": items, "count": len(items)}
+    except Exception as e:
+        logger.error(f"Error loading link review queue: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/approve-link")
+async def approve_link(
+    request: ApproveLinkRequest,
+    current_user: Dict[str, Any] = Depends(get_required_user)
+):
+    """Genehmigt/lehnt einen Link-aria-Vorschlag ab; optional Label überschreiben."""
+    try:
+        user_id = current_user.get("user_id") or current_user.get("id")
+        saver = AccessibilityFixSaver(db_pool)
+        new_status = 'approved' if request.approved else 'rejected'
+        try:
+            ok = await saver.set_link_status(
+                fix_id=request.fix_id, status=new_status,
+                custom_label=request.custom_label, user_id=user_id
+            )
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if not ok:
+            raise HTTPException(status_code=404, detail="Fix not found")
+        return {"success": True, "fix_id": request.fix_id, "status": new_status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error approving link fix: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/worklist")
+async def accessibility_worklist(
+    site_id: str = Query(..., description="Site ID"),
+    current_user: Dict[str, Any] = Depends(get_required_user)
+):
+    """
+    Vereinheitlichte A11y-Worklist für das Dashboard: Review-Items + Zähler über
+    Alt-Texte (HITL), Link-Zweck (HITL) und dokumentweite Fixes (auto, read-only).
+    Ein Aufruf bedient die ganze Worklist-Seite.
+    """
+    try:
+        saver = AccessibilityFixSaver(db_pool)
+
+        alt_pending = await saver.get_review_queue(site_id, status='pending')
+        alt_approved = await saver.get_fixes_for_site(site_id, status='approved')
+        link_pending = await saver.get_link_fixes_for_site(site_id, status='pending')
+        link_approved = await saver.get_link_fixes_for_site(site_id, status='approved')
+        doc_fixes = await saver.get_document_fixes_for_site(site_id, status='approved')
+
+        return {
+            "success": True,
+            "site_id": site_id,
+            "alt_texts": {
+                "pending": alt_pending,
+                "approved_count": len(alt_approved),
+                "pending_count": len(alt_pending),
+            },
+            "link_fixes": {
+                "pending": link_pending,
+                "approved_count": len(link_approved),
+                "pending_count": len(link_pending),
+            },
+            "document_fixes": {
+                "items": doc_fixes,          # auto-approved, read-only
+                "count": len(doc_fixes),
+            },
+            "totals": {
+                "needs_review": len(alt_pending) + len(link_pending),
+                "live": len(alt_approved) + len(link_approved) + len(doc_fixes),
+            },
+        }
+    except Exception as e:
+        logger.error(f"Error loading accessibility worklist: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
