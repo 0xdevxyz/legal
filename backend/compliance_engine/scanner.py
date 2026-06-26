@@ -120,6 +120,29 @@ class ComplianceScanner:
             soup = BeautifulSoup(main_page['content'], 'html.parser')
             main_page_headers = main_page.get('headers', {})
 
+            # ⚠️ Fehlerstatus, ABER vollständige Seite ausgeliefert: Viele (WordPress-)
+            # Seiten setzen wegen eines PHP-Fatals/Plugin-Fehlers im Shutdown einen
+            # 500er, rendern den Body aber komplett. Browser zeigen die Seite normal an
+            # und alle Compliance-Inhalte sind vorhanden → wir scannen den gelieferten
+            # Inhalt, statt irreführend abzubrechen. Echte Wartung/Down (502/503/504),
+            # Zugriffssperren (401/403) und 404 bleiben weiterhin "nicht scanbar".
+            body = main_page.get('content') or ""
+            title_tag = soup.title.string.strip() if (soup.title and soup.title.string) else ""
+            delivers_full_page = (
+                status_code not in (401, 403, 404, 502, 503, 504)
+                and len(body) > 3000
+                and '</html>' in body.lower()
+                and soup.find('body') is not None
+                and bool(title_tag)
+            )
+            if status_code >= 400 and delivers_full_page:
+                logger.warning(
+                    f"⚠️ {url} antwortet mit HTTP {status_code}, liefert aber eine "
+                    f"vollständige Seite ({len(body)} Bytes, Titel: '{title_tag[:60]}') "
+                    f"— Scan wird trotz Fehlerstatus durchgeführt."
+                )
+                status_code = 200  # als scanbar behandeln; Inhalt ist vollständig vorhanden
+
             # 🚧 Nicht scanbar: HTTP-Fehlerstatus → Hinweis statt irreführendem Score.
             # Grundsystem (CMS) trotzdem aus dem ausgelieferten HTML erkennen.
             if status_code >= 400:
