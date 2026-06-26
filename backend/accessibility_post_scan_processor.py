@@ -7,6 +7,7 @@ Verarbeitet Barrierefreiheits-Issues nach einem Scan und generiert Alt-Texte
 import asyncpg
 import json
 import logging
+import re
 from typing import List, Dict, Any
 from accessibility_fix_saver import AccessibilityFixSaver
 from site_id_utils import derive_site_id
@@ -70,6 +71,20 @@ class AccessibilityPostScanProcessor:
                     fixes=document_fixes,
                 )
                 logger.info(f"🧩 Persisted {doc_saved} document-level fixes for {stable_site_id}")
+
+            # WCAG 2.4.4 Link-Zweck (Stufe 2/HITL): nichtssagende Links holen,
+            # aria-label-Vorschläge generieren, als 'pending' für Review speichern.
+            link_saved = 0
+            if self._has_link_purpose_issue(accessibility_issues):
+                link_fixes = await self._derive_link_fixes(site_url)
+                if link_fixes:
+                    link_saved = await self.fix_saver.save_link_fixes(
+                        site_id=stable_site_id,
+                        scan_id=scan_id,
+                        user_id=user_id,
+                        fixes=link_fixes,
+                    )
+                    logger.info(f"🔗 Persisted {link_saved} link-purpose suggestions (pending) for {stable_site_id}")
 
             if not accessibility_issues:
                 logger.info(f"✅ No accessibility issues found for {site_url}")
@@ -277,6 +292,148 @@ class AccessibilityPostScanProcessor:
             })
 
         return fixes
+
+    # =========================================================================
+    # WCAG 2.4.4 — Link-Zweck (nichtssagende Linktexte)
+    # =========================================================================
+
+    # Nichtssagende Linktexte (dieselbe Liste wie die Heuristik-Detection).
+    _VAGUE_LINK_RE = re.compile(
+        r'^(hier|here|click here|hier klicken|mehr|more|weiterlesen|read more|'
+        r'details|link|weiter|next|mehr erfahren|mehr lesen|›|»|\.{3}|…)$',
+        re.I
+    )
+
+    def _has_link_purpose_issue(self, accessibility_issues: List[Dict[str, Any]]) -> bool:
+        blob = ' '.join(
+            (str(i.get('title', '')) + ' ' + str(i.get('description', '')) + ' '
+             + ' '.join(str(w) for w in (i.get('wcag_criteria') or [])))
+            for i in accessibility_issues
+        ).lower()
+        return ('2.4.4' in blob or 'wcag244' in blob
+                or 'nichtssagend' in blob or 'linktext' in blob or 'link purpose' in blob)
+
+    async def _derive_link_fixes(self, site_url: str) -> List[Dict[str, Any]]:
+        """
+        Holt die Seite, findet nichtssagende Links und generiert je Link einen
+        aussagekräftigen aria-label-Vorschlag aus dem Kontext (nächste Überschrift /
+        Umgebungstext / href-Slug). Self-contained — kein Durchreichen durch die
+        Scan-Pipeline nötig. Fehlertolerant: bei Problemen leere Liste.
+        """
+        try:
+            import aiohttp
+            from bs4 import BeautifulSoup
+        except Exception as e:
+            logger.warning(f"[Link-Fix] Abhängigkeiten fehlen ({e}) – überspringe.")
+            return []
+
+        url = site_url if site_url.startswith('http') else f'https://{site_url}'
+        html = None
+        try:
+            timeout = aiohttp.ClientTimeout(total=15)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url, allow_redirects=True) as resp:
+                    if resp.status != 200:
+                        logger.info(f"[Link-Fix] {url} nicht abrufbar (HTTP {resp.status})")
+                        return []
+                    html = await resp.text()
+        except Exception as e:
+            logger.warning(f"[Link-Fix] Abruf fehlgeschlagen für {url}: {e}")
+            return []
+
+        if not html:
+            return []
+
+        soup = BeautifulSoup(html, 'html.parser')
+        seen = set()
+        fixes: List[Dict[str, Any]] = []
+
+        for a in soup.find_all('a', href=True):
+            text = a.get_text(strip=True)
+            if not text or not self._VAGUE_LINK_RE.match(text):
+                continue
+            # Bereits zugänglicher Name vorhanden → kein Fix nötig.
+            if a.get('aria-label', '').strip() or a.get('title', '').strip():
+                continue
+
+            href = a.get('href', '').strip()
+            key = (href, ' '.join(text.split()).lower())
+            if key in seen:
+                continue
+            seen.add(key)
+
+            context = self._link_context(a, href)
+            label = self._suggest_link_label(text, context, href)
+            if not label:
+                continue
+            confidence = 0.8 if context else 0.5
+
+            fixes.append({
+                'page_url': url,
+                'link_href': href,
+                'link_text': text,
+                'suggested_label': label,
+                'confidence': confidence,
+                'surrounding_text': context[:500],
+                'source': 'scan',
+            })
+
+        return fixes
+
+    def _link_context(self, a, href: str) -> str:
+        """Bester verfügbarer Kontext für einen Link: Überschrift / Absatz / href-Slug."""
+        # 1) nächstgelegene vorausgehende Überschrift
+        try:
+            prev = a.find_previous(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+            if prev:
+                t = prev.get_text(strip=True)
+                if t and len(t) > 2:
+                    return t
+        except Exception:
+            pass
+        # 2) Text des umschließenden Absatzes/List-Items (ohne den Linktext selbst)
+        try:
+            parent = a.find_parent(['p', 'li', 'figcaption', 'td'])
+            if parent:
+                t = parent.get_text(' ', strip=True)
+                link_t = a.get_text(strip=True)
+                t = t.replace(link_t, '').strip()
+                if t and len(t) > 3:
+                    return t
+        except Exception:
+            pass
+        # 3) href-Slug humanisieren
+        return self._humanize_href(href)
+
+    @staticmethod
+    def _humanize_href(href: str) -> str:
+        if not href or href.startswith('#') or href.startswith('javascript:'):
+            return ''
+        slug = href.split('?')[0].split('#')[0].rstrip('/').split('/')[-1]
+        slug = slug.replace('.html', '').replace('.php', '')
+        slug = slug.replace('-', ' ').replace('_', ' ').strip()
+        return slug.title() if slug else ''
+
+    def _suggest_link_label(self, text: str, context: str, href: str) -> str:
+        """Baut einen lesbaren aria-label-Vorschlag aus Linktext + Kontext."""
+        context = (context or '').strip()
+        # Kontext auf eine knappe Phrase begrenzen.
+        if context:
+            words = context.split()
+            short = ' '.join(words[:8])
+            base = text.strip().rstrip('…').strip()
+            base_l = base.lower()
+            if base_l in ('mehr', 'more', 'mehr erfahren', 'mehr lesen', 'weiterlesen',
+                          'read more', 'weiter', 'details'):
+                return f"Mehr über {short}"
+            if base_l in ('hier', 'here', 'hier klicken', 'click here', 'link'):
+                return f"{short}"
+            if base_l in ('weiter', 'next', '›', '»'):
+                return f"Weiter zu {short}"
+            return f"{base}: {short}"
+        # Kein Kontext: wenigstens den href-Slug nutzen, sonst nichts vorschlagen.
+        slug = self._humanize_href(href)
+        return f"Mehr über {slug}" if slug else ''
 
     def _extract_accessibility_issues(
         self,

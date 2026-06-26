@@ -22,6 +22,7 @@ class Complyo_A11y_Remediation {
 
     const OPTION_MAP       = 'complyo_a11y_alt_map';   // [normalisierter_dateiname => alt-text]
     const OPTION_DOC       = 'complyo_a11y_doc_fixes'; // dokumentweite Fixes (lang/skip-link/css)
+    const OPTION_LINK      = 'complyo_a11y_link_fixes';// Link-Zweck-Fixes (WCAG 2.4.4)
     const OPTION_LAST_SYNC = 'complyo_a11y_last_sync'; // unix timestamp
     const CRON_HOOK        = 'complyo_a11y_sync_event';
 
@@ -124,8 +125,9 @@ class Complyo_A11y_Remediation {
 
         $body = json_decode(wp_remote_retrieve_body($res), true);
 
-        // Dokumentweite Fixes immer aktualisieren (auch wenn leer).
+        // Dokumentweite Fixes + Link-Zweck-Fixes immer aktualisieren (auch wenn leer).
         $this->store_document_fixes(is_array($body) ? $body : array());
+        $this->store_link_fixes(is_array($body) ? $body : array());
 
         // Rückwärtskompatibel: Manifest nutzt "alt_texts", Alt-Endpoint nutzte "fixes".
         $alt_list = array();
@@ -256,6 +258,65 @@ class Complyo_A11y_Remediation {
         return wp_parse_args($doc, array('lang' => null, 'skip' => null, 'css' => array()));
     }
 
+    /**
+     * Speichert Link-Zweck-Fixes (WCAG 2.4.4) als kompakte Liste:
+     * [ ['href'=>…, 'text'=>normalisiert, 'label'=>…], … ].
+     */
+    private function store_link_fixes($body) {
+        $out = array();
+        if (!empty($body['link_fixes']) && is_array($body['link_fixes'])) {
+            foreach ($body['link_fixes'] as $f) {
+                $label = isset($f['suggested_label']) ? trim(sanitize_text_field($f['suggested_label'])) : '';
+                $href  = isset($f['link_href']) ? (string) $f['link_href'] : '';
+                $text  = isset($f['link_text']) ? (string) $f['link_text'] : '';
+                if ($label === '' || ($href === '' && $text === '')) {
+                    continue;
+                }
+                $out[] = array(
+                    'href'  => $href,
+                    'text'  => $this->norm_text($text),
+                    'label' => $label,
+                );
+            }
+        }
+        update_option(self::OPTION_LINK, $out);
+    }
+
+    private function get_link_fixes() {
+        $v = get_option(self::OPTION_LINK, array());
+        return is_array($v) ? $v : array();
+    }
+
+    private function norm_text($s) {
+        $s = wp_strip_all_tags((string) $s);
+        $s = preg_replace('/\s+/', ' ', $s);
+        return strtolower(trim($s));
+    }
+
+    private function href_match($a, $b) {
+        if ($a === '' || $b === '') {
+            return false;
+        }
+        if ($a === $b) {
+            return true;
+        }
+        return strpos($a, $b) !== false || strpos($b, $a) !== false;
+    }
+
+    /**
+     * Sucht ein passendes Link-Label (gleicher normalisierter Text + href-Match).
+     * @return string '' wenn kein Treffer.
+     */
+    private function label_for_link($text, $href, $links) {
+        $nt = $this->norm_text($text);
+        foreach ($links as $f) {
+            if ($f['text'] === $nt && $this->href_match($href, $f['href'])) {
+                return $f['label'];
+            }
+        }
+        return '';
+    }
+
     // =========================================================================
     // Output-Buffer-Rewriter: lang / skip-link / css für die gesamte Seite
     // =========================================================================
@@ -267,8 +328,9 @@ class Complyo_A11y_Remediation {
             || (function_exists('wp_doing_ajax') && wp_doing_ajax())) {
             return;
         }
-        $doc = $this->get_document_fixes();
-        if (empty($doc['lang']) && empty($doc['skip']) && empty($doc['css'])) {
+        $doc   = $this->get_document_fixes();
+        $links = $this->get_link_fixes();
+        if (empty($doc['lang']) && empty($doc['skip']) && empty($doc['css']) && empty($links)) {
             return; // nichts zu tun → keinen Buffer aufmachen.
         }
         ob_start(array($this, 'rewrite_buffer'));
@@ -316,6 +378,32 @@ class Complyo_A11y_Remediation {
                 $html  = preg_replace('/(<body\b[^>]*>)/i', '$1' . "\n" . $link, $html, 1);
                 $inject_skip = true;
             }
+        }
+
+        // 2b) WCAG 2.4.4 — aria-label auf nichtssagende Links (guarded, ganze Seite).
+        $links = $this->get_link_fixes();
+        if (!empty($links)) {
+            $self = $this;
+            $html = preg_replace_callback('/<a\b([^>]*)>([\s\S]*?)<\/a>/i', function ($m) use ($self, $links) {
+                $attrs = $m[1];
+                // vorhandenen zugänglichen Namen nie überschreiben
+                if (preg_match('/\saria-label\s*=/i', $attrs) || preg_match('/\stitle\s*=/i', $attrs)) {
+                    return $m[0];
+                }
+                $text = $self->norm_text($m[2]);
+                if ($text === '') {
+                    return $m[0];
+                }
+                $href = '';
+                if (preg_match('/\shref\s*=\s*("([^"]*)"|\'([^\']*)\'|[^\s>]+)/i', $attrs, $hm)) {
+                    $href = $hm[2] !== '' ? $hm[2] : (isset($hm[3]) && $hm[3] !== '' ? $hm[3] : $hm[1]);
+                }
+                $label = $self->label_for_link($m[2], $href, $links);
+                if ($label === '') {
+                    return $m[0];
+                }
+                return '<a' . $attrs . ' aria-label="' . esc_attr($label) . '">' . $m[2] . '</a>';
+            }, $html);
         }
 
         // 3) <style> (Skip-Link-Styling + freigegebene CSS-Regeln) vor </head>.

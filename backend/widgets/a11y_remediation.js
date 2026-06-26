@@ -40,6 +40,7 @@
 
   var map = Object.create(null);   // normalisierter Dateiname -> alt-text
   var docFixes = [];               // dokumentweite Fixes
+  var linkFixes = [];              // [{link_href, link_text, suggested_label}]
   var cssRules = [];               // [{selector, declarations}]
   var ready = false;
 
@@ -141,12 +142,49 @@
     (document.head || document.documentElement).appendChild(style);
   }
 
+  // ---- Link-Zweck (WCAG 2.4.4): aria-label auf nichtssagende Links -----------
+  function normText(s) { return (s || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+
+  function hrefMatch(a, b) {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    // tolerant ggü. absolut/relativ: Endungs-Vergleich der Pfade.
+    return a.indexOf(b) !== -1 || b.indexOf(a) !== -1;
+  }
+
+  function labelForLink(txt, href) {
+    var nt = normText(txt);
+    for (var i = 0; i < linkFixes.length; i++) {
+      var f = linkFixes[i];
+      if (normText(f.link_text) === nt && hrefMatch(href, f.link_href)) {
+        return f.suggested_label || null;
+      }
+    }
+    return null;
+  }
+
+  function applyLinkLabels() {
+    if (!linkFixes.length) return;
+    var anchors = document.getElementsByTagName('a');
+    for (var i = 0; i < anchors.length; i++) {
+      var a = anchors[i];
+      // vorhandenen zugänglichen Namen nie überschreiben
+      if ((a.getAttribute('aria-label') || '').trim() !== '') continue;
+      if ((a.getAttribute('title') || '').trim() !== '') continue;
+      var txt = (a.textContent || '').trim();
+      if (!txt) continue;
+      var label = labelForLink(txt, a.getAttribute('href') || '');
+      if (label) a.setAttribute('aria-label', label);
+    }
+  }
+
   function apply() {
     if (!ready) return;
     applyAltTexts();
     applyHtmlLang();
     applySkipLink();
     applyLandmarkMain();
+    applyLinkLabels();
   }
 
   var scheduled = false;
@@ -187,6 +225,7 @@
       }
     }
     docFixes = d.document_fixes || [];
+    linkFixes = d.link_fixes || [];
     cssRules = d.css_rules || [];
   }
 

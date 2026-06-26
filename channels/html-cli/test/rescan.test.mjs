@@ -42,6 +42,16 @@ function heuristicScan(html) {
     issues.push({ wcag: '2.4.1', msg: 'kein Skip-Link' });
   }
 
+  // 2.4.4 — nichtssagende Links ohne aria-label/title
+  const VAGUE = /^(hier|mehr|weiterlesen|mehr erfahren|read more|details|weiter)$/i;
+  const anchors = html.match(/<a\b[^>]*>[\s\S]*?<\/a>/gi) || [];
+  for (const tag of anchors) {
+    const attrs = tag.match(/<a\b([^>]*)>/i)?.[1] || '';
+    if (/\saria-label\s*=/i.test(attrs) || /\stitle\s*=/i.test(attrs)) continue;
+    const text = tag.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    if (VAGUE.test(text)) issues.push({ wcag: '2.4.4', msg: `vager Link: ${text}` });
+  }
+
   return issues;
 }
 
@@ -54,6 +64,8 @@ const BEFORE = `<!DOCTYPE html>
     <h1>Willkommen</h1>
     <p><img src="/assets/team.jpg" alt=""></p>
     <p><img src="/img/dekor.svg" alt="Dekoratives Muster"></p>
+    <p>Unsere Datenschutzrichtlinie: <a href="/datenschutz">mehr</a></p>
+    <p>Bereits beschriftet: <a href="/agb" aria-label="Zu den AGB">hier</a></p>
   </main>
 </body>
 </html>`;
@@ -69,6 +81,9 @@ const MANIFEST = {
     { fix_type: 'html-lang', payload: { value: 'de' }, wcag_criterion: '3.1.1' },
     { fix_type: 'skip-link', payload: { target: '#main', label: 'Zum Inhalt springen' }, wcag_criterion: '2.4.1' },
   ],
+  link_fixes: [
+    { link_href: '/datenschutz', link_text: 'mehr', suggested_label: 'Mehr über Unsere Datenschutzrichtlinie' },
+  ],
   css_rules: [
     { selector: ':focus', declarations: 'outline:2px solid #1a73e8' },
   ],
@@ -77,10 +92,12 @@ const MANIFEST = {
 test('Re-Scan: Manifest-Patch entfernt die adressierten Verstöße', () => {
   const before = heuristicScan(BEFORE);
 
-  // Vorher: lang fehlt, 2 Bilder ohne alt (logo + leeres team-alt), kein Skip-Link.
+  // Vorher: lang fehlt, 2 Bilder ohne alt (logo + leeres team-alt), kein Skip-Link,
+  // 1 vager Link ("mehr"; der "hier"-Link hat bereits aria-label → nicht gezählt).
   assert.ok(before.some(i => i.wcag === '3.1.1'), 'BEFORE: lang-Verstoß erwartet');
   assert.equal(before.filter(i => i.wcag === '1.1.1').length, 2, 'BEFORE: 2 alt-Verstöße erwartet');
   assert.ok(before.some(i => i.wcag === '2.4.1'), 'BEFORE: Skip-Link-Verstoß erwartet');
+  assert.equal(before.filter(i => i.wcag === '2.4.4').length, 1, 'BEFORE: 1 vager Link erwartet');
 
   const manifest = buildManifest(MANIFEST);
   const { patched, stats } = patchHtml(BEFORE, manifest);
@@ -90,11 +107,13 @@ test('Re-Scan: Manifest-Patch entfernt die adressierten Verstöße', () => {
   assert.equal(stats.alt, 2, 'beide Alt-Texte gesetzt (logo + leeres team-alt gefüllt)');
   assert.equal(stats.lang, 1, 'lang gesetzt');
   assert.equal(stats.skip, 1, 'Skip-Link injiziert');
+  assert.equal(stats.link, 1, 'aria-label auf vagem Link gesetzt');
 
   // Re-Scan: adressierte Verstöße sind weg.
   assert.equal(after.filter(i => i.wcag === '3.1.1').length, 0, 'AFTER: kein lang-Verstoß mehr');
   assert.equal(after.filter(i => i.wcag === '1.1.1').length, 0, 'AFTER: kein img-ohne-alt mehr');
   assert.equal(after.filter(i => i.wcag === '2.4.1').length, 0, 'AFTER: Skip-Link vorhanden');
+  assert.equal(after.filter(i => i.wcag === '2.4.4').length, 0, 'AFTER: vager Link beschriftet');
   assert.equal(after.length, 0, 'AFTER: keine adressierten Verstöße mehr');
 });
 
@@ -102,7 +121,10 @@ test('Guard: vorhandene Werte werden nie überschrieben', () => {
   const html = `<!DOCTYPE html><html lang="en"><head><title>x</title></head>
 <body data-complyo-skip-link-present>
 <a href="#main" data-complyo-skip-link="1">Zum Inhalt springen</a>
-<main id="main"><img src="/assets/team.jpg" alt="Bereits gesetzt"></main>
+<main id="main">
+<img src="/assets/team.jpg" alt="Bereits gesetzt">
+<a href="/datenschutz" aria-label="Schon beschriftet">mehr</a>
+</main>
 </body></html>`;
   const manifest = buildManifest(MANIFEST);
   const { patched, stats } = patchHtml(html, manifest);
@@ -110,8 +132,10 @@ test('Guard: vorhandene Werte werden nie überschrieben', () => {
   assert.equal(stats.lang, 0, 'vorhandenes lang="en" nicht überschrieben');
   assert.equal(stats.skip, 0, 'vorhandener Skip-Link nicht dupliziert');
   assert.equal(stats.alt, 0, 'vorhandenes alt nicht überschrieben');
+  assert.equal(stats.link, 0, 'vorhandenes aria-label auf Link nicht überschrieben');
   assert.ok(patched.includes('lang="en"'), 'lang="en" bleibt erhalten');
   assert.ok(patched.includes('alt="Bereits gesetzt"'), 'alt bleibt erhalten');
+  assert.ok(patched.includes('aria-label="Schon beschriftet"'), 'Link-aria bleibt erhalten');
 });
 
 test('buildManifest ist rückwärtskompatibel (nacktes Alt-Text-Array)', () => {

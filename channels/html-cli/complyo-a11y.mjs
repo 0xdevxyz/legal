@@ -99,6 +99,16 @@ function buildManifest(body) {
   const skipPayload = pick('skip-link');
   const cssRules = Array.isArray(body) ? [] : (body?.css_rules || []);
 
+  // Link-Zweck-Fixes (WCAG 2.4.4): aria-label-Vorschläge je Link.
+  const linkSource = Array.isArray(body) ? [] : (body?.link_fixes || []);
+  const linkFixes = linkSource
+    .filter(f => f && f.suggested_label && (f.link_href || f.link_text))
+    .map(f => ({
+      href: String(f.link_href || ''),
+      text: String(f.link_text || ''),
+      label: String(f.suggested_label),
+    }));
+
   return {
     altMap,
     lang: langPayload?.value || null,
@@ -106,6 +116,7 @@ function buildManifest(body) {
       label: skipPayload.label || 'Zum Inhalt springen',
       target: skipPayload.target || '#main',
     } : null,
+    linkFixes,
     cssRules: Array.isArray(cssRules) ? cssRules : [],
   };
 }
@@ -218,13 +229,39 @@ function patchStyle(html, skip, cssRules, stats) {
   return style + html;
 }
 
+// WCAG 2.4.4 — aria-label auf nichtssagende Links (guarded, quellseitig).
+function normText(s) { return String(s || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+
+function hrefMatch(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return a.indexOf(b) !== -1 || b.indexOf(a) !== -1; // tolerant absolut/relativ
+}
+
+function patchLinkLabels(html, linkFixes, stats) {
+  if (!linkFixes || linkFixes.length === 0) return html;
+  return html.replace(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi, (full, attrs, inner) => {
+    // Vorhandenen zugänglichen Namen nie überschreiben.
+    if (/\saria-label\s*=/i.test(attrs) || /\stitle\s*=/i.test(attrs)) return full;
+    const text = normText(inner);
+    if (!text) return full;
+    const hrefMatch2 = attrs.match(/\shref\s*=\s*("([^"]*)"|'([^']*)'|[^\s>]+)/i);
+    const href = hrefMatch2 ? (hrefMatch2[2] ?? hrefMatch2[3] ?? hrefMatch2[1] ?? '') : '';
+    const fix = linkFixes.find(f => normText(f.text) === text && hrefMatch(href, f.href));
+    if (!fix) return full;
+    stats.link++;
+    return `<a${attrs} aria-label="${escapeAttr(fix.label)}">${inner}</a>`;
+  });
+}
+
 function patchHtml(html, manifest) {
-  const stats = { alt: 0, lang: 0, skip: 0, style: 0 };
+  const stats = { alt: 0, lang: 0, skip: 0, style: 0, link: 0 };
   html = patchAltTexts(html, manifest.altMap, stats);
   html = patchHtmlLang(html, manifest.lang, stats);
   html = patchSkipLink(html, manifest.skipLink, stats);
+  html = patchLinkLabels(html, manifest.linkFixes, stats);
   html = patchStyle(html, manifest.skipLink, manifest.cssRules, stats);
-  const total = stats.alt + stats.lang + stats.skip + stats.style;
+  const total = stats.alt + stats.lang + stats.skip + stats.style + stats.link;
   return { patched: html, stats, total };
 }
 
@@ -254,23 +291,23 @@ async function main() {
   const files = await walk(path.resolve(args.dir), args.ext);
   console.log(`[complyo-a11y] ${files.length} HTML-Dateien gefunden.`);
 
-  const totals = { alt: 0, lang: 0, skip: 0, style: 0 };
+  const totals = { alt: 0, lang: 0, skip: 0, style: 0, link: 0 };
   let filesChanged = 0;
   for (const file of files) {
     const html = await fs.readFile(file, 'utf8');
     const { patched, stats, total } = patchHtml(html, manifest);
     if (total > 0) {
       totals.alt += stats.alt; totals.lang += stats.lang;
-      totals.skip += stats.skip; totals.style += stats.style;
+      totals.skip += stats.skip; totals.style += stats.style; totals.link += stats.link;
       filesChanged++;
       console.log(`  ${args.dryRun ? '[dry-run] ' : ''}${file}: `
-        + `${stats.alt} alt, ${stats.lang} lang, ${stats.skip} skip-link, ${stats.style} style`);
+        + `${stats.alt} alt, ${stats.lang} lang, ${stats.skip} skip-link, ${stats.link} link-aria, ${stats.style} style`);
       if (!args.dryRun) await fs.writeFile(file, patched, 'utf8');
     }
   }
 
   console.log(`\n[complyo-a11y] Fertig: ${totals.alt} Alt-Texte, ${totals.lang} lang, `
-    + `${totals.skip} Skip-Links, ${totals.style} Style-Blöcke in ${filesChanged} Datei(en)`
+    + `${totals.skip} Skip-Links, ${totals.link} Link-aria, ${totals.style} Style-Blöcke in ${filesChanged} Datei(en)`
     + `${args.dryRun ? ' (dry-run, nichts geschrieben)' : ' geschrieben'}.`);
 }
 

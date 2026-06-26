@@ -594,17 +594,19 @@ async def get_fix_manifest(site_id: str, request: Request):
     _logger = logging.getLogger(__name__)
     alt_texts = []
     document_fixes = []
+    link_fixes = []
 
     if db_pool:
         try:
             fix_saver = AccessibilityFixSaver(db_pool)
             alt_texts = await fix_saver.get_fixes_for_site(site_id, status='approved')
             document_fixes = await fix_saver.get_document_fixes_for_site(site_id, status='approved')
+            link_fixes = await fix_saver.get_link_fixes_for_site(site_id, status='approved')
         except Exception as e:
             _logger.error(f"[Fix-Manifest] Fehler beim Laden für {site_id}: {e}")
             return JSONResponse(
                 content={"success": False, "site_id": site_id, "error": str(e),
-                         "alt_texts": [], "document_fixes": []},
+                         "alt_texts": [], "document_fixes": [], "link_fixes": []},
                 headers={'Access-Control-Allow-Origin': '*'}
             )
     else:
@@ -618,14 +620,16 @@ async def get_fix_manifest(site_id: str, request: Request):
 
     manifest = {
         "success": True,
-        "version": "1.0.0",
+        "version": "1.1.0",
         "site_id": site_id,
         "alt_texts": alt_texts,
         "document_fixes": [f for f in document_fixes if f.get("fix_type") != "css-rule"],
+        "link_fixes": link_fixes,
         "css_rules": css_rules,
         "counts": {
             "alt_texts": len(alt_texts),
             "document_fixes": len(document_fixes),
+            "link_fixes": len(link_fixes),
         },
     }
 
