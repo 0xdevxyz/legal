@@ -15,5 +15,6 @@
 | Feature | Doc | Status | Stand |
 |---|---|---|---|
 | Barrierefreiheits-Remediation (Fix-Manifest + Channels + Link-Zweck + Worklist + Re-Scan) | [accessibility-remediation.md](accessibility-remediation.md) | 🟢 Block 1–3 live | 2026-06-26 |
+| Drittlandtransfer-Erkennung (cookielose Transfers: Google Fonts/reCAPTCHA/Maps via HTML+CSS+Requests) | [drittlandtransfer-erkennung.md](drittlandtransfer-erkennung.md) | 🟢 live | 2026-06-26 |
 
 <!-- Neue Features als Zeile ergänzen. Doc-Datei = data/features/<kebab-name>.md -->
