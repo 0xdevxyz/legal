@@ -1,6 +1,6 @@
 # Cookie-Richtlinie-Seite ("Über Cookies")
 
-**Stand:** 2026-06-26 · **Status:** 🟢 live
+**Stand:** 2026-06-27 · **Status:** 🟢 live
 
 ## Ziel
 Der „Über Cookies"-/Cookie-Richtlinie-Link im Cookie-Banner führte überall ins Leere
@@ -47,10 +47,23 @@ Hostname mit Punkten→Bindestrichen (`complyo.de` → `complyo-de`,
 `_url_to_site_id` in cookie_compliance_routes.py). Öffentlich/erratbar — bei öffentlicher
 Cookie-Richtlinie unkritisch (Inhalt ist ohnehin öffentlich).
 
+## Teil C — angereichertes Cookie-Inventar
+`_load_cookie_policy` zieht zusätzlich `cookie_services.template` (+ `cookie_names`) und
+rendert eine devowl-artige Tabelle: **Dienst · Anbieter · Zweck · Cookies · Speicherdauer ·
+Rechtsgrundlage**, plus Drittland-Hinweis.
+- Quelle der Metadaten je Dienst aus `template` (JSONB): `description_de/en` → Zweck,
+  `cookie_lifetime` → Speicherdauer, `legal_basis` → Rechtsgrundlage,
+  `data_processing_countries` → Drittländer-Note. Cookie-Namen: `cookie_names` →
+  `cookies` → `template.cookies` (Fallback-Kette). JSON-Parsing via `_parse_json_obj`.
+- **Wichtig zur Datenlage:** Die Light-Scan-Tabelle `cookie_scan_results` existiert in der
+  DB **nicht**, `deep_cookie_scans` ist **leer**. Der Onboarding-Scan schreibt die erkannten
+  **Service-Keys** nach `cookie_banner_configs.services`; die reichen Cookie-Metadaten liefert
+  der Katalog `cookie_services`. Daher ist der Katalog (nicht die Scan-Tabellen) die reale,
+  befüllte Inventar-Quelle. JSON-Endpoint bleibt kompatibel (zusätzliche Felder additiv;
+  Dashboard `CookiePolicyGenerator` nutzt name/provider/description/cookies weiter).
+
 ## Abgrenzung
 - KI-Cookie-Richtlinie (Doctype `cookie-policy`, `legal_text_generator.py`,
   `generated_documents`, JWT, Dashboard-Anzeige) ist ein **separater** Pfad (Volltext-
   Dokument zum Download). Die öffentlich gehostete Seite nutzt bewusst den
   **site-basierten** Generator, weil er die echten konfigurierten Dienste/Cookies kennt.
-- Offen/optional (Teil C, noch nicht gebaut): Deep-Cookie-Scan-Ergebnisse direkt als
-  Cookie-Inventar in die Seite einspeisen für eine vollständige Cookie-Tabelle.
