@@ -2747,6 +2747,19 @@ def _parse_service_cookies(raw) -> list:
     return parsed if isinstance(parsed, list) else []
 
 
+def _parse_json_obj(raw) -> dict:
+    """JSONB-Objektspalte (z.B. cookie_services.template) robust als dict laden."""
+    if not raw:
+        return {}
+    parsed = raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 async def _load_cookie_policy(db_pool: asyncpg.Pool, site_id: str, lang: str = "de"):
     """
     Lädt die aktive Banner-Config + konfigurierte Dienste und baut ein
@@ -2761,7 +2774,9 @@ async def _load_cookie_policy(db_pool: asyncpg.Pool, site_id: str, lang: str = "
                array_agg(s.category ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)    AS service_categories,
                array_agg(s.provider ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)    AS service_providers,
                array_agg(s.description ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL) AS service_descriptions,
-               array_agg(s.cookies ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)     AS service_cookies
+               array_agg(s.cookies ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)     AS service_cookies,
+               array_agg(s.cookie_names ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL) AS service_cookie_names,
+               array_agg(s.template ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)     AS service_templates
         FROM cookie_banner_configs c
         LEFT JOIN LATERAL jsonb_array_elements_text(c.services) AS svc_key ON true
         LEFT JOIN cookie_services s ON s.service_key = svc_key
@@ -2810,11 +2825,27 @@ async def _load_cookie_policy(db_pool: asyncpg.Pool, site_id: str, lang: str = "
             if name:
                 cat = row['service_categories'][i] if row['service_categories'] else 'functional'
                 if cat in categories:
+                    # Template (JSONB) trägt die reichen Cookie-Metadaten:
+                    # Zweck, Speicherdauer, Rechtsgrundlage, Drittländer.
+                    tmpl = _parse_json_obj(row['service_templates'][i]) if row.get('service_templates') else {}
+                    desc = (row['service_descriptions'][i] if row['service_descriptions'] else "") \
+                        or tmpl.get('description_de' if de else 'description_en') \
+                        or tmpl.get('description_de') or tmpl.get('description_en') or ""
+                    # Cookie-Namen: bevorzugt explizite cookie_names-Spalte, sonst cookies, sonst template.cookies
+                    cookie_list = _parse_service_cookies(row['service_cookie_names'][i] if row.get('service_cookie_names') else None) \
+                        or _parse_service_cookies(row['service_cookies'][i] if row['service_cookies'] else None) \
+                        or (tmpl.get('cookies') if isinstance(tmpl.get('cookies'), list) else [])
+                    countries = tmpl.get('data_processing_countries') or []
+                    if not isinstance(countries, list):
+                        countries = []
                     categories[cat]["services"].append({
                         "name": name,
                         "provider": row['service_providers'][i] if row['service_providers'] else "",
-                        "description": row['service_descriptions'][i] if row['service_descriptions'] else "",
-                        "cookies": _parse_service_cookies(row['service_cookies'][i] if row['service_cookies'] else None),
+                        "description": desc,
+                        "cookies": cookie_list,
+                        "duration": tmpl.get('cookie_lifetime') or "",
+                        "legal_basis": tmpl.get('legal_basis') or "",
+                        "countries": countries,
                     })
 
     for cat_key, cat_data in categories.items():
@@ -2865,33 +2896,37 @@ def _render_cookie_policy_html(policy: dict, lang: str = "de") -> str:
         if section.get("content"):
             blocks.append(f'<section><h2>{title}</h2><p>{esc(section["content"])}</p></section>')
             continue
-        # Service-Kategorie mit Dienst-/Cookie-Tabelle
+        # Service-Kategorie mit Dienst-/Cookie-Tabelle (devowl-artig, aus Katalog-Metadaten)
         rows = []
         for svc in section.get("services", []):
             cookie_items = []
             for c in svc.get("cookies", []):
                 if isinstance(c, dict):
-                    parts = [str(c.get("name") or c.get("key") or "")]
-                    if c.get("duration") or c.get("expiry"):
-                        parts.append(str(c.get("duration") or c.get("expiry")))
-                    if c.get("purpose") or c.get("description"):
-                        parts.append(str(c.get("purpose") or c.get("description")))
-                    cookie_items.append(" – ".join(p for p in parts if p))
+                    cookie_items.append(str(c.get("name") or c.get("key") or ""))
                 else:
                     cookie_items.append(str(c))
             cookies_html = esc(", ".join(ci for ci in cookie_items if ci)) or "—"
+
+            purpose_cell = esc(svc.get("description", "")) or "—"
+            countries = svc.get("countries") or []
+            if countries:
+                note = ("Datenübermittlung in Drittländer: " if de else "Data transfer to third countries: ") + ", ".join(str(x) for x in countries)
+                purpose_cell += f'<br><span class="muted">{esc(note)}</span>'
+
             rows.append(
                 "<tr>"
                 f"<td>{esc(svc.get('name',''))}</td>"
                 f"<td>{esc(svc.get('provider',''))}</td>"
-                f"<td>{esc(svc.get('description',''))}</td>"
+                f"<td>{purpose_cell}</td>"
                 f"<td>{cookies_html}</td>"
+                f"<td>{esc(svc.get('duration','') or '—')}</td>"
+                f"<td>{esc(svc.get('legal_basis','') or '—')}</td>"
                 "</tr>"
             )
         thead = (
-            "<thead><tr><th>Dienst</th><th>Anbieter</th><th>Zweck</th><th>Cookies</th></tr></thead>"
+            "<thead><tr><th>Dienst</th><th>Anbieter</th><th>Zweck</th><th>Cookies</th><th>Speicherdauer</th><th>Rechtsgrundlage</th></tr></thead>"
             if de else
-            "<thead><tr><th>Service</th><th>Provider</th><th>Purpose</th><th>Cookies</th></tr></thead>"
+            "<thead><tr><th>Service</th><th>Provider</th><th>Purpose</th><th>Cookies</th><th>Storage period</th><th>Legal basis</th></tr></thead>"
         )
         blocks.append(
             f'<section><h2>{title}</h2>'
