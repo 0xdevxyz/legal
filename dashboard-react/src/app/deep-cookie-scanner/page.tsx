@@ -67,6 +67,24 @@ export default function DeepCookieScannerPage() {
   const [error, setError] = useState<string | null>(null);
   const [usage, setUsage] = useState({ scans_used: 0, scans_limit: 1 });
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+  const [isApplying, setIsApplying] = useState(false);
+  const [applyResult, setApplyResult] = useState<string | null>(null);
+
+  const handleApplyToBanner = async (scanId: number) => {
+    setIsApplying(true);
+    setApplyResult(null);
+    try {
+      const res = await apiClient.post<{ applied: number; total_services: number; message: string }>(
+        `/api/v2/deep-cookie-scan/${scanId}/apply`,
+        {}
+      );
+      setApplyResult(res.message || `${res.applied} Dienst(e) übernommen.`);
+    } catch (err) {
+      setApplyResult(errorDetail(err, 'Übernahme in den Banner fehlgeschlagen'));
+    } finally {
+      setIsApplying(false);
+    }
+  };
 
   const handleStartScan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -375,6 +393,19 @@ export default function DeepCookieScannerPage() {
                       ))}
                     </div>
                   </div>
+                )}
+
+                <button
+                  onClick={() => handleApplyToBanner(currentScan.scan_id)}
+                  disabled={isApplying}
+                  className="w-full mb-3 px-4 py-3 bg-green-600 text-white rounded-lg font-semibold
+                           hover:bg-green-700 transition flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  <Plus className="w-4 h-4" />
+                  {isApplying ? 'Übernehme…' : 'Erkannte Dienste in meinen Cookie-Banner übernehmen'}
+                </button>
+                {applyResult && (
+                  <p className="mb-3 text-sm text-green-400 text-center">{applyResult}</p>
                 )}
 
                 <div className="flex gap-3">
