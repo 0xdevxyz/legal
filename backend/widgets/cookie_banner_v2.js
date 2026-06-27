@@ -85,7 +85,7 @@
         
         // Texts (default German) - synchronisiert mit Dashboard
         texts: {
-            title: 'Datenschutz-Präferenz',
+            title: 'Privatsphäre-Einstellungen',
             description: 'Wir benötigen Ihre Einwilligung, bevor Sie unsere Website weiter besuchen können.\n\nWenn Sie unter 16 Jahre alt sind und Ihre Einwilligung zu optionalen Services geben möchten, müssen Sie Ihre Erziehungsberechtigten um Erlaubnis bitten.\n\nWir verwenden Cookies und andere Technologien auf unserer Website. Einige von ihnen sind essenziell, während andere uns helfen, diese Website und Ihre Erfahrung zu verbessern. Personenbezogene Daten können verarbeitet werden (z. B. IP-Adressen), z. B. für personalisierte Anzeigen und Inhalte oder die Messung von Anzeigen und Inhalten. Weitere Informationen über die Verwendung Ihrer Daten finden Sie in unserer Datenschutzerklärung. Es besteht keine Verpflichtung, in die Verarbeitung Ihrer Daten einzuwilligen, um dieses Angebot zu nutzen. Sie können Ihre Auswahl jederzeit unter Einstellungen widerrufen oder anpassen. Bitte beachten Sie, dass aufgrund individueller Einstellungen möglicherweise nicht alle Funktionen der Website verfügbar sind.',
             description2: 'Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwilligung zur Nutzung dieser Services willigen Sie auch in die Verarbeitung Ihrer Daten in den USA gemäß Art. 49 (1) lit. a DSGVO ein. Der EuGH stuft die USA als ein Land mit unzureichendem Datenschutz nach EU-Standards ein. Es besteht beispielsweise die Gefahr, dass US-Behörden personenbezogene Daten in Überwachungsprogrammen verarbeiten, ohne dass für Europäerinnen und Europäer eine Klagemöglichkeit besteht.',
             ageNotice: '',
@@ -2610,7 +2610,7 @@
                 <div class="cps-header">
                     <div class="cps-header-left">
                         <div class="cps-logo">C</div>
-                        <h2 class="cps-title" id="complyo-settings-title">Datenschutz-Präferenz</h2>
+                        <h2 class="cps-title" id="complyo-settings-title">${sanitizeText(this.config.texts?.title || 'Privatsphäre-Einstellungen')}</h2>
                     </div>
                     <div class="cps-header-links">
                         <a href="${privacyUrl}" target="_blank">Datenschutzerklärung</a>

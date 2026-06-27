@@ -40,7 +40,7 @@ const DEFAULT_CONFIG = {
   imprint_url: '/impressum',
   texts: {
     de: {
-      title: 'Datenschutz-Präferenz',
+      title: 'Privatsphäre-Einstellungen',
       description: 'Wir benötigen Ihre Einwilligung, bevor Sie unsere Website weiter besuchen können.\n\nWir verwenden Cookies und andere Technologien auf unserer Website. Einige von ihnen sind essenziell, während andere uns helfen, diese Website und Ihre Erfahrung zu verbessern.',
       accept_all: 'Alle akzeptieren',
       reject_all: 'Nur essenzielle Cookies akzeptieren',
@@ -531,7 +531,7 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                       style={{ backgroundColor: config.bg_color, color: config.text_color }}
                     >
                       <div className="p-5 space-y-3">
-                        <h3 className="font-bold text-sm">{config.texts?.de?.title || 'Datenschutz-Präferenz'}</h3>
+                        <h3 className="font-bold text-sm">{config.texts?.de?.title || 'Privatsphäre-Einstellungen'}</h3>
                         <p className="text-xs opacity-75 line-clamp-3">{config.texts?.de?.description || 'Beschreibung...'}</p>
                         <div className="flex flex-col gap-2">
                           <button className="px-3 py-2 text-xs font-semibold text-white rounded-md" style={{ backgroundColor: config.primary_color }}>
@@ -561,7 +561,7 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                     style={{ backgroundColor: config.bg_color, color: config.text_color }}
                   >
                     <div className="p-4 space-y-2">
-                      <h3 className="font-bold text-xs">{config.texts?.de?.title || 'Datenschutz-Präferenz'}</h3>
+                      <h3 className="font-bold text-xs">{config.texts?.de?.title || 'Privatsphäre-Einstellungen'}</h3>
                       <p className="text-[10px] opacity-70 line-clamp-2">{config.texts?.de?.description || ''}</p>
                       <div className="flex gap-2">
                         <button className="flex-1 px-2 py-1.5 text-[10px] font-semibold text-white rounded" style={{ backgroundColor: config.primary_color }}>
