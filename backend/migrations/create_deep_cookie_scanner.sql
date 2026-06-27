@@ -27,7 +27,9 @@ CREATE INDEX IF NOT EXISTS idx_deep_scans_created ON deep_cookie_scans(created_a
 
 CREATE TABLE IF NOT EXISTS deep_scan_usage (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    -- Kontingent wird PRO MONAT gezählt: ein Eintrag je (user_id, current_month).
+    -- KEIN UNIQUE(user_id) — das würde den Monatswechsel-INSERT brechen.
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     current_month VARCHAR(7) NOT NULL,
     scans_used INTEGER DEFAULT 0,
     scans_limit INTEGER DEFAULT 5,
@@ -35,6 +37,7 @@ CREATE TABLE IF NOT EXISTS deep_scan_usage (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS deep_scan_usage_user_month_key ON deep_scan_usage(user_id, current_month);
 CREATE INDEX IF NOT EXISTS idx_usage_user_month ON deep_scan_usage(user_id, current_month);
 
 CREATE TABLE IF NOT EXISTS deep_scan_history (

@@ -398,38 +398,124 @@ async def export_scan_for_configurator(
     
     categorized = _as_obj(scan["categorized"], {})
 
-    # Transform to service-centric format for configurator
+    # Transform to service-centric format for configurator.
+    # categorized trägt jetzt service_key/category/provider aus dem Katalog-Matching.
     services = []
-    
+
     for service_name, data in categorized.items():
         cookies = data.get("cookies", [])
         requests = data.get("requests", [])
-        
-        # Extract unique cookie names
-        cookie_names = list(set([c.get("name", "") for c in cookies if c.get("name")]))
-        
-        # Determine category based on service name and patterns
-        category = _determine_category(service_name, cookie_names)
-        
+        cookie_names = sorted({c.get("name", "") for c in cookies if c.get("name")})
+
+        service_key = data.get("service_key")
+        provider = data.get("provider") or ""
+        # Kategorie aus dem Katalog; Fallback-Heuristik nur für nicht zugeordnete Dienste.
+        category = data.get("category") or _determine_category(service_name, cookie_names)
+
         services.append({
+            "service_key": service_key,
             "name": service_name,
+            "provider": provider,
             "category": category,
             "cookies": cookie_names,
             "total_cookies": len(cookies),
             "total_requests": len(requests),
             "can_block": category != "necessary",
-            "description": _get_service_description(service_name),
+            "in_catalog": bool(service_key),
+            "description": provider or _get_service_description(service_name),
         })
-    
+
     # Sort by category priority (necessary first)
     category_priority = {"necessary": 0, "functional": 1, "analytics": 2, "marketing": 3}
     services.sort(key=lambda s: (category_priority.get(s["category"], 99), s["name"]))
-    
+
+    catalog_keys = sorted({s["service_key"] for s in services if s.get("service_key")})
+
     return {
         "scan_id": scan_id,
         "services": services,
+        "catalog_service_keys": catalog_keys,
         "import_ready": True,
         "message": "Ready to import into Cookie Configurator. Click '➜ Hinzufügen' to add each service."
+    }
+
+
+class ApplyScanRequest(BaseModel):
+    site_id: Optional[str] = None
+
+
+@router.post("/deep-cookie-scan/{scan_id}/apply")
+async def apply_scan_to_banner(
+    scan_id: int,
+    body: ApplyScanRequest = ApplyScanRequest(),
+    current_user: Dict = Depends(get_current_user),
+    connection: asyncpg.Connection = Depends(get_db_connection),
+):
+    """
+    Übernimmt die im Scan katalog-erkannten Dienste (service_keys) in die aktive
+    Cookie-Banner-Config des Nutzers. Die Dienste fließen damit automatisch in den
+    Banner UND in die öffentlich gehostete Cookie-Richtlinie (/cookie-richtlinie/{site_id}).
+    """
+    user_id = current_user["id"]
+
+    scan = await connection.fetchrow(
+        "SELECT categorized FROM deep_cookie_scans WHERE id = $1 AND user_id = $2 AND status = 'completed'",
+        scan_id, int(user_id),
+    )
+    if not scan:
+        raise HTTPException(status_code=404, detail="Completed scan not found")
+
+    categorized = _as_obj(scan["categorized"], {})
+    detected_keys = sorted({
+        data.get("service_key") for data in categorized.values() if data.get("service_key")
+    })
+    if not detected_keys:
+        return {
+            "applied": 0,
+            "added": [],
+            "message": "Keine katalog-erkannten Dienste im Scan — nichts zu übernehmen.",
+        }
+
+    # Ziel-Site bestimmen (explizit übergeben oder primäre Website des Nutzers)
+    site_id = body.site_id
+    if not site_id:
+        from cookie_compliance_routes import get_user_website_site_id
+        site_id = await get_user_website_site_id(int(user_id))
+    if not site_id:
+        raise HTTPException(status_code=400, detail="Keine Website/site_id für diesen Nutzer gefunden.")
+
+    cfg = await connection.fetchrow(
+        "SELECT services FROM cookie_banner_configs WHERE site_id = $1 AND is_active = true",
+        site_id,
+    )
+    current_services = _as_obj(cfg["services"], []) if cfg else []
+    if not isinstance(current_services, list):
+        current_services = []
+
+    merged = sorted(set(current_services) | set(detected_keys))
+    added = sorted(set(detected_keys) - set(current_services))
+
+    if cfg:
+        await connection.execute(
+            "UPDATE cookie_banner_configs SET services = $2, updated_at = NOW() "
+            "WHERE site_id = $1 AND is_active = true",
+            site_id, json.dumps(merged),
+        )
+    else:
+        # Noch keine aktive Config → minimal anlegen, damit Dienste nicht verloren gehen.
+        await connection.execute(
+            "INSERT INTO cookie_banner_configs (site_id, user_id, services, is_active) "
+            "VALUES ($1, $2, $3, true)",
+            site_id, int(user_id), json.dumps(merged),
+        )
+
+    return {
+        "applied": len(added),
+        "added": added,
+        "site_id": site_id,
+        "total_services": len(merged),
+        "policy_url": f"https://api.complyo.de/cookie-richtlinie/{site_id}",
+        "message": f"{len(added)} Dienst(e) in den Cookie-Banner übernommen.",
     }
 
 
@@ -477,6 +563,40 @@ def _get_service_description(service_name: str) -> str:
     return descriptions.get(service_name, f"External service: {service_name}")
 
 
+async def _load_service_catalog(connection) -> list:
+    """
+    Lädt den cookie_services-Katalog im CatalogMatcher-Format. Matcher-Quellen:
+    template.domains (215/217 Dienste) + cookie_names/template.cookies (Cookie-Pattern).
+    """
+    rows = await connection.fetch(
+        """
+        SELECT service_key, name, category, provider, template, cookie_names
+        FROM cookie_services
+        WHERE is_active = true
+        """
+    )
+    catalog = []
+    for r in rows:
+        tmpl = _as_obj(r["template"], {}) or {}
+        domains = tmpl.get("domains") if isinstance(tmpl.get("domains"), list) else []
+        cookie_patterns = []
+        cn = _as_obj(r["cookie_names"], []) or []
+        if isinstance(cn, list):
+            cookie_patterns += [c for c in cn if isinstance(c, str)]
+        tc = tmpl.get("cookies")
+        if isinstance(tc, list):
+            cookie_patterns += [c for c in tc if isinstance(c, str)]
+        catalog.append({
+            "service_key": r["service_key"],
+            "name": r["name"],
+            "category": (r["category"] or tmpl.get("category") or "functional"),
+            "provider": (r["provider"] or ""),
+            "domains": [d for d in domains if isinstance(d, str)],
+            "cookie_patterns": sorted(set(cookie_patterns)),
+        })
+    return catalog
+
+
 async def background_scan_job(scan_id: int, url: str):
     """
     Führt den echten Deep-Scan (Playwright) aus und persistiert das Ergebnis.
@@ -494,9 +614,11 @@ async def background_scan_job(scan_id: int, url: str):
                 "UPDATE deep_cookie_scans SET status = 'running' WHERE id = $1",
                 scan_id,
             )
+            catalog = await _load_service_catalog(connection)
 
-        # Echter Scan (DeepCookieScanner startet Playwright selbst)
-        scanner = DeepCookieScanner(scan_id, url)
+        # Echter Scan (DeepCookieScanner startet Playwright selbst), Dienst-Erkennung
+        # über den cookie_services-Katalog.
+        scanner = DeepCookieScanner(scan_id, url, catalog=catalog)
         result = await scanner.scan()
 
         if getattr(result, "error", None):
