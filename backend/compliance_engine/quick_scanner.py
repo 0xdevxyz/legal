@@ -7,7 +7,6 @@ import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
 from typing import Dict, List, Any, Optional
-from urllib.parse import urlparse
 from datetime import datetime
 import ssl
 import certifi
@@ -102,8 +101,18 @@ class QuickScanner:
         """Fetch webpage with short timeout"""
         try:
             async with self.session.get(url, allow_redirects=True) as response:
-                if response.status == 200:
-                    content = await response.text()
+                content = await response.text()
+                # Seite gilt als scanbar, wenn Status 200 ODER trotz Fehlerstatus
+                # eine vollständige Seite ausgeliefert wird (z. B. WordPress-500 mit
+                # komplett gerendertem Body — Browser zeigen die Seite normal an).
+                lower = content.lower()
+                delivers_full_page = (
+                    response.status not in (401, 403, 404, 502, 503, 504)
+                    and len(content) > 3000
+                    and '</html>' in lower
+                    and '<title>' in lower
+                )
+                if response.status == 200 or delivers_full_page:
                     return {
                         'url': str(response.url),
                         'status_code': response.status,

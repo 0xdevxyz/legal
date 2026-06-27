@@ -24,7 +24,7 @@
     // Configuration & Constants
     // ========================================================================
     
-    const VERSION = '2.0.0';
+    const VERSION = '2.1.0';
     const API_BASE = 'https://api.complyo.de';
     const CONSENT_STORAGE_KEY = 'complyo_cookie_consent';
     const CONSENT_DATE_KEY = 'complyo_consent_date';
@@ -209,7 +209,16 @@
             if (this.siteId && this.siteId !== 'demo-site') {
                 await this.loadServerConfig();
             }
-            
+
+            // 🔒 Lizenzprüfung: Wurde die Website im Dashboard entfernt, zeigen wir
+            // statt des funktionsfähigen Banners einen Hinweis an den Betreiber.
+            if (this.config.licenseActive === false) {
+                console.warn('[Complyo] Keine aktive Lizenz für diese Website – Banner deaktiviert.');
+                this.renderLicenseNotice();
+                return;
+            }
+
+
             // ✅ Phase 2: Check Geo-Restriction
             if (this.config.geo_restriction_enabled && this.config.geo_countries?.length > 0) {
                 const shouldShow = await this.checkGeoRestriction();
@@ -243,6 +252,34 @@
             }
         }
         
+        /**
+         * 🔒 Lizenz-Hinweis: Wird angezeigt, wenn für diese Website keine aktive
+         * Lizenz mehr besteht (Website wurde im Complyo-Dashboard entfernt).
+         */
+        renderLicenseNotice() {
+            const show = () => {
+                if (document.getElementById('complyo-license-notice')) return;
+                const bar = document.createElement('div');
+                bar.id = 'complyo-license-notice';
+                bar.setAttribute('role', 'alert');
+                bar.style.cssText = [
+                    'position:fixed', 'left:0', 'right:0', 'bottom:0', 'z-index:2147483647',
+                    'background:#1f2937', 'color:#f9fafb', 'padding:14px 18px',
+                    'font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif',
+                    'text-align:center', 'box-shadow:0 -2px 12px rgba(0,0,0,.25)'
+                ].join(';');
+                bar.textContent =
+                    'Für dieses Cookie-Banner besteht keine aktive Lizenz. ' +
+                    'Bitte wenden Sie sich an Ihren Administrator.';
+                document.body.appendChild(bar);
+            };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', show);
+            } else {
+                show();
+            }
+        }
+
         /**
          * ✅ Phase 2: Geo-Restriction Check
          */
@@ -469,7 +506,7 @@
             }
             
             try {
-                const servicesResponse = await fetch(`${API_BASE}/api/cookie-compliance/services`);
+                const servicesResponse = await fetch(`${API_BASE}/api/cookie-compliance/services?site_id=${encodeURIComponent(this.siteId)}`);
                 if (servicesResponse.ok) {
                     const servicesData = await servicesResponse.json();
                     if (servicesData.success && servicesData.services) {
@@ -515,6 +552,8 @@
             this.config.showBranding = serverConfig.show_branding !== false;
             this.config.services = serverConfig.services || [];
             this.config.isActiveFromServer = serverConfig.is_active === true;
+            // 🔒 Lizenzstatus vom Server (false = Website im Dashboard entfernt)
+            this.config.licenseActive = serverConfig.license_active !== false;
             this.configHash = serverConfig.config_hash || null;
 
             // Konfigurierbare Legal-Links (Task 2.5)
@@ -771,7 +810,8 @@
                             necessary: true,
                             functional: consent.functional || false,
                             analytics: consent.analytics || false,
-                            marketing: consent.marketing || false
+                            marketing: consent.marketing || false,
+                            third_country_consent: consent.third_country || false
                         },
                         services_accepted: consent.services || [],
                         language: navigator.language.split('-')[0],
@@ -1085,7 +1125,8 @@
                         necessary: true,
                         functional: consent.functional || false,
                         analytics: consent.analytics || false,
-                        marketing: consent.marketing || false
+                        marketing: consent.marketing || false,
+                        third_country: consent.third_country || false
                     },
                     services: consent.services || [],
                     // ✅ Include Google Consent Mode status
@@ -1161,7 +1202,7 @@
                 .complyo-cookie-banner {
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
                     font-size: 14px;
-                    line-height: 1.6;
+                    line-height: 1.45;
                     box-sizing: border-box;
                 }
                 
@@ -1184,6 +1225,11 @@
                     border-top: 1px solid rgba(255, 255, 255, 0.2);
                     opacity: 0;
                     transition: opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                    /* Höhe begrenzen, damit der Bottom/Top-Banner bei langem
+                       Beschreibungstext nicht den gesamten Viewport ausfüllt,
+                       sondern ein Streifen bleibt und bei Bedarf scrollt. */
+                    max-height: 85vh;
+                    overflow-y: auto;
                 }
                 
                 .complyo-banner-layout.complyo-position-bottom {
@@ -1241,10 +1287,10 @@
                     background: ${bgColor};
                     color: ${textColor};
                     border-radius: 12px;
-                    padding: 48px 52px;
-                    max-width: 720px;
+                    padding: 28px 32px;
+                    max-width: 760px;
                     width: 92%;
-                    max-height: 88vh;
+                    max-height: 85vh;
                     overflow-y: auto;
                     box-shadow: 0 24px 72px rgba(0, 0, 0, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1);
                     z-index: 1000000;
@@ -1287,21 +1333,21 @@
                 }
                 
                 .complyo-title {
-                    margin: 0 0 28px 0;
-                    font-size: 26px;
+                    margin: 0 0 14px 0;
+                    font-size: 21px;
                     font-weight: 700;
                     color: ${textColor};
                     text-align: center;
                     letter-spacing: -0.02em;
-                    line-height: 1.3;
+                    line-height: 1.25;
                 }
-                
+
                 .complyo-description {
-                    margin: 0 0 18px 0;
+                    margin: 0 0 12px 0;
                     color: ${textColor};
                     opacity: 0.88;
-                    line-height: 1.75;
-                    font-size: 15px;
+                    line-height: 1.5;
+                    font-size: 14px;
                     text-align: left;
                     white-space: pre-line;
                 }
@@ -1328,18 +1374,42 @@
                     border-radius: 4px;
                 }
                 
+                /* Two-Column-Layout: Text links, Buttons rechts daneben */
+                .complyo-main {
+                    display: flex;
+                    align-items: center;
+                    gap: 0;
+                }
+
+                .complyo-text {
+                    flex: 1 1 auto;
+                    min-width: 0;
+                    padding-right: 36px;
+                }
+
+                .complyo-main .complyo-title {
+                    text-align: left;
+                }
+
+                .complyo-main .complyo-description:last-child,
+                .complyo-main .complyo-age-notice:last-child {
+                    margin-bottom: 0;
+                }
+
                 /* Buttons - Clean & Professional */
                 .complyo-actions {
                     display: flex;
                     flex-direction: column;
-                    gap: 14px;
-                    margin-top: 36px;
+                    gap: 10px;
+                    flex: 0 0 250px;
+                    padding-left: 36px;
+                    border-left: 1px solid rgba(0, 0, 0, 0.09);
                 }
-                
+
                 .complyo-btn {
-                    padding: 17px 32px;
+                    padding: 13px 26px;
                     border: none;
-                    font-size: 16px;
+                    font-size: 15px;
                     font-weight: 600;
                     cursor: pointer;
                     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1382,21 +1452,25 @@
                     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
                 }
                 
+                /* DSGVO/DSK: "Ablehnen" muss gleichwertig zu "Akzeptieren" sein
+                   (gleiche Größe, gleiche visuelle Gewichtung). Daher ebenfalls
+                   gefüllt mit Schatten – kein schwächerer Outline-Button. */
                 .complyo-btn-secondary {
-                    background: white;
-                    color: ${primaryColor};
-                    border: 2px solid ${primaryColor};
-                }
-                
-                .complyo-btn-secondary:hover {
-                    background: ${primaryColor};
+                    background: #4b5563;
                     color: white;
+                    border: none;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+                }
+
+                .complyo-btn-secondary:hover {
+                    background: #374151;
                     transform: translateY(-1px);
                     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
                 }
-                
+
                 .complyo-btn-secondary:active {
                     transform: translateY(0);
+                    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
                 }
                 
                 .complyo-btn-link {
@@ -1656,8 +1730,8 @@
                 
                 /* Footer Links */
                 .complyo-footer {
-                    margin-top: 32px;
-                    padding-top: 24px;
+                    margin-top: 20px;
+                    padding-top: 14px;
                     border-top: 1px solid rgba(0, 0, 0, 0.08);
                     display: flex;
                     justify-content: center;
@@ -1683,18 +1757,41 @@
                 /* Branding */
                 .complyo-branding {
                     margin-top: 16px;
-                    text-align: center;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 7px;
                     font-size: 12px;
-                    opacity: 0.6;
                 }
-                
-                .complyo-branding a {
-                    color: ${primaryColor};
+
+                .complyo-branding-prefix {
+                    color: ${textColor};
+                    opacity: 0.55;
+                }
+
+                .complyo-branding-link {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
                     text-decoration: none;
+                    transition: opacity 0.2s ease;
                 }
-                
-                .complyo-branding a:hover {
-                    text-decoration: underline;
+
+                .complyo-branding-link:hover {
+                    opacity: 0.8;
+                }
+
+                .complyo-branding-logo {
+                    width: 16px;
+                    height: auto;
+                    color: ${primaryColor};
+                    flex-shrink: 0;
+                }
+
+                .complyo-branding-word {
+                    color: ${textColor};
+                    font-weight: 600;
+                    letter-spacing: 0.2px;
                 }
                 
                 /* Responsive */
@@ -1704,19 +1801,19 @@
                     }
                     
                     .complyo-box-layout {
-                        padding: 36px 28px;
+                        padding: 24px 22px;
                         width: 94%;
                         max-height: 90vh;
                     }
-                    
+
                     .complyo-title {
-                        font-size: 22px;
-                        margin-bottom: 22px;
+                        font-size: 20px;
+                        margin-bottom: 14px;
                     }
-                    
+
                     .complyo-description {
                         font-size: 14px;
-                        line-height: 1.7;
+                        line-height: 1.5;
                     }
                     
                     .complyo-age-notice {
@@ -1729,14 +1826,25 @@
                         font-size: 15px;
                     }
                     
-                    .complyo-actions {
-                        margin-top: 28px;
-                        gap: 12px;
+                    .complyo-main {
+                        flex-direction: column;
+                        gap: 18px;
                     }
-                    
+
+                    .complyo-text {
+                        padding-right: 0;
+                    }
+
+                    .complyo-actions {
+                        flex: 1 1 auto;
+                        gap: 10px;
+                        padding-left: 0;
+                        border-left: none;
+                    }
+
                     .complyo-footer {
-                        margin-top: 28px;
-                        padding-top: 20px;
+                        margin-top: 16px;
+                        padding-top: 12px;
                         font-size: 13px;
                         gap: 12px;
                     }
@@ -1793,7 +1901,17 @@
             // Create banner
             const banner = document.createElement('div');
             banner.className = isBox ? 'complyo-box-layout' : 'complyo-banner-layout';
-            banner.classList.add(`complyo-position-${this.config.position}`);
+            // Position-Klasse KOHÄRENT aus dem Layout ableiten. Der Dashboard-
+            // Layout-Picker setzte historisch nur `layout` und ließ `position`
+            // unangetastet, sodass z.B. layout='banner_bottom' mit einer
+            // veralteten position='center' gespeichert sein kann — für diese
+            // Kombi gibt es KEINE CSS-Regel (kein top/bottom, kein .show) und der
+            // Banner bliebe unsichtbar. Darum hier hart aus dem Layout ableiten.
+            let position = this.config.position;
+            if (layout === 'banner_bottom') position = 'bottom';
+            else if (layout === 'banner_top') position = 'top';
+            else if (isBox) position = 'center';
+            banner.classList.add(`complyo-position-${position}`);
             banner.id = 'complyo-banner';
             
             // Content
@@ -1804,40 +1922,44 @@
 
             banner.innerHTML = `
                 <div class="complyo-content">
-                    <h2 id="complyo-banner-title" class="complyo-title">${sanitizeText(t.title)}</h2>
-                    <p id="complyo-banner-desc" class="complyo-description">
-                        ${sanitizeText(t.description)}
-                    </p>
-                    <p class="complyo-description">
-                        ${sanitizeText(t.description2)}
-                    </p>
-                    ${t.ageNotice ? `
-                        <div class="complyo-age-notice">
-                            ${sanitizeText(t.ageNotice)}
+                    <div class="complyo-main">
+                        <div class="complyo-text">
+                            <h2 id="complyo-banner-title" class="complyo-title">${sanitizeText(t.title)}</h2>
+                            <p id="complyo-banner-desc" class="complyo-description">
+                                ${sanitizeText(t.description)}
+                            </p>
+                            <p class="complyo-description">
+                                ${sanitizeText(t.description2)}
+                            </p>
+                            ${t.ageNotice ? `
+                                <div class="complyo-age-notice">
+                                    ${sanitizeText(t.ageNotice)}
+                                </div>
+                            ` : ''}
                         </div>
-                    ` : ''}
-                    <div class="complyo-actions">
-                        <button 
-                            id="complyo-accept-all" 
-                            class="complyo-btn complyo-btn-primary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
-                            aria-label="${sanitizeText(t.acceptAll)}"
-                        >
-                            ${sanitizeText(t.acceptAll)}
-                        </button>
-                        <button 
-                            id="complyo-reject-all" 
-                            class="complyo-btn complyo-btn-secondary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
-                            aria-label="${sanitizeText(t.continueWithout)}"
-                        >
-                            ${sanitizeText(t.continueWithout)}
-                        </button>
-                        <button 
-                            id="complyo-settings" 
-                            class="complyo-btn complyo-btn-link"
-                            aria-label="${sanitizeText(t.settingsLink)}"
-                        >
-                            ${sanitizeText(t.settingsLink)}
-                        </button>
+                        <div class="complyo-actions">
+                            <button
+                                id="complyo-accept-all"
+                                class="complyo-btn complyo-btn-primary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
+                                aria-label="${sanitizeText(t.acceptAll)}"
+                            >
+                                ${sanitizeText(t.acceptAll)}
+                            </button>
+                            <button
+                                id="complyo-reject-all"
+                                class="complyo-btn complyo-btn-secondary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
+                                aria-label="${sanitizeText(t.continueWithout)}"
+                            >
+                                ${sanitizeText(t.continueWithout)}
+                            </button>
+                            <button
+                                id="complyo-settings"
+                                class="complyo-btn complyo-btn-link"
+                                aria-label="${sanitizeText(t.settingsLink)}"
+                            >
+                                ${sanitizeText(t.settingsLink)}
+                            </button>
+                        </div>
                     </div>
                     <div class="complyo-footer">
                         <a href="${privacyUrl}" target="_blank" rel="noopener">${sanitizeText(t.privacyPolicy)}</a>
@@ -1848,7 +1970,14 @@
                     </div>
                     ${this.config.showBranding ? `
                         <div class="complyo-branding">
-                            Powered by <a href="https://complyo.tech" target="_blank" rel="noopener">Complyo</a>
+                            <span class="complyo-branding-prefix">Powered by</span>
+                            <a class="complyo-branding-link" href="https://complyo.de" target="_blank" rel="noopener" aria-label="Complyo">
+                                <svg class="complyo-branding-logo" viewBox="0 0 30 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                                    <path d="M15 2 L26 6 V16.5 C26 23.5 21 28.5 15 30.5 C9 28.5 4 23.5 4 16.5 V6 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                    <path d="M19.2 10.6 C18.2 9.9 16.7 9.5 15 9.5 C12 9.5 9.5 11.5 9.5 14 C9.5 16.5 12 18.5 15 18.5 C16.7 18.5 18.2 18.1 19.2 17.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span class="complyo-branding-word">Complyo</span>
+                            </a>
                         </div>
                     ` : ''}
                 </div>
@@ -1885,10 +2014,11 @@
                 functional: true,
                 analytics: true,
                 marketing: true,
+                third_country: true,
                 services: this.config.services,
                 timestamp: new Date().toISOString()
             };
-            
+
             // Track A/B test result
             if (this.abTest) {
                 this.trackABTestResult('accept_all');
@@ -1904,10 +2034,11 @@
                 functional: false,
                 analytics: false,
                 marketing: false,
+                third_country: false,
                 services: [],
                 timestamp: new Date().toISOString()
             };
-            
+
             // Track A/B test result
             if (this.abTest) {
                 this.trackABTestResult('reject_all');
@@ -1929,10 +2060,11 @@
                 functional: selections.functional || false,
                 analytics: selections.analytics || false,
                 marketing: selections.marketing || false,
+                third_country: selections.thirdCountry || false,
                 services: selections.services || [],
                 timestamp: new Date().toISOString()
             };
-            
+
             console.log('[Complyo] Saving consent:', consent);
             
             // Track A/B test result
@@ -1987,14 +2119,16 @@
                     necessary: true,
                     functional: this.consent.functional || false,
                     analytics: this.consent.analytics || false,
-                    marketing: this.consent.marketing || false
+                    marketing: this.consent.marketing || false,
+                    thirdCountry: this.consent.third_country || false
                 };
             } else {
                 this.categorySelections = {
                     necessary: true,
                     functional: false,
                     analytics: false,
-                    marketing: false
+                    marketing: false,
+                    thirdCountry: false
                 };
             }
             
@@ -2040,7 +2174,9 @@
                     position: fixed;
                     inset: 0;
                     background: rgba(0, 0, 0, 0.5);
-                    z-index: 999998;
+                    /* MUSS über dem Banner liegen (Box-Layout = 1000000), sonst
+                       erscheinen die Detail-Einstellungen HINTER dem Banner. */
+                    z-index: 2147483646;
                     opacity: 0;
                     transition: opacity 0.3s ease;
                 }
@@ -2058,7 +2194,8 @@
                     max-height: 90vh;
                     display: flex;
                     flex-direction: column;
-                    z-index: 999999;
+                    /* über Banner (1000000) UND eigenem Backdrop (…646) */
+                    z-index: 2147483647;
                     opacity: 0;
                     transition: all 0.3s ease;
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -2229,6 +2366,13 @@
                 }
                 .cps-item:last-child {
                     border-bottom: none;
+                }
+                .cps-thirdcountry-item {
+                    background: #fff7ed;
+                    border-left: 3px solid #f59e0b;
+                }
+                .cps-thirdcountry-item .cps-item-title::before {
+                    content: "🌍 ";
                 }
                 .cps-item-header {
                     display: flex;
@@ -2550,7 +2694,27 @@
                     <button class="cps-action-btn" id="cps-deselect-all">○ Alle abwählen</button>
                 </div>
             `;
-            
+
+            // Art. 49 Abs. 1 lit. a DSGVO — gesonderte Einwilligung in die
+            // Datenverarbeitung in unsicheren Drittländern (z. B. USA). Eigener
+            // Toggle, weil dies eine separate, informierte Einwilligung erfordert.
+            html += `
+                <div class="cps-item cps-thirdcountry-item" data-category="thirdCountry">
+                    <div class="cps-item-header">
+                        <div class="cps-item-checkbox">
+                            <input type="checkbox"
+                                   id="cps-third-country"
+                                   data-category="thirdCountry"
+                                   ${this.categorySelections.thirdCountry ? 'checked' : ''}>
+                        </div>
+                        <div class="cps-item-content">
+                            <h3 class="cps-item-title">Datenverarbeitung in unsicheren Drittländern</h3>
+                            <p class="cps-item-desc">Einige Services verarbeiten Daten in Ländern außerhalb der EU/des EWR ohne anerkanntes Datenschutzniveau (z.&nbsp;B. USA). Mit dieser gesonderten Einwilligung nach Art.&nbsp;49 Abs.&nbsp;1 lit.&nbsp;a DSGVO stimmst du dieser Übermittlung ausdrücklich zu. Sie ist freiwillig und jederzeit widerrufbar.</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+
             categories.forEach(cat => {
                 const services = this.serviceDetails[cat.key] || [];
                 const isChecked = this.categorySelections[cat.key];
@@ -3107,9 +3271,23 @@
         setupSettingsLinks() {
             // Aktiviere alle existierenden Links mit data-complyo-settings
             document.querySelectorAll('[data-complyo-settings], [href="#cookie-settings"], [href="#datenschutz-einstellungen"]').forEach(link => {
+                if (link.dataset.complyoBound === '1') return;
+                link.dataset.complyoBound = '1';
                 link.addEventListener('click', (e) => {
                     e.preventDefault();
                     this.openSettings();
+                });
+                link.style.cursor = 'pointer';
+            });
+
+            // Aktiviere Widerruf-Links: löscht die Einwilligung und lädt neu,
+            // sodass der Banner erneut erscheint (z.B. via WP-Shortcode im Footer/Menü)
+            document.querySelectorAll('[data-complyo-revoke], [href="#cookie-widerrufen"]').forEach(link => {
+                if (link.dataset.complyoBound === '1') return;
+                link.dataset.complyoBound = '1';
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.revokeConsent();
                 });
                 link.style.cursor = 'pointer';
             });

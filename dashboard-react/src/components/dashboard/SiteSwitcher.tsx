@@ -29,15 +29,16 @@ export function SiteSwitcher() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Nur für Agentur-User sichtbar
-  if (user?.plan_type !== 'agency') return null;
+  // Nur für Agentur-/Expert-User sichtbar
+  const canManageSites = user?.plan_type === 'agency' || user?.plan_type === 'expert';
+  if (!canManageSites) return null;
 
   const displayUrl = activeSite
     ? activeSite.url.replace(/^https?:\/\//, '').replace(/\/$/, '')
     : '—';
 
-  // Kanonisch aus dem Plan: 25 nur im Agentur-Modus, sonst 1 Seite. (Keine 3-Seiten-Option.)
-  const planLimit = user?.plan_type === 'agency' ? 25 : 1;
+  // Kanonisch aus dem Plan: 25 Seiten im Agentur-/Expert-Modus, sonst 1 Seite.
+  const planLimit = canManageSites ? 25 : 1;
   const atLimit = sites.length >= planLimit;
 
   const handleAdd = async () => {

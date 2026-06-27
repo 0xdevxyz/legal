@@ -3,13 +3,10 @@ Complyo AI Compliance Engine - Intelligente Website-Optimierung
 KI-gesteuerter Prozess für non-tech User zur 100% Compliance
 """
 
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-import asyncio
+from datetime import datetime
 import logging
-import json
-import re
 from enum import Enum
 
 # ✅ FIX: Import centralized Score Calculator

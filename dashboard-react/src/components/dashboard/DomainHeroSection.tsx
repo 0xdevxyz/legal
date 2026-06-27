@@ -7,6 +7,7 @@ import { useDashboardStore } from '@/stores/dashboard';
 import { analyzeWebsite, getTrackedWebsites } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/Toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface DomainHeroSectionProps {
   onAnalyze?: (url: string) => void;
@@ -17,6 +18,9 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
 }) => {
   const { currentWebsite, updateMetrics, setCurrentWebsite, isInOptimizationMode, lockedOptimizationUrl, pendingRescanContext, setPendingRescanContext } = useDashboardStore();
   const { showToast } = useToast();
+  const { user } = useAuth();
+  // Agentur/Expert: kein Single-Domain-Lock-Hinweis (jede Seite frei optimierbar).
+  const isAgency = user?.plan_type === 'agency' || user?.plan_type === 'expert';
   const [url, setUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +29,10 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
     message: string;
     details?: string;
     suggestions?: string[];
+    reason?: string;
   } | null>(null);
+  // v4.0: Hinweis auf erstem Screen (Platzhalter/Baustelle/Grundsystem)
+  const [scanNotice, setScanNotice] = useState<{ text: string; cms?: string | null } | null>(null);
 
   // Store-Listener: Rescan-Kontext von Legal News empfangen
   useEffect(() => {
@@ -65,32 +72,9 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
         return;
       }
       
-      // 1. Versuche localStorage zu laden (nach Refresh)
-      if (typeof localStorage !== 'undefined') {
-        const savedWebsite = localStorage.getItem('complyo_current_website');
-        const savedAnalysis = localStorage.getItem('complyo_last_analysis');
-        
-        if (savedWebsite) {
-          try {
-            const website = JSON.parse(savedWebsite);
-            const analysisData = savedAnalysis ? JSON.parse(savedAnalysis) : null;
-            
-            console.log('✅ Lade Website aus localStorage nach Refresh:', website.url);
-            setCurrentWebsite(website);
-            
-            if (analysisData) {
-              const { setAnalysisData } = useDashboardStore.getState();
-              setAnalysisData(analysisData);
-              console.log('✅ Lade Analysedaten aus localStorage');
-            }
-            return; // Early exit — keine API-Abfrage nötig
-          } catch (e) {
-            console.error('localStorage parse error:', e);
-          }
-        }
-      }
-      
-      // 2. Fallback: API abfragen
+      // Website aus der DB laden (Quelle der Wahrheit, /api/v2/websites).
+      // Die Scan-/Analyse-Daten lädt WebsiteAnalysis separat über /api/scans/latest
+      // (DB) in den Store — es gibt bewusst kein localStorage-Caching mehr.
       try {
         const websites = await getTrackedWebsites();
         if (websites && websites.length > 0) {
@@ -129,6 +113,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
 
     setError(null);
     setErrorDetails(null);
+    setScanNotice(null);
     setIsAnalyzing(true);
 
     try {
@@ -170,6 +155,13 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
       const { setAnalysisData } = useDashboardStore.getState();
       setAnalysisData(result);
 
+      // ✅ v4.0: Hinweis bei nicht-produktiven Seiten (Platzhalter/Baustelle) auf erstem Screen
+      if ((result as any)?.scan_notice) {
+        setScanNotice({ text: (result as any).scan_notice, cms: (result as any).detected_cms });
+      } else {
+        setScanNotice(null);
+      }
+
       // Update metrics
       const criticalCount = Array.isArray(result.issues)
         ? result.issues.filter((issue: any) => {
@@ -207,7 +199,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
           setErrorDetails({
             message: errorDetail.message,
             details: errorDetail.details,
-            suggestions: errorDetail.suggestions
+            suggestions: errorDetail.suggestions,
+            reason: errorDetail.reason,
           });
         } else if (typeof errorDetail === 'string') {
           setError(errorDetail);
@@ -253,7 +246,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
             {/* Domain Input */}
             <div className="space-y-4">
               {/* ✅ Hinweis: Website ist dauerhaft verknüpft - KEIN Entsperren möglich */}
-              {isInOptimizationMode && lockedOptimizationUrl && (
+              {!isAgency && isInOptimizationMode && lockedOptimizationUrl && (
                 <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl">
                   <Lock className="w-5 h-5 text-emerald-400 flex-shrink-0" />
                   <div className="flex-1">
@@ -336,6 +329,30 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
               </div>
               </div>
 
+              {/* ✅ v4.0: Hinweis bei Platzhalter-/Baustellenseiten (Scan erfolgreich, aber nicht produktiv) */}
+              {scanNotice && (
+                <div className="bg-amber-500/10 backdrop-blur-sm border border-amber-500/30 rounded-2xl p-5 animate-slide-down">
+                  <div className="flex items-start gap-3">
+                    <div className="bg-amber-500/20 rounded-xl p-2 flex-shrink-0">
+                      <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-amber-200 font-semibold mb-1 flex items-center gap-2 flex-wrap">
+                        Aktuell nicht vollständig prüfbar
+                        {scanNotice.cms && (
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-100">
+                            Grundsystem: {scanNotice.cms}
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-amber-100/90 text-sm leading-relaxed">{scanNotice.text}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Error Message */}
               {error && (
                 <div className="bg-red-500/10 backdrop-blur-sm border border-red-500/30 rounded-2xl p-5 animate-slide-down">
@@ -346,7 +363,12 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                       </svg>
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-red-200 font-semibold mb-1">Website nicht erreichbar</h3>
+                      <h3 className="text-red-200 font-semibold mb-1">
+                        {errorDetails?.reason === 'maintenance' ? 'Aktuell nicht prüfbar (Wartung)'
+                          : errorDetails?.reason === 'blocked' ? 'Zugriff blockiert'
+                          : errorDetails?.reason === 'not_found' ? 'Seite nicht gefunden'
+                          : 'Website nicht erreichbar'}
+                      </h3>
                       <p className="text-red-300/80 text-sm mb-3">{error}</p>
                       
                       {errorDetails && (

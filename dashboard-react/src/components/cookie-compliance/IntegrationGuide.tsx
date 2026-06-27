@@ -15,6 +15,7 @@ import {
   Zap,
   CheckCircle2,
   ChevronRight,
+  AlertTriangle,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -150,6 +151,13 @@ export default function Document() {
             <Terminal className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-gray-300">
               Das <code className="px-1.5 py-0.5 bg-gray-800 rounded text-blue-400">async</code> Attribut sorgt dafür, dass das Banner Ihre Website nicht verlangsamt.
+            </p>
+          </div>
+
+          <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+            <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-gray-300">
+              <strong className="text-amber-300">Wichtig für die Rechtssicherheit:</strong> Fügen Sie diesen Code als <strong>allerersten Eintrag</strong> im <code className="px-1.5 py-0.5 bg-gray-800 rounded text-amber-400">&lt;head&gt;</code> ein – <strong>vor</strong> Google Tag Manager, Analytics, Meta-Pixel und allen anderen Tracking-Skripten. Nur so kann der Blocker diese Dienste zuverlässig <strong>vor der Einwilligung</strong> stoppen. Stehen Tracker davor, laden sie ggf. bereits ohne Zustimmung.
             </p>
           </div>
         </CardContent>

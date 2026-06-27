@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, EmailStr
 import asyncio
 from typing import Optional, Dict, Any, List
@@ -10,11 +10,9 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import hashlib
-import bcrypt as _bcrypt
 from passlib.context import CryptContext as _CryptContext
 _pwd_context = _CryptContext(schemes=["bcrypt"], deprecated="auto")
 from csrf_middleware import CSRFMiddleware
-import jwt
 import datetime
 import os
 from dotenv import load_dotenv
@@ -50,9 +48,8 @@ _postgres_health_gauge = _PGauge("complyo_postgres_health", "Postgres health (1=
 _5xx_errors_total = _PCounter("complyo_5xx_total", "5xx errors", ["endpoint"])
 from compliance_engine.scanner import ComplianceScanner
 from compliance_engine.workflow_engine import workflow_engine, UserSkillLevel
-from compliance_engine.workflow_integration import WorkflowIntegration
+from compliance_engine.workflow_integration import init_workflow_integration
 from compliance_engine.pdf_generator import pdf_generator
-from compliance_engine.score_calculator import ScoreCalculator
 from compliance_engine.deep_scanner import DeepScanner
 from compliance_engine.data_validator import DataValidator
 from ai_fix_engine.intelligent_analyzer import IntelligentAnalyzer
@@ -90,9 +87,6 @@ from export_service import ExportService
 from firebase_auth import init_firebase_admin, verify_firebase_token
 
 # New Services
-from compliance_engine.solution_generator import solution_generator
-from compliance_engine.cookie_analyzer import cookie_analyzer
-from compliance_engine.priority_engine import priority_engine
 
 # AI Compliance Module (ComploAI Guard)
 from ai_compliance_routes import router as ai_compliance_router
@@ -243,6 +237,47 @@ app.add_middleware(
 _csrf_enabled = os.getenv("CSRF_PROTECTION", "true").lower() != "false"
 app.add_middleware(CSRFMiddleware, enabled=_csrf_enabled)
 
+# Öffentliche Widget-Endpoints: werden vom Cookie-Banner/Accessibility-Widget
+# cross-origin von BELIEBIGEN Kundendomains via fetch() aufgerufen. Die globale
+# CORSMiddleware erlaubt nur Complyo-eigene Origins, deshalb bekämen Kundenseiten
+# kein Access-Control-Allow-Origin → der fetch auf die Server-Config scheitert,
+# isActiveFromServer bleibt false und der Banner zeigt sich nie. Für diese
+# öffentlichen, nicht-authentifizierten Read-/Telemetrie-Pfade spiegeln wir daher
+# die anfragende Origin (nur, wenn die CORSMiddleware nicht ohnehin schon gesetzt hat).
+_PUBLIC_WIDGET_PREFIXES = (
+    "/api/cookie-compliance/config",
+    "/api/cookie-compliance/services",
+    "/api/cookie-compliance/consent",
+    "/api/cookie-compliance/geo-check",
+    "/api/cookie-compliance/reconsent-check",
+    "/api/ab-tests/track",
+    "/api/widgets/",
+)
+
+@app.middleware("http")
+async def public_widget_cors(request: Request, call_next):
+    is_public_widget = request.url.path.startswith(_PUBLIC_WIDGET_PREFIXES)
+    origin = request.headers.get("origin")
+
+    # Simple GET/POST-Requests des Widgets lösen keinen Preflight aus; ein
+    # OPTIONS-Preflight (falls doch einer kommt) wird hier direkt beantwortet.
+    if is_public_widget and request.method == "OPTIONS":
+        return Response(status_code=204, headers={
+            "Access-Control-Allow-Origin": origin or "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Max-Age": "86400",
+            "Vary": "Origin",
+        })
+
+    response = await call_next(request)
+
+    if is_public_widget and "access-control-allow-origin" not in response.headers:
+        response.headers["Access-Control-Allow-Origin"] = origin or "*"
+        response.headers["Vary"] = "Origin"
+
+    return response
+
 # MCP Auth-Middleware: Bearer-Token auf /mcp-Endpunkten erzwingen
 @app.middleware("http")
 async def mcp_auth_middleware(request: Request, call_next):
@@ -354,6 +389,28 @@ async def init_db():
                 except Exception as e:
                     print(f"⚠️ Warning applying {filename}: {e}")
 
+        # Pflicht-Migrationen aus migrations/ idempotent sicherstellen (self-healing
+        # bei jedem Deploy). Bewusst KEIN Blind-Apply des gesamten Ordners: nur
+        # kuratierte, idempotente Dateien (CREATE ... IF NOT EXISTS / CREATE OR REPLACE).
+        # Andere Migrationen (z. B. complete_migration.sql) sind NICHT idempotent.
+        migrations_dir = os.path.join(backend_dir, 'migrations')
+        ensure_migrations = [
+            'create_accessibility_alt_text_fixes.sql',
+            'create_alt_text_review_queue.sql',
+            'create_accessibility_fix_packages.sql',
+            'create_accessibility_document_fixes.sql',
+            'create_accessibility_link_fixes.sql',
+        ]
+        for filename in ensure_migrations:
+            filepath = os.path.join(migrations_dir, filename)
+            if os.path.exists(filepath):
+                try:
+                    print(f"⚙️ Ensuring migration: {filename}")
+                    await execute_sql_from_file(connection, filepath)
+                    print(f"✅ {filename} ensured")
+                except Exception as e:
+                    print(f"⚠️ Warning ensuring {filename}: {e}")
+
 async def close_db():
     global db_pool
     if db_pool:
@@ -389,9 +446,10 @@ async def startup_event():
     # Initialize email service
     print(f"✅ Email service initialized ({'DEMO MODE' if email_service.demo_mode else 'SMTP MODE'})")
     
-    # Initialize workflow integration with the db_pool
+    # Initialize workflow integration with the db_pool. Wire up the shared
+    # singleton so workflow_engine (which imports it) uses the same db_pool.
     global workflow_integration_instance
-    workflow_integration_instance = WorkflowIntegration(db_pool)
+    workflow_integration_instance = init_workflow_integration(db_pool)
     
     # Initialize Stripe service
     global stripe_service
@@ -1168,11 +1226,19 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
             )
             
             if tracked_site:
+                # Scanner liefert pillar_scores als Liste [{"pillar": ..., "score": ...}].
+                # Frühere Version las nicht existente *_score-Keys → score_history
+                # speicherte Säulen dauerhaft als 0. Hier aus der Liste in ein Dict mappen.
+                _pillar_list = scan_result.get("pillar_scores") or []
+                _by_pillar = {
+                    p.get("pillar"): p.get("score", 0)
+                    for p in _pillar_list if isinstance(p, dict)
+                }
                 pillar_scores = {
-                    "accessibility": scan_result.get("accessibility_score", 0),
-                    "gdpr": scan_result.get("gdpr_score", 0),
-                    "legal": scan_result.get("legal_score", 0),
-                    "cookies": scan_result.get("cookie_score", 0),
+                    "accessibility": _by_pillar.get("accessibility", 0),
+                    "gdpr": _by_pillar.get("gdpr", 0),
+                    "legal": _by_pillar.get("legal", 0),
+                    "cookies": _by_pillar.get("cookies", 0),
                     "critical_issues": scan_result.get("critical_issues", 0)
                 }
                 await connection.execute(

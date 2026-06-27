@@ -4,10 +4,9 @@ Prüft IAB Transparency & Consent Framework v2.2 Compliance
 """
 
 from bs4 import BeautifulSoup
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 from dataclasses import dataclass, asdict
 import re
-import json
 
 @dataclass
 class TCFIssue:

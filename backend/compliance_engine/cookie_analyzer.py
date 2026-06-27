@@ -6,7 +6,6 @@ Generiert Cookie-Consent Konfigurationen
 import logging
 from typing import List, Dict, Any
 from bs4 import BeautifulSoup
-import re
 
 logger = logging.getLogger(__name__)
 

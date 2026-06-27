@@ -5,7 +5,6 @@ Provides German, English, French, Italian and Polish translations
 
 import json
 import logging
-from typing import Dict, Any
 from enum import Enum
 
 logger = logging.getLogger(__name__)

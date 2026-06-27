@@ -3,7 +3,7 @@ import bcrypt as _bcrypt
 import jwt
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from uuid import uuid4
 import asyncpg
 import logging

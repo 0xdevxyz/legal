@@ -12,8 +12,6 @@ from bs4 import BeautifulSoup
 from typing import Dict, List, Any, Optional
 from urllib.parse import urljoin, urlparse
 import re
-from datetime import datetime
-import json
 
 # Import base scanner
 from compliance_engine.scanner import ComplianceScanner

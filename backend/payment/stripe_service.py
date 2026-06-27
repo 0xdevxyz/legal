@@ -1,6 +1,6 @@
 import os
 import stripe
-from typing import Optional, Dict, Any, List
+from typing import Dict, Any, List
 from datetime import datetime
 import asyncpg
 

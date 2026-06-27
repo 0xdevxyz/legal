@@ -8,8 +8,6 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from database_service import db_service
-from email_service import email_service
-import json
 import os
 
 logger = logging.getLogger(__name__)

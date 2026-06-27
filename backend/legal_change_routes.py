@@ -12,7 +12,7 @@ import json
 from auth_routes import get_current_user
 from dependencies import require_admin
 from database_service import db_service
-from legal_change_monitor import legal_monitor, LegalArea, ChangeSeverity
+from legal_change_monitor import legal_monitor
 
 router = APIRouter(prefix="/api/legal-changes", tags=["Legal Changes"])
 

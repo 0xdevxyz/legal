@@ -106,40 +106,82 @@ async def check_impressum_compliance_smart(url: str, html: str = None, session=N
         return await check_impressum_compliance(url, soup, session)
 
 
+def _looks_like_impressum(text: str) -> bool:
+    """
+    Inhalts-Heuristik: Sieht der gelieferte Seitentext tatsächlich wie ein
+    Impressum aus? Schützt vor Soft-404 / Catch-all-Seiten, die für JEDE URL
+    HTTP 200 mit irgendeinem Inhalt zurückgeben.
+
+    Anforderung: ein Impressum-Schlüsselbegriff UND mindestens ein konkretes
+    Pflichtmerkmal (E-Mail ODER deutsche Postanschrift mit PLZ).
+    """
+    if not text:
+        return False
+    low = text.lower()
+    keyword = any(k in low for k in (
+        'impressum', 'imprint', 'angaben gemäß', 'angaben gemaess',
+        'diensteanbieter', 'verantwortlich für den inhalt', 'legal notice',
+    ))
+    if not keyword:
+        return False
+    has_email = bool(re.search(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', low))
+    has_address = bool(re.search(r'\b\d{5}\s+[a-zäöüß]', low))  # PLZ + Ort
+    return has_email or has_address
+
+
+async def _fetch_candidate_text(candidate_url: str, session, ssl_context) -> "tuple[int, str] | None":
+    """Lädt eine Kandidaten-URL und gibt (status, text) zurück; None bei Fehler."""
+    try:
+        if session:
+            async with session.get(candidate_url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
+                return resp.status, (await resp.text() if resp.status == 200 else "")
+        else:
+            import aiohttp as _aiohttp
+            connector = _aiohttp.TCPConnector(ssl=ssl_context)
+            async with _aiohttp.ClientSession(connector=connector) as tmp:
+                async with tmp.get(candidate_url, timeout=_aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
+                    return resp.status, (await resp.text() if resp.status == 200 else "")
+    except Exception:
+        return None
+
+
 async def _check_impressum_url_exists(base_url: str, session=None) -> bool:
     """
     Prüft direkt bekannte Impressum-Pfade per HTTP-Request.
     Fallback für clientseitig gerenderte Seiten (Next.js, React SPA).
+
+    ⚠️ Soft-404-Guard (v4.0): HTTP 200 allein zählt NICHT als Nachweis. Erst:
+    1. Catch-all-Probe gegen eine Nonsense-URL — liefert die ebenfalls 200,
+       ist die Domain ein Catch-all und URL-Existenz wertlos → False.
+    2. Inhaltsprüfung: Die Seite muss tatsächlich wie ein Impressum aussehen.
     """
-    from urllib.parse import urlparse, urljoin
+    from urllib.parse import urlparse
     import ssl
     import certifi
 
     parsed = urlparse(base_url)
     base = f"{parsed.scheme}://{parsed.netloc}"
 
-    candidate_paths = ['/impressum', '/imprint', '/legal-notice', '/legal', '/ueber-uns/impressum', '/about/imprint']
-
     ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+    # 1. Catch-all-Probe: Nonsense-Pfad, der niemals existieren sollte
+    probe = await _fetch_candidate_text(base + '/__complyo_probe_404__', session, ssl_context)
+    is_catch_all = bool(probe and probe[0] == 200 and len(probe[1].strip()) > 200)
+    if is_catch_all:
+        logger.info("⚠️ Catch-all-Domain erkannt (Nonsense-URL liefert 200) — URL-Existenz unzuverlässig, prüfe Inhalt strikt")
+
+    candidate_paths = ['/impressum', '/imprint', '/legal-notice', '/legal', '/ueber-uns/impressum', '/about/imprint']
 
     for path in candidate_paths:
         candidate_url = base + path
-        try:
-            if session:
-                async with session.get(candidate_url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
-                    if resp.status == 200:
-                        logger.info(f"✅ Impressum-URL direkt gefunden: {candidate_url}")
-                        return True
-            else:
-                import aiohttp as _aiohttp
-                connector = _aiohttp.TCPConnector(ssl=ssl_context)
-                async with _aiohttp.ClientSession(connector=connector) as tmp:
-                    async with tmp.get(candidate_url, timeout=_aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
-                        if resp.status == 200:
-                            logger.info(f"✅ Impressum-URL direkt gefunden: {candidate_url}")
-                            return True
-        except Exception:
+        result = await _fetch_candidate_text(candidate_url, session, ssl_context)
+        if not result or result[0] != 200:
             continue
+        # 2. Inhalt muss wie ein Impressum aussehen (Soft-404-/Catch-all-sicher)
+        if _looks_like_impressum(result[1]):
+            logger.info(f"✅ Impressum-URL mit validem Inhalt gefunden: {candidate_url}")
+            return True
+        logger.info(f"↪️ {candidate_url} liefert 200, aber Inhalt ist kein Impressum — ignoriert")
 
     return False
 

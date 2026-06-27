@@ -15,10 +15,9 @@ import asyncio
 import aiohttp
 import json
 import time
-from typing import Dict, Any, List, Optional, Tuple
-from dataclasses import dataclass, asdict
+from typing import Dict, Any, Optional
+from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
 
 from .prompts_v2 import PromptBuilder, FixType, AIModel, ContextBuilder
 from .prompts_v2 import CODE_FIX_SCHEMA, TEXT_FIX_SCHEMA, WIDGET_FIX_SCHEMA, GUIDE_FIX_SCHEMA

@@ -5,7 +5,7 @@ Context-aware AI analysis for generating personalized compliance fixes
 
 import os
 import json
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 import aiohttp
 
 

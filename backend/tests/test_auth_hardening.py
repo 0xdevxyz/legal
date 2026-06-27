@@ -21,7 +21,7 @@ sys.modules["fastapi.exceptions"] = _fastapi_exc
 import time
 import pytest
 import jwt
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timedelta, timezone
 
 JWT_SECRET = "test-secret-hardening"

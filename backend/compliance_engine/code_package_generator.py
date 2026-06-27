@@ -6,7 +6,7 @@ Erstellt ZIP-Pakete mit allen Accessibility-Fixes für verschiedene Frameworks
 import io
 import zipfile
 import json
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from datetime import datetime
 import logging
 

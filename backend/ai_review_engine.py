@@ -17,8 +17,15 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-REVIEW_MODEL = "moonshotai/kimi-k2-thinking"
-SOLUTION_MODEL = "moonshotai/kimi-k2-thinking"
+# v4.0: Umstellung auf Claude — moonshotai/kimi-k2-thinking lieferte über OpenRouter
+# leeren Inhalt (content=None) → KI-Review/Lösungen liefen ins Leere. Claude Haiku 4.5
+# ist schnell, günstig und auf dem vorhandenen OpenRouter-Key verfügbar. Per ENV override.
+REVIEW_MODEL = os.getenv("COMPLYO_REVIEW_MODEL", "anthropic/claude-haiku-4.5")
+SOLUTION_MODEL = os.getenv("COMPLYO_SOLUTION_MODEL", "anthropic/claude-haiku-4.5")
+# Verifikationsmodell (v4.0): schnell/günstig, empfohlen Claude Haiku 4.5 via OpenRouter.
+# Override per ENV; Fallback auf das bereits konfigurierte REVIEW_MODEL, falls das
+# Anthropic-Modell über den OpenRouter-Key nicht verfügbar ist.
+VERIFY_MODEL = os.getenv("COMPLYO_VERIFY_MODEL", "anthropic/claude-haiku-4.5")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 _HEADERS = {
@@ -76,6 +83,86 @@ async def _call_ai_json(prompt: str, model: str, max_tokens: int = 800) -> Optio
             except Exception:
                 pass
     return None
+
+
+# ─────────────────────────────────────────────
+# 0. Säulen-Verifikation (v4.0) — nur bei UNVERIFIED
+# ─────────────────────────────────────────────
+
+# Was muss pro Säule am realen Seiteninhalt nachweisbar sein?
+_PILLAR_VERIFY_CRITERIA = {
+    "legal": (
+        "ein gültiges Impressum nach DDG §5 (vollständiger Name/Firma, ladungsfähige "
+        "Anschrift mit PLZ und Ort, schnelle Kontaktmöglichkeit wie E-Mail)"
+    ),
+    "gdpr": (
+        "eine gültige Datenschutzerklärung nach DSGVO (Verantwortlicher, Zwecke und "
+        "Rechtsgrundlagen der Verarbeitung, Betroffenenrechte, Speicherdauer)"
+    ),
+    "cookies": (
+        "ein funktionsfähiges Cookie-Consent-Banner mit echter Ablehnen-Option "
+        "(Opt-In, kein reines 'OK'), sofern nicht-notwendige Cookies/Tracking genutzt werden"
+    ),
+    "accessibility": (
+        "grundlegende Barrierefreiheit (Barrierefreiheitserklärung nach BFSG bzw. "
+        "ein Barrierefreiheits-/Accessibility-Widget oder klare WCAG-Konformität)"
+    ),
+}
+
+
+async def ai_verify_pillar(
+    pillar: str,
+    page_text: str,
+    evidence: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Verifiziert per KI, ob eine NICHT eindeutig prüfbare Säule am realen
+    Seiteninhalt erfüllt ist. Wird nur bei Status UNVERIFIED / niedriger
+    Confidence aufgerufen (Kostenkontrolle).
+
+    Returns striktes JSON-Dict oder None (kein Key / Fehler / Modell nicht verfügbar):
+        {"compliant": bool, "missing": [str, ...], "reason": str, "confidence": float}
+
+    Bei None bleibt die Säule UNVERIFIED — der Scan funktioniert ohne KI weiter.
+    """
+    if not OPENROUTER_API_KEY:
+        return None
+    criteria = _PILLAR_VERIFY_CRITERIA.get(pillar)
+    if not criteria:
+        return None
+
+    text = (page_text or "").strip()[:6000]
+    if not text:
+        return None
+
+    prompt = f"""Du bist ein deutscher Compliance-Experte. Prüfe ausschließlich anhand des unten stehenden Seiteninhalts, ob folgende Anforderung erfüllt ist:
+
+ANFORDERUNG ({pillar}): {criteria}
+
+Beurteile nur, was im Text tatsächlich belegbar ist. Wenn der relevante Inhalt nicht enthalten ist, gilt die Anforderung als NICHT erfüllt.
+
+Seiteninhalt:
+\"\"\"
+{text}
+\"\"\"
+
+Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema:
+{{"compliant": true|false, "missing": ["..."], "reason": "kurze Begründung auf Deutsch", "confidence": 0.0-1.0}}"""
+
+    result = await _call_ai_json(prompt, VERIFY_MODEL, max_tokens=500)
+    if not result or "compliant" not in result:
+        # Fallback auf das bereits konfigurierte Review-Modell, falls das
+        # Verifikationsmodell (z.B. Claude via OpenRouter) nicht erreichbar ist.
+        if VERIFY_MODEL != REVIEW_MODEL:
+            result = await _call_ai_json(prompt, REVIEW_MODEL, max_tokens=500)
+    if not result or "compliant" not in result:
+        return None
+    return {
+        "compliant": bool(result.get("compliant")),
+        "missing": result.get("missing") or [],
+        "reason": str(result.get("reason") or ""),
+        "confidence": float(result.get("confidence") or 0.0),
+    }
 
 
 # ─────────────────────────────────────────────

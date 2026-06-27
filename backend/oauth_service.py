@@ -1,6 +1,6 @@
 import os
 import httpx
-from typing import Optional, Dict
+from typing import Dict
 import asyncpg
 from auth_service import AuthService
 import logging

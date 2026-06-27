@@ -73,8 +73,8 @@ function complyo_accessibility_widget() {
               <Code className="w-6 h-6 text-white" />
             </div>
             <div>
-              <CardTitle className="text-xl">⚡ Widget auf Website einbinden</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-xl text-gray-900">⚡ Widget auf Website einbinden</CardTitle>
+              <CardDescription className="text-gray-600">
                 In 60 Sekunden zu barrierefreiem Web
               </CardDescription>
             </div>

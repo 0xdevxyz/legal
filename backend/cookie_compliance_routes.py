@@ -3,23 +3,44 @@ Cookie Compliance Routes
 API endpoints for Cookie-Consent-Management
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Response, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, Request, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
 import asyncpg
 import hashlib
 import re
-import uuid
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 import json
+import os
+import html as _html
 import logging
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
 import io
+import csv
 from cookie_scanner_service import cookie_scanner
 from file_storage_service import file_storage
-from functools import wraps
 from agency_report_generator import AgencyReportGenerator
+from compliance_engine.data_processing_countries import country_processing_info
+
+
+def _enrich_third_country(service: dict) -> dict:
+    """
+    Reichert einen Service-Dict um Drittland-Infos an:
+    requires_third_country_consent (Art. 49), unsafe_third_country_names und
+    data_processing_countries. No-op, wenn für den Anbieter nichts hinterlegt ist.
+    """
+    info = country_processing_info(
+        service_key=service.get("service_key", "") or "",
+        provider=service.get("provider", "") or "",
+    )
+    if info:
+        service["requires_third_country_consent"] = info["requires_special_consent"]
+        service["unsafe_third_country_names"] = info["unsafe_country_names"]
+        service["data_processing_countries"] = info["countries_named"]
+    else:
+        service["requires_third_country_consent"] = False
+    return service
 
 logger = logging.getLogger(__name__)
 
@@ -137,8 +158,43 @@ async def get_user_website_site_id(user_id: Any) -> Optional[str]:
             hostname = hostname.replace('www.', '')
             site_id = hostname.replace('.', '-').lower()
             return site_id
-        
+
         return None
+
+
+def _url_to_site_id(url: str) -> Optional[str]:
+    """Hostname-basierte site_id aus einer URL (z.B. https://complyo.de -> complyo-de)."""
+    if not url:
+        return None
+    from urllib.parse import urlparse
+    parsed = urlparse(url if '://' in url else f'https://{url}')
+    hostname = (parsed.netloc or parsed.path).replace('www.', '')
+    if not hostname:
+        return None
+    return hostname.replace('.', '-').lower()
+
+
+async def get_user_site_ids(user_id: Any) -> set:
+    """Alle site_ids, die dem User gehören (tracked_websites + eigene Configs).
+
+    Agentur-/Expert-Pläne verwalten MEHRERE Websites. Die einzelne primäre
+    Website (get_user_website_site_id) reicht daher nicht, um zu prüfen, ob der
+    User eine bestimmte site_id konfigurieren darf — sonst landen Saves auf der
+    falschen Seite bzw. werden auf eine einzige Seite gezwungen.
+    """
+    if not db_pool:
+        return set()
+    site_ids: set = set()
+    async with db_pool.acquire() as conn:
+        for r in await conn.fetch("SELECT url FROM tracked_websites WHERE user_id = $1", user_id):
+            sid = _url_to_site_id(r['url'])
+            if sid:
+                site_ids.add(sid)
+        # Bereits angelegte eigene Configs ebenfalls als gültig betrachten
+        for r in await conn.fetch("SELECT site_id FROM cookie_banner_configs WHERE user_id = $1", user_id):
+            if r['site_id']:
+                site_ids.add(r['site_id'])
+    return site_ids
 
 # ============================================================================
 # Pydantic Models
@@ -149,6 +205,10 @@ class ConsentCategories(BaseModel):
     functional: bool = False
     analytics: bool = False
     marketing: bool = False
+    # Art. 49 Abs. 1 lit. a DSGVO — gesonderte Einwilligung in die
+    # Datenverarbeitung in unsicheren Drittländern. Wird im JSONB-Feld
+    # consent_categories mitprotokolliert (kein Schema-Migrationsbedarf).
+    third_country_consent: bool = False
 
 class ConsentLog(BaseModel):
     site_id: str = Field(..., min_length=1, max_length=255)
@@ -168,14 +228,24 @@ class ConsentLog(BaseModel):
         return v.strip()
 
 class BannerTexts(BaseModel):
-    title: str
-    description: str
-    accept_all: str
-    reject_all: str
-    accept_selected: str
-    settings: str
-    privacy_policy: str
-    imprint: str
+    # Alle Felder optional + extra erlaubt: Der Banner-Text wird je nach
+    # Sprache/Scan mit unterschiedlichen Schluesseln gespeichert (z.B.
+    # privacy_link/imprint_link statt privacy_policy/imprint, plus Kategorie-
+    # Texte analytics/marketing/...). Ein strenges Schema fuehrte dazu, dass
+    # jeder erneute Speichern-Vorgang mit HTTP 422 abgewiesen wurde und z.B.
+    # Layout-/Positionsaenderungen nie persistiert wurden. Texte sind reine
+    # Anzeige-Strings — sie duerfen die Speicherung niemals blockieren.
+    title: Optional[str] = ""
+    description: Optional[str] = ""
+    accept_all: Optional[str] = ""
+    reject_all: Optional[str] = ""
+    accept_selected: Optional[str] = ""
+    settings: Optional[str] = ""
+    privacy_policy: Optional[str] = ""
+    imprint: Optional[str] = ""
+
+    class Config:
+        extra = "allow"
 
 class BannerConfig(BaseModel):
     site_id: str = Field(..., min_length=1, max_length=255)
@@ -187,7 +257,12 @@ class BannerConfig(BaseModel):
     button_style: str = Field(default="rounded")
     position: str = Field(default="bottom")
     width_mode: str = Field(default="full")
-    texts: Dict[str, BannerTexts]
+    # WICHTIG: texts als plain dict (NICHT Dict[str, BannerTexts]).
+    # Pydantic v2 würde die Werte sonst in BannerTexts-Model-Instanzen wandeln,
+    # die json.dumps(config.texts) beim Speichern mit TypeError ("Object of type
+    # BannerTexts is not JSON serializable") abbricht → POST /config liefert 500
+    # und KEINE Banner-Einstellung (Layout/Position/Texte) wird je persistiert.
+    texts: Dict[str, Dict[str, Any]]
     services: List[str] = []
     show_on_pages: Dict[str, Any] = {"all": True, "exclude": []}
     geo_restriction: Dict[str, Any] = {"enabled": False, "countries": []}
@@ -236,9 +311,49 @@ class ClientAssignRequest(BaseModel):
     client_name: Optional[str] = Field(None, max_length=255)
     client_email: Optional[str] = Field(None, max_length=255)
 
+class CustomServiceInput(BaseModel):
+    """Customer-defined cookie service (Borlabs-style custom cookies)."""
+    name: str = Field(..., min_length=1, max_length=255)
+    category: str = Field(default="functional", max_length=50)
+    provider: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    domains: List[str] = []
+    cookies: List[str] = []
+    legal_basis: Optional[str] = None
+    privacy_url: Optional[str] = None
+    cookie_lifetime: Optional[str] = Field(None, max_length=100)
+
+    @validator('category')
+    def validate_category(cls, v):
+        allowed = {'necessary', 'functional', 'analytics', 'marketing'}
+        if v not in allowed:
+            raise ValueError(f"category must be one of {allowed}")
+        return v
+
+    @validator('domains', 'cookies', pre=True)
+    def clean_list(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, str):
+            v = [v]
+        return [str(x).strip() for x in v if str(x).strip()]
+
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
+def _as_list(val) -> List[str]:
+    """Normalize a JSONB column (str or list) into a list of strings."""
+    if val is None:
+        return []
+    if isinstance(val, str):
+        try:
+            val = json.loads(val)
+        except Exception:
+            return [val] if val.strip() else []
+    if isinstance(val, list):
+        return [str(x) for x in val]
+    return []
 
 def hash_ip_address(ip: str) -> str:
     """Hash IP address with SHA256 for privacy"""
@@ -437,13 +552,15 @@ async def get_my_config(
         registered_site_id = await get_user_website_site_id(user_id)
         
         query = """
-            SELECT 
+            SELECT
                 id, site_id, user_id,
                 layout, primary_color, accent_color, text_color, bg_color,
                 button_style, position, width_mode,
                 texts, services, show_on_pages, geo_restriction,
                 auto_block_scripts, respect_dnt, cookie_lifetime_days,
                 show_branding, custom_logo_url,
+                consent_mode_enabled, consent_mode_default, gtm_enabled, gtm_container_id,
+                privacy_policy_url, cookie_policy_url, imprint_url,
                 is_active, created_at, updated_at,
                 scan_completed_at, last_scan_url
             FROM cookie_banner_configs
@@ -451,7 +568,7 @@ async def get_my_config(
             ORDER BY created_at DESC
             LIMIT 1
         """
-        
+
         row = await db_pool.fetchrow(query, user_id)
         
         if not row:
@@ -557,7 +674,9 @@ async def get_my_config(
             config['show_on_pages'] = json.loads(config['show_on_pages'])
         if isinstance(config.get('geo_restriction'), str):
             config['geo_restriction'] = json.loads(config['geo_restriction'])
-        
+        if isinstance(config.get('consent_mode_default'), str):
+            config['consent_mode_default'] = json.loads(config['consent_mode_default'])
+
         config['scan_completed'] = config.get('scan_completed_at') is not None
         
         # Convert datetime to ISO string
@@ -594,19 +713,21 @@ async def get_banner_config(
     """
     try:
         query = """
-            SELECT 
+            SELECT
                 id, site_id, user_id,
                 layout, primary_color, accent_color, text_color, bg_color,
                 button_style, position, width_mode,
                 texts, services, show_on_pages, geo_restriction,
                 auto_block_scripts, respect_dnt, cookie_lifetime_days,
                 show_branding, custom_logo_url,
+                consent_mode_enabled, consent_mode_default, gtm_enabled, gtm_container_id,
+                privacy_policy_url, cookie_policy_url, imprint_url,
                 is_active, created_at, updated_at,
                 scan_completed_at, last_scan_url
             FROM cookie_banner_configs
             WHERE site_id = $1 AND is_active = true
         """
-        
+
         row = await db_pool.fetchrow(query, site_id)
         
         if not row:
@@ -659,6 +780,18 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
                     "cookie_lifetime_days": 365,
                     "show_branding": True,
                     "custom_logo_url": None,
+                    "consent_mode_enabled": True,
+                    "consent_mode_default": {
+                        "ad_storage": "denied",
+                        "analytics_storage": "denied",
+                        "ad_user_data": "denied",
+                        "ad_personalization": "denied"
+                    },
+                    "gtm_enabled": False,
+                    "gtm_container_id": None,
+                    "privacy_policy_url": None,
+                    "cookie_policy_url": public_cookie_policy_url(site_id),
+                    "imprint_url": None,
                     "revision": 1,
                     "is_active": False,  # ✅ FIX: Default ist FALSE - Banner nur zeigen wenn im Backend konfiguriert!
                     "scan_completed": False,
@@ -680,10 +813,17 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
             config['show_on_pages'] = json.loads(config['show_on_pages'])
         if isinstance(config.get('geo_restriction'), str):
             config['geo_restriction'] = json.loads(config['geo_restriction'])
-        
+        if isinstance(config.get('consent_mode_default'), str):
+            config['consent_mode_default'] = json.loads(config['consent_mode_default'])
+
         # ✅ Füge scan_completed Status hinzu
         config['scan_completed'] = config.get('scan_completed_at') is not None
-        
+
+        # "Über Cookies"-Link: Wenn der Kunde keine eigene Cookie-Richtlinie-URL
+        # gesetzt hat, auf die von Complyo gehostete öffentliche Seite zeigen.
+        if not config.get('cookie_policy_url'):
+            config['cookie_policy_url'] = public_cookie_policy_url(site_id)
+
         # Convert datetime to ISO string
         if config.get('scan_completed_at'):
             config['scan_completed_at'] = config['scan_completed_at'].isoformat()
@@ -691,7 +831,13 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
             config['created_at'] = config['created_at'].isoformat()
         if config.get('updated_at'):
             config['updated_at'] = config['updated_at'].isoformat()
-        
+
+        # 🔒 Laufzeit-Lizenzprüfung: Wurde die Website im Dashboard entfernt,
+        # signalisiert license_active=false → der Banner zeigt einen Hinweis
+        # statt zu funktionieren (Anti-Missbrauch gegen optimieren+löschen).
+        from license_check import site_has_active_license
+        config['license_active'] = await site_has_active_license(db_pool, site_id)
+
         return {
             "success": True,
             "data": config
@@ -700,6 +846,88 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
     except Exception as e:
         print(f"Error getting banner config: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get configuration: {str(e)}")
+
+class ExtractColorsRequest(BaseModel):
+    url: str = Field(..., description="URL der Website, deren Markenfarben ausgelesen werden sollen")
+
+
+@router.post("/api/cookie-compliance/extract-colors")
+async def extract_colors(
+    payload: ExtractColorsRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """
+    Liest die dominanten Markenfarben einer Website live aus und gibt sie als
+    Banner-Vorschlag zurück — OHNE die Konfiguration zu speichern. Der Nutzer
+    übernimmt die Farben im Designer und speichert sie erst bewusst.
+
+    Spiegelt das Scraping-Pattern aus website_routes.py (Erstanlage einer Site).
+    """
+    # Auth + Modul-Check: nur zahlende Cookie-Kunden dürfen scrapen.
+    user = await get_current_user_required(credentials)
+    await require_module(user, 'cookie')
+
+    try:
+        from website_crawler import WebsiteCrawler
+        from bs4 import BeautifulSoup
+        from ssrf_protection import validate_url, SSRFError
+        import aiohttp
+
+        crawl_url = payload.url if payload.url.startswith('http') else f'https://{payload.url}'
+        try:
+            crawl_url = validate_url(crawl_url)
+        except SSRFError:
+            raise HTTPException(status_code=400, detail="URL ist nicht erlaubt (SSRF-Schutz).")
+
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(
+                crawl_url,
+                headers={'User-Agent': 'Mozilla/5.0 (compatible; ComplyoBot/1.0)'},
+                allow_redirects=True
+            ) as resp:
+                if resp.status != 200:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"Website nicht erreichbar (HTTP {resp.status})."
+                    )
+                html = await resp.text()
+
+        soup = BeautifulSoup(html, 'lxml')
+        colors = WebsiteCrawler().extract_brand_colors(soup, html)
+
+        if not colors.get('scraped'):
+            return {
+                "success": True,
+                "scraped": False,
+                "message": "Keine eindeutigen Markenfarben gefunden — Standardvorschlag beibehalten.",
+                "colors": {
+                    "primary_color": colors['primary_color'],
+                    "accent_color": colors['accent_color'],
+                    "text_color": colors['text_color'],
+                    "bg_color": colors['bg_color'],
+                },
+            }
+
+        logger.info(f"✅ Farben live gescrapt für {payload.url}: {colors['primary_color']} / {colors['accent_color']}")
+        return {
+            "success": True,
+            "scraped": True,
+            "colors": {
+                "primary_color": colors['primary_color'],
+                "accent_color": colors['accent_color'],
+                "text_color": colors['text_color'],
+                "bg_color": colors['bg_color'],
+            },
+            "candidates": colors.get('raw_candidates', []),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Live-Farb-Scraping fehlgeschlagen für {payload.url}: {e}")
+        raise HTTPException(status_code=500, detail=f"Farben konnten nicht ausgelesen werden: {type(e).__name__}")
+
 
 @router.post("/api/cookie-compliance/config")
 async def create_or_update_config(
@@ -722,13 +950,18 @@ async def create_or_update_config(
         # Modul-Check: User muss Cookie-Modul gebucht haben
         await require_module(user, 'cookie')
         
-        # Prüfe, ob die site_id zur registrierten Website des Users gehört
-        registered_site_id = await get_user_website_site_id(user_id)
-        
-        if registered_site_id and config.site_id != registered_site_id:
-            logger.warning(f"User {user_id} tried to configure site_id '{config.site_id}' but registered site is '{registered_site_id}'")
-            # Verwende die registrierte site_id statt der übergebenen
-            config.site_id = registered_site_id
+        # Ownership-Prüfung (Multi-Site-fähig): Die site_id muss dem User gehören.
+        # Agentur/Expert verwalten mehrere Websites — daher NICHT auf die einzelne
+        # primäre Website zwingen, sondern gegen ALLE Sites des Users prüfen.
+        # Schützt zugleich vor Cross-Tenant-Writes auf fremde site_ids.
+        owned_site_ids = await get_user_site_ids(user_id)
+        if owned_site_ids and config.site_id not in owned_site_ids:
+            fallback = await get_user_website_site_id(user_id) or next(iter(owned_site_ids))
+            logger.warning(
+                f"User {user_id} tried to configure foreign site_id '{config.site_id}'. "
+                f"Falling back to '{fallback}'."
+            )
+            config.site_id = fallback
         
         # Check if config exists
         check_query = "SELECT id FROM cookie_banner_configs WHERE site_id = $1"
@@ -744,7 +977,11 @@ async def create_or_update_config(
                     services = $11, show_on_pages = $12, geo_restriction = $13,
                     auto_block_scripts = $14, respect_dnt = $15,
                     cookie_lifetime_days = $16, show_branding = $17,
-                    custom_logo_url = $18, updated_at = NOW()
+                    custom_logo_url = $18,
+                    consent_mode_enabled = $19, gtm_container_id = $20,
+                    privacy_policy_url = $21, cookie_policy_url = $22, imprint_url = $23,
+                    user_id = COALESCE(user_id, $24),
+                    updated_at = NOW()
                 WHERE site_id = $1
                 RETURNING id, revision
             """
@@ -768,7 +1005,13 @@ async def create_or_update_config(
                 config.respect_dnt,
                 config.cookie_lifetime_days,
                 config.show_branding,
-                config.custom_logo_url
+                config.custom_logo_url,
+                config.consent_mode_enabled,
+                config.gtm_container_id,
+                config.privacy_policy_url,
+                config.cookie_policy_url,
+                config.imprint_url,
+                user_id
             )
 
             return {
@@ -785,12 +1028,14 @@ async def create_or_update_config(
                     text_color, bg_color, button_style, position, width_mode,
                     texts, services, show_on_pages, geo_restriction,
                     auto_block_scripts, respect_dnt, cookie_lifetime_days,
-                    show_branding, custom_logo_url
+                    show_branding, custom_logo_url,
+                    consent_mode_enabled, gtm_container_id,
+                    privacy_policy_url, cookie_policy_url, imprint_url
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
                 RETURNING id, revision
             """
-            
+
             result = await db_pool.fetchrow(
                 insert_query,
                 config.site_id,
@@ -811,7 +1056,12 @@ async def create_or_update_config(
                 config.respect_dnt,
                 config.cookie_lifetime_days,
                 config.show_branding,
-                config.custom_logo_url
+                config.custom_logo_url,
+                config.consent_mode_enabled,
+                config.gtm_container_id,
+                config.privacy_policy_url,
+                config.cookie_policy_url,
+                config.imprint_url
             )
             
             return {
@@ -906,14 +1156,16 @@ async def update_config_partial(
 async def get_available_services(
     category: Optional[str] = None,
     plan: Optional[str] = None,
+    site_id: Optional[str] = None,
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
     Get available cookie service templates
-    
+
     Query params:
     - category: Filter by category (analytics, marketing, functional, necessary)
     - plan: Filter by required plan (ai, expert)
+    - site_id: If given, the site's custom services are appended (is_custom=true)
     """
     try:
         query = """
@@ -942,9 +1194,59 @@ async def get_available_services(
         query += " ORDER BY category, name"
         
         rows = await db_pool.fetch(query, *params)
-        
+
         services = [dict(row) for row in rows]
-        
+
+        # Append the site's custom services (shaped like catalogue rows).
+        # Wrapped defensively so a missing table never breaks the catalogue.
+        if site_id:
+            try:
+                custom_rows = await db_pool.fetch(
+                    """
+                    SELECT service_key, name, category, provider, description,
+                           domains, cookies, legal_basis, privacy_url, cookie_lifetime
+                    FROM cookie_custom_services
+                    WHERE site_id = $1 AND is_active = true
+                    ORDER BY category, name
+                    """,
+                    site_id,
+                )
+                for cr in custom_rows:
+                    cr = dict(cr)
+                    if category and cr['category'] != category:
+                        continue
+                    domains = _as_list(cr.get('domains'))
+                    cookies = _as_list(cr.get('cookies'))
+                    services.append({
+                        "id": None,
+                        "service_key": cr['service_key'],
+                        "name": cr['name'],
+                        "category": cr['category'],
+                        "provider": cr.get('provider'),
+                        "description": cr.get('description'),
+                        "cookies": cookies,
+                        "template": {
+                            "id": cr['service_key'],
+                            "name": cr['name'],
+                            "category": cr['category'],
+                            "domains": domains,
+                            "cookies": cookies,
+                            "legal_basis": cr.get('legal_basis'),
+                            "privacy_policy_url": cr.get('privacy_url'),
+                            "cookie_lifetime": cr.get('cookie_lifetime'),
+                        },
+                        "plan_required": "ai",
+                        "is_active": True,
+                        "privacy_url": cr.get('privacy_url'),
+                        "is_custom": True,
+                    })
+            except Exception as ce:
+                logger.warning(f"Custom services unavailable for {site_id}: {ce}")
+
+        # Drittland-Flag pro Service (Art. 49) anhängen — für Banner-Anzeige
+        # und Content-Blocker-Gating.
+        services = [_enrich_third_country(s) for s in services]
+
         # Group by category
         grouped = {}
         for service in services:
@@ -952,14 +1254,14 @@ async def get_available_services(
             if cat not in grouped:
                 grouped[cat] = []
             grouped[cat].append(service)
-        
+
         return {
             "success": True,
             "total": len(services),
             "services": services,
             "grouped": grouped
         }
-        
+
     except Exception as e:
         print(f"Error getting services: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get services: {str(e)}")
@@ -997,6 +1299,155 @@ async def get_service_detail(
     except Exception as e:
         print(f"Error getting service: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get service: {str(e)}")
+
+# ============================================================================
+# Custom Services Endpoints (kundeneigene Dienst-Definitionen)
+# ============================================================================
+
+def _slugify(name: str) -> str:
+    slug = re.sub(r'[^a-z0-9]+', '_', (name or '').lower()).strip('_')
+    return slug or 'service'
+
+@router.get("/api/cookie-compliance/custom-services/{site_id}")
+async def list_custom_services(
+    site_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """List the site's custom service definitions."""
+    user = await get_current_user_required(credentials)
+    await require_module(user, 'cookie')
+    try:
+        rows = await db_pool.fetch(
+            """
+            SELECT service_key, name, category, provider, description,
+                   domains, cookies, legal_basis, privacy_url, cookie_lifetime,
+                   is_active, created_at, updated_at
+            FROM cookie_custom_services
+            WHERE site_id = $1
+            ORDER BY category, name
+            """,
+            site_id,
+        )
+        data = []
+        for r in rows:
+            r = dict(r)
+            r['domains'] = _as_list(r.get('domains'))
+            r['cookies'] = _as_list(r.get('cookies'))
+            data.append(r)
+        return {"success": True, "total": len(data), "data": data}
+    except asyncpg.UndefinedTableError:
+        return {"success": True, "total": 0, "data": []}
+    except Exception as e:
+        logger.error(f"Error listing custom services: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list custom services: {str(e)}")
+
+@router.post("/api/cookie-compliance/custom-services/{site_id}")
+async def create_custom_service(
+    site_id: str,
+    payload: CustomServiceInput,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """Create a custom service for a site. service_key is derived from the name."""
+    user = await get_current_user_required(credentials)
+    await require_module(user, 'cookie')
+    try:
+        user_id = None
+        try:
+            user_id = await get_user_id_from_token(user)
+        except Exception:
+            pass
+
+        base_key = f"custom_{_slugify(payload.name)}"
+        # Ensure uniqueness within the site
+        existing = await db_pool.fetch(
+            "SELECT service_key FROM cookie_custom_services WHERE site_id = $1 AND service_key LIKE $2",
+            site_id, base_key + '%',
+        )
+        existing_keys = {r['service_key'] for r in existing}
+        service_key = base_key
+        i = 2
+        while service_key in existing_keys:
+            service_key = f"{base_key}_{i}"
+            i += 1
+
+        row = await db_pool.fetchrow(
+            """
+            INSERT INTO cookie_custom_services
+                (site_id, user_id, service_key, name, category, provider, description,
+                 domains, cookies, legal_basis, privacy_url, cookie_lifetime)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12)
+            RETURNING service_key
+            """,
+            site_id, user_id, service_key, payload.name, payload.category,
+            payload.provider, payload.description,
+            json.dumps(payload.domains), json.dumps(payload.cookies),
+            payload.legal_basis, payload.privacy_url, payload.cookie_lifetime,
+        )
+        return {"success": True, "service_key": row['service_key']}
+    except asyncpg.UndefinedTableError:
+        raise HTTPException(status_code=503, detail="Custom-Services-Tabelle noch nicht eingerichtet.")
+    except Exception as e:
+        logger.error(f"Error creating custom service: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create custom service: {str(e)}")
+
+@router.put("/api/cookie-compliance/custom-services/{site_id}/{service_key}")
+async def update_custom_service(
+    site_id: str,
+    service_key: str,
+    payload: CustomServiceInput,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """Update an existing custom service."""
+    user = await get_current_user_required(credentials)
+    await require_module(user, 'cookie')
+    try:
+        result = await db_pool.execute(
+            """
+            UPDATE cookie_custom_services
+            SET name=$3, category=$4, provider=$5, description=$6,
+                domains=$7::jsonb, cookies=$8::jsonb, legal_basis=$9,
+                privacy_url=$10, cookie_lifetime=$11, updated_at=now()
+            WHERE site_id=$1 AND service_key=$2
+            """,
+            site_id, service_key, payload.name, payload.category, payload.provider,
+            payload.description, json.dumps(payload.domains), json.dumps(payload.cookies),
+            payload.legal_basis, payload.privacy_url, payload.cookie_lifetime,
+        )
+        if result.endswith('0'):
+            raise HTTPException(status_code=404, detail="Custom service not found")
+        return {"success": True, "service_key": service_key}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating custom service: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update custom service: {str(e)}")
+
+@router.delete("/api/cookie-compliance/custom-services/{site_id}/{service_key}")
+async def delete_custom_service(
+    site_id: str,
+    service_key: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """Delete a custom service."""
+    user = await get_current_user_required(credentials)
+    await require_module(user, 'cookie')
+    try:
+        result = await db_pool.execute(
+            "DELETE FROM cookie_custom_services WHERE site_id=$1 AND service_key=$2",
+            site_id, service_key,
+        )
+        if result.endswith('0'):
+            raise HTTPException(status_code=404, detail="Custom service not found")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting custom service: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete custom service: {str(e)}")
 
 # ============================================================================
 # Statistics Endpoints
@@ -1135,6 +1586,83 @@ async def get_consent_logs(
     except Exception as e:
         print(f"Error getting consent logs: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get logs: {str(e)}")
+
+@router.get("/api/cookie-compliance/consents/{site_id}/export")
+async def export_consent_logs_csv(
+    site_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Export consent logs as CSV for DSGVO proof-of-consent documentation (Art. 7).
+
+    Authenticated + requires the Cookie module. Excel-compatible UTF-8 (BOM),
+    semicolon-separated. Contains pseudonymized data only (hashed IP, truncated UA).
+    """
+    user = await get_current_user_required(credentials)
+    await require_module(user, 'cookie')
+    try:
+        query = """
+            SELECT id, visitor_id, consent_categories, services_accepted,
+                   ip_address_hash, user_agent, language, banner_shown,
+                   revision_id, timestamp
+            FROM cookie_consent_logs
+            WHERE site_id = $1
+            ORDER BY timestamp DESC
+        """
+        rows = await db_pool.fetch(query, site_id)
+
+        buf = io.StringIO()
+        writer = csv.writer(buf, delimiter=';')
+        writer.writerow([
+            'ID', 'Zeitstempel (UTC)', 'Visitor-ID', 'Notwendig', 'Funktional',
+            'Statistik', 'Marketing', 'Akzeptierte Services', 'IP-Hash',
+            'User-Agent', 'Sprache', 'Banner angezeigt', 'Konfig-Revision'
+        ])
+        for r in rows:
+            cats = r['consent_categories']
+            if isinstance(cats, str):
+                try:
+                    cats = json.loads(cats)
+                except Exception:
+                    cats = {}
+            cats = cats or {}
+            services = r['services_accepted']
+            if isinstance(services, str):
+                try:
+                    services = json.loads(services)
+                except Exception:
+                    services = None
+            services_str = ', '.join(services) if isinstance(services, list) else ''
+            writer.writerow([
+                r['id'],
+                r['timestamp'].isoformat() if r['timestamp'] else '',
+                r['visitor_id'] or '',
+                'ja' if cats.get('necessary') else 'nein',
+                'ja' if cats.get('functional') else 'nein',
+                'ja' if cats.get('analytics') else 'nein',
+                'ja' if cats.get('marketing') else 'nein',
+                services_str,
+                r['ip_address_hash'] or '',
+                r['user_agent'] or '',
+                r['language'] or '',
+                'ja' if r['banner_shown'] else 'nein',
+                r['revision_id'] if r['revision_id'] is not None else ''
+            ])
+
+        # Prepend BOM so Excel renders UTF-8 (umlauts) correctly.
+        csv_bytes = ('﻿' + buf.getvalue()).encode('utf-8')
+        filename = f"consent-log_{site_id}_{date.today().isoformat()}.csv"
+        return StreamingResponse(
+            io.BytesIO(csv_bytes),
+            media_type='text/csv',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error exporting consent logs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to export: {str(e)}")
 
 # ============================================================================
 # Utility Endpoints
@@ -2196,6 +2724,111 @@ async def update_forwarding_config(
 # Phase 5: Cookie Policy Generator, Revision System, Import/Export
 # ============================================================================
 
+# Öffentliche Basis-URL, unter der die gehostete Cookie-Richtlinie erreichbar ist.
+# Das Widget verlinkt "Über Cookies" hierauf, wenn der Kunde keine eigene URL setzt.
+COOKIE_POLICY_BASE_URL = os.getenv("PUBLIC_API_BASE", "https://api.complyo.de").rstrip("/")
+
+
+def public_cookie_policy_url(site_id: str) -> str:
+    """Gehostete, öffentlich abrufbare Cookie-Richtlinie für eine site_id."""
+    return f"{COOKIE_POLICY_BASE_URL}/cookie-richtlinie/{site_id}"
+
+
+def _parse_service_cookies(raw) -> list:
+    """cookie_services.cookies ist JSONB; ohne json-Codec kommt es als str zurück."""
+    if not raw:
+        return []
+    parsed = raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            return []
+    return parsed if isinstance(parsed, list) else []
+
+
+async def _load_cookie_policy(db_pool: asyncpg.Pool, site_id: str, lang: str = "de"):
+    """
+    Lädt die aktive Banner-Config + konfigurierte Dienste und baut ein
+    strukturiertes Cookie-Policy-Dict. Gemeinsame Quelle für JSON- und HTML-Ausgabe.
+
+    Returns: (policy: dict, configured: bool)
+    """
+    de = (lang == "de")
+    config_query = """
+        SELECT c.*,
+               array_agg(s.name ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)        AS service_names,
+               array_agg(s.category ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)    AS service_categories,
+               array_agg(s.provider ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)    AS service_providers,
+               array_agg(s.description ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL) AS service_descriptions,
+               array_agg(s.cookies ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)     AS service_cookies
+        FROM cookie_banner_configs c
+        LEFT JOIN LATERAL jsonb_array_elements_text(c.services) AS svc_key ON true
+        LEFT JOIN cookie_services s ON s.service_key = svc_key
+        WHERE c.site_id = $1 AND c.is_active = true
+        GROUP BY c.id
+    """
+    row = await db_pool.fetchrow(config_query, site_id)
+
+    policy = {
+        "title": "Cookie-Richtlinie" if de else "Cookie Policy",
+        "last_updated": datetime.now().isoformat(),
+        "site_id": site_id,
+        "website": (row.get("last_scan_url") if row else None),
+        "privacy_policy_url": (row.get("privacy_policy_url") if row else None),
+        "imprint_url": (row.get("imprint_url") if row else None),
+        "sections": [],
+    }
+
+    if not row:
+        policy["sections"] = [
+            {
+                "title": "Einleitung" if de else "Introduction",
+                "content": "Diese Website verwendet Cookies und ähnliche Technologien, um die Benutzererfahrung zu verbessern." if de else "This website uses cookies and similar technologies to improve user experience.",
+            },
+            {
+                "title": "Ihre Rechte" if de else "Your Rights",
+                "content": "Sie können Ihre Einwilligung jederzeit widerrufen." if de else "You can withdraw your consent at any time.",
+            },
+        ]
+        return policy, False
+
+    policy["sections"].append({
+        "title": "Einleitung" if de else "Introduction",
+        "content": "Diese Website verwendet Cookies und ähnliche Technologien, um die Benutzererfahrung zu verbessern und bestimmte Funktionen bereitzustellen." if de else "This website uses cookies and similar technologies to improve user experience and provide certain features.",
+    })
+
+    categories = {
+        "necessary": {"name": "Notwendig" if de else "Necessary", "services": []},
+        "functional": {"name": "Funktional" if de else "Functional", "services": []},
+        "analytics": {"name": "Statistik" if de else "Statistics", "services": []},
+        "marketing": {"name": "Marketing", "services": []},
+    }
+
+    if row['service_names'] and row['service_names'][0]:
+        for i, name in enumerate(row['service_names']):
+            if name:
+                cat = row['service_categories'][i] if row['service_categories'] else 'functional'
+                if cat in categories:
+                    categories[cat]["services"].append({
+                        "name": name,
+                        "provider": row['service_providers'][i] if row['service_providers'] else "",
+                        "description": row['service_descriptions'][i] if row['service_descriptions'] else "",
+                        "cookies": _parse_service_cookies(row['service_cookies'][i] if row['service_cookies'] else None),
+                    })
+
+    for cat_key, cat_data in categories.items():
+        if cat_data["services"]:
+            policy["sections"].append({"title": cat_data["name"], "services": cat_data["services"]})
+
+    policy["sections"].append({
+        "title": "Ihre Rechte" if de else "Your Rights",
+        "content": "Sie können Ihre Einwilligung jederzeit widerrufen, indem Sie auf den Cookie-Einstellungen-Link klicken." if de else "You can withdraw your consent at any time by clicking the cookie settings link.",
+    })
+
+    return policy, True
+
+
 @router.get("/api/cookie-compliance/policy/{site_id}")
 async def generate_cookie_policy(
     site_id: str,
@@ -2203,100 +2836,154 @@ async def generate_cookie_policy(
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
-    Generate cookie policy document from configured services
+    Generate cookie policy document from configured services (JSON).
     """
     try:
-        config_query = """
-            SELECT c.*,
-                   array_agg(s.name ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)        AS service_names,
-                   array_agg(s.category ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)    AS service_categories,
-                   array_agg(s.provider ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)    AS service_providers,
-                   array_agg(s.description ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL) AS service_descriptions,
-                   array_agg(s.cookies ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL)     AS service_cookies
-            FROM cookie_banner_configs c
-            LEFT JOIN LATERAL jsonb_array_elements_text(c.services) AS svc_key ON true
-            LEFT JOIN cookie_services s ON s.service_key = svc_key
-            WHERE c.site_id = $1 AND c.is_active = true
-            GROUP BY c.id
-        """
-        row = await db_pool.fetchrow(config_query, site_id)
-        
-        if not row:
-            policy = {
-                "title": "Cookie-Richtlinie" if lang == "de" else "Cookie Policy",
-                "last_updated": datetime.now().isoformat(),
-                "site_id": site_id,
-                "sections": [
-                    {
-                        "title": "Einleitung" if lang == "de" else "Introduction",
-                        "content": "Diese Website verwendet Cookies und ähnliche Technologien, um die Benutzererfahrung zu verbessern." if lang == "de" else "This website uses cookies and similar technologies to improve user experience."
-                    },
-                    {
-                        "title": "Ihre Rechte" if lang == "de" else "Your Rights",
-                        "content": "Sie können Ihre Einwilligung jederzeit widerrufen." if lang == "de" else "You can withdraw your consent at any time."
-                    }
-                ]
-            }
-            return {"success": True, "policy": policy, "format": "json", "configured": False}
-        
-        # Build policy document
-        policy = {
-            "title": "Cookie-Richtlinie" if lang == "de" else "Cookie Policy",
-            "last_updated": datetime.now().isoformat(),
-            "site_id": site_id,
-            "sections": []
-        }
-        
-        # Introduction
-        policy["sections"].append({
-            "title": "Einleitung" if lang == "de" else "Introduction",
-            "content": "Diese Website verwendet Cookies und ähnliche Technologien, um die Benutzererfahrung zu verbessern und bestimmte Funktionen bereitzustellen." if lang == "de" else "This website uses cookies and similar technologies to improve user experience and provide certain features."
-        })
-        
-        # Categorize services
-        categories = {
-            "necessary": {"name": "Notwendig", "services": []},
-            "functional": {"name": "Funktional", "services": []},
-            "analytics": {"name": "Statistik", "services": []},
-            "marketing": {"name": "Marketing", "services": []}
-        }
-        
-        if row['service_names'] and row['service_names'][0]:
-            for i, name in enumerate(row['service_names']):
-                if name:
-                    cat = row['service_categories'][i] if row['service_categories'] else 'functional'
-                    if cat in categories:
-                        categories[cat]["services"].append({
-                            "name": name,
-                            "provider": row['service_providers'][i] if row['service_providers'] else "",
-                            "description": row['service_descriptions'][i] if row['service_descriptions'] else "",
-                            "cookies": row['service_cookies'][i] if row['service_cookies'] else []
-                        })
-        
-        for cat_key, cat_data in categories.items():
-            if cat_data["services"]:
-                section = {
-                    "title": cat_data["name"],
-                    "services": cat_data["services"]
-                }
-                policy["sections"].append(section)
-        
-        # Rights section
-        policy["sections"].append({
-            "title": "Ihre Rechte" if lang == "de" else "Your Rights",
-            "content": "Sie können Ihre Einwilligung jederzeit widerrufen, indem Sie auf den Cookie-Einstellungen-Link klicken." if lang == "de" else "You can withdraw your consent at any time by clicking the cookie settings link."
-        })
-        
-        return {
-            "success": True,
-            "policy": policy,
-            "format": "json",
-            "configured": True
-        }
+        policy, configured = await _load_cookie_policy(db_pool, site_id, lang)
+        return {"success": True, "policy": policy, "format": "json", "configured": configured}
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Policy generation failed: {str(e)}")
+
+
+def _render_cookie_policy_html(policy: dict, lang: str = "de") -> str:
+    """Rendert das Policy-Dict als eigenständige, öffentlich anzeigbare HTML-Seite."""
+    de = (lang == "de")
+    esc = _html.escape
+    site_id = policy.get("site_id", "")
+    website = policy.get("website") or site_id
+
+    try:
+        stamp = datetime.fromisoformat(policy["last_updated"]).strftime("%d.%m.%Y")
+    except Exception:
+        stamp = policy.get("last_updated", "")
+
+    blocks = []
+    for section in policy.get("sections", []):
+        title = esc(section.get("title", ""))
+        if section.get("content"):
+            blocks.append(f'<section><h2>{title}</h2><p>{esc(section["content"])}</p></section>')
+            continue
+        # Service-Kategorie mit Dienst-/Cookie-Tabelle
+        rows = []
+        for svc in section.get("services", []):
+            cookie_items = []
+            for c in svc.get("cookies", []):
+                if isinstance(c, dict):
+                    parts = [str(c.get("name") or c.get("key") or "")]
+                    if c.get("duration") or c.get("expiry"):
+                        parts.append(str(c.get("duration") or c.get("expiry")))
+                    if c.get("purpose") or c.get("description"):
+                        parts.append(str(c.get("purpose") or c.get("description")))
+                    cookie_items.append(" – ".join(p for p in parts if p))
+                else:
+                    cookie_items.append(str(c))
+            cookies_html = esc(", ".join(ci for ci in cookie_items if ci)) or "—"
+            rows.append(
+                "<tr>"
+                f"<td>{esc(svc.get('name',''))}</td>"
+                f"<td>{esc(svc.get('provider',''))}</td>"
+                f"<td>{esc(svc.get('description',''))}</td>"
+                f"<td>{cookies_html}</td>"
+                "</tr>"
+            )
+        thead = (
+            "<thead><tr><th>Dienst</th><th>Anbieter</th><th>Zweck</th><th>Cookies</th></tr></thead>"
+            if de else
+            "<thead><tr><th>Service</th><th>Provider</th><th>Purpose</th><th>Cookies</th></tr></thead>"
+        )
+        blocks.append(
+            f'<section><h2>{title}</h2>'
+            f'<div class="table-wrap"><table>{thead}<tbody>{"".join(rows)}</tbody></table></div></section>'
+        )
+
+    legal_basis = (
+        "<section><h2>Rechtsgrundlage</h2><p>Das Speichern und Auslesen von Cookies erfolgt nach "
+        "§ 25 TDDDG. Technisch notwendige Cookies sind ohne Einwilligung zulässig "
+        "(Art. 6 Abs. 1 lit. f DSGVO); alle übrigen Cookies setzen wir nur mit Ihrer "
+        "Einwilligung (Art. 6 Abs. 1 lit. a DSGVO).</p></section>"
+    ) if de else (
+        "<section><h2>Legal basis</h2><p>Storing and reading cookies is based on Art. 6 GDPR. "
+        "Strictly necessary cookies do not require consent; all other cookies are only set with your consent.</p></section>"
+    )
+
+    extra_links = []
+    if policy.get("privacy_policy_url"):
+        label = "Datenschutzerklärung" if de else "Privacy Policy"
+        extra_links.append(f'<a href="{esc(policy["privacy_policy_url"])}">{label}</a>')
+    if policy.get("imprint_url"):
+        label = "Impressum" if de else "Imprint"
+        extra_links.append(f'<a href="{esc(policy["imprint_url"])}">{label}</a>')
+    links_html = (" · ".join(extra_links)) if extra_links else ""
+
+    stand_label = "Stand" if de else "Last updated"
+    intro_controller = (
+        f"<p class=\"muted\">{('Diese Cookie-Richtlinie gilt für' if de else 'This cookie policy applies to')} "
+        f"<strong>{esc(website)}</strong>.</p>"
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="{esc(lang)}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{esc(policy.get('title',''))}</title>
+<style>
+  :root {{ color-scheme: light; }}
+  * {{ box-sizing: border-box; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         line-height: 1.6; color: #1f2937; background: #f8fafc; margin: 0; padding: 2rem 1rem; }}
+  .container {{ max-width: 860px; margin: 0 auto; background: #fff; border-radius: 14px;
+               box-shadow: 0 4px 24px rgba(0,0,0,.06); padding: 2.5rem; }}
+  h1 {{ font-size: 1.9rem; margin: 0 0 .25rem; }}
+  h2 {{ font-size: 1.25rem; margin: 2rem 0 .75rem; color: #111827; }}
+  p {{ margin: .5rem 0; }}
+  .muted {{ color: #6b7280; font-size: .9rem; }}
+  .table-wrap {{ overflow-x: auto; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: .5rem; }}
+  th, td {{ text-align: left; padding: .55rem .6rem; border: 1px solid #e5e7eb; vertical-align: top; }}
+  th {{ background: #f9fafb; font-weight: 600; }}
+  .footer {{ margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;
+            font-size: .85rem; color: #6b7280; }}
+  .footer a {{ color: #4f46e5; text-decoration: none; }}
+  .footer a:hover {{ text-decoration: underline; }}
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>{esc(policy.get('title',''))}</h1>
+    <p class="muted">{stand_label}: {esc(stamp)}</p>
+    {intro_controller}
+    {''.join(blocks)}
+    {legal_basis}
+    <div class="footer">
+      {links_html}{(' · ' if links_html else '')}<span>Cookie-Compliance by Complyo</span>
+    </div>
+  </div>
+</body>
+</html>"""
+
+
+@router.get("/cookie-richtlinie/{site_id}", response_class=HTMLResponse)
+async def public_cookie_policy_page(
+    site_id: str,
+    lang: str = "de",
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Öffentlich abrufbare Cookie-Richtlinie als HTML-Seite.
+    Ziel des "Über Cookies"-Links im Cookie-Banner. Kein Login erforderlich.
+    """
+    try:
+        policy, _configured = await _load_cookie_policy(db_pool, site_id, lang)
+        html_out = _render_cookie_policy_html(policy, lang)
+        return HTMLResponse(content=html_out, headers={"Cache-Control": "public, max-age=300"})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Cookie policy page failed: {str(e)}")
 
 
 @router.get("/api/cookie-compliance/revisions/{site_id}")

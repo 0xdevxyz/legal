@@ -2,8 +2,8 @@ import asyncio
 import hashlib
 import logging
 import re
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, List, Optional
 
 import aiohttp
 import feedparser

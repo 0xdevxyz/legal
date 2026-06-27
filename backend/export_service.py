@@ -4,19 +4,16 @@ Generiert PDF- und HTML-Exporte von Fixes
 """
 
 import asyncpg
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
 import logging
 import os
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Preformatted, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT, TA_CENTER
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-import io
+from reportlab.lib.enums import TA_CENTER
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +125,6 @@ class ExportService:
     async def _export_as_html(self, fix: asyncpg.Record) -> tuple[str, str]:
         """Generiert HTML-Export"""
         # Parse fix content (stored as JSON string in DB)
-        import json
         
         # Try to parse content_hash column which might contain the actual fix data
         # For now, create a simple HTML template

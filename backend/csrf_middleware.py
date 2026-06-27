@@ -27,6 +27,13 @@ EXEMPT_PATHS: Set[str] = {
     "/api/v2/analyze",
     "/api/v2/analyze/quick",
     "/api/v2/analyze/complete",
+    # Public widget telemetry endpoints — called cross-origin from customer
+    # websites by the embedded banner/widget. They carry no session cookie and
+    # no Bearer token, so the double-submit CSRF check can never succeed and
+    # would silently drop every consent log (DSGVO Art. 7 proof of consent).
+    "/api/cookie-compliance/consent",
+    "/api/ab-tests/track",
+    "/api/widgets/analytics",
     "/health",
     "/metrics",
 }

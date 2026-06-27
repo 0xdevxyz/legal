@@ -10,6 +10,21 @@ export interface RescanContext {
   triggered_at: string;
 }
 
+// Kleiner, quota-sicherer localStorage-Schreibhelfer (nur noch für winzige
+// UI-State-Werte wie den Optimierungs-Lock genutzt — NICHT für Scan-Daten).
+// Scan-Ergebnisse werden bewusst NICHT mehr im localStorage gecacht: Quelle ist
+// die DB (scan_history via /api/scans/latest). Das vermeidet den früheren
+// QuotaExceededError und hält die Persistenz an einer Stelle (DB).
+function safeSetItem(key: string, value: string): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 interface DashboardStore extends DashboardState {
   // Actions
   setCurrentWebsite: (website: Website) => void;
@@ -59,16 +74,15 @@ export const useDashboardStore = create<DashboardStore>()(
 
     // Actions
     setCurrentWebsite: (website) => {
-      if (typeof localStorage !== 'undefined' && website) {
-        localStorage.setItem('complyo_current_website', JSON.stringify(website));
-      }
+      // Keine localStorage-Persistenz mehr — die getrackte Website kommt aus der DB
+      // (/api/v2/websites). In-Memory-State genügt für die laufende Session.
       return set({ currentWebsite: website });
     },
 
     setAnalysisData: (data) => {
-      if (typeof localStorage !== 'undefined' && data) {
-        localStorage.setItem('complyo_last_analysis', JSON.stringify(data));
-      }
+      // Bewusst KEINE localStorage-Persistenz: Scan-Ergebnisse leben in der DB
+      // (scan_history, geladen via /api/scans/latest). localStorage war nur ein
+      // fragiler Cache (Quota). In-Memory-State für die laufende Session genügt.
       return set({
         analysisData: data,
         metrics: {
@@ -96,8 +110,8 @@ export const useDashboardStore = create<DashboardStore>()(
         isInOptimizationMode: true 
       });
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('complyo_locked_optimization_url', url);
-        localStorage.setItem('complyo_optimization_mode', 'true');
+        safeSetItem('complyo_locked_optimization_url', url);
+        safeSetItem('complyo_optimization_mode', 'true');
       }
     },
 
@@ -109,8 +123,8 @@ export const useDashboardStore = create<DashboardStore>()(
       if (url) {
         set({ lockedOptimizationUrl: url, isInOptimizationMode: true });
         if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('complyo_locked_optimization_url', url);
-          localStorage.setItem('complyo_optimization_mode', 'true');
+          safeSetItem('complyo_locked_optimization_url', url);
+          safeSetItem('complyo_optimization_mode', 'true');
         }
       }
     },
@@ -123,7 +137,7 @@ export const useDashboardStore = create<DashboardStore>()(
       set({ isInOptimizationMode: enabled });
       if (typeof localStorage !== 'undefined') {
         if (enabled) {
-          localStorage.setItem('complyo_optimization_mode', 'true');
+          safeSetItem('complyo_optimization_mode', 'true');
         } else {
           localStorage.removeItem('complyo_optimization_mode');
         }

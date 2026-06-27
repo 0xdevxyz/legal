@@ -3,12 +3,11 @@ Fix Apply Routes für Complyo
 Endpoints für das Anwenden von Fixes via FTP, SFTP, GitHub PR, etc.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status, Request, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, Request, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 import logging
 import asyncpg
-from datetime import datetime
 from dependencies import get_current_user
 
 from compliance_engine.deployment_engine import DeploymentEngine, DeploymentConfig, DeploymentResult

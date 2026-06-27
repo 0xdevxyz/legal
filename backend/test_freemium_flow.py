@@ -14,7 +14,6 @@ Testet die User Journey:
 import asyncio
 import asyncpg
 import os
-from datetime import datetime
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:

@@ -217,13 +217,17 @@ class TestContrastAnalyzer:
         assert result['passes'] is True
     
     def test_normal_text_higher_requirement(self):
-        """Test: Normaler Text hat höhere Anforderung (4.5:1)"""
+        """Test: Normaler Text hat höhere Anforderung (4.5:1)
+
+        #808080 auf Weiß = 3.95:1 → besteht large (3:1), fällt aber bei
+        normalem Text (4.5:1) durch. (#767676 = 4.54:1 würde BEIDE bestehen.)
+        """
         result = self.analyzer.analyze_color_pair(
-            foreground='#767676',
+            foreground='#808080',
             background='#FFFFFF',
             text_size='normal'
         )
-        
+
         assert result['required_ratio'] == 4.5
         assert result['passes'] is False
     
@@ -307,9 +311,11 @@ class TestAccessibilityIntegration:
         checker = ARIAChecker()
         issues = checker.check_aria_compliance(soup, 'https://test.com')
         
-        # Diese Seite sollte MEHRERE Issues haben
-        assert len(issues) > 3
-        
+        # Diese Seite sollte MEHRERE Issues haben (Landmarks, Button, Formularfeld);
+        # Formularfelder werden bewusst nur EINMAL gemeldet (via _check_form_labels),
+        # nicht zusätzlich über _check_missing_labels.
+        assert len(issues) >= 3
+
         # Mindestens: Landmarks, Button, Input ohne Label
         categories = [i['title'] for i in issues]
         assert any('Landmark' in c for c in categories)

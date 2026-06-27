@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
 
 
 def build_app():

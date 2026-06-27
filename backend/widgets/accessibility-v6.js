@@ -72,7 +72,24 @@
       zeilenhohe: 'Zeilenhöhe',
       textausrichtung: 'Textausrichtung',
       vorlesen: 'Vorlesen',
-      sprachnavigation: 'Sprachnavigation'
+      sprachnavigation: 'Sprachnavigation',
+      // UI-Strings (Footer, Modals, Tabs)
+      resetAllSettings: 'Alle Einstellungen zurücksetzen',
+      resetTextSettings: 'Text-Einstellungen zurücksetzen',
+      textSettings: 'Text-Einstellungen',
+      tabHeadings: 'Überschriften',
+      tabLandmarks: 'Bereiche',
+      tabLinks: 'Links',
+      alignDefault: 'Standard',
+      alignLeft: 'Linksbündig',
+      alignCenter: 'Zentriert',
+      alignRight: 'Rechtsbündig',
+      // Rechtliches / Barrierefreiheit
+      legalTitle: 'Rechtliches & Barrierefreiheit',
+      legalDisclaimer: 'Diese Hilfsfunktionen erleichtern die Bedienung dieser Website. Sie ersetzen jedoch keine vollständige Barrierefreiheit im Sinne des BFSG bzw. der WCAG.',
+      a11yStatement: 'Barrierefreiheitserklärung',
+      reportBarrier: 'Barriere melden',
+      conciliationBody: 'Schlichtungsstelle BGG'
     },
     en: {
       title: 'Accessibility Menu (CTRL+U)',
@@ -118,7 +135,24 @@
       zeilenhohe: 'Line Height',
       textausrichtung: 'Text Alignment',
       vorlesen: 'Read Aloud',
-      sprachnavigation: 'Voice Navigation'
+      sprachnavigation: 'Voice Navigation',
+      // UI strings (footer, modals, tabs)
+      resetAllSettings: 'Reset All Settings',
+      resetTextSettings: 'Reset Text Settings',
+      textSettings: 'Text Settings',
+      tabHeadings: 'Headings',
+      tabLandmarks: 'Landmarks',
+      tabLinks: 'Links',
+      alignDefault: 'Default',
+      alignLeft: 'Left',
+      alignCenter: 'Center',
+      alignRight: 'Right',
+      // Legal / accessibility
+      legalTitle: 'Legal & Accessibility',
+      legalDisclaimer: 'These assistive features make this website easier to use. They do not, however, replace full accessibility as required by the EAA/BFSG or WCAG.',
+      a11yStatement: 'Accessibility statement',
+      reportBarrier: 'Report a barrier',
+      conciliationBody: 'Conciliation body (BGG)'
     }
   };
   
@@ -130,7 +164,11 @@
         position: config.position || 'bottom-right',
         language: config.language || 'de'
       };
-      
+
+      // Rechts-/Barrierefreiheits-Konfig (pro Seite via Script-Attribute, optional
+      // zentral über den Config-Endpoint ergänzt – siehe checkLicense()).
+      this.config.legal = this.readLegalConfig(config.legal);
+
       // Simplified features for tile-based UI
       this.features = {
         // Toggle Features (Tiles)
@@ -172,7 +210,15 @@
     
     async init() {
       console.log(`🚀 Initializing Complyo Widget v${WIDGET_VERSION} with site-id: ${this.config.siteId}`);
-      
+
+      // 🔒 Lizenzprüfung: Wurde die Website im Complyo-Dashboard entfernt, ist die
+      // Lizenz entzogen → das Widget wird nicht gerendert und funktioniert nicht.
+      const licensed = await this.checkLicense();
+      if (!licensed) {
+        console.warn('[Complyo] Keine aktive Lizenz für diese Website – Barrierefreiheits-Widget deaktiviert.');
+        return;
+      }
+
       this.loadPreferences();
       this.injectCSS(); // CSS ZUERST injizieren!
       this.renderToolbar();
@@ -180,7 +226,8 @@
       await this.loadAndApplyAltTexts();
       this.setupKeyboardShortcuts();
       this.startVisibilityWatcher(); // KRITISCH: Widget-Sichtbarkeit ständig überwachen
-      
+      this.startPositionWatcher(); // Theme-Scroll-to-Top-Button erkennen & links daneben ausweichen
+
       console.log(`🎨 Complyo Accessibility Widget v${WIDGET_VERSION} initialized`);
     }
     
@@ -202,13 +249,161 @@
         }
       }, 500);
     }
-    
-    getSiteIdFromScript() {
-      const scripts = document.querySelectorAll('script[data-site-id]');
-      if (scripts.length > 0) {
-        return scripts[scripts.length - 1].getAttribute('data-site-id');
+
+    // Erkennt einen fixierten Theme-Button unten rechts (z. B. Scroll-to-Top) und
+    // setzt das Widget links daneben auf gleiche Höhe. Wird keiner gefunden, bleibt
+    // das Widget am Standardplatz unten rechts (20/20).
+    startPositionWatcher() {
+      // Nur für die Standard-Ecke unten rechts relevant
+      if ((this.config.position || 'bottom-right') !== 'bottom-right') return;
+
+      const apply = () => this.positionWidget();
+      // Initial + nach vollständigem Laden
+      apply();
+      window.addEventListener('load', apply, { once: true });
+      // Theme-Top-Buttons erscheinen oft erst beim Scrollen → reagieren
+      let raf = null;
+      const onScrollResize = () => {
+        if (raf) return;
+        raf = requestAnimationFrame(() => { raf = null; apply(); });
+      };
+      window.addEventListener('scroll', onScrollResize, { passive: true });
+      window.addEventListener('resize', onScrollResize, { passive: true });
+      // Sicherheitsnetz: ein paar verzögerte Durchläufe für spät injizierte Buttons
+      setTimeout(apply, 800);
+      setTimeout(apply, 2500);
+    }
+
+    positionWidget() {
+      const widget = this.container || document.getElementById('complyo-a11y-widget');
+      if (!widget) return;
+      // Während das Panel offen ist nicht verschieben
+      if (this.isOpen) return;
+
+      const GAP = 12;            // Abstand zum Theme-Button
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const topBtn = this.findCornerButton();
+
+      // Sanftes Umpositionieren ab dem zweiten Durchlauf (kein Slide beim ersten Render)
+      if (this._positioned) {
+        widget.style.transition = 'right 0.2s ease, bottom 0.2s ease';
       }
-      return 'demo';
+      this._positioned = true;
+
+      if (topBtn) {
+        const r = topBtn.getBoundingClientRect();
+        // Links neben den Button, Unterkanten bündig
+        const right = Math.max(Math.round(vw - r.left + GAP), 20);
+        const bottom = Math.max(Math.round(vh - r.bottom), 0);
+        widget.style.right = right + 'px';
+        widget.style.bottom = bottom + 'px';
+        widget.dataset.complyoDodge = '1';
+      } else {
+        widget.style.right = '20px';
+        widget.style.bottom = '20px';
+        widget.dataset.complyoDodge = '0';
+      }
+    }
+
+    // Sucht den fixierten "nach oben"-Button des Themes in der unteren rechten Ecke.
+    findCornerButton() {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      const isOwn = (el) =>
+        el.id === 'complyo-a11y-widget' || el.closest('#complyo-a11y-widget') ||
+        el.id === 'complyo-cookie-settings-btn' || el.closest('#complyo-cookie-settings-btn');
+
+      const inCorner = (el) => {
+        if (!el || el.nodeType !== 1 || isOwn(el)) return false;
+        let cs;
+        try { cs = getComputedStyle(el); } catch (e) { return false; }
+        if (cs.position !== 'fixed' && cs.position !== 'sticky') return false;
+        if (cs.visibility === 'hidden' || cs.display === 'none' || parseFloat(cs.opacity || '1') === 0) return false;
+        const r = el.getBoundingClientRect();
+        if (r.width < 16 || r.height < 16 || r.width > 96 || r.height > 96) return false; // nur kleine Buttons
+        const nearRight = (vw - r.right) <= 90 && r.right <= vw + 6;
+        const nearBottom = (vh - r.bottom) <= 160 && r.bottom <= vh + 6;
+        return nearRight && nearBottom;
+      };
+
+      // 1) Häufige Selektoren für Scroll-to-Top-Buttons
+      const SELECTORS = [
+        '[class*="scroll-top" i]', '[class*="scrolltop" i]', '[class*="scroll-to-top" i]',
+        '[class*="back-to-top" i]', '[class*="backtotop" i]', '[class*="back_to_top" i]',
+        '[id*="scroll-top" i]', '[id*="scrolltop" i]', '[id*="scrollup" i]',
+        '[id*="back-to-top" i]', '[id*="backtotop" i]',
+        '[aria-label*="nach oben" i]', '[aria-label*="scroll to top" i]', '[aria-label*="back to top" i]',
+        '[title*="nach oben" i]', '[title*="scroll to top" i]', '[title*="back to top" i]',
+        'a[href="#top"]', 'a[href="#"]'
+      ];
+      let candidates = [];
+      try { candidates = Array.from(document.querySelectorAll(SELECTORS.join(','))); } catch (e) {}
+      const hit = candidates.find(inCorner);
+      if (hit) return hit;
+
+      // 2) Generischer, begrenzter Scan über fixierte Elemente unten rechts
+      const all = document.body ? document.body.querySelectorAll('*') : [];
+      const max = Math.min(all.length, 4000); // Performance-Grenze
+      for (let i = 0; i < max; i++) {
+        if (inCorner(all[i])) return all[i];
+      }
+      return null;
+    }
+
+    getSiteIdFromScript() {
+      const el = this.getScriptEl();
+      return el ? el.getAttribute('data-site-id') : 'demo';
+    }
+
+    // Das einbindende <script>-Tag (zur Konfiguration via data-Attribute)
+    getScriptEl() {
+      const scripts = document.querySelectorAll('script[data-site-id]');
+      return scripts.length ? scripts[scripts.length - 1] : null;
+    }
+
+    // Rechts-Konfig aus Script-Attributen lesen. Reihenfolge: expliziter Override
+    // (programmatische Initialisierung) > data-Attribute > Standard.
+    readLegalConfig(override = {}) {
+      const el = this.getScriptEl();
+      const attr = (n) => ((el && el.getAttribute(n)) || '').trim();
+      return {
+        statementUrl: override.statementUrl || attr('data-a11y-statement-url'),
+        feedback:     override.feedback     || attr('data-a11y-feedback'),
+        // Schlichtungsstelle BGG ist die offizielle DE-Stelle; per Attribut abschalt-/änderbar
+        conciliationEnabled: (override.conciliation || attr('data-a11y-conciliation') || 'on') !== 'off',
+        conciliationName: override.conciliationName || attr('data-a11y-conciliation-name') || 'Schlichtungsstelle BGG',
+        conciliationUrl:  override.conciliationUrl  || attr('data-a11y-conciliation-url')  || 'https://www.schlichtungsstelle-bgg.de'
+      };
+    }
+
+    // "Barriere melden"-Ziel: E-Mail oder URL → korrektes href
+    feedbackHref(v) {
+      if (!v) return '';
+      if (/^(https?:|mailto:|tel:)/i.test(v)) return v;
+      if (v.includes('@')) return 'mailto:' + v;
+      return v;
+    }
+
+    // 🔒 Prüft, ob für diese Website noch eine aktive Lizenz besteht.
+    // Fail-open: bei Fehlern/Demo wird das Widget normal angezeigt.
+    async checkLicense() {
+      try {
+        const siteId = this.config.siteId;
+        if (!siteId || siteId === 'demo') return true;
+        const res = await fetch(`${API_BASE}/api/widgets/config/${siteId}`);
+        if (!res.ok) return true;
+        const data = await res.json();
+        // Optionale zentrale Rechts-Konfig aus dem Dashboard übernehmen.
+        // Script-Attribute haben Vorrang (nur leere Felder werden gefüllt).
+        const L = this.config.legal;
+        if (!L.statementUrl && data.accessibility_statement_url) L.statementUrl = data.accessibility_statement_url;
+        if (!L.feedback && data.accessibility_feedback) L.feedback = data.accessibility_feedback;
+        return data.license_active !== false;
+      } catch (e) {
+        return true;
+      }
     }
     
     generateSessionId() {
@@ -236,7 +431,7 @@
       
       container.innerHTML = `
         <button class="complyo-toggle-btn" aria-label="Barrierefreiheit öffnen" aria-expanded="false" title="Barrierefreiheit (CTRL+U)">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <!-- Universal Accessibility Symbol -->
             <circle cx="12" cy="12" r="10"/>
             <circle cx="12" cy="8" r="1.5" fill="currentColor"/>
@@ -514,11 +709,17 @@
           </div>
           
           <div class="complyo-panel-footer">
-            <button class="complyo-btn-reset" id="complyo-reset-all">
-              🔄 Reset All Accessibility Settings
+            <button class="complyo-btn-reset" id="complyo-reset-all" data-i18n="resetAllSettings">
+              Reset All Settings
             </button>
+            <details class="complyo-legal">
+              <summary data-i18n="legalTitle">Rechtliches &amp; Barrierefreiheit</summary>
+              <div class="complyo-legal-body">
+                <p class="complyo-legal-disclaimer" data-i18n="legalDisclaimer"></p>
+                <div class="complyo-legal-links" id="complyo-legal-links"></div>
+              </div>
+            </details>
             <div class="complyo-footer-info">
-              <button class="complyo-btn-link" id="complyo-move-widget">⚙️ Move Widget</button>
               <span class="complyo-version">Complyo Widget v${WIDGET_VERSION}</span>
             </div>
           </div>
@@ -530,15 +731,15 @@
         <!-- Page Structure Overlay mit Tabs -->
         <div class="complyo-page-structure-overlay" id="complyo-page-structure-overlay" hidden>
           <div class="complyo-structure-header">
-            <h3>📑 Page Structure</h3>
-            <button class="complyo-structure-close">✕</button>
+            <h3 data-i18n="pageStructure">Page Structure</h3>
+            <button class="complyo-structure-close" aria-label="Schließen">✕</button>
           </div>
-          
+
           <!-- Tabs für Page Structure -->
           <div class="complyo-structure-tabs">
-            <button class="complyo-tab-btn active" data-tab="headings">Headings</button>
-            <button class="complyo-tab-btn" data-tab="landmarks">Landmarks</button>
-            <button class="complyo-tab-btn" data-tab="links">Links</button>
+            <button class="complyo-tab-btn active" data-tab="headings" data-i18n="tabHeadings">Headings</button>
+            <button class="complyo-tab-btn" data-tab="landmarks" data-i18n="tabLandmarks">Landmarks</button>
+            <button class="complyo-tab-btn" data-tab="links" data-i18n="tabLinks">Links</button>
           </div>
           
           <div class="complyo-structure-content" id="complyo-structure-content">
@@ -548,18 +749,21 @@
           </div>
         </div>
         
+        <!-- Backdrop für das Text-Modal (klick schließt) -->
+        <div class="complyo-modal-backdrop" id="complyo-modal-backdrop" hidden></div>
+
         <!-- Text Settings Modal mit Schiebereglern -->
-        <div class="complyo-settings-modal" id="complyo-text-settings-modal" hidden>
+        <div class="complyo-settings-modal" id="complyo-text-settings-modal" role="dialog" aria-modal="true" hidden>
           <div class="complyo-modal-header">
-            <h3>📝 Text Settings</h3>
-            <button class="complyo-modal-close" data-modal="text-settings">✕</button>
+            <h3 data-i18n="textSettings">Text Settings</h3>
+            <button class="complyo-modal-close" data-modal="text-settings" aria-label="Schließen">✕</button>
           </div>
           
           <div class="complyo-modal-content">
             <!-- Font Size Slider -->
             <div class="complyo-slider-group">
               <label>
-                <span>Font Size</span>
+                <span data-i18n="fontSize">Font Size</span>
                 <span class="complyo-slider-value" id="fontSize-value">100%</span>
               </label>
               <input type="range" class="complyo-slider" id="fontSize-slider" 
@@ -573,7 +777,7 @@
             <!-- Line Height Slider -->
             <div class="complyo-slider-group">
               <label>
-                <span>Line Height</span>
+                <span data-i18n="lineHeight">Line Height</span>
                 <span class="complyo-slider-value" id="lineHeight-value">150%</span>
               </label>
               <input type="range" class="complyo-slider" id="lineHeight-slider" 
@@ -587,7 +791,7 @@
             <!-- Letter Spacing Slider -->
             <div class="complyo-slider-group">
               <label>
-                <span>Letter Spacing</span>
+                <span data-i18n="letterSpacing">Letter Spacing</span>
                 <span class="complyo-slider-value" id="letterSpacing-value">0px</span>
               </label>
               <input type="range" class="complyo-slider" id="letterSpacing-slider" 
@@ -601,7 +805,7 @@
             <!-- Word Spacing Slider -->
             <div class="complyo-slider-group">
               <label>
-                <span>Word Spacing</span>
+                <span data-i18n="wordSpacing">Word Spacing</span>
                 <span class="complyo-slider-value" id="wordSpacing-value">0px</span>
               </label>
               <input type="range" class="complyo-slider" id="wordSpacing-slider" 
@@ -614,18 +818,18 @@
             
             <!-- Text Align Buttons -->
             <div class="complyo-slider-group">
-              <label>Text Alignment</label>
+              <label data-i18n="textAlign">Text Alignment</label>
               <div class="complyo-button-group">
-                <button class="complyo-align-btn active" data-align="default">Default</button>
-                <button class="complyo-align-btn" data-align="left">Left</button>
-                <button class="complyo-align-btn" data-align="center">Center</button>
-                <button class="complyo-align-btn" data-align="right">Right</button>
+                <button class="complyo-align-btn active" data-align="default" data-i18n="alignDefault">Default</button>
+                <button class="complyo-align-btn" data-align="left" data-i18n="alignLeft">Left</button>
+                <button class="complyo-align-btn" data-align="center" data-i18n="alignCenter">Center</button>
+                <button class="complyo-align-btn" data-align="right" data-i18n="alignRight">Right</button>
               </div>
             </div>
-            
+
             <!-- Reset Button -->
-            <button class="complyo-reset-btn" id="reset-text-settings">
-              🔄 Reset All Text Settings
+            <button class="complyo-reset-btn" id="reset-text-settings" data-i18n="resetTextSettings">
+              Reset Text Settings
             </button>
           </div>
         </div>
@@ -635,10 +839,38 @@
       // (CSS filter auf parent erstellt neuen containing block für position:fixed)
       document.documentElement.appendChild(container);
       this.container = container;
-      
+
       this.setupEventListeners();
+      this.populateLegalLinks();
     }
-    
+
+    // Baut die Rechts-Links (Erklärung, Barriere melden, Schlichtungsstelle) je nach Konfig.
+    populateLegalLinks() {
+      const wrap = this.container.querySelector('#complyo-legal-links');
+      if (!wrap) return;
+      const L = this.config.legal || {};
+      const items = [];
+      if (L.statementUrl) {
+        items.push({ href: L.statementUrl, label: this.t('a11yStatement'), external: true });
+      }
+      const fb = this.feedbackHref(L.feedback);
+      if (fb) {
+        items.push({ href: fb, label: this.t('reportBarrier'), external: !/^mailto:|^tel:/i.test(fb) });
+      }
+      if (L.conciliationEnabled && L.conciliationUrl) {
+        items.push({ href: L.conciliationUrl, label: L.conciliationName || this.t('conciliationBody'), external: true });
+      }
+      wrap.innerHTML = '';
+      items.forEach(it => {
+        const a = document.createElement('a');
+        a.className = 'complyo-legal-link';
+        a.href = it.href;
+        if (it.external) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+        a.textContent = it.label;
+        wrap.appendChild(a);
+      });
+    }
+
     setupEventListeners() {
       const panel = this.container.querySelector('.complyo-panel');
       const toggleBtn = this.container.querySelector('.complyo-toggle-btn');
@@ -658,10 +890,7 @@
       
       // Reset Button
       this.container.querySelector('#complyo-reset-all').addEventListener('click', () => this.resetAll());
-      
-      // Move Widget
-      this.container.querySelector('#complyo-move-widget').addEventListener('click', () => this.toggleDragMode());
-      
+
       // Page Structure Close
       const structureClose = this.container.querySelector('.complyo-structure-close');
       if (structureClose) {
@@ -686,6 +915,12 @@
           this.closeModal(btn.dataset.modal);
         });
       });
+
+      // Backdrop-Klick schließt das Text-Modal
+      const modalBackdrop = this.container.querySelector('#complyo-modal-backdrop');
+      if (modalBackdrop) {
+        modalBackdrop.addEventListener('click', () => this.closeModal('text-settings'));
+      }
       
       // Slider Event Listeners (Live Preview)
       this.container.querySelectorAll('.complyo-slider').forEach(slider => {
@@ -823,15 +1058,19 @@
     
     openModal(modalName) {
       const modal = document.getElementById(`complyo-${modalName}-modal`);
+      const backdrop = document.getElementById('complyo-modal-backdrop');
       if (modal) {
         modal.hidden = false;
+        if (backdrop) backdrop.hidden = false;
       }
     }
-    
+
     closeModal(modalName) {
       const modal = document.getElementById(`complyo-${modalName}-modal`);
+      const backdrop = document.getElementById('complyo-modal-backdrop');
       if (modal) {
         modal.hidden = true;
+        if (backdrop) backdrop.hidden = true;
       }
     }
     
@@ -1332,11 +1571,7 @@
       // Simplified draggable
       console.log('Widget is draggable');
     }
-    
-    toggleDragMode() {
-      alert('Ziehen Sie das Widget an die gewünschte Position');
-    }
-    
+
     resetAll() {
       if (!confirm('Alle Barrierefreiheits-Einstellungen zurücksetzen?')) return;
       
@@ -1486,32 +1721,55 @@
           position: fixed;
           z-index: 999999;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          /* ===== Clean / neutral palette ===== */
+          --c-accent: #2563eb;
+          --c-accent-hover: #1d4ed8;
+          --c-accent-tint: #eff6ff;
+          --c-accent-border: #bfdbfe;
+          --c-surface: #ffffff;
+          --c-surface-2: #f9fafb;
+          --c-border: #e5e7eb;
+          --c-border-hover: #d1d5db;
+          --c-text: #111827;
+          --c-text-mid: #374151;
+          --c-text-muted: #6b7280;
+          --c-radius: 14px;
+          --c-radius-sm: 10px;
+          --c-shadow: 0 8px 28px rgba(17, 24, 39, 0.12);
         }
         
         .complyo-widget-bottom-right {
-          bottom: 100px;
-          right: 30px;
+          bottom: 20px;
+          right: 20px;
         }
-        
+
         /* ===== TOGGLE BUTTON ===== */
+        /* Maße/Form/Position passend zum Cookie-Settings-Button (links): 48x48, radius 12px, 20px Abstand */
         .complyo-toggle-btn {
-          width: 64px;
-          height: 64px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+          width: 48px;
+          height: 48px;
+          border-radius: 12px;
+          background: var(--c-accent);
           color: white;
           border: none;
-          box-shadow: 0 4px 20px rgba(67, 97, 238, 0.4);
+          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.3s ease;
+          padding: 0;
+          transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
         }
-        
+
         .complyo-toggle-btn:hover {
-          transform: scale(1.1);
-          box-shadow: 0 6px 24px rgba(67, 97, 238, 0.5);
+          background: var(--c-accent-hover);
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(37, 99, 235, 0.32);
+        }
+
+        .complyo-toggle-btn:focus-visible {
+          outline: 3px solid var(--c-accent-border);
+          outline-offset: 2px;
         }
         
         /* ===== PANEL ===== */
@@ -1519,11 +1777,13 @@
           position: fixed !important;
           bottom: 20px !important;
           right: 20px !important;
-          width: 520px;
+          width: 460px;
+          max-width: calc(100vw - 32px);
           max-height: calc(100vh - 40px);
-          background: white;
-          border-radius: 16px;
-          box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+          background: var(--c-surface);
+          border: 1px solid var(--c-border);
+          border-radius: var(--c-radius);
+          box-shadow: var(--c-shadow);
           overflow: hidden;
           display: flex;
           flex-direction: column;
@@ -1545,74 +1805,76 @@
         }
         
         .complyo-panel-header {
-          background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
-          color: white;
-          padding: 20px 24px;
+          background: var(--c-surface);
+          color: var(--c-text);
+          padding: 18px 20px;
           display: flex;
           justify-content: space-between;
           align-items: center;
+          border-bottom: 1px solid var(--c-border);
         }
-        
+
         .complyo-panel-header h3 {
           margin: 0;
           font-size: 16px;
           font-weight: 600;
-          letter-spacing: 0.5px;
+          letter-spacing: 0;
+          color: var(--c-text);
         }
-        
+
         .complyo-close-btn {
-          background: rgba(255,255,255,0.2);
+          background: transparent;
           border: none;
-          color: white;
+          color: var(--c-text-muted);
           width: 32px;
           height: 32px;
-          border-radius: 50%;
+          border-radius: 8px;
           cursor: pointer;
           font-size: 18px;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: background 0.2s;
+          transition: background 0.18s, color 0.18s;
         }
-        
+
         .complyo-close-btn:hover {
-          background: rgba(255,255,255,0.3);
+          background: var(--c-surface-2);
+          color: var(--c-text);
         }
         
         /* ===== LANGUAGE SWITCHER ===== */
         .complyo-language-selector {
           display: flex;
           gap: 8px;
-          padding: 12px 24px;
-          background: #f8f9fa;
-          border-bottom: 1px solid #e9ecef;
+          padding: 12px 20px;
+          background: var(--c-surface-2);
+          border-bottom: 1px solid var(--c-border);
         }
-        
+
         .complyo-lang-btn {
           display: flex;
           align-items: center;
           gap: 6px;
-          padding: 8px 16px;
-          background: white;
-          border: 2px solid #dee2e6;
+          padding: 7px 14px;
+          background: var(--c-surface);
+          border: 1px solid var(--c-border);
           border-radius: 8px;
           cursor: pointer;
           font-size: 14px;
           font-weight: 500;
-          color: #495057;
-          transition: all 0.2s ease;
+          color: var(--c-text-mid);
+          transition: border-color 0.18s, color 0.18s, background 0.18s;
         }
-        
+
         .complyo-lang-btn:hover {
-          border-color: #4361ee;
-          color: #4361ee;
-          transform: translateY(-1px);
+          border-color: var(--c-border-hover);
+          color: var(--c-text);
         }
-        
+
         .complyo-lang-btn.active {
-          background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
-          border-color: #4361ee;
-          color: white;
+          background: var(--c-accent-tint);
+          border-color: var(--c-accent);
+          color: var(--c-accent);
         }
         
         .complyo-lang-flag {
@@ -1621,134 +1883,170 @@
         
         .complyo-panel-content {
           overflow-y: auto;
-          padding: 24px;
+          padding: 20px;
           max-height: calc(85vh - 140px);
         }
-        
+
         /* ===== FEATURE GRID ===== */
         .complyo-feature-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 12px;
+          gap: 10px;
         }
-        
+
         /* ===== FEATURE TILE ===== */
         .complyo-feature-tile {
           position: relative;
-          background: #f8f9fa;
-          border: 2px solid #e9ecef;
-          border-radius: 12px;
-          padding: 16px 12px;
+          background: var(--c-surface);
+          border: 1px solid var(--c-border);
+          border-radius: var(--c-radius-sm);
+          padding: 16px 10px;
           cursor: pointer;
-          transition: all 0.2s ease;
+          transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
           display: flex;
           flex-direction: column;
           align-items: center;
           text-align: center;
-          min-height: 100px;
+          min-height: 96px;
         }
-        
+
         .complyo-feature-tile:hover {
-          background: #e9ecef;
-          border-color: #4361ee;
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(67, 97, 238, 0.15);
+          background: var(--c-surface-2);
+          border-color: var(--c-border-hover);
+          box-shadow: 0 2px 8px rgba(17, 24, 39, 0.06);
         }
-        
+
+        .complyo-feature-tile:focus-visible {
+          outline: 3px solid var(--c-accent-border);
+          outline-offset: 2px;
+        }
+
         .complyo-feature-tile.active {
-          background: #e7f0ff;
-          border-color: #4361ee;
-          border-width: 2px;
+          background: var(--c-accent-tint);
+          border-color: var(--c-accent);
         }
-        
+
         .complyo-tile-icon {
-          color: #4361ee;
+          color: var(--c-text-muted);
           margin-bottom: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
         }
-        
+
         .complyo-feature-tile.active .complyo-tile-icon {
-          color: #3a0ca3;
+          color: var(--c-accent);
         }
-        
+
         .complyo-tile-label {
           font-size: 12px;
           font-weight: 500;
-          color: #495057;
+          color: var(--c-text-mid);
           line-height: 1.3;
         }
-        
+
         .complyo-feature-tile.active .complyo-tile-label {
-          color: #3a0ca3;
+          color: var(--c-accent);
           font-weight: 600;
         }
-        
+
         .complyo-tile-check {
           position: absolute;
           top: 8px;
           right: 8px;
-          width: 20px;
-          height: 20px;
-          background: #4361ee;
+          width: 18px;
+          height: 18px;
+          background: var(--c-accent);
           color: white;
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 12px;
+          font-size: 11px;
           font-weight: bold;
         }
         
         /* ===== FOOTER ===== */
         .complyo-panel-footer {
-          padding: 16px 24px;
-          border-top: 1px solid #e9ecef;
-          background: #f8f9fa;
+          padding: 14px 20px;
+          border-top: 1px solid var(--c-border);
+          background: var(--c-surface-2);
           display: flex;
           flex-direction: column;
-          gap: 12px;
+          gap: 10px;
         }
-        
+
         .complyo-btn-reset {
           width: 100%;
-          padding: 12px 20px;
-          border-radius: 8px;
-          background: #dc3545;
-          color: white;
-          border: none;
+          padding: 11px 20px;
+          border-radius: var(--c-radius-sm);
+          background: var(--c-surface);
+          color: var(--c-text-mid);
+          border: 1px solid var(--c-border);
           font-size: 13px;
           font-weight: 600;
           cursor: pointer;
-          transition: background 0.2s;
+          transition: background 0.18s, border-color 0.18s, color 0.18s;
         }
-        
+
         .complyo-btn-reset:hover {
-          background: #c82333;
+          background: #fef2f2;
+          border-color: #fecaca;
+          color: #b91c1c;
         }
-        
+
         .complyo-footer-info {
           display: flex;
-          justify-content: space-between;
+          justify-content: flex-end;
           align-items: center;
         }
-        
-        .complyo-btn-link {
-          background: none;
-          border: none;
-          color: #4361ee;
-          font-size: 12px;
-          cursor: pointer;
-          padding: 4px 8px;
-          text-decoration: underline;
-        }
-        
+
         .complyo-version {
           font-size: 11px;
-          color: #6c757d;
+          color: var(--c-text-muted);
         }
-        
+
+        /* ===== RECHTLICHES / BARRIEREFREIHEIT ===== */
+        .complyo-legal {
+          font-size: 12px;
+          color: var(--c-text-muted);
+        }
+        .complyo-legal > summary {
+          cursor: pointer;
+          list-style: none;
+          font-weight: 600;
+          color: var(--c-text-mid);
+          padding: 6px 0;
+          user-select: none;
+        }
+        .complyo-legal > summary::-webkit-details-marker { display: none; }
+        .complyo-legal > summary::before {
+          content: '▸';
+          display: inline-block;
+          margin-right: 6px;
+          transition: transform 0.15s ease;
+        }
+        .complyo-legal[open] > summary::before { transform: rotate(90deg); }
+        .complyo-legal-body {
+          padding: 4px 0 2px;
+        }
+        .complyo-legal-disclaimer {
+          margin: 0 0 8px;
+          line-height: 1.5;
+          color: var(--c-text-muted);
+        }
+        .complyo-legal-links {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .complyo-legal-link {
+          color: var(--c-accent);
+          text-decoration: underline;
+          font-weight: 500;
+        }
+        .complyo-legal-link:hover { color: var(--c-accent-hover); }
+
         /* ===== OVERLAYS ===== */
         [hidden] {
           display: none !important;
@@ -1759,47 +2057,57 @@
           left: 0;
           right: 0;
           height: 3px;
-          background: rgba(67, 97, 238, 0.6);
+          background: rgba(37, 99, 235, 0.4);
           pointer-events: none;
           z-index: 999998;
-          box-shadow: 0 0 20px rgba(67, 97, 238, 0.4);
+          box-shadow: 0 0 20px rgba(37, 99, 235, 0.28);
         }
         
         .complyo-page-structure-overlay {
           position: fixed;
           top: 20px;
-          right: 570px;
+          right: 496px;
           width: 320px;
+          max-width: calc(100vw - 32px);
           max-height: 80vh;
-          background: white;
-          border-radius: 12px;
-          box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+          background: var(--c-surface);
+          border: 1px solid var(--c-border);
+          border-radius: var(--c-radius);
+          box-shadow: var(--c-shadow);
           overflow: hidden;
           z-index: 999998;
         }
         
         .complyo-structure-header {
-          background: #4361ee;
-          color: white;
+          background: var(--c-surface);
+          color: var(--c-text);
           padding: 16px;
           display: flex;
           justify-content: space-between;
           align-items: center;
+          border-bottom: 1px solid var(--c-border);
         }
-        
+
         .complyo-structure-header h3 {
           margin: 0;
           font-size: 14px;
+          color: var(--c-text);
         }
-        
+
         .complyo-structure-close {
-          background: rgba(255,255,255,0.2);
+          background: transparent;
           border: none;
-          color: white;
+          color: var(--c-text-muted);
           width: 28px;
           height: 28px;
-          border-radius: 50%;
+          border-radius: 8px;
           cursor: pointer;
+          transition: background 0.18s, color 0.18s;
+        }
+
+        .complyo-structure-close:hover {
+          background: var(--c-surface-2);
+          color: var(--c-text);
         }
         
         .complyo-structure-content {
@@ -1811,8 +2119,8 @@
         /* Tabs für Page Structure */
         .complyo-structure-tabs {
           display: flex;
-          background: #f8f9fa;
-          border-bottom: 2px solid #e9ecef;
+          background: var(--c-surface-2);
+          border-bottom: 2px solid var(--c-border);
           padding: 0 12px;
         }
         
@@ -1821,7 +2129,7 @@
           padding: 12px 16px;
           border: none;
           background: transparent;
-          color: #6c757d;
+          color: var(--c-text-muted);
           font-size: 13px;
           font-weight: 500;
           cursor: pointer;
@@ -1832,13 +2140,13 @@
         }
         
         .complyo-tab-btn:hover {
-          color: #4361ee;
-          background: rgba(67, 97, 238, 0.05);
+          color: var(--c-accent);
+          background: rgba(37, 99, 235, 0.06);
         }
         
         .complyo-tab-btn.active {
-          color: #4361ee;
-          border-bottom-color: #4361ee;
+          color: var(--c-accent);
+          border-bottom-color: var(--c-accent);
           background: white;
         }
         
@@ -1869,7 +2177,7 @@
           padding: 10px 12px;
           margin: 6px 0;
           border-radius: 6px;
-          background: #f8f9fa;
+          background: var(--c-surface-2);
           font-size: 13px;
           line-height: 1.5;
           border-left: 3px solid transparent;
@@ -1877,15 +2185,15 @@
         }
         
         .complyo-structure-list li:hover {
-          background: #e9ecef;
-          border-left-color: #4361ee;
+          background: var(--c-border);
+          border-left-color: var(--c-accent);
         }
         
         /* Heading Badges */
         .complyo-heading-badge {
           display: inline-block;
           padding: 2px 6px;
-          background: #4361ee;
+          background: var(--c-accent);
           color: white;
           border-radius: 4px;
           font-size: 10px;
@@ -1896,9 +2204,9 @@
         .complyo-heading-h1 .complyo-heading-badge { background: #e63946; }
         .complyo-heading-h2 .complyo-heading-badge { background: #f77f00; }
         .complyo-heading-h3 .complyo-heading-badge { background: #06a77d; }
-        .complyo-heading-h4 .complyo-heading-badge { background: #4361ee; }
+        .complyo-heading-h4 .complyo-heading-badge { background: var(--c-accent); }
         .complyo-heading-h5 .complyo-heading-badge { background: #7209b7; }
-        .complyo-heading-h6 .complyo-heading-badge { background: #6c757d; }
+        .complyo-heading-h6 .complyo-heading-badge { background: var(--c-text-muted); }
         
         /* Landmark Badges */
         .complyo-landmark-badge {
@@ -1915,7 +2223,7 @@
         
         /* Links List */
         .complyo-links-list a {
-          color: #4361ee;
+          color: var(--c-accent);
           text-decoration: none;
           display: block;
           font-size: 13px;
@@ -1927,70 +2235,93 @@
         
         .complyo-empty {
           text-align: center;
-          color: #6c757d;
+          color: var(--c-text-muted);
           padding: 24px;
           font-style: italic;
         }
         
         /* ===== TEXT SETTINGS MODAL ===== */
+        .complyo-modal-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(17, 24, 39, 0.45);
+          /* Gleiche z-Ebene wie Panel/Modal; DOM-Reihenfolge (Panel → Backdrop → Modal)
+             legt den Backdrop über das Panel und das Modal über den Backdrop. */
+          z-index: 2147483647 !important;
+          animation: fadeIn 0.2s ease-out;
+        }
+
         .complyo-settings-modal {
           position: fixed;
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
           width: 480px;
-          max-height: 80vh;
-          background: white;
-          border-radius: 16px;
-          box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+          max-width: calc(100vw - 32px);
+          max-height: 85vh;
+          background: var(--c-surface);
+          border: 1px solid var(--c-border);
+          border-radius: var(--c-radius);
+          box-shadow: var(--c-shadow);
+          display: flex;
+          flex-direction: column;
           overflow: hidden;
-          z-index: 999999;
-          animation: fadeIn 0.2s ease-in;
+          z-index: 2147483647 !important;
+          animation: modalIn 0.2s ease-out;
+        }
+
+        @keyframes modalIn {
+          from { opacity: 0; transform: translate(-50%, -50%) scale(0.97); }
+          to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         }
         
         .complyo-modal-header {
-          background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
-          color: white;
-          padding: 20px 24px;
+          background: var(--c-surface);
+          color: var(--c-text);
+          padding: 18px 20px;
           display: flex;
           justify-content: space-between;
           align-items: center;
+          border-bottom: 1px solid var(--c-border);
         }
-        
+
         .complyo-modal-header h3 {
           margin: 0;
           font-size: 16px;
           font-weight: 600;
+          color: var(--c-text);
         }
-        
+
         .complyo-modal-close {
-          background: rgba(255,255,255,0.2);
+          background: transparent;
           border: none;
-          color: white;
+          color: var(--c-text-muted);
           width: 32px;
           height: 32px;
-          border-radius: 50%;
+          border-radius: 8px;
           cursor: pointer;
           font-size: 18px;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: background 0.2s;
+          transition: background 0.18s, color 0.18s;
         }
-        
+
         .complyo-modal-close:hover {
-          background: rgba(255,255,255,0.3);
+          background: var(--c-surface-2);
+          color: var(--c-text);
         }
         
         .complyo-modal-content {
-          padding: 24px;
+          padding: 20px;
           overflow-y: auto;
-          max-height: calc(80vh - 80px);
+          flex: 1 1 auto;
+          min-height: 0;
         }
-        
+
         /* Slider Groups */
         .complyo-slider-group {
-          margin-bottom: 28px;
+          margin-bottom: 18px;
         }
         
         .complyo-slider-group label {
@@ -2000,16 +2331,16 @@
           margin-bottom: 12px;
           font-size: 14px;
           font-weight: 500;
-          color: #1f2937;
+          color: var(--c-text);
         }
         
         .complyo-slider-value {
-          background: #e9ecef;
+          background: var(--c-border);
           padding: 4px 12px;
           border-radius: 6px;
           font-size: 13px;
           font-weight: 600;
-          color: #4361ee;
+          color: var(--c-accent);
           min-width: 55px;
           text-align: center;
         }
@@ -2019,7 +2350,7 @@
           width: 100%;
           height: 6px;
           border-radius: 3px;
-          background: #e9ecef;
+          background: var(--c-border);
           outline: none;
           -webkit-appearance: none;
           appearance: none;
@@ -2032,31 +2363,31 @@
           width: 20px;
           height: 20px;
           border-radius: 50%;
-          background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+          background: var(--c-accent);
           cursor: pointer;
-          box-shadow: 0 2px 8px rgba(67, 97, 238, 0.4);
+          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
           transition: all 0.2s;
         }
         
         .complyo-slider::-webkit-slider-thumb:hover {
           transform: scale(1.2);
-          box-shadow: 0 4px 12px rgba(67, 97, 238, 0.6);
+          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
         }
         
         .complyo-slider::-moz-range-thumb {
           width: 20px;
           height: 20px;
           border-radius: 50%;
-          background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+          background: var(--c-accent);
           cursor: pointer;
           border: none;
-          box-shadow: 0 2px 8px rgba(67, 97, 238, 0.4);
+          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
           transition: all 0.2s;
         }
         
         .complyo-slider::-moz-range-thumb:hover {
           transform: scale(1.2);
-          box-shadow: 0 4px 12px rgba(67, 97, 238, 0.6);
+          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
         }
         
         .complyo-slider-labels {
@@ -2064,59 +2395,63 @@
           justify-content: space-between;
           margin-top: 8px;
           font-size: 11px;
-          color: #6c757d;
+          color: var(--c-text-muted);
         }
         
         /* Button Group */
         .complyo-button-group {
           display: flex;
+          flex-wrap: wrap;
           gap: 8px;
           margin-top: 8px;
         }
-        
+
         .complyo-align-btn {
-          flex: 1;
-          padding: 10px 16px;
-          border: 2px solid #dee2e6;
-          background: white;
+          flex: 1 1 auto;
+          min-width: 0;
+          padding: 10px 12px;
+          border: 1px solid var(--c-border);
+          background: var(--c-surface);
           border-radius: 8px;
           font-size: 13px;
           font-weight: 500;
-          color: #495057;
+          color: var(--c-text-mid);
           cursor: pointer;
-          transition: all 0.2s;
+          transition: border-color 0.18s, color 0.18s, background 0.18s;
+          white-space: nowrap;
         }
         
         .complyo-align-btn:hover {
-          border-color: #4361ee;
-          color: #4361ee;
-          background: rgba(67, 97, 238, 0.05);
+          border-color: var(--c-accent);
+          color: var(--c-accent);
+          background: rgba(37, 99, 235, 0.06);
         }
         
         .complyo-align-btn.active {
-          background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
-          border-color: #4361ee;
+          background: var(--c-accent);
+          border-color: var(--c-accent);
           color: white;
         }
         
         /* Reset Button */
         .complyo-reset-btn {
           width: 100%;
-          padding: 14px 24px;
+          padding: 12px 24px;
           margin-top: 20px;
-          background: #f8f9fa;
-          border: 2px solid #dee2e6;
-          border-radius: 8px;
+          background: var(--c-surface);
+          border: 1px solid var(--c-border);
+          border-radius: var(--c-radius-sm);
           font-size: 14px;
           font-weight: 600;
-          color: #495057;
+          color: var(--c-text-mid);
           cursor: pointer;
-          transition: all 0.2s;
+          transition: background 0.18s, border-color 0.18s, color 0.18s;
         }
-        
+
         .complyo-reset-btn:hover {
-          background: #e9ecef;
-          border-color: #adb5bd;
+          background: var(--c-surface-2);
+          border-color: var(--c-border-hover);
+          color: var(--c-text);
         }
         
         /* ===== HIGH CONTRAST FIX - MAXIMUM PRIORITY ===== */
@@ -2135,7 +2470,7 @@
         body.complyo-grayscale .complyo-toggle-btn,
         body.complyo-night-mode .complyo-toggle-btn,
         .complyo-toggle-btn {
-          background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%) !important;
+          background: var(--c-accent) !important;
           opacity: 1 !important;
           visibility: visible !important;
           pointer-events: auto !important;
@@ -2148,7 +2483,7 @@
         body.complyo-night-mode .complyo-panel,
         .complyo-panel {
           background: white !important;
-          color: #1f2937 !important;
+          color: var(--c-text) !important;
           opacity: 1 !important;
           visibility: visible !important;
           pointer-events: auto !important;
@@ -2167,8 +2502,8 @@
           z-index: 2147483647 !important;
           pointer-events: auto !important;
           display: block !important;
-          bottom: 100px !important;
-          right: 30px !important;
+          bottom: 20px !important;
+          right: 20px !important;
           transform: none !important;
           will-change: auto !important;
         }
@@ -2294,8 +2629,55 @@
         body.complyo-align-right * {
           text-align: right !important;
         }
+
+        /* ===== RESPONSIVE / MOBILE ===== */
+        @media (max-width: 540px) {
+          .complyo-panel {
+            width: auto !important;
+            left: 16px !important;
+            right: 16px !important;
+            bottom: 16px !important;
+            max-width: none !important;
+            max-height: calc(100vh - 32px);
+            border-radius: var(--c-radius);
+          }
+
+          .complyo-panel-content {
+            max-height: calc(100vh - 230px);
+          }
+
+          .complyo-feature-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+
+          /* Ausrichtungs-Buttons 2x2 statt abgeschnitten einreihig */
+          .complyo-align-btn {
+            flex: 1 1 calc(50% - 4px);
+          }
+
+          /* Page-Structure-Overlay vollflächig statt neben dem Panel */
+          .complyo-page-structure-overlay {
+            top: 16px;
+            left: 16px;
+            right: 16px;
+            width: auto;
+            max-width: none;
+          }
+        }
+
+        /* Reduzierte Bewegung respektieren */
+        @media (prefers-reduced-motion: reduce) {
+          .complyo-panel,
+          .complyo-tab-panel,
+          .complyo-settings-modal {
+            animation: none !important;
+          }
+          #complyo-a11y-widget * {
+            transition: none !important;
+          }
+        }
       `;
-      
+
       document.head.appendChild(style);
     }
   }

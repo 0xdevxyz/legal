@@ -16,6 +16,7 @@
             apiUrl: 'https://api.complyo.de',
             blockedScripts: [],
             blockedIframes: [],
+            blockedStyles: [],
             cookiesToDelete: [],
             localStorageKeys: [],
             serviceConfig: {}
@@ -37,9 +38,13 @@
             
             console.log('[Complyo] 🛡️ Cookie Blocker initializing...');
             
-            // Load configuration from API
+            // Statische Block-Patterns SOFORT bauen, damit der erste (synchrone)
+            // Scan bereits greift — die API-Konfiguration verfeinert sie danach.
+            this.buildBlockingPatterns([]);
+
+            // Load configuration from API (async, verfeinert Patterns)
             this.loadConfiguration();
-            
+
             // Block scripts before they execute
             this.blockScriptsEarly();
             
@@ -48,9 +53,50 @@
             
             // Load existing consent
             this.loadConsent();
-            
+
+            // Auf Consent aus dem Banner reagieren. Der Banner feuert
+            // 'complyoConsent' (window + document), ruft aber NICHT direkt
+            // updateConsent() auf. Ohne diesen Listener blieben die im <head>
+            // synchron blockierten Font-/CSS-<link>s nach "Akzeptieren" mit
+            // media="not all" hängen → die Schrift lud erst nach Seiten-Reload.
+            const onConsent = (e) => this.applyConsentFromEvent(e);
+            window.addEventListener('complyoConsent', onConsent);
+            document.addEventListener('complyoConsent', onConsent);
+
             this.state.initialized = true;
             console.log('[Complyo] ✅ Cookie Blocker initialized');
+        },
+
+        /**
+         * Consent-Event des Banners verarbeiten: Kategorien in das interne
+         * Consent-Format überführen und blockierte Elemente (insb. Google-Fonts-
+         * Stylesheets) SOFORT wieder freigeben – ohne Page-Reload.
+         */
+        applyConsentFromEvent: function(e) {
+            const detail = (e && e.detail) || {};
+            const cats   = detail.categories || {};
+
+            const accepted = !!(cats.functional || cats.analytics || cats.marketing);
+            const consent = {
+                accepted: accepted,
+                consent_categories: {
+                    necessary:  true,
+                    functional: cats.functional === true,
+                    analytics:  cats.analytics  === true,
+                    marketing:  cats.marketing  === true
+                }
+            };
+
+            this.state.consent = consent;
+
+            // Freigeben, was jetzt erlaubt ist (Fonts/CSS = funktional). Bei reiner
+            // Ablehnung Tracking-Cookies entfernen.
+            this.unblockElements();
+            if (!accepted) {
+                this.deleteCookies();
+            }
+
+            console.log('[Complyo] Consent via Banner-Event übernommen:', consent);
         },
         
         /**
@@ -111,6 +157,23 @@
                 /twitter\.com\/widgets/,
                 /platform\.twitter\.com/
             ];
+
+            // Externe Font-/CSS-Hosts: laden via <link rel="stylesheet">,
+            // <link as="font">/Preload oder @import und uebertragen die IP des
+            // Besuchers VOR Consent an Dritte (z.B. Google Fonts -> LG Muenchen
+            // 3 O 17493/20). Werden bis zur Einwilligung neutralisiert; das
+            // Layout faellt solange auf System-/Fallback-Fonts zurueck.
+            this.config.blockedStyles = [
+                /fonts\.googleapis\.com/,      // Google Fonts (CSS)
+                /fonts\.gstatic\.com/,         // Google Fonts (Font-Dateien)
+                /use\.typekit\.net/,           // Adobe Fonts
+                /p\.typekit\.net/,
+                /use\.fontawesome\.com/,       // Font Awesome CDN
+                /kit\.fontawesome\.com/,
+                /fast\.fonts\.(net|com)/,      // Monotype
+                /cloud\.typography\.com/,      // Hoefler&Co
+                /fonts\.bunny\.net/            // Bunny Fonts (extern)
+            ];
             
             this.config.cookiesToDelete = [
                 // Analytics
@@ -146,29 +209,83 @@
                     element.setAttribute = function(name, value) {
                         if (name === 'src' && self.shouldBlockScript(value)) {
                             console.log('[Complyo] 🚫 Blocked script:', value);
-                            
+
                             // Change type to prevent execution
                             originalSetAttribute.call(this, 'type', 'text/plain');
                             originalSetAttribute.call(this, 'data-complyo-src', value);
                             originalSetAttribute.call(this, 'data-complyo-blocked', 'true');
-                            
+
                             self.state.blockedElements.push(this);
                             return;
                         }
                         originalSetAttribute.call(this, name, value);
                     };
+                    // el.src = … (so injizieren GA/GTM/Meta real) ebenfalls abfangen
+                    const srcDesc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+                    if (srcDesc && srcDesc.set && srcDesc.get) {
+                        Object.defineProperty(element, 'src', {
+                            configurable: true,
+                            enumerable: true,
+                            get: function() { return srcDesc.get.call(this); },
+                            set: function(value) {
+                                if (self.shouldBlockScript(value)) {
+                                    console.log('[Complyo] 🚫 Blocked script:', value);
+                                    originalSetAttribute.call(this, 'type', 'text/plain');
+                                    originalSetAttribute.call(this, 'data-complyo-src', value);
+                                    originalSetAttribute.call(this, 'data-complyo-blocked', 'true');
+                                    self.state.blockedElements.push(this);
+                                    return;
+                                }
+                                srcDesc.set.call(this, value);
+                            }
+                        });
+                    }
                 }
-                
+
+                // Dynamisch erzeugte <link rel="stylesheet"> / <link as="font">:
+                // href abfangen, bevor der Browser den Request startet.
+                if (tagName.toLowerCase() === 'link') {
+                    const originalSetAttribute = element.setAttribute;
+                    element.setAttribute = function(name, value) {
+                        if (name === 'href' && self.shouldBlockStylesheet(value)) {
+                            console.log('[Complyo] 🚫 Blocked stylesheet/font:', value);
+                            originalSetAttribute.call(this, 'data-complyo-href', value);
+                            originalSetAttribute.call(this, 'data-complyo-blocked', 'true');
+                            originalSetAttribute.call(this, 'media', 'not all');
+                            self.state.blockedElements.push(this);
+                            return;
+                        }
+                        originalSetAttribute.call(this, name, value);
+                    };
+                    const hrefDesc = Object.getOwnPropertyDescriptor(HTMLLinkElement.prototype, 'href');
+                    if (hrefDesc && hrefDesc.set) {
+                        Object.defineProperty(element, 'href', {
+                            configurable: true,
+                            get: function() { return hrefDesc.get.call(this); },
+                            set: function(value) {
+                                if (self.shouldBlockStylesheet(value)) {
+                                    console.log('[Complyo] 🚫 Blocked stylesheet/font:', value);
+                                    element.setAttribute('href', value); // laeuft in Hook oben
+                                    return;
+                                }
+                                hrefDesc.set.call(this, value);
+                            }
+                        });
+                    }
+                }
+
                 return element;
             };
             
-            // Observer for dynamically added scripts
+            // Sofort vorhandene (bis hier geparste) Scripts & Styles neutralisieren …
+            this.scanAndBlockScripts();
+            this.scanAndBlockStyles();
+            // … und erneut nach vollstaendigem Parsen des restlichen DOM.
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', () => {
                     this.scanAndBlockScripts();
+                    this.scanAndBlockStyles();
                 });
-            } else {
-                this.scanAndBlockScripts();
             }
         },
         
@@ -223,7 +340,80 @@
             
             return this.config.blockedIframes.some(pattern => pattern.test(src));
         },
-        
+
+        /**
+         * Soll diese URL (Stylesheet/Font) blockiert werden?
+         */
+        shouldBlockStylesheet: function(href) {
+            if (!href) return false;
+            if (this.state.consent && this.hasConsentForStyle()) {
+                return false;
+            }
+            return this.config.blockedStyles.some(pattern => pattern.test(href));
+        },
+
+        /**
+         * Externe Fonts/CSS zaehlen als "funktional" — erst bei funktionaler
+         * Einwilligung (oder "Alle akzeptieren") wieder freigeben.
+         */
+        hasConsentForStyle: function() {
+            const c = this.state.consent;
+            if (!c) return false;
+            const cat = c.consent_categories || {};
+            return cat.functional === true || cat.all === true;
+        },
+
+        /**
+         * Vorhandene <link>/<style>-Elemente scannen und externe Font-/CSS-Hosts
+         * neutralisieren: <link rel="stylesheet">, <link as="font">/Preload und
+         * inline @import-Regeln.
+         */
+        scanAndBlockStyles: function() {
+            // 1) <link>-Elemente (stylesheet, preload/as=font, prefetch, dns-prefetch)
+            document.querySelectorAll('link[href]').forEach(link => {
+                if (link.getAttribute('data-complyo-blocked') === 'true') return;
+                const href = link.getAttribute('href');
+                const rel  = (link.getAttribute('rel') || '').toLowerCase();
+                const as   = (link.getAttribute('as')  || '').toLowerCase();
+                const isStyleish = rel.includes('stylesheet') || as === 'font' ||
+                                   rel === 'preload' || rel === 'prefetch' ||
+                                   rel === 'preconnect' || rel === 'dns-prefetch';
+                if (isStyleish && this.shouldBlockStylesheet(href)) {
+                    console.log('[Complyo] 🚫 Blocking stylesheet/font link:', href);
+                    // href entfernen stoppt den Request (sofern noch nicht fertig);
+                    // media="not all" verhindert das Anwenden bereits geladener CSS.
+                    link.setAttribute('data-complyo-href', href);
+                    link.setAttribute('data-complyo-rel', link.getAttribute('rel') || '');
+                    link.setAttribute('data-complyo-blocked', 'true');
+                    link.setAttribute('media', 'not all');
+                    link.removeAttribute('href');
+                    this.state.blockedElements.push(link);
+                }
+            });
+
+            // 2) Inline <style> mit @import auf externe Hosts
+            document.querySelectorAll('style:not([data-complyo-blocked])').forEach(style => {
+                const css = style.textContent || '';
+                if (!/@import/i.test(css)) return;
+                const importRe = /@import\s+(?:url\(\s*)?['"]?([^'")\s;]+)['"]?\s*\)?[^;]*;/gi;
+                let touched = false;
+                const newCss = css.replace(importRe, (full, url) => {
+                    if (this.shouldBlockStylesheet(url)) {
+                        touched = true;
+                        return '/* complyo-blocked: ' + full.replace(/\*\//g, '* /') + ' */';
+                    }
+                    return full;
+                });
+                if (touched) {
+                    console.log('[Complyo] 🚫 Neutralizing @import in <style>');
+                    style.setAttribute('data-complyo-css', css);
+                    style.setAttribute('data-complyo-blocked', 'true');
+                    style.textContent = newCss;
+                    this.state.blockedElements.push(style);
+                }
+            });
+        },
+
         /**
          * Check if user has consent for this script
          */
@@ -302,7 +492,12 @@
                                     self.replaceIframeWithPlaceholder(node);
                                 }
                             }
-                            
+
+                            // Externe Font-/CSS-Links und @import-Styles
+                            if (node.tagName === 'LINK' || node.tagName === 'STYLE') {
+                                self.scanAndBlockStyles();
+                            }
+
                             // Check child elements
                             if (node.querySelectorAll) {
                                 node.querySelectorAll('script[src], iframe[src]').forEach(child => {
@@ -317,6 +512,9 @@
                                         self.replaceIframeWithPlaceholder(child);
                                     }
                                 });
+                                if (node.querySelector('link[href], style')) {
+                                    self.scanAndBlockStyles();
+                                }
                             }
                         }
                     });
@@ -410,6 +608,23 @@
                         iframe.height = element.style.height;
                         element.parentNode.replaceChild(iframe, element);
                     }
+                } else if (element.tagName === 'LINK') {
+                    const originalHref = element.getAttribute('data-complyo-href');
+                    if (originalHref && this.hasConsentForStyle()) {
+                        console.log('[Complyo] ✅ Unblocking stylesheet/font:', originalHref);
+                        const originalRel = element.getAttribute('data-complyo-rel');
+                        element.removeAttribute('media');
+                        if (originalRel) element.setAttribute('rel', originalRel);
+                        element.setAttribute('href', originalHref);
+                        element.removeAttribute('data-complyo-blocked');
+                    }
+                } else if (element.tagName === 'STYLE') {
+                    const originalCss = element.getAttribute('data-complyo-css');
+                    if (originalCss && this.hasConsentForStyle()) {
+                        console.log('[Complyo] ✅ Unblocking @import styles');
+                        element.textContent = originalCss;
+                        element.removeAttribute('data-complyo-blocked');
+                    }
                 }
             });
         },
@@ -490,14 +705,12 @@
         }
     };
     
-    // Initialize immediately
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            ComplyoCookieBlocker.init();
-        });
-    } else {
-        ComplyoCookieBlocker.init();
-    }
+    // SOFORT initialisieren (Script laeuft synchron im <head>): nur so stehen
+    // createElement-Hook und MutationObserver, bevor der Parser nachfolgende
+    // <link>/<script>-Tags erreicht. Ein Warten auf DOMContentLoaded waere zu
+    // spaet — statische Font-/Tracking-Ressourcen waeren dann laengst geladen.
+    // init() startet selbst einen erneuten Scan auf DOMContentLoaded.
+    ComplyoCookieBlocker.init();
     
     // Export to global scope
     window.ComplyoCookieBlocker = ComplyoCookieBlocker;

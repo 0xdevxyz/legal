@@ -8,7 +8,16 @@ CREATE OR REPLACE FUNCTION check_fix_limit(p_user_id INTEGER, p_domain_name VARC
 RETURNS BOOLEAN AS $$
 DECLARE
     v_domain_lock RECORD;
+    v_plan_type VARCHAR;
 BEGIN
+    -- Agentur-/Expert-Plan: alle Domains sind durch die Pauschale (inkl. Add-ons)
+    -- gedeckt → unbegrenzte Fixes, kein Per-Domain-Lock. Die Mengen-Obergrenze
+    -- wird beim Anlegen über user_limits.websites_max erzwungen.
+    SELECT plan_type INTO v_plan_type FROM user_limits WHERE user_id = p_user_id;
+    IF v_plan_type IN ('agency', 'expert') THEN
+        RETURN TRUE;
+    END IF;
+
     -- Prüfe, ob Domain-Lock existiert
     SELECT * INTO v_domain_lock
     FROM domain_locks

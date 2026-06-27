@@ -4,14 +4,12 @@ Endpoints for serving and managing widgets
 """
 
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Depends
-from fastapi.responses import FileResponse, Response, JSONResponse, StreamingResponse
+from fastapi.responses import Response, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import os
-from datetime import datetime
 import time
 import gzip
-import io
 import hashlib
 import asyncpg
 import json
@@ -180,13 +178,22 @@ async def serve_accessibility_widget(request: Request, version: str = "6"):
         content = f.read()
     
     # Return as JavaScript with correct MIME type
+    etag = f'"{hashlib.md5(content.encode()).hexdigest()}"'
     headers = {
-        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=3600',
+        # no-cache = darf gecacht werden, MUSS aber bei jedem Load per ETag
+        # revalidiert werden. So erscheinen Widget-Updates sofort, während
+        # unveraenderte Inhalte als 304 (ohne Body) kommen → kaum Mehr-Traffic.
+        # (Vorher: max-age=86400 → bis zu 24h alter Stand beim Kunden.)
+        'Cache-Control': 'no-cache, must-revalidate',
         'Access-Control-Allow-Origin': '*',
         'X-Complyo-Widget-Version': '6.1.0',
-        'ETag': f'"{hashlib.md5(content.encode()).hexdigest()}"',
+        'ETag': etag,
         'Vary': 'Accept-Encoding',
     }
+
+    # Conditional GET: unveraenderte Datei → 304 Not Modified ohne Body
+    if request.headers.get('if-none-match') == etag:
+        return Response(status_code=304, headers=headers)
 
     accept_encoding = request.headers.get('Accept-Encoding', '')
     if 'gzip' in accept_encoding:
@@ -203,6 +210,39 @@ async def serve_accessibility_widget(request: Request, version: str = "6"):
         media_type='application/javascript',
         headers=headers,
     )
+
+
+@router.get("/api/widgets/a11y-fixes.js")
+async def serve_a11y_remediation_widget(request: Request):
+    """
+    Runtime-Alt-Text-Remediation für React/Vue/Angular/SPAs (Channel #3).
+    Wendet freigegebene KI-Alt-Texte ins Live-DOM an + MutationObserver.
+    """
+    widget_path = os.path.join(WIDGET_DIR, 'a11y_remediation.js')
+    if not os.path.exists(widget_path):
+        raise HTTPException(status_code=404, detail="Widget not found")
+
+    with open(widget_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    etag = f'"{hashlib.md5(content.encode()).hexdigest()}"'
+    headers = {
+        # Wie accessibility.js: per ETag revalidieren statt lange cachen.
+        'Cache-Control': 'no-cache, must-revalidate',
+        'Access-Control-Allow-Origin': '*',
+        'ETag': etag,
+        'Vary': 'Accept-Encoding',
+    }
+    if request.headers.get('if-none-match') == etag:
+        return Response(status_code=304, headers=headers)
+
+    accept_encoding = request.headers.get('Accept-Encoding', '')
+    if 'gzip' in accept_encoding:
+        compressed = gzip.compress(content.encode('utf-8'))
+        headers['Content-Encoding'] = 'gzip'
+        return Response(content=compressed, media_type='application/javascript', headers=headers)
+
+    return Response(content=content, media_type='application/javascript', headers=headers)
 
 
 @router.post("/api/widgets/track")
@@ -366,8 +406,19 @@ async def get_widget_config(site_id: str):
         except Exception as e:
             _logger.warning(f"[Widget Config] Could not load config for {site_id}: {e}")
 
+    # 🔒 Laufzeit-Lizenzprüfung: Wurde die Website im Dashboard entfernt, ist die
+    # Lizenz entzogen → das Barrierefreiheits-Widget rendert dann nicht mehr.
+    license_active = True
+    if db_pool:
+        try:
+            from license_check import site_has_active_license
+            license_active = await site_has_active_license(db_pool, site_id)
+        except Exception as e:
+            _logger.warning(f"[Widget Config] License check failed for {site_id}: {e}")
+
     return {
         "success": True,
+        "license_active": license_active,
         "config": default_config,
     }
 
@@ -380,10 +431,10 @@ async def get_widget_snippet(widget_type: str, site_id: str):
     base_url = "https://api.complyo.de"
     
     snippets = {
-        "cookie-consent": f'<script src="{base_url}/api/widgets/cookie-consent.js" data-site-id="{site_id}"></script>',
+        "cookie-consent": f'<script src="{base_url}/api/widgets/cookie-compliance.js" data-site-id="{site_id}"></script>',
         "accessibility": f'<script src="{base_url}/api/widgets/accessibility.js" data-site-id="{site_id}" data-complyo-a11y></script>',
         "all": f'''<!-- Complyo Widgets -->
-<script src="{base_url}/api/widgets/cookie-consent.js" data-site-id="{site_id}"></script>
+<script src="{base_url}/api/widgets/cookie-compliance.js" data-site-id="{site_id}"></script>
 <script src="{base_url}/api/widgets/accessibility.js" data-site-id="{site_id}" data-complyo-a11y></script>'''
     }
     
@@ -525,6 +576,74 @@ async def get_alt_text_fixes_for_widget(site_id: str):
                 'Access-Control-Allow-Origin': '*'
             }
         )
+
+
+@router.get("/api/accessibility/fix-manifest/{site_id}")
+async def get_fix_manifest(site_id: str, request: Request):
+    """
+    Vereinheitlichtes Fix-Manifest für ALLE Auslieferungskanäle
+    (WordPress-Plugin / HTML-CLI / SPA-Runtime).
+
+    Bündelt content-adressiert die freigegebenen, auto-sicheren Fixes einer Site:
+      - alt_texts:      KI-Alt-Texte je Bild (image_url_hash / filename / src)
+      - document_fixes: dokumentweite Fixes (html-lang, skip-link, landmarks, css)
+
+    Nur Status 'approved' wird ausgeliefert. Die Channels wenden die Fixes guarded
+    an (nur setzen, wenn am Ziel noch nicht vorhanden) — nie etwas überschreiben.
+    """
+    _logger = logging.getLogger(__name__)
+    alt_texts = []
+    document_fixes = []
+    link_fixes = []
+
+    if db_pool:
+        try:
+            fix_saver = AccessibilityFixSaver(db_pool)
+            alt_texts = await fix_saver.get_fixes_for_site(site_id, status='approved')
+            document_fixes = await fix_saver.get_document_fixes_for_site(site_id, status='approved')
+            link_fixes = await fix_saver.get_link_fixes_for_site(site_id, status='approved')
+        except Exception as e:
+            _logger.error(f"[Fix-Manifest] Fehler beim Laden für {site_id}: {e}")
+            return JSONResponse(
+                content={"success": False, "site_id": site_id, "error": str(e),
+                         "alt_texts": [], "document_fixes": [], "link_fixes": []},
+                headers={'Access-Control-Allow-Origin': '*'}
+            )
+    else:
+        _logger.warning(f"[Fix-Manifest] DB-Pool nicht verfügbar für {site_id}")
+
+    # CSS-Regeln aus document_fixes herausziehen (Channels mögen es getrennt).
+    css_rules = [
+        f["payload"] for f in document_fixes
+        if f.get("fix_type") == "css-rule" and isinstance(f.get("payload"), dict)
+    ]
+
+    manifest = {
+        "success": True,
+        "version": "1.1.0",
+        "site_id": site_id,
+        "alt_texts": alt_texts,
+        "document_fixes": [f for f in document_fixes if f.get("fix_type") != "css-rule"],
+        "link_fixes": link_fixes,
+        "css_rules": css_rules,
+        "counts": {
+            "alt_texts": len(alt_texts),
+            "document_fixes": len(document_fixes),
+            "link_fixes": len(link_fixes),
+        },
+    }
+
+    # ETag für effiziente Revalidierung (Channels cachen per If-None-Match).
+    etag = '"' + hashlib.md5(json.dumps(manifest, sort_keys=True, default=str).encode()).hexdigest() + '"'
+    headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache, must-revalidate',
+        'ETag': etag,
+    }
+    if request.headers.get('if-none-match') == etag:
+        return Response(status_code=304, headers=headers)
+
+    return JSONResponse(content=manifest, headers=headers)
 
 
 @router.post("/api/accessibility/patches/generate")

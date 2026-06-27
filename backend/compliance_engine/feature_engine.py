@@ -9,8 +9,8 @@ Diese Engine ist das Herzstück der anfängerfreundlichen Fix-Pipeline:
 4. Wählt passende Prompt-Templates
 """
 
-from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Any, Optional, Literal
+from dataclasses import dataclass, field
+from typing import Dict, List, Any, Optional
 from enum import Enum
 import re
 import logging
@@ -395,7 +395,7 @@ class FeatureEngine:
             fix_types=feature_def.fix_types,
             recommended_fix_type=recommended_fix,
             element_html=raw_issue.get('element_html'),
-            selector=raw_issue.get('selector'),
+            selector=raw_issue.get('selector') or raw_issue.get('metadata', {}).get('selector'),
             page_url=raw_issue.get('page_url', raw_issue.get('metadata', {}).get('page_url')),
             suggested_fix=raw_issue.get('recommendation'),
             fix_code=raw_issue.get('fix_code'),

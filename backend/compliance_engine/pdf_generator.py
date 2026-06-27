@@ -6,12 +6,9 @@ Creates branded, professional compliance reports with charts, scores and detaile
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm, mm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image, HRFlowable
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
-from reportlab.graphics.shapes import Drawing, Rect, String, Circle
-from reportlab.graphics.charts.piecharts import Pie
-from reportlab.graphics import renderPDF
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, HRFlowable
+from reportlab.lib.enums import TA_CENTER
 from datetime import datetime
 import io
 from typing import Dict, Any, List

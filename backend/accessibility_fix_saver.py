@@ -8,7 +8,6 @@ import asyncpg
 import hashlib
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +25,8 @@ class AccessibilityFixSaver:
         site_id: str,
         scan_id: str,
         user_id: str,  # UUID als String
-        fixes: List[Dict[str, Any]]
+        fixes: List[Dict[str, Any]],
+        status: str = 'pending'  # Human-in-the-loop: NICHT mehr Auto-Approve
     ) -> int:
         """
         Speichert AI-generierte Alt-Texte in die Datenbank
@@ -107,7 +107,7 @@ class AccessibilityFixSaver:
                             fix.get('page_title', ''),
                             fix.get('surrounding_text', ''),
                             fix.get('element_html', ''),
-                            'approved'  # Auto-approve für jetzt
+                            status  # Standard: 'pending' → erst nach Review live
                         )
                         
                         saved_count += 1
@@ -176,6 +176,331 @@ class AccessibilityFixSaver:
             logger.info(f"📦 Loaded {len(fixes)} alt-text fixes for site_id={site_id}")
             return fixes
     
+    async def set_status(
+        self,
+        fix_id: int,
+        status: str,
+        custom_alt: Optional[str] = None,
+        user_id: Optional[str] = None
+    ) -> bool:
+        """
+        Setzt den Status eines Fixes (approve/reject/deploy). Optionaler user_id-Check.
+        status ∈ ('pending','approved','rejected','deployed').
+        Gibt True zurück, wenn eine Zeile aktualisiert wurde.
+        """
+        async with self.db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT id, user_id FROM accessibility_alt_text_fixes WHERE id = $1",
+                fix_id
+            )
+            if not row:
+                return False
+            if user_id is not None and row['user_id'] is not None and str(row['user_id']) != str(user_id):
+                raise PermissionError("not authorized for this fix")
+
+            approved_at = "NOW()" if status == 'approved' else "approved_at"
+            if custom_alt is not None:
+                await conn.execute(
+                    f"""
+                    UPDATE accessibility_alt_text_fixes
+                    SET status = $1, suggested_alt = $2, approved_at = {approved_at}, updated_at = NOW()
+                    WHERE id = $3
+                    """,
+                    status, custom_alt, fix_id
+                )
+            else:
+                await conn.execute(
+                    f"""
+                    UPDATE accessibility_alt_text_fixes
+                    SET status = $1, approved_at = {approved_at}, updated_at = NOW()
+                    WHERE id = $2
+                    """,
+                    status, fix_id
+                )
+            return True
+
+    async def get_review_queue(
+        self,
+        site_id: str,
+        status: str = 'pending'
+    ) -> List[Dict[str, Any]]:
+        """Alt-Text-Fixes für die Review-Ansicht (Dashboard)."""
+        async with self.db_pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, page_url, image_src, image_filename, suggested_alt,
+                       confidence, surrounding_text, status, created_at
+                FROM accessibility_alt_text_fixes
+                WHERE site_id = $1 AND status = $2
+                ORDER BY confidence DESC, created_at DESC
+                """,
+                site_id, status
+            )
+            return [
+                {
+                    "id": r['id'],
+                    "page_url": r['page_url'],
+                    "image_src": r['image_src'],
+                    "image_filename": r['image_filename'],
+                    "suggested_alt": r['suggested_alt'],
+                    "confidence": float(r['confidence']) if r['confidence'] else 0.0,
+                    "surrounding_text": r['surrounding_text'],
+                    "status": r['status'],
+                }
+                for r in rows
+            ]
+
+    # =========================================================================
+    # Dokumentweite Fixes (Fix-Manifest) — lang / skip-link / landmarks / css
+    # =========================================================================
+
+    async def save_document_fixes(
+        self,
+        site_id: str,
+        scan_id: str,
+        user_id: str,
+        fixes: List[Dict[str, Any]],
+        status: str = 'approved'
+    ) -> int:
+        """
+        Speichert auto-sichere, dokumentweite Fixes (Stufe 1).
+
+        Args:
+            site_id: STABILE, domain-abgeleitete Site-ID (derive_site_id) – muss
+                     identisch zu der sein, mit der die Channels das Manifest abfragen.
+            fixes: Liste von Dicts mit:
+                   {"fix_type": "html-lang", "payload": {"value": "de"},
+                    "wcag_criterion": "3.1.1", "confidence": 1.0,
+                    "page_url": "...", "source": "scan"}
+
+        Returns:
+            Anzahl gespeicherter/aktualisierter Fixes.
+        """
+        if not fixes:
+            return 0
+
+        import json as _json
+        saved = 0
+        async with self.db_pool.acquire() as conn:
+            async with conn.transaction():
+                for fix in fixes:
+                    fix_type = fix.get('fix_type')
+                    if not fix_type:
+                        continue
+                    try:
+                        await conn.execute(
+                            """
+                            INSERT INTO accessibility_document_fixes (
+                                site_id, scan_id, user_id, page_url,
+                                fix_type, payload, wcag_criterion, confidence,
+                                source, status, approved_at, created_at, updated_at
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                                      CASE WHEN $10 = 'approved' THEN NOW() ELSE NULL END,
+                                      NOW(), NOW())
+                            ON CONFLICT (site_id, fix_type)
+                            DO UPDATE SET
+                                payload = EXCLUDED.payload,
+                                wcag_criterion = EXCLUDED.wcag_criterion,
+                                confidence = EXCLUDED.confidence,
+                                scan_id = EXCLUDED.scan_id,
+                                page_url = EXCLUDED.page_url,
+                                source = EXCLUDED.source,
+                                updated_at = NOW()
+                            """,
+                            site_id,
+                            scan_id,
+                            user_id,
+                            fix.get('page_url', ''),
+                            fix_type,
+                            _json.dumps(fix.get('payload', {})),
+                            fix.get('wcag_criterion'),
+                            fix.get('confidence', 1.0),
+                            fix.get('source', 'scan'),
+                            status,
+                        )
+                        saved += 1
+                    except Exception as e:
+                        logger.error(f"Error saving document fix {fix_type} for {site_id}: {e}")
+                        continue
+
+        logger.info(f"✅ Saved {saved}/{len(fixes)} document fixes for site_id={site_id}")
+        return saved
+
+    async def get_document_fixes_for_site(
+        self,
+        site_id: str,
+        status: Optional[str] = 'approved'
+    ) -> List[Dict[str, Any]]:
+        """Lädt dokumentweite Fixes für das Manifest."""
+        import json as _json
+        async with self.db_pool.acquire() as conn:
+            query = """
+                SELECT fix_type, payload, wcag_criterion, confidence, source, status, page_url
+                FROM accessibility_document_fixes
+                WHERE site_id = $1
+            """
+            params = [site_id]
+            if status:
+                query += " AND status = $2"
+                params.append(status)
+            query += " ORDER BY fix_type"
+            rows = await conn.fetch(query, *params)
+
+            result = []
+            for r in rows:
+                payload = r['payload']
+                if isinstance(payload, str):
+                    try:
+                        payload = _json.loads(payload)
+                    except Exception:
+                        payload = {}
+                result.append({
+                    "fix_type": r['fix_type'],
+                    "payload": payload or {},
+                    "wcag_criterion": r['wcag_criterion'],
+                    "confidence": float(r['confidence']) if r['confidence'] is not None else 1.0,
+                    "source": r['source'],
+                    "status": r['status'],
+                    "page_url": r['page_url'],
+                })
+            logger.info(f"📦 Loaded {len(result)} document fixes for site_id={site_id}")
+            return result
+
+    # =========================================================================
+    # Link-Zweck-Fixes (WCAG 2.4.4) — aria-label-Vorschläge, HITL
+    # =========================================================================
+
+    @staticmethod
+    def link_key(href: str, text: str) -> str:
+        """Stabiler Matching-Key für einen Link: SHA256(href|normalisierter_text)."""
+        norm_text = ' '.join((text or '').split()).strip().lower()
+        return hashlib.sha256(f"{(href or '').strip()}|{norm_text}".encode()).hexdigest()
+
+    async def save_link_fixes(
+        self,
+        site_id: str,
+        scan_id: str,
+        user_id: str,
+        fixes: List[Dict[str, Any]],
+        status: str = 'pending'  # Stufe 2: erst nach Review live
+    ) -> int:
+        """
+        Speichert aria-label-Vorschläge für nichtssagende Links.
+
+        fixes: [{
+            "page_url", "link_href", "link_text", "suggested_label",
+            "confidence", "surrounding_text", "source"
+        }]
+        """
+        if not fixes:
+            return 0
+        saved = 0
+        async with self.db_pool.acquire() as conn:
+            async with conn.transaction():
+                for fix in fixes:
+                    href = fix.get('link_href', '')
+                    text = fix.get('link_text', '')
+                    label = (fix.get('suggested_label') or '').strip()
+                    if not label or (not href and not text):
+                        continue
+                    try:
+                        await conn.execute(
+                            """
+                            INSERT INTO accessibility_link_fixes (
+                                site_id, scan_id, user_id, page_url,
+                                link_href, link_text, link_key,
+                                suggested_label, confidence, surrounding_text,
+                                source, status, created_at, updated_at
+                            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())
+                            ON CONFLICT (site_id, link_key)
+                            DO UPDATE SET
+                                suggested_label = EXCLUDED.suggested_label,
+                                confidence = EXCLUDED.confidence,
+                                surrounding_text = EXCLUDED.surrounding_text,
+                                scan_id = EXCLUDED.scan_id,
+                                page_url = EXCLUDED.page_url,
+                                updated_at = NOW()
+                            """,
+                            site_id, scan_id, user_id, fix.get('page_url', ''),
+                            href, text, self.link_key(href, text),
+                            label, fix.get('confidence', 0.0),
+                            fix.get('surrounding_text', ''),
+                            fix.get('source', 'scan'), status,
+                        )
+                        saved += 1
+                    except Exception as e:
+                        logger.error(f"Error saving link fix ({text!r}) for {site_id}: {e}")
+                        continue
+        logger.info(f"✅ Saved {saved}/{len(fixes)} link fixes for site_id={site_id}")
+        return saved
+
+    async def get_link_fixes_for_site(
+        self,
+        site_id: str,
+        status: Optional[str] = 'approved'
+    ) -> List[Dict[str, Any]]:
+        """Lädt Link-Fixes (für Manifest oder Review-Queue)."""
+        async with self.db_pool.acquire() as conn:
+            query = """
+                SELECT id, page_url, link_href, link_text, link_key,
+                       suggested_label, confidence, surrounding_text, status
+                FROM accessibility_link_fixes
+                WHERE site_id = $1
+            """
+            params = [site_id]
+            if status:
+                query += " AND status = $2"
+                params.append(status)
+            query += " ORDER BY confidence DESC, created_at DESC"
+            rows = await conn.fetch(query, *params)
+            return [
+                {
+                    "id": r['id'],
+                    "page_url": r['page_url'],
+                    "link_href": r['link_href'],
+                    "link_text": r['link_text'],
+                    "link_key": r['link_key'],
+                    "suggested_label": r['suggested_label'],
+                    "confidence": float(r['confidence']) if r['confidence'] else 0.0,
+                    "surrounding_text": r['surrounding_text'],
+                    "status": r['status'],
+                }
+                for r in rows
+            ]
+
+    async def set_link_status(
+        self,
+        fix_id: int,
+        status: str,
+        custom_label: Optional[str] = None,
+        user_id: Optional[str] = None
+    ) -> bool:
+        """Approve/Reject eines Link-Fixes (optionaler user_id-Check)."""
+        async with self.db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT id, user_id FROM accessibility_link_fixes WHERE id = $1", fix_id
+            )
+            if not row:
+                return False
+            if user_id is not None and row['user_id'] is not None and str(row['user_id']) != str(user_id):
+                raise PermissionError("not authorized for this fix")
+            approved_at = "NOW()" if status == 'approved' else "approved_at"
+            if custom_label is not None:
+                await conn.execute(
+                    f"""UPDATE accessibility_link_fixes
+                        SET status=$1, suggested_label=$2, approved_at={approved_at}, updated_at=NOW()
+                        WHERE id=$3""",
+                    status, custom_label, fix_id
+                )
+            else:
+                await conn.execute(
+                    f"""UPDATE accessibility_link_fixes
+                        SET status=$1, approved_at={approved_at}, updated_at=NOW()
+                        WHERE id=$2""",
+                    status, fix_id
+                )
+            return True
+
     async def get_stats_for_site(
         self,
         site_id: str

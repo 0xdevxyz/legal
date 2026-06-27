@@ -6,11 +6,10 @@ Generates preview for fixes before deployment
 import os
 import tempfile
 import hashlib
-from typing import Dict, List, Any, Optional
+from typing import Dict, Optional
 from dataclasses import dataclass
 import difflib
 from datetime import datetime
-import base64
 import logging
 
 logger = logging.getLogger(__name__)

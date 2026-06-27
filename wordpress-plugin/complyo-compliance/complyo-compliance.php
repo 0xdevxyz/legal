@@ -3,7 +3,7 @@
  * Plugin Name: Complyo Compliance
  * Plugin URI: https://complyo.tech
  * Description: DSGVO-konformes Cookie-Banner und Accessibility-Widget. Konfiguration über app.complyo.tech.
- * Version: 2.0.0
+ * Version: 2.5.0
  * Author: Complyo
  * Author URI: https://complyo.tech
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('COMPLYO_VERSION',        '2.0.0');
+define('COMPLYO_VERSION',        '2.5.0');
 define('COMPLYO_API_BASE',       'https://api.complyo.de');
 define('COMPLYO_APP_URL',        'https://app.complyo.tech');
 define('COMPLYO_PLUGIN_DIR',     plugin_dir_path(__FILE__));
@@ -29,6 +29,15 @@ define('COMPLYO_OPTION_COOKIE',  'complyo_enable_cookie_banner');
 define('COMPLYO_OPTION_A11Y',    'complyo_enable_accessibility');
 define('COMPLYO_OPTION_TCF',     'complyo_enable_tcf');
 define('COMPLYO_OPTION_SCANNER', 'complyo_enable_scanner');
+define('COMPLYO_OPTION_LOCAL_FONTS', 'complyo_enable_local_fonts');
+define('COMPLYO_OPTION_INLINE_BLOCKER', 'complyo_enable_inline_blocker');
+define('COMPLYO_OPTION_A11Y_STATEMENT', 'complyo_a11y_statement_url');
+define('COMPLYO_OPTION_A11Y_FEEDBACK',  'complyo_a11y_feedback');
+define('COMPLYO_OPTION_A11Y_SOURCE_FIX', 'complyo_a11y_source_fix');
+
+require_once COMPLYO_PLUGIN_DIR . 'includes/class-complyo-local-fonts.php';
+require_once COMPLYO_PLUGIN_DIR . 'includes/class-complyo-inline-blocker.php';
+require_once COMPLYO_PLUGIN_DIR . 'includes/class-complyo-a11y-remediation.php';
 
 class Complyo_Compliance {
 
@@ -58,6 +67,12 @@ class Complyo_Compliance {
         // Banner + A11y am Ende von <body> (niedrige Priorität = spät)
         add_action('wp_footer', array($this, 'output_banner_script'), 1);
 
+        // Shortcodes: Cookie-Einstellungen anzeigen/widerrufen (Footer/Menü)
+        add_shortcode('complyo_cookie_settings', array($this, 'shortcode_cookie_settings'));
+        add_shortcode('complyo_cookie_revoke',   array($this, 'shortcode_cookie_revoke'));
+        // Menüs rendern standardmäßig keine Shortcodes – nachrüsten:
+        add_filter('wp_nav_menu_items', array($this, 'do_shortcode_in_menu'), 10, 2);
+
         // Caching-Plugin-Kompatibilität
         add_filter('rocket_exclude_js',         array($this, 'exclude_from_rocket'));
         add_filter('rocket_delay_js_exclusions', array($this, 'exclude_from_rocket'));
@@ -65,6 +80,15 @@ class Complyo_Compliance {
         add_filter('autoptimize_filter_js_exclude', array($this, 'exclude_from_autoptimize'));
         add_filter('litespeed_optimize_js_excludes',    array($this, 'exclude_from_litespeed'));
         add_filter('sgo_js_async_execution_exclusions',  array($this, 'exclude_from_siteground'));
+
+        // Google Fonts lokal laden (DSGVO) – eigene Klasse
+        Complyo_Local_Fonts::get_instance();
+
+        // Server-seitiges Inline-Script-Blocking – eigene Klasse
+        Complyo_Inline_Blocker::get_instance();
+
+        // Serverseitige Alt-Text-Remediation (Quelle + Render-Fallback) – eigene Klasse
+        Complyo_A11y_Remediation::get_instance();
     }
 
     // =========================================================================
@@ -87,10 +111,21 @@ class Complyo_Compliance {
         if (get_option(COMPLYO_OPTION_SCANNER) === false) {
             update_option(COMPLYO_OPTION_SCANNER, '1');
         }
+        if (get_option(COMPLYO_OPTION_LOCAL_FONTS) === false) {
+            update_option(COMPLYO_OPTION_LOCAL_FONTS, '0');
+        }
+        if (get_option(COMPLYO_OPTION_INLINE_BLOCKER) === false) {
+            update_option(COMPLYO_OPTION_INLINE_BLOCKER, '0');
+        }
     }
 
     public function deactivate() {
-        // Optionen bleiben erhalten, damit die Konfiguration bei Re-Aktivierung erhalten bleibt
+        // Optionen bleiben erhalten, damit die Konfiguration bei Re-Aktivierung erhalten bleibt.
+        // Geplanten Alt-Text-Sync-Cron aber entfernen.
+        $ts = wp_next_scheduled(Complyo_A11y_Remediation::CRON_HOOK);
+        if ($ts) {
+            wp_unschedule_event($ts, Complyo_A11y_Remediation::CRON_HOOK);
+        }
     }
 
     public function load_textdomain() {
@@ -178,10 +213,16 @@ class Complyo_Compliance {
         }
 
         if ($enable_a11y === '1') {
+            $a11y_statement = get_option(COMPLYO_OPTION_A11Y_STATEMENT, '');
+            $a11y_feedback  = get_option(COMPLYO_OPTION_A11Y_FEEDBACK, '');
+            $statement_attr = $a11y_statement !== '' ? ' data-a11y-statement-url="' . esc_url($a11y_statement) . '"' : '';
+            $feedback_attr  = $a11y_feedback  !== '' ? ' data-a11y-feedback="' . esc_attr($a11y_feedback) . '"' : '';
             echo '<script src="' . $api . '/api/widgets/accessibility.js"'
                 . ' data-site-id="' . $site_id . '"'
                 . ' data-auto-fix="true"'
                 . ' data-show-toolbar="true"'
+                . $statement_attr
+                . $feedback_attr
                 . ' data-cfasync="false"'
                 . ' data-no-optimize="1"'
                 . ' async'
@@ -189,6 +230,81 @@ class Complyo_Compliance {
         }
 
         echo "<!-- End Complyo Compliance Widgets -->\n\n";
+    }
+
+    // =========================================================================
+    // Shortcodes
+    // =========================================================================
+
+    /**
+     * [complyo_cookie_settings] – Link/Button, der die Cookie-Einstellungen
+     * öffnet (aktuelle Auswahl ansehen und ändern).
+     *
+     * Attribute:
+     *   text  – Beschriftung (Standard: "Cookie-Einstellungen")
+     *   class – zusätzliche CSS-Klassen
+     *   style – "link" (Standard) oder "button"
+     *
+     * Beispiel: [complyo_cookie_settings text="Cookie-Einstellungen ändern"]
+     */
+    public function shortcode_cookie_settings($atts) {
+        $atts = shortcode_atts(array(
+            'text'  => __('Cookie-Einstellungen', 'complyo-compliance'),
+            'class' => '',
+            'style' => 'link',
+        ), $atts, 'complyo_cookie_settings');
+
+        return $this->render_consent_link('settings', $atts);
+    }
+
+    /**
+     * [complyo_cookie_revoke] – Link/Button, der die erteilte Einwilligung
+     * widerruft und den Banner erneut anzeigt.
+     *
+     * Attribute: text, class, style (wie oben)
+     * Beispiel: [complyo_cookie_revoke text="Cookies widerrufen"]
+     */
+    public function shortcode_cookie_revoke($atts) {
+        $atts = shortcode_atts(array(
+            'text'  => __('Cookies widerrufen', 'complyo-compliance'),
+            'class' => '',
+            'style' => 'link',
+        ), $atts, 'complyo_cookie_revoke');
+
+        return $this->render_consent_link('revoke', $atts);
+    }
+
+    /**
+     * Erzeugt das Markup für die Consent-Shortcodes. Das Banner-Script bindet
+     * Klicks automatisch über die data-Attribute (CSP-sicher, kein inline-JS).
+     */
+    private function render_consent_link($action, $atts) {
+        $data_attr = ($action === 'revoke') ? 'data-complyo-revoke' : 'data-complyo-settings';
+
+        $classes = 'complyo-consent-link';
+        if ($atts['style'] === 'button') {
+            $classes .= ' complyo-consent-button';
+        }
+        if (!empty($atts['class'])) {
+            $classes .= ' ' . $atts['class'];
+        }
+
+        return sprintf(
+            '<a href="#" %s="true" class="%s" style="cursor:pointer;">%s</a>',
+            esc_attr($data_attr),
+            esc_attr(trim($classes)),
+            esc_html($atts['text'])
+        );
+    }
+
+    /**
+     * Erlaubt die Verwendung der Shortcodes direkt in WordPress-Menüs.
+     */
+    public function do_shortcode_in_menu($items, $args) {
+        if (strpos($items, '[complyo_cookie_') !== false) {
+            $items = do_shortcode($items);
+        }
+        return $items;
     }
 
     // =========================================================================
@@ -272,6 +388,15 @@ class Complyo_Compliance {
         register_setting('complyo_settings_group', COMPLYO_OPTION_A11Y,     $args_flag);
         register_setting('complyo_settings_group', COMPLYO_OPTION_TCF,      $args_flag);
         register_setting('complyo_settings_group', COMPLYO_OPTION_SCANNER,  $args_flag);
+        register_setting('complyo_settings_group', COMPLYO_OPTION_LOCAL_FONTS, $args_flag);
+        register_setting('complyo_settings_group', COMPLYO_OPTION_INLINE_BLOCKER, $args_flag);
+        register_setting('complyo_settings_group', COMPLYO_OPTION_A11Y_STATEMENT, array(
+            'type'              => 'string',
+            'sanitize_callback' => 'esc_url_raw',
+            'default'           => '',
+        ));
+        register_setting('complyo_settings_group', COMPLYO_OPTION_A11Y_FEEDBACK, $args_string);
+        register_setting('complyo_settings_group', COMPLYO_OPTION_A11Y_SOURCE_FIX, $args_flag);
     }
 
     public function admin_enqueue_scripts($hook) {
@@ -294,11 +419,34 @@ class Complyo_Compliance {
         $site_id      = $this->get_site_id();
         $enable_cookie = get_option(COMPLYO_OPTION_COOKIE, '1');
         $enable_a11y   = get_option(COMPLYO_OPTION_A11Y, '0');
+        $a11y_statement = get_option(COMPLYO_OPTION_A11Y_STATEMENT, '');
+        $a11y_feedback  = get_option(COMPLYO_OPTION_A11Y_FEEDBACK, '');
+        $a11y_source_fix = get_option(COMPLYO_OPTION_A11Y_SOURCE_FIX, '0');
+        $a11y_last_sync  = (int) get_option('complyo_a11y_last_sync', 0);
         $enable_tcf    = get_option(COMPLYO_OPTION_TCF, '0');
         $enable_scanner = get_option(COMPLYO_OPTION_SCANNER, '1');
+        $enable_fonts   = get_option(COMPLYO_OPTION_LOCAL_FONTS, '0');
+        $enable_inline  = get_option(COMPLYO_OPTION_INLINE_BLOCKER, '0');
+        $fonts_count    = Complyo_Local_Fonts::get_instance()->localized_count();
         $app_url      = COMPLYO_APP_URL;
         $api_base     = COMPLYO_API_BASE;
         ?>
+        <?php if (isset($_GET['complyo_fonts'])) :
+            $cf_found     = isset($_GET['cf_found'])     ? (int) $_GET['cf_found']     : 0;
+            $cf_localized = isset($_GET['cf_localized']) ? (int) $_GET['cf_localized'] : 0;
+            $cf_errors    = isset($_GET['cf_errors'])    ? (int) $_GET['cf_errors']    : 0; ?>
+            <div class="notice notice-<?php echo $cf_errors > 0 ? 'warning' : 'success'; ?> is-dismissible">
+                <p><?php
+                    printf(
+                        esc_html__('Google Fonts lokalisiert: %1$d gefunden, %2$d lokal gespeichert, %3$d Fehler.', 'complyo-compliance'),
+                        $cf_found, $cf_localized, $cf_errors
+                    );
+                    if ($cf_localized > 0) {
+                        echo ' ' . esc_html__('Bitte ggf. Caching-Plugin-Cache leeren.', 'complyo-compliance');
+                    }
+                ?></p>
+            </div>
+        <?php endif; ?>
         <div class="wrap complyo-wrap">
             <div class="complyo-header">
                 <h1>Complyo Compliance</h1>
@@ -353,17 +501,18 @@ class Complyo_Compliance {
                             </td>
                         </tr>
                         <tr>
-                            <th scope="row"><?php esc_html_e('IAB TCF 2.2', 'complyo-compliance'); ?></th>
+                            <th scope="row"><?php esc_html_e('IAB TCF 2.2 (Coming Soon)', 'complyo-compliance'); ?></th>
                             <td>
                                 <label>
                                     <input type="checkbox"
                                            name="<?php echo esc_attr(COMPLYO_OPTION_TCF); ?>"
                                            value="1"
                                            <?php checked($enable_tcf, '1'); ?> />
-                                    <?php esc_html_e('IAB Transparency & Consent Framework 2.2 aktivieren (für Google Ads / Programmatic Advertising)', 'complyo-compliance'); ?>
+                                    <?php esc_html_e('IAB Transparency & Consent Framework 2.2 (in Vorbereitung – noch nicht produktiv nutzen)', 'complyo-compliance'); ?>
                                 </label>
                                 <p class="description">
-                                    <?php esc_html_e('Pflicht wenn Google Ads, DV360 oder andere IAB-Vendoren eingesetzt werden.', 'complyo-compliance'); ?>
+                                    <strong><?php esc_html_e('Coming Soon:', 'complyo-compliance'); ?></strong>
+                                    <?php esc_html_e('Complyo ist noch nicht als IAB-registriertes CMP zertifiziert. Diese Option aktiviert vorerst nur einen Test-Stub (cmpId 0) und ist KEIN Ersatz für ein registriertes TCF-CMP – für Google Ads / DV360 / Programmatic noch nicht verwenden.', 'complyo-compliance'); ?>
                                 </p>
                                 <div class="complyo-notice-adsense">
                                     <strong><?php esc_html_e('Sie nutzen Google AdSense?', 'complyo-compliance'); ?></strong><br>
@@ -401,6 +550,84 @@ class Complyo_Compliance {
                                            <?php checked($enable_a11y, '1'); ?> />
                                     <?php esc_html_e('WCAG 2.2 Level AA Barrierefreiheits-Widget aktivieren', 'complyo-compliance'); ?>
                                 </label>
+                                <p style="margin-top:12px;">
+                                    <label for="complyo_a11y_statement_url"><strong><?php esc_html_e('Barrierefreiheitserklärung (URL)', 'complyo-compliance'); ?></strong></label><br>
+                                    <input type="url"
+                                           id="complyo_a11y_statement_url"
+                                           name="<?php echo esc_attr(COMPLYO_OPTION_A11Y_STATEMENT); ?>"
+                                           value="<?php echo esc_attr($a11y_statement); ?>"
+                                           class="regular-text"
+                                           placeholder="https://ihre-domain.de/barrierefreiheit" />
+                                </p>
+                                <p style="margin-top:8px;">
+                                    <label for="complyo_a11y_feedback"><strong><?php esc_html_e('Barriere melden – Kontakt (E-Mail oder URL)', 'complyo-compliance'); ?></strong></label><br>
+                                    <input type="text"
+                                           id="complyo_a11y_feedback"
+                                           name="<?php echo esc_attr(COMPLYO_OPTION_A11Y_FEEDBACK); ?>"
+                                           value="<?php echo esc_attr($a11y_feedback); ?>"
+                                           class="regular-text"
+                                           placeholder="barrierefreiheit@ihre-domain.de" />
+                                </p>
+                                <p class="description">
+                                    <?php esc_html_e('Diese Links erscheinen im Widget unter „Rechtliches & Barrierefreiheit“. Der Haftungs-Hinweis und die Schlichtungsstelle BGG werden automatisch angezeigt.', 'complyo-compliance'); ?>
+                                </p>
+                                <hr style="margin:16px 0;">
+                                <label>
+                                    <input type="checkbox"
+                                           name="<?php echo esc_attr(COMPLYO_OPTION_A11Y_SOURCE_FIX); ?>"
+                                           value="1"
+                                           <?php checked($a11y_source_fix, '1'); ?> />
+                                    <strong><?php esc_html_e('Alt-Texte serverseitig an der Quelle anwenden (empfohlen)', 'complyo-compliance'); ?></strong>
+                                </label>
+                                <p class="description">
+                                    <?php esc_html_e('Holt freigegebene KI-Alt-Texte stündlich von Complyo und schreibt sie in die Mediathek (_wp_attachment_image_alt) sowie in Inhalts-Bilder ohne Alt – echte Quell-Korrektur statt nur Overlay. Vorhandene Alt-Texte werden nie überschrieben.', 'complyo-compliance'); ?>
+                                    <?php if ($a11y_source_fix === '1') : ?>
+                                        <br>
+                                        <?php if ($a11y_last_sync > 0) : ?>
+                                            <strong><?php printf(esc_html__('Letzter Sync: %s', 'complyo-compliance'), esc_html(date_i18n('d.m.Y H:i', $a11y_last_sync))); ?></strong>
+                                        <?php else : ?>
+                                            <strong><?php esc_html_e('Noch kein Sync gelaufen.', 'complyo-compliance'); ?></strong>
+                                        <?php endif; ?>
+                                        <br>
+                                        <a href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=complyo_a11y_sync'), 'complyo_a11y_sync')); ?>" class="button button-secondary" style="margin-top:6px;">
+                                            <?php esc_html_e('Jetzt synchronisieren', 'complyo-compliance'); ?>
+                                        </a>
+                                    <?php endif; ?>
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><?php esc_html_e('Google Fonts lokal', 'complyo-compliance'); ?></th>
+                            <td>
+                                <label>
+                                    <input type="checkbox"
+                                           name="<?php echo esc_attr(COMPLYO_OPTION_LOCAL_FONTS); ?>"
+                                           value="1"
+                                           <?php checked($enable_fonts, '1'); ?> />
+                                    <?php esc_html_e('Google Fonts lokal ausliefern (kein Request an Google – DSGVO, LG München)', 'complyo-compliance'); ?>
+                                </label>
+                                <p class="description">
+                                    <?php esc_html_e('Externe Google-Fonts-Stylesheets werden auf den eigenen Server kopiert und in der Seite ersetzt. Damit verlässt vor dem Consent keine IP-Adresse die Website an Google.', 'complyo-compliance'); ?>
+                                    <?php if ($fonts_count > 0) : ?>
+                                        <br><strong><?php printf(esc_html__('%d lokalisierte Font-Stylesheets.', 'complyo-compliance'), (int) $fonts_count); ?></strong>
+                                    <?php endif; ?>
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><?php esc_html_e('Inline-Tracker blockieren', 'complyo-compliance'); ?></th>
+                            <td>
+                                <label>
+                                    <input type="checkbox"
+                                           name="<?php echo esc_attr(COMPLYO_OPTION_INLINE_BLOCKER); ?>"
+                                           value="1"
+                                           <?php checked($enable_inline, '1'); ?> />
+                                    <?php esc_html_e('Inline-Tracking-Snippets server-seitig vor Consent neutralisieren', 'complyo-compliance'); ?>
+                                </label>
+                                <p class="description">
+                                    <?php esc_html_e('Neutralisiert direkt im HTML eingebettete Tracker (Google Analytics/gtag, Meta Pixel, Hotjar, Matomo, LinkedIn, TikTok, Pinterest, Bing, Clarity), die client-seitig nicht zuverlässig stoppbar sind. Nach Einwilligung werden sie automatisch nachgeladen.', 'complyo-compliance'); ?>
+                                    <br><em><?php esc_html_e('Empfohlen, aber nach dem Aktivieren bitte Seite + zentrale Funktionen testen (konservativ kuratierte Muster).', 'complyo-compliance'); ?></em>
+                                </p>
                             </td>
                         </tr>
                     </table>
@@ -408,6 +635,20 @@ class Complyo_Compliance {
 
                 <?php submit_button(__('Einstellungen speichern', 'complyo-compliance')); ?>
             </form>
+
+            <?php if ($enable_fonts === '1') : ?>
+            <div class="complyo-card">
+                <h2><?php esc_html_e('Google Fonts lokalisieren', 'complyo-compliance'); ?></h2>
+                <p class="description">
+                    <?php esc_html_e('Lädt die aktuell auf der Startseite eingebundenen Google Fonts herunter und speichert sie lokal. Neue Fonts auf anderen Seiten werden automatisch im Hintergrund nachgezogen.', 'complyo-compliance'); ?>
+                </p>
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                    <input type="hidden" name="action" value="complyo_localize_fonts" />
+                    <?php wp_nonce_field('complyo_localize_fonts'); ?>
+                    <?php submit_button(__('Google Fonts jetzt lokalisieren', 'complyo-compliance'), 'secondary', 'submit', false); ?>
+                </form>
+            </div>
+            <?php endif; ?>
 
             <div class="complyo-card complyo-card-info">
                 <h2><?php esc_html_e('Eingebundene Scripts', 'complyo-compliance'); ?></h2>

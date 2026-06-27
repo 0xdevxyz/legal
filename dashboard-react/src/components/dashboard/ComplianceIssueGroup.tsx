@@ -5,9 +5,11 @@ import { ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Info, Sparkles, Down
 import { ComplianceIssueCard } from './ComplianceIssueCard';
 import { UnifiedFixButton } from './UnifiedFixButton';
 import { useToast } from '@/components/ui/Toast';
-import { LegalDocumentGenerator } from '@/components/legal/LegalDocumentGenerator';
+import { LegalDocumentGenerator, type WizardDocType } from '@/components/legal/LegalDocumentGenerator';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api-client';
+import { generateLegalText, type LegalDocumentType } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface IssueGroup {
   group_id: string;
@@ -44,18 +46,33 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
   isAnalysisOnly = false
 }) => {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [isFixingAll, setIsFixingAll] = useState(false);
-  const [showLegalWizard, setShowLegalWizard] = useState<'impressum' | 'datenschutz' | null>(null);
+  const [showLegalWizard, setShowLegalWizard] = useState<WizardDocType | null>(null);
 
-  // ✅ Prüfe ob es sich um Impressum/Datenschutz handelt
-  const isLegalTextGroup = group.category === 'datenschutz' || 
-                           group.category === 'impressum' ||
-                           group.title.toLowerCase().includes('datenschutz') ||
-                           group.title.toLowerCase().includes('impressum');
-  
-  const legalDocumentType = group.title.toLowerCase().includes('impressum') ? 'impressum' : 'datenschutz';
+  // ✅ Welcher Rechtstext gehört zu dieser Gruppe? (Titel/Kategorie-Heuristik)
+  const _gt = `${group.title} ${group.category || ''}`.toLowerCase();
+  const legalDocumentType: WizardDocType | null =
+    _gt.includes('impressum') ? 'impressum' :
+    (_gt.includes('widerruf') || _gt.includes('withdrawal')) ? 'widerruf' :
+    (_gt.includes('agb') || _gt.includes('geschäftsbedingung') || _gt.includes('tos') || _gt.includes('terms')) ? 'agb' :
+    _gt.includes('datenschutz') ? 'datenschutz' :
+    null;
+
+  // Cookie-Richtlinie wird über die dedizierte Cookie-Compliance-Seite gepflegt,
+  // daher hier NICHT als Wizard-Gruppe behandelt.
+  const isLegalTextGroup = legalDocumentType !== null;
+
+  // Label-Map für UI-Texte
+  const DOC_LABELS: Record<WizardDocType, { title: string; basis: string; cta: string }> = {
+    impressum:   { title: 'Impressum erstellen',            basis: 'ein rechtssicheres Impressum nach § 5 TMG',                 cta: 'Impressum Generator starten' },
+    datenschutz: { title: 'Datenschutzerklärung erstellen', basis: 'eine DSGVO-konforme Datenschutzerklärung',                  cta: 'Datenschutz Generator starten' },
+    agb:         { title: 'AGB erstellen',                  basis: 'rechtssichere Allgemeine Geschäftsbedingungen',             cta: 'AGB Generator starten' },
+    cookie:      { title: 'Cookie-Richtlinie erstellen',    basis: 'eine TTDSG-konforme Cookie-Richtlinie',                     cta: 'Cookie-Richtlinie Generator starten' },
+    widerruf:    { title: 'Widerrufsbelehrung erstellen',   basis: 'eine Widerrufsbelehrung inkl. Muster-Widerrufsformular',    cta: 'Widerruf Generator starten' },
+  };
 
   // Severity-basierte Farben
   const severityColors = {
@@ -115,17 +132,25 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                           group.title.toLowerCase().includes('impressum');
       
       if (isLegalText) {
-        const textType = group.title.toLowerCase().includes('impressum') ? 'imprint' : 'privacy_policy';
-        const endpoint = textType === 'imprint' 
-          ? '/api/legal-texts/imprint'
-          : '/api/legal-texts/privacy';
+        const textType: LegalDocumentType = group.title.toLowerCase().includes('impressum') ? 'imprint' : 'privacy';
 
-        const data = await apiClient.get(endpoint, { language: 'de' }) as any;
-        
+        if (!user?.company && !user?.full_name) {
+          showToast('Bitte hinterlegen Sie zuerst Ihre Firmendaten im Profil.', 'error');
+          return;
+        }
+
+        const data = await generateLegalText(textType, {
+          user_data: {
+            company_name: user.company || user.full_name,
+            email: user.email,
+          },
+          language: 'de',
+        });
+
         // Auto-Download
-        if (typeof document !== 'undefined' && data.html) {
+        if (typeof document !== 'undefined' && data.html_content) {
           const filename = textType === 'imprint' ? 'impressum.html' : 'datenschutzerklaerung.html';
-          const blob = new Blob([data.html], { type: 'text/html;charset=utf-8' });
+          const blob = new Blob([data.html_content], { type: 'text/html;charset=utf-8' });
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
@@ -286,14 +311,11 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                 <FileText className="w-5 h-5 text-blue-400 mt-0.5" />
                 <div>
                   <p className="text-sm text-white font-medium mb-1">
-                    {legalDocumentType === 'impressum' ? 'Impressum erstellen' : 'Datenschutzerklärung erstellen'}
+                    {legalDocumentType && DOC_LABELS[legalDocumentType].title}
                   </p>
                   <p className="text-xs text-zinc-400">
-                    Unser Assistent führt Sie durch alle notwendigen Angaben und erstellt 
-                    {legalDocumentType === 'impressum' 
-                      ? ' ein rechtssicheres Impressum nach § 5 TMG' 
-                      : ' eine DSGVO-konforme Datenschutzerklärung'
-                    } basierend auf Ihrer Website.
+                    Unser Assistent führt Sie durch alle notwendigen Angaben und erstellt{' '}
+                    {legalDocumentType && DOC_LABELS[legalDocumentType].basis} basierend auf Ihrer Website.
                   </p>
                 </div>
               </div>
@@ -301,12 +323,12 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
             
             {/* Wizard-Button */}
             <Button
-              onClick={() => setShowLegalWizard(legalDocumentType)}
+              onClick={() => legalDocumentType && setShowLegalWizard(legalDocumentType)}
               className="w-full gap-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-3"
               size="lg"
             >
               <FileText className="w-5 h-5" />
-              {legalDocumentType === 'impressum' ? 'Impressum Generator starten' : 'Datenschutz Generator starten'}
+              {legalDocumentType && DOC_LABELS[legalDocumentType].cta}
             </Button>
           </div>
         ) : (
@@ -425,7 +447,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                   onComplete={(data) => {
                     setShowLegalWizard(null);
                     showToast(
-                      `✅ ${showLegalWizard === 'impressum' ? 'Impressum' : 'Datenschutzerklärung'} erfolgreich erstellt!`,
+                      `✅ ${DOC_LABELS[showLegalWizard].title.replace(' erstellen', '')} erfolgreich erstellt!`,
                       'success',
                       5000
                     );

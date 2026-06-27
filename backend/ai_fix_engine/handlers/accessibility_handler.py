@@ -4,7 +4,7 @@ Accessibility Handler - WCAG 2.1 Compliance
 Behandelt Barrierefreiheits-Issues mit Widget + Code-Fixes
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 import json
 
 

@@ -16,6 +16,10 @@ import {
   Sparkles,
   Zap,
   Lock,
+  Plus,
+  Pencil,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,6 +45,10 @@ interface Service {
     [key: string]: any;
   } | null;
   plan_required: string;
+  // Art. 49 DSGVO — vom Backend (_enrich_third_country) angereichert
+  requires_third_country_consent?: boolean;
+  unsafe_third_country_names?: string[];
+  data_processing_countries?: Array<{ code: string; name: string; safe: boolean }>;
 }
 
 interface ServiceManagerProps {
@@ -66,7 +74,16 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
   const [scanResults, setScanResults] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  
+
+  // Custom services (Borlabs-style)
+  const emptyCustomForm = { name: '', category: 'functional', provider: '', domains: '', cookies: '', description: '', privacy_url: '' };
+  const [customServices, setCustomServices] = useState<any[]>([]);
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [customForm, setCustomForm] = useState({ ...emptyCustomForm });
+  const [savingCustom, setSavingCustom] = useState(false);
+  const [customError, setCustomError] = useState('');
+
   // ✅ NEU: URL aktualisieren wenn sie sich ändert (z.B. beim ersten Laden)
   useEffect(() => {
     if (initialWebsiteUrl && !userWebsiteUrl) {
@@ -81,9 +98,12 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
   const loadServicesAndWebsite = async () => {
     try {
       setLoading(true);
-      
-      // Lade verfügbare Services
-      const data = await apiClient.get('/api/cookie-compliance/services') as any;
+
+      // Lade verfügbare Services (inkl. eigener Dienste, wenn site_id vorhanden)
+      const url = siteId
+        ? `/api/cookie-compliance/services?site_id=${encodeURIComponent(siteId)}`
+        : '/api/cookie-compliance/services';
+      const data = await apiClient.get(url) as any;
       if (data.success) {
         setServices(data.services || []);
       }
@@ -91,6 +111,88 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
       console.error('Error loading services:', error);
     } finally {
       setLoading(false);
+    }
+    loadCustomServices();
+  };
+
+  const loadCustomServices = async () => {
+    if (!siteId) return;
+    try {
+      const data = await apiClient.get(`/api/cookie-compliance/custom-services/${siteId}`) as any;
+      if (data.success) setCustomServices(data.data || []);
+    } catch (error) {
+      console.error('Error loading custom services:', error);
+    }
+  };
+
+  const resetCustomForm = () => {
+    setCustomForm({ ...emptyCustomForm });
+    setEditingKey(null);
+    setShowCustomForm(false);
+    setCustomError('');
+  };
+
+  const startEditCustom = (svc: any) => {
+    setCustomForm({
+      name: svc.name || '',
+      category: svc.category || 'functional',
+      provider: svc.provider || '',
+      domains: (svc.domains || []).join(', '),
+      cookies: (svc.cookies || []).join(', '),
+      description: svc.description || '',
+      privacy_url: svc.privacy_url || '',
+    });
+    setEditingKey(svc.service_key);
+    setShowCustomForm(true);
+    setCustomError('');
+  };
+
+  const saveCustomService = async () => {
+    if (!siteId) return;
+    if (!customForm.name.trim()) { setCustomError('Bitte einen Namen angeben.'); return; }
+    setSavingCustom(true);
+    setCustomError('');
+    const payload = {
+      name: customForm.name.trim(),
+      category: customForm.category,
+      provider: customForm.provider.trim() || null,
+      description: customForm.description.trim() || null,
+      domains: customForm.domains.split(',').map((d) => d.trim()).filter(Boolean),
+      cookies: customForm.cookies.split(',').map((c) => c.trim()).filter(Boolean),
+      privacy_url: customForm.privacy_url.trim() || null,
+    };
+    try {
+      let newKey = editingKey;
+      if (editingKey) {
+        await apiClient.put(`/api/cookie-compliance/custom-services/${siteId}/${editingKey}`, payload);
+      } else {
+        const res = await apiClient.post(`/api/cookie-compliance/custom-services/${siteId}`, payload) as any;
+        newKey = res?.service_key || null;
+      }
+      await loadServicesAndWebsite();
+      // Neuen Dienst automatisch aktivieren
+      if (newKey && !editingKey && !selectedServices.includes(newKey)) {
+        onServicesChange([...selectedServices, newKey]);
+      }
+      resetCustomForm();
+    } catch (error: any) {
+      setCustomError(error?.response?.data?.detail || 'Speichern fehlgeschlagen.');
+    } finally {
+      setSavingCustom(false);
+    }
+  };
+
+  const deleteCustomService = async (serviceKey: string) => {
+    if (!siteId) return;
+    if (!confirm('Diesen eigenen Dienst wirklich löschen?')) return;
+    try {
+      await apiClient.delete(`/api/cookie-compliance/custom-services/${siteId}/${serviceKey}`);
+      if (selectedServices.includes(serviceKey)) {
+        onServicesChange(selectedServices.filter((s) => s !== serviceKey));
+      }
+      await loadServicesAndWebsite();
+    } catch (error) {
+      console.error('Error deleting custom service:', error);
     }
   };
   
@@ -320,7 +422,120 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
           </div>
         </CardContent>
       </Card>
-      
+
+      {/* Eigene Dienste (Custom Services) */}
+      {siteId && (
+        <Card className="border-gray-700 bg-gray-800/40 backdrop-blur-sm">
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-semibold text-white">Eigene Dienste</h4>
+                <p className="text-xs text-gray-400 mt-1">
+                  Definieren Sie Tools, die nicht im Katalog sind. Domains werden automatisch vor Einwilligung blockiert.
+                </p>
+              </div>
+              {!showCustomForm && (
+                <Button
+                  onClick={() => { setCustomForm({ ...emptyCustomForm }); setEditingKey(null); setShowCustomForm(true); }}
+                  className="bg-orange-500 hover:bg-orange-600 text-white"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Eigenen Dienst hinzufügen
+                </Button>
+              )}
+            </div>
+
+            {/* Liste vorhandener eigener Dienste */}
+            {customServices.length > 0 && (
+              <div className="space-y-2">
+                {customServices.map((svc) => (
+                  <div key={svc.service_key} className="flex items-center justify-between p-3 bg-gray-900/60 border border-gray-700 rounded-lg">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-white truncate">{svc.name}</span>
+                        <Badge variant="secondary" className="bg-gray-700 text-gray-200 text-[10px] capitalize">{svc.category}</Badge>
+                      </div>
+                      <p className="text-xs text-gray-500 truncate">
+                        {(svc.domains || []).join(', ') || 'Keine Domains'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button onClick={() => startEditCustom(svc)} title="Bearbeiten" className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => deleteCustomService(svc.service_key)} title="Löschen" className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Formular */}
+            {showCustomForm && (
+              <div className="p-4 bg-gray-900/60 border border-gray-700 rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-sm font-semibold text-white">{editingKey ? 'Dienst bearbeiten' : 'Neuer Dienst'}</h5>
+                  <button onClick={resetCustomForm} className="p-1 text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-400">Name *</label>
+                    <Input value={customForm.name} onChange={(e) => setCustomForm({ ...customForm, name: e.target.value })}
+                      placeholder="z. B. Mein Analyse-Tool" className="bg-gray-800 border-gray-700 text-white" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400">Kategorie</label>
+                    <select value={customForm.category} onChange={(e) => setCustomForm({ ...customForm, category: e.target.value })}
+                      className="w-full h-10 px-3 rounded-md bg-gray-800 border border-gray-700 text-white text-sm">
+                      <option value="necessary">Notwendig</option>
+                      <option value="functional">Funktional</option>
+                      <option value="analytics">Statistik</option>
+                      <option value="marketing">Marketing</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400">Anbieter</label>
+                    <Input value={customForm.provider} onChange={(e) => setCustomForm({ ...customForm, provider: e.target.value })}
+                      placeholder="z. B. Beispiel GmbH" className="bg-gray-800 border-gray-700 text-white" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400">Datenschutz-URL</label>
+                    <Input value={customForm.privacy_url} onChange={(e) => setCustomForm({ ...customForm, privacy_url: e.target.value })}
+                      placeholder="https://…/datenschutz" className="bg-gray-800 border-gray-700 text-white" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-xs text-gray-400">Domains (kommagetrennt) — werden vor Einwilligung blockiert</label>
+                    <Input value={customForm.domains} onChange={(e) => setCustomForm({ ...customForm, domains: e.target.value })}
+                      placeholder="example.com, cdn.example.com" className="bg-gray-800 border-gray-700 text-white" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-xs text-gray-400">Cookie-Namen (kommagetrennt)</label>
+                    <Input value={customForm.cookies} onChange={(e) => setCustomForm({ ...customForm, cookies: e.target.value })}
+                      placeholder="_myid, _mysession" className="bg-gray-800 border-gray-700 text-white" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-xs text-gray-400">Beschreibung</label>
+                    <Input value={customForm.description} onChange={(e) => setCustomForm({ ...customForm, description: e.target.value })}
+                      placeholder="Wofür wird der Dienst genutzt?" className="bg-gray-800 border-gray-700 text-white" />
+                  </div>
+                </div>
+                {customError && <p className="text-sm text-red-400">{customError}</p>}
+                <div className="flex items-center gap-2">
+                  <Button onClick={saveCustomService} disabled={savingCustom} className="bg-orange-500 hover:bg-orange-600 text-white">
+                    {savingCustom ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Speichern…</> : (editingKey ? 'Änderungen speichern' : 'Dienst anlegen')}
+                  </Button>
+                  <Button variant="outline" onClick={resetCustomForm} className="border-gray-700 text-gray-300 hover:bg-gray-700">
+                    Abbrechen
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Search & Filter */}
       <div className="space-y-4">
         <div className="relative">
@@ -459,10 +674,22 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
               </div>
             </div>
             
-            {/* Category Badge */}
-            <Badge variant="secondary" className={`${colors.badge} text-xs flex-shrink-0`}>
-              {service.category}
-            </Badge>
+            {/* Badges: Kategorie + ggf. Art.49-Drittland */}
+            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+              <Badge variant="secondary" className={`${colors.badge} text-xs`}>
+                {service.category}
+              </Badge>
+              {service.requires_third_country_consent && (
+                <span title={`Datenverarbeitung in unsicheren Drittländern (Art. 49 DSGVO): ${(service.unsafe_third_country_names || []).join(', ')}`}>
+                  <Badge
+                    variant="secondary"
+                    className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[10px]"
+                  >
+                    🌍 Drittland (Art. 49)
+                  </Badge>
+                </span>
+              )}
+            </div>
           </div>
           
           {/* Description */}
@@ -513,8 +740,21 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
                 </div>
               )}
 
-              {/* Data Processing Countries */}
-              {(service.template?.data_processing_countries?.length ?? 0) > 0 && (
+              {/* Data Processing Countries — Backend-angereichert (mit Sicher/Unsicher),
+                  Fallback auf alte template-Liste (reine String-Namen) */}
+              {(service.data_processing_countries?.length ?? 0) > 0 ? (
+                <div>
+                  <p className="text-xs font-semibold text-gray-300 mb-1">Datenverarbeitung in:</p>
+                  <p className="text-xs text-gray-400">
+                    {service.data_processing_countries!.map(c => c.name).join(', ')}
+                  </p>
+                  {(service.unsafe_third_country_names?.length ?? 0) > 0 && (
+                    <p className="text-xs text-amber-400 mt-1">
+                      ⚠ Unsichere Drittländer (Art. 49 DSGVO): {service.unsafe_third_country_names!.join(', ')}
+                    </p>
+                  )}
+                </div>
+              ) : (service.template?.data_processing_countries?.length ?? 0) > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-gray-300 mb-1">Datenverarbeitung in:</p>
                   <p className="text-xs text-gray-400">
@@ -538,6 +778,7 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
               {/* Fallback when nothing available */}
               {!(service.template?.cookies?.length) &&
                !(service.cookies?.length) &&
+               !(service.data_processing_countries?.length) &&
                !(service.template?.data_processing_countries?.length) &&
                !service.template?.privacy_policy_url &&
                !service.privacy_url &&

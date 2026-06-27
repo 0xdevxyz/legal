@@ -27,6 +27,8 @@ import ScanMonitor from '@/components/cookie-compliance/ScanMonitor';
 export default function CookieCompliancePage() {
   const router = useRouter();
   const { user } = useAuth();
+  // Agentur/Expert verwalten mehrere Seiten → kein „1 Website pro Account"-Lock.
+  const isAgency = user?.plan_type === 'agency' || user?.plan_type === 'expert';
   const [loading, setLoading] = useState(true);
   const [siteId, setSiteId] = useState<string>('');
   const [config, setConfig] = useState<any>(null);
@@ -38,7 +40,9 @@ export default function CookieCompliancePage() {
 
   const [websiteLocked, setWebsiteLocked] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState<string>('');
-  
+  // Agentur/Expert: alle verwaltbaren Websites zur Auswahl
+  const [availableSites, setAvailableSites] = useState<Array<{ site_id: string; url: string; is_primary: boolean }>>([]);
+
   const handleUnlockCookie = async () => {
     setCheckoutLoading(true);
     setCheckoutError('');
@@ -60,9 +64,18 @@ export default function CookieCompliancePage() {
     } finally {
       setCheckoutLoading(false);
     }
-  };  useEffect(() => {
-    loadConfig();
-  }, []);
+  };
+
+  useEffect(() => {
+    // Auf geladenen User warten, damit der Plan (Agentur?) bekannt ist.
+    if (!user) return;
+    if (isAgency) {
+      loadAgencySites();
+    } else {
+      loadConfig();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.plan_type]);
 
   useEffect(() => {
     if (siteId) loadQuickStats(siteId);
@@ -164,7 +177,58 @@ export default function CookieCompliancePage() {
       return 'unknown-site';
     }
   };
-  
+
+  // Agentur/Expert: alle Websites laden und die ausgewählte konfigurieren.
+  const loadAgencySites = async () => {
+    try {
+      setLoading(true);
+      let websiteData: any = null;
+      try {
+        websiteData = await httpApiClient.get('/api/v2/websites');
+      } catch {
+        websiteData = null;
+      }
+
+      const list: Array<{ site_id: string; url: string; is_primary: boolean }> = [];
+      const seen = new Set<string>();
+      for (const w of (websiteData?.websites || [])) {
+        const sid = generateSiteIdFromUrl(w.url);
+        if (sid === 'unknown-site' || seen.has(sid)) continue;
+        seen.add(sid);
+        list.push({ site_id: sid, url: w.url, is_primary: !!w.is_primary });
+      }
+      setAvailableSites(list);
+
+      if (list.length === 0) {
+        // Keine Websites → klassischer Single-Flow als Fallback
+        await loadConfig();
+        return;
+      }
+
+      const initial = list.find((s) => s.is_primary) || list[0];
+      await loadSiteConfig(initial.site_id, initial.url);
+    } catch (error) {
+      console.error('Error loading agency sites:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Config für eine konkrete site_id laden (Agentur-Wechsel).
+  const loadSiteConfig = async (sid: string, url?: string) => {
+    setSiteId(sid);
+    if (url) setWebsiteUrl(url);
+    try {
+      const configData = await httpApiClient.get(`/api/cookie-compliance/config/${sid}`) as any;
+      if (configData?.success) {
+        setConfig({ ...configData.data, site_id: sid });
+      }
+    } catch (error) {
+      console.error('Error loading site config:', error);
+    }
+  };
+
+
   const saveConfig = async (newConfig: any) => {
     try {
       const data = await httpApiClient.post('/api/cookie-compliance/config', {
@@ -265,7 +329,7 @@ export default function CookieCompliancePage() {
       {showSetupWizard && (
         <CookieSetupWizard
           websiteUrl={websiteUrl}
-          websiteLocked={websiteLocked}
+          websiteLocked={websiteLocked && !isAgency}
           siteId={siteId}
           onComplete={() => { setShowSetupWizard(false); loadConfig(); }}
           onSkip={() => setShowSetupWizard(false)}
@@ -299,7 +363,25 @@ export default function CookieCompliancePage() {
             
             {/* ✅ NEU: Zeige gesperrte Website */}
             <div className="flex items-center gap-3">
-              {websiteLocked && websiteUrl && (
+              {/* Agentur/Expert: Website-Auswahl statt Lock */}
+              {isAgency && availableSites.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-blue-400" />
+                  <Select value={siteId} onValueChange={(v) => loadSiteConfig(v, availableSites.find((s) => s.site_id === v)?.url)}>
+                    <SelectTrigger className="w-[240px] h-9 text-sm">
+                      <SelectValue placeholder="Website wählen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableSites.map((s) => (
+                        <SelectItem key={s.site_id} value={s.site_id}>
+                          {s.url.replace(/^https?:\/\//, '')}{s.is_primary ? ' ★' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {websiteLocked && websiteUrl && !isAgency && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 rounded-lg">
                   <Globe className="w-4 h-4 text-blue-400" />
                   <span className="text-sm text-blue-300 font-medium">{websiteUrl}</span>
@@ -318,8 +400,8 @@ export default function CookieCompliancePage() {
       {/* Main Content */}
       <section aria-label="Cookie-Compliance Konfiguration" className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        {/* ✅ NEU: Hinweis 1 Website pro Account */}
-        {websiteLocked && (
+        {/* ✅ NEU: Hinweis 1 Website pro Account — nur für Einzel-Pläne, nicht Agentur */}
+        {websiteLocked && !isAgency && (
           <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center gap-3">
             <Lock className="w-5 h-5 text-blue-400 flex-shrink-0" />
             <div>
@@ -571,6 +653,7 @@ export default function CookieCompliancePage() {
                 <CookieBannerDesigner
                   config={config}
                   siteId={siteId}
+                  websiteUrl={websiteUrl}
                   onSave={saveConfig}
                 />
               </TabsContent>
@@ -582,7 +665,7 @@ export default function CookieCompliancePage() {
                     saveConfig({ ...config, services });
                   }}
                   websiteUrl={websiteUrl}
-                  websiteLocked={websiteLocked}
+                  websiteLocked={websiteLocked && !isAgency}
                   siteId={siteId}
                 />
               </TabsContent>

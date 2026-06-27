@@ -10,11 +10,11 @@ Strategie:
 import anthropic
 import os
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
-from .checks.deep_content_analyzer import DeepContentAnalyzer, ContentValidation, ContentQuality
+from .checks.deep_content_analyzer import DeepContentAnalyzer, ContentValidation
 
 logger = logging.getLogger(__name__)
 

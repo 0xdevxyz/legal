@@ -4,7 +4,7 @@ Provides language switching and translation endpoints for frontend
 """
 
 from fastapi import APIRouter, Request, Query
-from typing import Dict, Any, Optional
+from typing import Optional
 import logging
 from i18n_service import i18n_service
 

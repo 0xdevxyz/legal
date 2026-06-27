@@ -86,6 +86,19 @@ class BrowserRenderer:
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Complyo-Scanner/2.0'
                 })
 
+                # Echte ausgehende Requests mitschneiden — Basis für die
+                # Drittlandtransfer-Erkennung (fängt JS-/CSS-injizierte Ressourcen
+                # wie Google Fonts, reCAPTCHA, Maps, die im HTML nicht stehen).
+                request_urls: list = []
+
+                def _on_request(req):
+                    try:
+                        request_urls.append(req.url)
+                    except Exception:
+                        pass
+
+                page.on('request', _on_request)
+
                 start_time = asyncio.get_event_loop().time()
 
                 try:
@@ -109,6 +122,11 @@ class BrowserRenderer:
 
                 html = await page.content()
 
+                # Consent-Button-Metriken aus dem gerenderten DOM extrahieren
+                # (Maße + Computed Styles) — Basis für die Dark-Pattern-/Prominenz-
+                # Prüfung in cookie_check (Ablehnen vs. Akzeptieren gleich groß?).
+                consent_buttons = await self._extract_consent_buttons(page)
+
                 end_time = asyncio.get_event_loop().time()
                 render_time = round((end_time - start_time) * 1000, 2)
 
@@ -120,6 +138,9 @@ class BrowserRenderer:
                     'status_code': response.status if response else None,
                     'final_url': page.url,
                     'title': await page.title(),
+                    'consent_buttons': consent_buttons,
+                    # dedupliziert, Reihenfolge erhalten
+                    'request_urls': list(dict.fromkeys(request_urls)),
                     **rendering_info
                 }
 
@@ -140,6 +161,46 @@ class BrowserRenderer:
                 if page:
                     await page.close()
     
+    async def _extract_consent_buttons(self, page: Page) -> list:
+        """Liest sichtbare Consent-relevante Buttons/Links inkl. Maße & Computed
+        Styles aus dem gerenderten DOM. Reine Datenerfassung — die Klassifikation
+        (accept/reject) und Bewertung passieren in cookie_check."""
+        js = r"""
+        () => {
+          const RX = /accept|reject|ablehn|akzeptier|zustimm|einwillig|consent|cookie|ess(e|en)ziell|essentiell|notwendig|erforderlich|allow|agree|decline|deny|verweiger|nur /i;
+          const sel = 'button, a, [role="button"], input[type="submit"], input[type="button"]';
+          const els = Array.from(document.querySelectorAll(sel));
+          const out = [];
+          for (const el of els) {
+            const cls = (typeof el.className === 'string') ? el.className : '';
+            const text = (el.innerText || el.value || el.getAttribute('aria-label') || '').trim();
+            const idc = (el.id || '') + ' ' + cls + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('onclick') || '') + ' ' + (el.getAttribute('name') || '');
+            if (!RX.test(text) && !RX.test(idc)) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) continue;
+            const cs = getComputedStyle(el);
+            if (cs.visibility === 'hidden' || cs.display === 'none' || parseFloat(cs.opacity || '1') === 0) continue;
+            out.push({
+              text: text.slice(0, 120), id: el.id || '', cls: cls,
+              aria: el.getAttribute('aria-label') || '', onclick: el.getAttribute('onclick') || '',
+              name: el.getAttribute('name') || '', value: el.value || '', tag: el.tagName.toLowerCase(),
+              w: Math.round(r.width), h: Math.round(r.height),
+              bg: cs.backgroundColor || '', color: cs.color || '',
+              fontSize: cs.fontSize || '', fontWeight: cs.fontWeight || '',
+              opacity: cs.opacity || '1', borderStyle: cs.borderStyle || '',
+              borderWidth: cs.borderWidth || ''
+            });
+            if (out.length >= 40) break;
+          }
+          return out;
+        }
+        """
+        try:
+            return await page.evaluate(js)
+        except Exception as e:
+            logger.warning(f"consent-button extraction failed: {e}")
+            return []
+
     async def _analyze_rendering(self, page: Page, html: str) -> Dict[str, Any]:
         """
         Analysiert wie die Seite gerendert wurde
@@ -285,14 +346,17 @@ def detect_client_rendering(html: str) -> Tuple[bool, str]:
     return (False, 'Server-rendered content detected')
 
 
-async def smart_fetch_html(url: str, simple_html: str = None) -> Tuple[str, Dict[str, Any]]:
+async def smart_fetch_html(url: str, simple_html: str = None, force: bool = False) -> Tuple[str, Dict[str, Any]]:
     """
     Smart HTML-Fetching mit automatischer Browser-Nutzung
-    
+
     Args:
         url: URL zum Fetchen
         simple_html: Optional bereits gefetchtes HTML (für Re-Check)
-        
+        force: Wenn True, immer im Browser rendern — auch wenn die Seite
+               server-rendered aussieht (z.B. um JS-injizierte Cookie-Banner
+               sichtbar zu machen).
+
     Returns:
         Tuple[html, metadata]
     """
@@ -315,7 +379,9 @@ async def smart_fetch_html(url: str, simple_html: str = None) -> Tuple[str, Dict
     
     # 2. Prüfe ob Browser nötig
     needs_browser, reason = detect_client_rendering(simple_html)
-    
+    if force and not needs_browser:
+        needs_browser, reason = True, 'forced render (consent/banner detection)'
+
     metadata = {
         'detection_reason': reason,
         'used_browser': needs_browser

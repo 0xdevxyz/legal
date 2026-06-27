@@ -130,6 +130,9 @@ export default function DatenschutzPage() {
               <Link href="/impressum" className="hover:text-blue-600 transition-colors">
                 Impressum
               </Link>
+              <Link href="/cookie-richtlinie" className="hover:text-blue-600 transition-colors">
+                Cookie-Richtlinie
+              </Link>
               <Link href="/agb" className="hover:text-blue-600 transition-colors">
                 AGB
               </Link>

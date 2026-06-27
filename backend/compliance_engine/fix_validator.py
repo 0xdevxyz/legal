@@ -363,7 +363,7 @@ ISSUES: [Liste von Problemen, oder "none"]
 REASONING: [Kurze Begründung]"""
             
             response = self.ai_client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-sonnet-4-6",  # claude-3-5-sonnet-20241022 wurde am 28.10.2025 abgeschaltet (404)
                 max_tokens=800,
                 temperature=0,
                 messages=[{"role": "user", "content": prompt}]

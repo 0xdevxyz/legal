@@ -12,7 +12,9 @@ import {
   PieChart as PieChartIcon,
   Info,
   Loader2,
+  Download,
 } from 'lucide-react';
+import { getApiClient } from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -46,6 +48,31 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
   const [period, setPeriod] = useState('30');
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    if (!siteId) return;
+    try {
+      setExporting(true);
+      const res = await getApiClient().get(
+        `/api/cookie-compliance/consents/${siteId}/export`,
+        { responseType: 'blob' }
+      );
+      const url = window.URL.createObjectURL(res.data as Blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `consent-log_${siteId}_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting consent log:', error);
+      alert('Export fehlgeschlagen. Bitte versuchen Sie es erneut.');
+    } finally {
+      setExporting(false);
+    }
+  };
   
   useEffect(() => {
     loadStatistics();
@@ -123,16 +150,27 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
           <h3 className="text-lg font-semibold text-white">Consent-Statistiken</h3>
           <p className="text-sm text-gray-400 mt-1">Analyse Ihrer Cookie-Banner-Performance</p>
         </div>
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-[180px] bg-gray-800 border-gray-700 text-white">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-gray-800 border-gray-700">
-            <SelectItem value="7" className="text-white hover:bg-gray-700">Letzte 7 Tage</SelectItem>
-            <SelectItem value="30" className="text-white hover:bg-gray-700">Letzte 30 Tage</SelectItem>
-            <SelectItem value="90" className="text-white hover:bg-gray-700">Letzte 90 Tage</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            title="Einwilligungs-Nachweis als CSV exportieren (DSGVO Art. 7)"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gray-800 border border-gray-700 text-sm text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            <span>Consent-Log (CSV)</span>
+          </button>
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-[180px] bg-gray-800 border-gray-700 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-gray-800 border-gray-700">
+              <SelectItem value="7" className="text-white hover:bg-gray-700">Letzte 7 Tage</SelectItem>
+              <SelectItem value="30" className="text-white hover:bg-gray-700">Letzte 30 Tage</SelectItem>
+              <SelectItem value="90" className="text-white hover:bg-gray-700">Letzte 90 Tage</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       
       {/* Summary Stats */}

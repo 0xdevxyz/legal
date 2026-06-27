@@ -236,6 +236,8 @@ export default function SubscriptionPage() {
   const planLabel = PLAN_LABELS[currentPlanType] ?? PLAN_LABELS['unknown'];
   const activeModuleIds = sub?.modules?.map(m => m.id) ?? user?.active_modules ?? [];
   const isFreePlan = !sub?.has_subscription || sub?.plan_type === 'free';
+  // Höchste Stufe erreicht (Agentur) → es gibt nichts mehr zu „upgraden".
+  const isTopTier = (PLAN_RANK[currentPlanType] ?? 0) >= (PLAN_RANK['agency'] ?? 3);
 
   const colorMap: Record<string, string> = {
     blue: 'from-blue-500/20 to-blue-600/10 border-blue-500/40',
@@ -366,13 +368,15 @@ export default function SubscriptionPage() {
                   Zahlung & Rechnungen
                   <ExternalLink className="w-3.5 h-3.5 opacity-50" />
                 </button>
-                <button
-                  onClick={() => setShowPlans(s => !s)}
-                  className="flex items-center gap-2 bg-[var(--lime)] hover:bg-[var(--lime-bright)] px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <Zap className="w-4 h-4" />
-                  Plan upgraden
-                </button>
+                {!isTopTier && (
+                  <button
+                    onClick={() => setShowPlans(s => !s)}
+                    className="flex items-center gap-2 bg-[var(--lime)] hover:bg-[var(--lime-bright)] px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Plan upgraden
+                  </button>
+                )}
               </>
             ) : (
               <button

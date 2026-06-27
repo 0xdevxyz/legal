@@ -14,9 +14,8 @@ from bs4 import BeautifulSoup, Tag
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict, field
 import re
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 import logging
-import aiohttp
 
 logger = logging.getLogger(__name__)
 

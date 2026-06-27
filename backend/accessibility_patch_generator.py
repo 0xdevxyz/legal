@@ -10,12 +10,12 @@ Teil des Hybrid-Modells:
 from bs4 import BeautifulSoup
 import zipfile
 import io
-from typing import List, Dict, Optional
+from typing import List, Dict
 import aiohttp
 from datetime import datetime
 import logging
 import json
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -64,10 +64,9 @@ class AccessibilityPatchGenerator:
                 for filename, content in html_patches.items():
                     zip_file.writestr(f"html/{filename}", content)
             
-            # 2. CSS-Patches
-            if contrast_fixes or True:  # Immer CSS für Focus-Styles
-                css_content = self._generate_css_patches(contrast_fixes)
-                zip_file.writestr("css/accessibility-fixes.css", css_content)
+            # 2. CSS-Patches (immer, auch für Focus-Styles)
+            css_content = self._generate_css_patches(contrast_fixes)
+            zip_file.writestr("css/accessibility-fixes.css", css_content)
             
             # 3. WordPress-Export
             if alt_text_fixes:

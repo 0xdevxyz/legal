@@ -141,6 +141,9 @@ export default function ImpressumPage() {
               <Link href="/datenschutz" className="hover:text-blue-600 transition-colors">
                 Datenschutz
               </Link>
+              <Link href="/cookie-richtlinie" className="hover:text-blue-600 transition-colors">
+                Cookie-Richtlinie
+              </Link>
               <Link href="/agb" className="hover:text-blue-600 transition-colors">
                 AGB
               </Link>

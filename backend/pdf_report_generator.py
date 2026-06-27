@@ -3,20 +3,15 @@ Professional PDF Report Generator for Complyo Compliance Analysis
 Creates branded, professional compliance reports with charts and recommendations
 """
 
-from reportlab.lib.pagesizes import A4, letter
+from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch, cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-from reportlab.platypus import Image as RLImage
-from reportlab.graphics.shapes import Drawing, Rect, String
-from reportlab.graphics.charts.piecharts import Pie
-from reportlab.graphics.charts.barcharts import VerticalBarChart
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
+from reportlab.lib.enums import TA_CENTER
 from datetime import datetime
 import io
-import base64
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 import logging
 
 logger = logging.getLogger(__name__)

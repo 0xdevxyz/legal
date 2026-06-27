@@ -11,18 +11,34 @@ Kein externer API-Key erforderlich. Kein Abmahnschutz-Versprechen.
 Disclaimer wird automatisch angehängt (legal_disclaimer.py).
 """
 
+from __future__ import annotations
+
 import os
 import json
 import hashlib
 import logging
-import asyncpg
-import aiohttp
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from enum import Enum
 
+# asyncpg/aiohttp sind in der Produktion (Docker) vorhanden. Die Imports werden
+# tolerant gehalten, damit Template-/Prompt-Logik auch ohne DB/HTTP-Treiber
+# (z.B. in Unit-Tests) importierbar bleibt. Annotationen sind via
+# `from __future__ import annotations` ohnehin lazy.
+try:
+    import asyncpg
+except ImportError:  # pragma: no cover
+    asyncpg = None
+
+try:
+    import aiohttp
+except ImportError:  # pragma: no cover
+    aiohttp = None
+
 from legal_disclaimer import DISCLAIMER_LONG, DISCLAIMER_HTML
+from complyo_privacy_clause import build_complyo_privacy_clause
+from third_country_clause import build_third_country_clause
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +51,7 @@ class DocumentType(str, Enum):
     PRIVACY = "privacy"
     TOS = "tos"
     COOKIE_POLICY = "cookie-policy"
+    WITHDRAWAL = "withdrawal"  # Widerrufsbelehrung inkl. Muster-Widerrufsformular (B2C)
 
 
 @dataclass
@@ -61,7 +78,7 @@ class LegalTextGenerator:
     """
 
     OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-    MODEL = "anthropic/claude-3.5-sonnet"
+    MODEL = "anthropic/claude-sonnet-4.5"
     TEMPLATE_VERSION = "1.0"
 
     def __init__(self, db_pool: asyncpg.Pool):
@@ -85,7 +102,7 @@ class LegalTextGenerator:
         html_with_disclaimer = html + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.IMPRINT, language, html_with_disclaimer,
-            legal_update_id, regeneration_trigger
+            legal_update_id, regeneration_trigger, user_data=user_data
         )
         return GeneratedDocument(
             document_id=doc_id,
@@ -111,16 +128,59 @@ class LegalTextGenerator:
         language: str = "de",
         legal_update_id: Optional[str] = None,
         regeneration_trigger: str = "manual",
+        complyo_context: Optional[Dict[str, Any]] = None,
     ) -> GeneratedDocument:
         template = self._load_template(DocumentType.PRIVACY, language)
         laws_context = self._load_laws_context(["DSGVO", "TTDSG"], language)
-        enriched_data = {**user_data, "services_used": ", ".join(services_used or [])}
+        enriched_data = {**user_data}
+        if services_used is not None:
+            enriched_data["services_used"] = ", ".join(services_used)
+        elif "services_used" not in enriched_data:
+            enriched_data["services_used"] = ""
+
+        # Complyo-Passus: explizit übergebener Kontext hat Vorrang; andernfalls
+        # aus persistierten user_data lesen, damit das Auto-Update
+        # (regenerate_affected_users) den Abschnitt identisch reproduziert.
+        if complyo_context is None:
+            complyo_context = enriched_data.get("complyo_context")
+        if complyo_context:
+            enriched_data["complyo_context"] = complyo_context
+
+        # Drittland-Abschnitt deterministisch aus der SSOT (Art. 49 / Art. 44 ff.),
+        # damit Länderliste und Rechtsgrundlage nicht der KI-Varianz unterliegen.
+        # Beim Auto-Update kommt services_used=None — dann aus den persistierten
+        # user_data (komma-separiert) rekonstruieren, damit der Abschnitt identisch
+        # reproduziert wird statt zu verschwinden.
+        effective_services = services_used
+        if effective_services is None:
+            persisted = enriched_data.get("services_used") or ""
+            effective_services = [s.strip() for s in persisted.split(",") if s.strip()]
+        third_country_clause = build_third_country_clause(effective_services)
+
         prompt = self._build_prompt(template, enriched_data, laws_context, DocumentType.PRIVACY)
+        if complyo_context:
+            # Verhindert, dass die KI einen eigenen, abweichenden Abschnitt zum
+            # Consent-Tool erzeugt — der Complyo-Passus wird deterministisch angehängt.
+            prompt += (
+                "\n\nWICHTIG: Erstelle KEINEN eigenen Abschnitt zum eingesetzten "
+                "Cookie-/Consent-Management-Tool oder zum Barrierefreiheits-Assistenten "
+                "— dieser wird separat ergänzt.\n"
+            )
+        if third_country_clause:
+            # Doppelten/abweichenden Drittland-Abschnitt der KI vermeiden — der
+            # juristische Wortlaut wird deterministisch angehängt.
+            prompt += (
+                "\n\nWICHTIG: Erstelle KEINEN eigenen, aufgezählten Abschnitt zur "
+                "Datenübermittlung in Drittländer für die genannten Dienste — dieser "
+                "wird mit geprüftem Wortlaut separat ergänzt.\n"
+            )
+
         html = await self._call_ai(prompt)
-        html_with_disclaimer = html + DISCLAIMER_HTML
+        complyo_clause = build_complyo_privacy_clause(complyo_context) if complyo_context else ""
+        html_with_disclaimer = html + complyo_clause + third_country_clause + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.PRIVACY, language, html_with_disclaimer,
-            legal_update_id, regeneration_trigger
+            legal_update_id, regeneration_trigger, user_data=enriched_data
         )
         return GeneratedDocument(
             document_id=doc_id,
@@ -135,7 +195,11 @@ class LegalTextGenerator:
             is_active=True,
             generated_at=datetime.now().isoformat(),
             disclaimer=DISCLAIMER_LONG,
-            metadata={"services": services_used or [], "user_data_hash": self._hash(user_data)},
+            metadata={
+                "services": services_used or [],
+                "complyo_clause": bool(complyo_context),
+                "user_data_hash": self._hash(user_data),
+            },
         )
 
     async def generate_tos(
@@ -149,13 +213,17 @@ class LegalTextGenerator:
     ) -> GeneratedDocument:
         template = self._load_template(DocumentType.TOS, language)
         laws_context = self._load_laws_context(["AGB-Recht", "UWG"], language)
-        enriched_data = {**user_data, "business_type": business_type}
+        enriched_data = {**user_data}
+        if business_type:
+            enriched_data["business_type"] = business_type
+        elif "business_type" not in enriched_data:
+            enriched_data["business_type"] = "saas"
         prompt = self._build_prompt(template, enriched_data, laws_context, DocumentType.TOS)
         html = await self._call_ai(prompt)
         html_with_disclaimer = html + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.TOS, language, html_with_disclaimer,
-            legal_update_id, regeneration_trigger
+            legal_update_id, regeneration_trigger, user_data=enriched_data
         )
         return GeneratedDocument(
             document_id=doc_id,
@@ -184,16 +252,17 @@ class LegalTextGenerator:
     ) -> GeneratedDocument:
         template = self._load_template(DocumentType.COOKIE_POLICY, language)
         laws_context = self._load_laws_context(["TTDSG", "DSGVO"], language)
-        enriched_data = {
-            **user_data,
-            "cookie_inventory": json.dumps(cookie_inventory or [], ensure_ascii=False),
-        }
+        enriched_data = {**user_data}
+        if cookie_inventory is not None:
+            enriched_data["cookie_inventory"] = json.dumps(cookie_inventory, ensure_ascii=False)
+        elif "cookie_inventory" not in enriched_data:
+            enriched_data["cookie_inventory"] = "[]"
         prompt = self._build_prompt(template, enriched_data, laws_context, DocumentType.COOKIE_POLICY)
         html = await self._call_ai(prompt)
         html_with_disclaimer = html + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.COOKIE_POLICY, language, html_with_disclaimer,
-            legal_update_id, regeneration_trigger
+            legal_update_id, regeneration_trigger, user_data=enriched_data
         )
         return GeneratedDocument(
             document_id=doc_id,
@@ -209,6 +278,40 @@ class LegalTextGenerator:
             generated_at=datetime.now().isoformat(),
             disclaimer=DISCLAIMER_LONG,
             metadata={"cookie_count": len(cookie_inventory or []), "user_data_hash": self._hash(user_data)},
+        )
+
+    async def generate_withdrawal(
+        self,
+        user_id: int,
+        user_data: Dict[str, str],
+        language: str = "de",
+        legal_update_id: Optional[str] = None,
+        regeneration_trigger: str = "manual",
+    ) -> GeneratedDocument:
+        """Widerrufsbelehrung inkl. gesetzlichem Muster-Widerrufsformular (B2C-Fernabsatz)."""
+        template = self._load_template(DocumentType.WITHDRAWAL, language)
+        laws_context = self._load_laws_context(["Widerrufsrecht", "Verbraucherrecht", "AGB-Recht"], language)
+        prompt = self._build_prompt(template, user_data, laws_context, DocumentType.WITHDRAWAL)
+        html = await self._call_ai(prompt)
+        html_with_disclaimer = html + DISCLAIMER_HTML
+        doc_id = await self._save(
+            user_id, DocumentType.WITHDRAWAL, language, html_with_disclaimer,
+            legal_update_id, regeneration_trigger, user_data=user_data
+        )
+        return GeneratedDocument(
+            document_id=doc_id,
+            user_id=user_id,
+            document_type=DocumentType.WITHDRAWAL,
+            language=language,
+            html_content=html_with_disclaimer,
+            plain_text=self._strip_html(html_with_disclaimer),
+            template_version=self.TEMPLATE_VERSION,
+            legal_update_id=legal_update_id,
+            regeneration_trigger=regeneration_trigger,
+            is_active=True,
+            generated_at=datetime.now().isoformat(),
+            disclaimer=DISCLAIMER_LONG,
+            metadata={"user_data_hash": self._hash(user_data)},
         )
 
     async def get_active_document(
@@ -276,8 +379,10 @@ class LegalTextGenerator:
             "Impressumspflicht": [DocumentType.IMPRINT],
             "DSGVO": [DocumentType.PRIVACY, DocumentType.COOKIE_POLICY],
             "TTDSG": [DocumentType.PRIVACY, DocumentType.COOKIE_POLICY],
-            "AGB-Recht": [DocumentType.TOS],
+            "AGB-Recht": [DocumentType.TOS, DocumentType.WITHDRAWAL],
             "UWG": [DocumentType.TOS],
+            "Widerrufsrecht": [DocumentType.WITHDRAWAL],
+            "Verbraucherrecht": [DocumentType.WITHDRAWAL],
             "BFSG": [DocumentType.IMPRINT],
         }
         affected_doc_types = set()
@@ -323,6 +428,8 @@ class LegalTextGenerator:
                         await self.generate_tos(uid, user_data, legal_update_id=legal_update_id, regeneration_trigger="legal_update")
                     elif dt == DocumentType.COOKIE_POLICY:
                         await self.generate_cookie_policy(uid, user_data, legal_update_id=legal_update_id, regeneration_trigger="legal_update")
+                    elif dt == DocumentType.WITHDRAWAL:
+                        await self.generate_withdrawal(uid, user_data, legal_update_id=legal_update_id, regeneration_trigger="legal_update")
                     triggered += 1
                 except Exception as e:
                     logger.error(f"Re-Generation fehlgeschlagen für user_id={uid}, doc_type={dt}: {e}")
@@ -382,8 +489,10 @@ class LegalTextGenerator:
         laws_context: str,
         doc_type: DocumentType,
     ) -> str:
+        # generated_at automatisch ergänzen, falls nicht vom Aufrufer gesetzt
+        fill_data = {"generated_at": datetime.now().strftime("%d.%m.%Y"), **user_data}
         filled = template
-        for key, value in user_data.items():
+        for key, value in fill_data.items():
             filled = filled.replace(f"{{{{{key}}}}}", str(value))
 
         doc_labels = {
@@ -391,6 +500,7 @@ class LegalTextGenerator:
             DocumentType.PRIVACY: "Datenschutzerklärung gemäß DSGVO Art. 13-14 & TTDSG",
             DocumentType.TOS: "Allgemeine Geschäftsbedingungen (AGB)",
             DocumentType.COOKIE_POLICY: "Cookie-Richtlinie gemäß TTDSG & DSGVO",
+            DocumentType.WITHDRAWAL: "Widerrufsbelehrung inkl. Muster-Widerrufsformular gemäß §312g, §355 BGB & Art. 246a EGBGB",
         }
         return (
             f"Generiere ein vollständiges {doc_labels[doc_type]}.\n\n"
@@ -443,6 +553,7 @@ class LegalTextGenerator:
         html_content: str,
         legal_update_id: Optional[str],
         regeneration_trigger: str,
+        user_data: Optional[Dict[str, Any]] = None,
     ) -> Optional[int]:
         meta = {
             "is_active": True,
@@ -450,6 +561,10 @@ class LegalTextGenerator:
             "regeneration_trigger": regeneration_trigger,
             "legal_update_id": legal_update_id,
             "generator": "legal_text_generator",
+            # user_data wird gespeichert, damit legal_change_monitor die Dokumente
+            # bei Gesetzesänderungen automatisch neu generieren kann (Auto-Update).
+            "user_data": user_data or {},
+            "language": language,
         }
         try:
             async with self.db_pool.acquire() as conn:

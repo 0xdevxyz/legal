@@ -30,6 +30,7 @@ export default function FooterSection() {
               {[
                 { label: 'Impressum', href: '/impressum' },
                 { label: 'Datenschutz', href: '/datenschutz' },
+                { label: 'Cookie-Richtlinie', href: '/cookie-richtlinie' },
                 { label: 'AGB', href: '/agb' },
               ].map((l, i) => (
                 <li key={i}><a href={l.href} className="hover:text-white transition-colors">{l.label}</a></li>

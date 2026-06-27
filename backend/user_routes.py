@@ -5,7 +5,7 @@ User Routes - User Profile & Domain Locks
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import Optional
 import logging
 from passlib.context import CryptContext as _CryptContext
 

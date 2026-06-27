@@ -106,10 +106,51 @@ async def check_datenschutz_compliance_smart(url: str, html: str = None, session
         return await check_datenschutz_compliance(url, soup, session)
 
 
+def _looks_like_datenschutz(text: str) -> bool:
+    """
+    Inhalts-Heuristik gegen Soft-404 / Catch-all: Sieht der Seitentext wirklich
+    wie eine Datenschutzerklärung aus? Erfordert einen DSGVO-Schlüsselbegriff UND
+    mindestens ein typisches inhaltliches Pflichtmerkmal.
+    """
+    if not text:
+        return False
+    low = text.lower()
+    keyword = any(k in low for k in (
+        'datenschutz', 'privacy policy', 'data protection', 'dsgvo', 'gdpr',
+    ))
+    if not keyword:
+        return False
+    markers = (
+        'verantwortlich', 'personenbezogene daten', 'rechtsgrundlage',
+        'art. 6', 'betroffenenrechte', 'auskunftsrecht', 'speicherdauer',
+        'verarbeitung', 'aufsichtsbehörde',
+    )
+    return sum(1 for m in markers if m in low) >= 2
+
+
+async def _fetch_candidate_text(candidate_url: str, session, ssl_context) -> "tuple[int, str] | None":
+    """Lädt eine Kandidaten-URL und gibt (status, text) zurück; None bei Fehler."""
+    try:
+        if session:
+            async with session.get(candidate_url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
+                return resp.status, (await resp.text() if resp.status == 200 else "")
+        else:
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(connector=connector) as tmp:
+                async with tmp.get(candidate_url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
+                    return resp.status, (await resp.text() if resp.status == 200 else "")
+    except Exception:
+        return None
+
+
 async def _check_datenschutz_url_exists(base_url: str, session=None) -> bool:
     """
     Prüft direkt bekannte Datenschutz-Pfade per HTTP-Request.
     Fallback für clientseitig gerenderte Seiten (Next.js, React SPA).
+
+    ⚠️ Soft-404-Guard (v4.0): HTTP 200 allein ist KEIN Nachweis. Catch-all-Probe
+    + Inhaltsprüfung verhindern, dass Parking-/Catch-all-Seiten fälschlich als
+    "Datenschutz vorhanden" zählen.
     """
     from urllib.parse import urlparse
     import ssl
@@ -118,40 +159,103 @@ async def _check_datenschutz_url_exists(base_url: str, session=None) -> bool:
     parsed = urlparse(base_url)
     base = f"{parsed.scheme}://{parsed.netloc}"
 
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+    probe = await _fetch_candidate_text(base + '/__complyo_probe_404__', session, ssl_context)
+    if probe and probe[0] == 200 and len(probe[1].strip()) > 200:
+        logger.info("⚠️ Catch-all-Domain erkannt — prüfe Datenschutz-Inhalt strikt")
+
     candidate_paths = [
         '/datenschutz', '/datenschutzerklaerung', '/privacy', '/privacy-policy',
         '/dsgvo', '/data-protection', '/datenschutz-erklaerung'
     ]
 
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
-
     for path in candidate_paths:
         candidate_url = base + path
-        try:
-            if session:
-                async with session.get(candidate_url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
-                    if resp.status == 200:
-                        logger.info(f"✅ Datenschutz-URL direkt gefunden: {candidate_url}")
-                        return True
-            else:
-                connector = aiohttp.TCPConnector(ssl=ssl_context)
-                async with aiohttp.ClientSession(connector=connector) as tmp:
-                    async with tmp.get(candidate_url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
-                        if resp.status == 200:
-                            logger.info(f"✅ Datenschutz-URL direkt gefunden: {candidate_url}")
-                            return True
-        except Exception:
+        result = await _fetch_candidate_text(candidate_url, session, ssl_context)
+        if not result or result[0] != 200:
             continue
+        if _looks_like_datenschutz(result[1]):
+            logger.info(f"✅ Datenschutz-URL mit validem Inhalt gefunden: {candidate_url}")
+            return True
+        logger.info(f"↪️ {candidate_url} liefert 200, aber Inhalt ist keine Datenschutzerklärung — ignoriert")
 
     return False
 
 
-async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=None) -> List[Dict[str, Any]]:
+async def _collect_linked_css(url: str, soup: BeautifulSoup, session=None,
+                              max_files: int = 10, max_bytes: int = 700_000) -> str:
+    """
+    Lädt die SAME-ORIGIN <link rel=stylesheet>-Dateien der Seite und gibt deren
+    CSS-Text gebündelt zurück.
+
+    Hintergrund: Drittanbieter-Ressourcen mit IP-Transfer (v.a. Google Fonts via
+    @font-face/@import) stehen häufig NICHT im HTML, sondern erst im CSS der Seite
+    — typisch bei Avada/WordPress (fusion-styles), wo die fonts.gstatic.com-URLs
+    in der dynamisch generierten Theme-CSS liegen. Ohne diese Quelle übersieht die
+    Drittlandtransfer-Erkennung den Klassiker „Google Fonts extern geladen".
+    """
+    from urllib.parse import urljoin, urlparse
+    own = urlparse(url).netloc.lower()
+    if own.startswith('www.'):
+        own = own[4:]
+
+    hrefs = []
+    for link in soup.find_all('link', href=True):
+        rels = ' '.join(link.get('rel', [])).lower() if link.get('rel') else ''
+        if 'stylesheet' not in rels:
+            continue
+        href = (link.get('href') or '').strip()
+        if not href:
+            continue
+        if href.startswith('//'):
+            href = 'https:' + href
+        full = urljoin(url, href)
+        host = urlparse(full).netloc.lower()
+        if host.startswith('www.'):
+            host = host[4:]
+        # Nur eigene CSS-Dateien holen. Fremd-gehostete CSS ist selbst bereits ein
+        # Drittanbieter-Request und wird über die URL direkt erkannt.
+        if not host or host != own:
+            continue
+        if full not in hrefs:
+            hrefs.append(full)
+
+    hrefs = hrefs[:max_files]
+    if not hrefs:
+        return ""
+
+    close_session = False
+    if session is None:
+        import ssl
+        import certifi
+        ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_ctx))
+        close_session = True
+
+    chunks = []
+    try:
+        for h in hrefs:
+            try:
+                async with session.get(h, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        chunks.append((await resp.text())[:max_bytes])
+            except Exception:
+                continue
+    finally:
+        if close_session:
+            await session.close()
+    return "\n".join(chunks)
+
+
+async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=None,
+                                       request_urls: List[str] = None) -> List[Dict[str, Any]]:
     """
     Prüft Datenschutzerklärung-Compliance
-    
+
     1. Datenschutz-Link vorhanden (im gerenderten HTML oder als direkt erreichbare URL)
     2. Datenschutzerklärung-Inhalte (wenn erreichbar)
+    3. Drittlandtransfer ohne Einwilligung (HTML + verlinkte CSS + echte Requests)
     """
     issues = []
     
@@ -381,8 +485,22 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
     # Adobe/Typekit ...) — cookielose IP-Übertragung in die USA, der klassische
     # 100%-abmahnbare DSGVO-Verstoß, den ein reiner Cookie-Scanner nicht sieht.
     # Einzige Quelle: compliance_engine/privacy_transfer_findings (SSOT).
+    #
+    # Erkennung gegen drei Quellen, damit JS-/CSS-versteckte Transfers nicht
+    # durchrutschen:
+    #   1) HTML der Seite
+    #   2) Inhalt der verlinkten Same-Origin-CSS (Google Fonts liegen oft als
+    #      @font-face in der Theme-CSS, nicht im HTML — z.B. Avada/fusion-styles)
+    #   3) tatsächlich beobachtete Netzwerk-Requests aus dem Headless-Render
     from ..privacy_transfer_findings import detect_transfers
-    for finding in detect_transfers(html=html_raw):
+    try:
+        css_text = await _collect_linked_css(url, soup, session)
+    except Exception as e:
+        logger.warning(f"⚠️ CSS-Sammlung für Transfer-Erkennung fehlgeschlagen: {e}")
+        css_text = ""
+    transfer_haystack = html_raw if not css_text else (html_raw + "\n" + css_text)
+    transfer_findings = detect_transfers(html=transfer_haystack, request_urls=request_urls)
+    for finding in transfer_findings:
         issues.append(asdict(DatenschutzIssue(
             category='datenschutz',
             severity=finding['severity'],
@@ -461,6 +579,35 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
                     auto_fixable=False,
                     is_missing=False,
                 )))
+
+    # AVV-Pflicht (DSGVO Art. 28): Sobald externe Dienstleister personenbezogene
+    # Daten im Auftrag verarbeiten (Drittland-Transfers, US-Dienste, eingebundene
+    # Tools), ist ein Auftragsverarbeitungsvertrag erforderlich. Das lässt sich
+    # extern nicht verifizieren → informativer Hinweis (kein Score-Abzug).
+    if transfer_findings or found_us_services:
+        detected_processors = sorted({
+            *(f.get('title', '').split('(')[0].strip() for f in transfer_findings),
+            *found_us_services,
+        })
+        issues.append(asdict(DatenschutzIssue(
+            category='avv',
+            severity='info',
+            title='Auftragsverarbeitungsverträge (AVV) erforderlich',
+            description=(
+                'Es wurden externe Dienste erkannt, die personenbezogene Daten im Auftrag '
+                'verarbeiten könnten: ' + ', '.join(detected_processors[:6]) + '. '
+                'Für jeden Auftragsverarbeiter ist ein Vertrag nach Art. 28 DSGVO abzuschließen.'
+            ),
+            risk_euro=0,
+            recommendation=(
+                'Schließen Sie mit jedem eingesetzten Dienstleister einen '
+                'Auftragsverarbeitungsvertrag (AVV) ab und führen Sie ein Verzeichnis von '
+                'Verarbeitungstätigkeiten (Art. 30 DSGVO).'
+            ),
+            legal_basis='DSGVO Art. 28, Art. 30',
+            auto_fixable=False,
+            is_missing=False,
+        )))
 
     return issues
 

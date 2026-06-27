@@ -2,18 +2,16 @@
 AI Compliance Routes - EU AI Act API Endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from datetime import datetime, date, timedelta
 import uuid
 import io
 
-from auth_service import AuthService
-from ai_act_analyzer import ai_act_analyzer, AISystem, RiskClassification, ComplianceResult
-from ai_compliance_notification_service import ai_compliance_notification_service
+from ai_act_analyzer import ai_act_analyzer, AISystem
 from file_storage_service import file_storage
 from database_service import db_service
 
@@ -578,7 +576,6 @@ async def get_system_documentation(
     # Get required documentation based on risk category
     required_docs = ai_act_analyzer.get_required_documentation(system['risk_category'] or 'minimal')
     
-    import json
     return {
         "required": required_docs,
         "existing": [

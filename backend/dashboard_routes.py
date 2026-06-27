@@ -117,19 +117,23 @@ async def get_dashboard_metrics(user: Dict[str, Any] = Depends(get_current_user)
                 critical_trend = total_critical - old_critical
             
             # Get user plan and limits
+            # ⚠️ Spalten heißen fixes_used/fixes_limit (NICHT ai_fixes_count/-max).
+            # Falsche Spaltennamen führten zu einer SQL-Exception → der Endpoint
+            # fiel in den Fallback (websitesMax=1, aiFixesMax=1) und zeigte für
+            # ALLE Pläne fälschlich „1/1" bzw. „0/1".
             user_limits = await conn.fetchrow(
-                "SELECT plan_type, websites_max, ai_fixes_count, ai_fixes_max FROM user_limits WHERE user_id = $1",
+                "SELECT plan_type, websites_max, fixes_used, fixes_limit FROM user_limits WHERE user_id = $1",
                 user_id
             )
-            
+
             plan_type = user_limits['plan_type'] if user_limits else 'free'
             scans_available = 999
             # Website-Limit kanonisch aus dem Plan ableiten (DB-Spalte kann veraltet/-1/3 sein).
             websites_max = PLAN_WEBSITES_MAX.get(plan_type, 1)
-            ai_fixes_used = user_limits['ai_fixes_count'] if user_limits else 0
+            ai_fixes_used = user_limits['fixes_used'] if user_limits else 0
             # Bezahlte Pläne: unbegrenzte KI-Optimierungen (-1 = unbegrenzt). Nur Free hat das 1-Fix-Freemium-Limit.
             is_paid_plan = plan_type not in (None, '', 'free')
-            ai_fixes_max = -1 if is_paid_plan else (user_limits['ai_fixes_max'] if user_limits else 1)
+            ai_fixes_max = -1 if is_paid_plan else (user_limits['fixes_limit'] if user_limits else 1)
             
             return DashboardMetrics(
                 totalScore=avg_score,

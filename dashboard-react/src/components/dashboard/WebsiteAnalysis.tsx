@@ -45,14 +45,17 @@ export const WebsiteAnalysis: React.FC = () => {
     : rawPlanType !== 'free' ? 'paid'
     : 'free';
 
-  const isCurrentSiteLocked = isInOptimizationMode &&
+  // Agentur/Expert: jede getrackte Seite ist voll optimierbar → kein Single-Lock.
+  const isAgency = rawPlanType === 'agency' || rawPlanType === 'expert';
+
+  const isCurrentSiteLocked = isAgency || (isInOptimizationMode &&
     lockedOptimizationUrl &&
     currentWebsite?.url &&
     (currentWebsite.url === lockedOptimizationUrl ||
      currentWebsite.url.includes(lockedOptimizationUrl) ||
-     lockedOptimizationUrl.includes(currentWebsite.url));
+     lockedOptimizationUrl.includes(currentWebsite.url)));
 
-  const isAnalysisOnly = !!(isInOptimizationMode && lockedOptimizationUrl && !isCurrentSiteLocked);
+  const isAnalysisOnly = !isAgency && !!(isInOptimizationMode && lockedOptimizationUrl && !isCurrentSiteLocked);
   
   // ✅ PERSISTENCE: Lade letzte Scan-Ergebnisse beim Mount
   const { data: latestScanData, isLoading: isLoadingLatestScan } = useLatestScan();
@@ -63,8 +66,12 @@ export const WebsiteAnalysis: React.FC = () => {
     currentWebsite?.url || null // ← CRITICAL FIX: null statt undefined
   );
   
-  // Priorität: DB (latestScan) > Fetched > Store (localStorage-Cache)
-  const analysisData = latestScanData || fetchedAnalysisData || storedAnalysisData;
+  // Priorität: DB (latestScan) > Fetched > Store (localStorage-Cache).
+  // Bei Agentur NICHT den global letzten Scan bevorzugen — sonst überschreibt er
+  // beim Seitenwechsel die per-Domain-Analyse der aktiven Seite.
+  const analysisData = isAgency
+    ? (fetchedAnalysisData || storedAnalysisData)
+    : (latestScanData || fetchedAnalysisData || storedAnalysisData);
   
   // ✅ DEBUG: Log final analysisData
   React.useEffect(() => {
@@ -259,7 +266,23 @@ export const WebsiteAnalysis: React.FC = () => {
             auto_fixable: category === 'impressum' || category === 'datenschutz' || category === 'cookies'
           } as ComplianceIssue;
         }
-        return issue as ComplianceIssue;
+        // Objekt-Issue (von Check-Modulen): id sicherstellen.
+        // Manche Check-Module (z. B. Cookie/AGB) liefern keine id mit — ohne id
+        // bricht der KI-Fix mit "Ungültige Issue-ID" ab. Fallback wie im Backend:
+        // Slug aus Kategorie + Titel.
+        const obj = issue as ComplianceIssue;
+        if (!obj.id || typeof obj.id !== 'string') {
+          const cat = (obj.category || 'compliance').toLowerCase();
+          const slug = (obj.title || obj.description || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, '')
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 4)
+            .join('-');
+          obj.id = `${cat}-${slug}`.slice(0, 50) || `issue-${index}`;
+        }
+        return obj;
       })
     : [];
   
@@ -276,7 +299,7 @@ export const WebsiteAnalysis: React.FC = () => {
       icon: Eye,
       color: 'blue',
       description: 'WCAG 2.1 AA Konformität',
-      keywords: ['accessibility', 'wcag', 'barrierefreiheit', 'barriere', 'alt', 'kontrast', 'contrast', 'tastat']
+      keywords: ['accessibility', 'wcag', 'aria', 'barrierefreiheit', 'barriere', 'alt-text', 'alt_text', 'kontrast', 'contrast', 'tastat']
     },
     {
       id: 'gdpr',
@@ -307,11 +330,26 @@ export const WebsiteAnalysis: React.FC = () => {
   ];
 
   const categorizeIssue = (issue: ComplianceIssue): string => {
-    const text = `${issue.title} ${issue.description} ${issue.category}`.toLowerCase();
-
     // Reihenfolge der Säulen = Priorität (erste Übereinstimmung gewinnt),
     // damit z.B. "tracking" zuerst Cookies und nicht versehentlich Legal trifft.
     const ordered = ['accessibility', 'cookies', 'gdpr', 'legal'];
+
+    // 1. PRIMÄR: nur über das category-Feld zuordnen — identisch zum Backend
+    //    (ScoreCalculator.categorize). So kann ein Wort wie "Inhalt" nicht über den
+    //    Teilstring "alt" ein Datenschutz-Issue fälschlich in Barrierefreiheit kippen.
+    const cat = (issue.category || '').toLowerCase();
+    if (cat) {
+      for (const id of ordered) {
+        const pillar = pillars.find(p => p.id === id);
+        if (pillar && pillar.keywords.some(keyword => cat.includes(keyword))) {
+          return pillar.id;
+        }
+      }
+    }
+
+    // 2. FALLBACK (nur für Legacy-String-Issues ohne brauchbares category-Feld):
+    //    Titel/Beschreibung heranziehen.
+    const text = `${issue.title} ${issue.description}`.toLowerCase();
     for (const id of ordered) {
       const pillar = pillars.find(p => p.id === id);
       if (pillar && pillar.keywords.some(keyword => text.includes(keyword))) {
@@ -332,7 +370,7 @@ export const WebsiteAnalysis: React.FC = () => {
     );
     
     let score = 100; // Default wenn keine Issues
-    
+
     if (backendPillarScore) {
       // ✅ BESTE OPTION: Backend-Score verwenden!
       score = backendPillarScore.score;
@@ -345,11 +383,19 @@ export const WebsiteAnalysis: React.FC = () => {
 
       score = Math.max(0, 100 - (criticalCount * 25 + warningCount * 8));
     }
-    
+
+    // ✅ v4.0 evidenz-basiert: Status vom Backend übernehmen, sonst aus Score ableiten.
+    // 'unverified' = konnte nicht geprüft werden → NIE als grün/bestanden darstellen.
+    const criticalCount = pillarIssues.filter(i => i.severity === 'critical').length;
+    const status: string =
+      backendPillarScore?.status ||
+      (criticalCount > 0 ? 'non_compliant' : pillarIssues.length > 0 ? 'partial' : 'compliant');
+
     return {
       ...pillar,
       issues: pillarIssues,
-      score: Math.round(score)
+      score: Math.round(score),
+      status,
     };
   });
 
@@ -476,6 +522,28 @@ export const WebsiteAnalysis: React.FC = () => {
         </ErrorBoundary>
       )}
 
+    {/* ✅ v4.0: Hinweis bei Platzhalter-/Baustellenseiten + erkanntem Grundsystem */}
+    {(analysisData as any)?.scan_notice && (
+      <div className="mb-6 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-5">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="w-6 h-6 text-amber-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-base font-bold text-amber-300 mb-1">
+              Hinweis zum Scan
+              {(analysisData as any)?.detected_cms && (
+                <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200">
+                  Grundsystem: {(analysisData as any).detected_cms}
+                </span>
+              )}
+            </h4>
+            <p className="text-sm text-amber-100/90 leading-relaxed">
+              {(analysisData as any).scan_notice}
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
+
     <Card className="mb-8">
         <CardHeader>
           <CardTitle className="flex items-center gap-3">
@@ -572,8 +640,23 @@ export const WebsiteAnalysis: React.FC = () => {
                           <Icon className="w-6 h-6" style={{ color: 'var(--lime)' }} />
                         </div>
                         <div className="text-left">
-                          <h4 className="text-lg font-bold text-white flex items-center gap-2">
+                          <h4 className="text-lg font-bold text-white flex items-center gap-2 flex-wrap">
                             {pillar.name}
+                            {/* ✅ v4.0: evidenz-basierter Status-Badge */}
+                            {(() => {
+                              const cfg: Record<string, { label: string; cls: string }> = {
+                                compliant:     { label: '✓ Bestanden',    cls: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' },
+                                partial:       { label: 'Teilweise',      cls: 'bg-amber-500/15 text-amber-400 border border-amber-500/30' },
+                                non_compliant: { label: '✗ Nicht erfüllt', cls: 'bg-red-500/15 text-red-400 border border-red-500/30' },
+                                unverified:    { label: '? Ungeprüft',    cls: 'bg-zinc-500/15 text-zinc-300 border border-zinc-500/40' },
+                              };
+                              const s = cfg[(pillar as any).status] || cfg.compliant;
+                              return (
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.cls}`}>
+                                  {s.label}
+                                </span>
+                              );
+                            })()}
                             {issueCount > 0 && (
                               <Badge variant={criticalCount > 0 ? 'critical' : 'warning'}>
                                 {issueCount} Issue{issueCount !== 1 ? 's' : ''}
@@ -589,9 +672,13 @@ export const WebsiteAnalysis: React.FC = () => {
                         {(() => {
                           const r = 26;
                           const circ = 2 * Math.PI * r;
+                          const isUnverified = (pillar as any).status === 'unverified';
                           const pct = Math.max(0, Math.min(100, pillar.score));
-                          const off = circ - (pct / 100) * circ;
-                          const ringColor = pillar.score >= 80 ? '#25bac8' : pillar.score >= 60 ? '#eab308' : '#ef4444';
+                          // Ungeprüft: voller neutraler Ring, kein irreführender 0%-Wert
+                          const off = isUnverified ? 0 : circ - (pct / 100) * circ;
+                          const ringColor = isUnverified
+                            ? '#71717a' // zinc-500
+                            : pillar.score >= 80 ? '#25bac8' : pillar.score >= 60 ? '#eab308' : '#ef4444';
                           return (
                             <div className="relative w-[68px] h-[68px] flex-shrink-0">
                               <svg className="w-full h-full -rotate-90" viewBox="0 0 68 68">
@@ -604,8 +691,14 @@ export const WebsiteAnalysis: React.FC = () => {
                                 />
                               </svg>
                               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-lg font-black text-white leading-none">{pillar.score}</span>
-                                <span className="text-[9px] text-zinc-500 leading-none mt-0.5">/100</span>
+                                {isUnverified ? (
+                                  <span className="text-2xl font-black text-zinc-300 leading-none" title="Konnte nicht geprüft werden">?</span>
+                                ) : (
+                                  <>
+                                    <span className="text-lg font-black text-white leading-none">{pillar.score}</span>
+                                    <span className="text-[9px] text-zinc-500 leading-none mt-0.5">/100</span>
+                                  </>
+                                )}
                               </div>
                             </div>
                           );

@@ -11,13 +11,31 @@ import {
 } from 'lucide-react';
 import { useDashboardStore } from '@/stores/dashboard';
 import { sanitizeHtml } from '@/lib/sanitize';
-import { apiClient } from '@/lib/api-client';
+import { generateLegalText, type LegalDocumentType } from '@/lib/api';
+
+export type WizardDocType = 'impressum' | 'datenschutz' | 'agb' | 'cookie' | 'widerruf';
 
 interface LegalDocumentGeneratorProps {
-  documentType: 'impressum' | 'datenschutz';
+  documentType: WizardDocType;
   onComplete: (data: any) => void;
   onBack: () => void;
 }
+
+// Zentrale Konfiguration je Dokumenttyp (Labels, Backend-Mapping, Datei-Slug)
+const DOC_CONFIG: Record<WizardDocType, {
+  label: string;        // voller Name
+  short: string;        // kurzer Name (z.B. für Footer-Link)
+  emoji: string;
+  backendType: LegalDocumentType;
+  slug: string;         // Dateiname/URL-Pfad
+  legalBasis: string;
+}> = {
+  impressum:   { label: 'Impressum',            short: 'Impressum',   emoji: '📋', backendType: 'imprint',       slug: 'impressum',  legalBasis: 'nach § 5 TMG' },
+  datenschutz: { label: 'Datenschutzerklärung', short: 'Datenschutz', emoji: '🔒', backendType: 'privacy',       slug: 'datenschutz', legalBasis: 'nach DSGVO' },
+  agb:         { label: 'AGB',                   short: 'AGB',         emoji: '📜', backendType: 'tos',           slug: 'agb',        legalBasis: 'nach BGB §305 ff.' },
+  cookie:      { label: 'Cookie-Richtlinie',     short: 'Cookies',     emoji: '🍪', backendType: 'cookie-policy', slug: 'cookie-richtlinie', legalBasis: 'nach TTDSG & DSGVO' },
+  widerruf:    { label: 'Widerrufsbelehrung',    short: 'Widerruf',    emoji: '↩️', backendType: 'withdrawal',    slug: 'widerruf',   legalBasis: 'nach § 312g, § 355 BGB' },
+};
 
 interface CompanyData {
   company_name: string;
@@ -32,6 +50,29 @@ interface CompanyData {
   website: string;
   ust_id: string;
   registration_number: string;
+  // Impressum — berufsrechtliche & inhaltliche Verantwortung (optional)
+  profession: string;
+  regulatory_authority: string;
+  content_responsible: string;
+  // Datenschutz — Hosting (optional)
+  hosting_provider: string;
+  server_location: string;
+  // AGB — Leistung, Preise, Laufzeit
+  target_audience: string;
+  service_description: string;
+  pricing_model: string;
+  payment_methods: string;
+  min_contract_duration: string;
+  cancellation_period: string;
+  auto_renewal: string;
+  jurisdiction: string;
+  // Cookie-Richtlinie
+  consent_tool: string;
+  third_party_services: string;
+  privacy_url: string;
+  // Widerruf
+  has_withdrawal_right: string;
+  withdrawal_exceptions: string;
 }
 
 interface WebsiteFeatures {
@@ -174,23 +215,71 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
     return true;
   };
 
-  const getTitleForType = () => {
-    return documentType === 'impressum' ? 'Impressum erstellen' : 'Datenschutzerklärung erstellen';
-  };
+  const getTitleForType = () => `${DOC_CONFIG[documentType].label} erstellen`;
 
   const handleGenerate = async () => {
     setIsGenerating(true);
-    
+
     try {
-      const data = await apiClient.post('/api/v2/legal/generate-complete', {
-        document_type: documentType,
-        company_data: companyData,
-        website_features: features,
-        website_url: currentWebsite?.url || companyData.website,
-        language: 'de'
-      }) as any;
-      
-      setFinalContent(data.html || data.content || '');
+      const type: LegalDocumentType = DOC_CONFIG[documentType].backendType;
+
+      // CompanyData -> user_data des internen Rechtstexte-Generators mappen
+      const userData = {
+        company_name: companyData.company_name || '',
+        legal_form: companyData.legal_form,
+        address: companyData.address,
+        zip_city: [companyData.postal_code, companyData.city].filter(Boolean).join(' '),
+        country: companyData.country,
+        phone: companyData.phone,
+        email: companyData.email,
+        website: currentWebsite?.url || companyData.website,
+        represented_by: companyData.representative,
+        vat_id: companyData.ust_id,
+        registration_number: companyData.registration_number,
+        // Impressum-spezifisch
+        profession: companyData.profession || undefined,
+        regulatory_authority: companyData.regulatory_authority || undefined,
+        content_responsible: companyData.content_responsible || undefined,
+        // Datenschutz-spezifisch
+        hosting_provider: companyData.hosting_provider || undefined,
+        server_location: companyData.server_location || undefined,
+        // AGB-spezifisch
+        target_audience: companyData.target_audience || undefined,
+        service_description: companyData.service_description || undefined,
+        pricing_model: companyData.pricing_model || undefined,
+        payment_methods: companyData.payment_methods || undefined,
+        min_contract_duration: companyData.min_contract_duration || undefined,
+        cancellation_period: companyData.cancellation_period || undefined,
+        auto_renewal: companyData.auto_renewal || undefined,
+        jurisdiction: companyData.jurisdiction || undefined,
+        // Cookie-spezifisch
+        consent_tool: companyData.consent_tool || undefined,
+        third_party_services: companyData.third_party_services || undefined,
+        privacy_url: companyData.privacy_url || undefined,
+        // Widerruf-spezifisch
+        has_withdrawal_right: companyData.has_withdrawal_right || undefined,
+        withdrawal_exceptions: companyData.withdrawal_exceptions || undefined,
+      };
+
+      // Aktivierte Website-Features als genutzte Dienste übergeben (für Datenschutz)
+      const servicesUsed: string[] = [
+        ...(features.analytics_tools || []),
+        ...(features.payment_providers || []),
+        features.has_shop ? 'Online-Shop' : '',
+        features.has_contact_form ? 'Kontaktformular' : '',
+        features.has_newsletter ? 'Newsletter' : '',
+        features.has_user_accounts ? 'Nutzerkonten' : '',
+        features.has_social_media ? 'Social-Media-Einbindung' : '',
+        features.has_comments ? 'Kommentarfunktion' : '',
+      ].filter(Boolean);
+
+      const data = await generateLegalText(type, {
+        user_data: userData,
+        services_used: servicesUsed,
+        language: 'de',
+      });
+
+      setFinalContent(data.html_content || data.plain_text || '');
       setStep(5);
     } catch (error) {
       console.error('Fehler bei Rechtstext-Generierung:', error);
@@ -203,12 +292,78 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
   };
 
   const generateLocalContent = () => {
-    if (documentType === 'impressum') {
-      return generateImpressum();
-    } else {
-      return generateDatenschutz();
+    switch (documentType) {
+      case 'impressum': return generateImpressum();
+      case 'datenschutz': return generateDatenschutz();
+      case 'agb': return generateAGB();
+      case 'cookie': return generateCookie();
+      case 'widerruf': return generateWiderruf();
+      default: return generateImpressum();
     }
   };
+
+  // Minimaler lokaler Fallback (nur falls die KI-Generierung fehlschlägt).
+  const localDocShell = (title: string, body: string) => `<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>${title} - ${companyData.company_name || ''}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
+    h1 { color: #1a1a1a; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }
+    h2 { color: #0066cc; margin-top: 30px; }
+    p, li { margin: 10px 0; }
+  </style>
+</head>
+<body>
+${body}
+  <p style="margin-top: 40px; font-size: 12px; color: #666;"><em>Stand: ${new Date().toLocaleDateString('de-DE')}</em></p>
+</body>
+</html>`;
+
+  const generateAGB = () => localDocShell('AGB', `
+  <h1>Allgemeine Geschäftsbedingungen</h1>
+  <h2>1. Anbieter</h2>
+  <p>${companyData.company_name || '[Firmenname]'} ${companyData.legal_form || ''}<br>
+  ${companyData.address || ''}, ${companyData.postal_code || ''} ${companyData.city || ''}<br>
+  E-Mail: ${companyData.email || '[E-Mail]'}</p>
+  ${companyData.service_description ? `<h2>2. Leistungsbeschreibung</h2><p>${companyData.service_description}</p>` : ''}
+  ${companyData.pricing_model ? `<h2>3. Preise</h2><p>${companyData.pricing_model}</p>` : ''}
+  ${companyData.payment_methods ? `<h2>4. Zahlungsarten</h2><p>${companyData.payment_methods}</p>` : ''}
+  ${(companyData.min_contract_duration || companyData.cancellation_period || companyData.auto_renewal) ? `<h2>5. Vertragslaufzeit & Kündigung</h2><p>Mindestlaufzeit: ${companyData.min_contract_duration || '–'}<br>Kündigungsfrist: ${companyData.cancellation_period || '–'}<br>Automatische Verlängerung: ${companyData.auto_renewal || '–'}</p>` : ''}
+  <h2>6. Widerrufsrecht</h2>
+  <p>Verbraucher haben ein Widerrufsrecht von 14 Tagen. Details siehe Widerrufsbelehrung.</p>
+  <h2>7. Anwendbares Recht & Gerichtsstand</h2>
+  <p>Es gilt deutsches Recht.${companyData.jurisdiction ? ` Gerichtsstand (B2B): ${companyData.jurisdiction}.` : ''}</p>`);
+
+  const generateCookie = () => localDocShell('Cookie-Richtlinie', `
+  <h1>Cookie-Richtlinie</h1>
+  <h2>Verantwortlicher</h2>
+  <p>${companyData.company_name || '[Firmenname]'}<br>E-Mail: ${companyData.email || '[E-Mail]'}</p>
+  <h2>Verwendete Cookie-Kategorien</h2>
+  <ul>
+    <li><strong>Technisch notwendige Cookies</strong> – keine Einwilligung erforderlich (§ 25 Abs. 2 TTDSG)</li>
+    <li><strong>Funktionale Cookies</strong> – Einwilligung erforderlich</li>
+    <li><strong>Analyse-/Statistik-Cookies</strong> – Einwilligung erforderlich</li>
+    <li><strong>Marketing-/Tracking-Cookies</strong> – Einwilligung erforderlich</li>
+  </ul>
+  ${companyData.consent_tool ? `<h2>Einwilligungsmanagement</h2><p>Consent-Tool: ${companyData.consent_tool}. Die Einwilligung kann jederzeit widerrufen werden.</p>` : ''}
+  ${companyData.third_party_services ? `<h2>Drittanbieter</h2><p>${companyData.third_party_services}</p>` : ''}
+  ${companyData.privacy_url ? `<p>Weitere Informationen in unserer <a href="${companyData.privacy_url}">Datenschutzerklärung</a>.</p>` : ''}`);
+
+  const generateWiderruf = () => localDocShell('Widerrufsbelehrung', `
+  <h1>Widerrufsbelehrung</h1>
+  <h2>Widerrufsrecht</h2>
+  <p>Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen.</p>
+  <p>Um Ihr Widerrufsrecht auszuüben, müssen Sie uns (${companyData.company_name || '[Firmenname]'}, ${companyData.address || ''}, ${companyData.postal_code || ''} ${companyData.city || ''}, E-Mail: ${companyData.email || '[E-Mail]'}) mittels einer eindeutigen Erklärung über Ihren Entschluss informieren.</p>
+  ${companyData.withdrawal_exceptions ? `<h2>Erlöschen / Ausnahmen</h2><p>${companyData.withdrawal_exceptions}</p>` : ''}
+  <h2>Muster-Widerrufsformular</h2>
+  <p>An: ${companyData.company_name || '[Firmenname]'}, ${companyData.address || ''}, ${companyData.postal_code || ''} ${companyData.city || ''}, E-Mail: ${companyData.email || '[E-Mail]'}<br>
+  – Hiermit widerrufe(n) ich/wir den von mir/uns abgeschlossenen Vertrag<br>
+  – Bestellt am / erhalten am<br>
+  – Name des/der Verbraucher(s)<br>
+  – Anschrift des/der Verbraucher(s)<br>
+  – Datum</p>`);
 
   const generateImpressum = () => {
     return `<!DOCTYPE html>
@@ -415,7 +570,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${documentType}-${companyData.company_name?.toLowerCase().replace(/\s+/g, '-') || 'dokument'}.html`;
+    a.download = `${DOC_CONFIG[documentType].slug}-${companyData.company_name?.toLowerCase().replace(/\s+/g, '-') || 'dokument'}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -424,13 +579,16 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
 
   const getIntegrationGuide = () => {
     const cms = features.cms_type || 'custom';
-    
+    const label = DOC_CONFIG[documentType].label;
+    const short = DOC_CONFIG[documentType].short;
+    const slug = DOC_CONFIG[documentType].slug;
+
     const guides: Record<string, { title: string; steps: string[] }> = {
       wordpress: {
         title: 'WordPress Integration',
         steps: [
           'Gehen Sie zu "Seiten" → "Erstellen" im WordPress-Admin',
-          `Erstellen Sie eine neue Seite mit dem Titel "${documentType === 'impressum' ? 'Impressum' : 'Datenschutzerklärung'}"`,
+          `Erstellen Sie eine neue Seite mit dem Titel "${label}"`,
           'Wechseln Sie zum "Code-Editor" (Text-Tab oder Block-Editor → Code)',
           'Fügen Sie den HTML-Code ein',
           'Veröffentlichen Sie die Seite',
@@ -442,7 +600,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
         steps: [
           'Gehen Sie zu "Online Store" → "Pages" im Shopify-Admin',
           'Klicken Sie auf "Add page"',
-          `Titel: "${documentType === 'impressum' ? 'Impressum' : 'Datenschutzerklärung'}"`,
+          `Titel: "${label}"`,
           'Klicken Sie auf "<>" um zur HTML-Ansicht zu wechseln',
           'Fügen Sie den Code ein und speichern Sie',
           'Unter "Online Store" → "Navigation" fügen Sie die Seite zum Footer hinzu'
@@ -453,7 +611,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
         steps: [
           'Öffnen Sie den Wix Editor',
           'Klicken Sie auf "Seite hinzufügen"',
-          `Benennen Sie die Seite "${documentType === 'impressum' ? 'Impressum' : 'Datenschutzerklärung'}"`,
+          `Benennen Sie die Seite "${label}"`,
           'Fügen Sie ein "HTML iframe" oder "Embed Code" Element hinzu',
           'Fügen Sie den HTML-Code ein',
           'Verlinken Sie die Seite im Footer'
@@ -462,15 +620,15 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
       custom: {
         title: 'Standard HTML Integration',
         steps: [
-          `Erstellen Sie eine neue Datei: ${documentType}.html`,
+          `Erstellen Sie eine neue Datei: ${slug}.html`,
           'Fügen Sie den generierten HTML-Code ein',
           'Laden Sie die Datei auf Ihren Webserver hoch',
-          `Verlinken Sie im Footer aller Seiten: <a href="/${documentType}.html">${documentType === 'impressum' ? 'Impressum' : 'Datenschutz'}</a>`,
+          `Verlinken Sie im Footer aller Seiten: <a href="/${slug}.html">${short}</a>`,
           'Testen Sie den Link auf allen Unterseiten'
         ]
       }
     };
-    
+
     return guides[cms] || guides.custom;
   };
 
@@ -488,10 +646,10 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold text-white mb-2">
-          {documentType === 'impressum' ? '📋 Impressum Generator' : '🔒 Datenschutzerklärung Generator'}
+          {DOC_CONFIG[documentType].emoji} {DOC_CONFIG[documentType].label} Generator
         </h1>
         <p className="text-zinc-400">
-          Erstellen Sie ein rechtssicheres {documentType === 'impressum' ? 'Impressum' : 'Datenschutzerklärung'} für Ihre Website
+          Erstellen Sie rechtssichere {DOC_CONFIG[documentType].label} {DOC_CONFIG[documentType].legalBasis} für Ihre Website
         </p>
       </div>
 
@@ -700,6 +858,124 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
                 <input type="text" value={companyData.registration_number || ''} onChange={(e) => handleInputChange('registration_number', e.target.value)}
                   placeholder="z.B. HRB 12345, Amtsgericht Berlin" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
               </div>
+
+              {/* Impressum-spezifische Zusatzangaben */}
+              {documentType === 'impressum' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Berufsbezeichnung (optional)</label>
+                    <input type="text" value={companyData.profession || ''} onChange={(e) => handleInputChange('profession', e.target.value)}
+                      placeholder="z.B. Rechtsanwalt, Steuerberater" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Zuständige Aufsichtsbehörde (optional)</label>
+                    <input type="text" value={companyData.regulatory_authority || ''} onChange={(e) => handleInputChange('regulatory_authority', e.target.value)}
+                      placeholder="z.B. Rechtsanwaltskammer Berlin" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Inhaltlich Verantwortlicher § 18 Abs. 2 MStV (optional)</label>
+                    <input type="text" value={companyData.content_responsible || ''} onChange={(e) => handleInputChange('content_responsible', e.target.value)}
+                      placeholder="Name, falls abweichend vom Vertreter" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                </>
+              )}
+
+              {/* Datenschutz-spezifische Zusatzangaben */}
+              {documentType === 'datenschutz' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Hosting-Anbieter (optional)</label>
+                    <input type="text" value={companyData.hosting_provider || ''} onChange={(e) => handleInputChange('hosting_provider', e.target.value)}
+                      placeholder="z.B. Hetzner Online GmbH" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Server-Standort (optional)</label>
+                    <input type="text" value={companyData.server_location || ''} onChange={(e) => handleInputChange('server_location', e.target.value)}
+                      placeholder="z.B. Deutschland (Nürnberg)" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                </>
+              )}
+
+              {/* AGB-spezifische Angaben */}
+              {documentType === 'agb' && (
+                <>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Leistungsbeschreibung</label>
+                    <textarea value={companyData.service_description || ''} onChange={(e) => handleInputChange('service_description', e.target.value)}
+                      placeholder="Was bieten Sie an? z.B. SaaS-Abo für Compliance-Scans" rows={2} className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Zielgruppe (optional)</label>
+                    <select value={companyData.target_audience || ''} onChange={(e) => handleInputChange('target_audience', e.target.value)}
+                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white">
+                      <option value="">Bitte wählen…</option>
+                      <option value="Verbraucher (B2C)">Verbraucher (B2C)</option>
+                      <option value="Unternehmen (B2B)">Unternehmen (B2B)</option>
+                      <option value="B2C und B2B">B2C und B2B</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Preismodell (optional)</label>
+                    <input type="text" value={companyData.pricing_model || ''} onChange={(e) => handleInputChange('pricing_model', e.target.value)}
+                      placeholder="z.B. monatliches Abo, Festpreis" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Zahlungsarten (optional)</label>
+                    <input type="text" value={companyData.payment_methods || ''} onChange={(e) => handleInputChange('payment_methods', e.target.value)}
+                      placeholder="z.B. Kreditkarte, SEPA, PayPal" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Mindestlaufzeit (optional)</label>
+                    <input type="text" value={companyData.min_contract_duration || ''} onChange={(e) => handleInputChange('min_contract_duration', e.target.value)}
+                      placeholder="z.B. 1 Monat, 12 Monate" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Kündigungsfrist (optional)</label>
+                    <input type="text" value={companyData.cancellation_period || ''} onChange={(e) => handleInputChange('cancellation_period', e.target.value)}
+                      placeholder="z.B. 14 Tage zum Monatsende" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Automatische Verlängerung (optional)</label>
+                    <input type="text" value={companyData.auto_renewal || ''} onChange={(e) => handleInputChange('auto_renewal', e.target.value)}
+                      placeholder="z.B. um jeweils 1 Monat" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Gerichtsstand B2B (optional)</label>
+                    <input type="text" value={companyData.jurisdiction || ''} onChange={(e) => handleInputChange('jurisdiction', e.target.value)}
+                      placeholder="z.B. Berlin" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                </>
+              )}
+
+              {/* Cookie-spezifische Angaben */}
+              {documentType === 'cookie' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Consent-Tool (optional)</label>
+                    <input type="text" value={companyData.consent_tool || ''} onChange={(e) => handleInputChange('consent_tool', e.target.value)}
+                      placeholder="z.B. Usercentrics, Cookiebot, eigenes Banner" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Link zur Datenschutzerklärung (optional)</label>
+                    <input type="text" value={companyData.privacy_url || ''} onChange={(e) => handleInputChange('privacy_url', e.target.value)}
+                      placeholder="z.B. /datenschutz" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Eingesetzte Drittanbieter-Dienste (optional)</label>
+                    <textarea value={companyData.third_party_services || ''} onChange={(e) => handleInputChange('third_party_services', e.target.value)}
+                      placeholder="z.B. Google Analytics, Meta Pixel, YouTube" rows={2} className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                  </div>
+                </>
+              )}
+
+              {/* Widerruf-spezifische Angaben */}
+              {documentType === 'widerruf' && (
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-zinc-300 mb-2">Hinweis zu Ausschluss/Erlöschen des Widerrufsrechts (optional)</label>
+                  <textarea value={companyData.withdrawal_exceptions || ''} onChange={(e) => handleInputChange('withdrawal_exceptions', e.target.value)}
+                    placeholder="z.B. bei sofort beginnenden Dienstleistungen mit ausdrücklicher Zustimmung; bei digitalen Inhalten" rows={3} className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500" />
+                </div>
+              )}
             </div>
 
             <div className="flex justify-between pt-4">
@@ -783,7 +1059,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
           <CardHeader className="bg-gradient-to-r from-emerald-500/10 to-green-500/10 border-b border-emerald-500/30">
             <CardTitle className="flex items-center gap-3 text-white">
               <CheckCircle className="w-6 h-6 text-emerald-400" />
-              ✅ {documentType === 'impressum' ? 'Impressum' : 'Datenschutzerklärung'} erfolgreich erstellt!
+              ✅ {DOC_CONFIG[documentType].label} erfolgreich erstellt!
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6 pt-6">

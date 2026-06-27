@@ -7,8 +7,9 @@ Prüft Website auf Barrierefreiheitsstärkungsgesetz-Compliance
 
 from bs4 import BeautifulSoup
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, is_dataclass
 import re
+import asyncio
 from urllib.parse import urljoin, urlparse
 import logging
 import aiohttp
@@ -105,6 +106,95 @@ class BarrierefreiheitIssue:
     image_src: Optional[str] = None  # NEU: Bild-URL
     metadata: Dict[str, Any] = field(default_factory=dict)  # NEU: Zusätzliche Metadaten
 
+
+# ============================================================================
+# axe-core Integration: echte WCAG-2.1-AA-Engine auf gerendertem DOM
+# ============================================================================
+
+_WCAG_CRIT_RE = re.compile(r'(\d\.\d+\.\d+)')
+# Kriterien, die nur axe verlässlich auf dem gerenderten DOM messen kann
+# (echte Farbkontraste). Hier bekommt axe immer Vorrang vor der Heuristik.
+_CONTRAST_CRITERIA = {'1.4.3', '1.4.6', '1.4.11'}
+
+
+async def _run_axe_core_safe(url: str, timeout: float = 35.0) -> Optional[List[Dict[str, Any]]]:
+    """
+    Führt den axe-core-Scan (Playwright + axe-core) auf der gerenderten Seite aus.
+
+    Returns:
+        Liste strukturierter Issues bei Erfolg, sonst None.
+        Fail-open: Jeder Fehler/Timeout/fehlende Abhängigkeit → None, d.h. der
+        Scan verhält sich exakt wie zuvor (nur Heuristik) und stürzt nie ab.
+    """
+    try:
+        from ..axe_scanner import run_axe_scan
+        result, axe_issues = await asyncio.wait_for(run_axe_scan(url), timeout=timeout)
+        # _create_empty_result() setzt by_impact={"error": ...} bei Fehlern
+        if isinstance(result.by_impact, dict) and "error" in result.by_impact:
+            logger.warning(f"⚠️ axe-core lieferte kein valides Ergebnis: {result.by_impact.get('error')}")
+            return None
+        logger.info(f"✅ axe-core: {result.total_violations} Violations → {len(axe_issues)} Issues")
+        return axe_issues
+    except ImportError:
+        logger.warning("⚠️ axe-core/Playwright nicht verfügbar – Scan läuft heuristisch weiter")
+        return None
+    except asyncio.TimeoutError:
+        logger.warning(f"⚠️ axe-core Timeout nach {timeout}s für {url} – heuristisch weiter")
+        return None
+    except Exception as e:
+        logger.warning(f"⚠️ axe-core fehlgeschlagen ({type(e).__name__}: {e}) – heuristisch weiter")
+        return None
+
+
+def _issue_field(issue, name: str, default=""):
+    """Liest ein Feld aus einem Issue, egal ob Dataclass oder Dict."""
+    if is_dataclass(issue):
+        return getattr(issue, name, default)
+    if isinstance(issue, dict):
+        return issue.get(name, default)
+    return default
+
+
+def _heuristic_wcag_criteria(issue) -> set:
+    """Extrahiert die abgedeckten WCAG-Kriterien aus Titel + legal_basis."""
+    text = f"{_issue_field(issue, 'title')} {_issue_field(issue, 'legal_basis')}"
+    return set(_WCAG_CRIT_RE.findall(text))
+
+
+def _is_manual_contrast_hint(issue) -> bool:
+    """Der heuristische 'bitte manuell prüfen'-Kontrast-Hinweis."""
+    title = _issue_field(issue, 'title') or ''
+    category = _issue_field(issue, 'category') or ''
+    return category == 'kontraste' or 'Kontrast-Prüfung empfohlen' in title
+
+
+def _merge_axe_into_heuristic(heuristic_issues: list, axe_issues: List[Dict[str, Any]]) -> list:
+    """
+    Führt axe-Issues mit den Heuristik-Issues zusammen.
+
+    Regeln:
+    - Kontrast besitzt axe immer (echte Messung ersetzt den manuellen Hinweis).
+    - Für andere Kriterien wird ein axe-Issue verworfen, wenn die Heuristik das
+      Kriterium bereits meldet (vermeidet Doppelzählung in Score/Risiko).
+    - Alle übrigen axe-Issues (neue Kriterien) werden ergänzt → echte Mehr-Abdeckung.
+    """
+    covered = set()
+    for it in heuristic_issues:
+        covered |= _heuristic_wcag_criteria(it)
+
+    # Manuellen Kontrast-Hinweis entfernen – axe liefert jetzt echte Werte
+    merged = [it for it in heuristic_issues if not _is_manual_contrast_hint(it)]
+
+    for ax in axe_issues:
+        crit = set((ax.get('metadata') or {}).get('wcag_criteria') or [])
+        if crit & _CONTRAST_CRITERIA:
+            merged.append(ax)                 # axe besitzt Kontrast
+        elif crit and crit.issubset(covered):
+            continue                          # Heuristik deckt dieses Kriterium bereits ab
+        else:
+            merged.append(ax)                 # neues Kriterium → echte Mehr-Abdeckung
+    return merged
+
 async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, session=None) -> List[Dict[str, Any]]:
     """
     Umfassender Barrierefreiheits-Check mit Multi-Page Scanning
@@ -137,66 +227,10 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
         alt_issues = await _check_alt_texts_enhanced(url, soup, session)
         issues.extend(alt_issues)
 
-        # WCAG 3.1.1: Sprache nicht gesetzt
-        html_tag = soup.find('html')
-        if not html_tag or not html_tag.get('lang'):
-            issues.append(BarrierefreiheitIssue(
-                category='barrierefreiheit',
-                severity='critical',
-                title='WCAG 3.1.1: Sprache der Seite nicht angegeben (lang-Attribut fehlt)',
-                description='Das <html>-Tag hat kein lang-Attribut. Screenreader können die Sprache '
-                           'nicht korrekt erkennen.',
-                risk_euro=1000,
-                recommendation='Fügen Sie lang="de" (oder die jeweilige Sprache) zum <html>-Tag hinzu.',
-                legal_basis='WCAG 2.1 Level A (3.1.1), BFSG §12',
-                auto_fixable=True,
-                is_missing=False
-            ))
-
-        # WCAG 4.1.2: Inputs ohne Label
-        inputs_without_label = []
-        for inp in soup.find_all(['input', 'select', 'textarea']):
-            inp_id = inp.get('id')
-            inp_type = inp.get('type', '').lower()
-            if inp_type in ('hidden', 'submit', 'button', 'reset'):
-                continue
-            has_label = (
-                inp.get('aria-label') or
-                inp.get('aria-labelledby') or
-                inp.get('title') or
-                (inp_id and soup.find('label', attrs={'for': inp_id}))
-            )
-            if not has_label:
-                inputs_without_label.append(inp)
-        if inputs_without_label:
-            issues.append(BarrierefreiheitIssue(
-                category='barrierefreiheit',
-                severity='warning',
-                title=f'WCAG 4.1.2: {len(inputs_without_label)} Formularfeld(er) ohne Label',
-                description=f'{len(inputs_without_label)} Eingabefeld(er) haben kein zugehöriges Label. '
-                           'Screenreader können den Zweck des Felds nicht vermitteln.',
-                risk_euro=1500,
-                recommendation='Verknüpfen Sie jedes Formularfeld mit einem <label for="...">-Element oder aria-label.',
-                legal_basis='WCAG 2.1 Level A (4.1.2), BFSG §12',
-                auto_fixable=False,
-                is_missing=False
-            ))
-
-        # WCAG 1.3.1: Keine semantischen HTML5-Strukturelemente
-        has_semantic = bool(soup.find(['main', 'nav', 'header', 'footer', 'aside', 'article', 'section']))
-        if not has_semantic:
-            issues.append(BarrierefreiheitIssue(
-                category='barrierefreiheit',
-                severity='warning',
-                title='WCAG 1.3.1: Keine semantischen HTML5-Strukturelemente gefunden',
-                description='Die Seite verwendet keine semantischen HTML5-Elemente (main, nav, header, footer). '
-                           'Dies erschwert die Navigation mit Screenreadern.',
-                risk_euro=1000,
-                recommendation='Verwenden Sie semantische HTML5-Elemente zur Strukturierung der Seite.',
-                legal_basis='WCAG 2.1 Level A (1.3.1), BFSG §12',
-                auto_fixable=False,
-                is_missing=False
-            ))
+        # Hinweis: WCAG 3.1.1 (lang), 4.1.2 (Input-Labels) und 1.3.1 (semantisches
+        # HTML) werden weiter unten in den IMMER laufenden Struktur-Checks geprüft
+        # (_check_aria_labels, _check_semantic_html, lang-Check) — hier bewusst
+        # NICHT zusätzlich, um Doppelzählung in Score/Risiko zu vermeiden.
 
     else:
         # Widget vorhanden — führe detaillierte Checks durch
@@ -386,7 +420,20 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
             is_missing=False,
         ))
 
-    return [asdict(issue) for issue in issues]
+    # ── axe-core: echte WCAG-2.1-AA-Engine auf dem gerenderten DOM ──────────
+    # Ergänzt die HTML-Heuristik um real berechnete Kriterien (Kontrast 1.4.3,
+    # Fokus-Sichtbarkeit 2.4.7, ARIA-Validität, Heading-Order u.v.m.).
+    # Fail-open: schlägt axe fehl/fehlt Playwright, bleibt das Ergebnis exakt
+    # wie zuvor (nur Heuristik).
+    axe_issues = await _run_axe_core_safe(url)
+    if axe_issues is not None:
+        issues = _merge_axe_into_heuristic(issues, axe_issues)
+
+    # issues enthält gemischt BarrierefreiheitIssue-Instanzen UND bereits per asdict()
+    # konvertierte Dicts (AUDIT-09…13 + axe liefern Dicts). asdict() auf ein Dict wirft
+    # TypeError und ließ bisher den GESAMTEN Check abstürzen → Barrierefreiheit fiel
+    # im Scanner stumm weg (Säule defaultete auf 100, "Widget vorhanden").
+    return [asdict(issue) if is_dataclass(issue) else issue for issue in issues]
 
 async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIssue | None:
     """
@@ -741,8 +788,7 @@ async def _check_aria_labels(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
         aria_label = inp.get('aria-label', '').strip()
         aria_labelledby = inp.get('aria-labelledby', '').strip()
         title = inp.get('title', '').strip()
-        placeholder = inp.get('placeholder', '').strip()
-        
+
         # Check if there's a <label for="..."> element
         has_label = False
         if input_id:
@@ -759,7 +805,9 @@ async def _check_aria_labels(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
                     break
                 parent = parent.parent
         
-        if not any([has_label, aria_label, aria_labelledby, title]) and not placeholder:
+        # Hinweis: placeholder zählt bewusst NICHT als Label (WCAG 3.3.2/4.1.2 –
+        # ein Platzhalter ersetzt kein <label>/aria-label).
+        if not any([has_label, aria_label, aria_labelledby, title]):
             inputs_without_label.append(input_type)
     
     if inputs_without_label:
@@ -1197,13 +1245,19 @@ async def check_barrierefreiheit_enhanced(
             axe_result, axe_issues = await run_axe_scan(url)
             
             # Dedupliziere: Nur axe-Issues hinzufügen, die nicht schon gefunden wurden
-            existing_selectors = {issue.get('selector') for issue in all_issues if issue.get('selector')}
-            
+            def _selector_of(issue):
+                meta = issue.get('metadata') or {}
+                return meta.get('selector') or issue.get('selector')
+
+            existing_selectors = {s for s in (_selector_of(i) for i in all_issues) if s}
+
             for issue in axe_issues:
-                selector = issue.get('selector', '')
+                selector = _selector_of(issue)
                 if selector and selector not in existing_selectors:
                     all_issues.append(issue)
                     existing_selectors.add(selector)
+                elif not selector:
+                    all_issues.append(issue)
             
             logger.info(f"✅ axe-core Check: {len(axe_issues)} Issues ({axe_result.total_violations} Violations)")
         except ImportError:

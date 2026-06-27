@@ -3,7 +3,7 @@ Fix API Routes für Complyo
 Endpoints für KI-Fix Generierung und Export
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status, Request
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional

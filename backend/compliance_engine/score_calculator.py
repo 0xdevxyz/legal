@@ -12,6 +12,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class PillarStatus:
+    """
+    Status einer Compliance-Säule (evidenz-basiert, v4.0).
+
+    Leitprinzip: Compliance muss AKTIV nachgewiesen werden. Abwesenheit von
+    erkannten Problemen ist NICHT automatisch "konform" — wenn eine Säule gar
+    nicht geprüft werden konnte (Check abgestürzt / Seite nicht lesbar / nur
+    per JS gerendert), ist sie UNVERIFIED und zählt NICHT als bestanden.
+    """
+    COMPLIANT = "compliant"          # Nachgewiesen konform (Pflichtelemente vorhanden + valide)
+    PARTIAL = "partial"              # Vorhanden, aber mit Mängeln
+    NON_COMPLIANT = "non_compliant"  # Kern-Element fehlt / nicht erfüllt
+    UNVERIFIED = "unverified"        # Konnte nicht geprüft werden → 0 Credit, separat ausgewiesen
+
+
 @dataclass
 class ComplianceIssue:
     """Standard Issue Dataclass (muss mit bestehender Definition abgeglichen werden)"""
@@ -38,7 +53,7 @@ class ScoreCalculator:
     - Gesamtscore: gewichteter Mittelwert über Säulen
     """
 
-    FORMULA_VERSION = "v3.0"
+    FORMULA_VERSION = "v4.0"
 
     # ========================================================================
     # 4 SÄULEN — einzige kanonische Definition (Frontend + Backend identisch)
@@ -67,6 +82,10 @@ class ScoreCalculator:
         ("gdpr", [
             "datenschutz", "dsgvo", "gdpr", "privacy", "personenbezogen",
             "datenverarbeitung", "avv",
+            # Social-Media-Plugins übertragen ohne Consent personenbezogene
+            # Daten (IP) an Dritte → DSGVO Art. 6 / EuGH Fashion ID (C-40/17),
+            # gehört in die Datenschutz-Säule, NICHT zu "Rechtssichere Texte".
+            "social_media", "social",
             # Sicherheit = DSGVO Art. 32 (technische Schutzmaßnahmen)
             "security", "sicherheit", "csp", "content-security", "hsts",
             "x-frame", "header", "ssl", "tls", "https",
@@ -75,7 +94,7 @@ class ScoreCalculator:
             "impressum", "agb", "legal", "rechtlich", "tmg", "uwg",
             "widerruf", "preisangaben", "preisangabe", "pangv", "preis",
             # Shop-Pflichttexte zählen rechtlich
-            "shop", "contact", "kontakt", "social_media", "social",
+            "shop", "contact", "kontakt",
             "urheberrecht", "markenrecht",
         ]),
     ]
@@ -175,6 +194,32 @@ class ScoreCalculator:
                        + warning_count * ScoreCalculator.SEVERITY_DEDUCTIONS["warning"])
         return max(0, score)
 
+    # Aufwands-Klassifizierung (v4.0) für Bearbeitungshinweise/Priorisierung
+    EFFORT_LOW = "gering"      # automatisch / per KI behebbar
+    EFFORT_MEDIUM = "mittel"   # manuell, aber überschaubar
+    EFFORT_EXPERT = "experte"  # rechtliche Beratung / vollständige Erstellung nötig
+
+    @staticmethod
+    def classify_effort(severity: str, auto_fixable: bool = False, is_missing: bool = False) -> str:
+        """
+        Klassifiziere den Bearbeitungsaufwand eines Issues (deterministisch).
+
+        - auto_fixable                      → gering   (Complyo/KI kann es erledigen)
+        - komplett fehlendes Kern-Element   → experte  (z.B. Impressum/Datenschutz neu erstellen)
+        - critical                          → experte
+        - warning                           → mittel
+        - sonst (info)                      → gering
+        """
+        if auto_fixable:
+            return ScoreCalculator.EFFORT_LOW
+        if is_missing and severity == "critical":
+            return ScoreCalculator.EFFORT_EXPERT
+        if severity == "critical":
+            return ScoreCalculator.EFFORT_EXPERT
+        if severity == "warning":
+            return ScoreCalculator.EFFORT_MEDIUM
+        return ScoreCalculator.EFFORT_LOW
+
     @staticmethod
     def categorize(category: str) -> str:
         """
@@ -207,13 +252,16 @@ class ScoreCalculator:
 
         Args:
             pillar_scores: {"accessibility": 100, "gdpr": 100, "legal": 100, "cookies": 70}
-                           Fehlende Säulen werden als 100 (keine Issues) gewertet.
+                           ⚠️ v4.0: Eine fehlende Säule wird als 0 gewertet
+                           (Compliance muss NACHGEWIESEN werden — Abwesenheit ist
+                           kein Nachweis). Normalerweise liefert die Engine ohnehin
+                           für alle 4 Säulen einen Wert, sodass der Default nicht greift.
 
         Returns:
             int: Gesamtscore 0-100
         """
         scores = [
-            pillar_scores.get(pillar, 100)
+            pillar_scores.get(pillar, 0)
             for pillar in ScoreCalculator.PILLAR_IDS
         ]
         if not scores:
@@ -265,7 +313,15 @@ class ScoreCalculator:
         for pillar_id, pillar_issues in buckets.items():
             critical_count = sum(1 for i in pillar_issues if i.severity == "critical")
             warning_count = sum(1 for i in pillar_issues if i.severity == "warning")
-            has_missing_core = any(getattr(i, "is_missing", False) for i in pillar_issues)
+            # is_missing wird von vielen Checks auch auf einzelne Warning-Sub-Findings
+            # gesetzt ("Widerrufsmöglichkeit fehlt", "Ablehnen-Button fehlt" …). Nur ein
+            # komplett fehlendes KERN-Element (Impressum, Datenschutz, Cookie-Banner,
+            # A11y-Widget) soll die Säule auf 0 ziehen — solche Issues sind immer
+            # critical. Sonst kollabiert jede Säule mit einer einzelnen "fehlt"-Warnung.
+            has_missing_core = any(
+                getattr(i, "is_missing", False) and i.severity == "critical"
+                for i in pillar_issues
+            )
             pillar_scores[pillar_id] = ScoreCalculator.calculate_pillar_score(
                 critical_count=critical_count,
                 warning_count=warning_count,
@@ -275,25 +331,94 @@ class ScoreCalculator:
         return pillar_scores
 
     @staticmethod
+    def _derive_pillar_status(score: int, critical: int, warning: int, has_missing_core: bool) -> str:
+        """Leite den anzeigbaren Säulen-Status aus den gezählten Issues ab (v4.0)."""
+        if has_missing_core or score == 0:
+            return PillarStatus.NON_COMPLIANT
+        if critical or warning:
+            return PillarStatus.PARTIAL
+        return PillarStatus.COMPLIANT
+
+    @staticmethod
+    def compute_with_status(
+        issues: List[ComplianceIssue],
+        unverified_pillars: "set[str] | None" = None,
+    ) -> Dict[str, Any]:
+        """
+        Evidenz-basierte Score-Berechnung (v4.0) — liefert zusätzlich pro Säule
+        einen Status (compliant / partial / non_compliant / unverified).
+
+        UNVERIFIED-Prinzip: Wenn der zuständige Check für eine Säule NICHT sauber
+        durchlaufen ist (z.B. Exception, Seite nur per JS, Timeout) und deshalb
+        KEINE Evidenz vorliegt, gilt die Säule als "ungeprüft" → Score 0, Status
+        UNVERIFIED. So kann eine nicht prüfbare Säule nie als 100 (bestanden)
+        durchrutschen. Liegen dennoch Issues vor, gewinnen die Issues (echte Evidenz).
+
+        Args:
+            issues: alle erkannten ComplianceIssues
+            unverified_pillars: Säulen-IDs, deren Primär-Check nicht auswertbar war
+
+        Returns:
+            {
+                "overall_score": int,
+                "pillar_scores": {pillar_id: int, ...},
+                "pillar_status": {pillar_id: PillarStatus, ...}
+            }
+        """
+        unverified = set(unverified_pillars or [])
+        buckets: Dict[str, list] = {pillar: [] for pillar in ScoreCalculator.PILLAR_IDS}
+        for issue in issues:
+            buckets[ScoreCalculator.categorize(issue.category)].append(issue)
+
+        pillar_scores: Dict[str, int] = {}
+        pillar_status: Dict[str, str] = {}
+        for pillar_id, pillar_issues in buckets.items():
+            critical_count = sum(1 for i in pillar_issues if i.severity == "critical")
+            warning_count = sum(1 for i in pillar_issues if i.severity == "warning")
+            has_missing_core = any(
+                getattr(i, "is_missing", False) and i.severity == "critical"
+                for i in pillar_issues
+            )
+
+            # Ungeprüft UND keine Evidenz → 0 Credit, transparent als "ungeprüft"
+            if pillar_id in unverified and not pillar_issues:
+                pillar_scores[pillar_id] = 0
+                pillar_status[pillar_id] = PillarStatus.UNVERIFIED
+                continue
+
+            score = ScoreCalculator.calculate_pillar_score(
+                critical_count=critical_count,
+                warning_count=warning_count,
+                has_missing_core=has_missing_core,
+            )
+            pillar_scores[pillar_id] = score
+            pillar_status[pillar_id] = ScoreCalculator._derive_pillar_status(
+                score, critical_count, warning_count, has_missing_core
+            )
+
+        return {
+            "overall_score": ScoreCalculator.calculate_overall_score(pillar_scores),
+            "pillar_scores": pillar_scores,
+            "pillar_status": pillar_status,
+        }
+
+    @staticmethod
     def compute(issues: List[ComplianceIssue]) -> Dict[str, Any]:
         """
-        Einziger Einstiegspunkt für vollständige Score-Berechnung (v3.0).
+        Einziger Einstiegspunkt für vollständige Score-Berechnung (v4.0).
 
-        Liefert Säulen-Scores UND den daraus gleichgewichtet gemittelten
-        Gesamtscore in EINEM konsistenten Aufruf — so können Gesamt und
-        Säulen nie auseinanderlaufen.
+        Liefert Säulen-Scores, Säulen-Status UND den daraus gleichgewichtet
+        gemittelten Gesamtscore in EINEM konsistenten Aufruf — so können Gesamt
+        und Säulen nie auseinanderlaufen.
 
         Returns:
             {
                 "overall_score": int,                  # = Mittelwert der Säulen
-                "pillar_scores": {pillar_id: int, ...} # 4 Säulen
+                "pillar_scores": {pillar_id: int, ...},# 4 Säulen
+                "pillar_status": {pillar_id: str, ...} # evidenz-basierter Status
             }
         """
-        pillar_scores = ScoreCalculator.calculate_pillar_scores(issues)
-        return {
-            "overall_score": ScoreCalculator.calculate_overall_score(pillar_scores),
-            "pillar_scores": pillar_scores,
-        }
+        return ScoreCalculator.compute_with_status(issues)
     
     @staticmethod
     def get_score_breakdown(issues: List[ComplianceIssue]) -> Dict[str, Any]:

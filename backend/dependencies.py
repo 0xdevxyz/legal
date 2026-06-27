@@ -20,7 +20,7 @@ Usage:
 """
 
 import os
-from typing import Optional, AsyncGenerator, List
+from typing import Optional, List
 from functools import lru_cache
 
 import asyncpg

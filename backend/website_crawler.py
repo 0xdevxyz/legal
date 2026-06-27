@@ -5,9 +5,8 @@ Mit Caching-Support für bessere Performance und geringere API-Kosten
 """
 
 import aiohttp
-import asyncio
 from bs4 import BeautifulSoup
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 from urllib.parse import urljoin, urlparse
 from datetime import datetime, timedelta
 import asyncpg

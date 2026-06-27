@@ -383,7 +383,7 @@ async def oauth_token_pickup(request: Request):
 async def logout(request: Request):
     """Logout user: blacklist JTI, revoke refresh token, clear cookies"""
     import jwt as _jwt
-    from dependencies import get_redis, get_settings
+    from dependencies import get_settings
 
     token_from_cookie = request.cookies.get("refresh_token")
     token_from_body: Optional[str] = None
@@ -434,12 +434,10 @@ async def logout(request: Request):
 async def logout_all(request: Request):
     """Logout all sessions for the current user: blacklist all JTIs, delete all sessions"""
     import jwt as _jwt
-    from dependencies import get_settings, get_current_user
+    from dependencies import get_settings
 
     current_user: Optional[dict] = None
     try:
-        from dependencies import get_settings as _gs, security as _sec
-        from fastapi.security import HTTPAuthorizationCredentials
         cred_header = request.headers.get("Authorization", "")
         token: Optional[str] = None
         if cred_header.startswith("Bearer "):
