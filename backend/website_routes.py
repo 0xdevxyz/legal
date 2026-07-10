@@ -11,6 +11,11 @@ from uuid import UUID
 import traceback
 import logging
 from dependencies import get_current_user
+from compliance_engine.jurisdictions import (
+    DEFAULT_JURISDICTION,
+    is_supported_jurisdiction,
+    normalize_jurisdiction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +29,10 @@ router = APIRouter(prefix="/api/v2/websites", tags=["websites"])
 class WebsiteCreate(BaseModel):
     url: str
     score: int
+    jurisdiction: Optional[str] = None  # "de" | "eu" — None = Account-Default erben
+
+class WebsiteJurisdictionUpdate(BaseModel):
+    jurisdiction: Optional[str] = None  # None/"" = Override löschen (Account-Default erben)
 
 class TrackedWebsite(BaseModel):
     id: Union[str, int, UUID]
@@ -32,6 +41,8 @@ class TrackedWebsite(BaseModel):
     last_scan_date: Optional[str] = None
     scan_count: int
     is_primary: bool
+    jurisdiction: Optional[str] = None  # Pro-Site-Override (None = Account-Default)
+    effective_jurisdiction: Optional[str] = None  # aufgelöst: Site-Override oder Account-Default
 
 class WebsitesResponse(BaseModel):
     success: bool
@@ -48,19 +59,22 @@ async def get_websites(user=Depends(get_current_user)):
         user_id = user["id"]
 
         async with db_pool.acquire() as conn:
-            # Get tracked websites
+            # Get tracked websites (inkl. effektiver Jurisdiction: Site-Override oder Account-Default)
             rows = await conn.fetch("""
                 SELECT 
-                    id,
-                    url,
-                    last_score,
-                    last_scan_date,
-                    scan_count,
-                    is_primary,
-                    created_at
-                FROM tracked_websites
-                WHERE user_id = $1
-                ORDER BY is_primary DESC, last_scan_date DESC
+                    tw.id,
+                    tw.url,
+                    tw.last_score,
+                    tw.last_scan_date,
+                    tw.scan_count,
+                    tw.is_primary,
+                    tw.created_at,
+                    tw.jurisdiction,
+                    ul.jurisdiction AS account_jurisdiction
+                FROM tracked_websites tw
+                LEFT JOIN user_limits ul ON ul.user_id = tw.user_id
+                WHERE tw.user_id = $1
+                ORDER BY tw.is_primary DESC, tw.last_scan_date DESC
             """, user_id)
             
             websites = [
@@ -70,7 +84,11 @@ async def get_websites(user=Depends(get_current_user)):
                     "last_score": int(row["last_score"]) if row["last_score"] is not None else 0,
                     "last_scan_date": row["last_scan_date"].isoformat() if row["last_scan_date"] else None,
                     "scan_count": int(row.get("scan_count", 0)) if row.get("scan_count") is not None else 0,
-                    "is_primary": bool(row.get("is_primary", False))
+                    "is_primary": bool(row.get("is_primary", False)),
+                    "jurisdiction": row.get("jurisdiction"),
+                    "effective_jurisdiction": normalize_jurisdiction(
+                        row.get("jurisdiction") or row.get("account_jurisdiction")
+                    ),
                 }
                 for row in rows
             ]
@@ -92,7 +110,17 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
     """Save or update a tracked website"""
     try:
         user_id = user["id"]
-        
+
+        # Jurisdiction validieren (None = Account-Default erben)
+        site_jurisdiction = None
+        if data.jurisdiction:
+            if not is_supported_jurisdiction(data.jurisdiction):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unbekannte Jurisdiction '{data.jurisdiction}' (unterstützt: de, eu)"
+                )
+            site_jurisdiction = normalize_jurisdiction(data.jurisdiction)
+
         async with db_pool.acquire() as conn:
             # Check if website already exists
             existing = await conn.fetchrow("""
@@ -102,18 +130,19 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
             """, user_id, data.url)
             
             if existing:
-                # Update existing website
+                # Update existing website (Jurisdiction-Override nur setzen, wenn übergeben)
                 website = await conn.fetchrow("""
                     UPDATE tracked_websites
                     SET 
                         last_score = $1,
                         last_scan_date = $2,
-                        scan_count = scan_count + 1
+                        scan_count = scan_count + 1,
+                        jurisdiction = COALESCE($4, jurisdiction)
                     WHERE id = $3
                     RETURNING 
                         id, url, last_score, last_scan_date, 
-                        scan_count, is_primary
-                """, data.score, datetime.utcnow(), existing["id"])
+                        scan_count, is_primary, jurisdiction
+                """, data.score, datetime.utcnow(), existing["id"], site_jurisdiction)
             else:
                 # Check user limits
                 user_limits = await conn.fetchrow("""

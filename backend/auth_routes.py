@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from schemas.auth import LoginResponse, RegisterResponse, RefreshResponse, MeResponse
+from compliance_engine.jurisdictions import DEFAULT_JURISDICTION
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +62,10 @@ async def init_user_limits(user_id: int, plan_type: str):
             
             await conn.execute(
                 """
-                INSERT INTO user_limits (user_id, plan_type, websites_max, exports_max, exports_reset_date)
-                VALUES ($1, $2, $3, $4, CURRENT_DATE + INTERVAL '1 month')
+                INSERT INTO user_limits (user_id, plan_type, websites_max, exports_max, exports_reset_date, jurisdiction)
+                VALUES ($1, $2, $3, $4, CURRENT_DATE + INTERVAL '1 month', $5)
                 """,
-                user_id, plan_type, websites_max, exports_max
+                user_id, plan_type, websites_max, exports_max, DEFAULT_JURISDICTION
             )
             logger.info(f"User limits initialized for user {user_id} with plan {plan_type}")
 

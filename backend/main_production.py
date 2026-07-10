@@ -401,6 +401,7 @@ async def init_db():
             'create_accessibility_document_fixes.sql',
             'create_accessibility_link_fixes.sql',
             'create_deep_cookie_scanner.sql',
+            'add_jurisdiction.sql',
         ]
         for filename in ensure_migrations:
             filepath = os.path.join(migrations_dir, filename)
