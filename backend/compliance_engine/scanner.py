@@ -959,20 +959,40 @@ class ComplianceScanner:
         produktiver Inhalt). Gibt (is_placeholder, art) zurück.
         """
         title = (soup.title.get_text() if soup.title else "").lower()
+        headings = " ".join(
+            h.get_text(" ", strip=True) for h in soup.find_all(["h1", "h2"])
+        ).lower()
         body_text = soup.get_text(" ", strip=True).lower()
+        link_count = len(soup.find_all("a", href=True))
+
+        # ⚠️ Wichtig gegen False Positives: Ein Signalwort ("maintenance",
+        # "baustelle", …) allein reicht NICHT. Solche Wörter kommen auf produktiven
+        # Seiten völlig legitim im Fließtext vor (z.B. Blog-Teaser "Predictive
+        # Maintenance" oder "…während das Team auf der Baustelle ist"). Eine echte
+        # Wartungs-/Baustellen-/Coming-Soon-Seite ist strukturell "dünn" (kaum Links,
+        # wenig Text) UND trägt das Signalwort prominent im Titel/H1/H2. Eine Seite
+        # mit voller Navigation, Footer und viel Inhalt wird daher NIE als Platzhalter
+        # gewertet, egal welches Wort irgendwo im Text auftaucht.
+        is_content_rich = link_count > 10 or len(body_text) > 2000
+        prominent = f"{title} {headings}"
 
         patterns = {
             "Wartungs": ["wartungsmodus", "wartungsarbeiten", "maintenance", "under maintenance", "kurzfristig nicht verfügbar"],
             "Baustellen": ["under construction", "im aufbau", "baustelle", "seite im aufbau", "website is being built"],
             "Coming-Soon": ["coming soon", "demnächst", "in kürze online", "launching soon", "bald verfügbar", "wir sind bald für sie da"],
         }
-        haystack = f"{title} {body_text}"
         for kind, kws in patterns.items():
-            if any(kw in haystack for kw in kws):
+            # Signalwort prominent (Titel/Überschrift) → bewusstes Placeholder-Signal,
+            # aber nur werten, wenn die Seite nicht produktiv-voll ist.
+            if not is_content_rich and any(kw in prominent for kw in kws):
+                return True, kind
+            # Signalwort nur im Fließtext → ausschließlich bei strukturell dünner Seite,
+            # sonst ist es fast immer regulärer Inhalt.
+            if len(body_text) < 600 and link_count <= 3 and any(kw in body_text for kw in kws):
                 return True, kind
 
         # Sehr wenig Inhalt + kaum Links → wahrscheinlich Platzhalter
-        if len(body_text) < 400 and len(soup.find_all("a", href=True)) <= 2:
+        if len(body_text) < 400 and link_count <= 2:
             return True, "Platzhalter"
         return False, ""
 

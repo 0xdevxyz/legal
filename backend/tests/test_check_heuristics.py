@@ -103,3 +103,30 @@ class TestPlaceholderDetection:
         soup = BeautifulSoup(f"<html><title>Firma GmbH</title>{body}</html>", "html.parser")
         is_ph, _ = ComplianceScanner._detect_placeholder(soup)
         assert is_ph is False
+
+    def test_content_rich_page_with_signal_word_in_body_not_placeholder(self):
+        # Regression loqal.io: live Seite (viele Links, viel Text), Signalwörter
+        # ("maintenance", "baustelle") kommen NUR im Fließtext/Blog-Teaser vor.
+        # Darf NICHT als Wartungs-/Baustellenseite gewertet werden.
+        body = (
+            "<body>"
+            + "<a href='/x'>Link</a>" * 30
+            + "<p>Predictive Maintenance: Wie KI Maschinenausfälle vorhersagt.</p>"
+            + "<p>Nimmt Anrufe an, während das Team auf der Baustelle ist.</p>"
+            + "<p>" + ("Produktiver Inhalt. " * 120) + "</p>"
+            + "</body>"
+        )
+        soup = BeautifulSoup(f"<html><title>Loqal – KI-Telefonassistent</title>{body}</html>", "html.parser")
+        is_ph, kind = ComplianceScanner._detect_placeholder(soup)
+        assert is_ph is False, f"Fälschlich als '{kind}' erkannt"
+
+    def test_maintenance_in_title_still_detected(self):
+        # Echte Wartungsseite: Signalwort prominent im Titel, kaum Inhalt.
+        soup = BeautifulSoup(
+            "<html><title>Wartungsarbeiten – wir sind bald zurück</title>"
+            "<body><h1>Maintenance</h1></body></html>",
+            "html.parser",
+        )
+        is_ph, kind = ComplianceScanner._detect_placeholder(soup)
+        assert is_ph is True
+        assert kind == "Wartungs"
