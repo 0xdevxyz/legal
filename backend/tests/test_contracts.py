@@ -16,7 +16,45 @@ import urllib.error
 from pathlib import Path
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8002")
-SNAPSHOT_PATH = Path(__file__).parent.parent.parent / "data" / "hardening-2026-05-25" / "contracts" / "openapi.snapshot.json"
+
+
+def _resolve_data_file(relative: str):
+    """Sucht eine Datei unterhalb des Repo-`data/`-Verzeichnisses.
+
+    Das Backend-Image enthält nur `backend/` — `data/` liegt eine Ebene darüber
+    im Repo und wird nicht mitkopiert. Der feste Pfad
+    `parent.parent.parent/data/...` löst im Container zu `/data/...` auf und
+    existiert dort nicht, während er im Repo-Checkout (so läuft CI) stimmt.
+
+    Reihenfolge: explizites COMPLYO_DATA_DIR, dann von __file__ aufwärts nach
+    einem `data/`-Verzeichnis suchen, das die Datei enthält.
+    """
+    env_dir = os.getenv("COMPLYO_DATA_DIR")
+    if env_dir:
+        candidate = Path(env_dir) / relative
+        if candidate.exists():
+            return candidate
+
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "data" / relative
+        if candidate.exists():
+            return candidate
+    return None
+
+
+SNAPSHOT_PATH = _resolve_data_file("hardening-2026-05-25/contracts/openapi.snapshot.json")
+
+# Bewusst skipif statt xfail oder Selbst-Erzeugung: Der Snapshot EXISTIERT im
+# Repo und ist die committete Referenz — ihn beim ersten Lauf neu zu schreiben
+# würde die Aussage des Tests (Breaking-Change-Erkennung) zerstören, weil der
+# aktuelle Stand dann per Definition immer "kompatibel" wäre. Fehlt die Datei,
+# fehlt nur die Umgebung (Image ohne repo-`data/`).
+_SNAPSHOT_MISSING_REASON = (
+    "Snapshot data/hardening-2026-05-25/contracts/openapi.snapshot.json nicht gefunden. "
+    "Im Repo-Checkout vorhanden; das Backend-Image enthält repo-`data/` nicht. "
+    "Per COMPLYO_DATA_DIR oder Mount des Repo-data-Verzeichnisses ausführbar machen."
+)
+pytestmark = pytest.mark.skipif(SNAPSHOT_PATH is None, reason=_SNAPSHOT_MISSING_REASON)
 
 
 def _fetch_live_schema():
@@ -28,7 +66,7 @@ def _fetch_live_schema():
 
 
 def _load_snapshot():
-    if not SNAPSHOT_PATH.exists():
+    if SNAPSHOT_PATH is None or not SNAPSHOT_PATH.exists():
         return None
     with open(SNAPSHOT_PATH) as f:
         return json.load(f)
@@ -52,7 +90,11 @@ def _collect_paths_and_methods(schema: dict) -> dict:
 
 class TestAPIContracts:
     def test_snapshot_exists(self):
-        assert SNAPSHOT_PATH.exists(), f"Snapshot not found at {SNAPSHOT_PATH}"
+        # Läuft nur, wenn repo-`data/` erreichbar ist (sonst modulweiter skip).
+        # Prüft dann, dass der Snapshot eine echte, nicht-leere Datei ist —
+        # nicht bloß ein leerer Platzhalter.
+        assert SNAPSHOT_PATH.is_file(), f"Snapshot not found at {SNAPSHOT_PATH}"
+        assert SNAPSHOT_PATH.stat().st_size > 0, f"Snapshot ist leer: {SNAPSHOT_PATH}"
 
     def test_snapshot_is_valid_json(self):
         snapshot = _load_snapshot()

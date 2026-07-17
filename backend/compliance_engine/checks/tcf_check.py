@@ -146,24 +146,30 @@ async def check_tcf_compliance(url: str, soup: BeautifulSoup, page_content: str 
         # Nur Issue erstellen wenn bereits ein CMP vorhanden ist (z.B. nicht-TCF)
         
         # Prüfe ob ein nicht-TCF CMP vorhanden ist
-        non_tcf_cmps = [
-            r'onetrust',  # OneTrust hat TCF-Support, aber nicht immer aktiviert
-            r'usercentrics',  # Usercentrics kann mit/ohne TCF laufen
-            r'cookiefirst',
-            r'osano',
-            r'complianz'
-        ]
-        
+        # Signatur -> Anzeigename. Die Signaturen müssen die real ausgelieferten
+        # Script-URLs treffen, nicht nur den Produktnamen: OneTrust lädt in der
+        # Praxis fast immer über cdn.cookielaw.org bzw. optanon-Bundles, der
+        # String "onetrust" kommt in der src dann gar nicht vor.
+        non_tcf_cmps = {
+            r'onetrust': 'OneTrust',   # OneTrust hat TCF-Support, aber nicht immer aktiviert
+            r'cookielaw': 'OneTrust',  # cdn.cookielaw.org = OneTrust-CDN
+            r'optanon': 'OneTrust',    # Optanon = OneTrust-Legacy-Bundle
+            r'usercentrics': 'Usercentrics',  # Usercentrics kann mit/ohne TCF laufen
+            r'cookiefirst': 'CookieFirst',
+            r'osano': 'Osano',
+            r'complianz': 'Complianz',
+        }
+
         has_non_tcf_cmp = False
         cmp_name = None
-        
+
         scripts = soup.find_all('script', src=True)
         for script in scripts:
             src = script.get('src', '').lower()
-            for cmp in non_tcf_cmps:
+            for cmp, display_name in non_tcf_cmps.items():
                 if cmp in src:
                     has_non_tcf_cmp = True
-                    cmp_name = cmp.title()
+                    cmp_name = display_name
                     break
             if has_non_tcf_cmp:
                 break

@@ -557,6 +557,10 @@ async def log_consent(
             "message": "Consent logged successfully"
         }
         
+    except HTTPException:
+        # Eigene HTTPExceptions (z.B. 429 Rate-Limit) unverändert durchreichen —
+        # sonst wandelt der Handler unten sie in ein 500 um.
+        raise
     except Exception as e:
         print(f"Error logging consent: {e}")
         raise HTTPException(status_code=500, detail="Failed to log consent")
@@ -3245,7 +3249,8 @@ async def import_config(
                 config.get('accent_color', '#9333ea'),
                 config.get('text_color', '#333333'),
                 config.get('bg_color', '#ffffff'),
-                config.get('services', []),
+                # services ist JSONB — der Pool hat keinen json-Codec, rohe Liste => DataError
+                json.dumps(config.get('services', [])),
                 json.dumps(config.get('texts', {})),
                 config.get('consent_mode_enabled', True),
                 json.dumps(config.get('consent_mode_default', {}))

@@ -29,10 +29,9 @@ router = APIRouter(prefix="/api/v2/websites", tags=["websites"])
 class WebsiteCreate(BaseModel):
     url: str
     score: int
-    jurisdiction: Optional[str] = None  # "de" | "eu" — None = Account-Default erben
-
-class WebsiteJurisdictionUpdate(BaseModel):
-    jurisdiction: Optional[str] = None  # None/"" = Override löschen (Account-Default erben)
+    # "de" | "eu" — Feld weggelassen = Wert unangetastet lassen (bzw. Account-Default
+    # erben beim Anlegen); explizit null/"" = Override löschen.
+    jurisdiction: Optional[str] = None
 
 class TrackedWebsite(BaseModel):
     id: Union[str, int, UUID]
@@ -111,7 +110,12 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
     try:
         user_id = user["id"]
 
-        # Jurisdiction validieren (None = Account-Default erben)
+        # Jurisdiction validieren.
+        # Drei Fälle unterscheiden:
+        #   - Feld nicht mitgesendet  -> jurisdiction_sent=False  -> Wert unangetastet lassen
+        #   - explizit null oder ""   -> jurisdiction_sent=True, site_jurisdiction=None -> Override löschen
+        #   - "de"/"eu"               -> jurisdiction_sent=True, site_jurisdiction=Wert  -> Override setzen
+        jurisdiction_sent = "jurisdiction" in data.model_fields_set
         site_jurisdiction = None
         if data.jurisdiction:
             if not is_supported_jurisdiction(data.jurisdiction):
@@ -130,19 +134,22 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
             """, user_id, data.url)
             
             if existing:
-                # Update existing website (Jurisdiction-Override nur setzen, wenn übergeben)
+                # Update existing website.
+                # $5 = "Feld wurde mitgesendet?" — nur dann wird jurisdiction überhaupt
+                # angefasst. So löscht ein Request ohne jurisdiction den Override NICHT,
+                # ein Request mit explizitem null löscht ihn dagegen sehr wohl.
                 website = await conn.fetchrow("""
                     UPDATE tracked_websites
-                    SET 
+                    SET
                         last_score = $1,
                         last_scan_date = $2,
                         scan_count = scan_count + 1,
-                        jurisdiction = COALESCE($4, jurisdiction)
+                        jurisdiction = CASE WHEN $5 THEN $4 ELSE jurisdiction END
                     WHERE id = $3
-                    RETURNING 
-                        id, url, last_score, last_scan_date, 
+                    RETURNING
+                        id, url, last_score, last_scan_date,
                         scan_count, is_primary, jurisdiction
-                """, data.score, datetime.utcnow(), existing["id"], site_jurisdiction)
+                """, data.score, datetime.utcnow(), existing["id"], site_jurisdiction, jurisdiction_sent)
             else:
                 # Check user limits
                 user_limits = await conn.fetchrow("""
@@ -165,16 +172,18 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                 is_primary = (website_count == 0)
                 
                 # Create new website
+                # jurisdiction mit anlegen — ein beim Anlegen mitgesendeter Override
+                # ging bisher verloren. NULL = kein Override (Account-Default gilt).
                 website = await conn.fetchrow("""
                     INSERT INTO tracked_websites (
-                        user_id, url, last_score, last_scan_date, 
-                        scan_count, is_primary
+                        user_id, url, last_score, last_scan_date,
+                        scan_count, is_primary, jurisdiction
                     )
-                    VALUES ($1, $2, $3, $4, 1, $5)
-                    RETURNING 
-                        id, url, last_score, last_scan_date, 
-                        scan_count, is_primary
-                """, user_id, data.url, data.score, datetime.utcnow(), is_primary)
+                    VALUES ($1, $2, $3, $4, 1, $5, $6)
+                    RETURNING
+                        id, url, last_score, last_scan_date,
+                        scan_count, is_primary, jurisdiction
+                """, user_id, data.url, data.score, datetime.utcnow(), is_primary, site_jurisdiction)
                 
                 # Update user_limits.websites_count
                 await conn.execute("""
@@ -304,6 +313,11 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                 except Exception as e:
                     logger.warning(f"Legal Text Generator init fehlgeschlagen: {e}")
             
+            # Account-Default für die Auflösung der effektiven Jurisdiction
+            account_jurisdiction = await conn.fetchval("""
+                SELECT jurisdiction FROM user_limits WHERE user_id = $1
+            """, user_id)
+
             return {
                 "success": True,
                 "website": {
@@ -312,7 +326,11 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                     "last_score": int(website["last_score"]) if website["last_score"] is not None else 0,
                     "last_scan_date": website["last_scan_date"].isoformat() if website["last_scan_date"] else None,
                     "scan_count": int(website.get("scan_count", 0)) if website.get("scan_count") is not None else 0,
-                    "is_primary": bool(website.get("is_primary", False))
+                    "is_primary": bool(website.get("is_primary", False)),
+                    "jurisdiction": website.get("jurisdiction"),
+                    "effective_jurisdiction": normalize_jurisdiction(
+                        website.get("jurisdiction") or account_jurisdiction
+                    ),
                 }
             }
             

@@ -76,6 +76,86 @@ class DocumentType(str, Enum):
     WITHDRAWAL = "withdrawal"  # Widerrufsbelehrung inkl. Muster-Widerrufsformular (B2C)
 
 
+# =============================================================================
+# SSOT: Rechtsbereich → betroffene Dokumenttypen
+# =============================================================================
+# Die Schlüssel sind exakt die Werte von legal_change_monitor.LegalArea.
+# Bewusst hier (und nicht im Monitor) angesiedelt, weil nur dieses Modul
+# DocumentType kennt und die Re-Generation ausführt — der Monitor liefert nur
+# den Rechtsbereich, die Übersetzung in Dokumenttypen ist Generator-Wissen.
+# Wird ein neuer LegalArea-Wert ergänzt, MUSS er hier eingetragen werden
+# (Wächter: tests/test_legal_area_mapping.py).
+LEGAL_AREA_TO_DOCUMENT_TYPES: Dict[str, List["DocumentType"]] = {
+    # DSGVO
+    "datenschutz": [DocumentType.PRIVACY, DocumentType.COOKIE_POLICY],
+    # TTDSG / ePrivacy
+    "cookie_compliance": [DocumentType.PRIVACY, DocumentType.COOKIE_POLICY],
+    # Impressumspflicht (DDG/TMG)
+    "impressum": [DocumentType.IMPRINT],
+    # BFSG — Barrierefreiheitserklärung wird derzeit im Impressum getragen
+    "barrierefreiheit": [DocumentType.IMPRINT],
+    # UWG
+    "wettbewerbsrecht": [DocumentType.TOS],
+    # Verbraucherrecht / Widerrufsrecht / AGB-Recht
+    "verbraucherschutz": [DocumentType.TOS, DocumentType.WITHDRAWAL],
+    # AI Act erzeugt keinen der generierten Rechtstexte (eigener Doc-Generator)
+    "ai_act": [],
+}
+
+# Aliasse: Gesetzesname → Rechtsbereich. Erlaubt, dass eine Änderung auch dann
+# aufgelöst wird, wenn sie über den Gesetzesnamen statt über den LegalArea-Wert
+# hereinkommt. Zielt bewusst NUR auf die SSOT oben, dupliziert sie nicht.
+LAW_NAME_TO_LEGAL_AREA: Dict[str, str] = {
+    "dsgvo": "datenschutz",
+    "bdsg": "datenschutz",
+    "ttdsg": "cookie_compliance",
+    "eprivacy": "cookie_compliance",
+    "impressumspflicht": "impressum",
+    "ddg": "impressum",
+    "tmg": "impressum",
+    "bfsg": "barrierefreiheit",
+    "uwg": "wettbewerbsrecht",
+    "agb-recht": "verbraucherschutz",
+    "widerrufsrecht": "verbraucherschutz",
+    "verbraucherrecht": "verbraucherschutz",
+    "ai act": "ai_act",
+    "ki-verordnung": "ai_act",
+}
+
+
+def resolve_document_types(affected_areas: List[str]) -> List["DocumentType"]:
+    """
+    Löst Rechtsbereiche (LegalArea-Werte) bzw. Gesetzesnamen in Dokumenttypen auf.
+
+    Unbekannte Einträge werden geloggt und ignoriert — sie dürfen die
+    Re-Generation der übrigen Bereiche nicht verhindern.
+    """
+    doc_types: List[DocumentType] = []
+    for raw in affected_areas or []:
+        key = str(raw).strip().lower()
+        types = LEGAL_AREA_TO_DOCUMENT_TYPES.get(key)
+        if types is None:
+            # Gesetzesname? -> über Alias auf den Rechtsbereich abbilden
+            area = LAW_NAME_TO_LEGAL_AREA.get(key)
+            if area is None:
+                # Teiltreffer, z.B. "DSGVO-Novelle 2026"
+                for law_name, mapped_area in LAW_NAME_TO_LEGAL_AREA.items():
+                    if law_name in key:
+                        area = mapped_area
+                        break
+            if area is None:
+                logger.warning(
+                    f"resolve_document_types: Unbekannter Rechtsbereich '{raw}' — "
+                    f"kein Mapping in LEGAL_AREA_TO_DOCUMENT_TYPES/LAW_NAME_TO_LEGAL_AREA"
+                )
+                continue
+            types = LEGAL_AREA_TO_DOCUMENT_TYPES.get(area, [])
+        for t in types:
+            if t not in doc_types:
+                doc_types.append(t)
+    return doc_types
+
+
 @dataclass
 class GeneratedDocument:
     document_id: Optional[int]
@@ -383,7 +463,7 @@ class LegalTextGenerator:
 
     async def regenerate_affected_users(
         self,
-        affected_laws: List[str],
+        affected_areas: List[str],
         legal_update_id: str,
         severity: str = "medium",
     ) -> Dict[str, Any]:
@@ -397,24 +477,11 @@ class LegalTextGenerator:
             logger.info(f"Re-Generation übersprungen: severity={severity} < medium")
             return {"skipped": True, "reason": f"severity {severity} < medium"}
 
-        doc_type_map = {
-            "Impressumspflicht": [DocumentType.IMPRINT],
-            "DSGVO": [DocumentType.PRIVACY, DocumentType.COOKIE_POLICY],
-            "TTDSG": [DocumentType.PRIVACY, DocumentType.COOKIE_POLICY],
-            "AGB-Recht": [DocumentType.TOS, DocumentType.WITHDRAWAL],
-            "UWG": [DocumentType.TOS],
-            "Widerrufsrecht": [DocumentType.WITHDRAWAL],
-            "Verbraucherrecht": [DocumentType.WITHDRAWAL],
-            "BFSG": [DocumentType.IMPRINT],
-        }
-        affected_doc_types = set()
-        for law in affected_laws:
-            for key, types in doc_type_map.items():
-                if key.lower() in law.lower():
-                    affected_doc_types.update(types)
+        # Auflösung über die SSOT (LEGAL_AREA_TO_DOCUMENT_TYPES)
+        affected_doc_types = set(resolve_document_types(affected_areas))
 
         if not affected_doc_types:
-            logger.info(f"Keine betroffenen Dokumenttypen für laws={affected_laws}")
+            logger.info(f"Keine betroffenen Dokumenttypen für areas={affected_areas}")
             return {"skipped": True, "reason": "no affected document types"}
 
         async with self.db_pool.acquire() as conn:

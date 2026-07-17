@@ -280,10 +280,13 @@ async def test_admin_approve_fix():
     """
     from admin_routes import approve_fix
 
+    # approve_fix bekommt die Connection per Depends(get_db) injiziert; im
+    # Direktaufruf wird sie schlicht als Argument übergeben. Das frühere
+    # patch("admin_routes.get_db_pool") stammt aus der Zeit vor der Umstellung
+    # auf Dependency Injection — das Attribut existiert nicht mehr.
     pool, conn = make_db_pool(fetchval=99)
 
-    with patch("admin_routes.get_db_pool", return_value=pool):
-        result = await approve_fix(fix_id=99, admin=True, db=conn)
+    result = await approve_fix(fix_id=99, admin=True, db=conn)
 
     assert result["success"] is True
     assert result["new_status"] == "validated"

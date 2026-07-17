@@ -9,9 +9,10 @@ Covers AUDIT-05 verification criteria:
 - Security: Jinja2 autoescape prevents XSS
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
+import pytest
 import sys
 import os
 
@@ -20,6 +21,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 import accessibility_fix_routes
 from accessibility_fix_routes import accessibility_fix_router
+from dependencies import get_current_user
 
 
 # =============================================================================
@@ -69,22 +71,61 @@ def mock_user():
     }
 
 
+# =============================================================================
+# Fixtures
+# =============================================================================
+
+
+@pytest.fixture(autouse=True)
+def disable_rate_limit():
+    """Deaktiviert das Redis-Rate-Limit (5/60s) für alle Tests dieser Datei.
+
+    Die Route hängt an `Depends(rate_limit("a11y_statement", 5, 60))`. Das Limit
+    zählt in einem echten Redis pro Client-IP — im TestClient ist die IP für ALLE
+    Tests identisch ("testclient"), das Sliding Window (60s) überlebt also
+    Testgrenzen. Ab dem 6. Request im Gesamtlauf antwortete die Route mit 429,
+    bevor Auth-/Payload-Logik überhaupt lief.
+
+    `rate_limit._check` ist fail-open: ohne Redis wird das Limit nicht
+    durchgesetzt. Wir patchen daher `dependencies.get_redis` auf None — das
+    Limit ist damit pro Test deterministisch aus, ohne die eigentlichen
+    Aussagen der Tests (Auth, Response-Shape, Escaping) zu berühren.
+    Das Rate-Limit selbst ist nicht Gegenstand dieser Datei.
+    """
+    with patch("dependencies.get_redis", AsyncMock(return_value=None)):
+        yield
+
+
 def auth_headers():
     return {"Authorization": "Bearer fake-jwt-token"}
 
 
-def make_app():
+def make_app(user=None):
+    """Baut die Test-App.
+
+    Ohne `user` bleibt die echte Auth-Dependency aktiv (für den Auth-Test).
+    Mit `user` wird `get_current_user` per dependency_overrides ersetzt.
+    """
     app = FastAPI()
     app.include_router(accessibility_fix_router)
+    if user is not None:
+        app.dependency_overrides[get_current_user] = lambda: user
     return TestClient(app)
 
 
 def setup_mocks(monkeypatch, db_row=None, user=None):
-    """Configure mocks for auth_service, db_pool, and require_accessibility_module."""
-    # Mock auth_service so get_current_user accepts the fake Bearer token
-    mock_auth = MagicMock()
-    mock_auth.verify_token = MagicMock(return_value=user or mock_user())
-    monkeypatch.setattr(accessibility_fix_routes, "auth_service", mock_auth)
+    """Konfiguriert db_pool + Modul-Gate und liefert den Test-User zurück.
+
+    Auth wird NICHT mehr hier gemockt: Die Route hängt seit der Auth-Härtung an
+    der kanonischen Dependency `dependencies.get_current_user` (JWT-Decode +
+    DB-Lookup) und nutzt das modul-lokale `accessibility_fix_routes.auth_service`
+    nicht mehr. Der alte `auth_service.verify_token`-Mock lief deshalb ins Leere
+    (→ 401); sichtbar wurde das erst, nachdem das Rate-Limit-429 weg war.
+    Der zurückgegebene User geht an `make_app()` und wird dort per
+    dependency_overrides injiziert — der eigentliche Auth-Test bleibt davon
+    unberührt und prüft weiter gegen die echte Dependency.
+    """
+    resolved_user = user or mock_user()
 
     # Mock db_pool with a connection whose fetchrow returns db_row
     mock_conn = AsyncMock()
@@ -98,6 +139,8 @@ def setup_mocks(monkeypatch, db_row=None, user=None):
     async def _noop(user):
         return None
     monkeypatch.setattr(accessibility_fix_routes, "require_accessibility_module", _noop)
+
+    return resolved_user
 
 
 # =============================================================================
@@ -115,8 +158,8 @@ def test_generate_statement_requires_auth():
 
 def test_generate_statement_returns_correct_shape(monkeypatch):
     """Valid request returns JSON with keys 'html', 'markdown', 'filename'."""
-    setup_mocks(monkeypatch, db_row=SAMPLE_ROW_NO_ISSUES)
-    client = make_app()
+    user = setup_mocks(monkeypatch, db_row=SAMPLE_ROW_NO_ISSUES)
+    client = make_app(user)
     response = client.post(
         "/api/v2/accessibility/generate-statement",
         json=VALID_PAYLOAD,
@@ -136,8 +179,8 @@ def test_generate_statement_returns_correct_shape(monkeypatch):
 
 def test_generate_statement_no_scan_fallback(monkeypatch):
     """When fetchrow returns None (no scan data), response html must contain 'Nicht bewertet'."""
-    setup_mocks(monkeypatch, db_row=None)
-    client = make_app()
+    user = setup_mocks(monkeypatch, db_row=None)
+    client = make_app(user)
     response = client.post(
         "/api/v2/accessibility/generate-statement",
         json=VALID_PAYLOAD,
@@ -151,9 +194,20 @@ def test_generate_statement_no_scan_fallback(monkeypatch):
 
 
 def test_generate_statement_uses_scan_data_zero_issues(monkeypatch):
-    """When total_issues == 0, html must contain 'vollständig konform mit WCAG 2.1 Level AA'."""
-    setup_mocks(monkeypatch, db_row=SAMPLE_ROW_NO_ISSUES)
-    client = make_app()
+    """Bei total_issues == 0 werden die Scan-Daten genutzt — aber OHNE Konformitätsversprechen.
+
+    Der Test erwartete früher 'vollständig konform mit WCAG 2.1 Level AA'. Die
+    Route formuliert bewusst anders: Ein automatisierter Scan deckt nur einen
+    Teil der WCAG-Kriterien ab und darf deshalb keine vollständige Konformität
+    bescheinigen — eine solche Aussage wäre in einer BFSG-Erklärung eine
+    Falschangabe. Das Produkt hat recht, die alte Erwartung war überholt.
+
+    Geprüft wird daher der eigentliche Kern von SC2: Scan-Daten (0 Issues)
+    werden verwendet (Abgrenzung zum 'Nicht bewertet'-Fallback), und es wird
+    KEINE vollständige Konformität behauptet.
+    """
+    user = setup_mocks(monkeypatch, db_row=SAMPLE_ROW_NO_ISSUES)
+    client = make_app(user)
     response = client.post(
         "/api/v2/accessibility/generate-statement",
         json=VALID_PAYLOAD,
@@ -161,15 +215,21 @@ def test_generate_statement_uses_scan_data_zero_issues(monkeypatch):
     )
     assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
     html = response.json()["html"]
-    assert "vollständig konform mit WCAG 2.1 Level AA" in html, (
-        "When total_issues == 0, html must contain 'vollständig konform mit WCAG 2.1 Level AA'"
+    assert "keine Abweichungen von WCAG 2.1 Level AA" in html, (
+        "Bei total_issues == 0 muss das Ergebnis des Scans ausgewiesen werden"
+    )
+    assert "Nicht bewertet" not in html, (
+        "Mit vorhandenen Scan-Daten darf NICHT der 'Nicht bewertet'-Fallback greifen"
+    )
+    assert "vollständig konform" not in html, (
+        "Ein automatisierter Scan darf keine vollständige WCAG-Konformität bescheinigen"
     )
 
 
 def test_generate_statement_uses_scan_data_with_issues(monkeypatch):
     """When total_issues > 0, html must contain 'teilweise konform' AND issue descriptions."""
-    setup_mocks(monkeypatch, db_row=SAMPLE_ROW_WITH_ISSUES)
-    client = make_app()
+    user = setup_mocks(monkeypatch, db_row=SAMPLE_ROW_WITH_ISSUES)
+    client = make_app(user)
     response = client.post(
         "/api/v2/accessibility/generate-statement",
         json=VALID_PAYLOAD,
@@ -191,8 +251,8 @@ def test_generate_statement_uses_scan_data_with_issues(monkeypatch):
 
 def test_statement_contains_bfsg_required_fields(monkeypatch):
     """Generated html must contain all 6 BFSG required section markers."""
-    setup_mocks(monkeypatch, db_row=SAMPLE_ROW_NO_ISSUES)
-    client = make_app()
+    user = setup_mocks(monkeypatch, db_row=SAMPLE_ROW_NO_ISSUES)
+    client = make_app(user)
     response = client.post(
         "/api/v2/accessibility/generate-statement",
         json=VALID_PAYLOAD,
@@ -220,8 +280,8 @@ def test_statement_contains_bfsg_required_fields(monkeypatch):
 
 def test_statement_contains_bmas_url(monkeypatch):
     """Generated html must contain the BMAS Schlichtungsstelle URL."""
-    setup_mocks(monkeypatch, db_row=SAMPLE_ROW_NO_ISSUES)
-    client = make_app()
+    user = setup_mocks(monkeypatch, db_row=SAMPLE_ROW_NO_ISSUES)
+    client = make_app(user)
     response = client.post(
         "/api/v2/accessibility/generate-statement",
         json=VALID_PAYLOAD,
@@ -236,8 +296,8 @@ def test_statement_contains_bmas_url(monkeypatch):
 
 def test_generate_statement_escapes_html(monkeypatch):
     """XSS vector in contact_email must be escaped — literal '<script>' must NOT appear in html."""
-    setup_mocks(monkeypatch, db_row=None)
-    client = make_app()
+    user = setup_mocks(monkeypatch, db_row=None)
+    client = make_app(user)
     xss_payload = dict(VALID_PAYLOAD)
     xss_payload["contact_email"] = "evil<script>alert(1)</script>@x.de"
     response = client.post(

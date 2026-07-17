@@ -170,9 +170,10 @@ class LegalChangeMonitor:
         try:
             from legal_text_generator import get_legal_text_generator
             generator = get_legal_text_generator(self.db_pool)
-            affected_laws = [area.value for area in change.affected_areas]
+            # LegalArea-Werte werden im Generator via LEGAL_AREA_TO_DOCUMENT_TYPES aufgelöst
+            affected_areas = [area.value for area in change.affected_areas]
             result = await generator.regenerate_affected_users(
-                affected_laws=affected_laws,
+                affected_areas=affected_areas,
                 legal_update_id=str(legal_update_id),
                 severity=change.severity.value,
             )

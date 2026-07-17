@@ -120,7 +120,11 @@ async def apply_fix(
     """
     try:
         user_id = current_user.get('id')
-        user_plan = current_user.get('plan', 'ai')
+        # get_current_user liefert 'plan_type' (aus user_limits), NICHT 'plan'.
+        # ACHTUNG: Die Allowlist unten ('managed'/'premium') entspricht keinem real
+        # vergebenen plan_type (real: free/ki/agency) — das Gate sperrt damit alle.
+        # Bewusst nicht geraten; siehe Bericht.
+        user_plan = current_user.get('plan_type', 'free')
         
         logger.info(f"🚀 Apply fix request: {apply_request.fix_id} via {apply_request.deployment_method}")
         
@@ -314,7 +318,7 @@ async def preview_fix_on_staging(
     """
     try:
         user_id = current_user.get('id')
-        user_plan = current_user.get('plan', 'ai')
+        user_plan = current_user.get('plan_type', 'free')
         
         # Premium-Check
         if user_plan not in ['managed', 'premium']:
