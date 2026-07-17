@@ -19,10 +19,14 @@ BRANCH=$(git branch --show-current)
 STAMP=$(date +%Y-%m-%d)
 
 # --- Feature-Stand: Tabellenzeilen aus der Registry übernehmen ---------------
+# Tabellenzeilen erkennen: 5 Spalten, keine Kopf-/Trennzeile. Fett-Markup (**) wird entfernt,
+# damit auch hervorgehobene Feature-Namen erfasst werden.
 features=$(awk -F'|' '
-  /^\| *\[?[A-ZÄÖÜ]/ && !/^\| *Feature *\|/ && !/^\|---/ {
+  /^\|/ && NF >= 5 && !/^\| *Feature *\|/ && !/^\|[ :-]*-[ :-]*\|/ {
     name=$2; doc=$3; status=$4; stand=$5
+    gsub(/\*\*/, "", name); gsub(/\*\*/, "", status)
     gsub(/^ +| +$/, "", name); gsub(/^ +| +$/, "", status); gsub(/^ +| +$/, "", stand)
+    if (name == "" || doc !~ /\(/) next
     if (match(doc, /\(([^)]+)\)/)) { f=substr(doc, RSTART+1, RLENGTH-2) } else { f="" }
     printf "| %s | %s | %s | `data/features/%s` |\n", name, status, stand, f
   }' data/features/00_FEATURES_INDEX.md)
