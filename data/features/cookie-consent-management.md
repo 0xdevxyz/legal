@@ -123,11 +123,27 @@ hier doppeln); Playwright-Scan → [[deep-cookie-scanner]]; Agentur-Block → [[
   `cookie_custom_services`, `geo_ip_cache`.
 - PG-Funktion `delete_expired_consents()`.
 
+## Auth-Modell (seit 2026-07-17)
+Zuvor hatten **28 von 46 Routen** keine Auth-Prüfung — u. a. lieferte `GET /consents/{site_id}`
+personenbezogene Consent-Protokolle ohne Token aus (live 200 verifiziert) und `POST /import`
+überschrieb fremde Banner-Configs. Behoben:
+
+- **`require_site_access(site_id, credentials)`** (Z. ~206) — Auth + Modul + **Ownership** gegen
+  `get_user_site_ids()` (agenturfähig, mehrere Sites pro Account). Wirft 403 bei fremder
+  `site_id`; **kein** stiller Fallback auf die eigene Site wie in `save_banner_config`, und eine
+  leere Site-Menge gilt als „darf nichts" statt „darf alles".
+- Geschützt: `consents/{site_id}` (+`/export`, das zuvor zwar Auth, aber **keine** Ownership
+  prüfte → IDOR), `stats/`, `export/`, `revisions/`, `bannerless/`, `age-verification/`,
+  `geo-restriction/`, `forwarding/`, `tcf/config`, `monitor/check/`, `import`, `consent-mode-config`.
+- `DELETE /consents/expired` löscht site-übergreifend → **`require_admin`** (`dependencies.py:292`).
+- **Bewusst öffentlich** (Widget/Besucher, belegt durch `backend/widgets/*.js`):
+  `GET /config/{site_id}`, `POST /consent`, `POST /revoke` (Widerrufsrecht des Besuchers),
+  `GET /reconsent-check/{site_id}`, `GET /geo-check`, `GET /services[/{key}]`,
+  `GET /policy/{site_id}`, `GET /tcf/vendors`, `GET /health`, `GET /scan/capabilities`.
+- Abgesichert durch `backend/tests/test_cookie_consent_auth.py` — der statische Wächter schlägt an,
+  sobald eine neue Route ohne Auth hinzukommt, die nicht in der Allowlist steht.
+
 ## Bekannte Lücken / Offen
-- **Fehlende Auth auf Datenpfaden:** `GET /consents/{site_id}` liefert die Consent-Protokolle
-  jeder Site **ohne Login** (live 200); `DELETE /consents/expired`, `POST /consent-mode-config`,
-  `POST /age-verification`, `POST /geo-restriction`, `POST /forwarding`, `POST /import` schreiben
-  bzw. löschen **ohne Auth und ohne Site-Ownership-Prüfung** (nur `site_id` im Body). Höchste Priorität.
 - **Fünf Endpunktgruppen live defekt (500)** wegen fehlender Spalten/Tabellen — verifiziert gegen
   `api.complyo.de`: `revisions/`, `reconsent-check/`, `bannerless/`, `age-verification/`,
   `geo-restriction/`, `forwarding/`; `geo-check` fällt still auf `country_code: "EU"` zurück
@@ -143,11 +159,14 @@ hier doppeln); Playwright-Scan → [[deep-cookie-scanner]]; Agentur-Block → [[
 - **Fehler-Detail-Leaks:** die Zusatzmodul-Routen nutzen durchgehend `detail=str(e)` (entgegen
   Punkt 1.3 des Launch-Plans, der nur die Kernrouten erfasst hat).
 - **`POST /consent`:** das `except Exception` (Z. 529) fängt auch die eigene `HTTPException(429)`
-  → Rate-Limit-Überschreitung meldet dem Widget 500 statt 429.
+  → Rate-Limit-Überschreitung meldet dem Widget 500 statt 429. Dasselbe Muster war in den
+  Zusatzmodul-Routen; dort ist seit dem Auth-Fix ein `except HTTPException: raise` vorgeschaltet
+  (sonst wäre aus jedem 403 ein 500 geworden — und die bestehenden `400 site_id required`
+  wurden zuvor ebenfalls verschluckt). `POST /consent` selbst ist **noch offen**.
 - **Stilles Auth-Schlucken** (`planning/STRUKTUR_FIXES_LAUNCH_PLAN.md` 1.2, dort als erledigt
   markiert): `get_current_user_optional` (Z. 61) gibt bei ungültigem/blacklisted Token weiterhin
   `None` zurück. Für die optionale Variante ist das gewollt; geschützte Routen nutzen
-  `get_current_user_required` (401). Der eigentliche Rest-Befund sind die auth-losen Routen oben.
+  `get_current_user_required` (401).
 - **God-File:** 3660 LOC, in `planning/STRUKTUR_FIXES_LAUNCH_PLAN.md` Phase 6 (nach Launch) zum
   Aufteilen in Router/Service/Repository markiert.
 - **Migration nicht in `ensure_migrations`:** `create_cookie_compliance_tables.sql` und
