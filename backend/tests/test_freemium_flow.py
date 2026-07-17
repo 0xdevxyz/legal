@@ -11,6 +11,13 @@ Testet die User Journey:
 6. Neue Domain "example.com" → Neue Subscription erforderlich
 """
 
+import pytest
+
+pytest.skip(
+    "Manuelles Test-Szenario (schreibt in die DB) — bewusst nicht in der CI-Suite",
+    allow_module_level=True,
+)
+
 import asyncio
 import asyncpg
 import os

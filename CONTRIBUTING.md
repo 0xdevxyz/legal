@@ -75,6 +75,18 @@ docs: Dokumentation
 test: Tests
 ```
 
+## Datenbank-Migrationen (Pflicht seit 2026-07)
+
+Einzige Quelle der Wahrheit ist **Alembic** (`backend/alembic/`). Baseline ist
+`baseline_2026_07` (eingefrorenes Prod-Schema in `alembic/baseline_schema.sql`).
+
+- Jede Schema-Änderung als neue Alembic-Revision: `cd backend && alembic revision -m "..."`,
+  dann `alembic upgrade head` (läuft mit `DATABASE_URL` aus der Umgebung).
+- **Keine losen `.sql`-Dateien mehr** — der Altbestand liegt read-only unter
+  `backend/_archive_pre_baseline/` und `backend/migrations/_archive_pre_baseline/`.
+- Der alte Startup-SQL-Applier in `main_production.py` ist seit der Archivierung
+  ein No-Op und wird in Phase 6 entfernt.
+
 ## Code-Standards
 
 - **Python**: PEP 8, Type Hints, keine hardcodierten Credentials
