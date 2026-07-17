@@ -31,11 +31,11 @@ Kleine, isolierte Fixes mit dem höchsten Risiko-Nutzen-Verhältnis. Jeder Punkt
 Befund: 13 eigenständige `get_current_user`-Implementierungen mit abweichender ID-Semantik
 (`id` vs. `user_id`, `int` vs. `str`) trotz kanonischer Dependency in `backend/dependencies.py:144`.
 
-- [ ] **2.1 Inventur**: `grep -rn "def get_current_user" backend/*.py` → Liste aller 13 Stellen.
-- [ ] **2.2** Alle Router auf `from dependencies import get_current_user` umstellen; lokale
+- [x] **2.1 Inventur**: `grep -rn "def get_current_user" backend/*.py` → Liste aller 13 Stellen.
+- [x] **2.2** Alle Router auf `from dependencies import get_current_user` umstellen; lokale
   Kopien löschen. Rückgabe-Shape der kanonischen Dependency dokumentieren (welche Keys, welche Typen).
-- [ ] **2.3** ID-Zugriffe vereinheitlichen (ein Key, ein Typ) — Suchen: `.get('user_id')` vs `.get('id')`.
-- [ ] **2.4 Abnahme**: kompletter Test-Lauf + Smoke aller Hauptflows (Login, Dashboard,
+- [x] **2.3** ID-Zugriffe vereinheitlichen (ein Key, ein Typ) — Suchen: `.get('user_id')` vs `.get('id')`.
+- [x] **2.4 Abnahme**: kompletter Test-Lauf + Smoke aller Hauptflows (Login, Dashboard,
   Cookie-Config, Deep-Scan, Rechtstexte, Billing). Ein Fehler hier = Auth-Bypass-Risiko,
   daher Router-für-Router committen, nicht als Big Bang.
 
@@ -44,6 +44,10 @@ Befund: 13 eigenständige `get_current_user`-Implementierungen mit abweichender 
 Befund: Alembic (2 Versionen) parallel zu 46 losen SQL-Dateien in `backend/migrations/`
 plus Ad-hoc-Skripten → kein reproduzierbarer Schema-Stand. **Blocker für die Server-Migration
 (Phase 5), daher vor dieser abschließen.**
+
+**Neue Befunde für Phase 3 (aus Phase-2-Smoke):** Tabellen `domain_locks` und
+`ai_scheduled_scans` fehlen in der Prod-DB (500er in user_routes / Worker-Fehler
+im Log) — bei der Baseline mit anlegen oder die Features entfernen.
 
 - [ ] **3.1 Baseline ziehen**: Live-Schema dumpen (`pg_dump --schema-only`) und als neue
   Alembic-Revision „baseline_2026_07" einfrieren. Alembic `stamp head` auf Prod.
