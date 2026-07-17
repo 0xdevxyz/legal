@@ -3,13 +3,14 @@ GDPR API Endpoints for Data Rights Management
 Implements GDPR Articles 17 (Right to Erasure) and 20 (Data Portability)
 """
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
-from pydantic import BaseModel, EmailStr
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, Depends
+from pydantic import BaseModel
 from typing import Optional
 import logging
 import os
 from gdpr_retention_service import gdpr_service
 from email_service import email_service
+from dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +25,41 @@ def _verify_admin(admin_api_key: str) -> None:
     if admin_api_key != _ADMIN_API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized admin access")
 
+
+async def get_verified_email(current_user: dict = Depends(get_current_user)) -> str:
+    """Liefert die E-Mail des Betroffenen AUSSCHLIESSLICH aus dem JWT.
+
+    Verhindert IDOR (Muster: legal_text_routes.get_current_user_id): Bis 2026-07-17
+    identifizierten /request-deletion, /export-data und /retention-info den
+    Betroffenen allein über eine frei wählbare E-Mail im Request-Body bzw. in der
+    Query. Damit konnte jeder Anonyme die Daten beliebiger Dritter exportieren
+    ODER löschen lassen — Art. 17/20 DSGVO als Waffe gegen den Betroffenen.
+
+    Bewusste Entscheidung gegen einen "Besucher-Pfad": Ein Betroffenenrecht darf
+    erst nach Identitätsnachweis (Art. 12 Abs. 6 DSGVO) erfüllt werden. Einen
+    verifizierten Token-Flow für Nicht-Kunden gibt es hier nicht, und die
+    Zieltabelle `leads` existiert im Schema gar nicht mehr
+    (siehe backend/alembic/baseline_schema.sql). Nicht-Kunden nutzen daher den
+    manuellen Weg, den GET /privacy-policy ohnehin ausweist:
+    datenschutz@complyo.de. Die Landing-Seite landing-react/src/app/gdpr/page.tsx
+    muss entsprechend auf Login bzw. den E-Mail-Weg umgestellt werden.
+    """
+    email = current_user.get("email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Nicht authentifiziert")
+    return str(email)
+
+
 class DataDeletionRequest(BaseModel):
-    email: EmailStr
+    # Kein `email`-Feld mehr: Der Betroffene ergibt sich aus dem Token, nicht aus
+    # dem Body. Ein mitgesendetes Feld würde nur zur Wiedereinführung der Lücke
+    # einladen.
     reason: Optional[str] = "user_request"
     confirmation: bool = True
 
 class DataExportRequest(BaseModel):
-    email: EmailStr
+    # Absichtlich leer — die E-Mail kommt aus dem JWT (siehe get_verified_email).
+    pass
 
 class RetentionUpdateRequest(BaseModel):
     lead_id: str
@@ -39,39 +68,42 @@ class RetentionUpdateRequest(BaseModel):
 @gdpr_router.post("/request-deletion")
 async def request_data_deletion(
     request: DataDeletionRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    email: str = Depends(get_verified_email),
 ):
     """
     Handle user request for data deletion (GDPR Article 17 - Right to Erasure)
+
+    Betroffener = Token-Inhaber. Siehe get_verified_email.
     """
     try:
         if not request.confirmation:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="Data deletion requires explicit confirmation"
             )
-        
-        logger.info(f"Processing data deletion request for {request.email}")
-        
+
+        logger.info(f"Processing data deletion request for {email}")
+
         # Process the deletion request
         result = await gdpr_service.request_data_deletion(
-            request.email, 
+            email,
             request.reason
         )
-        
+
         if result["success"]:
             # Send confirmation email in background
             background_tasks.add_task(
                 email_service.send_deletion_confirmation_email,
-                request.email,
+                email,
                 result.get("reference_id", "unknown")
             )
-            
+
             return {
                 "success": True,
                 "message": "Your data deletion request has been processed successfully",
                 "details": {
-                    "email": request.email,
+                    "email": email,
                     "deletion_date": result.get("deletion_date"),
                     "reference_id": result.get("reference_id"),
                     "gdpr_article": "Article 17 - Right to erasure ('right to be forgotten')"
@@ -81,9 +113,12 @@ async def request_data_deletion(
             return {
                 "success": False,
                 "message": result["message"],
-                "email": request.email
+                "email": email
             }
-            
+
+    # HTTPException (401/403/400) muss durch — sonst wird daraus unten eine 500.
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error processing deletion request: {e}")
         raise HTTPException(
@@ -94,17 +129,20 @@ async def request_data_deletion(
 @gdpr_router.post("/export-data")
 async def export_personal_data(
     request: DataExportRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    email: str = Depends(get_verified_email),
 ):
     """
     Export all personal data for a user (GDPR Article 20 - Data Portability)
+
+    Betroffener = Token-Inhaber. Siehe get_verified_email.
     """
     try:
-        logger.info(f"Processing data export request for {request.email}")
-        
+        logger.info(f"Processing data export request for {email}")
+
         # Get all data for the user
-        export_data = await gdpr_service.get_data_for_export(request.email)
-        
+        export_data = await gdpr_service.get_data_for_export(email)
+
         if export_data is None:
             raise HTTPException(
                 status_code=404,
@@ -114,15 +152,15 @@ async def export_personal_data(
         # Send export data via email in background
         background_tasks.add_task(
             email_service.send_data_export_email,
-            request.email,
+            email,
             export_data
         )
-        
+
         return {
             "success": True,
             "message": "Your data export has been generated and will be sent to your email address",
             "details": {
-                "email": request.email,
+                "email": email,
                 "export_generated_at": export_data["gdpr_data"]["export_generated_at"],
                 "data_categories": list(export_data.keys()),
                 "gdpr_article": "Article 20 - Right to data portability"
@@ -140,10 +178,13 @@ async def export_personal_data(
 
 @gdpr_router.get("/retention-info")
 async def get_retention_information(
-    email: EmailStr = Query(..., description="Email address to check retention info")
+    email: str = Depends(get_verified_email),
 ):
     """
-    Get data retention information for a specific email
+    Get data retention information for the authenticated data subject.
+
+    Der frühere Query-Parameter `email` war ein Auskunfts-Orakel über beliebige
+    Dritte (Existenz, Anlagedatum, Rechtsgrundlage). Jetzt aus dem Token.
     """
     try:
         from database_service import db_service

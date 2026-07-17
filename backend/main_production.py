@@ -278,15 +278,48 @@ async def public_widget_cors(request: Request, call_next):
 
     return response
 
-# MCP Auth-Middleware: Bearer-Token auf /mcp-Endpunkten erzwingen
+# MCP Auth-Middleware: echtes JWT auf /mcp-Endpunkten erzwingen
+#
+# Vorher wurde NUR geprüft, ob der Header mit "Bearer " beginnt — jeder beliebige
+# String ("Bearer fake") öffnete den SSE-Stream und lieferte via tools/list die
+# vollständigen Schemata der gesamten API inkl. der ungeschützten Endpunkte.
+# Jetzt wird derselbe Verifikationspfad wie im übrigen Backend benutzt
+# (dependencies.get_current_user: Signatur, Ablauf, aud/iss, JTI-Blacklist,
+# User existiert und ist aktiv). Kein eigener jwt.decode hier.
+#
+# Der Pfad-Präfix "/mcp" trifft ausschliesslich den fastapi-mcp-Mount
+# (siehe mcp_server.setup_mcp); es gibt keine weiteren /mcp*-Routen.
 @app.middleware("http")
 async def mcp_auth_middleware(request: Request, call_next):
     if request.url.path.startswith("/mcp"):
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
+        from fastapi.security import HTTPAuthorizationCredentials
+        from dependencies import get_current_user as _mcp_get_current_user, get_settings as _mcp_get_settings
+
+        auth_header = request.headers.get("Authorization") or ""
+        credentials = None
+        if auth_header.startswith("Bearer "):
+            credentials = HTTPAuthorizationCredentials(
+                scheme="Bearer", credentials=auth_header[len("Bearer "):].strip()
+            )
+
+        try:
+            await _mcp_get_current_user(
+                request=request,
+                credentials=credentials,
+                settings=_mcp_get_settings(),
+            )
+        except HTTPException as e:
+            return JSONResponse(
+                status_code=e.status_code,
+                content={"detail": e.detail},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except Exception as e:
+            logger.warning(f"MCP-Auth fehlgeschlagen: {e}")
             return JSONResponse(
                 status_code=401,
-                content={"detail": "MCP requires Bearer token authentication"},
+                content={"detail": "MCP requires valid Bearer token authentication"},
+                headers={"WWW-Authenticate": "Bearer"},
             )
     return await call_next(request)
 

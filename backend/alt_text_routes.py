@@ -71,6 +71,30 @@ def _filename_from_url(url: str) -> str:
 # Kanonische Auth-Dependency (Phase 2 Auth-Konsolidierung)
 from dependencies import get_current_user as get_required_user
 
+# Ownership-Quelle. Liegt in cookie_compliance_routes; der Import ist NICHT
+# zirkulär (cookie_compliance_routes importiert weder alt_text_routes noch
+# widget_routes) und main_production setzt beiden Modulen denselben db_pool.
+from cookie_compliance_routes import get_user_site_ids
+
+
+async def require_site_ownership(site_id: str, current_user: Dict[str, Any]) -> Any:
+    """Ownership-Prüfung für die A11y-Routen (Pendant zu require_site_access).
+
+    Die Routen hier waren zwar authentifiziert, prüften die site_id aber nie —
+    ein eingeloggter User konnte die Review-Queues, Worklists und Fixes einer
+    FREMDEN Site lesen bzw. bespielen. Auth ohne Ownership ist keine Auth.
+
+    Gibt die user_id zurück oder wirft 403. Wie beim Cookie-Pendant gilt eine
+    leere Site-Menge als "kein Zugriff", nicht als "darf alles", und es wird
+    nicht zwischen 'fremd' und 'existiert nicht' unterschieden.
+    """
+    user_id = current_user.get("user_id") or current_user.get("id")
+    owned_site_ids = await get_user_site_ids(user_id)
+    if site_id not in owned_site_ids:
+        logger.warning(f"User {user_id} denied access to site_id '{site_id}' (a11y)")
+        raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Website")
+    return user_id
+
 
 @router.get("/alt-text-review-queue")
 async def alt_text_review_queue(
@@ -79,6 +103,7 @@ async def alt_text_review_queue(
     current_user: Dict[str, Any] = Depends(get_required_user)
 ):
     """Liste der Alt-Text-Fixes zum Review (Dashboard)."""
+    await require_site_ownership(site_id, current_user)
     try:
         saver = AccessibilityFixSaver(db_pool)
         items = await saver.get_review_queue(site_id, status=status)
@@ -99,9 +124,10 @@ async def generate_alt_texts(
     """
     from compliance_engine.ai_alt_text_generator import AIAltTextGenerator
 
+    user_id = await require_site_ownership(request.site_id, current_user)
+
     try:
         generator = AIAltTextGenerator()
-        user_id = current_user.get("user_id") or current_user.get("id")
 
         fixes: List[Dict[str, Any]] = []
         results: List[Dict[str, Any]] = []
@@ -185,6 +211,7 @@ async def link_review_queue(
     current_user: Dict[str, Any] = Depends(get_required_user)
 ):
     """Liste der Link-Zweck-Fixes (WCAG 2.4.4) zum Review (Dashboard)."""
+    await require_site_ownership(site_id, current_user)
     try:
         saver = AccessibilityFixSaver(db_pool)
         items = await saver.get_link_fixes_for_site(site_id, status=status)
@@ -231,6 +258,7 @@ async def accessibility_worklist(
     Alt-Texte (HITL), Link-Zweck (HITL) und dokumentweite Fixes (auto, read-only).
     Ein Aufruf bedient die ganze Worklist-Seite.
     """
+    await require_site_ownership(site_id, current_user)
     try:
         saver = AccessibilityFixSaver(db_pool)
 
@@ -304,10 +332,20 @@ async def scan_images_for_alt_text(
     from bs4 import BeautifulSoup
     from compliance_engine.ai_alt_text_generator import AIAltTextGenerator
     from urllib.parse import urljoin
+    from ssrf_protection import validate_url, SSRFError
+
+    user_id = await require_site_ownership(site_id, current_user)
+
+    # SSRF: site_url wird serverseitig gerendert/abgerufen. Ohne Prüfung liesse
+    # sich der Backend-Renderer als Proxy auf interne Dienste und
+    # Cloud-Metadata-Endpunkte richten.
+    try:
+        site_url = validate_url(site_url)
+    except SSRFError as e:
+        logger.warning(f"SSRF blocked scan-images URL '{site_url}': {e}")
+        raise HTTPException(status_code=400, detail="Ungültige oder nicht erlaubte URL")
 
     try:
-        user_id = current_user.get("user_id") or current_user.get("id")
-
         html, metadata = await smart_fetch_html(site_url)
         if not html:
             raise HTTPException(status_code=400, detail="Could not fetch page")

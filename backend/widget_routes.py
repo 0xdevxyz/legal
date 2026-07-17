@@ -19,6 +19,10 @@ from accessibility_patch_generator import AccessibilityPatchGenerator
 import aiohttp
 from accessibility_fix_saver import AccessibilityFixSaver
 from dependencies import get_current_user, get_db
+# Gemeinsame Ownership-Prüfung (definiert in alt_text_routes, Quelle:
+# cookie_compliance_routes.get_user_site_ids). Kein Zyklus: alt_text_routes
+# importiert widget_routes nicht.
+from alt_text_routes import require_site_ownership
 
 router = APIRouter()
 
@@ -756,21 +760,40 @@ async def generate_accessibility_patches(
 
 
 @router.get("/api/accessibility/patches/download/{download_id}")
-async def download_accessibility_patches(download_id: str):
+async def download_accessibility_patches(
+    download_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """
     Lädt generierte Barrierefreiheits-Patches herunter
-    
+
+    Bis 2026-07-17 ohne jede Auth erreichbar, bei erratbarer download_id
+    ("{site_id}_{unix_ts}") — fremde Patch-ZIPs waren damit abrufbar. Jetzt:
+    Login + Ownership auf der im download_id enthaltenen site_id.
+
     Args:
         download_id: Download-Identifier (von generate-Endpoint)
-        
+
     Returns:
         ZIP-Datei mit Patches
     """
+    import re as _re
+
+    # download_id landet in einem Dateinamen — strikt validieren, sonst ist
+    # "../../.." ein Path-Traversal.
+    if not _re.fullmatch(r"[A-Za-z0-9-]+_\d+", download_id):
+        raise HTTPException(status_code=404, detail="Download nicht gefunden oder abgelaufen")
+
+    # Ownership: site_id ist der Teil vor dem letzten "_" (site_ids sind
+    # hostname-basiert und enthalten keine Unterstriche).
+    site_id = download_id.rsplit("_", 1)[0]
+    await require_site_ownership(site_id, current_user)
+
     try:
         import tempfile
         import os as _os
         tmp_path = _os.path.join(tempfile.gettempdir(), f"complyo_patches_{download_id}.zip")
-        
+
         if not _os.path.exists(tmp_path):
             raise HTTPException(status_code=404, detail="Download nicht gefunden oder abgelaufen")
         

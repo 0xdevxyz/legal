@@ -4,7 +4,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+
+from dependencies import require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -151,8 +153,18 @@ async def get_vault_stats():
 
 
 @router.post("/trigger-refresh")
-async def trigger_refresh(background_tasks: BackgroundTasks):
-    """Manueller Update-Trigger (Admin). Startet Knowledge-Update im Hintergrund."""
+async def trigger_refresh(
+    background_tasks: BackgroundTasks,
+    admin: dict = Depends(require_admin),
+):
+    """Manueller Update-Trigger (Admin). Startet Knowledge-Update im Hintergrund.
+
+    Der Docstring sagte schon immer "(Admin)", die Dependency fehlte aber — jede
+    Session (und ohne Token sogar jeder) konnte einen vollen Ingestion-Lauf samt
+    OpenAI-Klassifizierung auslösen (Kosten + Vault-Schreibzugriff).
+    Die GET-Routen dieses Routers bleiben bewusst offen: veröffentlichte
+    Gesetzestexte und Updates sind keine Kundendaten.
+    """
     async def run_update():
         try:
             from knowledge.knowledge_ingestion_service import KnowledgeIngestionService

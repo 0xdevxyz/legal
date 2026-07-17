@@ -132,7 +132,7 @@ für die Nische Website-Recht — die Evolutionsstufe ist das Meta-Layer „Welc
 gelten für MICH, was kostet Ignorieren, was tue ich Montagfrüh?" als Abo. Kein neues
 Projekt, sondern Verbreiterung. Jede Stufe verkauft sich einzeln:
 
-- [ ] **7.1 Scan-Verbreiterung** (Wochen, baut auf Vorhandenem): bestehenden Scanner um
+- [x] **7.1 Scan-Verbreiterung** (✅ 2026-07-17, siehe data/features/regulierungs-radar.md) (Wochen, baut auf Vorhandenem): bestehenden Scanner um
   expliziten BFSG-Check-Report + AI-Act-Transparenz-Check erweitern. Assets da:
   AxeScanner, AI-Act-Doku-Generator, Jurisdiction-Kontext. Als Lead-Magnet ausspielen
   („Ist Ihre Website BFSG-konform? 60-Sekunden-Check" — deckt sich mit Vertriebsplan).

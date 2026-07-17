@@ -20,6 +20,7 @@
 | Feature | Doc | Status | Stand |
 |---|---|---|---|
 | **Scan-/Analyse-Kern** (Quick/Deep/Complete, Check-Registry, Score, Issue-Grouping) | [scan-analyze-kern.md](scan-analyze-kern.md) | 🟢 live | 2026-07-17 |
+| **Regulierungs-Radar** (BFSG-Report + AI-Act-Transparenz-Check im Free-Scan) | [regulierungs-radar.md](regulierungs-radar.md) | 🟢 live | 2026-07-17 |
 | **KI-Fix-Engine** (Fix-Generierung, Quality-Gate, Fix-Jobs-Queue) | [ai-fix-engine.md](ai-fix-engine.md) | 🟡 in Arbeit | 2026-07-17 |
 | **Cookie-Consent-Widget** (ausgeliefertes JS: Banner v2, Content-Blocker, Consent Mode) | [cookie-consent-widget.md](cookie-consent-widget.md) | 🟢 live (tote Pfade) | 2026-07-17 |
 | **Cookie-Consent-Management** (Server: Consent-Logging, Katalog, Banner-Config) | [cookie-consent-management.md](cookie-consent-management.md) | 🟡 in Arbeit | 2026-07-17 |

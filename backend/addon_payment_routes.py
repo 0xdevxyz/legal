@@ -180,7 +180,72 @@ ONETIME_ADDONS = {
 
 class AddAddonRequest(BaseModel):
     addon_key: str
-    user_plan: Optional[str] = "professional"  # To determine limits
+    # DEPRECATED und WIRKUNGSLOS: Der Plan wird ausschliesslich serverseitig aus der
+    # DB ermittelt (resolve_addon_plan). Frueher bestimmte dieses Body-Feld die Limits
+    # — ein Professional-Kunde konnte "enterprise" senden und unbegrenzte Limits zum
+    # Professional-Preis bekommen (Rechteausweitung). Das Feld bleibt nur im Model,
+    # damit der bestehende Frontend-Aufruf (dashboard-react/src/lib/ai-compliance-api.ts)
+    # nicht mit einem Validierungsfehler bricht. Es wird nirgends gelesen.
+    user_plan: Optional[str] = None
+
+
+# ==================== PLAN-AUFLÖSUNG (serverseitig) ====================
+
+# Namensraum-Mapping: Das übrige System speichert in `subscriptions.plan_type`
+# Werte wie free/single/pro/premium/agency/expert/update/enterprise/complete
+# (vgl. stripe_routes.PLAN_WEBSITES_MAX und deep_cookie_scanner_routes.check_premium_plan).
+# Der Add-on-Katalog oben nutzt dagegen starter/professional/business/enterprise
+# (+ agency für agency_sites_extra). Diese Tabelle übersetzt explizit.
+PLAN_TYPE_TO_ADDON_PLAN = {
+    # kein/kleinster bezahlter Umfang → starter
+    "free": "starter",
+    "single": "starter",
+    "update": "starter",
+    "starter": "starter",
+    # Pro-Ebene
+    "pro": "professional",
+    "professional": "professional",
+    # gehobene Einzelplätze
+    "premium": "business",
+    "business": "business",
+    "expert": "business",
+    "complete": "business",
+    # Agentur / Enterprise
+    "agency": "agency",
+    "enterprise": "enterprise",
+}
+
+# Unbekannter/fehlender Plan → konservativster (kleinster) Limit-Satz, nie der grösste.
+FALLBACK_ADDON_PLAN = "starter"
+
+
+async def resolve_addon_plan(user_id: int) -> str:
+    """
+    Ermittelt den Add-on-Katalog-Plan des Users serverseitig aus der DB.
+
+    Quelle: aktive Zeile in `subscriptions` (neueste zuerst) — dieselbe Quelle,
+    aus der deep_cookie_scanner_routes.check_premium_plan sein Premium-Gate zieht.
+    Kein Vertrauen in Client-Angaben. Bei fehlender/unbekannter Subscription oder
+    DB-Fehler gilt der kleinste Limit-Satz.
+    """
+    plan_type = None
+    try:
+        async with db_service.get_connection() as conn:
+            plan_type = await conn.fetchval(
+                """
+                SELECT plan_type FROM subscriptions
+                WHERE user_id = $1 AND status = 'active'
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                user_id,
+            )
+    except Exception as e:
+        logger.error(f"Plan-Auflösung für user {user_id} fehlgeschlagen: {e}")
+        return FALLBACK_ADDON_PLAN
+
+    if not plan_type:
+        return FALLBACK_ADDON_PLAN
+    return PLAN_TYPE_TO_ADDON_PLAN.get(str(plan_type).strip().lower(), FALLBACK_ADDON_PLAN)
 
 class CheckoutResponse(BaseModel):
     checkout_url: str
@@ -253,8 +318,9 @@ async def subscribe_to_addon(
         user_row = await conn.fetchrow("SELECT email FROM users WHERE id = $1", user_id)
     user_email = user_row["email"] if user_row else ""
 
-    # Determine limits based on user plan
-    user_plan = data.user_plan or "professional"
+    # Limits ausschliesslich aus dem serverseitig ermittelten Plan ableiten.
+    # data.user_plan wird bewusst ignoriert (siehe AddAddonRequest).
+    user_plan = await resolve_addon_plan(user_id)
     limits = addon.get("limits_by_plan", {}).get(user_plan, {})
     
     # Create Stripe checkout session
@@ -473,6 +539,24 @@ async def handle_addon_checkout_completed(session):
         )
         
         logger.info(f"Created monthly add-on subscription: {addon_key} for user {user_id}")
+
+        # Site-Kontingent-Add-ons müssen das Website-Limit auch tatsächlich erhöhen.
+        # Bisher legte der Webhook nur eine user_addons-Zeile an — der Kunde zahlte
+        # 200€/Monat und bekam keine einzige zusätzliche Site. Gleiches additives
+        # Muster wie stripe_routes._apply_plan_activation (agency_extra +1, agency2 +25);
+        # plan_type bleibt unverändert.
+        extra_sites = limits.get("extra_sites")
+        if extra_sites:
+            try:
+                async with db_service.get_connection() as conn:
+                    await conn.execute(
+                        "UPDATE user_limits SET websites_max = COALESCE(websites_max, 0) + $2 "
+                        "WHERE user_id = $1",
+                        int(user_id), int(extra_sites),
+                    )
+                logger.info(f"websites_max um {extra_sites} erhöht (user={user_id}, addon={addon_key})")
+            except Exception as e:
+                logger.error(f"Konnte websites_max für user {user_id} nicht erhöhen: {e}")
     
     else:
         # One-time purchase — notify sales team

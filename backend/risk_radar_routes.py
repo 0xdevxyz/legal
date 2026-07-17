@@ -13,9 +13,10 @@ Kein "Abmahnschutz"-Versprechen. Klarer Disclaimer auf allen Responses.
 import logging
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from legal_disclaimer import DISCLAIMER_SHORT
+from dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -40,17 +41,61 @@ def _classify_law_category(text: str) -> str:
     return "other"
 
 
+async def require_domain_access(domain: str, user_id: int) -> None:
+    """Ownership-Prüfung für `domain` (Muster: cookie_compliance_routes.require_site_access).
+
+    `/score` liest über ein ILIKE-Muster den letzten Scan zu einer beliebigen
+    Domain aus `scan_history` — inklusive der Issue-Liste, also einer fertigen
+    Schwachstellenkarte fremder Websites. Ohne Prüfung wäre der Endpunkt ein
+    Aufklärungswerkzeug gegen andere Complyo-Kunden.
+
+    Kein Unterschied zwischen "fremd" und "nicht getrackt" — sonst wird die
+    Fehlermeldung zum Domain-Scanner.
+    """
+    from dependencies import get_db_pool
+    db_pool = await get_db_pool()
+
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT 1 FROM tracked_websites
+            WHERE user_id = $1 AND (url ILIKE $2 OR url ILIKE $3)
+            LIMIT 1
+            """,
+            user_id,
+            f"%{domain}%",
+            f"{domain}%",
+        )
+    if not row:
+        logger.warning(f"User {user_id} denied risk-radar access to domain '{domain}'")
+        raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Domain")
+
+
+def _user_id_from(current_user: dict) -> int:
+    uid = current_user.get("user_id") or current_user.get("id")
+    if uid is None:
+        raise HTTPException(status_code=401, detail="Nicht authentifiziert")
+    return int(uid)
+
+
 @router.get("/score")
 async def get_risk_radar_score(
     domain: Optional[str] = Query(None),
-    user_id: Optional[int] = Query(None),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Aggregierter Risiko-Score mit Kategorien.
     Nutzt risk_calculator + scan_history für domainspezifische Scores.
+
+    Der frühere Query-Parameter `user_id` ist entfallen: Er wurde nie ausgewertet
+    und wäre als frei wählbarer Identitäts-Parameter ein IDOR-Einfallstor. Die
+    User-ID kommt aus dem JWT.
     """
     from dependencies import get_db_pool
     db_pool = await get_db_pool()
+
+    if domain:
+        await require_domain_access(domain, _user_id_from(current_user))
 
     categories = {
         "dsgvo": {"score": 0, "label": "DSGVO", "issues": []},

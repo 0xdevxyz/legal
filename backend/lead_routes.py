@@ -4,15 +4,17 @@ Handles lead collection, email verification, and statistics
 Also provides Early-Access Waitlist endpoints with Double-Opt-In.
 """
 
-from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Depends
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, EmailStr, validator
 from typing import Optional, Dict, Any
 import logging
 import secrets
 import hashlib
+import hmac
 import os
 import re
+from dependencies import require_admin
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from database_service import db_service
@@ -61,7 +63,8 @@ class WaitlistJoinRequest(BaseModel):
 
     @validator("source")
     def validate_source(cls, v):
-        allowed = {"early-access", "complyo.de", "complyo.de", "landing"}
+        # "complyo.de" stand hier doppelt — Set-Duplikat ohne Wirkung, bereinigt.
+        allowed = {"early-access", "complyo.de", "landing"}
         if v not in allowed:
             return "early-access"
         return v
@@ -79,6 +82,38 @@ class WaitlistJoinResponse(BaseModel):
 def _hash_ip(ip: str) -> str:
     salt = os.getenv("SECRET_SALT", "complyo-salt-2026")
     return hashlib.sha256(f"{ip}{salt}".encode()).hexdigest()
+
+
+def unsubscribe_token_for(email: str) -> str:
+    """Leitet den Abmelde-Token deterministisch aus E-Mail + JWT_SECRET ab (HMAC-SHA256).
+
+    Bewusst kein DB-Feld: der Token muss ohne Migration in bereits versandte
+    E-Mails eingebettet werden können. Deterministisch heisst, derselbe
+    Abmeldelink bleibt dauerhaft gültig — genau das erwartet ein Empfänger,
+    der eine alte Mail wieder aufmacht.
+    """
+    secret = os.getenv("JWT_SECRET") or ""
+    if not secret:
+        # Ohne Secret gibt es keinen prüfbaren Token — dann darf auch nichts
+        # abgemeldet werden (fail closed statt fail open).
+        raise RuntimeError("JWT_SECRET fehlt — Unsubscribe-Token nicht ableitbar")
+    return hmac.new(
+        secret.encode(),
+        f"unsubscribe:{email.strip().lower()}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _verify_unsubscribe_token(email: str, token: Optional[str]) -> bool:
+    """Konstantzeit-Vergleich; jeder Fehlerfall bedeutet 'ungültig'."""
+    if not token:
+        return False
+    try:
+        erwartet = unsubscribe_token_for(email)
+    except RuntimeError as e:
+        logger.error(f"Unsubscribe-Token nicht prüfbar: {e}")
+        return False
+    return hmac.compare_digest(erwartet, token)
 
 
 def _check_rate_limit(ip_hash: str) -> bool:
@@ -463,11 +498,13 @@ async def verify_email(
         )
 
 @lead_router.get("/stats")
-async def get_lead_statistics():
+async def get_lead_statistics(admin: dict = Depends(require_admin)):
     """
-    Get public lead statistics (for demo/transparency purposes)
-    
-    Returns anonymized statistics about lead generation
+    Lead-Statistiken — Admin-only.
+
+    Waren bis 2026-07-17 ohne jede Auth abrufbar ("public ... for transparency"):
+    Gesamt-/Verified-/Converted-Zahlen sind Geschäftszahlen und gehören nicht
+    an die Öffentlichkeit. Kein Aufrufer im Dashboard/Landing hängt daran.
     """
     try:
         stats = await db_service.get_lead_statistics()
@@ -493,11 +530,32 @@ async def get_lead_statistics():
             "timestamp": datetime.now().isoformat()
         }
 
+class UnsubscribeRequest(BaseModel):
+    email: EmailStr
+    token: Optional[str] = None
+
+
 @lead_router.post("/unsubscribe")
-async def unsubscribe_lead(email: EmailStr):
+async def unsubscribe_lead(request: UnsubscribeRequest):
     """
-    Unsubscribe lead from marketing communications (GDPR Article 7)
+    Abmeldung von Marketing-Kommunikation (Art. 7 DSGVO).
+
+    Bis 2026-07-17 genügte eine beliebige E-Mail-Adresse — jeder konnte jeden
+    abmelden. Analog zu GET /verify/{token} ist jetzt ein Token Pflicht; er wird
+    per HMAC aus E-Mail + JWT_SECRET abgeleitet (siehe unsubscribe_token_for)
+    und gehört in den Abmeldelink der versendeten Mails.
+
+    Die Signatur bleibt {email, token} — Aufrufer ohne gültigen Token: 403.
     """
+    email = request.email
+
+    if not _verify_unsubscribe_token(email, request.token):
+        logger.warning(f"Unsubscribe mit ungültigem/fehlendem Token für {email}")
+        raise HTTPException(
+            status_code=403,
+            detail="Ungültiger oder fehlender Abmelde-Token.",
+        )
+
     try:
         success = await db_service.update_lead_status_by_email(email, 'unsubscribed')
         
