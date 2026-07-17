@@ -1820,10 +1820,13 @@ async def get_audit_log(
         async with db_pool.acquire() as conn:
             rows = await conn.fetch(
                 """
+                -- fix_application_audit ist die Tabelle, die audit_service tatsächlich
+                -- beschreibt. Der Reader las zuvor die nie geschriebene Geistertabelle
+                -- fix_audit_trail (existierte nirgends) -> immer 500. Siehe Alembic 0003.
                 SELECT id, fix_id, fix_category, fix_type, action_type,
                        deployment_method, applied_at, success, error_message,
                        backup_id, rollback_available
-                FROM fix_audit_trail
+                FROM fix_application_audit
                 WHERE user_id = $1
                 ORDER BY applied_at DESC
                 LIMIT $2 OFFSET $3
@@ -1851,7 +1854,7 @@ async def export_audit_log(
                 """
                 SELECT id, fix_id, fix_category, fix_type, action_type,
                        deployment_method, applied_at, success, error_message
-                FROM fix_audit_trail
+                FROM fix_application_audit
                 WHERE user_id = $1
                 ORDER BY applied_at DESC
                 """,

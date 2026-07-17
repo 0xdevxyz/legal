@@ -72,12 +72,12 @@ class TestGesetzeskontext:
             f"die KI generiert dann ohne Rechtsgrundlage."
         )
 
-    def test_fehlende_gesetze_sind_bekannt(self):
-        """`generate_withdrawal` fordert Widerrufsrecht + Verbraucherrecht an — beide fehlen.
+    def test_withdrawal_gesetze_vorhanden(self):
+        """`generate_withdrawal` fordert Widerrufsrecht + Verbraucherrecht an.
 
-        Dokumentiert in data/features/legal-text-generator.md. Schlägt der Test um,
-        weil die Dateien angelegt wurden: erwartete Liste leeren und den Doku-Eintrag
-        streichen.
+        Beide Dateien fehlten bis 2026-07-17 (Kontext-Verlust beim wichtigsten
+        Dokument) und wurden nachgezogen. Der umfassendere Coverage-Wächter über
+        ALLE Dokumenttypen steht in tests/test_laws_coverage.py.
         """
         fehlend = [
             name
@@ -85,7 +85,7 @@ class TestGesetzeskontext:
             if not os.path.exists(os.path.join(ltg.LAWS_DIR, f"{name}.md"))
             and not os.path.exists(os.path.join(ltg.LAWS_DIR, "de", f"{name}.md"))
         ]
-        assert fehlend == ["Widerrufsrecht", "Verbraucherrecht"], (
-            f"Erwarteter Ist-Zustand geändert — fehlend: {fehlend}. "
-            f"Doku data/features/legal-text-generator.md nachziehen."
+        assert not fehlend, (
+            f"Gesetzesdatei(en) fehlen wieder: {fehlend}. generate_withdrawal "
+            f"generiert dann ohne den relevanten Rechtskontext."
         )
