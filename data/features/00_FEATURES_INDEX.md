@@ -27,6 +27,12 @@
 | **Legal-Change-Monitoring** (EUR-Lex/RSS/KI-Recherche, Klassifikation, Benachrichtigung) | [legal-change-monitoring.md](legal-change-monitoring.md) | 🟡 in Arbeit | 2026-07-17 |
 | **AI-Act-Compliance** ("ComplyoAI Guard": KI-Register, Risikoklassifizierung, Doku) | [ai-act-compliance.md](ai-act-compliance.md) | 🟡 in Arbeit | 2026-07-17 |
 | **Jurisdiction-Kontext** (internationale Compliance Stufe 1) | [jurisdiction-kontext.md](jurisdiction-kontext.md) | 🟡 Fundament, ohne Wirkung | 2026-07-17 |
+| **Billing / Pläne / Add-ons** (Stripe-Abos, Checkout, Webhooks, Plan-Gating) | [billing-plans-addons.md](billing-plans-addons.md) | 🟡 in Arbeit | 2026-07-17 |
+| **Agentur / White-Label** (Kundengruppen, Logo, Kundenreports, Agentur-Stats) | [agentur-white-label.md](agentur-white-label.md) | 🟢 live | 2026-07-17 |
+| **Lead-/Free-Scan-Funnel** (Scan ohne Login, Double-Opt-in, Warteliste) | [lead-free-scan-funnel.md](lead-free-scan-funnel.md) | 🟡 in Arbeit | 2026-07-17 |
+| **Alt-Text-KI-Generierung** (Vision-KI für Bild-Alternativtexte + Patches) | [alt-text-ki-generierung.md](alt-text-ki-generierung.md) | 🟢 live | 2026-07-17 |
+| **WordPress-Plugin** (Widget, Inline-Blocker, A11y-Remediation, Local Fonts) | [wordpress-plugin.md](wordpress-plugin.md) | 🟢 live (v2.6.0) | 2026-07-17 |
+| **Joomla-Plugin** (nur Widget-Einbindung) | [joomla-plugin.md](joomla-plugin.md) | 🟡 Teilstand (v2.1.0) | 2026-07-17 |
 | Barrierefreiheits-Remediation (Fix-Manifest + Channels + Link-Zweck + Worklist + Re-Scan) | [accessibility-remediation.md](accessibility-remediation.md) | 🟢 Block 1–3 live | 2026-06-26 |
 | Drittlandtransfer-Erkennung (cookielose Transfers: Google Fonts/reCAPTCHA/Maps via HTML+CSS+Requests) | [drittlandtransfer-erkennung.md](drittlandtransfer-erkennung.md) | 🟢 live | 2026-06-26 |
 | Cookie-Richtlinie-Seite ("Über Cookies": complyo.de-Seite + öffentlich gehostete /cookie-richtlinie/{site_id} fürs Widget) | [cookie-richtlinie-seite.md](cookie-richtlinie-seite.md) | 🟢 live | 2026-06-27 |
