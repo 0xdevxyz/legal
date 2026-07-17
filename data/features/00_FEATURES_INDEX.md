@@ -33,6 +33,30 @@
 | **Alt-Text-KI-Generierung** (Vision-KI für Bild-Alternativtexte + Patches) | [alt-text-ki-generierung.md](alt-text-ki-generierung.md) | 🟢 live | 2026-07-17 |
 | **WordPress-Plugin** (Widget, Inline-Blocker, A11y-Remediation, Local Fonts) | [wordpress-plugin.md](wordpress-plugin.md) | 🟢 live (v2.6.0) | 2026-07-17 |
 | **Joomla-Plugin** (nur Widget-Einbindung) | [joomla-plugin.md](joomla-plugin.md) | 🟡 Teilstand (v2.1.0) | 2026-07-17 |
+| **PDF-Report & Export** (Compliance-Report, Audit-Log) | [pdf-report-export.md](pdf-report-export.md) | 🟡 PDF live, Audit-Export tot | 2026-07-17 |
+| **Admin-Bereich** (Leads, Analytics, System-Health, Fix-Review-Queue) | [admin-bereich.md](admin-bereich.md) | 🟡 faktisch inaktiv (503) | 2026-07-17 |
+| **Onboarding & Journey** (Wizards, Schritt-Tracking, Skill-Level) | [onboarding-journey.md](onboarding-journey.md) | 🟡 entkoppelt | 2026-07-17 |
+| **Knowledge-Base / Gesetzes-Vault** (Obsidian-Vault: Gesetze + Templates) | [knowledge-base-gesetzes-vault.md](knowledge-base-gesetzes-vault.md) | 🟡 in Arbeit | 2026-07-17 |
+| **AVV/DPA-Generator** (Auftragsverarbeitungsvertrag) | [avv-dpa-generator.md](avv-dpa-generator.md) | 🟡 nur HTML-Rendering | 2026-07-17 |
+| **TCF 2.2** (IAB-Vendorliste, TCF-Config) | [tcf-2-2.md](tcf-2-2.md) | 🟡 nicht IAB-registriert | 2026-07-17 |
+| **DSGVO-Betroffenenrechte** (Auskunft/Löschung/Export, Retention) | [dsgvo-betroffenenrechte.md](dsgvo-betroffenenrechte.md) | 🔵 wirkungslos | 2026-07-17 |
+| **MCP-Server** (Complyo-API für KI-Agenten unter `/mcp`) | [mcp-server.md](mcp-server.md) | 🟡 Auth-Gate ist Attrappe | 2026-07-17 |
+| **Channel HTML-CLI** (Fix-Manifest auf statische Projekte anwenden) | [channel-html-cli.md](channel-html-cli.md) | 🟢 live | 2026-07-17 |
+| **Risiko-Radar** (Score-Trend, Frühwarnung) | [risiko-radar.md](risiko-radar.md) | 🟡 Backend ohne UI | 2026-07-17 |
+| **i18n / Mehrsprachigkeit** (Übersetzungs-API, Widget-Locales) | [i18n-mehrsprachigkeit.md](i18n-mehrsprachigkeit.md) | ⚪ verworfen (alle EP 500) | 2026-07-17 |
+
+## Registrierte Router ohne Doku — Entscheidung offen
+
+Kein Feature-Doc, weil erst zu entscheiden ist: **nachziehen oder Router entfernen**. Ihre
+Tabellen liegen ausschliesslich in `backend/migrations/_archive_pre_baseline/` und sind beim
+Baseline-Cut (2026-07-17) **nicht** in `backend/alembic/baseline_schema.sql` übernommen worden —
+laut Migrations-Regel darf das Archiv nicht mehr angewendet werden.
+
+| Router | Zustand |
+|---|---|
+| `backend/ab_test_routes.py` | Hat einen echten Konsumenten: `widgets/cookie_banner_v2.js:445,481`. Live 200 mit `relation "cookie_ab_tests" does not exist` — das Banner schluckt es still. |
+| `backend/expert_service_routes.py` | Tot, kein Frontend. Live 500 (Tabelle fehlt). **Kein `Depends(get_current_user)` im ganzen Modul.** |
+| `backend/git_routes.py` | Tot, kein Frontend. Live 401 — Auth sauber. Tabellen fehlen. |
 | Barrierefreiheits-Remediation (Fix-Manifest + Channels + Link-Zweck + Worklist + Re-Scan) | [accessibility-remediation.md](accessibility-remediation.md) | 🟢 Block 1–3 live | 2026-06-26 |
 | Drittlandtransfer-Erkennung (cookielose Transfers: Google Fonts/reCAPTCHA/Maps via HTML+CSS+Requests) | [drittlandtransfer-erkennung.md](drittlandtransfer-erkennung.md) | 🟢 live | 2026-06-26 |
 | Cookie-Richtlinie-Seite ("Über Cookies": complyo.de-Seite + öffentlich gehostete /cookie-richtlinie/{site_id} fürs Widget) | [cookie-richtlinie-seite.md](cookie-richtlinie-seite.md) | 🟢 live | 2026-06-27 |
