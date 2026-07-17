@@ -11,19 +11,19 @@ enden auf `.de`, `complyo.tech` wird vollständig eliminiert.
 
 Kleine, isolierte Fixes mit dem höchsten Risiko-Nutzen-Verhältnis. Jeder Punkt ein eigener Commit + Deploy.
 
-- [ ] **1.1 OAuth-Signaturprüfung**: `backend/oauth_service.py:134` dekodiert ID-Tokens mit
+- [x] **1.1 OAuth-Signaturprüfung**: `backend/oauth_service.py:134` dekodiert ID-Tokens mit
   `verify_signature: False`. Prüfen, ob nachgelagert validiert wird; sonst Signaturprüfung
   gegen die JWKS des Providers (Google/…) einbauen.
-- [ ] **1.2 Stilles Auth-Schlucken beheben**: `backend/cookie_compliance_routes.py:60` fängt
+- [x] **1.2 Stilles Auth-Schlucken beheben**: `backend/cookie_compliance_routes.py:60` fängt
   Auth-Fehler und gibt `None` zurück → durch die kanonische Dependency ersetzen (siehe Phase 2),
   bis dahin mindestens `HTTPException(401)` statt `return None`.
-- [ ] **1.3 Fehler-Detail-Leaks entfernen**: alle `detail=f"...{str(e)}"`-Stellen
+- [x] **1.3 Fehler-Detail-Leaks entfernen**: alle `detail=f"...{str(e)}"`-Stellen
   (u. a. `backend/user_routes.py:238`) → generische Client-Meldung, Details nur ins Log.
   Suche: `grep -rn 'detail=f' backend/*.py | grep -i 'str(e)\|{e}'`.
-- [ ] **1.4 Rate-Limiting auf teure Endpunkte**: slowapi ist registriert, aber nur ~10 Endpunkte
+- [x] **1.4 Rate-Limiting auf teure Endpunkte**: slowapi ist registriert, aber nur ~10 Endpunkte
   gedrosselt. `@limiter.limit` ergänzen für: KI-Generierung (ai_fix, legal-texts, alt-text),
   Scanner/Analyze, Deep-Scan, PDF-Export. Richtwerte: KI 5/min, Scan 3/min pro User/IP.
-- [ ] **1.5 Abnahme**: `pytest backend/tests/test_auth_hardening.py` grün + manueller Smoke
+- [x] **1.5 Abnahme**: `pytest backend/tests/test_auth_hardening.py` grün + manueller Smoke
   (Login, Scan, KI-Fix) auf app.complyo.de.
 
 ## Phase 2 — Auth-Konsolidierung (Woche 1–2, ~2 Tage)
