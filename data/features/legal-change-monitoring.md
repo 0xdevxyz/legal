@@ -149,9 +149,10 @@ Single Source of Truth. Die alten SQL-Dateien unter `backend/migrations/_archive
   (Z. ~40/51/57) — existiert im echten Repo (`/home/clawd/saas/legal`) nicht. Die vom Skript
   ausgegebenen Crontab-Zeilen (`legal_news_cronjob.py`, 4-stündlich + Digest 09:00) zeigen ins
   Leere und sind **nicht** installiert. Skript ist obsolet → entfernen oder korrigieren.
-- **Kein Rate-Limiting auf `/api/legal-ai/*`** (12 LLM-Endpunkte in `backend/ai_legal_routes.py`):
-  nur `Depends(get_current_user_id)`, kein `slowapi`/Limiter. Deckt sich mit
-  `planning/STRUKTUR_FIXES_LAUNCH_PLAN.md` 1.4. Kostenrisiko pro authentifiziertem User.
+- **Rate-Limiting auf `/api/legal-ai/*` teilbehoben (2026-07-17):** die teuren LLM-Routen
+  `/updates/{id}/classify`, `/generate-impressum`, `/generate-datenschutz` tragen jetzt
+  `Depends(rate_limit(..., 5, 60))` (`ai_legal_routes.py:472/959/993`). Die übrigen
+  `/api/legal-ai/*`-Endpunkte bleiben ungedrosselt (`planning/STRUKTUR_FIXES_LAUNCH_PLAN.md` 1.4).
 - **`eulex_service` und `cronjobs/eurlex_crawler.py` laufen in keinem Cron** — EUR-Lex-Daten
   kommen nur durch Zufall (On-Demand-Aufrufe) rein. Nutzen unklar → zu prüfen.
 - **Monitor-Erkennung ist reine LLM-Recherche ohne Verifikation** — keine Quellenprüfung

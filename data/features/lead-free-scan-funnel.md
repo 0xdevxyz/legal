@@ -37,11 +37,11 @@ Zweiter Pfad: Early-Access-**Warteliste** mit eigenem Double-Opt-in.
 Gegen die Alembic-Baseline (`backend/alembic/versions/20260717_baseline_2026_07.py`,
 Dump `backend/alembic/baseline_schema.sql`) und die Live-DB verifiziert:
 - `waitlist_leads` — vorhanden (Baseline `baseline_schema.sql:3283`, live bestätigt).
-- **`leads` — existiert NICHT**: weder in der Baseline noch in der laufenden DB
-  (`information_schema.tables` liefert nur `waitlist_leads`). `database_service.py`
-  liest/schreibt sie trotzdem (`INSERT INTO leads` :69, `SELECT * FROM leads` :116/:137,
-  `COUNT(*) FROM leads` :275/:278/:281). Nur `create_waitlist_leads.sql` liegt im Archiv
-  `backend/migrations/_archive_pre_baseline/` — für `leads` gibt es **gar kein** DDL.
+- **`leads` — [BEHOBEN 2026-07-17]**: fehlte weder in Baseline noch in der laufenden DB;
+  `database_service.py` las/schrieb sie trotzdem (`INSERT INTO leads`, `SELECT * FROM leads`,
+  `COUNT(*) FROM leads`). Jetzt via Alembic-Revision `0003_missing_lead_and_audit_tables`
+  angelegt (zusammen mit `lead_consents`, `communication_log`, `email_verifications`) und gegen
+  die Live-DB angewendet. Archiv-SQL (`_archive_pre_baseline/`) bleibt tabu.
 - `analysis_data` wird korrekt mit `json.dumps(...)` geschrieben
   (`database_service.py:87`) → asyncpg-JSONB-Regel eingehalten.
 - `backend/init_lead_tables.py` **existiert nicht (mehr)** — der Tote-Code-Verdacht ist
@@ -64,21 +64,20 @@ Dump `backend/alembic/baseline_schema.sql`) und die Live-DB verifiziert:
   dauerhaft `confirmed_at IS NULL`. Gleiches Muster wie der SMTP-`demo_mode` in
   `legal_notification_service.py`. Fix: SMTP-Credentials setzen **und** `demo_mode` in
   Produktion hart abschalten statt still `True` zu liefern.
-- **`GET /api/leads/stats` ist ohne Auth abrufbar** (verifiziert: keine Dependency, kein
-  Gate; Docstring nennt es explizit „public"). Exponiert wären Lead-Gesamtzahl,
-  verifizierte und konvertierte Leads — Geschäftskennzahlen. Aktuell nur deshalb
-  ungefährlich, weil die Tabelle fehlt und der Fallback Nullen liefert; **mit** Tabelle
-  ist es sofort ein Leak. Gleiche Lücken-Klasse wie die 28 offenen Routen in
-  `cookie_compliance_routes.py` (am 2026-07-17 gefixt) → Auth nachziehen, bevor `leads`
-  angelegt wird.
-- **`POST /api/leads/unsubscribe` nimmt eine beliebige E-Mail ohne Token/Auth** → jeder
-  kann jeden fremden Lead abmelden. Braucht einen signierten Unsubscribe-Token.
-- **`POST /api/analyze-preview`: voller Scan ohne Auth und ohne Rate-Limit** (verifiziert,
-  s. [[scan-analyze-kern]]) → DoS- und Kostenfläche (Playwright/LLM je Request). Der
-  Waitlist-Endpoint hat immerhin ein Limit, der teure Scan nicht.
+- **[BEHOBEN 2026-07-17] `GET /api/leads/stats` war ohne Auth abrufbar** (Geschäftskennzahlen:
+  Lead-Gesamtzahl, verifizierte/konvertierte Leads). Fix: `Depends(require_admin)`
+  (`lead_routes.py:501`).
+- **[BEHOBEN 2026-07-17] `POST /api/leads/unsubscribe` nahm eine beliebige E-Mail ohne
+  Token/Auth** → jeder konnte jeden fremden Lead abmelden. Fix: signierter Unsubscribe-Token
+  (`unsubscribe_token_for`, HMAC aus E-Mail + JWT_SECRET; `hmac.compare_digest`, fail-closed).
+- **[BEHOBEN 2026-07-17] `POST /api/analyze-preview`: voller Scan ohne Rate-Limit** → DoS-/
+  Kostenfläche (Playwright/LLM je Request). Fix: `dependencies=[Depends(rate_limit("analyze_preview", 3, 60))]`
+  (`public_routes.py:1884`, 3/60s). Weiterhin bewusst ohne Auth (Funnel-Einstieg),
+  s. [[scan-analyze-kern]].
 - Das Waitlist-Rate-Limit ist **prozesslokal** (`defaultdict` im RAM), nicht Redis-basiert
   wie `dependencies.rate_limit` → überlebt keinen Neustart und greift nicht über mehrere
   Worker. Umstellung auf `rate_limit(...)` naheliegend.
 - `GET /api/leads/waitlist` (Admin-CSV-Export) ist als TODO markiert (`lead_routes.py:241`).
-- `WaitlistJoinRequest.validate_source`: die `allowed`-Menge listet `"complyo.de"` doppelt —
-  vermutlich Rest einer `.tech`→`.de`-Umstellung (vgl. [[live-domains]]), harmlos.
+- **[BEHOBEN 2026-07-17] `WaitlistJoinRequest.validate_source`:** die `allowed`-Menge listete
+  `"complyo.de"` doppelt (Rest einer `.tech`→`.de`-Umstellung, vgl. [[live-domains]]) →
+  Duplikat entfernt, Menge jetzt `{"early-access", "complyo.de", "landing"}`.

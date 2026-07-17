@@ -1,6 +1,7 @@
 # DSGVO-Betroffenenrechte & Retention
 
-**Stand:** 2026-07-17 · **Status:** 🔵 geplant (Code vorhanden, produktiv wirkungslos)
+**Stand:** 2026-07-17 · **Status:** 🟡 teilbehoben (Retention-Cleanup löscht jetzt,
+Betroffenen-Endpunkte token-gebunden; Datenmodell-Klärung offen)
 
 ## Ziel
 Compliance am eigenen Produkt: Auskunft (Art. 15/20), Löschung (Art. 17) und automatisierte
@@ -39,35 +40,33 @@ Aufbewahrungsbegrenzung (Art. 5 Abs. 1 lit. e) für die von Complyo selbst verar
 - Kein eigenes Schema; das Feature löscht ausschließlich in fremden Tabellen.
 - `backend/alembic/baseline_schema.sql` / Revision `20260717_baseline_2026_07.py` sind die
   einzige Quelle der Wahrheit; `backend/migrations/_archive_pre_baseline/` (46 Dateien) ist gesperrt.
-- **Vorhanden** in der Live-DB: `users`, `user_sessions`, `cookie_consent_logs`.
-- **Nicht vorhanden** (verifiziert): `leads`, `ai_call_logs`, `email_verifications`,
-  und damit auch `communication_log`/`lead_consents` (aus `delete_lead_permanently()`).
+- **Vorhanden** in der Live-DB: `users`, `user_sessions`, `cookie_consent_logs`; seit
+  Alembic 0003 (2026-07-17) auch `leads`, `email_verifications`, `communication_log`,
+  `lead_consents` ([[lead-free-scan-funnel]]).
+- **Nicht vorhanden** (verifiziert): `ai_call_logs` — der Cleanup überspringt die Tabelle jetzt
+  aber sauber, statt zu scheitern.
 
 ## Bekannte Lücken / Offen
-- **`_daily_gdpr_cleanup()` läuft, löscht aber nichts (verifiziert).** Alle fünf Statements
-  nutzen `DELETE ... RETURNING COUNT(*)` — in PostgreSQL unzulässig. Live-Log:
-  `✅ Daily GDPR cleanup task scheduled`, danach exakt
-  `WARNING: GDPR cleanup error: aggregate functions are not allowed in RETURNING`;
-  0 Vorkommen von `GDPR cleanup: removed`. Die erste Anweisung wirft, der `except` fängt,
-  schläft 24 h und scheitert erneut — **dauerhaft**. Fix: `RETURNING COUNT(*)` entfernen und
-  die Trefferzahl aus dem `DELETE …`-Status-Tag lesen (`conn.execute`).
-  Der identische Defekt steckt in `backend/backup_retention.py`.
-- Selbst nach dem Fix bräche der Lauf an `ai_call_logs` / `email_verifications` — beide
-  Tabellen existieren nicht.
-- **Keine Auth, keine Ownership auf den Betroffenen-Endpunkten (verifiziert).**
-  `POST /request-deletion` und `POST /export-data` identifizieren allein über eine
-  E-Mail-Adresse im Body — keine Dependency, kein Token, kein Verifikations-Link.
-  `GET /retention-info?email=` ebenso (live 422 = Validierung, kein 401). Faktischer Schutz
-  ist nur die globale `CSRFMiddleware` (`main_production.py:238`), die alle POSTs ohne Token
-  mit 403 abweist — **kein** Ownership-Nachweis. Der Export mildert sich dadurch, dass er an
-  die angefragte Adresse geht; die **Löschung** hat keine solche Bremse. Selbe Klasse Lücke wie
-  die am 2026-07-17 in `cookie_compliance_routes.py` geschlossenen 28 offenen Routen →
-  Double-Opt-In-Token oder Auth-Dependency erforderlich.
-- Praktisch entschärft ist beides derzeit nur dadurch, dass `leads` gar nicht existiert:
-  `get_lead_by_email` läuft ins Leere, `/request-deletion` liefert „No data found",
-  `/export-data` 404. Der gesamte `gdpr_retention_service` adressiert ein Datenmodell, das
-  in der Baseline nicht mehr vorkommt — **zu klären**, ob es ersatzlos entfällt (dann Modul
-  + Routen entfernen) oder auf `users`/[[lead-free-scan-funnel]] umgeschrieben wird.
+- **[BEHOBEN 2026-07-17] `_daily_gdpr_cleanup()` lief, löschte aber nichts.** Alle fünf
+  Statements nutzten `DELETE ... RETURNING COUNT(*)` — in PostgreSQL unzulässig; die erste
+  Anweisung warf `aggregate functions are not allowed in RETURNING`, der `except` fing,
+  schlief 24 h, scheiterte erneut. Fix: `RETURNING COUNT(*)` entfernt, Trefferzahl aus dem
+  asyncpg-Command-Tag (`"DELETE 42" → 42`); fehlende Tabellen kippen den Lauf nicht mehr,
+  sondern werden übersprungen. Beleg: 123 abgelaufene Sessions lagen zuvor unlöschbar in der DB
+  und werden nun gelöscht. (Der identische Defekt in `backend/backup_retention.py` bleibt —
+  toter Code.) `email_verifications` existiert seit Alembic 0003; `ai_call_logs` fehlt weiter,
+  wird aber jetzt sauber übersprungen.
+- **[BEHOBEN 2026-07-17] Keine Auth/Ownership auf den Betroffenen-Endpunkten.**
+  `POST /request-deletion` und `POST /export-data` identifizierten den Betroffenen allein über
+  eine E-Mail im Body — kein Token. Fix: neue Dependency `get_verified_email` zieht die E-Mail
+  aus dem JWT (`gdpr_api.py:29`), das `email`-Body-Feld entfällt → Betroffener = Token-Inhaber
+  (IDOR geschlossen). Abgesichert durch `tests/test_gdpr_knowledge_auth.py`.
+  (`GET /retention-info?email=` als reiner Lese-Endpunkt zu prüfen.)
+- Der `gdpr_retention_service` adressiert das `leads`-Datenmodell; `leads` existiert seit
+  Alembic 0003 wieder (2026-07-17), damit greifen `get_lead_by_email` / `/request-deletion` /
+  `/export-data` jetzt gegen echte Daten. **Weiter zu klären**, ob das Modul auf
+  `users`/[[lead-free-scan-funnel]] konsolidiert wird — die Betroffenen-Endpunkte sind nun aber
+  token-gebunden statt E-Mail-adressierbar.
 - **Konkurrierende Retention-Mechanismen (3 Stück):** `_daily_gdpr_cleanup()` (läuft, wirkungslos),
   `gdpr_service.perform_retention_cleanup()` (nur manuell über `/admin/run-cleanup`) und
   `backup_retention.py` (tot). Zusätzlich existiert in

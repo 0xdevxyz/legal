@@ -16,25 +16,30 @@ ohne die REST-API einzeln zu integrieren. Technisch ein Auto-Wrapper über das O
     zum Tool**, es gibt keine kuratierte Tool-Liste.
 - **Mount:** `backend/main_production.py:755-758` → `/mcp` (SSE-Transport), Nachrichten-Endpunkt
   `/mcp/messages/?session_id=…`.
-- **Auth-Gate:** `backend/main_production.py:281-292`, Middleware `mcp_auth_middleware`
-  - prüft für `request.url.path.startswith("/mcp")` **nur die Existenz** von
-    `Authorization: Bearer …` — **kein JWT-Decode, keine Signatur-, Ablauf- oder User-Prüfung**.
-  - Die eigentliche Autorisierung passiert erst im gewrappten Endpoint (`Depends`-Kette).
-- **Verifiziert live gegen `https://api.complyo.de/mcp`:**
-  - ohne Header → `401`; mit `Authorization: Bearer fake` → `200` + offener SSE-Stream.
+- **Auth-Gate:** `backend/main_production.py:296`, Middleware `mcp_auth_middleware`
+  - **[BEHOBEN 2026-07-17]** validiert für `request.url.path.startswith("/mcp")` jetzt ein
+    **echtes JWT** über die kanonische Dependency `dependencies.get_current_user` (Signatur +
+    Ablauf + User existiert/aktiv); jede `HTTPException`/jeder Fehler → 401. Zuvor wurde nur das
+    Präfix `Bearer ` geprüft — jeder beliebige String öffnete den SSE-Stream.
+  - Die endpunktspezifische Autorisierung passiert zusätzlich in der `Depends`-Kette des
+    gewrappten Endpoints.
+- **Verifiziert live vor dem Fix gegen `https://api.complyo.de/mcp`:**
+  - ohne Header → `401`; mit `Authorization: Bearer fake` → `200` + offener SSE-Stream
+    (**vor dem Fix**; jetzt liefert `Bearer fake` 401).
   - `initialize` + `tools/list` mit `Bearer fake` → **296 Tools** vollständig ausgeliefert
-    (inkl. Namen, Beschreibungen, Input-/Output-Schemata der kompletten API).
+    (inkl. Namen, Beschreibungen, Input-/Output-Schemata der kompletten API) — vor dem Fix.
   - `tools/call get_current_user_info_api_auth_me_get` → `401 Authentication failed`
     (Endpoint-Auth greift, Status wird durchgereicht).
   - `tools/call get_dashboard_stats_api_v2_dashboard_stats_get` → `200` mit Daten,
     weil dieser Endpoint selbst keine Auth hat.
 
 ## Bekannte Lücken / Offen
-- **Auth-Middleware ist rein syntaktisch (hoch).** Jeder beliebige String nach `Bearer `
-  öffnet die Session. Der Schutz der Tools ist damit exakt der Schutz der darunterliegenden
-  Endpunkte — die Middleware fügt **null** Sicherheit hinzu, suggeriert sie aber
-  (`MCP_SERVER_DESCRIPTION`: „Bearer-Token (JWT) erforderlich"). Fix: JWT im Middleware
-  validieren (bestehender `auth_service`), sonst 401.
+- **[BEHOBEN 2026-07-17] Auth-Middleware war rein syntaktisch (hoch).** Jeder beliebige String
+  nach `Bearer ` öffnete die Session; die Middleware fügte null Sicherheit hinzu, suggerierte
+  sie aber (`MCP_SERVER_DESCRIPTION`: „Bearer-Token (JWT) erforderlich"). Fix: `mcp_auth_middleware`
+  ruft jetzt `dependencies.get_current_user` und validiert damit ein echtes JWT (Signatur,
+  Ablauf, aktiver User), sonst 401. Der Schutz ungeschützter Endpunkte bleibt aber deren
+  eigene Sache (s. u.).
 - **Ungeschützte Endpunkte sind über `/mcp` ohne gültiges Token nutzbar (hoch).**
   Belegt an `/api/v2/dashboard/stats`; ebenso betroffen: `/api/risk-radar/*`
   (siehe [[risiko-radar]], keine Auth, `user_id` als freier Query-Param). Die MCP-Fläche

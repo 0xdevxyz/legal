@@ -108,11 +108,13 @@ gilt nicht als bestanden, sondern als `unverified`.
 - `tracked_websites` — `last_score`, `last_scan_date`, `scan_count` werden fortgeschrieben.
 
 ## Bekannte Lücken / Offen
-- **Kein Rate-Limit auf den Scan-Endpunkten:** nur `/api/v2/analyze/complete` hat
-  `@limiter.limit("30/minute")`. `/api/v2/analyze`, `/api/v2/analyze/quick`, `/api/analyze`
-  und das **unauthentifizierte** `/api/analyze-preview` sind ungedrosselt — obwohl
-  `planning/STRUKTUR_FIXES_LAUNCH_PLAN.md` (1.4, Richtwert Scan 3/min) als erledigt
-  markiert ist. `/api/analyze-preview` ist damit eine offene, teure DoS-/Kostenfläche.
+- **[BEHOBEN 2026-07-17] Rate-Limit auf den Scan-Endpunkten.** Zuvor hatte nur
+  `/api/v2/analyze/complete` ein Limit; `/api/v2/analyze`, `/api/v2/analyze/quick` und das
+  unauthentifizierte `/api/analyze-preview` waren ungedrosselt. Fix: alle vier tragen jetzt
+  `Depends(rate_limit("...", 3, 60))` (3/60s) — `analyze_full`, `analyze_quick`,
+  `analyze_complete`, `analyze_preview` (`main_production.py:1250/1194/936`,
+  `public_routes.py:1884`). (`POST /api/analyze` in `public_routes.py:105` ist auth-pflichtig
+  und noch ohne Limit — zu prüfen.)
 - **Kein Plan-Gate:** keine der Scan-Varianten prüft `plan_type` oder ein Kontingent
   (im Gegensatz zu [[deep-cookie-scanner]]).
 - **Scanner ist nicht jurisdiction-aware:** `compliance_engine/jurisdictions.py` und

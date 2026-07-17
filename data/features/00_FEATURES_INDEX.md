@@ -23,26 +23,26 @@
 | **Regulierungs-Radar** (BFSG-Report + AI-Act-Transparenz-Check im Free-Scan) | [regulierungs-radar.md](regulierungs-radar.md) | 🟢 live | 2026-07-17 |
 | **Pflichten-Report** (Firmenprofil → 13 Pflichten + lebender Änderungs-Feed; Premium-Gating) | [pflichten-report.md](pflichten-report.md) | 🟢 live (7.2+7.3) | 2026-07-17 |
 | **KI-Fix-Engine** (Fix-Generierung, Quality-Gate, Fix-Jobs-Queue) | [ai-fix-engine.md](ai-fix-engine.md) | 🟡 in Arbeit | 2026-07-17 |
-| **Cookie-Consent-Widget** (ausgeliefertes JS: Banner v2, Content-Blocker, Consent Mode) | [cookie-consent-widget.md](cookie-consent-widget.md) | 🟢 live (tote Pfade) | 2026-07-17 |
+| **Cookie-Consent-Widget** (ausgeliefertes JS: Banner v2, Content-Blocker, Consent Mode) | [cookie-consent-widget.md](cookie-consent-widget.md) | 🟢 live (tote Pfade bereinigt) | 2026-07-17 |
 | **Cookie-Consent-Management** (Server: Consent-Logging, Katalog, Banner-Config) | [cookie-consent-management.md](cookie-consent-management.md) | 🟡 in Arbeit | 2026-07-17 |
-| **Legal Text Generator** (KI-Rechtstexte: Impressum, Datenschutz, AGB, Cookie, Widerruf) | [legal-text-generator.md](legal-text-generator.md) | 🟢 live (Auto-Update tot) | 2026-07-17 |
+| **Legal Text Generator** (KI-Rechtstexte: Impressum, Datenschutz, AGB, Cookie, Widerruf) | [legal-text-generator.md](legal-text-generator.md) | 🟢 live (Auto-Update jetzt live) | 2026-07-17 |
 | **Legal-Change-Monitoring** (EUR-Lex/RSS/KI-Recherche, Klassifikation, Benachrichtigung) | [legal-change-monitoring.md](legal-change-monitoring.md) | 🟡 in Arbeit | 2026-07-17 |
 | **AI-Act-Compliance** ("ComplyoAI Guard": KI-Register, Risikoklassifizierung, Doku) | [ai-act-compliance.md](ai-act-compliance.md) | 🟡 in Arbeit | 2026-07-17 |
 | **Jurisdiction-Kontext** (internationale Compliance Stufe 1) | [jurisdiction-kontext.md](jurisdiction-kontext.md) | 🟡 Fundament, ohne Wirkung | 2026-07-17 |
 | **Billing / Pläne / Add-ons** (Stripe-Abos, Checkout, Webhooks, Plan-Gating) | [billing-plans-addons.md](billing-plans-addons.md) | 🟡 in Arbeit | 2026-07-17 |
 | **Agentur / White-Label** (Kundengruppen, Logo, Kundenreports, Agentur-Stats) | [agentur-white-label.md](agentur-white-label.md) | 🟢 live | 2026-07-17 |
-| **Lead-/Free-Scan-Funnel** (Scan ohne Login, Double-Opt-in, Warteliste) | [lead-free-scan-funnel.md](lead-free-scan-funnel.md) | 🟡 in Arbeit | 2026-07-17 |
+| **Lead-/Free-Scan-Funnel** (Scan ohne Login, Double-Opt-in, Warteliste) | [lead-free-scan-funnel.md](lead-free-scan-funnel.md) | 🟡 in Arbeit (leads-Tabelle+Auth gefixt; Double-Opt-in offen) | 2026-07-17 |
 | **Alt-Text-KI-Generierung** (Vision-KI für Bild-Alternativtexte + Patches) | [alt-text-ki-generierung.md](alt-text-ki-generierung.md) | 🟢 live | 2026-07-17 |
 | **WordPress-Plugin** (Widget, Inline-Blocker, A11y-Remediation, Local Fonts) | [wordpress-plugin.md](wordpress-plugin.md) | 🟢 live (v2.6.0) | 2026-07-17 |
 | **Joomla-Plugin** (nur Widget-Einbindung) | [joomla-plugin.md](joomla-plugin.md) | 🟡 Teilstand (v2.1.0) | 2026-07-17 |
-| **PDF-Report & Export** (Compliance-Report, Audit-Log) | [pdf-report-export.md](pdf-report-export.md) | 🟡 PDF live, Audit-Export tot | 2026-07-17 |
+| **PDF-Report & Export** (Compliance-Report, Audit-Log) | [pdf-report-export.md](pdf-report-export.md) | 🟢 live (Audit-Log/-Export gefixt) | 2026-07-17 |
 | **Admin-Bereich** (Leads, Analytics, System-Health, Fix-Review-Queue) | [admin-bereich.md](admin-bereich.md) | 🟡 faktisch inaktiv (503) | 2026-07-17 |
 | **Onboarding & Journey** (Wizards, Schritt-Tracking, Skill-Level) | [onboarding-journey.md](onboarding-journey.md) | 🟡 entkoppelt | 2026-07-17 |
 | **Knowledge-Base / Gesetzes-Vault** (Obsidian-Vault: Gesetze + Templates) | [knowledge-base-gesetzes-vault.md](knowledge-base-gesetzes-vault.md) | 🟡 in Arbeit | 2026-07-17 |
 | **AVV/DPA-Generator** (Auftragsverarbeitungsvertrag) | [avv-dpa-generator.md](avv-dpa-generator.md) | 🟡 nur HTML-Rendering | 2026-07-17 |
 | **TCF 2.2** (IAB-Vendorliste, TCF-Config) | [tcf-2-2.md](tcf-2-2.md) | 🟡 nicht IAB-registriert | 2026-07-17 |
-| **DSGVO-Betroffenenrechte** (Auskunft/Löschung/Export, Retention) | [dsgvo-betroffenenrechte.md](dsgvo-betroffenenrechte.md) | 🔵 wirkungslos | 2026-07-17 |
-| **MCP-Server** (Complyo-API für KI-Agenten unter `/mcp`) | [mcp-server.md](mcp-server.md) | 🟡 Auth-Gate ist Attrappe | 2026-07-17 |
+| **DSGVO-Betroffenenrechte** (Auskunft/Löschung/Export, Retention) | [dsgvo-betroffenenrechte.md](dsgvo-betroffenenrechte.md) | 🟡 teilbehoben (Cleanup+Auth gefixt) | 2026-07-17 |
+| **MCP-Server** (Complyo-API für KI-Agenten unter `/mcp`) | [mcp-server.md](mcp-server.md) | 🟡 Auth-Gate validiert JWT, Fläche unkuratiert | 2026-07-17 |
 | **Channel HTML-CLI** (Fix-Manifest auf statische Projekte anwenden) | [channel-html-cli.md](channel-html-cli.md) | 🟢 live | 2026-07-17 |
 | **Risiko-Radar** (Score-Trend, Frühwarnung) | [risiko-radar.md](risiko-radar.md) | 🟡 Backend ohne UI | 2026-07-17 |
 | **i18n / Mehrsprachigkeit** (Übersetzungs-API, Widget-Locales) | [i18n-mehrsprachigkeit.md](i18n-mehrsprachigkeit.md) | ⚪ verworfen (alle EP 500) | 2026-07-17 |

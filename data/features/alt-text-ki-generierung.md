@@ -65,27 +65,26 @@ Gegen `backend/alembic/baseline_schema.sql` (Revision
   JSONB-Write aus diesem Feature; asyncpg-JSONB-Regel nicht berührt.
 
 ## Bekannte Lücken / Offen
-- **`GET /api/accessibility/patches/download/{download_id}` hat KEINE Auth**
-  (`widget_routes.py:758-759`, Signatur nur `download_id: str`). `download_id` ist
-  `{site_id}_{unix_timestamp}` — beides erratbar (site_id ist die öffentliche
-  domain-abgeleitete ID) → fremde Patch-ZIPs sind per Brute-Force über das
-  Sekunden-Fenster ziehbar. Gleiche Lücken-Klasse wie die 28 offenen Routen in
-  `cookie_compliance_routes.py` (2026-07-17 gefixt). **Hohe Priorität.**
-- **Keine Ownership-Prüfung auf `site_id`.** Weder `patches/generate` noch
-  `/alt-text-review-queue`, `/link-review-queue`, `/worklist`, `/generate-alt-texts`,
-  `/scan-images` prüfen, ob die `site_id` dem eingeloggten User gehört — sie nehmen sie
-  als Query-/Body-Parameter. Ein beliebiger eingeloggter User liest damit fremde
-  Review-Queues und erzeugt Fixes unter fremder site_id. Auth ✅, Ownership ❌.
-  `get_user_site_ids()` aus `cookie_compliance_routes.py:184` wäre der passende
-  (multi-site-fähige) Check.
+- **[BEHOBEN 2026-07-17] `GET /api/accessibility/patches/download/{download_id}` hatte KEINE
+  Auth** (`download_id = {site_id}_{unix_timestamp}` — erratbar → fremde Patch-ZIPs per
+  Brute-Force ziehbar; die ID floss zudem ungeprüft in einen Dateinamen). Fix: `Depends(get_current_user)`
+  + strikte ID-Validierung (`re.fullmatch(r"[A-Za-z0-9-]+_\d+")`) + Ownership auf die im
+  `download_id` enthaltene `site_id` (`require_site_ownership`, `widget_routes.py:747-774`).
+- **[BEHOBEN 2026-07-17] Keine Ownership-Prüfung auf `site_id`.** Auth war da, Ownership nicht —
+  ein beliebiger eingeloggter User las fremde Review-Queues und erzeugte Fixes unter fremder
+  site_id. Fix: neue `require_site_ownership(site_id, current_user)` (`alt_text_routes.py:80`,
+  nutzt `get_user_site_ids` aus `cookie_compliance_routes`, wirft 403), vorgeschaltet auf
+  `patches/generate`, `/alt-text-review-queue`, `/link-review-queue`, `/worklist`,
+  `/generate-alt-texts`, `/scan-images`.
 - **`patches/generate` fällt bei DB-Fehler auf hartkodierte Demo-Fixes zurück**
   („Firmenlogo", „Hero-Bild der Website") und liefert sie als echtes Patch-ZIP aus, statt
   zu scheitern → der Kunde patcht seine Quelle mit erfundenen Alt-Texten. Sollte einen
   Fehler werfen.
 - **`rate_limit` ist fail-open:** ohne Redis wird das Limit nur geloggt, nicht durchgesetzt
   (`dependencies.py:369-373`). Die 5/min aus Plan 1.4 hängen damit an der Redis-Verfügbarkeit.
-- `POST /scan-images` holt eine beliebige, vom Nutzer gelieferte `site_url` serverseitig ab
-  — kein SSRF-Schutz erkennbar (**zu prüfen**, ob `smart_fetch_html` intern filtert).
+- **[BEHOBEN 2026-07-17] `POST /scan-images` holte eine beliebige, vom Nutzer gelieferte
+  `site_url` serverseitig ab** — ohne SSRF-Schutz. Fix: `ssrf_protection.validate_url(site_url)`
+  vorgeschaltet, `SSRFError` → 400 (`alt_text_routes.py:335-345`).
 - Der KI-Fallback ohne `OPENROUTER_API_KEY` (`source: 'fallback'`) speichert generische
   Texte mit `confidence` 0.9 als `pending` — der Reviewer sieht der Queue nicht an, dass
   keine Vision gelaufen ist.

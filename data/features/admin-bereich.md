@@ -46,10 +46,11 @@ weiten Teilen Stub.
 Gegen die Baseline (`backend/alembic/baseline_schema.sql`, 57 Tabellen) verifiziert:
 - Vorhanden: `users`, `tracked_websites`, `fix_jobs`, `waitlist_leads`,
   `accessibility_alt_text_fixes` / `_document_fixes` / `_link_fixes`.
-- **Fehlen in der Baseline** (nur `backend/migrations/_archive_pre_baseline/`, nicht mehr
-  anwendbar): `fix_application_audit`, `fix_backups`, `staging_deployments`, `leads`.
-- Der Lead-Bereich adressiert eine `leads`-Tabelle, die es nicht gibt — nur `waitlist_leads`
-  ([[lead-free-scan-funnel]]).
+- **[BEHOBEN 2026-07-17]** `fix_application_audit`, `fix_backups` und `leads` fehlten in der
+  Baseline — via Alembic-Revision `0003_missing_lead_and_audit_tables` nachgezogen (gegen die
+  Live-DB angewendet). Weiterhin nicht angelegt: `staging_deployments` (Produktentscheidung offen).
+- Der Lead-Bereich adressiert eine `leads`-Tabelle; diese existiert seit Alembic 0003 wieder
+  (neben `waitlist_leads`), s. [[lead-free-scan-funnel]].
 - Keine asyncpg-JSONB-Verstöße: `admin_routes.py` baut JSONB serverseitig über
   `jsonb_build_array`/`jsonb_build_object` (`:459-466`), `$3` ist reiner Text (`:473`).
   `ai_review_engine.py` greift gar nicht auf die DB zu.
@@ -59,9 +60,11 @@ Gegen die Baseline (`backend/alembic/baseline_schema.sql`, 57 Tabellen) verifizi
   `docker-compose.yml` noch in `.env` gesetzt → `_ADMIN_API_KEY is None` → alle 11 Routen
   antworten 503. Live verifiziert: `GET /api/admin/system/health?api_key=x` → 503
   `{"detail":"Admin access not configured"}`, während `/health` 200 liefert.
-- **Fix-Review-Queue ist eine Fassade — es gibt de facto keine menschliche Freigabe.** Vier
-  unabhängige Bruchstellen, jede allein ausreichend:
-  1. `fix_application_audit` existiert in der Baseline nicht → `UndefinedTableError` → 500.
+- **Fix-Review-Queue ist eine Fassade — es gibt de facto keine menschliche Freigabe.** Von den
+  vier unabhängigen Bruchstellen ist eine behoben, drei bleiben (jede allein ausreichend):
+  1. **[BEHOBEN 2026-07-17]** `fix_application_audit` fehlte in der Baseline (→
+     `UndefinedTableError`/500) — jetzt via Alembic 0003 angelegt. Die Queue bleibt aber
+     **praktisch leer**, solange kein Writer `quality_gate_status='pending_review'` setzt (Punkt 2).
   2. `audit_service.log_fix_application()` (`audit_service.py:186-203`) listet 18 Spalten
      explizit auf — `quality_gate_status`/`quality_gate_log` sind **nicht** darunter. Kein Code
      im Repo schreibt den Status je in die Tabelle; die einzigen Writes sind die Admin-UPDATEs,

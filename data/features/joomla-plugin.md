@@ -9,15 +9,16 @@ Accessibility-Widget einbindet — inklusive DE/EN-Sprachdateien. Funktional die
 
 ## Architektur (end-to-end)
 - **Plugin:** `joomla-plugin/plg_system_complyo/complyo.php` (145 Z., `PlgSystemComplyo extends CMSPlugin`)
-  - **URL-Konstanten (zentral):** `const API_BASE = 'https://api.complyo.de'` (Z. 21),
-    `const APP_URL = 'https://app.complyo.de'` (Z. 22) — hardcoded, kein Settings-Feld, kein Override.
-    `APP_URL` ist deklariert, wird im PHP aber **nirgends verwendet** (toter Code; im WP-Pendant
-    verlinkt es das Dashboard).
+  - **URL-Konstante:** `const API_BASE = 'https://api.complyo.de'` (Z. 21) — hardcoded, kein
+    Settings-Feld, kein Override. **[BEHOBEN 2026-07-17]** Die deklarierte, aber nirgends genutzte
+    Konstante `APP_URL` (toter Code) wurde entfernt.
   - **`onAfterInitialise()`** — frühestmöglicher Hook; `$app->getDocument()->addCustomTag($this->buildBlockerTag())`,
     damit der Blocker möglichst früh im `<head>` steht. Nur `isClient('site')`.
-  - **`onBeforeCompileHead()`** — **leerer No-Op**. Der Kommentar kündigt „doppelte Sicherheit, falls
-    onAfterInitialise nicht greift" an, der Rumpf tut nichts. Irreführend → entfernen oder implementieren.
-  - **`onAfterRender()`** — `str_replace('</body>', $scripts . "\n</body>", $body)` auf `$app->getBody()`.
+  - **[BEHOBEN 2026-07-17] `onBeforeCompileHead()` No-Op entfernt.** Der Hook war ein leerer
+    No-Op (nur Client-Check), der eine nie existierende Fallback-Absicherung suggerierte → raus.
+  - **`onAfterRender()`** — **[BEHOBEN 2026-07-17]** ersetzt jetzt nur noch das **letzte**
+    `</body>` via `strripos()` + `substr_replace()` (zuvor `str_replace`, das **jedes** Vorkommen
+    traf — auch `</body>` in Text-/JS-Strings → Mehrfach-/Fehlinjektion).
   - **`getSiteId()`** — Param `site_id`, sonst abgeleitet: `Uri::getInstance()`-Host, `www.`-Strip, `.`→`-`,
     lowercase. Entspricht dem Backend-`derive_site_id`. Escaping via `htmlspecialchars(ENT_QUOTES)`.
   - **`buildBlockerTag()`** — `<script src="{API}/public/cookie-blocker.js" data-site-id data-cfasync="false">`,
@@ -62,9 +63,9 @@ Kein Aufruf von `GET /api/accessibility/fix-manifest/{site_id}` — vgl. [[acces
   - **Caching-Kompatibilität** — nur `data-cfasync="false"`; keine Ausschlüsse für Joomla-Cache/JCH Optimizer
     o. ä. (WP schließt fünf Caching-Plugins aus). Blocker kann minifiziert/deferred werden.
   - **Scanner-/Statement-Optionen** — kein `data-a11y-statement-url`/`data-a11y-feedback`.
-- **`onAfterRender`-Rewrite ist naiv.** `str_replace('</body>', …)` ersetzt **jedes** Vorkommen, auch in
-  Inline-JS oder Kommentaren → potenziell mehrfache Script-Einbindung. `str_replace` mit Limit bzw.
-  `strrpos`-basiertes Einsetzen wäre korrekt.
+- **[BEHOBEN 2026-07-17] `onAfterRender`-Rewrite war naiv.** `str_replace('</body>', …)` ersetzte
+  jedes Vorkommen (auch in Inline-JS/Kommentaren) → mehrfache Script-Einbindung. Fix:
+  `strripos()` + `substr_replace()` trifft ausschließlich den schließenden Body-Tag.
 - **Nur `enable_cookie_banner` gatet den Blocker.** Ist der Banner aus und nur A11y an, wird der Blocker
   nicht geladen — konsistent, aber unbelegt, ob gewollt (zu prüfen).
 - Joomla-Versionskompatibilität (J4/J5) nicht dokumentiert; `complyo.xml` deklariert keine

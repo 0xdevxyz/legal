@@ -101,10 +101,10 @@ Alle Tabellen sind in der Alembic-Baseline `backend/alembic/baseline_schema.sql`
   `.../schedule` und alle Doku-/Notification-Routen prüfen `check_user_addon` **nicht** —
   nur Ownership. Wer das Add-on kündigt, kann Bestandssysteme weiter scannen und Doku
   generieren.
-- **Kein Rate-Limiting** auf den KI-Endpunkten: `slowapi`-`limiter` existiert
-  (`main_production.py:209`), wird aber in `ai_compliance_routes.py` nirgends verwendet —
-  `POST /systems/{id}/scan` und `documentation/generate` sind ungedrosselte
-  OpenRouter-Kostenpfade (vgl. `planning/STRUKTUR_FIXES_LAUNCH_PLAN.md` 1.4).
+- **Rate-Limiting teilbehoben (2026-07-17):** `POST /systems/{id}/documentation/generate` trägt
+  jetzt `Depends(rate_limit("ai_doc_generate", 5, 60))` (`ai_compliance_routes.py:656`).
+  `POST /systems/{id}/scan` (`:337`) ist **weiterhin ungedrosselt** — offener OpenRouter-Kostenpfad
+  (vgl. `planning/STRUKTUR_FIXES_LAUNCH_PLAN.md` 1.4).
 - **Ownership: keine Lücke** — alle systemspezifischen Queries filtern `user_id = $2` bzw.
   joinen `ai_systems s ON ... AND s.user_id = $2` (`:222`, `:348`, `:569`, `:669`, `:783`,
   `:850`, `:893`, `:996`, `:1043`, `:1071`, `:1306`).

@@ -59,6 +59,13 @@ einsetzt. **Kein registriertes CMP** — der `__tcfapi`-Teil im Banner ist ein S
   ist gesperrt.
 
 ## Bekannte Lücken / Offen
+- **[BEHOBEN 2026-07-17] OneTrust-Erkennung im Scan-Check** (`checks/tcf_check.py`): OneTrust
+  wurde nur über den String `onetrust` erkannt, liefert real aber fast immer über
+  `cdn.cookielaw.org` / Optanon-Bundles aus → der String tauchte in der Script-`src` nie auf,
+  das Info-Issue „TCF 2.2 nicht implementiert" blieb bei OneTrust-Seiten stillschweigend aus.
+  Fix: Signatur→Anzeigename-Map ergänzt um `cookielaw` und `optanon` (beide → „OneTrust"),
+  plus saubere Anzeigenamen für Usercentrics/CookieFirst/Osano/Complianz. Abgesichert durch
+  `tests/test_tcf_compliance.py`. Die IAB-Registrierung bleibt offen (s. u.).
 - **Keine IAB-Registrierung** (`TODO_TCF_REGISTRIERUNG.md`): keine CMP-ID, kein
   TC-String-Generator, kein bestandener CMP Validation Test. Ohne CMP-ID ist der
   `__tcfapi`-Stub für AdSense/Ad-Manager-Kunden **nicht** verwertbar. Kosten €1.575/Jahr;

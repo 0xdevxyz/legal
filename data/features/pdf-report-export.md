@@ -1,6 +1,7 @@
 # PDF-Report & Export
 
-**Stand:** 2026-07-17 · **Status:** 🟡 in Arbeit (PDF-Download live, Audit-Export tot)
+**Stand:** 2026-07-17 · **Status:** 🟢 live (PDF-Download live, Audit-Log/-Export seit
+2026-07-17 funktionsfähig)
 
 ## Ziel
 Scan-Ergebnisse als PDF-Compliance-Report zum Download, KI-Fixes als HTML/PDF-Export und
@@ -48,32 +49,28 @@ Gegen die Alembic-Baseline (`backend/alembic/versions/20260717_baseline_2026_07.
 Dump `backend/alembic/baseline_schema.sql`, 57 Tabellen) verifiziert:
 - Vorhanden: `scan_history` (Report-Quelle), `generated_fixes` + `user_limits` + `export_history`
   (Fix-Export), `users.agency_logo_path`.
-- **Fehlen in der Baseline:** `fix_application_audit`, `fix_backups` — nur noch in
-  `backend/migrations/_archive_pre_baseline/` (`create_fix_audit_trail.sql`,
-  `complete_migration.sql`, `add_rule_versioning.sql`), die nicht mehr angewendet werden dürfen.
-- **`fix_audit_trail` ist nirgends definiert** — weder Baseline noch Archiv (`grep` über alle
-  `*.sql` = 0 Treffer). Genau aus dieser Tabelle lesen aber beide Audit-Endpunkte.
+- **[BEHOBEN 2026-07-17] Fehlten in der Baseline:** `fix_application_audit`, `fix_backups` —
+  jetzt via Alembic-Revision `0003_missing_lead_and_audit_tables` (additiv, gegen die Live-DB
+  angewendet) nachgezogen. Die Archiv-Skripte bleiben tabu.
+- **[BEHOBEN 2026-07-17] `fix_audit_trail` war nirgends definiert** — eine Geistertabelle, aus
+  der aber beide Audit-Endpunkte lasen. Fix: beide Reader lesen jetzt `fix_application_audit`
+  (die Writer-Tabelle, `main_production.py:1820/1854`).
 - asyncpg-JSONB-Regel in `audit_service.py` **eingehalten**: jede JSONB-Bindung ist
   `json.dumps()`-gewrappt (`:87,133,200,202,258,312,314,499`).
 
 ## Bekannte Lücken / Offen
-- **Audit-Log und Audit-Export sind tot.** Sie lesen `fix_audit_trail`, eine Tabelle, die im
-  Repo nirgends existiert → jeder Aufruf endet in `UndefinedTableError` → HTTP 500. Verifiziert.
-- **Write und Read nutzen verschiedene Tabellen:** `audit_service.py` schreibt
-  `fix_application_audit`, die Endpunkte lesen `fix_audit_trail`. Selbst mit angelegter Tabelle
-  läge dort nichts. Zusätzlich selektieren die Routen Spalten (`backup_id`,
-  `rollback_available`), die kein Writer je füllt. Welche Tabelle die intendierte ist:
-  **zu klären**.
-- **`fix_application_audit`/`fix_backups` fehlen in der Baseline** → auf einer frisch aus der
-  Baseline aufgebauten DB läuft auch `audit_service` in `UndefinedTableError`. Das Feature
-  funktioniert allenfalls auf gewachsenen DBs mit Pre-Baseline-Migrationen. Nachzuziehen als
-  Alembic-Revision.
-- **Kein Rate-Limit auf PDF-Export** (Plan 1.4 fordert Drosselung). slowapi ist vorhanden
-  (`main_production.py:9-11,209-211`), aber nur auf `/api/v2/analyze/complete` (30/min, `:867`),
-  `/api/v2/fixes/execute` (10/min, `:932`), `/api/v2/fixes/validate` (20/min, `:960`).
-  `/api/v2/reports/{scan_id}/download` rendert synchron und ohne Cache → unlimitierter
-  CPU-Amplifier für jeden eingeloggten User. Auch `/audit/export` und die Agentur-Route sind offen.
+- **[BEHOBEN 2026-07-17] Audit-Log und Audit-Export waren tot** (lasen `fix_audit_trail` →
+  `UndefinedTableError`/500) und **Write/Read nutzten verschiedene Tabellen** (`audit_service`
+  schrieb `fix_application_audit`, die Endpunkte lasen `fix_audit_trail`). Fix: Reader auf
+  `fix_application_audit` umgestellt + Tabelle via Alembic 0003 angelegt → Audit-Log/-Export
+  funktionsfähig. (Die Routen selektieren weiterhin `backup_id`/`rollback_available` — ob jeder
+  Writer diese füllt, bleibt zu prüfen.)
+- **[BEHOBEN 2026-07-17] Kein Rate-Limit auf PDF-Export** (Plan 1.4). Fix:
+  `/api/v2/reports/{scan_id}/download` hat jetzt `Depends(rate_limit("report_download", 10, 60))`
+  (`main_production.py:1770`). (`/audit/export` und die Agentur-Route noch prüfen.)
 - `limit`/`offset` in `/api/v2/audit/log` sind **ungebounded** (`limit: int = 50` ohne `le=`)
   → `?limit=10000000` möglich.
-- Beide Audit-Handler geben `detail=str(e)` an den Client (`:1766`, `:1804`) → DB-Fehlertexte leaken.
+- **[BEHOBEN 2026-07-17] `detail=str(e)`-Leaks in den Audit-Handlern:** beide gaben DB-Fehlertexte
+  an den Client. Fix: beide liefern jetzt generisch `detail="Interner Fehler"`
+  (`main_production.py:1842/1883`).
 - Zwei `ComplianceReportGenerator`-Forks mit divergierenden Signaturen (s. o.) — zusammenführen.

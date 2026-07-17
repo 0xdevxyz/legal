@@ -50,27 +50,28 @@ Durchsuchbares Rechts-Archiv mit **Doppelrolle**:
   berührt.
 
 ## Bekannte Lücken / Offen
-- **Vault-Pfad im Generator kaputt (verifiziert im Container):** `LAWS_DIR` löst zu
-  `/app/../knowledge/laws` = `/knowledge` auf — existiert nicht (Build-Context ist `./backend`,
-  der Vault liegt auf `/data/knowledge`). `os.path.exists()` = `False` für `LAWS_DIR` **und**
-  `TEMPLATES_DIR`. Folge: der [[legal-text-generator]] läuft produktiv **ohne** Templates
-  (String-Fallback) und **ohne** Gesetzeskontext (`"Aktuelle DSGVO- und TMG-Anforderungen beachten."`).
-  Fix: `KNOWLEDGE_VAULT_PATH` auch im Generator nutzen.
-- **Fehlende Gesetzesseiten (verifiziert):** `generate_withdrawal` fordert
+- **[BEHOBEN 2026-07-17] Vault-Pfad im Generator kaputt:** `LAWS_DIR` löste zu
+  `/app/../knowledge/laws` = `/knowledge` auf — existiert nicht (Vault liegt auf
+  `/data/knowledge`); der [[legal-text-generator]] lief produktiv ohne Templates und ohne
+  Gesetzeskontext. Fix: `KNOWLEDGE_DIR = os.getenv("KNOWLEDGE_VAULT_PATH", <repo-relativ>)`
+  (`legal_text_generator.py:55`), Fehlschlag loggt jetzt `error` statt stillem Fallback.
+  Abgesichert durch `tests/test_knowledge_vault_wiring.py`.
+- **[BEHOBEN 2026-07-17] Fehlende Gesetzesseiten:** `generate_withdrawal` fordert
   `_load_laws_context(["Widerrufsrecht", "Verbraucherrecht", "AGB-Recht"])` an, aber
-  `knowledge/laws/Widerrufsrecht.md` und `knowledge/laws/Verbraucherrecht.md` **fehlen**.
-  Auch `_mapping.yaml` kennt beide nicht. Nur `AGB-Recht` würde greifen.
+  `knowledge/laws/Widerrufsrecht.md` und `knowledge/laws/Verbraucherrecht.md` fehlten — nur
+  `AGB-Recht` griff. Fix: beide Stammseiten im Vault ergänzt (`knowledge/laws/`), Wächter
+  `tests/test_knowledge_vault_wiring.py` auf den neuen Sollzustand gezogen. (`_mapping.yaml`
+  kennt beide weiterhin nicht — offen.) Siehe [[legal-text-generator]].
 - **`updates/` ist leer** → `/updates` liefert dauerhaft `[]`, die Update-Ansicht im Dashboard
   ist faktisch tot. Ob der genannte Host-Cron existiert und läuft: **unklar, zu prüfen**.
 - **`trigger-refresh` kann nichts schreiben:** der Mount ist `:ro`. `MDWriter.write_batch()` und
   `_save_cache()` (→ `_meta/embeddings.json`) schlagen im Container fehl; Fehler werden nur
   geloggt, der Endpoint meldet trotzdem `started`. Passt zu `cached_embeddings: 0` → jede Suche
   embeddet neu bzw. fällt auf Keyword-Score zurück.
-- **Auth `trigger-refresh`:** Docstring sagt „(Admin)", der Code hat **keine** Dependency.
-  Faktischer Schutz ist allein die globale `CSRFMiddleware` (`main_production.py:238`) — live
-  403 ohne CSRF-Token. Das ist kein Admin-Gate: jede Session mit gültigem CSRF-Token kann den
-  Ingestion-Lauf (inkl. OpenAI-Kosten) auslösen. Gleiche Klasse Lücke wie die am 2026-07-17 in
-  `cookie_compliance_routes.py` geschlossenen offenen Routen → Admin-Dependency nachrüsten.
+- **[BEHOBEN 2026-07-17] Auth `trigger-refresh`:** der Code hatte trotz Docstring „(Admin)"
+  **keine** Dependency — jede Session mit CSRF-Token konnte den Ingestion-Lauf (OpenAI-Kosten)
+  auslösen. Fix: `admin: dict = Depends(require_admin)` (`knowledge_routes.py:158`). Abgesichert
+  durch `tests/test_gdpr_knowledge_auth.py`.
 - Alle `GET`-Routen sind unauthentifiziert öffentlich. Für Gesetzestexte vertretbar, aber
   bewusst zu entscheiden.
 - Sprach-Unterordner und `_mapping.yaml` sind weder in `/laws` noch in der Suche sichtbar.

@@ -93,22 +93,23 @@ Farb-Extraktion aus der Kundenseite: `POST /api/cookie-compliance/extract-colors
 serverseitig, dokumentiert unter [[cookie-consent-management]].
 
 ## Bekannte Lücken / Offen
-- **`.tech` im Widget-Pfad:** `backend/widget_manager.py` Z. 39/40/391 —
-  `https://widgets.complyo.tech`, `https://cdn.complyo.tech/widgets`, `https://docs.complyo.tech`.
-  `WidgetManager` wird von `backend/ai_fix_engine/handlers/{cookie,accessibility}_handler.py`
-  benutzt → **erzeugt Integrations-Snippets mit toten Domains**. `widget_routes.py` und die
-  JS-Bundles sind sauber (`API_BASE = 'https://api.complyo.de'`). Weitere: CSP in
-  `nginx/complyo.de` erlaubt `cdn.complyo.tech`; `IntegrationGuide.tsx:413` mailto
-  `support@complyo.tech`.
-- **`GET /api/widgets/cookie-consent.js` ist tot:** liest `widgets/cookie_consent.js` — die Datei
-  existiert nicht → immer 404.
-- **`backend/widgets/optout_center.js` (815 Z.) wird von keiner Route ausgeliefert** — Doc-Header
-  nennt `/widgets/optout-center.js`, die Route gibt es nicht. Funktional redundant zum
-  Settings-Modal/Floating-Button im Banner. Entweder Route bauen oder löschen.
-- **`backend/widgets/locales/translations.js` (17 Sprachen: de, en, fr, es, it, nl, pl, pt, sv,
-  da, fi, no, cs, hu, ro, el, ru) wird nirgends geladen.** Der Banner liest
-  `window.COMPLYO_TRANSLATIONS` (Z. 576) — nichts setzt das. Mehrsprachigkeit läuft de facto nur
-  über `texts` aus der Server-Config → i18n aktuell **nicht funktional**.
+- **[BEHOBEN 2026-07-17] `.tech` im Widget-Pfad:** `backend/widget_manager.py` Z. 39/40/391
+  zeigten auf `widgets.complyo.tech`, `cdn.complyo.tech`, `docs.complyo.tech` (`.tech` ist tot,
+  [[live-domains]]) → `WidgetManager` erzeugte Integrations-Snippets mit toten Domains. Fix: alle
+  auf `.de` umgestellt (`widgets.complyo.de`, `cdn.complyo.de/widgets`, `docs.complyo.de`).
+  (CSP in `nginx/complyo.de` und mailto in `IntegrationGuide.tsx` ggf. noch prüfen.)
+- **[BEHOBEN 2026-07-17] `GET /api/widgets/cookie-consent.js` war tot** (las die nicht
+  existierende `widgets/cookie_consent.js` → immer 404, kein Konsument). Fix: die tote
+  Legacy-v1-Route ist entfernt; Auslieferung läuft über `/api/widgets/cookie-compliance.js`
+  bzw. `/privacy-manager.js`.
+- **[BEHOBEN 2026-07-17] `backend/widgets/locales/translations.js` (17 Sprachen) wurde nirgends
+  geladen** → der Banner las `window.COMPLYO_TRANSLATIONS`, das nie gesetzt war, i18n war tot.
+  Fix: `translations.js` wird jetzt vom Bundle **vor** dem Banner ausgeliefert (setzt
+  `window.COMPLYO_TRANSLATIONS`, `widget_routes.py:serve_cookie_compliance_widget`) → i18n greift.
+- **[BEHOBEN 2026-07-17] `backend/widgets/optout_center.js` als toter Code markiert:** wird von
+  keiner Route ausgeliefert und von keinem Konsumenten geladen (redundant zum Banner-eigenen
+  Preferences-Modal). Ein deutlicher `⚠️ TOTER CODE`-Header steht jetzt oben in der Datei; vor
+  Wiederbelebung erst eine serve-Route ergänzen.
 - **`IntegrationGuide.tsx:51` verweist auf `${API_BASE}/public/cookie-blocker.js`** — im Backend
   existiert keine solche Route → Snippet lädt 404.
 - **TCF-Stub** `cmpId: 0` — nicht registriert, nicht produktiv nutzbar (AUDIT-02).

@@ -98,13 +98,17 @@ server-seitig. Das ist der Kernwert des Plugins.
   dieser Stelle veraltet, nicht der Code.
 - **URLs nicht überschreibbar.** Plan 4.3 forderte „Konstante mit Default" — erfüllt. Für Staging/Self-Hosting
   fehlt aber jeder Override-Weg (kein `wp-config.php`-Vorrang via `defined()`-Guard, kein Filter, kein Settings-Feld).
-- **`complyo_enable_scanner` ist ein toter Schalter.** Registriert (Z. 389), Default `1` (Z. 111 f.), im Admin
-  gerendert (Z. 532 ff.) — aber an **keiner Stelle** gelesen, um Verhalten zu steuern. Entweder verdrahten oder entfernen.
-- **`languages/` fehlt.** Header deklariert `Domain Path: /languages` und `load_plugin_textdomain()` lädt von dort,
-  das Verzeichnis existiert nicht → keine Übersetzungen ausgelieferter Strings (UI ist ohnehin deutsch hardcoded).
+- **[BEHOBEN 2026-07-17] `complyo_enable_scanner` war ein toter Schalter** (registriert, Default `1`,
+  im Admin gerendert, aber nirgends gelesen). Fix: die tote Option/Konstante `COMPLYO_OPTION_SCANNER`
+  ist entfernt.
+- **[BEHOBEN 2026-07-17] `languages/` fehlte.** Header deklariert `Domain Path: /languages` und
+  `load_plugin_textdomain()` lädt von dort, das Verzeichnis existierte aber nicht. Fix:
+  `languages/complyo-compliance.pot` ergänzt (Übersetzungs-Template; UI selbst bleibt deutsch).
 - **Inline-Blocker per Regex.** `preg_replace_callback` auf ganzem HTML: `</script>` in einem JS-String
   kann den Block vorzeitig beenden. Kuratierte Signaturen begrenzen den Schaden, aber Output-Buffering über
   die komplette Seite kostet Speicher/Zeit — Wechselwirkung mit Page-Cache-Plugins nicht systematisch getestet (zu prüfen).
-- **Kein ETag im WP-Adapter.** Das Manifest ist server-seitig ETag-revalidiert, `sync_fixes()` sendet aber
-  kein `If-None-Match` und wertet nur 200 aus → jeder Cron-Lauf ist ein Vollabruf.
+- **[BEHOBEN 2026-07-17] Kein ETag im WP-Adapter.** Das Manifest ist server-seitig ETag-revalidiert,
+  `sync_fixes()` sendete aber kein `If-None-Match` und wertete nur 200 aus → jeder Cron-Lauf war
+  ein Vollabruf. Fix: `sync_fixes()` merkt sich das letzte ETag (`OPTION_ETAG`), sendet
+  `If-None-Match` und behandelt `304 Not Modified` als „unverändert, keine Verarbeitung".
 - Vgl. [[joomla-plugin]] (deutlich kleinerer Funktionsumfang) und [[channel-html-cli]].

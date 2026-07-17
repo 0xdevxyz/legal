@@ -97,9 +97,11 @@ suggeriert Überlappung, ist aber ungenutzt (s. u.).
   `quality_gate_status` **nie** in `fix_application_audit`; die Engine legt ihn nur in
   `fix_jobs.result` ab → Review-Queue dürfte dauerhaft leer sein, **de facto keine menschliche
   Freigabe für KI-Fixes**. Gegen Live-DB zu verifizieren.
-- **Fallback-Kette wirkungslos:** `AIModel.CLAUDE_SONNET/GPT4/GPT4_TURBO` sind alle auf
-  `moonshotai/kimi-k2.5` gesetzt → `fallback_chain` ruft zweimal dasselbe Modell; bei
-  OpenRouter-Ausfall greift direkt der Template-Fallback.
+- **[BEHOBEN 2026-07-17] Fallback-Kette wirkungslos:** `AIModel.CLAUDE_SONNET/GPT4/GPT4_TURBO`
+  zeigen alle auf `moonshotai/kimi-k2.5` → `fallback_chain` rief 3× dasselbe Modell und meldete
+  fälschlich `fallback_used=True`. Fix: `list(dict.fromkeys([...]))` dedupliziert die Kette (EIN
+  Primärmodell + Template-Fallback statt Schein-Kette); echte Alternativmodelle in `AIModel`
+  ergeben automatisch wieder eine echte Kette. Abgesichert durch `tests/test_plan_key_and_model_chain.py`.
 - **`ai_fix_engine/handlers/` ist toter Code:** `LegalTextHandler`, `CookieBannerHandler`,
   `AccessibilityHandler`, `CodeFixHandler`, `GuideHandler` nur in `handlers/__init__.py`
   exportiert, von keinem Modul importiert — die Engine routet über `prompts_v2.PromptBuilder`.
@@ -109,9 +111,12 @@ suggeriert Überlappung, ist aber ungenutzt (s. u.).
   `compliance_engine/github_integration.py` von keinem Modul importiert; `POST
   /api/v2/fixes/propose-pr` (`fix_routes.py:542`) ohne UI-Einstieg. → Kein produktives Feature;
   Entscheidung nötig (entfernen oder anbinden).
-- **Plan-Gate-Bug (zu prüfen):** `fix_apply_routes.py:135,320` liest `current_user.get('plan')`,
-  der Auth-Layer liefert aber `plan_type` (derselbe Bug war in `fix_routes.py` behoben) →
-  Default `'ai'` → SFTP-Gate greift vermutlich nie.
+- **[BEHOBEN 2026-07-17] Plan-Gate-Bug:** `fix_apply_routes.py` las `current_user.get('plan')`,
+  der Auth-Layer liefert aber `plan_type` → Default `'ai'`. Fix: liest jetzt
+  `current_user.get('plan_type', 'free')` (`fix_apply_routes.py:135/320`). ⚠️ Restproblem bleibt
+  dokumentiert: die Allowlist (`managed`/`premium`) entspricht keinem real vergebenen `plan_type`
+  (real: `free`/`ki`/`agency`) → das Gate sperrt damit aktuell **alle**; bewusst nicht geraten.
+  Abgesichert durch `tests/test_plan_key_and_model_chain.py`.
 - Weiterer unbenutzter Code: `compliance_engine/fix_validator.py`, `preview_engine.py`,
   `ai_fix_engine/white_label.py`, `ai_fix_engine/monitoring.py`.
 - `fix_jobs` fehlt im self-healing Migrations-Runner → auf frischer DB nur via
