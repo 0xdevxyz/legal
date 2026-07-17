@@ -1,6 +1,6 @@
 # Legal Text Generator (Rechtstexte)
 
-**Stand:** 2026-07-17 · **Status:** 🟢 live — **Auto-Update jedoch tot** (s. u.)
+**Stand:** 2026-07-17 · **Status:** 🟢 live — **Auto-Update jetzt live** (s. u.)
 
 ## Ziel
 Interner Ersatz für die entfernte eRecht24-Anbindung: KI-generierte Rechtstexte ohne externen
@@ -65,14 +65,17 @@ kanonisch (idempotent, `IF NOT EXISTS`) und hat das frühere, inkompatible Schem
   Für Altbestände: `_archive_pre_baseline/backfill_user_data_in_generated_documents.sql`.
 
 ## Bekannte Lücken / Offen
-- **Auto-Update feuert nie — das Kernversprechen ist tot.** [[legal-change-monitoring]] ruft
-  `on_legal_change` → `regenerate_affected_users(affected_laws=[area.value for area in
-  change.affected_areas])` (`legal_change_monitor.py:173`). Übergeben werden **Rechtsbereiche**
-  (`datenschutz`, `cookie_compliance`, `impressum`, …), die `doc_type_map` (Z. 378) erwartet
-  aber **Gesetzesnamen** (`DSGVO`, `TTDSG`, `Impressumspflicht`, …). Der Substring-Vergleich
-  `key.lower() in law.lower()` (Z. 391) trifft für **keinen** der 7 `LegalArea`-Werte je zu
-  (durchgezählt) → jeder Lauf endet mit „no affected document types". Es wurde noch nie ein
-  Rechtstext automatisch regeneriert. Fix: Mapping `LegalArea` → Gesetzesnamen ergänzen.
+- **[BEHOBEN 2026-07-17] Auto-Update feuert nie — das Kernversprechen war tot.**
+  [[legal-change-monitoring]] übergab `affected_laws=[area.value …]` = **Rechtsbereiche**
+  (`datenschutz`, `cookie_compliance`, …), `doc_type_map` erwartete aber **Gesetzesnamen**
+  (`DSGVO`, `TTDSG`, …) → der Substring-Vergleich traf für **keinen** `LegalArea`-Wert je zu,
+  jeder Lauf endete mit „no affected document types". Es wurde noch nie ein Rechtstext
+  automatisch regeneriert. Fix: neue SSOT `LEGAL_AREA_TO_DOCUMENT_TYPES` + Funktion
+  `resolve_document_types()` im Generator (mappt `LegalArea`-Werte direkt auf `DocumentType`,
+  plus Alias-Map `LAW_NAME_TO_LEGAL_AREA` für Gesetzesnamen und Teiltreffer); der Monitor gibt
+  jetzt `affected_areas` statt `affected_laws`. Wächter `tests/test_legal_area_mapping.py`
+  schlägt an, sobald ein neuer `LegalArea`-Wert ohne Mapping dazukommt. Auto-Update ist damit
+  live.
 - **[BEHOBEN 2026-07-17] Vault wurde nie gefunden.** `TEMPLATES_DIR`/`LAWS_DIR` waren
   repo-relativ (`backend/../knowledge`) verdrahtet; im Container liegt der Code in `/app`,
   also lösten sie zu `/knowledge` auf (existiert nicht; `/app/knowledge` ist ein
@@ -85,9 +88,11 @@ kanonisch (idempotent, `IF NOT EXISTS`) und hat das frühere, inkompatible Schem
   stillem Fallback. Abgesichert durch `backend/tests/test_knowledge_vault_wiring.py`.
   ⚠️ Alle **vor** dem 2026-07-17 generierten Dokumente sind ohne Vorlage entstanden und
   sollten neu erzeugt werden.
-- **`generate_withdrawal` ohne Widerrufsrecht im Kontext:** `knowledge/laws/Widerrufsrecht.md`
-  und `Verbraucherrecht.md` **existieren nicht**. Von drei angeforderten Gesetzen landet nur
-  `AGB-Recht` im Prompt — beim Dokument, dessen ganzer Zweck das Widerrufsrecht ist.
+- **[BEHOBEN 2026-07-17] `generate_withdrawal` ohne Widerrufsrecht im Kontext:**
+  `knowledge/laws/Widerrufsrecht.md` und `Verbraucherrecht.md` **existierten nicht** — von drei
+  angeforderten Gesetzen landete nur `AGB-Recht` im Prompt, beim Dokument, dessen ganzer Zweck
+  das Widerrufsrecht ist. Fix: beide Gesetzesdateien im Vault ergänzt (`knowledge/laws/`), damit
+  `_load_laws_context` sie in den Prompt zieht. Siehe [[knowledge-base-gesetzes-vault]].
 - **Spalten vs. `metadata` divergieren:** `_save` (Z. 581–595) schreibt nur `user_id`,
   `document_type`, `language`, `html_content`, `content`, `metadata`, `status`. Die Spalten
   `is_active`, `legal_update_id`, `template_version`, `regeneration_trigger` werden **nie**
@@ -99,9 +104,13 @@ kanonisch (idempotent, `IF NOT EXISTS`) und hat das frühere, inkompatible Schem
   alle Anweisungen (Z. 459–464, 498–517) sind hartkodiert deutsch, das Frontend sendet fest
   `language: 'de'` (`LegalDocumentGenerator.tsx:279`). `language` ist zudem unvalidiert
   (`_load_template` fällt still auf `_de.md` zurück). Relevant für [[jurisdiction-kontext]] B2.
-- **`_fallback_template` (Z. 610) ist kein Template-Fallback:** ohne `OPENROUTER_API_KEY` oder
-  bei HTTP≠200 kommt ein Stub („KI-Generierung aktuell nicht verfügbar") statt eines
-  Dokuments — entgegen dem Klassen-Docstring (Z. 88).
+- **[BEHOBEN 2026-07-17] `_fallback_template` sah aus wie ein fertiges Dokument:** ohne
+  `OPENROUTER_API_KEY` oder bei HTTP≠200 kam ein Stub („KI-Generierung aktuell nicht
+  verfügbar"), der wie ein regulärer Rechtstext aussah und unbemerkt ausgeliefert werden
+  konnte. Fix: Ausgabe jetzt unmissverständlich als **UNFERTIG** markiert
+  (`data-document-status="incomplete"`, `role="alert"`, „kein gültiges Rechtsdokument"), plus
+  `logger.error` statt stillem Fallback. (Bleibt ein Notfall-Platzhalter, kein
+  Template-Fallback — entgegen dem Klassen-Docstring.)
 - **`/preview` ohne Auth:** nur Rate-Limit `10/60s`. Kein Datenleck (verarbeitet nur
   mitgesendete Daten), aber ein **unauthentifizierter OpenRouter-Kostenpfad** (4000 Tokens/Call).
 - **Zwei Wizards nebeneinander:** `dashboard-react/src/components/dashboard/LegalTextWizard.tsx:75`

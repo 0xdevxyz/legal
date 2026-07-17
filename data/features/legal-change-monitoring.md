@@ -7,8 +7,8 @@ Gesetzesänderungen (DSGVO, TTDSG/ePrivacy, BFSG, AI Act, UWG, Widerrufsrecht) a
 erfassen, den **Handlungsbedarf per KI klassifizieren**, betroffene User benachrichtigen und
 daraus Folgeaktionen auslösen: neue deklarative Website-Prüfungen ([[scan-analyze-kern]])
 und Re-Generierung betroffener Rechtstexte ([[legal-text-generator]]).
-Die Erfassung läuft produktiv; der **Auto-Update-Trigger für Rechtstexte feuert faktisch nie**
-(siehe „Bekannte Lücken").
+Die Erfassung läuft produktiv; der **Auto-Update-Trigger für Rechtstexte feuert seit
+2026-07-17 tatsächlich** (Vokabular-Mismatch behoben, siehe „Bekannte Lücken").
 
 ## Architektur (end-to-end)
 
@@ -65,13 +65,14 @@ Die Erfassung läuft produktiv; der **Auto-Update-Trigger für Rechtstexte feuer
 
 ### 4. Auto-Update-Trigger für Rechtstexte → [[legal-text-generator]]
 - `legal_change_monitor.py:162` `on_legal_change(change, saved_id)` →
-  `get_legal_text_generator(db_pool).regenerate_affected_users(affected_laws=..., legal_update_id=..., severity=...)`
-  (`backend/legal_text_generator.py:362`).
+  `get_legal_text_generator(db_pool).regenerate_affected_users(affected_areas=..., legal_update_id=..., severity=...)`
+  (seit 2026-07-17 `affected_areas` statt `affected_laws`).
 - **Severity-Gate:** nur `>= medium` (`severity_order`-Index-Vergleich, Z. 373).
-- **Law→DocType-Map** (`legal_text_generator.py:378`): `DSGVO`/`TTDSG` → PRIVACY +
-  COOKIE_POLICY, `Impressumspflicht` → IMPRINT, `AGB-Recht` → TOS + WITHDRAWAL,
-  `Widerrufsrecht`/`Verbraucherrecht` → WITHDRAWAL, `UWG` → TOS, `BFSG` → IMPRINT.
-  Details der Generierung stehen in [[legal-text-generator]].
+- **Area→DocType-Map** (`legal_text_generator.LEGAL_AREA_TO_DOCUMENT_TYPES` +
+  `resolve_document_types()`): mappt jetzt direkt die `LegalArea`-Werte
+  (`datenschutz`/`cookie_compliance` → PRIVACY + COOKIE_POLICY, `impressum`/`barrierefreiheit`
+  → IMPRINT, `verbraucherschutz` → TOS + WITHDRAWAL, `wettbewerbsrecht` → TOS); zusätzlich
+  Alias-Map für Gesetzesnamen. Details der Generierung stehen in [[legal-text-generator]].
 
 ### 5. Benachrichtigung
 - **In-App:** `legal_update_integration.create_scan_notification_for_users()` →
@@ -86,7 +87,8 @@ Die Erfassung läuft produktiv; der **Auto-Update-Trigger für Rechtstexte feuer
   `ai_legal_routes.py`), `/api/legal-notifications/*` (7), `/api/legal/*` (4, `legal_news_routes.py`).
 
 ## Läuft das produktiv?
-**Ja — Erfassung + Check-Generierung laufen täglich. Der Rechtstext-Auto-Update nicht.**
+**Ja — Erfassung + Check-Generierung laufen täglich; der Rechtstext-Auto-Update feuert seit
+2026-07-17 ebenfalls (Vokabular-Mismatch behoben).**
 - Cron liegt **im Host-Crontab** (`crontab -l` als root), nicht im Container — der
   Backend-Container hat gar kein `cron`/`crontab` installiert. Beide Zeilen nutzen `docker exec`:
   - `0 5 * * *` → `cronjobs/legal_change_monitor_cron.py` → `LegalChangeMonitor.monitor_and_persist()`
@@ -122,14 +124,13 @@ Single Source of Truth. Die alten SQL-Dateien unter `backend/migrations/_archive
   `ai_classification_feedback`, `ai_learning_cycles`, `ai_compliance_notifications`.
 
 ## Bekannte Lücken / Offen
-- **Auto-Update-Trigger feuert nie — Vokabular-Mismatch (kritisch).** `on_legal_change()`
-  übergibt `[area.value for area in change.affected_areas]`, also `LegalArea`-Werte
-  (`datenschutz`, `cookie_compliance`, `impressum`, …). Die `doc_type_map` in
-  `legal_text_generator.py:378` erwartet aber Gesetzesnamen (`DSGVO`, `TTDSG`,
-  `Impressumspflicht`, …). Kein Substring-Match trifft → **120 von 120** Regen-Läufen im
-  Log enden mit `{'skipped': True, 'reason': 'no affected document types'}`. Es wurde noch
-  **nie** ein Rechtstext automatisch regeneriert. Fix: Map auf `LegalArea`-Werte umstellen
-  (oder eine Übersetzungsschicht) — betrifft [[legal-text-generator]].
+- **[BEHOBEN 2026-07-17] Auto-Update-Trigger feuerte nie — Vokabular-Mismatch (kritisch).**
+  `on_legal_change()` übergab `LegalArea`-Werte (`datenschutz`, `cookie_compliance`, …), die
+  `doc_type_map` erwartete aber Gesetzesnamen (`DSGVO`, `TTDSG`, …) → kein Substring-Match,
+  **120 von 120** Regen-Läufen endeten mit `'no affected document types'`, nie wurde ein
+  Rechtstext automatisch regeneriert. Fix (Gegenstück im Generator): neue SSOT
+  `LEGAL_AREA_TO_DOCUMENT_TYPES` + `resolve_document_types()`; `on_legal_change` übergibt jetzt
+  `affected_areas`. Wächter `tests/test_legal_area_mapping.py`. Siehe [[legal-text-generator]].
 - **E-Mail-Benachrichtigung im `demo_mode` (verifiziert).**
   `legal_notification_service.py:32`: `self.demo_mode = not all([self.smtp_username, self.smtp_password])`.
   In Produktion sind `SMTP_USERNAME` und `SMTP_PASSWORD` **leer** → `_send_email()` (Z. ~403)

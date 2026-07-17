@@ -48,11 +48,13 @@ Dump `backend/alembic/baseline_schema.sql`) und die Live-DB verifiziert:
   gegenstandslos.
 
 ## Bekannte Lücken / Offen
-- **Der klassische Lead-Pfad ist funktionsunfähig (höchste Priorität).** Ohne Tabelle
-  `leads` läuft `POST /collect` in `UndefinedTableError` → 500. `GET /stats` fängt die
-  Exception ab und liefert stillschweigend `total_leads: 0, ..., "success": true` — sieht
-  gesund aus, ist es nicht. Entweder Tabelle in eine Alembic-Revision aufnehmen oder den
-  Pfad entfernen. Archiv-SQL darf **nicht** angewendet werden.
+- **[BEHOBEN 2026-07-17] Der klassische Lead-Pfad war funktionsunfähig (höchste Priorität).**
+  Ohne Tabelle `leads` lief `POST /collect` in `UndefinedTableError` → 500; `GET /stats` fing
+  die Exception ab und lieferte still `total_leads: 0, … "success": true`. Fix: `leads` (plus
+  `lead_consents`, `communication_log`, `email_verifications`) via Alembic-Revision
+  `0003_missing_lead_and_audit_tables` (additiv, gegen die Live-DB angewendet) nachgezogen →
+  `POST /collect` durchläuft jetzt die normale Validierung (live verifiziert). Wächter
+  `tests/test_schema_completeness.py` leitet fehlende Tabellen künftig aus INSERT/FROM ab.
 - **Double-Opt-in ist faktisch tot.** `email_service.py:35` setzt
   `demo_mode = not all([self.smtp_username, self.smtp_password])`; im Container sind
   `SMTP_USERNAME` und `SMTP_PASSWORD` **leer** (nur `SMTP_HOST` gesetzt) → `_send_email`

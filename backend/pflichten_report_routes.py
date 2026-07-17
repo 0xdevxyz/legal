@@ -17,7 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from dependencies import get_current_user, get_db
-from pflichten_katalog import evaluate_pflichten, APPLIES
+from pflichten_katalog import evaluate_pflichten, APPLIES, CHECK
+from pflichten_events import sync_pflichten_events, get_events_for_rules
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,67 @@ async def _latest_scan_pillars(db, user_id: int) -> Optional[Dict[str, Any]]:
             "gdpr": row["privacy_score"],
         },
         "overall": row["overall_score"],
+    }
+
+
+@router.get("/updates")
+async def get_updates_feed(
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    """
+    Phase 7.3 „lebender Pflichten-Graph": Änderungs-Feed zu den Pflichten,
+    die laut Profil relevant sind (applies/check). Lazy-Sync aus dem
+    Legal-Change-Monitoring — kein eigener Cron nötig.
+    """
+    user_id = current_user["id"]
+    prow = await db.fetchrow(
+        "SELECT answers FROM company_profiles WHERE user_id = $1", user_id
+    )
+    if not prow:
+        raise HTTPException(
+            status_code=404,
+            detail="Kein Firmenprofil vorhanden — bitte zuerst den Fragebogen ausfüllen.",
+        )
+    answers = prow["answers"]
+    if isinstance(answers, str):
+        answers = json.loads(answers)
+
+    try:
+        await sync_pflichten_events(db)
+    except Exception as e:
+        logger.warning(f"Pflichten-Events-Sync fehlgeschlagen (Feed liefert Bestand): {e}")
+
+    report = evaluate_pflichten(answers)
+    relevant_rules = [i["id"] for i in report["items"] if i["status"] in (APPLIES, CHECK)]
+    titles = {i["id"]: i["title"] for i in report["items"]}
+    events = await get_events_for_rules(db, relevant_rules)
+    for ev in events:
+        ev["rule_title"] = titles.get(ev["rule_id"], ev["rule_id"])
+        if ev.get("published_at"):
+            ev["published_at"] = ev["published_at"].isoformat()
+        if ev.get("effective_date"):
+            ev["effective_date"] = ev["effective_date"].isoformat()
+
+    plan_type = await _get_plan_type(db, user_id)
+    is_paid = plan_type not in ("free", "freemium")
+    total = len(events)
+    if not is_paid:
+        events = events[:2]
+    return {
+        "relevant_rules": relevant_rules,
+        "total_events": total,
+        "events": events,
+        "locked": not is_paid,
+        "teaser": (
+            {"hidden_count": total - len(events),
+             "upgrade_hint": f"{total - len(events)} weitere Entwicklungen zu Ihren Pflichten im Pro-Plan."}
+            if not is_paid and total > len(events) else None
+        ),
+        "disclaimer": (
+            "Automatisch zugeordnete Meldungen aus dem Rechts-Monitoring — "
+            "Information, keine Rechtsberatung. Quelle jeweils verlinkt."
+        ),
     }
 
 

@@ -81,6 +81,13 @@ export default function PflichtenReportPage() {
     retry: false,
   });
 
+  const updatesQuery = useQuery({
+    queryKey: ['pflichten-updates'],
+    queryFn: async () => (await api.get('/api/pflichten-report/updates')).data,
+    enabled: profileQuery.data?.exists === true,
+    retry: false,
+  });
+
   const saveMutation = useMutation({
     mutationFn: async (a: Record<string, any>) =>
       (await api.put('/api/pflichten-report/profile', { answers: a })).data,
@@ -230,6 +237,44 @@ export default function PflichtenReportPage() {
               </div>
             );
           })}
+
+          {/* Änderungs-Feed (Phase 7.3 lebender Pflichten-Graph) */}
+          {updatesQuery.data && updatesQuery.data.total_events > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+              <h2 className="text-lg font-bold mb-1">Aktuelle Entwicklungen zu Ihren Pflichten</h2>
+              <p className="text-xs text-gray-500 mb-4">
+                Automatisch zugeordnet aus dem Rechts-Monitoring ({updatesQuery.data.total_events} Meldungen)
+              </p>
+              <div className="space-y-3">
+                {updatesQuery.data.events.map((ev: any, idx: number) => (
+                  <div key={idx} className="border-l-4 border-blue-400 pl-3 py-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">{ev.rule_title}</span>
+                      {ev.published_at && (
+                        <span className="text-xs text-gray-400">
+                          {new Date(ev.published_at).toLocaleDateString('de-DE')}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium mt-1">{ev.title}</p>
+                    {ev.summary && <p className="text-xs text-gray-500 line-clamp-2">{ev.summary}</p>}
+                    {ev.source_url && (
+                      <a href={ev.source_url} target="_blank" rel="noopener noreferrer"
+                         className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1">
+                        Quelle <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {updatesQuery.data.locked && updatesQuery.data.teaser && (
+                <p className="text-sm text-blue-700 mt-4 font-medium">
+                  <Lock className="w-4 h-4 inline mr-1" />
+                  {updatesQuery.data.teaser.upgrade_hint}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Teaser / Upgrade */}
           {report.locked && report.teaser && (

@@ -21,7 +21,7 @@
 |---|---|---|---|
 | **Scan-/Analyse-Kern** (Quick/Deep/Complete, Check-Registry, Score, Issue-Grouping) | [scan-analyze-kern.md](scan-analyze-kern.md) | 🟢 live | 2026-07-17 |
 | **Regulierungs-Radar** (BFSG-Report + AI-Act-Transparenz-Check im Free-Scan) | [regulierungs-radar.md](regulierungs-radar.md) | 🟢 live | 2026-07-17 |
-| **Pflichten-Report** (Firmenprofil → 13 Pflichten mit Status/Frist/Risiko; Premium-Gating) | [pflichten-report.md](pflichten-report.md) | 🟢 live | 2026-07-17 |
+| **Pflichten-Report** (Firmenprofil → 13 Pflichten + lebender Änderungs-Feed; Premium-Gating) | [pflichten-report.md](pflichten-report.md) | 🟢 live (7.2+7.3) | 2026-07-17 |
 | **KI-Fix-Engine** (Fix-Generierung, Quality-Gate, Fix-Jobs-Queue) | [ai-fix-engine.md](ai-fix-engine.md) | 🟡 in Arbeit | 2026-07-17 |
 | **Cookie-Consent-Widget** (ausgeliefertes JS: Banner v2, Content-Blocker, Consent Mode) | [cookie-consent-widget.md](cookie-consent-widget.md) | 🟢 live (tote Pfade) | 2026-07-17 |
 | **Cookie-Consent-Management** (Server: Consent-Logging, Katalog, Banner-Config) | [cookie-consent-management.md](cookie-consent-management.md) | 🟡 in Arbeit | 2026-07-17 |
@@ -63,9 +63,10 @@ laut Migrations-Regel darf das Archiv nicht mehr angewendet werden.
 | `backend/ab_test_routes.py` | Hat einen echten Konsumenten: `widgets/cookie_banner_v2.js:445,481`. Live 200 mit `relation "cookie_ab_tests" does not exist` — das Banner schluckt es still. |
 | `backend/expert_service_routes.py` | Tot, kein Frontend. Live 500 (Tabelle fehlt). **Kein `Depends(get_current_user)` im ganzen Modul.** |
 | `backend/git_routes.py` | Tot, kein Frontend. Live 401 — Auth sauber. Tabellen fehlen. |
-| Barrierefreiheits-Remediation (Fix-Manifest + Channels + Link-Zweck + Worklist + Re-Scan) | [accessibility-remediation.md](accessibility-remediation.md) | 🟢 Block 1–3 live | 2026-06-26 |
-| Drittlandtransfer-Erkennung (cookielose Transfers: Google Fonts/reCAPTCHA/Maps via HTML+CSS+Requests) | [drittlandtransfer-erkennung.md](drittlandtransfer-erkennung.md) | 🟢 live | 2026-06-26 |
-| Cookie-Richtlinie-Seite ("Über Cookies": complyo.de-Seite + öffentlich gehostete /cookie-richtlinie/{site_id} fürs Widget) | [cookie-richtlinie-seite.md](cookie-richtlinie-seite.md) | 🟢 live | 2026-06-27 |
-| Deep Cookie Scanner (Playwright-Scan + Katalog-Erkennung + 1-Klick in Banner/Cookie-Richtlinie) | [deep-cookie-scanner.md](deep-cookie-scanner.md) | 🟢 live | 2026-06-27 |
+
+Deren Tabellen wurden in der Alembic-Revision `0003_missing_tables` **bewusst
+ausgelassen** und stehen als `BEKANNTE_AUSNAHMEN` im Schema-Wächter
+(`backend/tests/test_schema_completeness.py`). Entscheidung: Feature bauen (Tabellen
+per neuer Revision nachziehen) oder Router entfernen.
 
 <!-- Neue Features als Zeile ergänzen. Doc-Datei = data/features/<kebab-name>.md -->

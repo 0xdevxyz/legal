@@ -89,12 +89,14 @@ Alle Tabellen sind in der Alembic-Baseline `backend/alembic/baseline_schema.sql`
 - `OPENROUTER_API_KEY` für die Klassifizierung; SMTP-Vars für echte Alerts.
 
 ## Bekannte Lücken / Offen
-- **Worker ruft nicht existierende Methode**: `ai_compliance_worker.py:71` ruft
-  `ai_act_analyzer.classify_system(...)` — im Analyzer existiert nur `classify_risk_category`.
-  Zudem `check_compliance(system_data, classification)` (`:72`) gegen die Signatur
-  `check_compliance(ai_system: AISystem, risk_category: str)`. Geplante Scans laufen damit
-  in einen `AttributeError` (vom `try/except` in `start()` geschluckt) → **Zeitplan-Feature
-  faktisch tot**; deshalb Status 🟡. Prio 1.
+- **[BEHOBEN 2026-07-17] Worker rief nicht existierende Methode**: `ai_compliance_worker.py`
+  rief `ai_act_analyzer.classify_system(...)` — existiert nicht (heißt `classify_risk_category`)
+  — und `check_compliance(system_data, classification)` gegen die Signatur
+  `check_compliance(ai_system: AISystem, risk_category: str)`. Geplante Scans liefen in einen
+  `AttributeError`, den `logger.error` verschluckte → Zeitplan-Feature war faktisch tot. Fix:
+  Worker baut jetzt ein `AISystem`-Modell, ruft `classify_risk_category` und übergibt
+  `classification_model.risk_category` (str) an `check_compliance`; `logger.error` → `logger.exception`
+  (Stacktrace sichtbar). Abgesichert durch `tests/test_ai_compliance_worker_contract.py`.
 - **Add-on-Gate lückenhaft**: `POST /systems/{id}/scan`, `.../documentation/generate`,
   `.../schedule` und alle Doku-/Notification-Routen prüfen `check_user_addon` **nicht** —
   nur Ownership. Wer das Add-on kündigt, kann Bestandssysteme weiter scannen und Doku

@@ -72,13 +72,17 @@ Quelle ist die Alembic-Baseline (`backend/alembic/versions/20260717_baseline_202
   **keinem** Produktivpfad aufgerufen. `compliance_engine/scanner.py:98` lautet unverändert
   `async def scan_website(self, url: str)` — kein `jurisdiction`-Parameter, kein
   `"jurisdiction"` im Ergebnis. Kein Check nimmt einen `context`. Siehe [[scan-analyze-kern]].
-- **`POST /api/v2/websites` verwirft den Override beim Anlegen** (`website_routes.py:167-176`):
-  der INSERT-Zweig schreibt `jurisdiction` nicht. Ein mitgesendeter Wert wird validiert —
-  und dann weggeworfen. Er greift nur beim Update einer bestehenden Site.
-- **Override lässt sich nicht zurücksetzen:** `COALESCE($4, jurisdiction)` (Z. 140) macht das
-  im Kommentar (Z. 35) beschriebene „`None` = Override löschen" unmöglich.
-- **Toter Code:** `WebsiteJurisdictionUpdate` (`website_routes.py:34-35`) wird nirgends
-  referenziert; ein PATCH/PUT zum Setzen des Overrides existiert nicht.
+- **[BEHOBEN 2026-07-17] `POST /api/v2/websites` verwarf den Override beim Anlegen:** der
+  INSERT-Zweig schrieb `jurisdiction` nicht — ein mitgesendeter Wert wurde validiert und dann
+  weggeworfen. Fix: INSERT nimmt `jurisdiction` jetzt mit auf (NULL = kein Override).
+- **[BEHOBEN 2026-07-17] Override ließ sich nicht zurücksetzen:** `COALESCE($4, jurisdiction)`
+  machte „`None` = Override löschen" unmöglich. Fix: `CASE WHEN $5 THEN $4 ELSE jurisdiction END`
+  mit `jurisdiction_sent = "jurisdiction" in data.model_fields_set` als Sentinel — „Feld nicht
+  gesendet" (unangetastet) wird jetzt von „explizit null" (Override löschen) unterschieden.
+  Abgesichert durch `tests/test_website_jurisdiction.py`.
+- **[BEHOBEN 2026-07-17] Toter Code entfernt:** `WebsiteJurisdictionUpdate` wurde nirgends
+  referenziert und ist raus. (Ein dedizierter PATCH/PUT existiert weiterhin nicht — Setzen läuft
+  über `POST` mit dem Sentinel oben.)
 - **Account-Default nicht änderbar:** bei Registrierung immer `"de"` (`auth_routes.py:69`),
   kein Endpunkt zum Ändern.
 - **Keine Tests** — `backend/tests/` enthält nichts zu Jurisdiction/ScanContext, obwohl der

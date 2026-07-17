@@ -1,6 +1,6 @@
-# Pflichten-Report (Firmenprofil → individuelle Pflichten-Einordnung)
+# Pflichten-Report (Firmenprofil → individuelle Pflichten-Einordnung + Änderungs-Feed)
 
-**Stand:** 2026-07-17 · **Status:** 🟢 live (Stufe 7.2 des Pflichtenradar-Plans)
+**Stand:** 2026-07-17 · **Status:** 🟢 live (Stufen 7.2 + 7.3 des Pflichtenradar-Plans)
 
 ## Ziel
 Stufe 2 der Pflichtenradar-Evolution: Nutzer beantworten ~12 Profil-Fragen
@@ -51,9 +51,27 @@ Kleinstunternehmen→check, KI-Hochrisiko nie hartes applies, NIS2-Logik,
 Sortierung, Robustheit bei kaputtem Profil. Live-Smoke: Free-User → Teaser
 (3/13 sichtbar), Agency-User → 13/13, Kleinstunternehmen-BFSG korrekt `check`.
 
-## Nächste Stufen (gesperrt bis zahlende Kunden, Fokus-Regel)
-- 7.3 lebender Pflichten-Graph: Katalog aus dem Legal-Change-Monitoring
-  befüllen/aktualisieren, „Pflicht neu/geändert/entfallen"-Alerts als Abo.
+## Stufe 7.3 — lebender Änderungs-Feed (🟢 live)
+- **Mapping:** `backend/pflichten_events.py` — `map_update_to_rules()` ordnet
+  `legal_updates`-Einträge (aus [[legal-change-monitoring]]) per Keyword-Regex
+  auf Titel+Beschreibung den Katalog-Regeln zu (`RULE_KEYWORDS`, 13 Regeln;
+  `update_type` nur als Zusatz-Hint, da historisch unsauber).
+- **Persistenz:** Tabelle `pflichten_events` (Alembic `0004_pflichten_events`,
+  UNIQUE(legal_update_id, rule_id)). `sync_pflichten_events()` ist idempotent
+  und läuft **lazy beim Feed-Abruf** (kein Cron) — neue Monitoring-Einträge
+  erscheinen beim nächsten Aufruf. Stand Rollout: 378 Events / 10 Regeln aus
+  520 legal_updates.
+- **API:** `GET /api/pflichten-report/updates` — nur Events zu Regeln, die
+  laut Profil `applies`/`check` sind; free → 2 Events + Upgrade-Hint,
+  paid → voll; Quelle je Meldung verlinkt, Disclaimer im Response.
+- **UI:** Abschnitt „Aktuelle Entwicklungen zu Ihren Pflichten" auf
+  `/pflichten-report` (rule-Badge, Datum, Summary, Quell-Link).
+- Tests: `backend/tests/test_pflichten_events.py` (6, inkl. Katalog-Konsistenz
+  der Keyword-Regeln).
+
+## Nächste Stufen
+- E-Mail-/Push-Alert bei neuen Events zu applies-Pflichten (Notification-
+  Pipeline aus [[legal-change-monitoring]] wiederverwenden).
 - Katalog-Erweiterung (GPSR, Verpackungsgesetz, LkSG-Ausstrahlung, DSA) ist
   Datenpflege im selben Format.
 - PDF-Export des Reports (Assets im pdf_report_generator vorhanden).

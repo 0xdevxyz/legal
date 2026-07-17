@@ -116,17 +116,22 @@ Schema-Referenz ist die Alembic-Baseline (`backend/alembic/baseline_schema.sql`,
   `POST /systems/{id}/documentation/generate` (`:655`), `POST /systems/{id}/schedule` (`:1296`)
   sowie alle Detail-/Doku-Downloads → Nutzung nach Kündigung möglich. **Hohe Priorität**,
   Details in [[ai-act-compliance]].
-- **`user_plan` ist client-gesteuert:** `POST /api/addons/subscribe/{key}` übernimmt
-  `AddAddonRequest.user_plan` aus dem Request-Body und leitet daraus `limits_by_plan` ab
-  (`addon_payment_routes.py:256`) → Client kann `"enterprise"` senden und sich `ai_systems: -1`
-  (unbegrenzt) verschaffen. Muss serverseitig aus `user_limits.plan_type` kommen.
+- **[BEHOBEN 2026-07-17] `user_plan` war client-gesteuert (Rechteausweitung):**
+  `POST /api/addons/subscribe/{key}` übernahm `AddAddonRequest.user_plan` aus dem Request-Body
+  und leitete daraus `limits_by_plan` ab → Client konnte `"enterprise"` senden und sich
+  `ai_systems: -1` (unbegrenzt) verschaffen. Fix: `user_plan` aus dem Body wird ignoriert; der
+  Plan wird serverseitig über `resolve_addon_plan()` aus der neuesten `subscriptions`-Zeile
+  gelesen (`PLAN_TYPE_TO_ADDON_PLAN`-Mapping; unbekannt → kleinster Satz `FALLBACK_ADDON_PLAN`).
+  Abgesichert durch `tests/test_addon_plan_escalation.py`.
 - **Plan-Namensraum inkonsistent:** Add-on-Katalog nutzt `starter`/`professional`/`business`/
   `enterprise`, die reale Welt `free`/`pro`/`agency`. `compatible_plans` matcht deshalb faktisch
   nie den echten `plan_type` — Auswirkung auf `/catalog`-Anzeige zu prüfen.
-- **`agency_sites_extra` bumpt `websites_max` nicht.** Der Add-on-Webhook legt nur eine
-  `user_addons`-Zeile mit `limits` an; `user_limits.websites_max` bleibt unverändert. Nur der
-  Weg über `stripe_routes` `agency2`/`agency_extra` erhöht das Kontingent wirklich → zwei
-  konkurrierende Mechanismen für dasselbe Produkt.
+- **[BEHOBEN 2026-07-17] `agency_sites_extra` bumpte `websites_max` nicht.** Der Add-on-Webhook
+  legte nur eine `user_addons`-Zeile mit `limits` an; `user_limits.websites_max` blieb
+  unverändert (200 €/Monat ohne jede Wirkung). Fix: die Aktivierung erhöht `websites_max` jetzt
+  additiv (`UPDATE user_limits SET websites_max = COALESCE(websites_max, 0) + extra_sites`),
+  `plan_type` bleibt unverändert. (Zwei konkurrierende Mechanismen mit `stripe_routes`
+  `agency2`/`agency_extra` bleiben ein offener Aufräumpunkt.)
 - **Fallback-Preis-IDs:** fehlt eine Env-Price-ID, fällt `create-checkout` still auf
   `pro_monthly` zurück (`stripe_routes.py:246`) — Kunde zahlt den falschen Betrag. Add-on-
   Defaults sind Dummy-Strings (`"price_1234"`), die im Checkout hart fehlschlagen.

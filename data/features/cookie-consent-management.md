@@ -119,8 +119,8 @@ hier doppeln); Playwright-Scan → [[deep-cookie-scanner]]; Agentur-Block → [[
 - `cookie_banner_revisions` — `site_id`, `revision`, `config_snapshot`, `services_snapshot`,
   `changed_by`, `change_reason` (vorhanden, vom Revisions-Endpunkt nicht genutzt).
 - `tcf_vendors`, `deep_cookie_scans`, `deep_scan_usage` ([[deep-cookie-scanner]]).
-- **Fehlt in der Live-DB, aber im Code referenziert:** `cookie_consent_revisions`,
-  `cookie_custom_services`, `geo_ip_cache`.
+- **Fehlt in der Live-DB, aber im Code referenziert:** `cookie_consent_revisions`, `geo_ip_cache`.
+  (`cookie_custom_services` **[BEHOBEN 2026-07-17]** via Alembic 0003 nachgezogen → Custom-Service-CRUD läuft.)
 - PG-Funktion `delete_expired_consents()`.
 
 ## Auth-Modell (seit 2026-07-17)
@@ -149,20 +149,24 @@ personenbezogene Consent-Protokolle ohne Token aus (live 200 verifiziert) und `P
   `geo-restriction/`, `forwarding/`; `geo-check` fällt still auf `country_code: "EU"` zurück
   (`relation "geo_ip_cache" does not exist`). Es fehlt eine Migration, die die Live-DB an den
   Code angleicht (bzw. `cookie_consent_revisions` → `cookie_banner_revisions` im Code).
-- **asyncpg-JSONB-Verstöße:** `POST /import` (Z. 3161) schreibt `config.get('services', [])` als
-  rohe Liste in die JSONB-Spalte `services` → `DataError`/500. `POST /geo-restriction` (Z. 2646,
-  `countries`) und `POST /forwarding` (Z. 2723, `target_sites`) hätten dasselbe Problem, sobald die
-  Spalten angelegt werden. Fix: `json.dumps(...)`. Die Haupt-Config-Routen sind korrekt.
+- **[BEHOBEN 2026-07-17] asyncpg-JSONB-Verstoß `POST /import`:** schrieb
+  `config.get('services', [])` als rohe Liste in die JSONB-Spalte `services` → `DataError`/500.
+  Fix: `json.dumps(config.get('services', []))`. `POST /geo-restriction` (`countries`) und
+  `POST /forwarding` (`target_sites`) hätten dasselbe Problem, sobald die Spalten angelegt werden
+  (noch offen, da die Routen selbst defekt sind). Die Haupt-Config-Routen waren schon korrekt.
 - **Kein Cleanup-Automatismus:** `delete_expired_consents()` läuft nirgends automatisch (kein
   Cronjob/Timer im Repo, kein Aufruf in `backend/main_production.py`) → Logs bleiben über die
   3 Jahre hinaus liegen (Art. 5 Abs. 1 lit. e). Endpunkt existiert, muss manuell getriggert werden.
-- **Fehler-Detail-Leaks:** die Zusatzmodul-Routen nutzen durchgehend `detail=str(e)` (entgegen
-  Punkt 1.3 des Launch-Plans, der nur die Kernrouten erfasst hat).
-- **`POST /consent`:** das `except Exception` (Z. 529) fängt auch die eigene `HTTPException(429)`
-  → Rate-Limit-Überschreitung meldet dem Widget 500 statt 429. Dasselbe Muster war in den
-  Zusatzmodul-Routen; dort ist seit dem Auth-Fix ein `except HTTPException: raise` vorgeschaltet
-  (sonst wäre aus jedem 403 ein 500 geworden — und die bestehenden `400 site_id required`
-  wurden zuvor ebenfalls verschluckt). `POST /consent` selbst ist **noch offen**.
+- **[BEHOBEN 2026-07-17] Fehler-Detail-Leaks:** die Zusatzmodul-Routen nutzten durchgehend
+  `detail=str(e)`/`type(e).__name__` (entgegen Punkt 1.3 des Launch-Plans, der nur die
+  Kernrouten erfasst hatte). Fix: `consent-mode-config`, `age-verification`, `tcf/config`,
+  `geo-restriction`, `get_my_config`, `extract-colors` u. a. liefern jetzt generisch
+  „Interner Fehler" und loggen mit `exc_info=True`.
+- **[BEHOBEN 2026-07-17] `POST /consent` verschluckte die eigene 429:** das `except Exception`
+  fing auch die eigene `HTTPException(429)` → Rate-Limit-Überschreitung meldete dem Widget 500
+  statt 429. Fix: `except HTTPException: raise` vorgeschaltet. Dasselbe Muster in den
+  Zusatzmodul-Routen war schon mit dem Auth-Fix behoben (sonst wäre aus jedem 403 ein 500
+  geworden).
 - **Stilles Auth-Schlucken** (`planning/STRUKTUR_FIXES_LAUNCH_PLAN.md` 1.2, dort als erledigt
   markiert): `get_current_user_optional` (Z. 61) gibt bei ungültigem/blacklisted Token weiterhin
   `None` zurück. Für die optionale Variante ist das gewollt; geschützte Routen nutzen

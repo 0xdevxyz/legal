@@ -140,7 +140,7 @@ Projekt, sondern Verbreiterung. Jede Stufe verkauft sich einzeln:
   Größe, Produkte, Software; so viel wie möglich aus dem Website-Scan vorbefüllt)
   → generierter „Ihr Pflichten-Report" mit Deadlines und Bußgeld-Risiko in €.
   Vorarbeit nutzen: legal_changes/legal_news-Pipeline, compliance_risk_matrix-Tabelle.
-- [ ] **7.3 Lebender Pflichten-Graph + Monitoring-Abo**: RSS/EU-Lex-Pipeline (existiert)
+- [x] **7.3 Lebender Pflichten-Graph + Monitoring-Abo** (✅ 2026-07-17: Änderungs-Feed live; E-Mail-Alerts offen): RSS/EU-Lex-Pipeline (existiert)
   → Rules-as-Code-Mapping auf Firmenprofile, „Pflicht neu/geändert/entfallen"-Alerts.
   Der Graph ist der Moat — jedes gemappte Gesetz und jedes Profil compoundet.
 - [ ] **7.0 Pflicht-Hausaufgaben VOR 7.2-Launch** (aus der Idee, nicht verhandelbar):
