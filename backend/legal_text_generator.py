@@ -42,8 +42,30 @@ from third_country_clause import build_third_country_clause
 
 logger = logging.getLogger(__name__)
 
-TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "..", "knowledge", "templates", "legal")
-LAWS_DIR = os.path.join(os.path.dirname(__file__), "..", "knowledge", "laws")
+# Knowledge-Vault (Templates + Gesetzestexte).
+#
+# ACHTUNG, hier lag ein stiller Totalausfall: Der frühere Pfad
+# `os.path.dirname(__file__)/../knowledge` stimmt nur im Repo-Layout (backend/../knowledge).
+# Im Container liegt der Code direkt in `/app`, also löste er zu `/knowledge` auf — das es
+# nicht gibt. Der Vault ist per docker-compose read-only nach `/data/knowledge` gemountet
+# (`KNOWLEDGE_VAULT_PATH`). Zusätzlich kollidiert der Name mit dem Python-Paket
+# `/app/knowledge`. Folge: JEDER Rechtstext wurde ohne Template und ohne Gesetzeskontext
+# generiert — ohne dass ein Fehler sichtbar wurde. Dieselbe Env-Variable nutzen bereits
+# `backend/knowledge/knowledge_retriever.py` u. a.
+KNOWLEDGE_DIR = os.getenv(
+    "KNOWLEDGE_VAULT_PATH",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "knowledge")),
+)
+TEMPLATES_DIR = os.path.join(KNOWLEDGE_DIR, "templates", "legal")
+LAWS_DIR = os.path.join(KNOWLEDGE_DIR, "laws")
+
+if not os.path.isdir(TEMPLATES_DIR):
+    # Laut scheitern: ohne Templates/Gesetze sind die erzeugten Rechtstexte wertlos.
+    logger.error(
+        f"Knowledge-Vault nicht gefunden: {TEMPLATES_DIR} existiert nicht. "
+        f"Rechtstexte würden ohne Template und ohne Gesetzeskontext generiert. "
+        f"KNOWLEDGE_VAULT_PATH prüfen (aktuell: {KNOWLEDGE_DIR})."
+    )
 
 
 class DocumentType(str, Enum):
@@ -524,7 +546,12 @@ class LegalTextGenerator:
             if os.path.exists(p):
                 with open(p, "r", encoding="utf-8") as f:
                     return f.read()
-        logger.warning(f"Template nicht gefunden: {filename} — nutze leeres Template")
+        # Kein warning, sondern error: ohne Template erzeugt die KI einen frei improvisierten
+        # Rechtstext. Das ist kein Randfall, sondern Produktversagen — entsprechend laut.
+        logger.error(
+            f"Template nicht gefunden: {filename} (gesucht in {TEMPLATES_DIR}) — "
+            f"Rechtstext wird OHNE Vorlage generiert."
+        )
         return f"Erstelle {doc_type.value} für:\n{{{{company_name}}}}, {{{{address}}}}"
 
     def _load_laws_context(self, law_names: List[str], language: str) -> str:

@@ -73,6 +73,18 @@ kanonisch (idempotent, `IF NOT EXISTS`) und hat das frühere, inkompatible Schem
   `key.lower() in law.lower()` (Z. 391) trifft für **keinen** der 7 `LegalArea`-Werte je zu
   (durchgezählt) → jeder Lauf endet mit „no affected document types". Es wurde noch nie ein
   Rechtstext automatisch regeneriert. Fix: Mapping `LegalArea` → Gesetzesnamen ergänzen.
+- **[BEHOBEN 2026-07-17] Vault wurde nie gefunden.** `TEMPLATES_DIR`/`LAWS_DIR` waren
+  repo-relativ (`backend/../knowledge`) verdrahtet; im Container liegt der Code in `/app`,
+  also lösten sie zu `/knowledge` auf (existiert nicht; `/app/knowledge` ist ein
+  gleichnamiges **Python-Paket**). Der Vault ist read-only nach `/data/knowledge` gemountet.
+  Gemessen vor dem Fix: `_load_template` → **51 Zeichen** Stub statt Vorlage,
+  `_load_laws_context('DSGVO')` → **47** statt **2010** Zeichen. **Jeder** je erzeugte
+  Rechtstext entstand ohne Vorlage und ohne Gesetzeskontext — ohne sichtbaren Fehler.
+  Fix: `KNOWLEDGE_DIR = os.getenv("KNOWLEDGE_VAULT_PATH", <repo-relativ>)` (dasselbe Muster
+  wie `backend/knowledge/knowledge_retriever.py`), Fehlschlag loggt jetzt `error` statt
+  stillem Fallback. Abgesichert durch `backend/tests/test_knowledge_vault_wiring.py`.
+  ⚠️ Alle **vor** dem 2026-07-17 generierten Dokumente sind ohne Vorlage entstanden und
+  sollten neu erzeugt werden.
 - **`generate_withdrawal` ohne Widerrufsrecht im Kontext:** `knowledge/laws/Widerrufsrecht.md`
   und `Verbraucherrecht.md` **existieren nicht**. Von drei angeforderten Gesetzen landet nur
   `AGB-Recht` im Prompt — beim Dokument, dessen ganzer Zweck das Widerrufsrecht ist.
