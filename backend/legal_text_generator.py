@@ -702,10 +702,34 @@ class LegalTextGenerator:
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()[:16]
 
     def _fallback_template(self, prompt: str) -> str:
+        """Notfall-Rückgabe, wenn die KI-Generierung nicht durchführbar war
+        (kein ``OPENROUTER_API_KEY`` gesetzt oder HTTP-Status ≠ 200).
+
+        Bewusst KEIN fertig aussehendes Dokument: Der frühere Stub
+        ("KI-Generierung aktuell nicht verfügbar") sah aus wie ein regulärer
+        Rechtstext und konnte so unbemerkt an Endnutzer ausgeliefert werden —
+        ein leerer Text im Gewand eines fertigen Dokuments. Stattdessen wird der
+        Zustand laut geloggt und ein unmissverständlich als UNFERTIG markierter
+        Platzhalter zurückgegeben, der nicht mit einem gültigen Dokument
+        verwechselt werden kann.
+        """
+        logger.error(
+            "KI-Generierung fehlgeschlagen — Fallback-Platzhalter wird zurückgegeben. "
+            "Kein gültiger Rechtstext erzeugt (OPENROUTER_API_KEY fehlt oder OpenRouter "
+            "lieferte keinen Status 200). Ursache prüfen; das Dokument ist NICHT fertig."
+        )
+        generated_at = datetime.now().strftime("%d.%m.%Y %H:%M")
         return (
-            "<h1>Dokument</h1>"
-            "<p>KI-Generierung aktuell nicht verfügbar. "
-            "Bitte füllen Sie das Dokument manuell aus oder wenden Sie sich an den Support.</p>"
+            '<div data-document-status="incomplete" role="alert">'
+            "<h1>⚠ Rechtstext konnte nicht erzeugt werden</h1>"
+            "<p><strong>Status: UNFERTIG — dies ist kein gültiges Rechtsdokument.</strong></p>"
+            "<p>Die automatische Generierung war zum Zeitpunkt der Anforderung "
+            f"({generated_at}) nicht verfügbar. Es wurde bewusst kein Ersatztext "
+            "erstellt, um den falschen Eindruck eines fertigen Dokuments zu vermeiden.</p>"
+            "<p>Bitte die Generierung erneut auslösen. Bleibt der Fehler bestehen, "
+            "wenden Sie sich an den Support — bis dahin darf dieser Platzhalter nicht "
+            "als Rechtstext verwendet oder veröffentlicht werden.</p>"
+            "</div>"
         )
 
 

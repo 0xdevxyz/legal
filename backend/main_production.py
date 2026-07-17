@@ -78,7 +78,7 @@ import website_routes  # Website management routes
 import stripe_routes  # NEW: Freemium Stripe integration
 import user_routes  # User profile & domain locks
 from database_service import db_service
-from dependencies import get_current_user
+from dependencies import get_current_user, rate_limit
 from email_service import email_service
 from news_service import NewsService
 from risk_calculator import RiskCalculator
@@ -100,6 +100,9 @@ from cookie_compliance_routes import router as cookie_compliance_router
 
 # A/B Testing Module for Cookie Banner
 from ab_test_routes import router as ab_test_router
+
+# Pflichten-Report (Phase 7.2 Pflichtenradar)
+from pflichten_report_routes import router as pflichten_report_router
 
 # TCF 2.2 Module
 try:
@@ -674,6 +677,7 @@ async def startup_event():
         app.include_router(tcf_router)  # TCF 2.2 Transparency & Consent Framework
     
     app.include_router(legal_change_router)  # Legal Change Monitoring (auto-detect law changes)
+    app.include_router(pflichten_report_router)  # Pflichten-Report (Phase 7.2 Pflichtenradar)
     app.include_router(ai_legal_router)  # AI Legal System - NEW
     app.include_router(legal_notification_router)  # Legal News Notifications - NEW
     app.include_router(accessibility_fix_router)  # BFSG Accessibility Fix Pipeline - NEW
@@ -929,7 +933,7 @@ async def metrics_endpoint(request: Request):
 
 # ==================== NEU: ENHANCED SCAN API ====================
 
-@app.post("/api/v2/analyze/complete")
+@app.post("/api/v2/analyze/complete", dependencies=[Depends(rate_limit("analyze_complete", 3, 60))])
 @limiter.limit("30/minute")
 async def complete_analysis(analyze_request: AnalyzeRequest, request: Request, current_user: dict = Depends(get_current_user)):
     """
@@ -1187,7 +1191,7 @@ async def get_projects(current_user: dict = Depends(get_current_user)):
             detail="Projects could not be loaded"
         )
 
-@app.post("/api/v2/analyze/quick")
+@app.post("/api/v2/analyze/quick", dependencies=[Depends(rate_limit("analyze_quick", 3, 60))])
 async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = Depends(get_current_user)):
     """
     Quick compliance scan (10-20 seconds) for instant feedback
@@ -1243,7 +1247,7 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
             detail="Quick-Scan fehlgeschlagen"
         )
 
-@app.post("/api/v2/analyze")
+@app.post("/api/v2/analyze", dependencies=[Depends(rate_limit("analyze_full", 3, 60))])
 async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depends(get_current_user)):
     """
     Performs a real, in-depth compliance scan of a website.
@@ -1763,7 +1767,7 @@ async def get_active_fix_jobs(current_user: dict = Depends(get_current_user)):
 
 # ========== REPORTING ENDPOINTS ==========
 
-@app.get("/api/v2/reports/{scan_id}/download")
+@app.get("/api/v2/reports/{scan_id}/download", dependencies=[Depends(rate_limit("report_download", 10, 60))])
 async def download_report(scan_id: str, current_user: dict = Depends(get_current_user)):
     try:
         user_id_raw = current_user.get("id") or current_user.get("user_id") or ""
@@ -1827,9 +1831,12 @@ async def get_audit_log(
                 user_id, limit, offset
             )
         return {"audit_log": [dict(r) for r in rows], "total": len(rows)}
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error fetching audit log: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # echten Fehler serverseitig loggen, generische Meldung an den Client
+        logger.error(f"Error fetching audit log: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @app.get("/api/v2/audit/export")
@@ -1865,9 +1872,12 @@ async def export_audit_log(
             media_type="text/csv",
             headers={"Content-Disposition": "attachment; filename=audit_log.csv"}
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error exporting audit log: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # echten Fehler serverseitig loggen, generische Meldung an den Client
+        logger.error(f"Error exporting audit log: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # ========== PAYMENT ENDPOINTS ==========

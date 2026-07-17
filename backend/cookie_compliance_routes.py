@@ -734,9 +734,11 @@ async def get_my_config(
             "message": "Konfiguration gefunden - 1 Website bereits registriert"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error in get_my_config (user lookup/db): {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get configuration: {type(e).__name__}: {str(e)[:200]}")
+        logger.error(f"Fehler in get_my_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.get("/api/cookie-compliance/config/{site_id}")
@@ -967,8 +969,8 @@ async def extract_colors(
     except HTTPException:
         raise
     except Exception as e:
-        logger.warning(f"Live-Farb-Scraping fehlgeschlagen für {payload.url}: {e}")
-        raise HTTPException(status_code=500, detail=f"Farben konnten nicht ausgelesen werden: {type(e).__name__}")
+        logger.warning(f"Live-Farb-Scraping fehlgeschlagen für {payload.url}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Farben konnten nicht ausgelesen werden")
 
 
 @router.post("/api/cookie-compliance/config")
@@ -2280,8 +2282,11 @@ async def get_consent_mode_config(
                 "gtm_container_id": row.get('gtm_container_id')
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_consent_mode_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.post("/api/cookie-compliance/consent-mode-config")
@@ -2326,7 +2331,8 @@ async def update_consent_mode_config(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in update_consent_mode_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.get("/api/cookie-compliance/age-verification/{site_id}")
@@ -2378,8 +2384,11 @@ async def get_age_verification_config(
                 "country_age_limits": country_age_limits
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_age_verification_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.post("/api/cookie-compliance/age-verification")
@@ -2420,7 +2429,8 @@ async def update_age_verification_config(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in update_age_verification_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # TCF 2.2 Endpoints (UI vorbereitet)
@@ -2524,8 +2534,11 @@ async def get_tcf_config(
                 "notice": "TCF erfordert Registrierung bei IAB Europe als CMP"
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_tcf_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.post("/api/cookie-compliance/tcf/config")
@@ -2566,7 +2579,8 @@ async def update_tcf_config(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in update_tcf_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # ============================================================================
@@ -2683,8 +2697,11 @@ async def get_geo_restriction_config(
                 "mode": "show_in_countries"
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_geo_restriction_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.post("/api/cookie-compliance/geo-restriction")
@@ -2725,7 +2742,8 @@ async def update_geo_restriction(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in update_geo_restriction: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # Consent Forwarding
@@ -2767,8 +2785,11 @@ async def get_forwarding_config(
                 "mode": "one_way"
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_forwarding_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.post("/api/cookie-compliance/forwarding")
@@ -2809,7 +2830,8 @@ async def update_forwarding_config(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in update_forwarding_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # ============================================================================
@@ -3150,8 +3172,11 @@ async def get_config_revisions(
             "revisions": revisions,
             "total": len(revisions)
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_config_revisions: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.get("/api/cookie-compliance/export/{site_id}")
@@ -3193,8 +3218,11 @@ async def export_config(
                 "config": config
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in export_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.post("/api/cookie-compliance/import")
@@ -3266,7 +3294,8 @@ async def import_config(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in import_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # ============================================================================
@@ -3305,8 +3334,11 @@ async def check_reconsent_required(
             "requires_reconsent": requires_reconsent,
             "current_hash": current_hash
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in check_reconsent_required: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.get("/api/cookie-compliance/bannerless/{site_id}")
@@ -3332,8 +3364,11 @@ async def get_bannerless_config(
             "success": True,
             "bannerless_mode": row['bannerless_mode'] if row else False
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_bannerless_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # =============================================================================
@@ -3366,8 +3401,11 @@ async def revoke_consent(
             truncate_user_agent(request.headers.get("user-agent", ""))
         )
         return {"success": True, "action": "revoke", "site_id": revocation.site_id}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in revoke_consent: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.get("/api/cookie-compliance/revocation-stats/{site_id}")
@@ -3401,8 +3439,11 @@ async def get_revocation_stats(
             "acceptance_rate": round(accept_count / total, 4) if total else 0.0,
             "revocation_rate": round(revoke_count / total, 4) if total else 0.0,
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_revocation_stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # =============================================================================
@@ -3441,8 +3482,11 @@ async def get_service_consent_stats(
                 for svc in services:
                     service_counts[svc] = service_counts.get(svc, 0) + 1
         return {"site_id": site_id, "days": days, "services": service_counts}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_service_consent_stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # =============================================================================
@@ -3526,8 +3570,11 @@ async def get_agency_stats(
                 "site_count": len(sites),
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_agency_stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # =============================================================================

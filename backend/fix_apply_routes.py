@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 import logging
 import asyncpg
-from dependencies import get_current_user
+from dependencies import get_current_user, rate_limit
 
 from compliance_engine.deployment_engine import DeploymentEngine, DeploymentConfig, DeploymentResult
 from audit_service import FixAuditService
@@ -92,7 +92,7 @@ class ApplyStatusResponse(BaseModel):
 # Apply Endpoints
 # ============================================================================
 
-@apply_router.post("/apply", response_model=ApplyFixResponse)
+@apply_router.post("/apply", response_model=ApplyFixResponse, dependencies=[Depends(rate_limit("fix_apply", 5, 60))])
 async def apply_fix(
     request: Request,
     apply_request: ApplyFixRequest,
@@ -298,7 +298,7 @@ async def rollback_fix(
         )
 
 
-@apply_router.post("/apply/preview")
+@apply_router.post("/apply/preview", dependencies=[Depends(rate_limit("fix_apply_preview", 5, 60))])
 async def preview_fix_on_staging(
     preview_request: PreviewRequest,
     background_tasks: BackgroundTasks,

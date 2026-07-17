@@ -136,7 +136,7 @@ Projekt, sondern Verbreiterung. Jede Stufe verkauft sich einzeln:
   expliziten BFSG-Check-Report + AI-Act-Transparenz-Check erweitern. Assets da:
   AxeScanner, AI-Act-Doku-Generator, Jurisdiction-Kontext. Als Lead-Magnet ausspielen
   („Ist Ihre Website BFSG-konform? 60-Sekunden-Check" — deckt sich mit Vertriebsplan).
-- [ ] **7.2 Pflichten-Report als Premium-Feature**: KMU-Profil-Fragebogen (Branche,
+- [x] **7.2 Pflichten-Report als Premium-Feature** (✅ 2026-07-17 auf User-Anweisung vorgezogen; RDG-Klärung vor Marketing-Launch offen — siehe data/features/pflichten-report.md): KMU-Profil-Fragebogen (Branche,
   Größe, Produkte, Software; so viel wie möglich aus dem Website-Scan vorbefüllt)
   → generierter „Ihr Pflichten-Report" mit Deadlines und Bußgeld-Risiko in €.
   Vorarbeit nutzen: legal_changes/legal_news-Pipeline, compliance_risk_matrix-Tabelle.

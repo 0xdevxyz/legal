@@ -19,6 +19,7 @@ import json
 
 from dependencies import get_current_user
 from dependencies import require_admin
+from dependencies import rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -471,7 +472,7 @@ async def get_update_details(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/updates/{update_id}/classify")
+@router.post("/updates/{update_id}/classify", dependencies=[Depends(rate_limit("legal_ai_classify", 5, 60))])
 async def classify_update(
     update_id: int,
     background_tasks: BackgroundTasks,
@@ -958,7 +959,7 @@ class DocumentResponse(BaseModel):
     stale_after_days: int = 365
 
 
-@router.post("/generate-impressum", response_model=DocumentResponse)
+@router.post("/generate-impressum", response_model=DocumentResponse, dependencies=[Depends(rate_limit("legal_ai_impressum", 5, 60))])
 async def generate_impressum(
     request: ImpressumRequest,
     current_user: dict = Depends(get_current_user),
@@ -992,7 +993,7 @@ async def generate_impressum(
         )
 
 
-@router.post("/generate-datenschutz", response_model=DocumentResponse)
+@router.post("/generate-datenschutz", response_model=DocumentResponse, dependencies=[Depends(rate_limit("legal_ai_datenschutz", 5, 60))])
 async def generate_datenschutz(
     request: DatenschutzRequest,
     current_user: dict = Depends(get_current_user),

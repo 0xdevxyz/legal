@@ -77,6 +77,7 @@ class ScanResponse(BaseModel):
 # ==================== AI SYSTEMS MANAGEMENT ====================
 
 from dependencies import get_current_user as _canonical_user
+from dependencies import rate_limit
 
 async def get_current_user_id(current_user: dict = Depends(_canonical_user)) -> int:
     """User-ID über die kanonische Auth-Dependency (Phase 2 Auth-Konsolidierung)"""
@@ -652,7 +653,7 @@ async def get_ai_compliance_stats(
 class GenerateDocRequest(BaseModel):
     document_type: str = Field(..., description="Type: risk_assessment, technical_documentation, conformity_declaration")
 
-@router.post("/systems/{system_id}/documentation/generate")
+@router.post("/systems/{system_id}/documentation/generate", dependencies=[Depends(rate_limit("ai_doc_generate", 5, 60))])
 async def generate_documentation(
     system_id: str,
     request: GenerateDocRequest,

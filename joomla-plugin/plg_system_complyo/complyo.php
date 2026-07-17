@@ -19,7 +19,6 @@ use Joomla\CMS\Factory;
 class PlgSystemComplyo extends CMSPlugin
 {
     const API_BASE = 'https://api.complyo.de';
-    const APP_URL  = 'https://app.complyo.de';
 
     protected $autoloadLanguage = true;
 
@@ -43,20 +42,12 @@ class PlgSystemComplyo extends CMSPlugin
         }
     }
 
-    /**
-     * onBeforeCompileHead – wird kurz vor </head> aufgerufen.
-     * Doppelte Sicherheit: Falls onAfterInitialise nicht greift.
-     */
-    public function onBeforeCompileHead(): void
-    {
-        $app = Factory::getApplication();
-
-        if (!$app->isClient('site')) {
-            return;
-        }
-
-        // Nichts weiter hier – Blocker bereits via onAfterInitialise hinzugefügt
-    }
+    // Hinweis: Ein früherer onBeforeCompileHead()-Hook war ein leerer No-Op
+    // (nur Client-Check, dann Rückgabe) und wurde entfernt. Der Cookie-Blocker
+    // wird bereits in onAfterInitialise() via addCustomTag() in den <head>
+    // eingehängt; ein leerer Zweit-Hook suggerierte einen Fallback, der nie
+    // existierte. Bei Bedarf einer echten Zweitabsicherung müsste hier real
+    // ein Tag ergänzt (und Doppel-Injektion verhindert) werden.
 
     /**
      * onAfterRender – fügt Banner-Script vor </body> ein.
@@ -79,8 +70,15 @@ class PlgSystemComplyo extends CMSPlugin
         $scripts = $this->buildBannerScripts($enable_cookie, $enable_a11y);
 
         $body = $app->getBody();
-        $body = str_replace('</body>', $scripts . "\n</body>", $body);
-        $app->setBody($body);
+        // Nur das LETZTE </body> ersetzen. str_replace() würde JEDES Vorkommen
+        // treffen – auch </body> in Text-/JS-Strings der Seite – und die Skripte
+        // mehrfach bzw. an falscher Stelle injizieren. strripos()+substr_replace()
+        // trifft ausschließlich den schließenden Body-Tag des Dokuments.
+        $pos = strripos($body, '</body>');
+        if ($pos !== false) {
+            $body = substr_replace($body, $scripts . "\n</body>", $pos, strlen('</body>'));
+            $app->setBody($body);
+        }
     }
 
     // =========================================================================
