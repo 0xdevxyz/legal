@@ -3,11 +3,11 @@
 Test-Szenario für Freemium-Modell mit Domain-Locks
 
 Testet die User Journey:
-1. User scannt "complyo.tech" → 15 Issues gefunden
+1. User scannt "complyo.de" → 15 Issues gefunden
 2. Klickt "KI-Fix" auf Issue #1 → ✅ Kostenloser Fix
-3. Domain "complyo.tech" wird gelockt
+3. Domain "complyo.de" wird gelockt
 4. Klickt "KI-Fix" auf Issue #2 → 💳 Paywall erscheint
-5. Nach Zahlung: Unbegrenzte Fixes für "complyo.tech"
+5. Nach Zahlung: Unbegrenzte Fixes für "complyo.de"
 6. Neue Domain "example.com" → Neue Subscription erforderlich
 """
 
@@ -32,7 +32,7 @@ async def test_freemium_flow():
     conn = await asyncpg.connect(DATABASE_URL)
 
     # Test-User erstellen (oder existierenden verwenden)
-    test_email = "test-freemium@complyo.tech"
+    test_email = "test-freemium@complyo.de"
     
     # Lösche alten Test-User falls vorhanden
     await conn.execute("DELETE FROM domain_locks WHERE user_id IN (SELECT id FROM users WHERE email = $1)", test_email)
@@ -62,7 +62,7 @@ async def test_freemium_flow():
 
     # === TEST 1: Erste Domain scannen ===
 
-    domain1 = "complyo.tech"
+    domain1 = "complyo.de"
     
     # Prüfe Domain-Lock
     is_locked = await conn.fetchval(

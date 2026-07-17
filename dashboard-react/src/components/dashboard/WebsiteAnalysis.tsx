@@ -75,18 +75,9 @@ export const WebsiteAnalysis: React.FC = () => {
   
   // ✅ DEBUG: Log final analysisData
   React.useEffect(() => {
-    console.log('📊 Final analysisData:', {
-      hasData: !!analysisData,
-      url: analysisData?.url,
-      issues: analysisData?.issues?.length,
-      issue_groups: analysisData?.issue_groups?.length,
-      grouping_stats: analysisData?.grouping_stats,
-      source: storedAnalysisData ? 'store' : fetchedAnalysisData ? 'fetched' : latestScanData ? 'latest' : 'none'
-    });
     
     // 🔍 DEBUG: Log issue_groups im Detail
     if (analysisData?.issue_groups) {
-      console.log('🎯 Issue Groups gefunden:', analysisData.issue_groups);
     } else {
       console.warn('⚠️ Keine issue_groups in analysisData!', analysisData);
     }
@@ -104,16 +95,8 @@ export const WebsiteAnalysis: React.FC = () => {
   
   // ✅ PERSISTENCE: Letzte Scan-Ergebnisse beim Mount in Store laden
   React.useEffect(() => {
-    console.log('🔍 PERSISTENCE DEBUG:', {
-      hasLatestScanData: !!latestScanData,
-      hasStoredData: !!storedAnalysisData,
-      hasFetchedData: !!fetchedAnalysisData,
-      latestScanUrl: latestScanData?.url,
-      latestScanIssues: latestScanData?.issues?.length
-    });
     
     if (latestScanData && !storedAnalysisData && !fetchedAnalysisData) {
-      console.log('✅ Loading latest scan into store:', latestScanData.url);
       setAnalysisData(latestScanData);
       
       // ✅ WICHTIG: Auch die Website-URL im Store setzen, damit der Score angezeigt wird
@@ -719,11 +702,6 @@ export const WebsiteAnalysis: React.FC = () => {
                             const ungroupedIssues = (analysisData as any)?.ungrouped_issues || [];
                             
                             // 🔍 DEBUG: Log für diese Säule
-                            console.log(`🔧 Rendering pillar: ${pillar.id}`, {
-                              totalGroups: issueGroups.length,
-                              groups: issueGroups,
-                              pillarIssues: pillar.issues.length
-                            });
                             
                             // Filtere Gruppen für diese Säule
                             const pillarGroups = issueGroups.filter((group: any) => 
@@ -732,7 +710,6 @@ export const WebsiteAnalysis: React.FC = () => {
                               (pillar.id === 'legal' && group.category === 'impressum')
                             );
                             
-                            console.log(`📦 Filtered groups for ${pillar.id}:`, pillarGroups.length, pillarGroups);
                             
                             // Filtere ungrouped Issues für diese Säule
                             const pillarUngrouped = pillar.issues.filter((issue: any) => {

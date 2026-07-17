@@ -737,7 +737,7 @@ Diese Änderungen verbessern die Barrierefreiheit gemäß:
 ⚠️ Bitte prüfen Sie die semantische Korrektheit der generierten Texte (z.B. Alt-Texte, Labels).
 
 ---
-*Generiert von [Complyo.tech](https://complyo.tech) - Barrierefreiheit leicht gemacht.*
+*Generiert von [Complyo.tech](https://complyo.de) - Barrierefreiheit leicht gemacht.*
 """
         
         return title, body

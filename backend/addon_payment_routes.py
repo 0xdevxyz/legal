@@ -57,7 +57,7 @@ _addon_webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET_ADDONS", "")
 if not _addon_webhook_secret:
     raise RuntimeError("STRIPE_WEBHOOK_SECRET_ADDONS environment variable is required!")
 STRIPE_WEBHOOK_SECRET = _addon_webhook_secret
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.complyo.tech")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.complyo.de")
 
 # ==================== PRICING CONFIGURATION ====================
 

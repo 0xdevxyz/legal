@@ -259,7 +259,7 @@ class SolutionGenerator:
 <head>
   <!-- Complyo Cookie-Banner Script -->
   <script 
-    src="https://api.complyo.tech/api/widgets/cookie-compliance.js" 
+    src="https://api.complyo.de/api/widgets/cookie-compliance.js" 
     data-site-id="[IHRE-SITE-ID]"
     async
   ></script>
@@ -278,7 +278,7 @@ class SolutionGenerator:
   - WCAG 2.2 Level AA barrierefrei
   
   Konfiguration im Dashboard unter:
-  https://app.complyo.tech/cookie-compliance
+  https://app.complyo.de/cookie-compliance
 -->""",
             estimated_time="45-60 Minuten",
             validation_steps=[

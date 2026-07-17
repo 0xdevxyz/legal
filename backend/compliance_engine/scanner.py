@@ -86,7 +86,7 @@ class ComplianceScanner:
             timeout=aiohttp.ClientTimeout(total=55),
             connector=connector,
             headers={
-                'User-Agent': 'Complyo-Scanner/2.0 (Compliance Bot; +https://complyo.tech/scanner)'
+                'User-Agent': 'Complyo-Scanner/2.0 (Compliance Bot; +https://complyo.de/scanner)'
             }
         )
         return self

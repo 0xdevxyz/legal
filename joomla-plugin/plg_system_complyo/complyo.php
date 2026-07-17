@@ -19,7 +19,7 @@ use Joomla\CMS\Factory;
 class PlgSystemComplyo extends CMSPlugin
 {
     const API_BASE = 'https://api.complyo.de';
-    const APP_URL  = 'https://app.complyo.tech';
+    const APP_URL  = 'https://app.complyo.de';
 
     protected $autoloadLanguage = true;
 

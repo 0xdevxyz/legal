@@ -179,7 +179,7 @@ export default function WebsiteScanner() {
       
       // Optional: Pathname hinzufügen (ohne trailing slash)
       // WICHTIG: Immer den pathname entfernen für konsistente Hashes
-      // URLs wie "complyo.tech" und "complyo.tech/" sollen gleich behandelt werden
+      // URLs wie "complyo.de" und "complyo.de/" sollen gleich behandelt werden
       if (urlObj.pathname && urlObj.pathname !== '/' && urlObj.pathname !== '') {
         normalized += urlObj.pathname.replace(/\/+$/, '');
       }
@@ -204,14 +204,11 @@ export default function WebsiteScanner() {
     try {
       // Normalisiere URL
       const normalizedUrl = normalizeUrl(url);
-      console.log('🔗 Original URL:', url);
-      console.log('✅ Normalisierte URL:', normalizedUrl);
 
       // API-Analyse durchführen
       const result = await complianceApi.analyzeWebsite(normalizedUrl);
       const apiData: any = result;
       
-      console.log('📡 API Response:', apiData);
       
       // API liefert risk_categories[] — validieren
       const categories: any[] = Array.isArray(apiData.risk_categories) ? apiData.risk_categories : [];
@@ -281,7 +278,6 @@ export default function WebsiteScanner() {
         issues: categories,
       };
       localStorage.setItem('last_scan_data', JSON.stringify(scanData));
-      console.log('✅ Scan-Daten gespeichert für Dashboard-Sync:', scanData.scan_id);
       
       setScanResult(transformedResult);
     } catch (err: any) {
@@ -382,7 +378,7 @@ export default function WebsiteScanner() {
               </button>
             </div>
             <p className="text-sm text-gray-400 mt-2 text-center sm:text-left">
-              ✓ Mit oder ohne https:// · ✓ Mit oder ohne www. · ✓ Einfach complyo.tech eingeben
+              ✓ Mit oder ohne https:// · ✓ Mit oder ohne www. · ✓ Einfach complyo.de eingeben
             </p>
           </form>
 

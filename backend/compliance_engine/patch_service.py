@@ -181,7 +181,7 @@ class PatchAIClient:
                     headers = {
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
-                        "HTTP-Referer": "https://complyo.tech",
+                        "HTTP-Referer": "https://complyo.de",
                         "X-Title": "Complyo BFSG Patch Service"
                     }
                     
@@ -664,7 +664,7 @@ class PatchService:
         
         return f'''<!-- Complyo Accessibility Widget -->
 <script 
-  src="https://api.complyo.tech/api/widgets/accessibility.js"
+  src="https://api.complyo.de/api/widgets/accessibility.js"
   data-site-id="{site_id}"
   data-auto-fix="true"
   data-features="{feature_id.value.lower()}"
@@ -724,7 +724,7 @@ Betroffenes WCAG-Kriterium: {', '.join(issue.wcag_criteria)}"""
         
         resources.append({
             "title": "Complyo Barrierefreiheits-Guide",
-            "url": "https://complyo.tech/guides/accessibility"
+            "url": "https://complyo.de/guides/accessibility"
         })
         
         return resources

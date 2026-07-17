@@ -434,7 +434,7 @@ export default function SettingsPage() {
                       onClick={() => {
                         if (typeof window !== 'undefined' &&
                           window.confirm('Konto wirklich löschen? Diese Aktion ist nicht rückgängig zu machen.')) {
-                          window.location.href = 'mailto:support@complyo.tech?subject=Kontolöschung';
+                          window.location.href = 'mailto:support@complyo.de?subject=Kontolöschung';
                         }
                       }}
                     >

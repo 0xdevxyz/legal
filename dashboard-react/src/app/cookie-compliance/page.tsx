@@ -116,7 +116,7 @@ export default function CookieCompliancePage() {
           if (existingConfig.last_scan_url) {
             setWebsiteUrl(existingConfig.last_scan_url);
           } else {
-            // z.B. "complyo-tech" -> "complyo.tech"
+            // z.B. "complyo-tech" -> "complyo.de"
             setWebsiteUrl(existingConfig.site_id.replace(/-/g, '.'));
           }
           

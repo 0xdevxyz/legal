@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: Complyo Compliance
- * Plugin URI: https://complyo.tech
- * Description: DSGVO-konformes Cookie-Banner und Accessibility-Widget. Konfiguration über app.complyo.tech.
- * Version: 2.5.0
+ * Plugin URI: https://complyo.de
+ * Description: DSGVO-konformes Cookie-Banner und Accessibility-Widget. Konfiguration über app.complyo.de.
+ * Version: 2.6.0
  * Author: Complyo
- * Author URI: https://complyo.tech
+ * Author URI: https://complyo.de
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: complyo-compliance
@@ -18,9 +18,9 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('COMPLYO_VERSION',        '2.5.0');
+define('COMPLYO_VERSION',        '2.6.0');
 define('COMPLYO_API_BASE',       'https://api.complyo.de');
-define('COMPLYO_APP_URL',        'https://app.complyo.tech');
+define('COMPLYO_APP_URL',        'https://app.complyo.de');
 define('COMPLYO_PLUGIN_DIR',     plugin_dir_path(__FILE__));
 define('COMPLYO_PLUGIN_URL',     plugin_dir_url(__FILE__));
 define('COMPLYO_PLUGIN_BASE',    plugin_basename(__FILE__));
@@ -318,7 +318,6 @@ class Complyo_Compliance {
             'privacy-manager.js',
             'accessibility.js',
             'api.complyo.de',
-            'api.complyo.tech',
         );
     }
 

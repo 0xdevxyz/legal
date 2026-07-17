@@ -259,7 +259,7 @@ export const PatchDownloadCard: React.FC<PatchDownloadCardProps> = ({
             variant="outline"
             size="sm"
             className="w-full"
-            onClick={() => window.open('https://complyo.tech/expertservice', '_blank')}
+            onClick={() => window.open('https://complyo.de/expertservice', '_blank')}
           >
             <ExternalLink className="mr-2 h-4 w-4" />
             Expertservice buchen (€3.000)

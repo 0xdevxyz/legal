@@ -378,7 +378,7 @@ Dieser automatische Fix wurde von Complyo generiert um Compliance-Probleme
 im Bereich {category} zu beheben.
 
 ---
-🛡️ Generiert von Complyo (https://complyo.tech)
+🛡️ Generiert von Complyo (https://complyo.de)
 """
     
     def _generate_pr_content(
@@ -429,12 +429,12 @@ Wir empfehlen jedoch immer eine Prüfung durch einen Rechtsanwalt, insbesondere 
 ### Support
 
 Bei Fragen wenden Sie sich an:
-- 📧 support@complyo.tech
-- 📚 [Complyo Dokumentation](https://docs.complyo.tech)
+- 📧 support@complyo.de
+- 📚 [Complyo Dokumentation](https://docs.complyo.de)
 
 ---
 
-🛡️ Generiert von [Complyo](https://complyo.tech) | Fix-ID: {fix_id}
+🛡️ Generiert von [Complyo](https://complyo.de) | Fix-ID: {fix_id}
 """
         
         return (title, body)

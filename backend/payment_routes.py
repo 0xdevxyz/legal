@@ -31,7 +31,7 @@ if (DEV_MODE or BYPASS_PAYMENT) and ENVIRONMENT == "production":
 
 # Environment variables
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.complyo.tech")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.complyo.de")
 
 # Stripe Price IDs je Plan (im Stripe Dashboard anlegen)
 # free:    kostenlos — 1 Domain, 1 Fix

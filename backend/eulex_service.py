@@ -42,7 +42,7 @@ class EULexService:
         if not self.session or self.session.closed:
             self.session = aiohttp.ClientSession(
                 headers={
-                    'User-Agent': 'ComplyoBot/1.0 (+https://complyo.tech)',
+                    'User-Agent': 'ComplyoBot/1.0 (+https://complyo.de)',
                     'Accept': 'application/sparql-results+xml, application/xml'
                 }
             )

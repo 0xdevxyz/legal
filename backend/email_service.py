@@ -26,7 +26,7 @@ class EmailService:
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
         self.smtp_username = os.getenv('SMTP_USERNAME', '')
         self.smtp_password = os.getenv('SMTP_PASSWORD', '')
-        self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.tech')
+        self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.de')
         self.sender_name = os.getenv('SENDER_NAME', 'Complyo Compliance')
         self.frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
         self.admin_notify_email = os.getenv('ADMIN_NOTIFY_EMAIL', '')
@@ -231,7 +231,7 @@ class EmailService:
             <p style="margin-bottom: 0; font-size: 14px;">
                 Mit der Bestätigung willigen Sie ein, dass wir Ihnen den angeforderten Compliance-Report 
                 sowie gelegentlich relevante Compliance-Informationen zusenden dürfen. 
-                <strong>Widerruf jederzeit möglich</strong> unter datenschutz@complyo.tech
+                <strong>Widerruf jederzeit möglich</strong> unter datenschutz@complyo.de
             </p>
         </div>
         
@@ -244,8 +244,8 @@ class EmailService:
         
         <p style="font-size: 12px; color: #888; text-align: center;">
             Complyo GmbH • Compliance Made Simple<br>
-            <a href="mailto:datenschutz@complyo.tech" style="color: #667eea;">datenschutz@complyo.tech</a> • 
-            <a href="https://complyo.tech/datenschutz" style="color: #667eea;">Datenschutzerklärung</a>
+            <a href="mailto:datenschutz@complyo.de" style="color: #667eea;">datenschutz@complyo.de</a> • 
+            <a href="https://complyo.de/datenschutz" style="color: #667eea;">Datenschutzerklärung</a>
         </p>
     </div>
 </body>
@@ -270,14 +270,14 @@ vielen Dank für Ihr Interesse an unserem Compliance-Report!
 🇩🇪 DSGVO-HINWEIS:
 Mit der Bestätigung willigen Sie ein, dass wir Ihnen den angeforderten 
 Compliance-Report sowie gelegentlich relevante Compliance-Informationen 
-zusenden dürfen. Widerruf jederzeit möglich unter datenschutz@complyo.tech
+zusenden dürfen. Widerruf jederzeit möglich unter datenschutz@complyo.de
 
 ⏰ WICHTIG: Dieser Link ist 24 Stunden gültig.
 Falls Sie diese E-Mail nicht angefordert haben, können Sie sie einfach ignorieren.
 
 ---
 Complyo GmbH • Compliance Made Simple
-datenschutz@complyo.tech • https://complyo.tech/datenschutz
+datenschutz@complyo.de • https://complyo.de/datenschutz
         """
 
     def _get_report_email_template(self, name: str, analysis_data: Dict[str, Any]) -> str:
@@ -346,15 +346,15 @@ datenschutz@complyo.tech • https://complyo.tech/datenschutz
         
         <p style="font-size: 14px; color: #666;">
             <strong>🔒 Datenschutz:</strong> Ihre Daten werden DSGVO-konform verarbeitet. 
-            Widerruf jederzeit unter datenschutz@complyo.tech möglich.
+            Widerruf jederzeit unter datenschutz@complyo.de möglich.
         </p>
         
         <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
         
         <p style="font-size: 12px; color: #888; text-align: center;">
             Complyo GmbH • Compliance Made Simple<br>
-            <a href="mailto:support@complyo.tech" style="color: #667eea;">support@complyo.tech</a> • 
-            <a href="http://localhost:3000" style="color: #667eea;">complyo.tech</a>
+            <a href="mailto:support@complyo.de" style="color: #667eea;">support@complyo.de</a> • 
+            <a href="http://localhost:3000" style="color: #667eea;">complyo.de</a>
         </p>
     </div>
 </body>
@@ -394,11 +394,11 @@ empfehlen wir Ihnen unseren KI-Automatisierung Service (39€/Monat).
 
 🔒 DATENSCHUTZ: 
 Ihre Daten werden DSGVO-konform verarbeitet. 
-Widerruf jederzeit unter datenschutz@complyo.tech möglich.
+Widerruf jederzeit unter datenschutz@complyo.de möglich.
 
 ---
 Complyo GmbH • Compliance Made Simple
-support@complyo.tech • http://localhost:3000
+support@complyo.de • http://localhost:3000
         """
 
     def send_deletion_confirmation_email(self, email: str, reference_id: str) -> bool:
@@ -448,8 +448,8 @@ support@complyo.tech • http://localhost:3000
                     
                     <div style="border-top: 1px solid #eee; padding-top: 20px; font-size: 12px; color: #666;">
                         <p><strong>Complyo GmbH</strong><br>
-                        E-Mail: datenschutz@complyo.tech<br>
-                        Website: https://complyo.tech</p>
+                        E-Mail: datenschutz@complyo.de<br>
+                        Website: https://complyo.de</p>
                         
                         <p>Bei Fragen wenden Sie sich gerne an unseren Datenschutzbeauftragten.</p>
                     </div>
@@ -473,7 +473,7 @@ support@complyo.tech • http://localhost:3000
             
             Ihre Daten wurden permanent und unwiderruflich gelöscht.
             
-            Bei Fragen: datenschutz@complyo.tech
+            Bei Fragen: datenschutz@complyo.de
             
             Mit freundlichen Grüßen,
             Ihr Complyo Team
@@ -543,8 +543,8 @@ support@complyo.tech • http://localhost:3000
                     
                     <div style="border-top: 1px solid #eee; padding-top: 20px; font-size: 12px; color: #666;">
                         <p><strong>Complyo GmbH</strong><br>
-                        E-Mail: datenschutz@complyo.tech<br>
-                        Website: https://complyo.tech</p>
+                        E-Mail: datenschutz@complyo.de<br>
+                        Website: https://complyo.de</p>
                     </div>
                     
                     <div style="margin-top: 30px; padding: 20px; background-color: #f8f9fa; border-radius: 8px;">
@@ -574,7 +574,7 @@ support@complyo.tech • http://localhost:3000
             
             Behandeln Sie diese Daten vertraulich.
             
-            Bei Fragen: datenschutz@complyo.tech
+            Bei Fragen: datenschutz@complyo.de
             
             Mit freundlichen Grüßen,
             Ihr Complyo Team
@@ -642,7 +642,7 @@ support@complyo.tech • http://localhost:3000
       <a href="mailto:support@complyo.de" style="color:#94a3b8;">support@complyo.de</a>
     </p>
     <p style="font-size:11px;color:#cbd5e1;text-align:center;">
-      Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.tech für Early Access angemeldet hast.
+      Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.de für Early Access angemeldet hast.
       Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
     </p>
   </div>
@@ -666,7 +666,7 @@ Impressum: https://complyo.de/impressum
 Datenschutz: https://complyo.de/datenschutz
 Kontakt: support@complyo.de
 
-Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.tech für Early Access angemeldet hast.
+Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.de für Early Access angemeldet hast.
 Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
 """
             return self._send_email(

@@ -12,7 +12,7 @@ import re
 def derive_site_id(url: str) -> str:
     """Wandelt eine Website-URL in eine konsistente Site-ID um.
 
-    "https://www.complyo.tech/path?x=1" -> "complyo-tech"
+    "https://www.complyo.de/path?x=1" -> "complyo-tech"
     Liefert "unknown-site", wenn das Ergebnis kürzer als 3 Zeichen ist.
     """
     try:

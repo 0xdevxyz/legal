@@ -491,7 +491,7 @@ Probleme:
 WIDGET-INTEGRATION:
 1. Fügen Sie folgenden Code vor </body> ein:
 
-<script src="https://api.complyo.tech/api/widgets/accessibility.js" 
+<script src="https://api.complyo.de/api/widgets/accessibility.js" 
         data-site-id="YOUR_SITE_ID"
         data-auto-fix="true">
 </script>

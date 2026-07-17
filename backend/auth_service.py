@@ -25,7 +25,7 @@ class AuthService:
         self.jwt_secret = os.getenv("JWT_SECRET")
         if not self.jwt_secret:
             raise RuntimeError("❌ CRITICAL: JWT_SECRET environment variable is required!")
-        self.jwt_issuer = os.getenv("FRONTEND_URL", "https://complyo.tech")
+        self.jwt_issuer = os.getenv("FRONTEND_URL", "https://complyo.de")
         self.jwt_audience = "complyo-api"
         self.access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
         self.refresh_token_expire = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30")) * 24 * 60

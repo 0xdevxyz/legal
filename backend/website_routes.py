@@ -360,7 +360,7 @@ async def delete_website(website_id: str, user=Depends(get_current_user)):
             if website["is_primary"] and not is_agency:
                 raise HTTPException(
                     status_code=403,
-                    detail="Die primäre Website kann nicht gelöscht werden. Diese Verknüpfung ist dauerhaft. Bitte kontaktieren Sie den Support unter support@complyo.tech für Änderungen."
+                    detail="Die primäre Website kann nicht gelöscht werden. Diese Verknüpfung ist dauerhaft. Bitte kontaktieren Sie den Support unter support@complyo.de für Änderungen."
                 )
 
             # Delete website

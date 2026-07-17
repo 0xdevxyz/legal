@@ -649,7 +649,7 @@ Dieser PR behebt automatisch erkannte Compliance-Probleme.
 4. ✅ Mergen
 
 ---
-🤖 Generiert von [Complyo](https://complyo.tech) | Fix-ID: {request.fix_id}
+🤖 Generiert von [Complyo](https://complyo.de) | Fix-ID: {request.fix_id}
 """,
                 "patch_b64": patch_b64,
                 "branch": f"complyo-fix-{request.fix_id}"

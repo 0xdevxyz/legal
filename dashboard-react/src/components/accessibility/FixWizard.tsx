@@ -663,7 +663,7 @@ export function FixWizard({
         <h3 className="font-semibold text-gray-900 mb-4">Weitere Ressourcen</h3>
         <div className="grid md:grid-cols-2 gap-4 max-w-lg mx-auto">
           <a
-            href="https://complyo.tech/guides/accessibility"
+            href="https://complyo.de/guides/accessibility"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 p-4 bg-gray-50 hover:bg-gray-100 rounded-xl text-left transition"
@@ -673,7 +673,7 @@ export function FixWizard({
             <ExternalLink className="w-4 h-4 text-gray-400 ml-auto" />
           </a>
           <a
-            href="https://complyo.tech/support"
+            href="https://complyo.de/support"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 p-4 bg-gray-50 hover:bg-gray-100 rounded-xl text-left transition"

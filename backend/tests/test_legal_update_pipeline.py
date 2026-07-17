@@ -255,7 +255,7 @@ async def test_rescan_notification_triggered():
     )
 
     svc = LegalNewsNotificationService(pool)
-    svc.frontend_url = "https://app.complyo.tech"
+    svc.frontend_url = "https://app.complyo.de"
 
     await svc.notify_rescan_required(
         website_id="site-1",

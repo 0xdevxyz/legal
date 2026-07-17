@@ -395,9 +395,9 @@ class ComplianceReportGenerator:
         content.append(Paragraph("Kontakt", self.styles['ComplyoHeading']))
         contact = """
         <b>Complyo GmbH</b><br/>
-        E-Mail: support@complyo.tech<br/>
-        Website: https://complyo.tech<br/>
-        Datenschutz: datenschutz@complyo.tech
+        E-Mail: support@complyo.de<br/>
+        Website: https://complyo.de<br/>
+        Datenschutz: datenschutz@complyo.de
         """
         content.append(Paragraph(contact, self.styles['Normal']))
         

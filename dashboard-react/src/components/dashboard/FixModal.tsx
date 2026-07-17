@@ -67,12 +67,10 @@ export const FixModal: React.FC<FixModalProps> = ({ isOpen, onClose, fix, issueT
         <AIFixDisplay
           fixData={transformedFix as any}
           onFeedback={(rating, feedback) => {
-            console.log('User feedback:', { rating, feedback });
             // TODO: Send feedback to backend
             // fetch('/api/v2/feedback', { ... })
           }}
           onApply={() => {
-            console.log('Fix applied');
             onClose();
           }}
         />

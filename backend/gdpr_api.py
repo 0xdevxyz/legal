@@ -302,8 +302,8 @@ async def get_privacy_policy_info():
     return {
         "privacy_policy": {
             "data_controller": "Complyo GmbH",
-            "contact_email": "datenschutz@complyo.tech",
-            "data_protection_officer": "dpo@complyo.tech",
+            "contact_email": "datenschutz@complyo.de",
+            "data_protection_officer": "dpo@complyo.de",
             "legal_basis": "Article 6(1)(a) GDPR - Consent",
             "data_retention_period": "24 months from collection",
             "purposes_of_processing": [
@@ -321,7 +321,7 @@ async def get_privacy_policy_info():
             "right_to_withdraw_consent": "Withdraw consent at any time"
         },
         "contact_information": {
-            "exercise_rights": "Send requests to datenschutz@complyo.tech",
+            "exercise_rights": "Send requests to datenschutz@complyo.de",
             "supervisory_authority": "Contact your local data protection authority",
             "response_time": "We will respond within 30 days"
         }

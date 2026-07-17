@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 
 JWT_SECRET = "test-secret-hardening"
 JWT_AUDIENCE = "complyo-api"
-JWT_ISSUER = "https://complyo.tech"
+JWT_ISSUER = "https://complyo.de"
 
 
 def _make_token(user_id=1, jti="test-jti", expired=False, extra_claims=None):

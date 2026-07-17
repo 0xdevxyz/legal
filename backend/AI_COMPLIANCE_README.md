@@ -107,7 +107,7 @@ Erstelle folgende Produkte im [Stripe Dashboard](https://dashboard.stripe.com/pr
 
 Erstelle einen Webhook-Endpoint im Stripe Dashboard:
 
-- URL: `https://api.complyo.tech/api/addons/webhook`
+- URL: `https://api.complyo.de/api/addons/webhook`
 - Events auswählen:
   - `checkout.session.completed`
   - `customer.subscription.updated`
@@ -397,12 +397,12 @@ curl -X POST http://localhost:8002/api/ai/systems/{system_id}/scan \
 
 1. **Stripe Webhooks testen**:
 ```bash
-stripe listen --forward-to https://api.complyo.tech/api/addons/webhook
+stripe listen --forward-to https://api.complyo.de/api/addons/webhook
 ```
 
 2. **Health Check**:
 ```bash
-curl https://api.complyo.tech/api/ai/act/requirements
+curl https://api.complyo.de/api/ai/act/requirements
 ```
 
 ## Troubleshooting
@@ -476,8 +476,8 @@ echo $OPENROUTER_API_KEY  # Sollte nicht leer sein
 
 Bei Fragen oder Problemen:
 
-- **Email**: support@complyo.tech
-- **Dokumentation**: https://docs.complyo.tech/ai-compliance
+- **Email**: support@complyo.de
+- **Dokumentation**: https://docs.complyo.de/ai-compliance
 - **Slack**: #complyo-ai-guard
 
 ## Roadmap

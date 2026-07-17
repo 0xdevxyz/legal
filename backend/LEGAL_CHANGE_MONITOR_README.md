@@ -304,8 +304,8 @@ Logs werden in `legal_monitoring_logs` gespeichert:
 ## Support
 
 Bei Fragen oder Problemen:
-- 📧 support@complyo.tech
-- 📚 Dokumentation: https://docs.complyo.tech
+- 📧 support@complyo.de
+- 📚 Dokumentation: https://docs.complyo.de
 
 ## Roadmap
 

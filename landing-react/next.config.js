@@ -3,7 +3,7 @@ const nextConfig = {
   output: 'standalone', // ✅ FÜR PRODUCTION DOCKER BUILD ERFORDERLICH
   
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.tech',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de',
   },
   
   trailingSlash: true,
@@ -35,8 +35,8 @@ const nextConfig = {
               "script-src 'self' 'unsafe-inline' https://api.complyo.de",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.complyo.de",
               "font-src 'self' data: https://fonts.gstatic.com",
-              "img-src 'self' data: blob: https://cdn.complyo.tech https://api.complyo.de https://i.ytimg.com",
-              "connect-src 'self' https://api.complyo.de https://app.complyo.de https://cdn.complyo.tech",
+              "img-src 'self' data: blob: https://cdn.complyo.de https://api.complyo.de https://i.ytimg.com",
+              "connect-src 'self' https://api.complyo.de https://app.complyo.de https://cdn.complyo.de",
               "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
               "frame-ancestors 'self'",
               "base-uri 'self'",
@@ -51,7 +51,7 @@ const nextConfig = {
   },
   
   images: {
-    domains: ['complyo.tech', 'api.complyo.tech'],
+    domains: ['complyo.de', 'api.complyo.de'],
     unoptimized: process.env.NODE_ENV === 'development',
   },
   
@@ -59,7 +59,7 @@ const nextConfig = {
     return [
       {
         source: '/dashboard',
-        destination: 'https://app.complyo.tech',
+        destination: 'https://app.complyo.de',
         permanent: true,
       },
     ];

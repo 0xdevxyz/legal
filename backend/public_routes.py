@@ -856,7 +856,7 @@ Antworte auf Deutsch, maximal 300 Wörter."""
                 headers={
                     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://complyo.tech",
+                    "HTTP-Referer": "https://complyo.de",
                     "X-Title": "Complyo Compliance Scanner"
                 },
                 json={
@@ -2298,8 +2298,8 @@ async def widget_version():
     """
     return {
         "version": "2.0.0",
-        "cdn_url": "https://cdn.complyo.tech/accessibility-v2.js",
-        "changelog_url": "https://complyo.tech/widget/changelog",
+        "cdn_url": "https://cdn.complyo.de/accessibility-v2.js",
+        "changelog_url": "https://complyo.de/widget/changelog",
         "deprecated_versions": ["1.0.0", "1.5.0"]
     }
 

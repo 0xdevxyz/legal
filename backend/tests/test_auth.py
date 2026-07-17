@@ -11,7 +11,7 @@ class TestAuthService:
         with patch.object(AuthService, '__init__', lambda self, pool: None):
             service = AuthService.__new__(AuthService)
             service.jwt_secret = "test-secret"
-            service.jwt_issuer = "https://complyo.tech"
+            service.jwt_issuer = "https://complyo.de"
             service.jwt_audience = "complyo-api"
             service.access_token_expire = 60
             token = service.create_access_token("user-123")
@@ -22,7 +22,7 @@ class TestAuthService:
         from auth_service import AuthService
         service = AuthService.__new__(AuthService)
         service.jwt_secret = "test-secret"
-        service.jwt_issuer = "https://complyo.tech"
+        service.jwt_issuer = "https://complyo.de"
         service.jwt_audience = "complyo-api"
         service.access_token_expire = 60
         token = service.create_access_token("user-123")
@@ -34,7 +34,7 @@ class TestAuthService:
         from auth_service import AuthService
         service = AuthService.__new__(AuthService)
         service.jwt_secret = "test-secret"
-        service.jwt_issuer = "https://complyo.tech"
+        service.jwt_issuer = "https://complyo.de"
         service.jwt_audience = "complyo-api"
         service.access_token_expire = 60
         result = service.verify_token("invalid.token.here")

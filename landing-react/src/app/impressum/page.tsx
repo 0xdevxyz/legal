@@ -54,14 +54,14 @@ export default function ImpressumPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <Mail className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                  <a href="mailto:info@complyo.tech" className="hover:text-blue-600 transition-colors">
-                    info@complyo.tech
+                  <a href="mailto:info@complyo.de" className="hover:text-blue-600 transition-colors">
+                    info@complyo.de
                   </a>
                 </div>
                 <div className="flex items-center gap-3">
                   <Globe className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                  <a href="https://complyo.tech" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 transition-colors">
-                    www.complyo.tech
+                  <a href="https://complyo.de" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 transition-colors">
+                    www.complyo.de
                   </a>
                 </div>
               </div>

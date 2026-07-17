@@ -45,7 +45,7 @@ class Settings:
         self.jwt_secret = os.getenv("JWT_SECRET")
         self.jwt_algorithm = "HS256"
         self.jwt_audience = "complyo-api"
-        self.jwt_issuer = os.getenv("FRONTEND_URL", "https://complyo.tech")
+        self.jwt_issuer = os.getenv("FRONTEND_URL", "https://complyo.de")
         self.environment = os.getenv("ENVIRONMENT", "production")
         self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
         

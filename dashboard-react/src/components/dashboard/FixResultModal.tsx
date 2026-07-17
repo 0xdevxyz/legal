@@ -114,7 +114,6 @@ export const FixResultModal: React.FC<FixResultModalProps> = ({ isOpen, onClose,
                 fixType={getLegalTextType()}
                 generatedContent={fixResult.content}
                 onComplete={(data) => {
-                  console.log('Legal text completed:', data);
                   setShowWizard(false);
                   onClose();
                 }}

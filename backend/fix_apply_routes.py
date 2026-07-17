@@ -306,7 +306,7 @@ async def preview_fix_on_staging(
     **Nur für Managed-Plan (3.000€/Mo)!**
     
     **Ablauf:**
-    1. Erstelle temporäre Subdomain (preview-{id}.complyo.tech)
+    1. Erstelle temporäre Subdomain (preview-{id}.complyo.de)
     2. Deploye Fix auf Staging
     3. Erstelle Screenshots (Before/After)
     4. Generiere Diff-Image
@@ -329,7 +329,7 @@ async def preview_fix_on_staging(
         
         return {
             'success': True,
-            'staging_url': f"https://preview-{preview_request.fix_id[:8]}.complyo.tech",
+            'staging_url': f"https://preview-{preview_request.fix_id[:8]}.complyo.de",
             'screenshot_before': None,
             'screenshot_after': None,
             'screenshot_diff': None,

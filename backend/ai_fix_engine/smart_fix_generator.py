@@ -143,7 +143,7 @@ class SmartFixGenerator:
         
         # Generate widget URL and integration code
         site_id = context.get("site_id", "demo")
-        widget_url = f"https://widget.complyo.tech/{widget_type}.js"
+        widget_url = f"https://widget.complyo.de/{widget_type}.js"
         
         integration_code = f'''<!-- Complyo {widget_type.title()} Widget -->
 <script 
@@ -174,9 +174,9 @@ class SmartFixGenerator:
 
 Das Widget ist sofort funktionsbereit und DSGVO-konform konfiguriert.
 """,
-                "video_tutorial": f"https://complyo.tech/tutorials/{widget_type}"
+                "video_tutorial": f"https://complyo.de/tutorials/{widget_type}"
             },
-            "preview": f"https://widget.complyo.tech/preview/{widget_type}?site={site_id}",
+            "preview": f"https://widget.complyo.de/preview/{widget_type}?site={site_id}",
             "estimated_time": fix_data.get("estimated_time", "3 Minuten"),
             "generated_at": datetime.now().isoformat(),
             "branding": "Powered by Complyo"

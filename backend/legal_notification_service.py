@@ -26,9 +26,9 @@ class LegalNewsNotificationService:
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
         self.smtp_username = os.getenv('SMTP_USERNAME', '')
         self.smtp_password = os.getenv('SMTP_PASSWORD', '')
-        self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.tech')
+        self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.de')
         self.sender_name = os.getenv('SENDER_NAME', 'Complyo Legal Updates')
-        self.frontend_url = os.getenv('FRONTEND_URL', 'https://app.complyo.tech')
+        self.frontend_url = os.getenv('FRONTEND_URL', 'https://app.complyo.de')
         self.demo_mode = not all([self.smtp_username, self.smtp_password])
         
     async def process_new_legal_changes(self) -> Dict[str, Any]:
@@ -325,7 +325,7 @@ class LegalNewsNotificationService:
             </p>
             <p style="margin: 0;">
                 Complyo GmbH | 
-                <a href="mailto:datenschutz@complyo.tech" style="color: #667eea;">datenschutz@complyo.tech</a>
+                <a href="mailto:datenschutz@complyo.de" style="color: #667eea;">datenschutz@complyo.de</a>
             </p>
         </div>
     </div>
@@ -389,7 +389,7 @@ Nicht relevant für mich: {dismiss_url}
 
 Benachrichtigungseinstellungen: {self.frontend_url}/settings/notifications
 
-Complyo GmbH | datenschutz@complyo.tech
+Complyo GmbH | datenschutz@complyo.de
         """
     
     async def _send_email(

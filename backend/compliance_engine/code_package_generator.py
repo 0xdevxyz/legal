@@ -116,7 +116,7 @@ Die Verantwortung für das Ausrollen der Änderungen in produktive Systeme liegt
 - ✅ Testen Sie in einer Staging-Umgebung
 - ✅ Konsultieren Sie bei rechtlichen Fragen einen Anwalt
 
-**Vollständige AGB:** https://complyo.tech/terms-liability
+**Vollständige AGB:** https://complyo.de/terms-liability
 
 ---
 
@@ -188,9 +188,9 @@ Nach der Integration testen Sie bitte:
 
 Bei Fragen oder Problemen:
 
-- 📧 Email: support@complyo.tech
-- 🌐 Web: https://complyo.tech/support
-- 📚 Docs: https://complyo.tech/docs/accessibility
+- 📧 Email: support@complyo.de
+- 🌐 Web: https://complyo.de/support
+- 📚 Docs: https://complyo.de/docs/accessibility
 
 ---
 
@@ -449,7 +449,7 @@ Ziel: 0 kritische Fehler
 
 ## Support
 
-Bei Fragen: support@complyo.tech
+Bei Fragen: support@complyo.de
 """
         
         return content

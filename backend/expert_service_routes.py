@@ -293,11 +293,11 @@ async def _send_expert_request_email(
         f"Kontakt: {contact_name} ({contact_email})\n"
         f"Service: {service_type}\n"
         f"Preis: €{estimated_price:,.2f}\n\n"
-        f"Dashboard: https://app.complyo.tech/admin/expert-requests/{request_id}"
+        f"Dashboard: https://app.complyo.de/admin/expert-requests/{request_id}"
     )
     team_html = team_text.replace("\n", "<br>")
 
-    team_email = "support@complyo.tech"
+    team_email = "support@complyo.de"
 
     try:
         email_service._send_email(

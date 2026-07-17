@@ -127,8 +127,8 @@ export default function AGBPage() {
             <h3 className="font-semibold text-gray-900 mb-3">Fragen zu den AGB?</h3>
             <p className="text-gray-700 text-sm">
               <strong>E-Mail:</strong>{' '}
-              <a href="mailto:info@complyo.tech" className="text-blue-600 hover:underline">
-                info@complyo.tech
+              <a href="mailto:info@complyo.de" className="text-blue-600 hover:underline">
+                info@complyo.de
               </a>
             </p>
           </div>

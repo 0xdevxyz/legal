@@ -67,7 +67,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   <li>Seite neu laden (F5 oder Strg+R)</li>
                   <li>Browser-Cache leeren (Strg+Shift+Delete)</li>
                   <li>In einem anderen Browser versuchen</li>
-                  <li>Support kontaktieren: <a href="mailto:support@complyo.tech" className="underline">support@complyo.tech</a></li>
+                  <li>Support kontaktieren: <a href="mailto:support@complyo.de" className="underline">support@complyo.de</a></li>
                 </ul>
                 
                 <button

@@ -130,7 +130,7 @@ export const useDashboardStore = create<DashboardStore>()(
     },
 
     unlockOptimization: () => {
-      console.warn('⛔ unlockOptimization ist deaktiviert. Die Website-Verknüpfung ist dauerhaft und kann nur über den Support geändert werden: support@complyo.tech');
+      console.warn('⛔ unlockOptimization ist deaktiviert. Die Website-Verknüpfung ist dauerhaft und kann nur über den Support geändert werden: support@complyo.de');
     },
 
     setOptimizationMode: (enabled: boolean) => {

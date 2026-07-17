@@ -22,7 +22,7 @@ class QuickScanner:
             timeout=aiohttp.ClientTimeout(total=15),  # Shorter timeout for quick scan
             connector=connector,
             headers={
-                'User-Agent': 'Complyo-QuickScanner/1.0 (Compliance Bot; +https://complyo.tech/scanner)'
+                'User-Agent': 'Complyo-QuickScanner/1.0 (Compliance Bot; +https://complyo.de/scanner)'
             }
         )
         return self

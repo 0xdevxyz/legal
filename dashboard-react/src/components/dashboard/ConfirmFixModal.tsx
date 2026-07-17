@@ -82,7 +82,6 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
       alert('Bitte bestätigen Sie, dass Sie die Warnung gelesen haben.');
       return;
     }
-    console.log('✅ Modal: Bestätigt, starte Fix...');
     onConfirm();
   };
 
@@ -93,7 +92,6 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
       onClick={(e) => {
         // Close on backdrop click
         if (e.target === e.currentTarget) {
-          console.log('🚪 Modal: Backdrop geklickt, schließe...');
           onCancel();
         }
       }}
@@ -212,7 +210,6 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
         <div className="flex gap-3 p-6 border-t border-gray-200 bg-gray-50">
           <button
             onClick={() => {
-              console.log('❌ Modal: Abgebrochen');
               onCancel();
             }}
             className="flex-1 px-6 py-3 border-2 border-gray-300 rounded-lg hover:bg-white hover:border-gray-400 font-bold text-gray-700 transition-all"

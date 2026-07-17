@@ -63,7 +63,7 @@ class KnowledgeIngestionService:
     async def _get_session(self) -> aiohttp.ClientSession:
         if not self._session or self._session.closed:
             self._session = aiohttp.ClientSession(
-                headers={"User-Agent": "ComplyoKnowledgeBot/1.0 (+https://complyo.tech)"},
+                headers={"User-Agent": "ComplyoKnowledgeBot/1.0 (+https://complyo.de)"},
                 timeout=aiohttp.ClientTimeout(total=30),
             )
         return self._session

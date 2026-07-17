@@ -206,7 +206,7 @@ class CookieScanner:
                     ]
                 )
                 context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (compatible; ComplyoScanner/2.0; +https://complyo.tech/scanner)",
+                    user_agent="Mozilla/5.0 (compatible; ComplyoScanner/2.0; +https://complyo.de/scanner)",
                     locale="de-DE",
                     timezone_id="Europe/Berlin",
                     ignore_https_errors=True,

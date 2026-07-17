@@ -61,7 +61,7 @@ class WaitlistJoinRequest(BaseModel):
 
     @validator("source")
     def validate_source(cls, v):
-        allowed = {"early-access", "complyo.de", "complyo.tech", "landing"}
+        allowed = {"early-access", "complyo.de", "complyo.de", "landing"}
         if v not in allowed:
             return "early-access"
         return v

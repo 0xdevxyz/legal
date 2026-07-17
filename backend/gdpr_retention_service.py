@@ -300,7 +300,7 @@ class GDPRRetentionService:
 
             Ihre Daten wurden am {lead.get('data_retention_until', 'unbekannt')} zur Löschung vorgesehen.
 
-            Falls Sie Fragen haben, kontaktieren Sie uns unter datenschutz@complyo.tech.
+            Falls Sie Fragen haben, kontaktieren Sie uns unter datenschutz@complyo.de.
 
             Mit freundlichen Grüßen,
             Ihr Complyo Team
