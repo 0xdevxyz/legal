@@ -45,6 +45,10 @@
 | **Channel HTML-CLI** (Fix-Manifest auf statische Projekte anwenden) | [channel-html-cli.md](channel-html-cli.md) | 🟢 live | 2026-07-17 |
 | **Risiko-Radar** (Score-Trend, Frühwarnung) | [risiko-radar.md](risiko-radar.md) | 🟡 Backend ohne UI | 2026-07-17 |
 | **i18n / Mehrsprachigkeit** (Übersetzungs-API, Widget-Locales) | [i18n-mehrsprachigkeit.md](i18n-mehrsprachigkeit.md) | ⚪ verworfen (alle EP 500) | 2026-07-17 |
+| Barrierefreiheits-Remediation (Fix-Manifest + Channels + Link-Zweck + Worklist + Re-Scan) | [accessibility-remediation.md](accessibility-remediation.md) | 🟢 Block 1–3 live | 2026-06-26 |
+| Drittlandtransfer-Erkennung (cookielose Transfers: Google Fonts/reCAPTCHA/Maps via HTML+CSS+Requests) | [drittlandtransfer-erkennung.md](drittlandtransfer-erkennung.md) | 🟢 live | 2026-06-26 |
+| Cookie-Richtlinie-Seite ("Über Cookies": complyo.de-Seite + öffentlich gehostete /cookie-richtlinie/{site_id} fürs Widget) | [cookie-richtlinie-seite.md](cookie-richtlinie-seite.md) | 🟢 live | 2026-06-27 |
+| Deep Cookie Scanner (Playwright-Scan + Katalog-Erkennung + 1-Klick in Banner/Cookie-Richtlinie) | [deep-cookie-scanner.md](deep-cookie-scanner.md) | 🟢 live | 2026-06-27 |
 
 ## Registrierte Router ohne Doku — Entscheidung offen
 

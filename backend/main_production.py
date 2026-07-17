@@ -366,6 +366,22 @@ auth_service = None
 # Logger
 logger = logging.getLogger(__name__)
 
+
+def _parse_delete_count(status: str) -> int:
+    """Zeilenzahl aus dem asyncpg-Command-Tag eines DELETE ziehen ("DELETE 42" -> 42).
+
+    Postgres erlaubt in RETURNING keine Aggregatfunktionen: `DELETE ... RETURNING
+    COUNT(*)` wirft "aggregate functions are not allowed in RETURNING". Genau das
+    hat den täglichen GDPR-Cleanup seit jeher bei der ERSTEN Anweisung abgebrochen
+    — es wurde nie etwas gelöscht. conn.execute() liefert stattdessen das
+    Command-Tag, aus dem sich die Zahl zuverlässig lesen lässt.
+    """
+    try:
+        return int(str(status).split()[-1])
+    except (ValueError, IndexError):
+        return 0
+
+
 # Environment variables
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
@@ -737,10 +753,10 @@ async def startup_event():
             try:
                 await asyncio.sleep(24 * 60 * 60)
                 async with db_pool.acquire() as conn:
-                    deleted = await conn.fetchval(
-                        "DELETE FROM ai_solution_cache WHERE generation_date < NOW() - INTERVAL '30 days' RETURNING COUNT(*)"
-                    )
-                    logger.info(f"AI cache cleanup: removed {deleted or 0} entries older than 30 days")
+                    deleted = _parse_delete_count(await conn.execute(
+                        "DELETE FROM ai_solution_cache WHERE generation_date < NOW() - INTERVAL '30 days'"
+                    ))
+                    logger.info(f"AI cache cleanup: removed {deleted} entries older than 30 days")
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -751,28 +767,45 @@ async def startup_event():
 
     # GDPR: daily cleanup of expired sessions and inactive accounts
     async def _daily_gdpr_cleanup():
+        # Aufräum-Statements. Reihenfolge egal — jedes wird einzeln ausgeführt,
+        # damit ein fehlendes Ziel nicht den ganzen Lauf kippt.
+        # Hinweis: ai_call_logs und email_verifications existieren im aktuellen
+        # Schema (alembic/baseline_schema.sql) NICHT. Sie bleiben absichtlich
+        # gelistet, damit der Lauf sie abdeckt, sobald sie angelegt werden — das
+        # Fehlen wird pro Lauf einmal als INFO protokolliert, nicht als Fehler.
+        statements = [
+            ("user_sessions",
+             "DELETE FROM user_sessions WHERE expires_at < NOW()"),
+            ("users (inaktiv > 2 Jahre)",
+             "DELETE FROM users WHERE is_active = FALSE AND updated_at < NOW() - INTERVAL '2 years'"),
+            # Retention cleanup (MED-011)
+            ("cookie_consent_logs",
+             "DELETE FROM cookie_consent_logs WHERE timestamp < NOW() - INTERVAL '1 year'"),
+            ("ai_call_logs",
+             "DELETE FROM ai_call_logs WHERE created_at < NOW() - INTERVAL '90 days'"),
+            ("email_verifications",
+             "DELETE FROM email_verifications WHERE expires_at < NOW()"),
+        ]
+
         await asyncio.sleep(60)
         while True:
             try:
                 async with db_pool.acquire() as conn:
-                    expired_sessions = await conn.fetchval(
-                        "DELETE FROM user_sessions WHERE expires_at < NOW() RETURNING COUNT(*)"
-                    )
-                    old_inactive = await conn.fetchval(
-                        "DELETE FROM users WHERE is_active = FALSE AND updated_at < NOW() - INTERVAL '2 years' RETURNING COUNT(*)"
-                    )
-                    logger.info(f"GDPR cleanup: removed {expired_sessions or 0} expired sessions, {old_inactive or 0} inactive accounts")
-                    # Retention cleanup (MED-011)
-                    deleted_consent = await conn.fetchval(
-                        "DELETE FROM cookie_consent_logs WHERE timestamp < NOW() - INTERVAL '1 year' RETURNING COUNT(*)"
-                    )
-                    deleted_ai_logs = await conn.fetchval(
-                        "DELETE FROM ai_call_logs WHERE created_at < NOW() - INTERVAL '90 days' RETURNING COUNT(*)"
-                    )
-                    deleted_verif = await conn.fetchval(
-                        "DELETE FROM email_verifications WHERE expires_at < NOW() RETURNING COUNT(*)"
-                    )
-                    logger.info(f"Retention cleanup: consent_logs={deleted_consent or 0}, ai_logs={deleted_ai_logs or 0}, email_verif={deleted_verif or 0}")
+                    for label, sql in statements:
+                        # Pro Statement eigenes try: früher scheiterte der GESAMTE
+                        # Lauf am ersten Fehler (und schlief dann 24 h weiter).
+                        try:
+                            n = _parse_delete_count(await conn.execute(sql))
+                            logger.info(f"GDPR cleanup: {label} — {n} Zeile(n) gelöscht")
+                        except asyncpg.exceptions.UndefinedTableError:
+                            logger.info(
+                                f"GDPR cleanup: Tabelle für '{label}' existiert nicht — übersprungen"
+                            )
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as e:
+                            # Bewusst nur dieses eine Statement verlieren, nicht den Lauf.
+                            logger.error(f"GDPR cleanup: '{label}' fehlgeschlagen: {e}")
                 await asyncio.sleep(24 * 60 * 60)
             except asyncio.CancelledError:
                 break

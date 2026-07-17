@@ -46,7 +46,12 @@ class TestSoft404Datenschutz:
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # asyncio.run() statt get_event_loop(): Letzteres greift auf den globalen Loop zu und
+    # scheitert mit "There is no current event loop", sobald ein zuvor gelaufener Test
+    # asyncio.run() genutzt und den Loop damit geschlossen hat (z. B. test_bfsg_features).
+    # Isoliert lief diese Datei grün, im Gesamtlauf fiel sie um — asyncio.run() bringt
+    # seinen eigenen Loop mit und ist von fremdem Testzustand unabhängig.
+    return asyncio.run(coro)
 
 
 class TestTrackingDetection:

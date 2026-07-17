@@ -17,7 +17,10 @@ from compliance_engine.scanner import ComplianceScanner
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # asyncio.run() statt get_event_loop() — siehe tests/test_check_heuristics.py:
+    # der globale Loop ist im Gesamtlauf bereits geschlossen, die Datei fiel nur im
+    # Verbund um, nicht isoliert.
+    return asyncio.run(coro)
 
 
 def _patch_verdict(monkeyverdict):

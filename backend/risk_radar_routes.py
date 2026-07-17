@@ -173,14 +173,18 @@ async def get_risk_radar_score(
 
 @router.get("/early-warnings")
 async def get_early_warnings(
-    user_id: Optional[int] = Query(None),
     severity_min: str = Query("low", description="Mindestseverity: info|low|medium|high|critical"),
     limit: int = Query(20, ge=1, le=100),
     unread_only: bool = Query(False),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Abmahnfallen-Frühwarnungen aus der Update-Pipeline.
     Klassifiziert durch ai_legal_classifier mit Severity-Filter.
+
+    Inhaltlich mandantenunabhängig (allgemeine Rechts-Updates), aber ein
+    kostenpflichtiges Produktfeature — daher Login-Pflicht. `user_id` als
+    Query-Parameter ist entfallen (wurde nie ausgewertet).
     """
     from dependencies import get_db_pool
     db_pool = await get_db_pool()
@@ -266,11 +270,15 @@ async def get_early_warnings(
 @router.get("/summary")
 async def get_risk_radar_summary(
     domain: Optional[str] = Query(None),
-    user_id: Optional[int] = Query(None),
+    current_user: dict = Depends(get_current_user),
 ):
     """Kompakte Zusammenfassung für Dashboard-Karte."""
-    score_data = await get_risk_radar_score(domain=domain, user_id=user_id)
-    warnings_data = await get_early_warnings(limit=5, severity_min="medium")
+    # Direktaufruf der Handler: Dependencies laufen dabei NICHT mit, deshalb wird
+    # current_user explizit durchgereicht (inkl. Ownership-Prüfung in /score).
+    score_data = await get_risk_radar_score(domain=domain, current_user=current_user)
+    warnings_data = await get_early_warnings(
+        limit=5, severity_min="medium", current_user=current_user
+    )
 
     critical_warnings = [w for w in warnings_data["warnings"] if w["severity"] in ["high", "critical"]]
 
