@@ -65,22 +65,22 @@ im Log) — bei der Baseline mit anlegen oder die Features entfernen.
 Reihenfolge wichtig: erst toten Code löschen, dann Domains fixen (viele der 200
 `.tech`-Referenzen liegen im toten Landing-Code).
 
-- [ ] **4.1 Landing-Dead-Code entfernen** (~4–5k LOC): `ComplyoOriginalLanding.tsx` (1940 LOC),
+- [x] **4.1 Landing-Dead-Code entfernen** (~4–5k LOC): `ComplyoOriginalLanding.tsx` (1940 LOC),
   `ComplyoViralLanding.tsx`, `ComplyoHighConversionLanding.tsx`, `ComplyoModernLanding.tsx`,
   Verzeichnisse `modern-landing/`, `saas-landing/`, `alfima-landing/` sowie den nicht
   eingebundenen `app/ABTestRouter.tsx`. Aktiv ist nur `EarlyAccessLanding` (`app/page.tsx`).
   Vorher prüfen: `grep -rn "alfima\|ModernLanding\|ViralLanding" landing-react/src --include="*.tsx" -l`.
-- [ ] **4.2 Domain-Sweep**: alle verbleibenden `complyo.tech`-Referenzen → `.de`
+- [x] **4.2 Domain-Sweep**: alle verbleibenden `complyo.tech`-Referenzen → `.de`
   (`grep -rn "complyo\.tech"` über backend, dashboard-react, landing-react, Plugins, nginx).
   Betroffen u. a.: WordPress-Plugin (`app.complyo.tech` hardcoded!), Joomla-Plugin,
   `dashboard-react/next.config.js`, diverse Rechtsseiten. 301-Redirect `.tech → .de` im
   Gateway bleibt als Fangnetz bestehen.
-- [ ] **4.3 Plugins konfigurierbar machen**: API-/App-URL in WP- und Joomla-Plugin als
+- [x] **4.3 Plugins konfigurierbar machen**: API-/App-URL in WP- und Joomla-Plugin als
   Konstante mit Default `api.complyo.de` / `app.complyo.de` (ein Ort statt verstreuter Strings).
   Plugin-Versionen bumpen (WP → 2.6.0), neue ZIPs bauen.
-- [ ] **4.4 Log-Hygiene**: 313× `print()` im Backend → `logging`; 64× `console.log` in den
+- [x] **4.4 Log-Hygiene**: 313× `print()` im Backend → `logging`; 64× `console.log` in den
   Frontends entfernen (mind. aus Auth-/Payment-Pfaden).
-- [ ] **4.5 Abnahme**: `grep -rn "complyo\.tech"` liefert 0 Treffer in aktivem Code
+- [x] **4.5 Abnahme**: `grep -rn "complyo\.tech"` liefert 0 Treffer in aktivem Code
   (Archiv/Snapshots ausgenommen); Landing + Dashboard bauen fehlerfrei; Widgets laden von api.complyo.de.
 
 ## Phase 5 — Server-Isolation & Migration (vor Launch, ~2–3 Tage + DNS-Vorlauf)
