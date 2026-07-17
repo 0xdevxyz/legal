@@ -124,6 +124,35 @@ Bewusst NICHT vor dem Launch — Vertriebszeit geht vor:
 - Git-Auto-Deployment (`paramiko` in requirements) — nur bei Kundenbedarf.
 - Coverage-Messung + CI-Gate für Backend-Tests.
 
+## Phase 7 — Produkt-Evolution: „Pflichtenradar" (nach Launch + ersten Kunden)
+
+Quelle: `unicorn-idee-pflichtenradar-regulierungs-betriebssystem-fuer-kmu-complyo-evolutionsstufe.md`
+(Hermes-Brain, Session 2026-07-17). Kernthese: Complyo ist bereits der Pflichtenradar
+für die Nische Website-Recht — die Evolutionsstufe ist das Meta-Layer „Welche Pflichten
+gelten für MICH, was kostet Ignorieren, was tue ich Montagfrüh?" als Abo. Kein neues
+Projekt, sondern Verbreiterung. Jede Stufe verkauft sich einzeln:
+
+- [ ] **7.1 Scan-Verbreiterung** (Wochen, baut auf Vorhandenem): bestehenden Scanner um
+  expliziten BFSG-Check-Report + AI-Act-Transparenz-Check erweitern. Assets da:
+  AxeScanner, AI-Act-Doku-Generator, Jurisdiction-Kontext. Als Lead-Magnet ausspielen
+  („Ist Ihre Website BFSG-konform? 60-Sekunden-Check" — deckt sich mit Vertriebsplan).
+- [ ] **7.2 Pflichten-Report als Premium-Feature**: KMU-Profil-Fragebogen (Branche,
+  Größe, Produkte, Software; so viel wie möglich aus dem Website-Scan vorbefüllt)
+  → generierter „Ihr Pflichten-Report" mit Deadlines und Bußgeld-Risiko in €.
+  Vorarbeit nutzen: legal_changes/legal_news-Pipeline, compliance_risk_matrix-Tabelle.
+- [ ] **7.3 Lebender Pflichten-Graph + Monitoring-Abo**: RSS/EU-Lex-Pipeline (existiert)
+  → Rules-as-Code-Mapping auf Firmenprofile, „Pflicht neu/geändert/entfallen"-Alerts.
+  Der Graph ist der Moat — jedes gemappte Gesetz und jedes Profil compoundet.
+- [ ] **7.0 Pflicht-Hausaufgaben VOR 7.2-Launch** (aus der Idee, nicht verhandelbar):
+  - **RDG-Klärung**: als Information/Selbst-Check positionieren, nicht als individuelle
+    Rechtsprüfung; Anwalts-Netzwerk als Eskalation (Vorbild Smartlaw/Trusted Shops).
+  - **Haftungs-Design**: Confidence-Level + Quellenangabe pro Aussage als Kern-Feature
+    (nicht als Fußnote) — „dich betrifft nichts" ohne Beleg darf es nicht geben.
+
+Reihenfolge-Regel (Fokus-Wächter): 7.x startet erst, wenn der Launch durch ist und
+zahlende Kunden da sind (Ziel aus dem Audit: 10 bis Oktober). 7.1 darf als
+Lead-Magnet-Arbeit parallel zum Vertrieb laufen, 7.2/7.3 nicht.
+
 ---
 
 ## Reihenfolge & Abhängigkeiten
