@@ -22,6 +22,7 @@ from cookie_scanner_service import cookie_scanner
 from file_storage_service import file_storage
 from agency_report_generator import AgencyReportGenerator
 from compliance_engine.data_processing_countries import country_processing_info
+from dependencies import rate_limit
 
 
 def _enrich_third_country(service: dict) -> dict:
@@ -62,22 +63,28 @@ async def get_current_user_optional(credentials: HTTPAuthorizationCredentials = 
     if not credentials:
         return None
     
-    try:
-        if not auth_service:
-            logger.warning("Auth service not configured")
-            return None
-            
-        token = credentials.credentials
-        user_data = auth_service.verify_token(token)
-        
-        if not user_data:
-            return None
-        
-        logger.info(f"User authenticated: {user_data.get('user_id') or user_data.get('id')}")
-        return user_data
-    except Exception as e:
-        logger.error(f"Authentication failed: {e}")
+    if not auth_service:
+        logger.warning("Auth service not configured")
         return None
+
+    token = credentials.credentials
+    user_data = auth_service.verify_token(token)
+
+    if not user_data:
+        return None
+
+    # Widerrufene Tokens (Logout) ablehnen — verify_token prüft die jti-Blacklist nicht
+    jti = user_data.get("jti")
+    if jti and redis_client:
+        try:
+            if await redis_client.get(f"jwt:blacklist:{jti}"):
+                logger.info("Rejected blacklisted token (jti revoked)")
+                return None
+        except Exception as e:
+            logger.warning(f"JTI blacklist check failed: {e}")
+
+    logger.info(f"User authenticated: {user_data.get('user_id') or user_data.get('id')}")
+    return user_data
 
 async def get_current_user_required(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
     """Verify JWT token and return user data (required - raises 401 if no auth)"""
@@ -521,7 +528,7 @@ async def log_consent(
         
     except Exception as e:
         print(f"Error logging consent: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to log consent: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to log consent")
 
 # ============================================================================
 # Banner Configuration Endpoints
@@ -845,7 +852,7 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
         
     except Exception as e:
         print(f"Error getting banner config: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get configuration: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get configuration")
 
 class ExtractColorsRequest(BaseModel):
     url: str = Field(..., description="URL der Website, deren Markenfarben ausgelesen werden sollen")
@@ -1073,7 +1080,7 @@ async def create_or_update_config(
         
     except Exception as e:
         print(f"Error saving banner config: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to save configuration: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to save configuration")
 
 @router.patch("/api/cookie-compliance/config/{site_id}")
 async def update_config_partial(
@@ -1146,7 +1153,7 @@ async def update_config_partial(
         raise
     except Exception as e:
         print(f"Error updating config: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update")
 
 # ============================================================================
 # Service Templates Endpoints
@@ -1264,7 +1271,7 @@ async def get_available_services(
 
     except Exception as e:
         print(f"Error getting services: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get services: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get services")
 
 @router.get("/api/cookie-compliance/services/{service_key}")
 async def get_service_detail(
@@ -1298,7 +1305,7 @@ async def get_service_detail(
         raise
     except Exception as e:
         print(f"Error getting service: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get service: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get service")
 
 # ============================================================================
 # Custom Services Endpoints (kundeneigene Dienst-Definitionen)
@@ -1340,7 +1347,7 @@ async def list_custom_services(
         return {"success": True, "total": 0, "data": []}
     except Exception as e:
         logger.error(f"Error listing custom services: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list custom services: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to list custom services")
 
 @router.post("/api/cookie-compliance/custom-services/{site_id}")
 async def create_custom_service(
@@ -1390,7 +1397,7 @@ async def create_custom_service(
         raise HTTPException(status_code=503, detail="Custom-Services-Tabelle noch nicht eingerichtet.")
     except Exception as e:
         logger.error(f"Error creating custom service: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create custom service: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create custom service")
 
 @router.put("/api/cookie-compliance/custom-services/{site_id}/{service_key}")
 async def update_custom_service(
@@ -1423,7 +1430,7 @@ async def update_custom_service(
         raise
     except Exception as e:
         logger.error(f"Error updating custom service: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update custom service: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update custom service")
 
 @router.delete("/api/cookie-compliance/custom-services/{site_id}/{service_key}")
 async def delete_custom_service(
@@ -1447,7 +1454,7 @@ async def delete_custom_service(
         raise
     except Exception as e:
         logger.error(f"Error deleting custom service: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete custom service: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete custom service")
 
 # ============================================================================
 # Statistics Endpoints
@@ -1534,7 +1541,7 @@ async def get_site_statistics(
         
     except Exception as e:
         print(f"Error getting statistics: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get statistics: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get statistics")
 
 @router.get("/api/cookie-compliance/consents/{site_id}")
 async def get_consent_logs(
@@ -1585,7 +1592,7 @@ async def get_consent_logs(
         
     except Exception as e:
         print(f"Error getting consent logs: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get logs: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get logs")
 
 @router.get("/api/cookie-compliance/consents/{site_id}/export")
 async def export_consent_logs_csv(
@@ -1662,7 +1669,7 @@ async def export_consent_logs_csv(
         raise
     except Exception as e:
         print(f"Error exporting consent logs: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to export: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to export")
 
 # ============================================================================
 # Utility Endpoints
@@ -1688,9 +1695,9 @@ async def delete_expired_consents(
         
     except Exception as e:
         print(f"Error deleting expired consents: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete")
 
-@router.post("/api/cookie-compliance/scan")
+@router.post("/api/cookie-compliance/scan", dependencies=[Depends(rate_limit("cookie_scan", 5, 60))])
 async def scan_website(
     request: Request,
     data: Dict[str, str],
@@ -1847,7 +1854,7 @@ async def scan_website(
         raise
     except Exception as e:
         print(f"Error scanning website: {e}")
-        raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Scan failed")
 
 
 @router.post("/api/cookie-compliance/monitor/check/{site_id}")
@@ -1919,10 +1926,10 @@ async def monitor_website_check(
         raise
     except Exception as e:
         logger.error(f"Monitor check error for {site_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Monitor check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Monitor check failed")
 
 
-@router.post("/api/cookie-compliance/scan/deep")
+@router.post("/api/cookie-compliance/scan/deep", dependencies=[Depends(rate_limit("cookie_deep", 3, 60))])
 async def scan_website_deep(
     request: Request,
     data: Dict[str, Any],
@@ -2026,7 +2033,7 @@ async def scan_website_deep(
         raise
     except Exception as e:
         print(f"Error in deep scan: {e}")
-        raise HTTPException(status_code=500, detail=f"Deep scan failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Deep scan failed")
 
 
 @router.get("/api/cookie-compliance/scan/capabilities")
@@ -2140,7 +2147,7 @@ async def get_blocking_config(
         
     except Exception as e:
         print(f"Error getting blocking config: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get blocking configuration: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get blocking configuration")
 
 @router.get("/api/cookie-compliance/health")
 async def health_check(db_pool: asyncpg.Pool = Depends(get_db_connection)):
@@ -2406,9 +2413,10 @@ async def get_tcf_vendors(
             "vendor_count": len(vendors)
         }
     except Exception as e:
+        logger.exception("TCF vendor fetch failed")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"TCF vendor fetch failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="TCF vendor fetch failed")
 
 
 @router.get("/api/cookie-compliance/tcf/config/{site_id}")
@@ -2873,9 +2881,10 @@ async def generate_cookie_policy(
         policy, configured = await _load_cookie_policy(db_pool, site_id, lang)
         return {"success": True, "policy": policy, "format": "json", "configured": configured}
     except Exception as e:
+        logger.exception("Policy generation failed")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Policy generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Policy generation failed")
 
 
 def _render_cookie_policy_html(policy: dict, lang: str = "de") -> str:
@@ -3016,9 +3025,10 @@ async def public_cookie_policy_page(
         html_out = _render_cookie_policy_html(policy, lang)
         return HTMLResponse(content=html_out, headers={"Cache-Control": "public, max-age=300"})
     except Exception as e:
+        logger.exception("Cookie policy page failed")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Cookie policy page failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Cookie policy page failed")
 
 
 @router.get("/api/cookie-compliance/revisions/{site_id}")

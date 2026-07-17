@@ -262,7 +262,7 @@ async def create_checkout(request: Request, data: CreateCheckoutRequest):
 
     except stripe.error.StripeError as e:
         logger.error(f"Stripe-Fehler: {e}")
-        raise HTTPException(status_code=500, detail=f"Stripe-Fehler: {str(e)}")
+        raise HTTPException(status_code=500, detail="Stripe-Fehler")
     except HTTPException:
         raise
     except Exception as e:

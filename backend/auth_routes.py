@@ -790,7 +790,7 @@ async def firebase_verify(request: FirebaseTokenRequest):
         logger.error(f"Firebase verification error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Firebase Authentifizierung fehlgeschlagen: {str(e)}"
+            detail="Firebase Authentifizierung fehlgeschlagen"
         )
 
 # ============= Health Check =============
@@ -895,5 +895,5 @@ async def reset_master_password(request: Request, admin_key: str = Query(..., al
         logger.error(f"Error resetting master password: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to reset password: {str(e)}"
+            detail="Failed to reset password"
         )

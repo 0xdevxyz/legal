@@ -924,7 +924,7 @@ async def complete_analysis(analyze_request: AnalyzeRequest, request: Request, c
         print(f"Error in complete_analysis: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler bei der erweiterten Analyse: {str(e)}"
+            detail="Fehler bei der erweiterten Analyse"
         )
 
 
@@ -952,7 +952,7 @@ async def execute_fix(execute_request: ExecuteFixRequest, request: Request, curr
         print(f"Error in execute_fix: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler bei der Fix-Generierung: {str(e)}"
+            detail="Fehler bei der Fix-Generierung"
         )
 
 
@@ -1000,7 +1000,7 @@ async def validate_fix_live(validate_request: ValidateFixRequest, request: Reque
         print(f"Error in validate_fix_live: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler bei der Validierung: {str(e)}"
+            detail="Fehler bei der Validierung"
         )
 
 
@@ -1174,7 +1174,7 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
         logger.error(f"Quick analysis error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Quick-Scan fehlgeschlagen: {str(e)}"
+            detail="Quick-Scan fehlgeschlagen"
         )
 
 @app.post("/api/v2/analyze")
@@ -1275,7 +1275,7 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
         logger.exception(f"Analysis v2 error for url={getattr(request, 'url', 'unknown')}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Analyse fehlgeschlagen: {str(e)}"
+            detail="Analyse fehlgeschlagen"
         )
 
 @app.post("/api/v2/ai-fix")
@@ -1344,7 +1344,7 @@ async def generate_ai_fixes(request: AIFixRequest, current_user: dict = Depends(
         print(f"AI Fix error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"AI-Fix-Generierung fehlgeschlagen: {str(e)}"
+            detail="AI-Fix-Generierung fehlgeschlagen"
         )
 
 # ========== WORKFLOW ENDPOINTS ==========
@@ -1361,7 +1361,8 @@ async def start_user_journey(request: StartJourneyRequest, current_user: dict = 
         await workflow_integration_instance.save_user_journey(journey)
         return {"success": True, "data": journey}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to start journey: {e}")
+        logger.exception("Failed to start journey")
+        raise HTTPException(status_code=500, detail="Failed to start journey")
 
 @app.get("/api/v2/workflow/current-step")
 async def get_current_workflow_step(current_user: dict = Depends(get_current_user)):
@@ -1369,7 +1370,8 @@ async def get_current_workflow_step(current_user: dict = Depends(get_current_use
         current_step = await workflow_engine.get_current_step(str(current_user["id"]))
         return {"success": True, "data": current_step}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get current step: {e}")
+        logger.exception("Failed to get current step")
+        raise HTTPException(status_code=500, detail="Failed to get current step")
 
 @app.post("/api/v2/workflow/complete-step")
 async def complete_workflow_step(request: CompleteStepRequest, current_user: dict = Depends(get_current_user)):
@@ -1381,7 +1383,8 @@ async def complete_workflow_step(request: CompleteStepRequest, current_user: dic
         )
         return {"success": True, "data": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to complete step: {e}")
+        logger.exception("Failed to complete step")
+        raise HTTPException(status_code=500, detail="Failed to complete step")
 
 @app.get("/api/v2/workflow/progress")
 async def get_workflow_progress(current_user: dict = Depends(get_current_user)):
@@ -1389,7 +1392,8 @@ async def get_workflow_progress(current_user: dict = Depends(get_current_user)):
         progress = await workflow_engine.get_journey_progress(str(current_user["id"]))
         return {"success": True, "data": progress}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get progress: {e}")
+        logger.exception("Failed to get progress")
+        raise HTTPException(status_code=500, detail="Failed to get progress")
 
 # ========== SCAN PERSISTENCE ENDPOINTS ==========
 
@@ -1467,7 +1471,7 @@ async def get_latest_scan(current_user: dict = Depends(get_current_user)):
         print(f"Error loading latest scan: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler beim Laden der Scan-Ergebnisse: {str(e)}"
+            detail="Fehler beim Laden der Scan-Ergebnisse"
         )
 
 @app.get("/api/scans/history")
@@ -1506,7 +1510,7 @@ async def get_scan_history(limit: int = 10, current_user: dict = Depends(get_cur
         print(f"Error loading scan history: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler beim Laden der Scan-Historie: {str(e)}"
+            detail="Fehler beim Laden der Scan-Historie"
         )
 
 # ========== FIX JOBS ENDPOINTS ==========
@@ -1589,7 +1593,7 @@ async def create_fix_job(
         print(f"Error creating fix job: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler beim Erstellen des Fix-Jobs: {str(e)}"
+            detail="Fehler beim Erstellen des Fix-Jobs"
         )
 
 @app.get("/api/fix-jobs/{job_id}/status")
@@ -1637,7 +1641,7 @@ async def get_fix_job_status(job_id: str, current_user: dict = Depends(get_curre
         print(f"Error getting job status: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler beim Abrufen des Job-Status: {str(e)}"
+            detail="Fehler beim Abrufen des Job-Status"
         )
 
 @app.get("/api/fix-jobs/active")
@@ -1688,7 +1692,7 @@ async def get_active_fix_jobs(current_user: dict = Depends(get_current_user)):
         print(f"Error getting active jobs: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler beim Abrufen aktiver Jobs: {str(e)}"
+            detail="Fehler beim Abrufen aktiver Jobs"
         )
 
 # ========== REPORTING ENDPOINTS ==========
@@ -1730,7 +1734,7 @@ async def download_report(scan_id: str, current_user: dict = Depends(get_current
         logger.error(f"Report generation error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"PDF-Generierung fehlgeschlagen: {str(e)}"
+            detail="PDF-Generierung fehlgeschlagen"
         )
 
 # ========== AUDIT LOG ENDPOINTS ==========
@@ -1824,7 +1828,8 @@ async def create_checkout_session(
         )
         return {"success": True, "data": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create checkout session: {str(e)}")
+        logger.exception("Failed to create checkout session")
+        raise HTTPException(status_code=500, detail="Failed to create checkout session")
 
 @app.post("/api/v2/payments/create-portal-session")
 async def create_portal_session(current_user: dict = Depends(get_current_user)):
@@ -1835,7 +1840,8 @@ async def create_portal_session(current_user: dict = Depends(get_current_user)):
         )
         return {"success": True, "data": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create portal session: {str(e)}")
+        logger.exception("Failed to create portal session")
+        raise HTTPException(status_code=500, detail="Failed to create portal session")
 
 @app.get("/api/v2/payments/subscription-status")
 async def get_subscription_status(current_user: dict = Depends(get_current_user)):
@@ -1843,7 +1849,8 @@ async def get_subscription_status(current_user: dict = Depends(get_current_user)
         status = await stripe_service.get_subscription_status(current_user["id"])
         return {"success": True, "data": status}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get subscription status: {str(e)}")
+        logger.exception("Failed to get subscription status")
+        raise HTTPException(status_code=500, detail="Failed to get subscription status")
 
 @app.get("/api/v2/payments/history")
 async def get_payment_history(current_user: dict = Depends(get_current_user)):
@@ -1851,7 +1858,8 @@ async def get_payment_history(current_user: dict = Depends(get_current_user)):
         history = await stripe_service.get_payment_history(current_user["id"])
         return {"success": True, "data": history}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get payment history: {str(e)}")
+        logger.exception("Failed to get payment history")
+        raise HTTPException(status_code=500, detail="Failed to get payment history")
 
 @app.get("/api/v2/payments/plans")
 async def get_available_plans():
@@ -1859,7 +1867,8 @@ async def get_available_plans():
         plans = await stripe_service.get_available_plans()
         return {"success": True, "data": plans}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get available plans: {str(e)}")
+        logger.exception("Failed to get available plans")
+        raise HTTPException(status_code=500, detail="Failed to get available plans")
 
 @app.post("/api/v2/payments/webhook")
 async def stripe_webhook(request: Request):

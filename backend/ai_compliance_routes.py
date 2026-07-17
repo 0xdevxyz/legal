@@ -10,10 +10,13 @@ from typing import Optional, List
 from datetime import datetime, date, timedelta
 import uuid
 import io
+import logging
 
 from ai_act_analyzer import ai_act_analyzer, AISystem
 from file_storage_service import file_storage
 from database_service import db_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/ai", tags=["AI Compliance"])
 security = HTTPBearer()
@@ -759,9 +762,10 @@ async def generate_documentation(
         }
         
     except Exception as e:
+        logger.exception("Dokumentgenerierung fehlgeschlagen")
         raise HTTPException(
             status_code=500,
-            detail=f"Dokumentgenerierung fehlgeschlagen: {str(e)}"
+            detail="Dokumentgenerierung fehlgeschlagen"
         )
 
 @router.get("/documentation/{doc_id}/download")
@@ -820,9 +824,10 @@ async def download_documentation(
                 }
             )
         except Exception as e:
+            logger.exception("PDF-Generierung fehlgeschlagen. Versuchen Sie HTML-Export.")
             raise HTTPException(
                 status_code=500,
-                detail=f"PDF-Generierung fehlgeschlagen: {str(e)}. Versuchen Sie HTML-Export."
+                detail="PDF-Generierung fehlgeschlagen. Versuchen Sie HTML-Export."
             )
     else:
         return StreamingResponse(
@@ -971,9 +976,10 @@ async def upload_documentation(
         }
         
     except Exception as e:
+        logger.exception("Upload fehlgeschlagen")
         raise HTTPException(
             status_code=500,
-            detail=f"Upload fehlgeschlagen: {str(e)}"
+            detail="Upload fehlgeschlagen"
         )
 
 @router.get("/documentation/file/{file_path:path}")

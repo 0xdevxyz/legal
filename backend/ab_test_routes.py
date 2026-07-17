@@ -174,7 +174,7 @@ async def create_ab_test(
         raise
     except Exception as e:
         print(f"Error creating A/B test: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create test: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create test")
 
 
 @router.get("/{test_id}")
@@ -312,7 +312,7 @@ async def get_ab_test(
         raise
     except Exception as e:
         print(f"Error getting A/B test: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get test: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get test")
 
 
 @router.get("/site/{site_id}")
@@ -367,7 +367,7 @@ async def get_site_tests(
         
     except Exception as e:
         print(f"Error getting site tests: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get tests: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get tests")
 
 
 @router.patch("/{test_id}")
@@ -430,7 +430,7 @@ async def update_ab_test(
         raise
     except Exception as e:
         print(f"Error updating A/B test: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update test: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update test")
 
 
 @router.post("/{test_id}/start")
@@ -490,7 +490,7 @@ async def start_ab_test(
         raise
     except Exception as e:
         print(f"Error starting A/B test: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start test: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to start test")
 
 
 @router.post("/{test_id}/stop")
@@ -544,7 +544,7 @@ async def stop_ab_test(
         raise
     except Exception as e:
         print(f"Error stopping A/B test: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to stop test: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to stop test")
 
 
 # ============================================================================
@@ -691,7 +691,7 @@ async def track_ab_result(
         
     except Exception as e:
         print(f"Error tracking A/B result: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to track result: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to track result")
 
 
 @router.delete("/{test_id}")
@@ -727,5 +727,5 @@ async def delete_ab_test(
         raise
     except Exception as e:
         print(f"Error deleting A/B test: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete test: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete test")
 

@@ -158,7 +158,7 @@ async def serve_cookie_compliance_widget(request: Request, site_id: Optional[str
         
     except Exception as e:
         print(f"Error serving cookie compliance widget: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to serve widget: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to serve widget")
 
 
 @router.get("/api/widgets/accessibility.js")
@@ -751,7 +751,7 @@ async def generate_accessibility_patches(
         
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Generieren der Patches: {str(e)}"
+            detail="Fehler beim Generieren der Patches"
         )
 
 
@@ -797,7 +797,7 @@ async def download_accessibility_patches(download_id: str):
         
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Download: {str(e)}"
+            detail="Fehler beim Download"
         )
 
 

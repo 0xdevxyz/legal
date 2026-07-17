@@ -151,7 +151,7 @@ async def create_expert_service_request(
         logger.error(f"❌ Error creating expert service request: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Erstellen der Anfrage: {str(e)}"
+            detail="Fehler beim Erstellen der Anfrage"
         )
 
 
@@ -250,7 +250,7 @@ async def get_expert_service_requests(
         logger.error(f"❌ Error fetching expert service requests: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Laden der Anfragen: {str(e)}"
+            detail="Fehler beim Laden der Anfragen"
         )
 
 

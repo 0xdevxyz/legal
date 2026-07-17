@@ -121,18 +121,24 @@ async def get_db() -> asyncpg.Pool:
         await init_db_pool()
     return _db_pool
 
+async def get_db_pool() -> asyncpg.Pool:
+    """Alias auf get_db — mehrere Router importieren diesen Namen."""
+    return await get_db()
+
 async def get_redis() -> Optional[aioredis.Redis]:
     """
     Dependency: Get Redis client (optional).
-    
+
     Returns None if Redis is not available.
-    
+
     Usage:
         @router.get("/cached")
         async def get_cached(redis: Optional[aioredis.Redis] = Depends(get_redis)):
             if redis:
                 cached = await redis.get("key")
     """
+    if _redis_client is None:
+        await init_redis()
     return _redis_client
 
 # ==========================================
@@ -348,6 +354,46 @@ async def get_news_service():
 # ==========================================
 # Utility Dependencies
 # ==========================================
+
+def rate_limit(scope: str, max_requests: int, window_seconds: int = 60):
+    """
+    Dependency-Factory: Redis-Sliding-Window-Rate-Limit pro Client-IP.
+
+    Für Router-Dekoratoren gedacht, damit Handler-Signaturen unverändert bleiben:
+        @router.post("/generate", dependencies=[Depends(rate_limit("ai", 5))])
+
+    Fail-open ohne Redis (Limit dann nicht durchgesetzt, nur geloggt).
+    """
+    async def _check(request: Request) -> None:
+        redis = await get_redis()
+        if not redis:
+            logger.warning(f"rate_limit({scope}): Redis nicht verfügbar — Limit nicht durchgesetzt")
+            return
+        ip = get_client_ip(request)
+        key = f"rate_limit:{scope}:{ip}"
+        import time as _time
+        now = _time.time()
+        try:
+            pipe = redis.pipeline()
+            pipe.zremrangebyscore(key, 0, now - window_seconds)
+            pipe.zadd(key, {str(now): now})
+            pipe.zcard(key)
+            pipe.expire(key, window_seconds * 2)
+            results = await pipe.execute()
+        except Exception as e:
+            logger.warning(f"rate_limit({scope}): Redis-Fehler — {e}")
+            return
+        if results[2] > max_requests:
+            try:
+                await redis.zrem(key, str(now))
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Zu viele Anfragen. Bitte versuchen Sie es später erneut.",
+                headers={"Retry-After": str(window_seconds)},
+            )
+    return _check
 
 def get_client_ip(request: Request) -> str:
     """

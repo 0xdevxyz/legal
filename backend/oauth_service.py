@@ -19,14 +19,14 @@ class OAuthService:
         # Google OAuth Config
         self.google_client_id = os.getenv("GOOGLE_CLIENT_ID")
         self.google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-        self.google_redirect_uri = os.getenv("FRONTEND_URL", "https://app.complyo.tech") + "/auth/google/callback"
+        self.google_redirect_uri = os.getenv("FRONTEND_URL", "https://app.complyo.de") + "/auth/google/callback"
         
         # Apple OAuth Config
         self.apple_client_id = os.getenv("APPLE_CLIENT_ID")  # Service ID
         self.apple_team_id = os.getenv("APPLE_TEAM_ID")
         self.apple_key_id = os.getenv("APPLE_KEY_ID")
         self.apple_private_key = os.getenv("APPLE_PRIVATE_KEY")  # .p8 file content
-        self.apple_redirect_uri = os.getenv("FRONTEND_URL", "https://app.complyo.tech") + "/auth/apple/callback"
+        self.apple_redirect_uri = os.getenv("FRONTEND_URL", "https://app.complyo.de") + "/auth/apple/callback"
     
     def get_google_auth_url(self, state: str) -> str:
         """Generate Google OAuth authorization URL"""
@@ -129,10 +129,17 @@ class OAuthService:
             token_data = token_response.json()
             id_token = token_data["id_token"]
             
-            # Decode ID token to get user info
-            # Note: In production, verify the token signature with Apple's public key
-            user_info = pyjwt.decode(id_token, options={"verify_signature": False})
-            
+            # Signatur gegen Apples JWKS prüfen (kid im Token-Header wählt den Key)
+            jwk_client = pyjwt.PyJWKClient("https://appleid.apple.com/auth/keys")
+            signing_key = jwk_client.get_signing_key_from_jwt(id_token)
+            user_info = pyjwt.decode(
+                id_token,
+                signing_key.key,
+                algorithms=["RS256"],
+                audience=self.apple_client_id,
+                issuer="https://appleid.apple.com",
+            )
+
             return user_info
     
     async def get_or_create_oauth_user(self, provider: str, provider_user_id: str, email: str, full_name: str) -> Dict:

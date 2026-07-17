@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 import logging
 
 from accessibility_fix_saver import AccessibilityFixSaver
+from dependencies import rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ async def alt_text_review_queue(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/generate-alt-texts")
+@router.post("/generate-alt-texts", dependencies=[Depends(rate_limit("alt_text", 5, 60))])
 async def generate_alt_texts(
     request: GenerateAltTextsRequest,
     current_user: Dict[str, Any] = Depends(get_required_user)
@@ -161,7 +162,7 @@ async def generate_alt_texts(
         }
     except Exception as e:
         logger.error(f"Alt-text generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Generation failed")
 
 
 @router.post("/approve-alt-text")
@@ -280,7 +281,7 @@ async def accessibility_worklist(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/rescan")
+@router.post("/rescan", dependencies=[Depends(rate_limit("a11y_rescan", 3, 60))])
 async def rescan_accessibility(
     request: RescanRequest,
     current_user: Dict[str, Any] = Depends(get_required_user)
@@ -300,10 +301,10 @@ async def rescan_accessibility(
         return result
     except Exception as e:
         logger.error(f"Accessibility rescan failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Re-Scan fehlgeschlagen: {str(e)}")
+        raise HTTPException(status_code=500, detail="Re-Scan fehlgeschlagen")
 
 
-@router.post("/scan-images")
+@router.post("/scan-images", dependencies=[Depends(rate_limit("a11y_scan_images", 5, 60))])
 async def scan_images_for_alt_text(
     site_url: str = Query(..., description="URL to scan for images without alt"),
     site_id: str = Query(..., description="Site ID to associate fixes"),

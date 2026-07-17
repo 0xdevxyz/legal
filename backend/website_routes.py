@@ -103,7 +103,7 @@ async def get_websites(user=Depends(get_current_user)):
     except Exception as e:
         print(f"❌ Error fetching websites: {str(e)}")
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to fetch websites: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch websites")
 
 @router.post("", response_model=WebsiteResponse)
 async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
@@ -321,7 +321,7 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
     except Exception as e:
         print(f"❌ Error saving website: {str(e)}")
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to save website: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to save website")
 
 @router.delete("/{website_id}")
 async def delete_website(website_id: str, user=Depends(get_current_user)):
@@ -398,7 +398,7 @@ async def delete_website(website_id: str, user=Depends(get_current_user)):
     except Exception as e:
         print(f"❌ Error deleting website: {str(e)}")
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to delete website: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete website")
 
 @router.get("/{website_id}/last-scan")
 async def get_last_scan(
@@ -458,7 +458,7 @@ async def get_last_scan(
     except Exception as e:
         print(f"❌ Error getting last scan: {str(e)}")
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to get last scan: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get last scan")
 
 @router.get("/{website_id}/score-history")
 async def get_score_history(
@@ -545,7 +545,7 @@ async def get_score_history(
         raise
     except Exception as e:
         logger.error(f"Error getting score history: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get score history: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get score history")
 
 
 @router.get("/{website_id}/scan-status")

@@ -214,7 +214,7 @@ async def apply_fix(
         logger.error(f"❌ Apply fix failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Anwenden des Fixes: {str(e)}"
+            detail="Fehler beim Anwenden des Fixes"
         )
 
 
@@ -290,7 +290,7 @@ async def rollback_fix(
         logger.error(f"❌ Rollback failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Rollback: {str(e)}"
+            detail="Fehler beim Rollback"
         )
 
 
