@@ -19,7 +19,7 @@ from compliance_engine.scanner import ComplianceScanner
 from compliance_engine.priority_engine import priority_engine
 from ai_review_engine import run_ai_review_pass, SOLUTION_MODEL
 from website_crawler import WebsiteCrawler
-from auth_routes import get_current_user
+from dependencies import get_current_user
 from accessibility_post_scan_processor import AccessibilityPostScanProcessor
 from ai_solution_cache_service import AISolutionCache
 

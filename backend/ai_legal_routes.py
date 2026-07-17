@@ -17,7 +17,7 @@ from datetime import datetime
 import logging
 import json
 
-from auth_routes import get_current_user
+from dependencies import get_current_user
 from dependencies import require_admin
 
 logger = logging.getLogger(__name__)

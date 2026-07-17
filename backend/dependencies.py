@@ -240,6 +240,7 @@ async def get_current_user(
         )
 
     user["id"] = int(user["id"])
+    user["user_id"] = user["id"]  # beide Key-Varianten bedienen (Alt-Code liest teils nur user_id)
     return user
 
 async def get_current_user_optional(
@@ -285,6 +286,7 @@ async def get_current_user_optional(
         return None
 
     user["id"] = int(user["id"])
+    user["user_id"] = user["id"]  # beide Key-Varianten bedienen (Alt-Code liest teils nur user_id)
     return user
 
 async def require_admin(

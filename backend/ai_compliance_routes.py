@@ -76,11 +76,11 @@ class ScanResponse(BaseModel):
 
 # ==================== AI SYSTEMS MANAGEMENT ====================
 
-async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Get current user ID from JWT token"""
-    from auth_routes import get_current_user
-    user = await get_current_user(credentials)
-    return user["id"]
+from dependencies import get_current_user as _canonical_user
+
+async def get_current_user_id(current_user: dict = Depends(_canonical_user)) -> int:
+    """User-ID über die kanonische Auth-Dependency (Phase 2 Auth-Konsolidierung)"""
+    return current_user["id"]
 
 @router.post("/systems", response_model=AISystemResponse)
 async def create_ai_system(

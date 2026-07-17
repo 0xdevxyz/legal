@@ -63,14 +63,11 @@ class TCFComplianceReport(BaseModel):
 
 
 # Helper: Get Current User from Token
-async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Get current user ID from JWT token"""
-    try:
-        from auth_routes import get_current_user
-        user = await get_current_user(credentials)
-        return user["id"]
-    except Exception as e:
-        raise HTTPException(status_code=401, detail="Invalid authentication")
+from dependencies import get_current_user as _canonical_user
+
+async def get_current_user_id(current_user: dict = Depends(_canonical_user)) -> int:
+    """User-ID über die kanonische Auth-Dependency (Phase 2 Auth-Konsolidierung)"""
+    return current_user["id"]
 
 
 # ==================== TCF ENDPOINTS ====================

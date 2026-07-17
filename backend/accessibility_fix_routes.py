@@ -181,36 +181,8 @@ class GenerateStatementResponse(BaseModel):
 # Auth Helper
 # =============================================================================
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> Dict[str, Any]:
-    """Verify JWT token and return user data"""
-    try:
-        if not auth_service:
-            raise HTTPException(status_code=500, detail="Auth service not initialized")
-        
-        token = credentials.credentials
-        user_data = auth_service.verify_token(token)
-        
-        if not user_data:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        
-        return user_data
-    except Exception as e:
-        logger.error(f"Authentication failed: {e}")
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-
-async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
-) -> Optional[Dict[str, Any]]:
-    """Optional auth - returns None if not authenticated"""
-    if not credentials:
-        return None
-    try:
-        return await get_current_user(credentials)
-    except HTTPException:
-        return None
+# Kanonische Auth-Dependencies (Phase 2 Auth-Konsolidierung)
+from dependencies import get_current_user, get_current_user_optional as get_optional_user
 
 
 async def require_accessibility_module(user: Dict[str, Any]) -> bool:

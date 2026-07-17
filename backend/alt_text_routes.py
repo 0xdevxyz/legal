@@ -68,22 +68,8 @@ def _filename_from_url(url: str) -> str:
         return ''
 
 
-async def get_required_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
-    """Required auth - raises 401 if not authenticated"""
-    if not credentials:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    try:
-        token = credentials.credentials
-        user_data = auth_service.verify_token(token)
-        if not user_data:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        if "user_id" not in user_data and "id" in user_data:
-            user_data["user_id"] = user_data["id"]
-        return user_data
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=401, detail="Authentication failed")
+# Kanonische Auth-Dependency (Phase 2 Auth-Konsolidierung)
+from dependencies import get_current_user as get_required_user
 
 
 @router.get("/alt-text-review-queue")

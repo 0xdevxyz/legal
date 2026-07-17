@@ -20,18 +20,10 @@ db_pool = None
 auth_service = None
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
-    if auth_service is None:
-        raise HTTPException(status_code=503, detail="Auth service not available")
-    try:
-        user = await auth_service.verify_token(credentials.credentials)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        return user
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=str(e))
+# Kanonische Auth-Dependency (Phase 2 Auth-Konsolidierung).
+# Vorher: `await auth_service.verify_token(...)` auf einer synchronen Funktion
+# → TypeError → jede Anfrage wurde mit 401 abgelehnt.
+from dependencies import get_current_user
 
 
 # =============================================================================

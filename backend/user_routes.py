@@ -20,10 +20,8 @@ security = HTTPBearer()
 db_pool = None
 auth_service = None
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Get current user from Authorization header"""
-    from auth_routes import get_current_user as auth_get_user
-    return await auth_get_user(credentials)
+# Kanonische Auth-Dependency (Phase 2 Auth-Konsolidierung)
+from dependencies import get_current_user
 
 @router.get("/domain-locks")
 async def get_domain_locks(current_user: dict = Depends(get_current_user)):

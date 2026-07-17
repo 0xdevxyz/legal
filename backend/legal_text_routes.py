@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from legal_text_generator import LegalTextGenerator, DocumentType, get_legal_text_generator
 from legal_disclaimer import DISCLAIMER_LONG, DISCLAIMER_SHORT
-from auth_routes import get_current_user
+from dependencies import get_current_user
 from dependencies import rate_limit
 
 logger = logging.getLogger(__name__)
