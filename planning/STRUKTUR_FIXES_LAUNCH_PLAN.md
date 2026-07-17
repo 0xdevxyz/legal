@@ -45,18 +45,19 @@ Befund: Alembic (2 Versionen) parallel zu 46 losen SQL-Dateien in `backend/migra
 plus Ad-hoc-Skripten → kein reproduzierbarer Schema-Stand. **Blocker für die Server-Migration
 (Phase 5), daher vor dieser abschließen.**
 
-**Neue Befunde für Phase 3 (aus Phase-2-Smoke):** Tabellen `domain_locks` und
+**Erledigt in Phase 3:** fehlende Tabellen (domain_locks + ComploAI-Guard-Satz) wurden angelegt.
+**Ursprünglicher Befund:** Tabellen `domain_locks` und
 `ai_scheduled_scans` fehlen in der Prod-DB (500er in user_routes / Worker-Fehler
 im Log) — bei der Baseline mit anlegen oder die Features entfernen.
 
-- [ ] **3.1 Baseline ziehen**: Live-Schema dumpen (`pg_dump --schema-only`) und als neue
+- [x] **3.1 Baseline ziehen**: Live-Schema dumpen (`pg_dump --schema-only`) und als neue
   Alembic-Revision „baseline_2026_07" einfrieren. Alembic `stamp head` auf Prod.
-- [ ] **3.2 Alte Artefakte archivieren**: die 46 `.sql`-Dateien nach
+- [x] **3.2 Alte Artefakte archivieren**: die 46 `.sql`-Dateien nach
   `backend/migrations/_archive_pre_baseline/` verschieben; `migrate.py`, `run_migration.py`,
   `init_lead_tables.py` u. ä. Einmal-Skripte ebenfalls archivieren oder löschen.
-- [ ] **3.3 Regel ab jetzt**: jede Schema-Änderung ausschließlich als Alembic-Revision;
+- [x] **3.3 Regel ab jetzt**: jede Schema-Änderung ausschließlich als Alembic-Revision;
   Hinweis in `CONTRIBUTING.md` + Memory.
-- [ ] **3.4 Abnahme**: `alembic upgrade head` auf leerer DB erzeugt ein Schema, das mit dem
+- [x] **3.4 Abnahme**: `alembic upgrade head` auf leerer DB erzeugt ein Schema, das mit dem
   Prod-Dump übereinstimmt (Diff via `apgdiff` oder `pg_dump`-Vergleich).
 
 ## Phase 4 — Dead Code & Domain-Sweep .tech → .de (Woche 2–3, ~2 Tage)
