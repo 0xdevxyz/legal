@@ -2009,25 +2009,44 @@ async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict
     # Zähle Issues pro Säule
     for pillar_id, pillar_data in all_pillars.items():
         detected_issues = []
-        pillar_risk_min = 0
-        pillar_risk_max = 0
+        issue_risks_min = []
+        issue_risks_max = []
         max_severity = 'info'
-        
+
         for issue in issues:
             issue_text = issue if isinstance(issue, str) else issue.get("description", str(issue))
             risk_data = await risk_calculator.calculate_issue_risk(issue_text)
-            
+
             if risk_data['category'] in pillar_data['categories']:
                 detected_issues.append(issue_text)
-                pillar_risk_min += risk_data['risk_min']
-                pillar_risk_max += risk_data['risk_max']
-                
-                # Update max severity
+                issue_risks_min.append(risk_data['risk_min'])
+                issue_risks_max.append(risk_data['risk_max'])
+
                 if risk_data['severity'] == 'critical':
                     max_severity = 'critical'
                 elif risk_data['severity'] == 'warning' and max_severity != 'critical':
                     max_severity = 'warning'
-        
+
+        # Risiko-Aggregation: NICHT aufsummieren.
+        #
+        # Aus 48 Cookie-Verstoessen auf einer Website werden keine 48 Verfahren,
+        # sondern eines. Das Aufsummieren der Einzelrisiken hat frueher Betraege
+        # bis in den zweistelligen Millionenbereich erzeugt - fuer die Zielgruppe
+        # (KMU) unglaubwuerdig und als Werbeaussage angreifbar.
+        #
+        # Modell: hoechstes Einzelrisiko der Kategorie als Basis, plus einen
+        # unterlinearen Zuschlag fuer die Anzahl der Fundstellen (viele Verstoesse
+        # erhoehen Wahrscheinlichkeit und Bussgeldzumessung, aber nicht linear).
+        # Zuschlag gedeckelt bei +50 %.
+        if detected_issues:
+            escalation = 1.0 + min(0.5, 0.05 * (len(detected_issues) - 1))
+            pillar_risk_min = int(max(issue_risks_min) * escalation)
+            pillar_risk_max = int(max(issue_risks_max) * escalation)
+        else:
+            pillar_risk_min = 0
+            pillar_risk_max = 0
+
+
         result.append({
             'id': pillar_id,
             'label': pillar_data['label'],
