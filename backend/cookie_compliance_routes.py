@@ -2605,12 +2605,17 @@ async def geo_check(
         # Hash IP for privacy
         ip_hash = hashlib.sha256(client_ip.encode()).hexdigest()[:16]
         
-        # Check cache first
-        cache_query = """
-            SELECT country_code FROM geo_ip_cache 
-            WHERE ip_hash = $1 AND cached_at > NOW() - INTERVAL '24 hours'
-        """
-        cached = await db_pool.fetchrow(cache_query, ip_hash)
+        # Cache-Zugriff darf die Erkennung nicht mitreissen: faellt der Cache aus,
+        # wird trotzdem ausgewertet, nur eben ohne Zwischenspeicher.
+        try:
+            cache_query = """
+                SELECT country_code FROM geo_ip_cache 
+                WHERE ip_hash = $1 AND cached_at > NOW() - INTERVAL '24 hours'
+            """
+            cached = await db_pool.fetchrow(cache_query, ip_hash)
+        except Exception as cache_err:
+            logger.warning(f"geo-check: Cache nicht lesbar ({cache_err})")
+            cached = None
         
         if cached:
             return {
@@ -2620,7 +2625,6 @@ async def geo_check(
             }
         
         # Simple IP-based detection (can be enhanced with MaxMind)
-        # For now, use a basic approach or default to EU
         country_code = "DE"  # Default
         
         # Try to detect from common headers
@@ -2628,14 +2632,16 @@ async def geo_check(
         if cf_country:
             country_code = cf_country
         
-        # Cache result
-        cache_insert = """
-            INSERT INTO geo_ip_cache (ip_hash, country_code)
-            VALUES ($1, $2)
-            ON CONFLICT (ip_hash) DO UPDATE SET 
-                country_code = $2, cached_at = NOW()
-        """
-        await db_pool.execute(cache_insert, ip_hash, country_code)
+        try:
+            cache_insert = """
+                INSERT INTO geo_ip_cache (ip_hash, country_code)
+                VALUES ($1, $2)
+                ON CONFLICT (ip_hash) DO UPDATE SET 
+                    country_code = $2, cached_at = NOW()
+            """
+            await db_pool.execute(cache_insert, ip_hash, country_code)
+        except Exception as cache_err:
+            logger.warning(f"geo-check: Cache nicht schreibbar ({cache_err})")
         
         return {
             "success": True,
@@ -2643,10 +2649,13 @@ async def geo_check(
             "cached": False
         }
     except Exception as e:
+        # Oeffentlicher Endpunkt: die Fehlermeldung bleibt im Log. Sie enthielt
+        # bisher den DB-Fehler im Klartext und gab damit Schemadetails preis.
+        logger.error(f"geo-check fehlgeschlagen: {e}")
         return {
             "success": True,
-            "country_code": "EU",  # Default to EU on error
-            "error": str(e)
+            "country_code": "DE",  # konservativer Rueckfall: Banner wird gezeigt
+            "cached": False
         }
 
 

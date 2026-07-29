@@ -20,14 +20,13 @@ BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Produktentscheidung aus (Feature behalten oder Router entfernen). Siehe
 # data/features/00_FEATURES_INDEX.md, Abschnitt "Registrierte Router ohne Doku".
 BEKANNTE_AUSNAHMEN = {
-    # Expert-Service (tot, kein Frontend) — Router entfernen oder Feature bauen
+    # Expert-Service: Router am 2026-07-29 stillgelegt (kein Frontend).
+    # Vor einer Reaktivierung muss das Schema nachgezogen werden.
     "expert_service_requests",
-    # Git-PR-Deployment (tot, kein Frontend)
+    # Git-PR-Deployment: Router am 2026-07-29 stillgelegt (kein Frontend).
     "git_credentials",
     "git_connected_repos",
     "git_pull_requests",
-    # geo/forwarding: Routen sind Entscheidungs-Kandidaten (Spalten/Tabellen fehlen)
-    "geo_ip_cache",
 }
 
 # Nicht-Tabellen bzw. CTEs/Aliasse, die dem Regex sonst ins Netz gehen.
