@@ -1,6 +1,7 @@
 """
 Tests für die Early-Access Waitlist-Endpoints
-Deckt ab: Happy-Path, Honeypot, Consent-False, Duplicate, Token-Confirm, Rate-Limit
+Deckt ab: Happy-Path, Honeypot, Zeitfalle, Turnstile, Consent-False, Duplicate,
+Token-Confirm, Rate-Limit
 """
 
 import pytest
@@ -17,6 +18,16 @@ def build_app():
     return app
 
 
+def _form_ts(vor_sekunden: float = 10) -> int:
+    """form_ts wie das Formular es setzt: Renderzeitpunkt in Millisekunden.
+
+    10 Sekunden zurück liegt sicher im erlaubten Fenster der Zeitfalle
+    (_MIN_FILL_SECONDS = 4 bis _MAX_FORM_AGE_SECONDS = 6 h). Der Wert wird beim
+    Import berechnet; die verstrichene Zeit wächst danach nur, bleibt also gültig.
+    """
+    return int((datetime.now(timezone.utc).timestamp() - vor_sekunden) * 1000)
+
+
 VALID_PAYLOAD = {
     "email": "test@example.de",
     "name": "Max Mustermann",
@@ -24,6 +35,9 @@ VALID_PAYLOAD = {
     "consent": True,
     "website": "",
     "source": "early-access",
+    # Ohne form_ts greift die Zeitfalle und der Endpunkt antwortet still mit 204,
+    # bevor Rate-Limit oder Speicherung überhaupt erreicht werden.
+    "form_ts": _form_ts(),
 }
 
 CONFIRM_TOKEN = "valid_token_abc123"
@@ -68,6 +82,40 @@ class TestWaitlistJoin:
         payload = {**VALID_PAYLOAD, "website": "http://spam.bot"}
         response = client.post("/api/leads/waitlist", json=payload)
         assert response.status_code == 204
+
+    @patch("lead_routes.db_service")
+    def test_ohne_form_ts_greift_die_zeitfalle(self, mock_db, client):
+        """Wer direkt auf den Endpunkt POSTet, hat kein Formular gerendert."""
+        payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "form_ts"}
+        response = client.post("/api/leads/waitlist", json=payload)
+        assert response.status_code == 204
+        mock_db.execute_query.assert_not_called()
+
+    @patch("lead_routes.db_service")
+    def test_zu_schnell_ausgefuellt_wird_verworfen(self, mock_db, client):
+        payload = {**VALID_PAYLOAD, "form_ts": _form_ts(vor_sekunden=1)}
+        response = client.post("/api/leads/waitlist", json=payload)
+        assert response.status_code == 204
+        mock_db.execute_query.assert_not_called()
+
+    @patch("lead_routes.db_service")
+    def test_abgestandenes_formular_wird_verworfen(self, mock_db, client):
+        """Älter als 6 Stunden — vermutlich ein wiederverwendetes Formular."""
+        payload = {**VALID_PAYLOAD, "form_ts": _form_ts(vor_sekunden=7 * 3600)}
+        response = client.post("/api/leads/waitlist", json=payload)
+        assert response.status_code == 204
+        mock_db.execute_query.assert_not_called()
+
+    @patch("lead_routes.db_service")
+    def test_turnstile_aktiv_aber_kein_token(self, mock_db, client, monkeypatch):
+        """Ist ein Secret gesetzt, wird ohne Token nicht gespeichert."""
+        import lead_routes
+
+        monkeypatch.setattr(lead_routes, "TURNSTILE_SECRET", "geheim")
+        payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "turnstile_token"}
+        response = client.post("/api/leads/waitlist", json=payload)
+        assert response.status_code == 204
+        mock_db.execute_query.assert_not_called()
 
     @patch("lead_routes.db_service")
     def test_duplicate_email_returns_already_registered(self, mock_db, client):
