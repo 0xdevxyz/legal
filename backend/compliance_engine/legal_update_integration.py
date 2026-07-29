@@ -405,7 +405,8 @@ class LegalUpdateIntegration:
                     UPDATE tracked_websites
                     SET rescan_required        = TRUE,
                         rescan_reason          = $1,
-                        rescan_triggered_by    = $2
+                        rescan_triggered_by    = $2,
+                        rescan_flagged_at      = NOW()
                     WHERE status = 'active'
                       AND (rescan_required IS NULL OR rescan_required = FALSE)
                     """,

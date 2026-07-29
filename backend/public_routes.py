@@ -423,7 +423,13 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         await conn.execute(
                             """
                             UPDATE tracked_websites
-                            SET last_scan_date = NOW(), last_score = $1, status = 'active', scan_count = COALESCE(scan_count, 0) + 1
+                            SET last_scan_date = NOW(), last_score = $1, status = 'active', scan_count = COALESCE(scan_count, 0) + 1,
+                                -- Rescan-Anforderung ist mit diesem Scan erfuellt.
+                                -- Ohne das Zuruecksetzen blieb das Flag dauerhaft TRUE und
+                                -- _flag_websites_for_rescan() markierte danach nie wieder
+                                -- eine Site -> 0 Benachrichtigungen bei jedem Legal-Update.
+                                rescan_required = FALSE, rescan_reason = NULL,
+                                rescan_triggered_by = NULL, rescan_flagged_at = NULL
                             WHERE id = $2
                             """,
                             overall_compliance_score,

@@ -100,6 +100,11 @@ LEGAL_AREA_TO_DOCUMENT_TYPES: Dict[str, List["DocumentType"]] = {
     "verbraucherschutz": [DocumentType.TOS, DocumentType.WITHDRAWAL],
     # AI Act erzeugt keinen der generierten Rechtstexte (eigener Doc-Generator)
     "ai_act": [],
+    # PPWR: Kennzeichnungs-/Informationspflichten am Produkt und im Shop, kein
+    # Rechtstext-Dokument. Bewusst leer — verhindert, dass eine PPWR-Meldung
+    # eine unnötige AGB-Re-Generierung auslöst (und die "Unbekannter
+    # Rechtsbereich"-Warnung in jedem Monitoring-Lauf).
+    "verpackung": [],
 }
 
 # Aliasse: Gesetzesname → Rechtsbereich. Erlaubt, dass eine Änderung auch dann
