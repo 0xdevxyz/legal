@@ -14,6 +14,7 @@ import hashlib
 import hmac
 import os
 import re
+import httpx
 from dependencies import require_admin
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
@@ -23,6 +24,16 @@ from email_service import email_service
 _rate_limit_store: Dict[str, list] = defaultdict(list)
 _RATE_LIMIT_MAX = 3
 _RATE_LIMIT_WINDOW_MINUTES = 10
+
+# Zeitfalle: schneller ausgefüllt als _MIN_FILL_SECONDS ist kein Mensch,
+# älter als _MAX_FORM_AGE_SECONDS ist ein abgestandenes Formular.
+_MIN_FILL_SECONDS = 4
+_MAX_FORM_AGE_SECONDS = 6 * 3600
+
+# Cloudflare Turnstile. Nicht gesetzt = Prüfung aus; Honeypot, Zeitfalle und
+# Rate-Limit greifen unabhängig davon.
+TURNSTILE_SECRET = os.getenv("TURNSTILE_SECRET", "")
+TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +48,10 @@ class WaitlistJoinRequest(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     consent: bool
-    website: Optional[str] = None
+    website: Optional[str] = None          # Honeypot – bleibt bei Menschen leer
     source: Optional[str] = "early-access"
+    form_ts: Optional[int] = None          # Zeitfalle, ms seit Epoch (clientseitig gesetzt)
+    turnstile_token: Optional[str] = None  # cf-turnstile-response
 
     @validator("name")
     def validate_name(cls, v):
@@ -116,6 +129,42 @@ def _verify_unsubscribe_token(email: str, token: Optional[str]) -> bool:
     return hmac.compare_digest(erwartet, token)
 
 
+def _fill_time_plausible(form_ts: Optional[int]) -> bool:
+    """Prüft, wie lange das Formular offen war.
+
+    Ein Bot, der direkt auf den Endpoint POSTet, schickt gar kein form_ts —
+    das allein ist schon ein Ausschlusskriterium.
+    """
+    if not form_ts:
+        return False
+    elapsed = datetime.now(timezone.utc).timestamp() - (form_ts / 1000)
+    return _MIN_FILL_SECONDS <= elapsed <= _MAX_FORM_AGE_SECONDS
+
+
+async def _verify_turnstile(token: Optional[str], remote_ip: str) -> bool:
+    """Fragt Cloudflare, ob das Turnstile-Token echt ist."""
+    if not TURNSTILE_SECRET:
+        return True          # nicht konfiguriert
+    if not token:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(
+                TURNSTILE_VERIFY_URL,
+                data={
+                    "secret": TURNSTILE_SECRET,
+                    "response": token,
+                    "remoteip": remote_ip,
+                },
+            )
+        return bool(resp.json().get("success"))
+    except Exception as e:
+        # Cloudflare nicht erreichbar: lieber durchlassen als echte Anmeldungen
+        # verlieren. Honeypot, Zeitfalle und Rate-Limit greifen weiterhin.
+        logger.warning(f"Turnstile nicht erreichbar, Prüfung übersprungen: {e}")
+        return True
+
+
 def _check_rate_limit(ip_hash: str) -> bool:
     now = datetime.now(timezone.utc)
     window_start = now - timedelta(minutes=_RATE_LIMIT_WINDOW_MINUTES)
@@ -141,12 +190,23 @@ async def join_waitlist(
     """
     Early-Access Waitlist Anmeldung (DSGVO-konform, Double-Opt-In)
     """
+    # Honeypot. 204 statt Fehler: der Bot soll nicht lernen, was ihn verrät.
     if payload.website:
         return Response(status_code=204)
 
     client_ip = http_request.client.host if http_request.client else "0.0.0.0"
     ip_hash = _hash_ip(client_ip)
     user_agent = http_request.headers.get("user-agent", "")[:500]
+
+    # Zeitfalle – ebenfalls stillschweigend
+    if not _fill_time_plausible(payload.form_ts):
+        logger.info("Waitlist: Zeitfalle ausgelöst")
+        return Response(status_code=204)
+
+    # Turnstile
+    if not await _verify_turnstile(payload.turnstile_token, client_ip):
+        logger.info("Waitlist: Turnstile fehlgeschlagen")
+        return Response(status_code=204)
 
     if not _check_rate_limit(ip_hash):
         raise HTTPException(

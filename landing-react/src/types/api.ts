@@ -50,8 +50,10 @@ export interface WaitlistJoinRequest {
   name?: string;
   phone?: string;
   consent: boolean;
-  website?: string;
+  website?: string;        // Honeypot – bleibt bei Menschen leer
   source?: string;
+  form_ts?: number;        // Zeitfalle: ms seit Epoch, gesetzt beim Rendern
+  turnstile_token?: string;
 }
 
 export interface WaitlistJoinResponse {
