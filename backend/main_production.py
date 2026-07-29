@@ -93,7 +93,10 @@ from ai_compliance_routes import router as ai_compliance_router
 from addon_payment_routes import router as addon_payment_router
 from ai_compliance_worker import start_worker as start_ai_compliance_worker
 from widget_routes import router as widget_router
-from expert_service_routes import router as expert_service_router
+# Stillgelegt 2026-07-29 vor dem Launch: Router ohne Frontend, dessen Tabellen
+# nie angelegt wurden. Code bleibt im Repo — zum Reaktivieren Schema nachziehen
+# (siehe tests/test_schema_completeness.py) und diese Zeilen wieder aktivieren.
+# from expert_service_routes import router as expert_service_router
 
 # Cookie Compliance Module
 from cookie_compliance_routes import router as cookie_compliance_router
@@ -135,7 +138,10 @@ from risk_radar_routes import router as risk_radar_router
 from accessibility_fix_routes import accessibility_fix_router, init_routes as init_accessibility_routes
 
 # Git Integration - Automatische PRs für Accessibility-Fixes
-from git_routes import git_router, init_git_routes
+# Stillgelegt 2026-07-29 vor dem Launch: Router ohne Frontend, dessen Tabellen
+# nie angelegt wurden. Code bleibt im Repo — zum Reaktivieren Schema nachziehen
+# (siehe tests/test_schema_completeness.py) und diese Zeilen wieder aktivieren.
+# from git_routes import git_router, init_git_routes
 
 # Alt-Text AI Generation - KI-generierte Alt-Texte für Bilder
 from alt_text_routes import router as alt_text_router
@@ -528,10 +534,8 @@ async def startup_event():
     public_routes.solution_cache = AISolutionCache(db_pool)
     print("✅ AI Solution Cache initialized (70-85% API call reduction)")
     
-    # Initialize Expert Service routes with db_pool
-    import expert_service_routes
-    expert_service_routes.db_pool = db_pool
-    print("✅ Expert service routes initialized with database pool")
+    # Expert Service: stillgelegt 2026-07-29 (kein Frontend, Tabelle
+    # expert_service_requests existiert nicht).
     
     # Start Background Worker for fix-jobs
     try:
@@ -605,9 +609,8 @@ async def startup_event():
     init_legal_document_routes(db_pool, auth_service)
     print("✅ Legal Document routes (DPA Generator) initialized")
     
-    # Initialize Git Integration routes
-    init_git_routes(db_pool, auth_service, _async_redis)
-    print("✅ Git Integration routes initialized")
+    # Git-Integration: stillgelegt 2026-07-29 (kein Frontend, Tabellen
+    # git_credentials/git_connected_repos/git_pull_requests existieren nicht).
 
     # Initialize Firebase Admin SDK
     firebase_app = init_firebase_admin()
@@ -668,7 +671,7 @@ async def startup_event():
     app.include_router(ai_compliance_router)  # AI Compliance (ComploAI Guard)
     app.include_router(addon_payment_router)  # Add-on Payments (ComploAI Guard & Priority Support)
     app.include_router(widget_router)  # Complyo Widgets (Cookie Consent & Accessibility)
-    app.include_router(expert_service_router)  # Expert Service Booking
+    # app.include_router(expert_service_router)  # stillgelegt 2026-07-29
     app.include_router(cookie_compliance_router)  # Cookie Compliance Management
     app.include_router(ab_test_router)  # A/B Testing for Cookie Banner
     
@@ -681,7 +684,7 @@ async def startup_event():
     app.include_router(ai_legal_router)  # AI Legal System - NEW
     app.include_router(legal_notification_router)  # Legal News Notifications - NEW
     app.include_router(accessibility_fix_router)  # BFSG Accessibility Fix Pipeline - NEW
-    app.include_router(git_router)  # Git Integration - Automatic PRs - NEW
+    # app.include_router(git_router)  # stillgelegt 2026-07-29
     app.include_router(alt_text_router)  # Alt-Text AI Generation - NEW
     app.include_router(deep_cookie_scanner_router)  # Deep Cookie Scanner - Premium Feature
     app.include_router(legal_document_router)  # AUDIT-19: DPA Generator
@@ -1324,7 +1327,16 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
                     json.dumps(pillar_scores)
                 )
                 await connection.execute(
-                    "UPDATE tracked_websites SET last_score = $1, last_scan_date = NOW(), scan_count = scan_count + 1 WHERE id = $2",
+                    # rescan_* wird mitgeloescht: der Scan erfuellt die Anforderung.
+                    # Bleibt das Flag stehen, markiert _flag_websites_for_rescan()
+                    # die Site bei kuenftigen Legal-Updates nie wieder.
+                    """
+                    UPDATE tracked_websites
+                    SET last_score = $1, last_scan_date = NOW(), scan_count = scan_count + 1,
+                        rescan_required = FALSE, rescan_reason = NULL,
+                        rescan_triggered_by = NULL, rescan_flagged_at = NULL
+                    WHERE id = $2
+                    """,
                     scan_result["compliance_score"], tracked_site["id"]
                 )
 
