@@ -5,7 +5,7 @@ export const fetchCache = 'force-no-store'
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Cookie, Settings, Eye, Code, BarChart3, CheckCircle, AlertCircle, Globe, Lock, Zap, CreditCard, TrendingUp, Radio } from 'lucide-react';
+import { ArrowLeft, Cookie, Settings, Eye, Code, BarChart3, CheckCircle, AlertCircle, Globe, Lock, Zap, CreditCard, TrendingUp, Radio, FlaskConical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -23,6 +23,7 @@ import RevocationChart from '@/components/cookie-compliance/RevocationChart';
 import AdvancedSettings from '@/components/cookie-compliance/AdvancedSettings';
 import CookieSetupWizard from '@/components/cookie-compliance/CookieSetupWizard';
 import ScanMonitor from '@/components/cookie-compliance/ScanMonitor';
+import ABTestManager from '@/components/cookie-compliance/ABTestManager';
 
 export default function CookieCompliancePage() {
   const router = useRouter();
@@ -599,11 +600,12 @@ export default function CookieCompliancePage() {
                     <SelectItem value="integration" className="dark:text-white text-gray-900">Integration</SelectItem>
                     <SelectItem value="statistics" className="dark:text-white text-gray-900">Statistiken</SelectItem>
                     <SelectItem value="monitoring" className="dark:text-white text-gray-900">Überwachung</SelectItem>
+                    <SelectItem value="abtests" className="dark:text-white text-gray-900">A/B-Tests</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               {/* Desktop: Tab bar */}
-              <TabsList className="hidden sm:grid w-full grid-cols-6 dark:bg-zinc-900/50 bg-white/70 p-1 h-auto">
+              <TabsList className="hidden sm:grid w-full grid-cols-7 dark:bg-zinc-900/50 bg-white/70 p-1 h-auto">
                 <TabsTrigger
                   value="design"
                   className="gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-white transition-all py-3"
@@ -646,6 +648,14 @@ export default function CookieCompliancePage() {
                 >
                   <Radio className="w-4 h-4 flex-shrink-0" />
                   <span>Überwachung</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="abtests"
+                  className="relative gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-white transition-all py-3"
+                >
+                  <FlaskConical className="w-4 h-4 flex-shrink-0" />
+                  <span>A/B-Tests</span>
+                  <span className="absolute -top-1 -right-1 px-1 py-0.5 text-[10px] rounded bg-red-500 dark:text-white text-gray-900">Neu</span>
                 </TabsTrigger>
               </TabsList>
               
@@ -696,6 +706,10 @@ export default function CookieCompliancePage() {
                   lastScanDate={config?.scan_completed_at}
                   storedServices={Array.isArray(config?.services) ? config.services : []}
                 />
+              </TabsContent>
+
+              <TabsContent value="abtests">
+                <ABTestManager siteId={siteId} config={config} />
               </TabsContent>
             </Tabs>
           </CardContent>

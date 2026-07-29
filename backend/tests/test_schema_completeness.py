@@ -20,10 +20,6 @@ BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Produktentscheidung aus (Feature behalten oder Router entfernen). Siehe
 # data/features/00_FEATURES_INDEX.md, Abschnitt "Registrierte Router ohne Doku".
 BEKANNTE_AUSNAHMEN = {
-    # A/B-Testing (ab_test_routes.py) — komplettes Feature ist Entscheidungs-Kandidat
-    "cookie_ab_tests",
-    "cookie_ab_assignments",
-    "cookie_ab_results",
     # Expert-Service (tot, kein Frontend) — Router entfernen oder Feature bauen
     "expert_service_requests",
     # Git-PR-Deployment (tot, kein Frontend)
