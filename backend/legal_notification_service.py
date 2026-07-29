@@ -102,7 +102,10 @@ class LegalNewsNotificationService:
                 COALESCE(ulns.digest_frequency, 'daily') as digest_frequency
             FROM users u
             LEFT JOIN user_legal_notification_settings ulns ON u.id = ulns.user_id
-            WHERE u.email_verified = TRUE
+            -- users fuehrt die Spalte is_verified; email_verified gibt es nur
+            -- in leads. Mit dem falschen Namen brach die Query ab und es wurde
+            -- nie eine Benachrichtigung verschickt.
+            WHERE u.is_verified = TRUE
             AND u.is_active = TRUE
             AND COALESCE(ulns.email_enabled, TRUE) = TRUE
         """)
