@@ -55,7 +55,7 @@ logger.info(f"🔧 Payment Routes - DEV_MODE: {DEV_MODE}, BYPASS_PAYMENT: {BYPAS
 
 
 class CreateCheckoutRequest(BaseModel):
-    plan_type: str        # 'single', 'complete', 'expert'
+    plan_type: str        # 'single' | 'pro' | 'agency' | 'expert' | 'update'
     modules: List[str] = []  # Pflicht bei 'single', wird bei 'complete'/'expert' auto-gesetzt
 
 
@@ -500,8 +500,12 @@ async def payment_health():
         "stripe_service_initialized": stripe_service is not None,
         "webhook_secret_configured": STRIPE_WEBHOOK_SECRET is not None,
         "prices_configured": {
-            "single_module":  STRIPE_PRICE_SINGLE_MODULE is not None,
-            "complete":       STRIPE_PRICE_COMPLETE is not None,
-            "expert_monthly": STRIPE_PRICE_EXPERT_MONTHLY is not None,
+            "single_module":  bool(STRIPE_PRICE_SINGLE_MODULE),
+            "pro_monthly":    bool(STRIPE_PRICE_PRO_MONTHLY),
+            "pro_yearly":     bool(STRIPE_PRICE_PRO_YEARLY),
+            "agency_monthly": bool(STRIPE_PRICE_AGENCY_MONTHLY),
+            "agency_yearly":  bool(STRIPE_PRICE_AGENCY_YEARLY),
+            "expert":         bool(STRIPE_PRICE_EXPERT),
+            "update_monthly": bool(STRIPE_PRICE_UPDATE_MONTHLY),
         }
     }

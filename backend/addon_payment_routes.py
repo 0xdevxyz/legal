@@ -85,7 +85,7 @@ MONTHLY_ADDONS = {
             "business": {"ai_systems": 25},
             "enterprise": {"ai_systems": -1}
         },
-        "stripe_price_id": os.getenv("STRIPE_PRICE_COMPLOAI_GUARD", "price_1234"),  # Set in Stripe Dashboard
+        "stripe_price_id": os.getenv("STRIPE_PRICE_COMPLOAI_GUARD"),
         "badge": "NEW",
         "discount_text": "Spare bis zu 50.000€ Bußgeld",
         "compatible_plans": ["starter", "professional", "business", "enterprise"]
@@ -104,7 +104,7 @@ MONTHLY_ADDONS = {
             "Monatliches Compliance-Review (30 Min)",
             "Priorisierte Feature-Requests"
         ],
-        "stripe_price_id": os.getenv("STRIPE_PRICE_PRIORITY_SUPPORT", "price_5678"),  # Set in Stripe Dashboard
+        "stripe_price_id": os.getenv("STRIPE_PRICE_PRIORITY_SUPPORT"),
         "badge": "PREMIUM",
         "compatible_plans": ["starter", "professional", "business", "enterprise"]
     },
@@ -121,7 +121,7 @@ MONTHLY_ADDONS = {
         "limits_by_plan": {
             "agency": {"extra_sites": 25},
         },
-        "stripe_price_id": os.getenv("STRIPE_PRICE_AGENCY_SITES_EXTRA", "price_agency_extra"),
+        "stripe_price_id": os.getenv("STRIPE_PRICE_AGENCY_SITES_EXTRA"),
         "badge": "ADD-ON",
         "compatible_plans": ["agency"],
     }
@@ -142,7 +142,7 @@ ONETIME_ADDONS = {
             "Follow-up nach 3 Monaten"
         ],
         "duration": "2-3 Wochen",
-        "stripe_price_id": os.getenv("STRIPE_PRICE_EXPERT_AUDIT", "price_9999")
+        "stripe_price_id": os.getenv("STRIPE_PRICE_EXPERT_AUDIT")
     },
     "implementation_support": {
         "name": "AI Act Implementation Support",
@@ -157,7 +157,7 @@ ONETIME_ADDONS = {
             "Email-Support während Laufzeit"
         ],
         "duration": "4 Wochen",
-        "stripe_price_id": os.getenv("STRIPE_PRICE_IMPLEMENTATION", "price_8888")
+        "stripe_price_id": os.getenv("STRIPE_PRICE_IMPLEMENTATION")
     },
     "custom_integration": {
         "name": "Custom Integration",
@@ -172,7 +172,7 @@ ONETIME_ADDONS = {
             "3 Monate Wartung inklusive"
         ],
         "duration": "4-6 Wochen",
-        "stripe_price_id": os.getenv("STRIPE_PRICE_CUSTOM_INTEGRATION", "price_7777")
+        "stripe_price_id": os.getenv("STRIPE_PRICE_CUSTOM_INTEGRATION")
     }
 }
 
@@ -323,6 +323,12 @@ async def subscribe_to_addon(
     user_plan = await resolve_addon_plan(user_id)
     limits = addon.get("limits_by_plan", {}).get(user_plan, {})
     
+    if not addon.get('stripe_price_id'):
+        raise HTTPException(
+            status_code=503,
+            detail=f"Add-on '{addon_key}' ist noch nicht buchbar: keine Stripe-Preis-ID konfiguriert.",
+        )
+
     # Create Stripe checkout session
     try:
         checkout_session = stripe.checkout.Session.create(
@@ -380,6 +386,12 @@ async def purchase_onetime_addon(
     async with db_service.get_connection() as conn:
         user_row = await conn.fetchrow("SELECT email FROM users WHERE id = $1", user_id)
     user_email = user_row["email"] if user_row else ""
+
+    if not addon.get('stripe_price_id'):
+        raise HTTPException(
+            status_code=503,
+            detail=f"Add-on '{addon_key}' ist noch nicht buchbar: keine Stripe-Preis-ID konfiguriert.",
+        )
 
     # Create Stripe checkout session for one-time payment
     try:

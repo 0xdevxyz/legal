@@ -183,6 +183,12 @@ class TestKeineRechteausweitung:
         )
         monkeypatch.setattr(apr, "stripe", fake_stripe)
 
+        # Add-on buchbar machen: ohne konfigurierte Stripe-Preis-ID bricht der
+        # Endpunkt vor dem Checkout mit 503 ab (siehe addon_payment_routes.py).
+        monkeypatch.setitem(
+            apr.MONTHLY_ADDONS["comploai_guard"], "stripe_price_id", "price_test_guard"
+        )
+
         # Angriff: Professional-Account behauptet 'enterprise'.
         request = apr.AddAddonRequest(addon_key="comploai_guard", user_plan="enterprise")
         await apr.subscribe_to_addon("comploai_guard", request, user_id=42)
