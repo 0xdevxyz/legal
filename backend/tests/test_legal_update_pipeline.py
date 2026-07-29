@@ -273,6 +273,12 @@ async def test_rescan_notification_triggered():
 # Test 9: Admin Approve Fix (via mock DB)
 # ---------------------------------------------------------------------------
 
+# Seit 2026-07-29 laeuft der Adminbereich ueber require_admin: die Dependency
+# liefert das User-Dict, nicht mehr ein bool aus der Schluesselpruefung.
+# admin_routes._reviewer_name() liest daraus den Namen fuer reviewed_by.
+ADMIN_USER = {"id": 1, "email": "admin@complyo.de", "role": "admin"}
+
+
 @pytest.mark.asyncio
 async def test_admin_approve_fix():
     """
@@ -286,7 +292,7 @@ async def test_admin_approve_fix():
     # auf Dependency Injection — das Attribut existiert nicht mehr.
     pool, conn = make_db_pool(fetchval=99)
 
-    result = await approve_fix(fix_id=99, admin=True, db=conn)
+    result = await approve_fix(fix_id=99, admin=ADMIN_USER, db=conn)
 
     assert result["success"] is True
     assert result["new_status"] == "validated"
@@ -305,7 +311,7 @@ async def test_admin_reject_fix_requires_reason():
     pool, conn = make_db_pool(fetchval=99)
 
     with pytest.raises(HTTPException) as exc_info:
-        await reject_fix(fix_id=99, reason="ab", admin=True, db=conn)
+        await reject_fix(fix_id=99, reason="ab", admin=ADMIN_USER, db=conn)
 
     assert exc_info.value.status_code == 422
 
@@ -320,7 +326,7 @@ async def test_admin_reject_fix_valid():
     result = await reject_fix(
         fix_id=99,
         reason="Fix enthält falschen ARIA-Role-Wert",
-        admin=True,
+        admin=ADMIN_USER,
         db=conn,
     )
 

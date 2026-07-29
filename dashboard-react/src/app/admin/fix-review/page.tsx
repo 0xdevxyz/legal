@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { getApiClient } from "@/lib/api-client";
 
 interface StageLog {
   stage: number;
@@ -31,8 +32,20 @@ interface ReviewQueue {
   offset: number;
 }
 
-const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_API_KEY ?? "";
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+// Zugang laeuft ueber die normale Anmeldung (JWT) und die Rolle "admin".
+// Frueher stand hier NEXT_PUBLIC_ADMIN_API_KEY -- durch das NEXT_PUBLIC_-Praefix
+// waere der Schluessel ins ausgelieferte JS-Bundle gebacken und damit fuer jeden
+// Besucher lesbar gewesen. Ausserdem hing er als Query-Parameter in der URL.
+const api = getApiClient();
+
+/** Fehlertext aus einer Axios-Antwort, mit verstaendlicher Meldung bei 401/403. */
+function fehlertext(e: unknown): string {
+  const err = e as { response?: { status?: number; data?: { detail?: string } }; message?: string };
+  const status = err?.response?.status;
+  if (status === 401) return "Nicht angemeldet.";
+  if (status === 403) return "Dieser Bereich ist Konten mit der Rolle \"admin\" vorbehalten.";
+  return err?.response?.data?.detail || err?.message || "Unbekannter Fehler";
+}
 
 export default function FixReviewPage() {
   const [queue, setQueue] = useState<ReviewQueue | null>(null);
@@ -44,14 +57,12 @@ export default function FixReviewPage() {
   const fetchQueue = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `${API_BASE}/api/admin/fix-review-queue?api_key=${ADMIN_KEY}&limit=50&offset=0`
-      );
-      if (!res.ok) throw new Error(await res.text());
-      setQueue(await res.json());
+      const res = await api.get<ReviewQueue>("/api/admin/fix-review-queue", {
+        params: { limit: 50, offset: 0 },
+      });
+      setQueue(res.data);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setActionMsg({ type: "err", text: `Laden fehlgeschlagen: ${msg}` });
+      setActionMsg({ type: "err", text: `Laden fehlgeschlagen: ${fehlertext(e)}` });
     } finally {
       setLoading(false);
     }
@@ -65,19 +76,10 @@ export default function FixReviewPage() {
     setLoading(true);
     setActionMsg(null);
     try {
-      const body =
-        action === "reject"
-          ? JSON.stringify({ reason: rejectReason })
-          : undefined;
-      const res = await fetch(
-        `${API_BASE}/api/admin/fix-review-queue/${fixId}/${action}?api_key=${ADMIN_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-        }
+      await api.post(
+        `/api/admin/fix-review-queue/${fixId}/${action}`,
+        action === "reject" ? { reason: rejectReason } : undefined
       );
-      if (!res.ok) throw new Error(await res.text());
       setActionMsg({
         type: "ok",
         text: action === "approve" ? "Fix freigegeben." : "Fix abgelehnt.",
@@ -86,8 +88,7 @@ export default function FixReviewPage() {
       setRejectReason("");
       await fetchQueue();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setActionMsg({ type: "err", text: msg });
+      setActionMsg({ type: "err", text: fehlertext(e) });
     } finally {
       setLoading(false);
     }

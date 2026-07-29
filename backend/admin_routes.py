@@ -7,25 +7,34 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import Optional
 from datetime import datetime
 import logging
-import os
 from database_service import db_service
+from dependencies import require_admin
 
 logger = logging.getLogger(__name__)
 
 admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-_ADMIN_API_KEY = os.getenv("ADMIN_API_KEY")
 
-def verify_admin_access(api_key: str = Query(..., alias="api_key")):
-    """Admin API key verification — key must be set via ADMIN_API_KEY env var."""
-    if not _ADMIN_API_KEY:
-        raise HTTPException(status_code=503, detail="Admin access not configured")
-    if api_key != _ADMIN_API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized admin access")
-    return True
+def _reviewer_name(admin: dict) -> str:
+    """Wer die Freigabe erteilt hat — fuer das Audit-Feld reviewed_by.
+
+    Bevorzugt die E-Mail, sonst die User-ID. Ein Audit-Eintrag soll eine Person
+    benennen; frueher stand hier der gemeinsame API-Schluessel.
+    """
+    return str(admin.get("email") or f"user:{admin.get('id')}")
+
+
+# Zugang ueber die rollenbasierte Dependency require_admin (JWT, users.role).
+# Bis 2026-07-29 lief das ueber einen gemeinsamen Schluessel als QUERY-Parameter
+# (?api_key=...). Das hatte drei Probleme: der Schluessel landete in
+# Access-Logs, Browser-History und Referer-Headern; im Frontend stand er als
+# NEXT_PUBLIC_ADMIN_API_KEY und waere damit ins ausgelieferte JS-Bundle
+# gebacken worden; und er wurde als reviewed_by in die Audit-Tabelle
+# geschrieben. require_admin wird bereits von ai_legal_routes,
+# cookie_compliance_routes, legal_change_routes und i18n_api genutzt.
 
 @admin_router.get("/dashboard/overview")
-async def admin_dashboard_overview(admin: bool = Depends(verify_admin_access)):
+async def admin_dashboard_overview(admin: dict = Depends(require_admin)):
     """
     Get comprehensive dashboard overview for admin
     """
@@ -66,7 +75,7 @@ async def admin_dashboard_overview(admin: bool = Depends(verify_admin_access)):
 
 @admin_router.get("/leads")
 async def get_all_leads(
-    admin: bool = Depends(verify_admin_access),
+    admin: dict = Depends(require_admin),
     status: Optional[str] = Query(None, description="Filter by status"),
     verified: Optional[bool] = Query(None, description="Filter by verification status"),
     limit: int = Query(50, description="Number of leads to return"),
@@ -119,7 +128,7 @@ async def get_all_leads(
 @admin_router.get("/leads/{lead_id}")
 async def get_lead_details(
     lead_id: str,
-    admin: bool = Depends(verify_admin_access)
+    admin: dict = Depends(require_admin)
 ):
     """
     Get detailed information about a specific lead
@@ -161,7 +170,7 @@ async def get_lead_details(
 @admin_router.post("/leads/{lead_id}/resend-verification")
 async def resend_verification_email(
     lead_id: str,
-    admin: bool = Depends(verify_admin_access)
+    admin: dict = Depends(require_admin)
 ):
     """
     Manually resend verification email for a lead
@@ -208,7 +217,7 @@ async def resend_verification_email(
 @admin_router.delete("/leads/{lead_id}")
 async def delete_lead_gdpr(
     lead_id: str,
-    admin: bool = Depends(verify_admin_access),
+    admin: dict = Depends(require_admin),
     reason: str = Query(..., description="Reason for deletion (GDPR compliance)")
 ):
     """
@@ -237,7 +246,7 @@ async def delete_lead_gdpr(
 
 @admin_router.get("/analytics/trends")
 async def get_analytics_trends(
-    admin: bool = Depends(verify_admin_access),
+    admin: dict = Depends(require_admin),
     days: int = Query(30, description="Number of days for trend analysis")
 ):
     """
@@ -262,7 +271,7 @@ async def get_analytics_trends(
         raise HTTPException(status_code=500, detail="Error loading analytics trends")
 
 @admin_router.get("/system/health")
-async def admin_system_health(admin: bool = Depends(verify_admin_access)):
+async def admin_system_health(admin: dict = Depends(require_admin)):
     """
     Get comprehensive system health status for admin monitoring
     """
@@ -311,7 +320,7 @@ from dependencies import get_db
 
 @admin_router.get("/fix-review-queue")
 async def get_fix_review_queue(
-    admin: bool = Depends(verify_admin_access),
+    admin: dict = Depends(require_admin),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db=Depends(get_db),
@@ -362,7 +371,7 @@ async def get_fix_review_queue(
 @admin_router.get("/fix-review-queue/{fix_id}")
 async def get_fix_review_detail(
     fix_id: int,
-    admin: bool = Depends(verify_admin_access),
+    admin: dict = Depends(require_admin),
     db=Depends(get_db),
 ):
     """
@@ -397,14 +406,14 @@ async def get_fix_review_detail(
 @admin_router.post("/fix-review-queue/{fix_id}/approve")
 async def approve_fix(
     fix_id: int,
-    admin: bool = Depends(verify_admin_access),
+    admin: dict = Depends(require_admin),
     db=Depends(get_db),
 ):
     """
     Setzt quality_gate_status='validated' und speichert Reviewer.
     """
     try:
-        api_key = _ADMIN_API_KEY or "admin"
+        reviewer = _reviewer_name(admin)
         updated = await db.fetchval(
             """
             UPDATE fix_application_audit
@@ -415,7 +424,7 @@ async def approve_fix(
               AND quality_gate_status = 'pending_review'
             RETURNING id
             """,
-            api_key,
+            reviewer,
             fix_id,
         )
 
@@ -438,7 +447,7 @@ async def approve_fix(
 async def reject_fix(
     fix_id: int,
     reason: str = Body(..., embed=True),
-    admin: bool = Depends(verify_admin_access),
+    admin: dict = Depends(require_admin),
     db=Depends(get_db),
 ):
     """
@@ -448,7 +457,7 @@ async def reject_fix(
         raise HTTPException(status_code=422, detail="Begründung muss mindestens 5 Zeichen haben")
 
     try:
-        api_key = _ADMIN_API_KEY or "admin"
+        reviewer = _reviewer_name(admin)
         updated = await db.fetchval(
             """
             UPDATE fix_application_audit
@@ -468,7 +477,7 @@ async def reject_fix(
               AND quality_gate_status = 'pending_review'
             RETURNING id
             """,
-            api_key,
+            reviewer,
             fix_id,
             reason.strip(),
         )
