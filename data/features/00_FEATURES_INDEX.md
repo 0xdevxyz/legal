@@ -36,7 +36,7 @@
 | **WordPress-Plugin** (Widget, Inline-Blocker, A11y-Remediation, Local Fonts) | [wordpress-plugin.md](wordpress-plugin.md) | 🟢 live (v2.6.0) | 2026-07-17 |
 | **Joomla-Plugin** (nur Widget-Einbindung) | [joomla-plugin.md](joomla-plugin.md) | 🟡 Teilstand (v2.1.0) | 2026-07-17 |
 | **PDF-Report & Export** (Compliance-Report, Audit-Log) | [pdf-report-export.md](pdf-report-export.md) | 🟢 live (Audit-Log/-Export gefixt) | 2026-07-17 |
-| **Admin-Bereich** (Leads, Analytics, System-Health, Fix-Review-Queue) | [admin-bereich.md](admin-bereich.md) | 🟡 faktisch inaktiv (503) | 2026-07-17 |
+| **Admin-Bereich** (Leads, Analytics, System-Health, Fix-Review-Queue) | [admin-bereich.md](admin-bereich.md) | 🟡 nur API + Fix-Review-Seite; `simple-admin` entfernt | 2026-07-29 |
 | **Onboarding & Journey** (Wizards, Schritt-Tracking, Skill-Level) | [onboarding-journey.md](onboarding-journey.md) | 🟡 entkoppelt | 2026-07-17 |
 | **Knowledge-Base / Gesetzes-Vault** (Obsidian-Vault: Gesetze + Templates) | [knowledge-base-gesetzes-vault.md](knowledge-base-gesetzes-vault.md) | 🟡 in Arbeit | 2026-07-17 |
 | **AVV/DPA-Generator** (Auftragsverarbeitungsvertrag) | [avv-dpa-generator.md](avv-dpa-generator.md) | 🟡 nur HTML-Rendering | 2026-07-17 |
@@ -45,6 +45,7 @@
 | **MCP-Server** (Complyo-API für KI-Agenten unter `/mcp`) | [mcp-server.md](mcp-server.md) | 🟡 Auth-Gate validiert JWT, Fläche unkuratiert | 2026-07-17 |
 | **Channel HTML-CLI** (Fix-Manifest auf statische Projekte anwenden) | [channel-html-cli.md](channel-html-cli.md) | 🟢 live | 2026-07-17 |
 | **Risiko-Radar** (Score-Trend, Frühwarnung) | [risiko-radar.md](risiko-radar.md) | 🟡 Backend ohne UI | 2026-07-17 |
+| **A/B-Testing Cookie-Banner** (Varianten, Zuweisung, Signifikanz, Gewinner-Übernahme) | [ab-testing-cookie-banner.md](ab-testing-cookie-banner.md) | 🟢 live | 2026-07-29 |
 | **i18n / Mehrsprachigkeit** (Übersetzungs-API, Widget-Locales) | [i18n-mehrsprachigkeit.md](i18n-mehrsprachigkeit.md) | ⚪ verworfen (alle EP 500) | 2026-07-17 |
 | Barrierefreiheits-Remediation (Fix-Manifest + Channels + Link-Zweck + Worklist + Re-Scan) | [accessibility-remediation.md](accessibility-remediation.md) | 🟢 Block 1–3 live | 2026-06-26 |
 | Drittlandtransfer-Erkennung (cookielose Transfers: Google Fonts/reCAPTCHA/Maps via HTML+CSS+Requests) | [drittlandtransfer-erkennung.md](drittlandtransfer-erkennung.md) | 🟢 live | 2026-06-26 |

@@ -70,10 +70,18 @@ services:
       - STRIPE_PRICE_PRO_YEARLY=${STRIPE_PRICE_PRO_YEARLY}
       - STRIPE_PRICE_AGENCY_MONTHLY=${STRIPE_PRICE_AGENCY_MONTHLY}
       - STRIPE_PRICE_AGENCY_YEARLY=${STRIPE_PRICE_AGENCY_YEARLY}
-      # Neue Pläne: single (19€/Modul), complete (49€), expert (39€/Monat)
+      # Pläne: single (19€/Modul), pro (49€/Mon), agency (299€/Mon),
+      # expert (Einmalservice), update (29€/Mon Folgebetreuung)
       - STRIPE_PRICE_SINGLE_MODULE=${STRIPE_PRICE_SINGLE_MODULE}
-      - STRIPE_PRICE_COMPLETE=${STRIPE_PRICE_COMPLETE}
-      - STRIPE_PRICE_EXPERT_MONTHLY=${STRIPE_PRICE_EXPERT_MONTHLY}
+      - STRIPE_PRICE_EXPERT=${STRIPE_PRICE_EXPERT}
+      - STRIPE_PRICE_UPDATE_MONTHLY=${STRIPE_PRICE_UPDATE_MONTHLY:-${STRIPE_PRICE_UPDATE}}
+      # Add-ons (in Stripe anzulegen; ohne Wert schlaegt der Kauf mit klarer Meldung fehl)
+      - STRIPE_PRICE_COMPLOAI_GUARD=${STRIPE_PRICE_COMPLOAI_GUARD:-}
+      - STRIPE_PRICE_PRIORITY_SUPPORT=${STRIPE_PRICE_PRIORITY_SUPPORT:-}
+      - STRIPE_PRICE_AGENCY_SITES_EXTRA=${STRIPE_PRICE_AGENCY_SITES_EXTRA:-}
+      - STRIPE_PRICE_EXPERT_AUDIT=${STRIPE_PRICE_EXPERT_AUDIT:-}
+      - STRIPE_PRICE_IMPLEMENTATION=${STRIPE_PRICE_IMPLEMENTATION:-}
+      - STRIPE_PRICE_CUSTOM_INTEGRATION=${STRIPE_PRICE_CUSTOM_INTEGRATION:-}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required in .env}
       - FRONTEND_URL=https://complyo.de
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
@@ -181,18 +189,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-
-  # Admin Panel
-  admin:
-    image: nginx:alpine
-    container_name: complyo-admin
-    ports:
-      - "127.0.0.1:3004:80"
-    volumes:
-      - ./simple-admin:/usr/share/nginx/html:ro
-    networks:
-      - complyo-network
-    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest

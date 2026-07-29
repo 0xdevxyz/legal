@@ -140,3 +140,6 @@ docker-compose*.yml
    *.pem
 .env
 graphify-out/
+
+# Zeitgestempelte Sicherungskopien (*.bak.YYYYMMDD) - Git ist die Sicherung
+*.bak.*

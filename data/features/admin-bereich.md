@@ -1,6 +1,7 @@
 # Admin-Bereich (intern)
 
-**Stand:** 2026-07-17 · **Status:** 🟡 in Arbeit — **faktisch inaktiv: alle Routen liefern 503**
+**Stand:** 2026-07-29 · **Status:** 🟡 nur Backend-API + Fix-Review-Seite im Dashboard.
+Das statische Admin-Panel (`simple-admin/`) ist am 29.07.2026 ersatzlos entfernt worden.
 
 ## Ziel
 Interner Adminbereich für Lead-Verwaltung, Analytics-Trends, System-Health und eine
@@ -92,11 +93,10 @@ Gegen die Baseline (`backend/alembic/baseline_schema.sql`, 57 Tabellen) verifizi
   (`:80-81`), `/analytics/trends` liefert `trends = []` (`:248`), `/system/health` hartcodierte
   Strings ohne echte Checks (`:270-297`, z. B. `"uptime": "99.9%"`). Der fehlende
   `leads`-Tabellenzugriff fällt dadurch nicht auf — der Fehler ist wegcodiert, nicht behoben.
-- **`simple-admin/` ist eine tote Hülle.** Das Verzeichnis ist **leer**; die einzige Datei
-  `simple-admin/index.html` wurde am 2025-11-10 gelöscht (Commit `a3cd3a1`). Der Compose-Dienst
-  `admin` (`docker-compose.yml:186-196`, `nginx:alpine`, `127.0.0.1:3004:80`, Mount
-  `./simple-admin:/usr/share/nginx/html:ro`, `restart: unless-stopped`) läuft seit ~2 Monaten
-  und liefert **HTTP 403** (nginx auf leerem Verzeichnis; live verifiziert). Kein
-  Reverse-Proxy-Eintrag zeigt auf 3004, der Port ist nur an 127.0.0.1 gebunden.
-  Ältere Statusberichte führen es als „laufendes Admin-Panel" — sie haben Container-Liveness
-  mit Funktion verwechselt. Compose-Dienst + Verzeichnis ersatzlos entfernen.
+- **`simple-admin/` ist am 29.07.2026 entfernt** (erledigt). Das Verzeichnis war leer —
+  die einzige Datei `simple-admin/index.html` wurde am 2025-11-10 gelöscht (Commit `a3cd3a1`).
+  Der Compose-Dienst `admin` (`nginx:alpine`, `127.0.0.1:3004:80`) lieferte seither HTTP 403
+  auf ein leeres Verzeichnis, ohne dass ein Reverse-Proxy-Eintrag darauf zeigte.
+  Ältere Statusberichte führten ihn als „laufendes Admin-Panel" — sie haben Container-Liveness
+  mit Funktion verwechselt. Dienst, Container und Verzeichnis sind jetzt weg;
+  `backend/admin_routes.py` und `dashboard-react/src/app/admin/fix-review/` bleiben unberührt.
