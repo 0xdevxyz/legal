@@ -256,8 +256,19 @@ class AxeScanner:
             page = await browser.new_page()
             
             try:
-                # Lade Seite
-                await page.goto(url, timeout=timeout, wait_until="networkidle")
+                # Seite laden. "networkidle" ist bewusst NICHT das primaere
+                # Kriterium: Seiten mit dauerhaftem Polling, Chat-Widgets oder
+                # Werbung erreichen nie Netzwerkruhe und liefen damit garantiert
+                # in den Timeout ("Timeout 30000ms exceeded"). DOM-ready reicht
+                # fuer axe; danach geben wir Netzwerkruhe eine kurze Chance,
+                # ohne den Scan daran scheitern zu lassen.
+                await page.goto(url, timeout=timeout, wait_until="domcontentloaded")
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=5000)
+                except Exception:
+                    # Kein Fehler: die Seite laedt dauerhaft nach — axe laeuft
+                    # auf dem Stand von jetzt.
+                    logger.info(f"axe-core: {url} erreicht keine Netzwerkruhe — scanne den aktuellen Stand")
                 
                 # Injiziere axe-core
                 await page.add_script_tag(url=AXE_CORE_CDN)
