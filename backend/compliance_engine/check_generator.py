@@ -9,9 +9,12 @@ Website-Prüfung werden. Dieser Generator nimmt eine erkannte Gesetzesänderung,
 lässt das LLM sie in eine deklarative `compliance_checks`-Definition übersetzen
 (sofern sie dem "required_element"-Muster folgt) und legt sie an.
 
-Sicherheits-Gate (Testphase): Neue Auto-Checks landen als `pending_review` und
-werden erst durch das Admin-GO scharf geschaltet. Über das Env-Flag
-AUTO_ACTIVATE_GENERATED_CHECKS=true entfällt das Review (voll automatisch).
+Sicherheits-Gate: Neue Auto-Checks landen als `pending_review` und werden erst
+durch das Admin-GO scharf geschaltet. Über das Env-Flag
+AUTO_ACTIVATE_GENERATED_CHECKS=true entfällt das Review für unkritische Checks
+(voll automatisch). Ausnahme (Safety-Governor): Checks mit severity=critical
+bleiben IMMER `pending_review` — ein False-Positive trifft Kunden dort am
+härtesten, daher nie ohne menschliche Freigabe.
 """
 
 import os
@@ -282,6 +285,16 @@ async def generate_check_for_legal_update(
         return result
 
     status = "active" if _auto_activate() else "pending_review"
+    # Safety-Governor: kritische Auto-Checks nie ungereviewt scharf schalten.
+    # Ein False-Positive bei einem critical-Check trifft Kunden am haertesten
+    # (roter Score-Einbruch, Fehlalarm). Selbst bei AUTO_ACTIVATE_GENERATED_CHECKS
+    # landen sie in der Admin-Review-Queue; /checks/{id}/activate gibt das finale GO.
+    if status == "active" and spec.get("severity") == "critical":
+        status = "pending_review"
+        logger.info(
+            f"check_generator: {spec.get('slug')} ist critical -> trotz "
+            f"Auto-Activate auf pending_review (Safety-Governor)"
+        )
 
     try:
         async with db_pool.acquire() as conn:
