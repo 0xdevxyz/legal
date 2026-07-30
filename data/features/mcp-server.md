@@ -1,6 +1,14 @@
 # MCP-Server (KI-Agenten-Zugang)
 
-**Stand:** 2026-07-17 · **Status:** 🟡 in Arbeit
+**Stand:** 2026-07-30 · **Status:** 🟢 kuratiert — Allowlist mit 12 Tools, MCP-Rate-Limit
+
+> **Update 2026-07-30:** Auto-Wrapper (296 Tools, Tag-Denylist) ersetzt durch eine
+> Allowlist (`MCP_ALLOWED_OPERATIONS` in `backend/mcp_server.py`): Scan, KI-Fix-Jobs,
+> A11y-Worklist/Manifest lesen, GitHub-Kanal (PR erstellen/Status/Revert). Bewusst KEIN
+> Direct-Deploy-, Approve- oder OAuth-Tool — Serverschreiben und Freigaben bleiben
+> menschliche Klicks. `describe_full_response_schema=False`. Rate-Limit 30/min je Nutzer
+> (Redis, in `mcp_auth_middleware`; live belegt: 429 ab Request 31).
+> Wächter: `tests/test_mcp_allowlist.py`. Live verifiziert: tools/list = exakt 12.
 
 ## Ziel
 Die gesamte Complyo-FastAPI-App als MCP-Server für KI-Agenten exponieren, damit Agenten

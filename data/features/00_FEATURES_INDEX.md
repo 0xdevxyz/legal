@@ -22,7 +22,7 @@
 | **Scan-/Analyse-Kern** (Quick/Deep/Complete, Check-Registry, Score, Issue-Grouping) | [scan-analyze-kern.md](scan-analyze-kern.md) | 🟢 live | 2026-07-17 |
 | **Regulierungs-Radar** (BFSG-Report + AI-Act-Transparenz-Check im Free-Scan) | [regulierungs-radar.md](regulierungs-radar.md) | 🟢 live | 2026-07-17 |
 | **Pflichten-Report** (Firmenprofil → 13 Pflichten + lebender Änderungs-Feed; Premium-Gating) | [pflichten-report.md](pflichten-report.md) | 🟢 live (7.2+7.3) | 2026-07-17 |
-| **KI-Fix-Engine** (Fix-Generierung, Quality-Gate, Fix-Jobs-Queue) | [ai-fix-engine.md](ai-fix-engine.md) | 🟡 in Arbeit | 2026-07-17 |
+| **KI-Fix-Engine** (Fix-Generierung, Quality-Gate, Review-Kette, Fix-Jobs-Queue) | [ai-fix-engine.md](ai-fix-engine.md) | 🟢 Review-Kette + Gating live | 2026-07-30 |
 | **Cookie-Consent-Widget** (ausgeliefertes JS: Banner v2, Content-Blocker, Consent Mode) | [cookie-consent-widget.md](cookie-consent-widget.md) | 🟢 live (tote Pfade bereinigt) | 2026-07-17 |
 | **Cookie-Consent-Management** (Server: Consent-Logging, Katalog, Banner-Config) | [cookie-consent-management.md](cookie-consent-management.md) | 🟡 in Arbeit | 2026-07-17 |
 | **Legal Text Generator** (KI-Rechtstexte: Impressum, Datenschutz, AGB, Cookie, Widerruf) | [legal-text-generator.md](legal-text-generator.md) | 🟢 live (Auto-Update jetzt live) | 2026-07-17 |
@@ -42,10 +42,11 @@
 | **AVV/DPA-Generator** (Auftragsverarbeitungsvertrag) | [avv-dpa-generator.md](avv-dpa-generator.md) | 🟡 nur HTML-Rendering | 2026-07-17 |
 | **TCF 2.2** (IAB-Vendorliste, TCF-Config) | [tcf-2-2.md](tcf-2-2.md) | 🟡 nicht IAB-registriert | 2026-07-17 |
 | **DSGVO-Betroffenenrechte** (Auskunft/Löschung/Export, Retention) | [dsgvo-betroffenenrechte.md](dsgvo-betroffenenrechte.md) | 🟡 teilbehoben (Cleanup+Auth gefixt) | 2026-07-17 |
-| **MCP-Server** (Complyo-API für KI-Agenten unter `/mcp`) | [mcp-server.md](mcp-server.md) | 🟡 Auth-Gate validiert JWT, Fläche unkuratiert | 2026-07-17 |
+| **MCP-Server** (Complyo-API für KI-Agenten unter `/mcp`) | [mcp-server.md](mcp-server.md) | 🟢 kuratierte Allowlist (12 Tools) + Rate-Limit | 2026-07-30 |
 | **Channel HTML-CLI** (Fix-Manifest auf statische Projekte anwenden) | [channel-html-cli.md](channel-html-cli.md) | 🟢 live | 2026-07-17 |
 | **Risiko-Radar** (Score-Trend, Frühwarnung) | [risiko-radar.md](risiko-radar.md) | 🟡 Backend ohne UI | 2026-07-17 |
 | **A/B-Testing Cookie-Banner** (Varianten, Zuweisung, Signifikanz, Gewinner-Übernahme) | [ab-testing-cookie-banner.md](ab-testing-cookie-banner.md) | 🟢 live | 2026-07-29 |
+| **GitHub-PR-Kanal** (OAuth, PRs statt Direktschreiben, Revert) | [git-pr-kanal.md](git-pr-kanal.md) | 🟢 live (Praxistest: Launchtag) | 2026-07-30 |
 | **i18n / Mehrsprachigkeit** (Übersetzungs-API, Widget-Locales) | [i18n-mehrsprachigkeit.md](i18n-mehrsprachigkeit.md) | ⚪ verworfen (alle EP 500) | 2026-07-17 |
 | Barrierefreiheits-Remediation (Fix-Manifest + Channels + Link-Zweck + Worklist + Re-Scan) | [accessibility-remediation.md](accessibility-remediation.md) | 🟢 Block 1–3 live | 2026-06-26 |
 | Drittlandtransfer-Erkennung (cookielose Transfers: Google Fonts/reCAPTCHA/Maps via HTML+CSS+Requests) | [drittlandtransfer-erkennung.md](drittlandtransfer-erkennung.md) | 🟢 live | 2026-06-26 |

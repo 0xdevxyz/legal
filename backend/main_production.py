@@ -311,11 +311,29 @@ async def mcp_auth_middleware(request: Request, call_next):
             )
 
         try:
-            await _mcp_get_current_user(
+            _mcp_user = await _mcp_get_current_user(
                 request=request,
                 credentials=credentials,
                 settings=_mcp_get_settings(),
             )
+            # MCP-eigenes Rate-Limit: auch ein legitim authentifizierter Agent
+            # soll kostenverursachende Routen (Scan, KI-Fix) nicht ungebremst
+            # treiben. 30 Requests/Minute je Nutzer; ohne Redis kein Limit
+            # (Auth bleibt der Gate-Keeper, Ausfall drosselt nicht auf 0).
+            try:
+                if _async_redis is not None:
+                    _rl_key = f"mcp_rl:{_mcp_user['id']}"
+                    _zaehler = await _async_redis.incr(_rl_key)
+                    if _zaehler == 1:
+                        await _async_redis.expire(_rl_key, 60)
+                    if _zaehler > 30:
+                        return JSONResponse(
+                            status_code=429,
+                            content={"detail": "MCP-Rate-Limit erreicht (30 Anfragen/Minute). Bitte kurz warten."},
+                            headers={"Retry-After": "60"},
+                        )
+            except Exception as _rl_err:
+                logger.warning(f"MCP-Rate-Limit nicht pruefbar: {_rl_err}")
         except HTTPException as e:
             return JSONResponse(
                 status_code=e.status_code,

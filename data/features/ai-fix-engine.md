@@ -1,6 +1,15 @@
 # KI-Fix-Engine
 
-**Stand:** 2026-07-17 · **Status:** 🟡 in Arbeit
+**Stand:** 2026-07-30 · **Status:** 🟢 Review-Kette live
+
+> **Update 2026-07-30 (Phasen A–D):** Quality-Gate-Ergebnis wird im Audit persistiert
+> (Revision 0009, background_worker → audit_service), die Admin-Review-Queue ist
+> funktionsfähig, Kunden-Endpunkte gaten pending_review/rejected (Inhalt zurückgehalten),
+> Admin-Approve spiegelt nach fix_jobs.result. Direct-Deploy neu als secure_deployment.py
+> (nur FTP/SFTP, Backup-Pflicht fail-closed, Backups in fix_backups.file_contents,
+> Restore per /api/v2/fixes/rollback; alter Motor + /apply/preview-Stub entfernt).
+> Auslieferung zusätzlich über den [[git-pr-kanal]]. Wächter: test_fix_review_chain.py,
+> test_secure_deploy.py.
 
 ## Ziel
 Zu jedem im Scan ([[scan-analyze-kern]]) gefundenen Problem eine individuelle Lösung per KI
