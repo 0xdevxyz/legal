@@ -16,7 +16,7 @@ Grundsätze (Betreiber-Entscheidung 29.07.2026):
 - Backups liegen in der DB (fix_backups.file_contents), Restore läuft daraus.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
 import json
@@ -93,6 +93,7 @@ class ApplyStatusResponse(BaseModel):
 async def apply_fix(
     request: Request,
     apply_request: ApplyFixRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
 ):
     """Deployt einen geprüften Fix per FTP/SFTP — mit erzwungenem Backup."""
@@ -167,6 +168,14 @@ async def apply_fix(
         metadata={"target_path": apply_request.target_path},
         backup_file_contents=ergebnis.backup_contents,
     )
+
+    # 7. Best-Effort Post-Deploy-Verifikation (beeinflusst die Antwort nie).
+    if fix.get("page_url"):
+        background_tasks.add_task(
+            _verify_post_deploy,
+            apply_request.fix_id, user_id, fix["page_url"],
+            fix["category"], fix["code"],
+        )
 
     return ApplyFixResponse(
         success=True,
@@ -267,6 +276,40 @@ async def get_apply_status(
 # Helper Functions
 # ============================================================================
 
+async def _verify_post_deploy(
+    fix_id: str, user_id: int, page_url: str, category: str, code: str
+) -> None:
+    """Best-Effort: Live-Seite re-fetchen, verifizieren, Ergebnis in fix_jobs.result ablegen.
+
+    Laeuft im Hintergrund; Fehler werden nur geloggt und beeinflussen den Deploy nie.
+    """
+    try:
+        from post_deploy_verifier import verify_live_url
+
+        verification = await verify_live_url(page_url, category, code)
+        async with db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT result FROM fix_jobs WHERE job_id::text = $1 AND user_id = $2",
+                fix_id, user_id,
+            )
+            if row and row["result"]:
+                res = row["result"]
+                if isinstance(res, str):
+                    res = json.loads(res)
+                res["post_deploy_verification"] = verification
+                await conn.execute(
+                    "UPDATE fix_jobs SET result = $3 WHERE job_id::text = $1 AND user_id = $2",
+                    fix_id, user_id, json.dumps(res),
+                )
+        logger.info(
+            f"Post-Deploy-Verifikation fix={fix_id}: "
+            f"verified={verification.get('verified')} "
+            f"({str(verification.get('reason', ''))[:140]})"
+        )
+    except Exception as e:
+        logger.warning(f"Post-Deploy-Verifikation fehlgeschlagen (fix={fix_id}): {e}")
+
+
 async def _get_deploybaren_fix(fix_id: str, user_id: int) -> Optional[Dict]:
     """Fix aus fix_jobs laden — nur wenn geprüft und mit Inhalt.
 
@@ -308,6 +351,12 @@ async def _get_deploybaren_fix(fix_id: str, user_id: int) -> Optional[Dict]:
             "code": code,
             "category": str((issue or {}).get("category") or "unknown"),
             "type": str(data.get("fix_type") or "code"),
+            "page_url": str(
+                (issue or {}).get("page_url")
+                or (issue or {}).get("url")
+                or (issue or {}).get("site_url")
+                or ""
+            ),
         }
     except Exception as e:
         logger.error(f"Fix-Laden fehlgeschlagen ({fix_id}): {e}")
