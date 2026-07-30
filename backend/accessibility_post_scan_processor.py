@@ -495,9 +495,14 @@ class AccessibilityPostScanProcessor:
         """
         Generiert AI Alt-Text-Fixes
         
-        Für jetzt: Simple Demo-Generierung
-        TODO: Echte AI-Integration später
+        Nutzt AIAltTextGenerator (Claude Vision). Fällt auf die
+        Kontext-Heuristik zurück, wenn kein API-Key gesetzt ist oder das
+        Bild nicht ladbar/analysierbar ist.
         """
+        from compliance_engine.ai_alt_text_generator import AIAltTextGenerator
+        from urllib.parse import urljoin
+
+        generator = AIAltTextGenerator()
         fixes = []
         
         for idx, issue in enumerate(alt_text_issues):
@@ -522,20 +527,38 @@ class AccessibilityPostScanProcessor:
                           issue.get('html', '') or \
                           f'<img src="{image_src}">'
             
-            # Generiere Alt-Text (Simple Heuristik für jetzt)
-            suggested_alt = self._generate_simple_alt_text(
-                filename=filename,
-                page_title=page_title,
-                surrounding_text=surrounding_text,
-                image_src=image_src
-            )
-            
-            # Confidence basierend auf verfügbarem Kontext
-            confidence = self._calculate_confidence(
-                page_title=page_title,
-                surrounding_text=surrounding_text,
-                filename=filename
-            )
+            # Alt-Text bevorzugt via Claude Vision, sonst Kontext-Heuristik.
+            abs_src = urljoin(page_url or site_url, image_src) if image_src else ""
+            suggested_alt = ""
+            alt_source = "heuristic"
+            confidence = 0.0
+            if abs_src.startswith(("http://", "https://")):
+                try:
+                    ai_res = await generator.generate_alt_text(
+                        image_url=abs_src,
+                        context=(surrounding_text or page_title or "")[:500],
+                        language="de",
+                    )
+                    if ai_res and ai_res.get("source") == "claude_vision" and ai_res.get("alt_text"):
+                        suggested_alt = ai_res["alt_text"]
+                        confidence = float(ai_res.get("confidence", 0.9))
+                        alt_source = "claude_vision"
+                except Exception as e:
+                    logger.warning(f"Vision-Alt-Text fehlgeschlagen für {abs_src}: {e}")
+
+            if not suggested_alt:
+                # Fallback: Kontext-Heuristik (kein Bildinhalt gesehen)
+                suggested_alt = self._generate_simple_alt_text(
+                    filename=filename,
+                    page_title=page_title,
+                    surrounding_text=surrounding_text,
+                    image_src=image_src,
+                )
+                confidence = self._calculate_confidence(
+                    page_title=page_title,
+                    surrounding_text=surrounding_text,
+                    filename=filename,
+                )
             
             fixes.append({
                 "page_url": page_url,
@@ -543,6 +566,7 @@ class AccessibilityPostScanProcessor:
                 "image_filename": filename,
                 "suggested_alt": suggested_alt,
                 "confidence": confidence,
+                "alt_text_source": alt_source,
                 "page_title": page_title,
                 "surrounding_text": surrounding_text[:500],  # Limit length
                 "element_html": element_html[:1000]  # Limit length
