@@ -193,14 +193,19 @@ async def test_websites_flagged_after_legal_update(mock_legal_update):
 
 @pytest.mark.asyncio
 async def test_fix_quality_gate_passes_valid_fix(mock_fix_valid):
-    """Valider Fix (kein gefährlicher Code, kein Placeholder) → validated."""
+    """Valider Fix (Syntax ok), aber ohne verifizierbares Ziel im Original.
+    Neuer Vertrag: kein Silent-Pass mehr — Stufe 1 besteht, aber der
+    Gesamtstatus ist pending_review, weil der Fix nicht re-scan-verifiziert
+    werden konnte (Button ohne stabile Identitaet, nur angehaengt)."""
     from ai_fix_engine.fix_quality_gate import FixQualityGate
 
     gate = FixQualityGate()
     result = await gate.run(mock_fix_valid, original_html="<html><body></body></html>")
 
-    assert result.final_status == "validated"
     assert all(s.passed for s in result.stage_results if s.stage == 1)
+    assert result.final_status == "pending_review"
+    s2 = next(s for s in result.stage_results if s.stage == 2)
+    assert s2.details.get("verified") is False
 
 
 # ---------------------------------------------------------------------------
