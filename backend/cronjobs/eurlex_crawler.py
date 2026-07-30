@@ -6,7 +6,9 @@ Läuft monatlich (1. des Monats, 02:00 Uhr).
 """
 import asyncio
 import logging
+import os
 import re
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -14,7 +16,20 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-LAWS_DIR = Path(__file__).parents[2] / "knowledge" / "laws"
+LAWS_DIR = Path(
+    os.getenv("KNOWLEDGE_VAULT_PATH", str(Path(__file__).parents[2] / "knowledge"))
+) / "laws"
+# Nach wie vielen Tagen ein zwischengespeicherter Rechtsakt neu geholt wird.
+MAX_AGE_DAYS = int(os.getenv("EURLEX_MAX_AGE_DAYS", "30"))
+
+
+def _needs_refresh(path: Path) -> bool:
+    """True, wenn die Datei fehlt oder aelter als MAX_AGE_DAYS ist."""
+    try:
+        age_days = (time.time() - path.stat().st_mtime) / 86400.0
+        return age_days >= MAX_AGE_DAYS
+    except OSError:
+        return True
 
 EUR_LEX_ACTS = {
     "GDPR":    {"celex": "32016R0679", "de_id": "DSGVO"},
@@ -77,8 +92,10 @@ async def crawl_eurlex():
                 lang_dir = LAWS_DIR / LANG_DIR_MAP[lang]
                 lang_dir.mkdir(parents=True, exist_ok=True)
                 output_file = lang_dir / f"{act_name}.md"
-                if output_file.exists():
-                    logger.debug(f"Überspringe {act_name} ({lang}) — bereits vorhanden")
+                if output_file.exists() and not _needs_refresh(output_file):
+                    logger.debug(
+                        f"Überspringe {act_name} ({lang}) — aktuell (< {MAX_AGE_DAYS}d)"
+                    )
                     continue
                 html = await fetch_act_html(meta["celex"], lang, client)
                 if html:
