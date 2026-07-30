@@ -17,6 +17,7 @@ import os
 import json
 import hashlib
 import logging
+import re
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
@@ -74,6 +75,50 @@ class DocumentType(str, Enum):
     TOS = "tos"
     COOKIE_POLICY = "cookie-policy"
     WITHDRAWAL = "withdrawal"  # Widerrufsbelehrung inkl. Muster-Widerrufsformular (B2C)
+
+
+# Pflicht-Marker je Dokumenttyp: (Label, [Substrings], [Regex]). Ein Marker gilt als
+# vorhanden, wenn EIN Substring ODER EIN Regex trifft. Heuristisch/nicht-blockierend —
+# dient als Qualitaets-Fruehwarnung fuer den KI-Output (frueher gar nicht geprueft).
+_MANDATORY_MARKERS = {
+    DocumentType.IMPRINT: [
+        ("Kontakt (E-Mail/Telefon)", ["telefon", "tel.", "kontakt"], [r"[\w.%+\-]+@[\w.\-]+\.\w{2,}"]),
+        ("Anschrift (PLZ + Ort)", [], [r"\b\d{5}\s+[a-zäöü]"]),
+        ("Verantwortlicher/Diensteanbieter", ["verantwortlich", "diensteanbieter", "angaben gem", "vertreten durch"], []),
+    ],
+    DocumentType.PRIVACY: [
+        ("Verantwortlicher", ["verantwortlich"], []),
+        ("Personenbezogene Daten", ["personenbezogene daten"], []),
+        ("Rechtsgrundlage", ["rechtsgrundlage", "art. 6"], []),
+        ("Betroffenenrechte", ["betroffenenrechte", "auskunftsrecht", "auskunft"], []),
+    ],
+    DocumentType.TOS: [
+        ("Geltungsbereich", ["geltungsbereich", "anwendungsbereich"], []),
+        ("Vertrag/Leistung", ["vertrag", "leistung"], []),
+    ],
+    DocumentType.COOKIE_POLICY: [
+        ("Cookies", ["cookie"], []),
+        ("Einwilligung", ["einwilligung", "consent"], []),
+    ],
+    DocumentType.WITHDRAWAL: [
+        ("Widerrufsrecht", ["widerruf"], []),
+        ("Widerrufsfrist", ["widerrufsfrist", "14 tage", "vierzehn tagen"], []),
+        ("Muster-Widerrufsformular", ["widerrufsformular"], []),
+    ],
+}
+
+
+def validate_document_content(doc_type: "DocumentType", html: str) -> List[str]:
+    """Prueft, ob die wichtigsten Pflicht-Marker im generierten Dokument vorkommen.
+    Rueckgabe: Liste fehlender Marker-Labels (leer = vollstaendig). Heuristisch und
+    nicht-blockierend; validiert den KI-Output, der bisher ungeprueft ausgeliefert wurde."""
+    text = (html or "").lower()
+    missing: List[str] = []
+    for label, subs, rxs in _MANDATORY_MARKERS.get(doc_type, []):
+        ok = any(sub in text for sub in subs) or any(re.search(rx, text) for rx in rxs)
+        if not ok:
+            missing.append(label)
+    return missing
 
 
 # =============================================================================
@@ -654,8 +699,16 @@ class LegalTextGenerator:
         regeneration_trigger: str,
         user_data: Optional[Dict[str, Any]] = None,
     ) -> Optional[int]:
+        missing_markers = validate_document_content(doc_type, html_content)
+        if missing_markers:
+            logger.warning(
+                f"Generiertes Dokument unvollstaendig (user={user_id}, "
+                f"type={doc_type.value}): fehlende Pflicht-Marker: "
+                f"{', '.join(missing_markers)}"
+            )
         meta = {
             "is_active": True,
+            "content_validation": {"missing_markers": missing_markers},
             "template_version": self.TEMPLATE_VERSION,
             "regeneration_trigger": regeneration_trigger,
             "legal_update_id": legal_update_id,
