@@ -26,7 +26,7 @@ echo "Repo=$REPO Image=$IMAGE Network=$NETWORK"
 
 FETCH_NEWS_CRON="0 6 * * * docker exec complyo-backend python3 /app/cronjobs/fetch_news.py >> /var/log/complyo-news-fetch.log 2>&1"
 
-KNOWLEDGE_CRON="0 7 * * * docker run --rm --network $NETWORK -e DATABASE_URL='$DATABASE_URL' -e OPENAI_API_KEY='$OPENAI_API_KEY' -e OPENROUTER_API_KEY='$OPENROUTER_API_KEY' -e KNOWLEDGE_VAULT_PATH=/data/knowledge -v $VAULT:/data/knowledge $IMAGE python3 cronjobs/knowledge_updater.py >> /var/log/complyo-knowledge-updater.log 2>&1"
+KNOWLEDGE_CRON="0 7 * * * docker run --rm --network $NETWORK --env-file $ENV_FILE -e KNOWLEDGE_VAULT_PATH=/data/knowledge -v $VAULT:/data/knowledge $IMAGE python3 cronjobs/knowledge_updater.py >> /var/log/complyo-knowledge-updater.log 2>&1"
 
 EURLEX_CRON="0 4 * * 1 docker run --rm -e KNOWLEDGE_VAULT_PATH=/data/knowledge -e EURLEX_MAX_AGE_DAYS=30 -v $VAULT:/data/knowledge $IMAGE python3 cronjobs/eurlex_crawler.py >> /var/log/complyo-eurlex.log 2>&1"
 
