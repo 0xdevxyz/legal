@@ -1,37 +1,69 @@
 """
-Complyo MCP Server Configuration
-Exposiert die Complyo FastAPI-API als MCP-Server fuer KI-Agenten.
+Complyo MCP Server — kuratierte Tool-Allowlist.
 
-Ausgeschlossene Tags (nicht als MCP-Tools verfuegbar):
-- admin:   Admin-only Routen (User-Verwaltung, System-Konfiguration)
-- stripe:  Stripe-Webhooks & interne Zahlungs-Callbacks
-- leads:   Interne Lead-Verwaltung
+Bis 30.07.2026 war der MCP-Server ein Auto-Wrapper über die gesamte API:
+296 Tools aus 302 OpenAPI-Pfaden, gefiltert nur über eine Tag-Denylist
+(admin/stripe/leads). Jede neue Route wurde automatisch zum Agenten-Tool —
+inklusive kostenverursachender und seiteneffektbehafteter Endpunkte.
+
+Jetzt gilt eine **Allowlist** (include_operations). Ein Agent kann:
+- Scans starten und Ergebnisse lesen
+- KI-Fixes anstoßen und deren Status/Ergebnis lesen (das Auslieferungs-
+  Gating der Review-Kette greift dort serverseitig)
+- die A11y-Worklist und das Fix-Manifest lesen
+- den GitHub-Kanal bedienen: Status, Repos, **PR erstellen** (der Kunde
+  merged), PR-Liste, **PR-Revert** — das ist der strategische Weg
+  "GitHub + Rollback" (Betreiber-Vorgabe 29.07.2026)
+
+Bewusst NICHT als Tool verfügbar:
+- Direct-Deploy (/api/v2/fixes/apply) und dessen Rollback — Serverschreiben
+  bleibt ein menschlicher Klick im Dashboard, die KI löst es nie aus
+- Admin-Freigaben (approve/reject) — Review bleibt menschlich
+- OAuth-Verbindung, Billing, Konto- und Lead-Verwaltung
+
+Zusätzlich: MCP-eigenes Rate-Limit (Redis, pro Nutzer) in der Auth-Middleware
+(main_production.mcp_auth_middleware) — ein legitim authentifizierter Agent
+soll die kostenverursachenden Routen nicht ungebremst treiben können.
 """
 from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP
 
-EXCLUDED_TAGS = [
-    "admin",
-    "stripe",
-    "leads",
+# Kuratierte Tools: FastAPI-operationIds (Methode + Pfad im Namen kodiert).
+# Der Wächter-Test tests/test_mcp_allowlist.py hält diese Liste ehrlich.
+MCP_ALLOWED_OPERATIONS = [
+    # Scan
+    "analyze_website_v2_api_v2_analyze_post",
+    "quick_analyze_website_api_v2_analyze_quick_post",
+    # KI-Fixes (Job-Pipeline; Gating der Review-Kette greift im Endpunkt)
+    "create_fix_job_api_fix_jobs_post",
+    "get_fix_job_status_api_fix_jobs__job_id__status_get",
+    "get_active_fix_jobs_api_fix_jobs_active_get",
+    # Barrierefreiheit: lesen
+    "accessibility_worklist_api_accessibility_worklist_get",
+    "get_fix_manifest_api_accessibility_fix_manifest__site_id__get",
+    # GitHub-Kanal: der strategische Weg (PR statt Direktschreiben, Revert als Rollback)
+    "git_connection_status_api_v2_git_status_get",
+    "list_connected_repos_api_v2_git_repos_get",
+    "apply_patches_api_v2_git_apply_patches_post",
+    "list_pull_requests_api_v2_git_prs_get",
+    "revert_pull_request_api_v2_git_prs__pr_id__revert_post",
 ]
 
 MCP_SERVER_DESCRIPTION = """
-Complyo Compliance Platform MCP-Server.
+Complyo Compliance Platform MCP-Server (kuratiert).
 
-Verfuegbare Faehigkeiten:
+Verfügbare Fähigkeiten:
 - Website-Scans starten und Ergebnisse abrufen (DSGVO, WCAG, BFSG, Cookie)
-- AI-Fixes generieren und anwenden
-- Cookie-Banner konfigurieren und Consent verwalten
-- Legal-Dokumente (Datenschutzerklaerung, Impressum, DPA) generieren
-- Compliance-Scores und Dashboard-Reports abrufen
-- TCF 2.2 Vendor-Listen verwalten
-- Accessibility-Fixes (Alt-Text, WCAG) generieren
-- Legal-News und Gesetzesaenderungen abrufen
-- AI Legal Classifier und Feedback-Learning
+- KI-Fixes generieren und deren Status abrufen (freigegebene Inhalte)
+- Barrierefreiheits-Worklist und Fix-Manifest lesen
+- GitHub-Integration: Fixes als Pull Request vorschlagen, PR-Status,
+  PR-Revert als Rollback — gemerged wird immer vom Kunden
+
+Nicht über MCP möglich (bewusst): Direktschreiben auf Kundenserver,
+Review-Freigaben, Kontoverwaltung, Zahlungen.
 
 Authentifizierung: Bearer-Token (JWT) erforderlich.
-Alle Requests muessen den Header 'Authorization: Bearer <token>' enthalten.
+Alle Requests müssen den Header 'Authorization: Bearer <token>' enthalten.
 """
 
 
@@ -41,9 +73,11 @@ def setup_mcp(app: FastAPI) -> FastApiMCP:
         app,
         name="Complyo MCP",
         description=MCP_SERVER_DESCRIPTION,
-        describe_all_responses=True,
-        describe_full_response_schema=True,
-        exclude_tags=EXCLUDED_TAGS,
+        # Kompakte Tool-Beschreibungen: das volle Response-Schema blähte
+        # tools/list massiv auf, ohne den Agenten zu helfen.
+        describe_all_responses=False,
+        describe_full_response_schema=False,
+        include_operations=MCP_ALLOWED_OPERATIONS,
     )
     mcp.mount()
     return mcp

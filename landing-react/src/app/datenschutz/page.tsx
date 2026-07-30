@@ -63,7 +63,7 @@ export default function DatenschutzPage() {
                     Telefon: <a href="tel:+49301234567" className="text-blue-600 hover:underline">+49 (0) 30 1234567</a>
                   </p>
                   <p>
-                    E-Mail: <a href="mailto:datenschutz@complyo.tech" className="text-blue-600 hover:underline">datenschutz@complyo.tech</a>
+                    E-Mail: <a href="mailto:datenschutz@complyo.de" className="text-blue-600 hover:underline">datenschutz@complyo.de</a>
                   </p>
                 </div>
               </div>
@@ -103,8 +103,8 @@ export default function DatenschutzPage() {
                 <div className="bg-blue-50 p-4 rounded-lg mt-4">
                   <p>
                     <strong>E-Mail:</strong>{' '}
-                    <a href="mailto:datenschutz@complyo.tech" className="text-blue-600 hover:underline">
-                      datenschutz@complyo.tech
+                    <a href="mailto:datenschutz@complyo.de" className="text-blue-600 hover:underline">
+                      datenschutz@complyo.de
                     </a>
                   </p>
                 </div>

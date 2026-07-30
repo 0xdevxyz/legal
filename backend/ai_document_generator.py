@@ -133,7 +133,7 @@ class AIDocumentGenerator:
         headers = {
             "Authorization": f"Bearer {self.openrouter_api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://complyo.tech",
+            "HTTP-Referer": "https://complyo.de",
             "X-Title": "Complyo Compliance Platform"
         }
         

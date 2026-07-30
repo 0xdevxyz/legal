@@ -20,10 +20,8 @@ security = HTTPBearer()
 db_pool = None
 auth_service = None
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Get current user from Authorization header"""
-    from auth_routes import get_current_user as auth_get_user
-    return await auth_get_user(credentials)
+# Kanonische Auth-Dependency (Phase 2 Auth-Konsolidierung)
+from dependencies import get_current_user
 
 @router.get("/domain-locks")
 async def get_domain_locks(current_user: dict = Depends(get_current_user)):
@@ -84,7 +82,7 @@ async def get_domain_locks(current_user: dict = Depends(get_current_user)):
         logger.error(f"Error fetching domain locks: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Laden der Domain-Status: {str(e)}"
+            detail="Fehler beim Laden der Domain-Status"
         )
 
 @router.get("/profile")
@@ -171,7 +169,7 @@ async def get_user_profile(current_user: dict = Depends(get_current_user)):
         logger.error(f"Error fetching user profile: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Laden des Profils: {str(e)}"
+            detail="Fehler beim Laden des Profils"
         )
 
 @router.get("/health")
@@ -235,7 +233,7 @@ async def update_user_profile(request: UpdateProfileRequest, current_user: dict 
         raise
     except Exception as e:
         logger.error(f"Error updating profile: {e}")
-        raise HTTPException(status_code=500, detail=f"Fehler beim Speichern: {str(e)}")
+        raise HTTPException(status_code=500, detail="Fehler beim Speichern")
 
 
 @router.put("/billing")
@@ -267,7 +265,7 @@ async def update_billing_data(request: UpdateBillingRequest, current_user: dict 
         raise
     except Exception as e:
         logger.error(f"Error updating billing: {e}")
-        raise HTTPException(status_code=500, detail=f"Fehler beim Speichern: {str(e)}")
+        raise HTTPException(status_code=500, detail="Fehler beim Speichern")
 
 
 @router.put("/password")
@@ -296,5 +294,5 @@ async def change_password(request: ChangePasswordRequest, current_user: dict = D
         raise
     except Exception as e:
         logger.error(f"Error changing password: {e}")
-        raise HTTPException(status_code=500, detail=f"Fehler beim Aendern des Passworts: {str(e)}")
+        raise HTTPException(status_code=500, detail="Fehler beim Aendern des Passworts")
 

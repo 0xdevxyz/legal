@@ -179,7 +179,7 @@ export default function WebsiteScanner() {
       
       // Optional: Pathname hinzufügen (ohne trailing slash)
       // WICHTIG: Immer den pathname entfernen für konsistente Hashes
-      // URLs wie "complyo.tech" und "complyo.tech/" sollen gleich behandelt werden
+      // URLs wie "complyo.de" und "complyo.de/" sollen gleich behandelt werden
       if (urlObj.pathname && urlObj.pathname !== '/' && urlObj.pathname !== '') {
         normalized += urlObj.pathname.replace(/\/+$/, '');
       }
@@ -204,14 +204,11 @@ export default function WebsiteScanner() {
     try {
       // Normalisiere URL
       const normalizedUrl = normalizeUrl(url);
-      console.log('🔗 Original URL:', url);
-      console.log('✅ Normalisierte URL:', normalizedUrl);
 
       // API-Analyse durchführen
       const result = await complianceApi.analyzeWebsite(normalizedUrl);
       const apiData: any = result;
       
-      console.log('📡 API Response:', apiData);
       
       // API liefert risk_categories[] — validieren
       const categories: any[] = Array.isArray(apiData.risk_categories) ? apiData.risk_categories : [];
@@ -271,6 +268,9 @@ export default function WebsiteScanner() {
         overallScore: backendScore,
         fineRisk,
         pillars: pillarScores,
+        // Phase 7.1 Regulierungs-Radar (Lead-Magnet)
+        bfsg: apiData.bfsg_report ?? null,
+        aiAct: apiData.ai_act_report ?? null,
       };
 
       const scanData = {
@@ -281,7 +281,6 @@ export default function WebsiteScanner() {
         issues: categories,
       };
       localStorage.setItem('last_scan_data', JSON.stringify(scanData));
-      console.log('✅ Scan-Daten gespeichert für Dashboard-Sync:', scanData.scan_id);
       
       setScanResult(transformedResult);
     } catch (err: any) {
@@ -382,7 +381,7 @@ export default function WebsiteScanner() {
               </button>
             </div>
             <p className="text-sm text-gray-400 mt-2 text-center sm:text-left">
-              ✓ Mit oder ohne https:// · ✓ Mit oder ohne www. · ✓ Einfach complyo.tech eingeben
+              ✓ Mit oder ohne https:// · ✓ Mit oder ohne www. · ✓ Einfach complyo.de eingeben
             </p>
           </form>
 
@@ -441,6 +440,54 @@ export default function WebsiteScanner() {
         {/* Scan Results */}
         {scanResult && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Regulierungs-Radar: BFSG + AI Act (Phase 7.1 Lead-Magnet) */}
+            {(scanResult.bfsg || scanResult.aiAct) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {scanResult.bfsg && (
+                  <div className={`rounded-2xl p-6 border-2 shadow-xl ${scanResult.bfsg.critical_issues > 0 ? 'bg-red-50 border-red-300' : 'bg-white border-gray-200'}`}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-2xl">♿</span>
+                      <h3 className="text-lg font-bold text-gray-900">BFSG-Check</h3>
+                      <span className="ml-auto text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-800">
+                        gilt seit 28.06.2025
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-700 mb-3">{scanResult.bfsg.scope_note}</p>
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className={`font-bold ${scanResult.bfsg.critical_issues > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {scanResult.bfsg.critical_issues} kritische Probleme
+                      </span>
+                      <span className="text-gray-600">{scanResult.bfsg.warning_issues} Warnungen</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-3">{scanResult.bfsg.enforcement_note}</p>
+                  </div>
+                )}
+                {scanResult.aiAct && scanResult.aiAct.ai_systems_detected > 0 && (
+                  <div className={`rounded-2xl p-6 border-2 shadow-xl ${scanResult.aiAct.action_needed ? 'bg-red-50 border-red-300' : 'bg-white border-gray-200'}`}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-2xl">🤖</span>
+                      <h3 className="text-lg font-bold text-gray-900">AI-Act-Transparenz</h3>
+                      <span className="ml-auto text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-800">
+                        Art. 50 KI-VO
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-700 mb-3">
+                      {scanResult.aiAct.ai_systems_detected} KI-/Chat-System(e) erkannt
+                      {scanResult.aiAct.providers?.length > 0 && (
+                        <>: {scanResult.aiAct.providers.map((p: any) => p.provider).join(', ')}</>
+                      )}
+                    </p>
+                    <p className={`text-sm font-semibold ${scanResult.aiAct.action_needed ? 'text-red-600' : 'text-green-600'}`}>
+                      {scanResult.aiAct.action_needed
+                        ? 'Transparenzhinweis fehlt offenbar — Handlungsbedarf'
+                        : 'Kein unmittelbarer Handlungsbedarf erkannt'}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-3">{scanResult.aiAct.fines_note}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Overall Score Card */}
             <div className="bg-white rounded-2xl p-8 border-2 border-gray-200 shadow-xl">
               <div className="flex flex-col md:flex-row items-center justify-between gap-6">

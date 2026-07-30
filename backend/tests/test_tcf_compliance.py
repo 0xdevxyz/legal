@@ -148,9 +148,12 @@ class TestTCStringValidation:
     def test_invalid_tc_string_short(self):
         """Test: Zu kurzer TC String"""
         result = validate_tc_string_format("ABC123")
-        
+
         assert result["valid"] == False
-        assert "zu kurz" in result["errors"][0].lower()
+        # "ABC123" verletzt zwei Regeln (kein 'C'-Prefix UND zu kurz); der
+        # Validator meldet beide. Die Reihenfolge ist nicht Teil des Kontrakts,
+        # daher über alle Fehler prüfen statt starr auf errors[0].
+        assert any("zu kurz" in e.lower() for e in result["errors"]), result["errors"]
 
 
 class TestVendorAnalyzer:

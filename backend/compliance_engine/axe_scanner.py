@@ -12,14 +12,22 @@ Features:
 import asyncio
 import json
 import logging
+import os
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# axe-core CDN URL (wird in Playwright injiziert)
-AXE_CORE_CDN = "https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.4/axe.min.js"
+# axe-core wird lokal gebundelt und zur Scan-Zeit injiziert — kein externes CDN
+# (SPOF vermieden; vendored axe-core 4.11.4).
+_AXE_CORE_PATH = os.path.join(os.path.dirname(__file__), "vendor", "axe.min.js")
+try:
+    with open(_AXE_CORE_PATH, "r", encoding="utf-8") as _axe_f:
+        AXE_CORE_JS = _axe_f.read()
+except OSError as _axe_err:  # pragma: no cover - Deploy-Fehlkonfiguration
+    AXE_CORE_JS = ""
+    logger.error(f"axe-core Bundle nicht gefunden unter {_AXE_CORE_PATH}: {_axe_err}")
 
 
 # =============================================================================
@@ -256,11 +264,22 @@ class AxeScanner:
             page = await browser.new_page()
             
             try:
-                # Lade Seite
-                await page.goto(url, timeout=timeout, wait_until="networkidle")
+                # Seite laden. "networkidle" ist bewusst NICHT das primaere
+                # Kriterium: Seiten mit dauerhaftem Polling, Chat-Widgets oder
+                # Werbung erreichen nie Netzwerkruhe und liefen damit garantiert
+                # in den Timeout ("Timeout 30000ms exceeded"). DOM-ready reicht
+                # fuer axe; danach geben wir Netzwerkruhe eine kurze Chance,
+                # ohne den Scan daran scheitern zu lassen.
+                await page.goto(url, timeout=timeout, wait_until="domcontentloaded")
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=5000)
+                except Exception:
+                    # Kein Fehler: die Seite laedt dauerhaft nach — axe laeuft
+                    # auf dem Stand von jetzt.
+                    logger.info(f"axe-core: {url} erreicht keine Netzwerkruhe — scanne den aktuellen Stand")
                 
-                # Injiziere axe-core
-                await page.add_script_tag(url=AXE_CORE_CDN)
+                # Injiziere axe-core (lokal gebundelt)
+                await page.add_script_tag(content=AXE_CORE_JS)
                 
                 # Warte kurz auf Script-Laden
                 await page.wait_for_function("typeof axe !== 'undefined'", timeout=5000)

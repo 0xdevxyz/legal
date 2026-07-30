@@ -9,15 +9,19 @@ Website-Prüfung werden. Dieser Generator nimmt eine erkannte Gesetzesänderung,
 lässt das LLM sie in eine deklarative `compliance_checks`-Definition übersetzen
 (sofern sie dem "required_element"-Muster folgt) und legt sie an.
 
-Sicherheits-Gate (Testphase): Neue Auto-Checks landen als `pending_review` und
-werden erst durch das Admin-GO scharf geschaltet. Über das Env-Flag
-AUTO_ACTIVATE_GENERATED_CHECKS=true entfällt das Review (voll automatisch).
+Sicherheits-Gate: Neue Auto-Checks landen als `pending_review` und werden erst
+durch das Admin-GO scharf geschaltet. Über das Env-Flag
+AUTO_ACTIVATE_GENERATED_CHECKS=true entfällt das Review für unkritische Checks
+(voll automatisch). Ausnahme (Safety-Governor): Checks mit severity=critical
+bleiben IMMER `pending_review` — ein False-Positive trifft Kunden dort am
+härtesten, daher nie ohne menschliche Freigabe.
 """
 
 import os
 import re
 import json
 import logging
+from difflib import SequenceMatcher
 from typing import Dict, Any, Optional, Callable, Awaitable
 
 logger = logging.getLogger(__name__)
@@ -124,6 +128,99 @@ def _auto_activate() -> bool:
     return os.getenv("AUTO_ACTIVATE_GENERATED_CHECKS", "false").lower() in ("1", "true", "yes")
 
 
+# --------------------------------------------------------------------------
+# Themen-Dedup
+# --------------------------------------------------------------------------
+# Der Monitor recherchiert mit einem rollierenden 30-Tage-Fenster: dieselbe
+# Pflicht (z.B. AI-Act-Kennzeichnung ab 02.08.2026) wird an vielen Tagen erneut
+# gemeldet und bekommt jedes Mal eine neue legal_updates.id. Die bisherige
+# Idempotenz griff nur über source_legal_update_id und den exakten Slug — das
+# LLM formuliert den Slug aber jedes Mal etwas anders. Ergebnis waren 11 aktive
+# Prüfungen für ein und dieselbe Pflicht, die ein Kunde alle einzeln als Befund
+# sah. Diese Sperre vergleicht deshalb das THEMA, nicht den String.
+
+_SLUG_STOPWORDS = {
+    "fehlt", "fehlend", "vorhanden", "erforderlich", "required", "pflicht",
+    "website", "websites", "webseite", "seite", "neu", "neue", "und", "der",
+    "die", "das", "fuer", "für", "auf", "bei", "von",
+}
+
+# Beide Schwellen müssen greifen, damit zwei Prüfungen als dasselbe Thema gelten.
+# Gegen die 131 aktiven Checks vom 29.07.2026 kalibriert: Slug allein ab 0.5 zieht
+# fachlich verschiedene Pflichten zusammen (z.B. "netzdg-transparenzbericht-*" mit
+# "netzdg-meldesystem-*"); Titel-Ähnlichkeit allein scheitert an der deutschen
+# Flexion ("KI-generierter Inhalte" vs. "KI-generierten Inhalten").
+_SLUG_SIMILARITY_THRESHOLD = 0.6
+_TITLE_SIMILARITY_THRESHOLD = 0.6
+
+
+def _slug_tokens(slug: str) -> set:
+    return {
+        t for t in re.split(r"[-_\s]+", (slug or "").lower())
+        if len(t) >= 2 and t not in _SLUG_STOPWORDS
+    }
+
+
+def _jaccard(a: set, b: set) -> float:
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
+
+
+def _normalize_title(title: str) -> str:
+    text = (title or "").lower()
+    for umlaut, replacement in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
+        text = text.replace(umlaut, replacement)
+    return re.sub(r"[^a-z0-9 ]", " ", text)
+
+
+def _norm_refs(legal_basis: str) -> set:
+    """Zieht Norm-Nummern aus der Rechtsgrundlage ('Art. 50', '§ 25')."""
+    return set(re.findall(r"(?:art(?:ikel)?\.?|§)\s*(\d+[a-z]?)", (legal_basis or "").lower()))
+
+
+def _is_same_topic(spec: Dict[str, Any], existing: Dict[str, Any]) -> bool:
+    """Prüft, ob `spec` fachlich dieselbe Pflicht abdeckt wie ein bestehender Check."""
+    if _jaccard(_slug_tokens(spec.get("slug", "")),
+                _slug_tokens(existing.get("slug", ""))) < _SLUG_SIMILARITY_THRESHOLD:
+        return False
+
+    title_similarity = SequenceMatcher(
+        None,
+        _normalize_title(spec.get("title", "")),
+        _normalize_title(existing.get("title", "")),
+    ).ratio()
+    if title_similarity < _TITLE_SIMILARITY_THRESHOLD:
+        return False
+
+    # Letzter Filter: verschiedene Normen = verschiedene Pflichten, auch wenn
+    # Slug und Titel fast gleich klingen. AI Act Art. 50 (Kennzeichnung
+    # KI-generierter Inhalte) ist NICHT Art. 13 (Hochrisiko-Transparenz) —
+    # ohne diesen Vergleich hätte der Guard die zweite Pflicht unterdrückt.
+    # Fehlt auf einer Seite die Normangabe, entscheiden Slug und Titel allein.
+    new_refs = _norm_refs(spec.get("legal_basis", ""))
+    old_refs = _norm_refs(existing.get("legal_basis", ""))
+    if new_refs and old_refs and new_refs != old_refs:
+        return False
+
+    return True
+
+
+async def _find_topic_duplicate(conn, spec: Dict[str, Any]) -> Optional[str]:
+    """Gibt den Slug eines bestehenden Checks zurück, der dasselbe Thema abdeckt."""
+    rows = await conn.fetch(
+        """
+        SELECT slug, title, legal_basis
+        FROM compliance_checks
+        WHERE status IN ('active', 'pending_review')
+        """
+    )
+    for row in rows:
+        if _is_same_topic(spec, dict(row)):
+            return row["slug"]
+    return None
+
+
 async def generate_check_for_legal_update(
     db_pool,
     legal_update: Dict[str, Any],
@@ -188,9 +285,28 @@ async def generate_check_for_legal_update(
         return result
 
     status = "active" if _auto_activate() else "pending_review"
+    # Safety-Governor: kritische Auto-Checks nie ungereviewt scharf schalten.
+    # Ein False-Positive bei einem critical-Check trifft Kunden am haertesten
+    # (roter Score-Einbruch, Fehlalarm). Selbst bei AUTO_ACTIVATE_GENERATED_CHECKS
+    # landen sie in der Admin-Review-Queue; /checks/{id}/activate gibt das finale GO.
+    if status == "active" and spec.get("severity") == "critical":
+        status = "pending_review"
+        logger.info(
+            f"check_generator: {spec.get('slug')} ist critical -> trotz "
+            f"Auto-Activate auf pending_review (Safety-Governor)"
+        )
 
     try:
         async with db_pool.acquire() as conn:
+            duplicate_of = await _find_topic_duplicate(conn, spec)
+            if duplicate_of:
+                logger.info(
+                    f"check_generator: #{update_id} übersprungen — Thema bereits "
+                    f"abgedeckt durch '{duplicate_of}'"
+                )
+                result["reason"] = f"topic already covered by '{duplicate_of}'"
+                return result
+
             inserted = await conn.fetchval(
                 """
                 INSERT INTO compliance_checks

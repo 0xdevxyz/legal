@@ -18,7 +18,8 @@ from pydantic import BaseModel, Field
 
 from legal_text_generator import LegalTextGenerator, DocumentType, get_legal_text_generator
 from legal_disclaimer import DISCLAIMER_LONG, DISCLAIMER_SHORT
-from auth_routes import get_current_user
+from dependencies import get_current_user
+from dependencies import rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +243,7 @@ async def get_legal_text(
     )
 
 
-@router.post("/{doc_type}/generate", response_model=LegalTextResponse)
+@router.post("/{doc_type}/generate", response_model=LegalTextResponse, dependencies=[Depends(rate_limit("legal_generate", 5, 60))])
 async def generate_legal_text(
     doc_type: str,
     body: GenerateRequest,
@@ -279,7 +280,7 @@ async def generate_legal_text(
             raise HTTPException(status_code=400, detail="Unbekannter Dokumenttyp")
     except Exception as e:
         logger.error(f"Generierung fehlgeschlagen ({doc_type}, user={user_id}): {e}")
-        raise HTTPException(status_code=500, detail=f"Generierung fehlgeschlagen: {str(e)}")
+        raise HTTPException(status_code=500, detail="Generierung fehlgeschlagen")
 
     return LegalTextResponse(
         document_id=result.document_id,
@@ -316,7 +317,7 @@ async def get_legal_text_history(
     }
 
 
-@router.get("/{doc_type}/preview")
+@router.get("/{doc_type}/preview", dependencies=[Depends(rate_limit("legal_preview", 10, 60))])
 async def preview_legal_text(
     doc_type: str,
     company_name: str = Query(...),
@@ -359,7 +360,8 @@ async def preview_legal_text(
         else:
             raise HTTPException(status_code=400, detail="Unbekannter Dokumenttyp")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Preview fehlgeschlagen: {str(e)}")
+        logger.exception("Preview fehlgeschlagen")
+        raise HTTPException(status_code=500, detail="Preview fehlgeschlagen")
 
     return {
         "document_type": doc_type,

@@ -290,7 +290,7 @@ async def create_checkout_session(
         
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error creating checkout: {e}")
-        raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Stripe error")
     except Exception as e:
         logger.error(f"Error creating checkout: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -347,7 +347,7 @@ async def create_portal_session(
         
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error creating portal: {e}")
-        raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Stripe error")
     except Exception as e:
         logger.error(f"Error creating portal: {e}")
         raise HTTPException(status_code=500, detail=str(e))

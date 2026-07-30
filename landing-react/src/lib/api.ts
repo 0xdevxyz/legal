@@ -30,7 +30,7 @@ api.interceptors.response.use(
 
 /**
  * Normalisiert URLs zu vollständigen https:// URLs
- * Akzeptiert: https://, http://, www., nur domain (z.B. complyo.tech)
+ * Akzeptiert: https://, http://, www., nur domain (z.B. complyo.de)
  * Entfernt trailing slashes für saubere URLs
  */
 const normalizeUrl = (input: string): string => {
@@ -89,7 +89,6 @@ export const complianceApi = {
   analyzeWebsite: async (url: string): Promise<ComplianceAnalysis> => {
     // Normalisiere URL vor dem API-Call
     const normalizedUrl = normalizeUrl(url);
-    console.log('🔗 Landing API - Original:', url, '→ Normalized:', normalizedUrl);
     // ✅ FIX: Verwende /api/analyze-preview für Landing-Seite (keine Auth erforderlich)
     const response = await api.post<ComplianceAnalysis>('/api/analyze-preview', { url: normalizedUrl });
     return response.data;

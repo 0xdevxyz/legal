@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: Complyo Compliance
- * Plugin URI: https://complyo.tech
- * Description: DSGVO-konformes Cookie-Banner und Accessibility-Widget. Konfiguration über app.complyo.tech.
- * Version: 2.5.0
+ * Plugin URI: https://complyo.de
+ * Description: DSGVO-konformes Cookie-Banner und Accessibility-Widget. Konfiguration über app.complyo.de.
+ * Version: 2.6.0
  * Author: Complyo
- * Author URI: https://complyo.tech
+ * Author URI: https://complyo.de
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: complyo-compliance
@@ -18,9 +18,9 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('COMPLYO_VERSION',        '2.5.0');
+define('COMPLYO_VERSION',        '2.6.0');
 define('COMPLYO_API_BASE',       'https://api.complyo.de');
-define('COMPLYO_APP_URL',        'https://app.complyo.tech');
+define('COMPLYO_APP_URL',        'https://app.complyo.de');
 define('COMPLYO_PLUGIN_DIR',     plugin_dir_path(__FILE__));
 define('COMPLYO_PLUGIN_URL',     plugin_dir_url(__FILE__));
 define('COMPLYO_PLUGIN_BASE',    plugin_basename(__FILE__));
@@ -28,7 +28,10 @@ define('COMPLYO_OPTION_SITE_ID', 'complyo_site_id');
 define('COMPLYO_OPTION_COOKIE',  'complyo_enable_cookie_banner');
 define('COMPLYO_OPTION_A11Y',    'complyo_enable_accessibility');
 define('COMPLYO_OPTION_TCF',     'complyo_enable_tcf');
-define('COMPLYO_OPTION_SCANNER', 'complyo_enable_scanner');
+// Hinweis: Der frühere Schalter COMPLYO_OPTION_SCANNER ('complyo_enable_scanner')
+// wurde entfernt – er wurde nirgends ausgewertet (kein Scanner läuft im Plugin;
+// das Cookie-Scanning ist ein server-seitiger Backend-Dienst). Ein Schalter, der
+// nichts gated, führt Nutzer in die Irre.
 define('COMPLYO_OPTION_LOCAL_FONTS', 'complyo_enable_local_fonts');
 define('COMPLYO_OPTION_INLINE_BLOCKER', 'complyo_enable_inline_blocker');
 define('COMPLYO_OPTION_A11Y_STATEMENT', 'complyo_a11y_statement_url');
@@ -107,9 +110,6 @@ class Complyo_Compliance {
         }
         if (get_option(COMPLYO_OPTION_TCF) === false) {
             update_option(COMPLYO_OPTION_TCF, '0');
-        }
-        if (get_option(COMPLYO_OPTION_SCANNER) === false) {
-            update_option(COMPLYO_OPTION_SCANNER, '1');
         }
         if (get_option(COMPLYO_OPTION_LOCAL_FONTS) === false) {
             update_option(COMPLYO_OPTION_LOCAL_FONTS, '0');
@@ -318,7 +318,6 @@ class Complyo_Compliance {
             'privacy-manager.js',
             'accessibility.js',
             'api.complyo.de',
-            'api.complyo.tech',
         );
     }
 
@@ -387,7 +386,6 @@ class Complyo_Compliance {
         register_setting('complyo_settings_group', COMPLYO_OPTION_COOKIE,   $args_flag);
         register_setting('complyo_settings_group', COMPLYO_OPTION_A11Y,     $args_flag);
         register_setting('complyo_settings_group', COMPLYO_OPTION_TCF,      $args_flag);
-        register_setting('complyo_settings_group', COMPLYO_OPTION_SCANNER,  $args_flag);
         register_setting('complyo_settings_group', COMPLYO_OPTION_LOCAL_FONTS, $args_flag);
         register_setting('complyo_settings_group', COMPLYO_OPTION_INLINE_BLOCKER, $args_flag);
         register_setting('complyo_settings_group', COMPLYO_OPTION_A11Y_STATEMENT, array(
@@ -424,7 +422,6 @@ class Complyo_Compliance {
         $a11y_source_fix = get_option(COMPLYO_OPTION_A11Y_SOURCE_FIX, '0');
         $a11y_last_sync  = (int) get_option('complyo_a11y_last_sync', 0);
         $enable_tcf    = get_option(COMPLYO_OPTION_TCF, '0');
-        $enable_scanner = get_option(COMPLYO_OPTION_SCANNER, '1');
         $enable_fonts   = get_option(COMPLYO_OPTION_LOCAL_FONTS, '0');
         $enable_inline  = get_option(COMPLYO_OPTION_INLINE_BLOCKER, '0');
         $fonts_count    = Complyo_Local_Fonts::get_instance()->localized_count();
@@ -523,21 +520,6 @@ class Complyo_Compliance {
                                     </a>
                                     <span class="complyo-notice-path"><?php esc_html_e('AdSense → Datenschutz und Nachrichten → Nachricht erstellen', 'complyo-compliance'); ?></span>
                                 </div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row"><?php esc_html_e('Cookie-Scanner', 'complyo-compliance'); ?></th>
-                            <td>
-                                <label>
-                                    <input type="checkbox"
-                                           name="<?php echo esc_attr(COMPLYO_OPTION_SCANNER); ?>"
-                                           value="1"
-                                           <?php checked($enable_scanner, '1'); ?> />
-                                    <?php esc_html_e('Automatisches Cookie-Scanning aktivieren', 'complyo-compliance'); ?>
-                                </label>
-                                <p class="description">
-                                    <?php esc_html_e('Complyo scannt Ihre Website automatisch auf neue Cookies und aktualisiert die Cookie-Deklaration.', 'complyo-compliance'); ?>
-                                </p>
                             </td>
                         </tr>
                         <tr>

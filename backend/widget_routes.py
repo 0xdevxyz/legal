@@ -19,6 +19,10 @@ from accessibility_patch_generator import AccessibilityPatchGenerator
 import aiohttp
 from accessibility_fix_saver import AccessibilityFixSaver
 from dependencies import get_current_user, get_db
+# Gemeinsame Ownership-Prüfung (definiert in alt_text_routes, Quelle:
+# cookie_compliance_routes.get_user_site_ids). Kein Zyklus: alt_text_routes
+# importiert widget_routes nicht.
+from alt_text_routes import require_site_ownership
 
 router = APIRouter()
 
@@ -49,42 +53,12 @@ class WidgetAnalyticsRequest(BaseModel):
     session_id: str
 
 
-@router.get("/api/widgets/cookie-consent.js")
-async def serve_cookie_consent_widget(request: Request):
-    """
-    Serve the Cookie Consent Widget JavaScript (Legacy v1)
-    """
-    widget_path = os.path.join(WIDGET_DIR, 'cookie_consent.js')
-    
-    if not os.path.exists(widget_path):
-        raise HTTPException(status_code=404, detail="Widget not found")
-    
-    # Read widget content
-    with open(widget_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    headers = {
-        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=3600',
-        'Access-Control-Allow-Origin': '*',
-        'ETag': f'"{hashlib.md5(content.encode()).hexdigest()}"',
-        'Vary': 'Accept-Encoding',
-    }
-
-    accept_encoding = request.headers.get('Accept-Encoding', '')
-    if 'gzip' in accept_encoding:
-        compressed = gzip.compress(content.encode('utf-8'))
-        headers['Content-Encoding'] = 'gzip'
-        return Response(
-            content=compressed,
-            media_type='application/javascript',
-            headers=headers,
-        )
-
-    return Response(
-        content=content,
-        media_type='application/javascript',
-        headers=headers,
-    )
+# Hinweis: Die frühere Route GET /api/widgets/cookie-consent.js (Legacy v1) wurde
+# entfernt. Sie las die Datei backend/widgets/cookie_consent.js, die nicht (mehr)
+# existiert → jeder Abruf lieferte 404. Kein Konsument nutzte diese URL (belegt per
+# grep über backend/, dashboard-react/src, wordpress-plugin/, joomla-plugin/,
+# channels/ – 0 Treffer außer der Route selbst). Der aktuelle Banner wird über
+# /api/widgets/cookie-compliance.js bzw. /privacy-manager.js ausgeliefert (siehe unten).
 
 @router.get("/api/widgets/privacy-manager.js")
 @router.get("/api/widgets/cookie-compliance.js")  # Legacy support
@@ -106,23 +80,37 @@ async def serve_cookie_compliance_widget(request: Request, site_id: Optional[str
         # Load both widgets
         banner_path = os.path.join(WIDGET_DIR, 'cookie_banner_v2.js')
         blocker_path = os.path.join(WIDGET_DIR, 'content_blocker.js')
-        
+        # i18n: 17-Sprachen-Übersetzungen, die window.COMPLYO_TRANSLATIONS setzen.
+        # Der Banner liest window.COMPLYO_TRANSLATIONS (cookie_banner_v2.js), das ohne
+        # diese Datei nie gesetzt wurde → Mehrsprachigkeit war tot. Muss VOR dem Banner
+        # ausgeliefert werden, damit die globale Variable beim Init bereitsteht.
+        translations_path = os.path.join(WIDGET_DIR, 'locales', 'translations.js')
+
         if not os.path.exists(banner_path) or not os.path.exists(blocker_path):
             raise HTTPException(status_code=404, detail="Widget files not found")
-        
+
         # Read widgets
         with open(banner_path, 'r', encoding='utf-8') as f:
             banner_code = f.read()
-        
+
         with open(blocker_path, 'r', encoding='utf-8') as f:
             blocker_code = f.read()
-        
+
+        # Übersetzungen optional laden (fehlende Datei darf das Widget nicht brechen)
+        translations_code = ''
+        if os.path.exists(translations_path):
+            with open(translations_path, 'r', encoding='utf-8') as f:
+                translations_code = f.read()
+
         # Combine widgets
         combined_code = f"""/**
  * Complyo Cookie Compliance Widget - Combined Bundle
  * Version: 2.0.0
  * © 2025 Complyo - All rights reserved
  */
+
+/* ========== i18n Translations (sets window.COMPLYO_TRANSLATIONS before banner init) ========== */
+{translations_code}
 
 /* ========== Content Blocker (loads first to block before page renders) ========== */
 {blocker_code}
@@ -158,7 +146,7 @@ async def serve_cookie_compliance_widget(request: Request, site_id: Optional[str
         
     except Exception as e:
         print(f"Error serving cookie compliance widget: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to serve widget: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to serve widget")
 
 
 @router.get("/api/widgets/accessibility.js")
@@ -751,26 +739,45 @@ async def generate_accessibility_patches(
         
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Generieren der Patches: {str(e)}"
+            detail="Fehler beim Generieren der Patches"
         )
 
 
 @router.get("/api/accessibility/patches/download/{download_id}")
-async def download_accessibility_patches(download_id: str):
+async def download_accessibility_patches(
+    download_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """
     Lädt generierte Barrierefreiheits-Patches herunter
-    
+
+    Bis 2026-07-17 ohne jede Auth erreichbar, bei erratbarer download_id
+    ("{site_id}_{unix_ts}") — fremde Patch-ZIPs waren damit abrufbar. Jetzt:
+    Login + Ownership auf der im download_id enthaltenen site_id.
+
     Args:
         download_id: Download-Identifier (von generate-Endpoint)
-        
+
     Returns:
         ZIP-Datei mit Patches
     """
+    import re as _re
+
+    # download_id landet in einem Dateinamen — strikt validieren, sonst ist
+    # "../../.." ein Path-Traversal.
+    if not _re.fullmatch(r"[A-Za-z0-9-]+_\d+", download_id):
+        raise HTTPException(status_code=404, detail="Download nicht gefunden oder abgelaufen")
+
+    # Ownership: site_id ist der Teil vor dem letzten "_" (site_ids sind
+    # hostname-basiert und enthalten keine Unterstriche).
+    site_id = download_id.rsplit("_", 1)[0]
+    await require_site_ownership(site_id, current_user)
+
     try:
         import tempfile
         import os as _os
         tmp_path = _os.path.join(tempfile.gettempdir(), f"complyo_patches_{download_id}.zip")
-        
+
         if not _os.path.exists(tmp_path):
             raise HTTPException(status_code=404, detail="Download nicht gefunden oder abgelaufen")
         
@@ -797,7 +804,7 @@ async def download_accessibility_patches(download_id: str):
         
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Download: {str(e)}"
+            detail="Fehler beim Download"
         )
 
 

@@ -115,7 +115,7 @@ class AccessibilityHandler:
             config_json = json.dumps(widget_config, ensure_ascii=False)
             integration_code = f'''<!-- Complyo Accessibility Widget -->
 <script 
-  src="https://widgets.complyo.tech/accessibility-v2.0.0.min.js" 
+  src="https://widgets.complyo.de/accessibility-v2.0.0.min.js" 
   data-site-id="{context.get("site_id", "demo")}"
   data-config='{config_json}'
   async
@@ -129,7 +129,7 @@ class AccessibilityHandler:
             "widget_type": "accessibility",
             "integration_code": integration_code,
             "configuration": widget_config,
-            "preview_url": f"https://widgets.complyo.tech/preview/accessibility?site={context.get('site_id', 'demo')}",
+            "preview_url": f"https://widgets.complyo.de/preview/accessibility?site={context.get('site_id', 'demo')}",
             "features": [
                 "Kontrast-Anpassung",
                 "Schriftgrößen-Kontrolle",

@@ -612,7 +612,7 @@ async def google_oauth_callback(code: str, state: str):
         
         # Set HttpOnly cookie and redirect cleanly — never put tokens in URL fragments
         is_secure = os.getenv("ENVIRONMENT", "production") == "production"
-        frontend_url = os.getenv("FRONTEND_URL", "https://app.complyo.tech")
+        frontend_url = os.getenv("FRONTEND_URL", "https://app.complyo.de")
         response = RedirectResponse(url=f"{frontend_url}/auth/callback?provider=google&status=ok")
         response.set_cookie(
             key="access_token_once",
@@ -698,7 +698,7 @@ async def apple_oauth_callback(code: str, state: str):
         refresh_token = await auth_service.create_refresh_token(user['id'])
         
         is_secure = os.getenv("ENVIRONMENT", "production") == "production"
-        frontend_url = os.getenv("FRONTEND_URL", "https://app.complyo.tech")
+        frontend_url = os.getenv("FRONTEND_URL", "https://app.complyo.de")
         response = RedirectResponse(url=f"{frontend_url}/auth/callback?provider=apple&status=ok")
         response.set_cookie(
             key="access_token_once",
@@ -790,7 +790,7 @@ async def firebase_verify(request: FirebaseTokenRequest):
         logger.error(f"Firebase verification error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Firebase Authentifizierung fehlgeschlagen: {str(e)}"
+            detail="Firebase Authentifizierung fehlgeschlagen"
         )
 
 # ============= Health Check =============
@@ -811,7 +811,7 @@ async def auth_health():
 @limiter.limit("3/hour")
 async def reset_master_password(request: Request, admin_key: str = Query(..., alias="admin_key")):
     """
-    Admin Endpoint: Setzt das Passwort für master@complyo.tech zurück
+    Admin Endpoint: Setzt das Passwort für master@complyo.de zurück
 
     Query Parameter:
     - admin_key: Admin-Schlüssel (muss als ADMIN_KEY env var gesetzt sein)
@@ -837,7 +837,7 @@ async def reset_master_password(request: Request, admin_key: str = Query(..., al
             detail="Services not initialized"
         )
 
-    email = "master@complyo.tech"
+    email = "master@complyo.de"
     # Password must be provided via query param — never hardcoded
     new_password = os.getenv("MASTER_RESET_PASSWORD")
     if not new_password:
@@ -895,5 +895,5 @@ async def reset_master_password(request: Request, admin_key: str = Query(..., al
         logger.error(f"Error resetting master password: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to reset password: {str(e)}"
+            detail="Failed to reset password"
         )

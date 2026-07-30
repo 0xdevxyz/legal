@@ -13,9 +13,10 @@ Kein "Abmahnschutz"-Versprechen. Klarer Disclaimer auf allen Responses.
 import logging
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from legal_disclaimer import DISCLAIMER_SHORT
+from dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -40,17 +41,61 @@ def _classify_law_category(text: str) -> str:
     return "other"
 
 
+async def require_domain_access(domain: str, user_id: int) -> None:
+    """Ownership-Prüfung für `domain` (Muster: cookie_compliance_routes.require_site_access).
+
+    `/score` liest über ein ILIKE-Muster den letzten Scan zu einer beliebigen
+    Domain aus `scan_history` — inklusive der Issue-Liste, also einer fertigen
+    Schwachstellenkarte fremder Websites. Ohne Prüfung wäre der Endpunkt ein
+    Aufklärungswerkzeug gegen andere Complyo-Kunden.
+
+    Kein Unterschied zwischen "fremd" und "nicht getrackt" — sonst wird die
+    Fehlermeldung zum Domain-Scanner.
+    """
+    from dependencies import get_db_pool
+    db_pool = await get_db_pool()
+
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT 1 FROM tracked_websites
+            WHERE user_id = $1 AND (url ILIKE $2 OR url ILIKE $3)
+            LIMIT 1
+            """,
+            user_id,
+            f"%{domain}%",
+            f"{domain}%",
+        )
+    if not row:
+        logger.warning(f"User {user_id} denied risk-radar access to domain '{domain}'")
+        raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Domain")
+
+
+def _user_id_from(current_user: dict) -> int:
+    uid = current_user.get("user_id") or current_user.get("id")
+    if uid is None:
+        raise HTTPException(status_code=401, detail="Nicht authentifiziert")
+    return int(uid)
+
+
 @router.get("/score")
 async def get_risk_radar_score(
     domain: Optional[str] = Query(None),
-    user_id: Optional[int] = Query(None),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Aggregierter Risiko-Score mit Kategorien.
     Nutzt risk_calculator + scan_history für domainspezifische Scores.
+
+    Der frühere Query-Parameter `user_id` ist entfallen: Er wurde nie ausgewertet
+    und wäre als frei wählbarer Identitäts-Parameter ein IDOR-Einfallstor. Die
+    User-ID kommt aus dem JWT.
     """
     from dependencies import get_db_pool
     db_pool = await get_db_pool()
+
+    if domain:
+        await require_domain_access(domain, _user_id_from(current_user))
 
     categories = {
         "dsgvo": {"score": 0, "label": "DSGVO", "issues": []},
@@ -128,14 +173,18 @@ async def get_risk_radar_score(
 
 @router.get("/early-warnings")
 async def get_early_warnings(
-    user_id: Optional[int] = Query(None),
     severity_min: str = Query("low", description="Mindestseverity: info|low|medium|high|critical"),
     limit: int = Query(20, ge=1, le=100),
     unread_only: bool = Query(False),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Abmahnfallen-Frühwarnungen aus der Update-Pipeline.
     Klassifiziert durch ai_legal_classifier mit Severity-Filter.
+
+    Inhaltlich mandantenunabhängig (allgemeine Rechts-Updates), aber ein
+    kostenpflichtiges Produktfeature — daher Login-Pflicht. `user_id` als
+    Query-Parameter ist entfallen (wurde nie ausgewertet).
     """
     from dependencies import get_db_pool
     db_pool = await get_db_pool()
@@ -221,11 +270,15 @@ async def get_early_warnings(
 @router.get("/summary")
 async def get_risk_radar_summary(
     domain: Optional[str] = Query(None),
-    user_id: Optional[int] = Query(None),
+    current_user: dict = Depends(get_current_user),
 ):
     """Kompakte Zusammenfassung für Dashboard-Karte."""
-    score_data = await get_risk_radar_score(domain=domain, user_id=user_id)
-    warnings_data = await get_early_warnings(limit=5, severity_min="medium")
+    # Direktaufruf der Handler: Dependencies laufen dabei NICHT mit, deshalb wird
+    # current_user explizit durchgereicht (inkl. Ownership-Prüfung in /score).
+    score_data = await get_risk_radar_score(domain=domain, current_user=current_user)
+    warnings_data = await get_early_warnings(
+        limit=5, severity_min="medium", current_user=current_user
+    )
 
     critical_warnings = [w for w in warnings_data["warnings"] if w["severity"] in ["high", "critical"]]
 

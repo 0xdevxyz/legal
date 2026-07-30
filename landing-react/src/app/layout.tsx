@@ -21,11 +21,11 @@ export const metadata: Metadata = {
   keywords: 'DSGVO, TTDSG, Website Compliance, Rechtssicherheit, Barrierefreiheit, Cookie Banner',
   authors: [{ name: 'Complyo Team' }],
   robots: 'index, follow',
-  metadataBase: new URL('https://complyo.tech'),
+  metadataBase: new URL('https://complyo.de'),
   openGraph: {
     title: 'Complyo - Website Compliance & Rechtssicherheit',
     description: 'Von nicht-konform zu rechtssicher in 24 Stunden. DSGVO, TTDSG, Barrierefreiheit - KI-gestuetzte Compliance-Loesung fuer Ihr Unternehmen.',
-    url: 'https://complyo.tech',
+    url: 'https://complyo.de',
     siteName: 'Complyo',
     locale: 'de_DE',
     type: 'website',

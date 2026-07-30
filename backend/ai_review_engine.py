@@ -31,7 +31,7 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 _HEADERS = {
     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
     "Content-Type": "application/json",
-    "HTTP-Referer": "https://complyo.tech",
+    "HTTP-Referer": "https://complyo.de",
     "X-Title": "Complyo AI Review Engine",
 }
 

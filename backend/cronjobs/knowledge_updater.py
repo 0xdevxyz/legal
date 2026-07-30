@@ -85,6 +85,14 @@ async def run_knowledge_update():
         written_paths = writer.write_batch(classified_items)
         logger.info(f"  → {len(written_paths)} Dateien geschrieben")
 
+        logger.info("Schritt 3b: Compliance-Pattern aus eigenen Scans extrahieren...")
+        try:
+            from knowledge.pattern_extractor import PatternExtractor
+            pattern_paths = await PatternExtractor(db_pool).run()
+            logger.info(f"  → {len(pattern_paths)} Pattern-Dateien im Vault")
+        except Exception as e:
+            logger.warning(f"  → Pattern-Extraktion übersprungen: {e}")
+
         logger.info("Schritt 4/5: RAG-Index aktualisieren...")
         await retriever.refresh_index()
         logger.info("  → Index aktualisiert")

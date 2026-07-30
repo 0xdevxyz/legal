@@ -1,83 +1,55 @@
 #!/bin/bash
-# Install Crontab für RSS Feed Fetching, Knowledge Updater, TCF GVL Sync
+# Installiert die complyo-Cronjobs. Idempotent: vorhandene Eintraege werden nicht dupliziert.
+#
+# Ausfuehrungsmodelle:
+#   - fetch_news / legal_change_monitor / tcf_gvl_sync: laufen IM Backend-Container
+#     (docker exec), erben Secrets aus der Container-Umgebung.
+#   - knowledge_updater / eurlex_crawler: SCHREIBEN den Gesetzes-Vault. Der Vault ist
+#     in den Backend-Container nur read-only gemountet, daher laufen sie als
+#     eigener `docker run --rm` mit einem read-write Vault-Mount (gleiches Image,
+#     also gleiche Dependencies), damit die Schreibvorgaenge auf dem Host landen.
 
 set -e
 
-echo "📋 Installing Crontab for RSS Feed Fetching..."
+REPO="/home/clawd/saas/legal"
+ENV_FILE="$REPO/.env"
+VAULT="$REPO/knowledge"
 
-# Get the project directory
-PROJECT_DIR="/opt/projects/saas-project-2/backend"
-DATABASE_URL=$(grep DATABASE_URL /opt/projects/saas-project-2/.env | cut -d '=' -f2-)
-OPENROUTER_API_KEY=$(grep '^OPENROUTER_API_KEY' /opt/projects/saas-project-2/.env | cut -d '=' -f2-)
+DATABASE_URL=$(grep "^DATABASE_URL" "$ENV_FILE" | cut -d "=" -f2-)
+OPENROUTER_API_KEY=$(grep "^OPENROUTER_API_KEY" "$ENV_FILE" | cut -d "=" -f2-)
+OPENAI_API_KEY=$(grep "^OPENAI_API_KEY" "$ENV_FILE" | cut -d "=" -f2-)
 
-# Create crontab entry - news fetch
-CRON_JOB="0 6 * * * cd $PROJECT_DIR && DATABASE_URL='$DATABASE_URL' /usr/bin/python3 cronjobs/fetch_news.py >> /var/log/complyo-news-fetch.log 2>&1"
+IMAGE=$(docker inspect complyo-backend --format "{{.Config.Image}}")
+NETWORK=$(docker inspect complyo-postgres --format "{{range \$k,\$v := .NetworkSettings.Networks}}{{\$k}}{{end}}")
 
-# Create crontab entry - knowledge updater
-KNOWLEDGE_CRON="0 7 * * * cd $PROJECT_DIR && DATABASE_URL='$DATABASE_URL' OPENAI_API_KEY='$OPENAI_API_KEY' KNOWLEDGE_VAULT_PATH='/home/clawd/saas/legal/knowledge' /usr/bin/python3 cronjobs/knowledge_updater.py >> /var/log/complyo-knowledge-updater.log 2>&1"
+echo "Repo=$REPO Image=$IMAGE Network=$NETWORK"
 
-# Create crontab entry - TCF GVL sync (daily at 03:00)
-GVL_CRON="0 3 * * * cd $PROJECT_DIR && DATABASE_URL='$DATABASE_URL' /usr/bin/python3 cronjobs/tcf_gvl_sync.py >> /var/log/complyo-tcf-gvl-sync.log 2>&1"
+FETCH_NEWS_CRON="0 6 * * * docker exec complyo-backend python3 /app/cronjobs/fetch_news.py >> /var/log/complyo-news-fetch.log 2>&1"
 
-# Create crontab entry - Legal Change Monitor (daily at 05:00) — full pipeline incl. auto-generated checks
-# Läuft im Backend-Container; DATABASE_URL/OPENROUTER_API_KEY/AUTO_ACTIVATE_GENERATED_CHECKS
-# werden aus der Container-Umgebung (docker-compose environment) geerbt.
+KNOWLEDGE_CRON="0 7 * * * docker run --rm --network $NETWORK -e DATABASE_URL='$DATABASE_URL' -e OPENAI_API_KEY='$OPENAI_API_KEY' -e OPENROUTER_API_KEY='$OPENROUTER_API_KEY' -e KNOWLEDGE_VAULT_PATH=/data/knowledge -v $VAULT:/data/knowledge $IMAGE python3 cronjobs/knowledge_updater.py >> /var/log/complyo-knowledge-updater.log 2>&1"
+
+EURLEX_CRON="0 4 * * 1 docker run --rm -e KNOWLEDGE_VAULT_PATH=/data/knowledge -e EURLEX_MAX_AGE_DAYS=30 -v $VAULT:/data/knowledge $IMAGE python3 cronjobs/eurlex_crawler.py >> /var/log/complyo-eurlex.log 2>&1"
+
+GVL_CRON="0 3 * * * docker exec complyo-backend python3 /app/cronjobs/tcf_gvl_sync.py >> /var/log/complyo-tcf-gvl-sync.log 2>&1"
+
 LEGAL_MONITOR_CRON="0 5 * * * docker exec complyo-backend python3 /app/cronjobs/legal_change_monitor_cron.py >> /var/log/complyo-legal-monitor.log 2>&1"
 
-# Check if crontab entry already exists
-if crontab -l 2>/dev/null | grep -q "fetch_news.py"; then
-    echo "⚠️  Crontab entry already exists"
-    crontab -l 2>/dev/null | grep "fetch_news.py"
-else
-    # Add to crontab
-    (crontab -l 2>/dev/null || true; echo "$CRON_JOB") | crontab -
-    echo "✅ Crontab entry added:"
-    echo "   $CRON_JOB"
-fi
+add_job() {
+  local marker="$1"; local job="$2"; local logfile="$3"
+  if crontab -l 2>/dev/null | grep -qF "$marker"; then
+    echo "= vorhanden: $marker"
+  else
+    (crontab -l 2>/dev/null || true; echo "$job") | crontab -
+    [ -n "$logfile" ] && { touch "$logfile" 2>/dev/null || true; chmod 666 "$logfile" 2>/dev/null || true; }
+    echo "+ hinzugefuegt: $marker"
+  fi
+}
 
-if crontab -l 2>/dev/null | grep -q "knowledge_updater.py"; then
-    echo "⚠️  Knowledge updater crontab entry already exists"
-else
-    (crontab -l 2>/dev/null || true; echo "$KNOWLEDGE_CRON") | crontab -
-    echo "✅ Knowledge updater crontab entry added:"
-    echo "   $KNOWLEDGE_CRON"
-fi
+add_job "fetch_news.py"                 "$FETCH_NEWS_CRON"     "/var/log/complyo-news-fetch.log"
+add_job "cronjobs/knowledge_updater.py" "$KNOWLEDGE_CRON"      "/var/log/complyo-knowledge-updater.log"
+add_job "cronjobs/eurlex_crawler.py"    "$EURLEX_CRON"         "/var/log/complyo-eurlex.log"
+add_job "tcf_gvl_sync.py"               "$GVL_CRON"            "/var/log/complyo-tcf-gvl-sync.log"
+add_job "legal_change_monitor_cron.py"  "$LEGAL_MONITOR_CRON"  "/var/log/complyo-legal-monitor.log"
 
-if crontab -l 2>/dev/null | grep -q "tcf_gvl_sync.py"; then
-    echo "⚠️  TCF GVL sync crontab entry already exists"
-else
-    (crontab -l 2>/dev/null || true; echo "$GVL_CRON") | crontab -
-    sudo touch /var/log/complyo-tcf-gvl-sync.log
-    sudo chmod 666 /var/log/complyo-tcf-gvl-sync.log
-    echo "✅ TCF GVL sync crontab entry added (daily 03:00):"
-    echo "   $GVL_CRON"
-fi
-
-if crontab -l 2>/dev/null | grep -q "legal_change_monitor_cron.py"; then
-    echo "⚠️  Legal Change Monitor crontab entry already exists"
-else
-    (crontab -l 2>/dev/null || true; echo "$LEGAL_MONITOR_CRON") | crontab -
-    sudo touch /var/log/complyo-legal-monitor.log
-    sudo chmod 666 /var/log/complyo-legal-monitor.log
-    echo "✅ Legal Change Monitor crontab entry added (daily 05:00):"
-    echo "   $LEGAL_MONITOR_CRON"
-fi
-
-# Create log files
-sudo touch /var/log/complyo-news-fetch.log
-sudo chmod 666 /var/log/complyo-news-fetch.log
-sudo touch /var/log/complyo-knowledge-updater.log
-sudo chmod 666 /var/log/complyo-knowledge-updater.log
-
-echo ""
-echo "✅ Crontab installation complete!"
-echo ""
-echo "ℹ️  Cronjobs:"
-echo "   03:00 - TCF GVL Sync (IAB Global Vendor List)"
-echo "   05:00 - Legal Change Monitor (auto-detect laws → auto-generate checks)"
-echo "   06:00 - RSS Feed Fetch"
-echo "   07:00 - Knowledge Updater"
-echo ""
-echo "To view crontab:"
-echo "  crontab -l"
-
+echo "Fertig. Aktuelle complyo-Cronjobs:"
+crontab -l 2>/dev/null | grep -E "complyo|cronjobs/" || true

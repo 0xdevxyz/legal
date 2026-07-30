@@ -51,6 +51,19 @@ class UserActionType(str, Enum):
     CONTACT_SUPPORT = "contact_support"
 
 
+# Feedback-Typen, die als negativ zaehlen (Ausloeser der Lern-Adaption).
+# MUSS zu den real geschriebenen FeedbackType-Werten passen. Frueher wurde
+# auf 'rejected'/'action_ignored'/'incorrect' geprueft — Werte, die der
+# Schreibpfad nie erzeugt, sodass der Trigger nie feuerte.
+NEGATIVE_FEEDBACK_TYPES = [
+    FeedbackType.IMPLICIT_IGNORE.value,
+    FeedbackType.IMPLICIT_DISMISS.value,
+    FeedbackType.EXPLICIT_NOT_HELPFUL.value,
+    FeedbackType.EXPLICIT_WRONG.value,
+    FeedbackType.ACTION_SKIPPED.value,
+]
+
+
 @dataclass
 class FeedbackEvent:
     """Ein Feedback-Event"""
@@ -429,9 +442,9 @@ class AIFeedbackLearning:
                     """
                     SELECT COUNT(*) FROM ai_classification_feedback
                     WHERE created_at > $1
-                    AND feedback_type IN ('rejected', 'action_ignored', 'incorrect')
+                    AND feedback_type = ANY($2::text[])
                     """,
-                    since
+                    since, NEGATIVE_FEEDBACK_TYPES
                 )
                 if negative_count >= 10:
                     logger.info(f"🔄 Learning-Trigger: {negative_count} negative Feedbacks → starte Adaption")
@@ -452,15 +465,15 @@ class AIFeedbackLearning:
                 SELECT
                     acl.risk_category,
                     COUNT(*) AS total,
-                    SUM(CASE WHEN f.feedback_type IN ('rejected','action_ignored') THEN 1 ELSE 0 END) AS negative
+                    SUM(CASE WHEN f.feedback_type = ANY($2::text[]) THEN 1 ELSE 0 END) AS negative
                 FROM ai_compliance_logs acl
                 JOIN ai_classification_feedback f ON f.classification_id = acl.id
                 WHERE f.created_at > $1
                 GROUP BY acl.risk_category
                 HAVING COUNT(*) >= 3
-                ORDER BY (SUM(CASE WHEN f.feedback_type IN ('rejected','action_ignored') THEN 1 ELSE 0 END)::float / COUNT(*)) DESC
+                ORDER BY (SUM(CASE WHEN f.feedback_type = ANY($2::text[]) THEN 1 ELSE 0 END)::float / COUNT(*)) DESC
                 """,
-                since
+                since, NEGATIVE_FEEDBACK_TYPES
             )
             for row in rows:
                 negative_rate = row['negative'] / row['total'] if row['total'] > 0 else 0

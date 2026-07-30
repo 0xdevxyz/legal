@@ -2,7 +2,7 @@
  * Utility-Funktionen für Site-ID Generierung
  * 
  * Wandelt Website-URLs in konsistente Site-IDs um
- * z.B. "https://www.complyo.tech" -> "complyo-tech"
+ * z.B. "https://www.complyo.de" -> "complyo-tech"
  */
 
 /**
@@ -57,7 +57,7 @@ export function isValidSiteId(siteId: string): boolean {
  * Extrahiert die Domain aus einer Site-ID zurück
  * 
  * @param siteId - Die Site-ID (z.B. "complyo-tech")
- * @returns Domain (z.B. "complyo.tech")
+ * @returns Domain (z.B. "complyo.de")
  */
 export function siteIdToDomain(siteId: string): string {
   // Einfache Umkehrung: Bindestriche zu Punkten

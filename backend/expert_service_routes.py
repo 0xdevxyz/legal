@@ -151,7 +151,7 @@ async def create_expert_service_request(
         logger.error(f"❌ Error creating expert service request: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Erstellen der Anfrage: {str(e)}"
+            detail="Fehler beim Erstellen der Anfrage"
         )
 
 
@@ -250,7 +250,7 @@ async def get_expert_service_requests(
         logger.error(f"❌ Error fetching expert service requests: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Laden der Anfragen: {str(e)}"
+            detail="Fehler beim Laden der Anfragen"
         )
 
 
@@ -293,11 +293,11 @@ async def _send_expert_request_email(
         f"Kontakt: {contact_name} ({contact_email})\n"
         f"Service: {service_type}\n"
         f"Preis: €{estimated_price:,.2f}\n\n"
-        f"Dashboard: https://app.complyo.tech/admin/expert-requests/{request_id}"
+        f"Dashboard: https://app.complyo.de/admin/expert-requests/{request_id}"
     )
     team_html = team_text.replace("\n", "<br>")
 
-    team_email = "support@complyo.tech"
+    team_email = "support@complyo.de"
 
     try:
         email_service._send_email(

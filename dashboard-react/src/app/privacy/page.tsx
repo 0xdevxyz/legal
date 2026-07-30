@@ -34,9 +34,9 @@ export default function PrivacyPage() {
             <div className="text-zinc-300 space-y-2">
               <p><strong className="text-white">Complyo.tech</strong></p>
               <p>[Adresse wird ergänzt]</p>
-              <p>E-Mail: <a href="mailto:contact@complyo.tech" className="text-blue-400 hover:text-blue-300">contact@complyo.tech</a></p>
+              <p>E-Mail: <a href="mailto:contact@complyo.de" className="text-blue-400 hover:text-blue-300">contact@complyo.de</a></p>
               <p className="text-sm text-zinc-500 mt-4">
-                Datenschutz-Anfragen: <a href="mailto:privacy@complyo.tech" className="text-blue-400 hover:text-blue-300">privacy@complyo.tech</a>
+                Datenschutz-Anfragen: <a href="mailto:privacy@complyo.de" className="text-blue-400 hover:text-blue-300">privacy@complyo.de</a>
               </p>
             </div>
           </section>
@@ -333,11 +333,11 @@ export default function PrivacyPage() {
             <div className="space-y-2 text-zinc-300">
               <p>
                 <strong className="text-white">Allgemeine Anfragen:</strong>{' '}
-                <a href="mailto:contact@complyo.tech" className="text-blue-400 hover:text-blue-300">contact@complyo.tech</a>
+                <a href="mailto:contact@complyo.de" className="text-blue-400 hover:text-blue-300">contact@complyo.de</a>
               </p>
               <p>
                 <strong className="text-white">Datenschutz-Anfragen:</strong>{' '}
-                <a href="mailto:privacy@complyo.tech" className="text-blue-400 hover:text-blue-300">privacy@complyo.tech</a>
+                <a href="mailto:privacy@complyo.de" className="text-blue-400 hover:text-blue-300">privacy@complyo.de</a>
               </p>
             </div>
           </section>

@@ -21,9 +21,9 @@ class AIComplianceNotificationService:
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
         self.smtp_username = os.getenv('SMTP_USERNAME', '')
         self.smtp_password = os.getenv('SMTP_PASSWORD', '')
-        self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.tech')
+        self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.de')
         self.sender_name = os.getenv('SENDER_NAME', 'Complyo AI Compliance')
-        self.frontend_url = os.getenv('FRONTEND_URL', 'https://app.complyo.tech')
+        self.frontend_url = os.getenv('FRONTEND_URL', 'https://app.complyo.de')
         self.demo_mode = not all([self.smtp_username, self.smtp_password])
         
         if self.demo_mode:

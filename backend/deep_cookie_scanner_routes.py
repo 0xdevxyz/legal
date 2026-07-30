@@ -22,6 +22,7 @@ from compliance_engine.deep_cookie_scanner import DeepCookieScanner
 import json
 import logging
 from dataclasses import asdict
+from dependencies import rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,7 @@ class StartScanRequest(BaseModel):
     website_id: Optional[str] = None
 
 
-@router.post("/deep-cookie-scan/start")
+@router.post("/deep-cookie-scan/start", dependencies=[Depends(rate_limit("deep_scan", 3, 60))])
 async def start_deep_scan(
     body: StartScanRequest,
     current_user: Dict = Depends(get_current_user),
@@ -185,7 +186,8 @@ async def start_deep_scan(
             url
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create scan: {str(e)}")
+        logger.exception("Failed to create scan")
+        raise HTTPException(status_code=500, detail="Failed to create scan")
     
     # 5. Increment usage counter
     current_month = datetime.utcnow().strftime("%Y-%m")
@@ -738,7 +740,8 @@ async def get_my_scans(
             ]
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch scans: {str(e)}")
+        logger.exception("Failed to fetch scans")
+        raise HTTPException(status_code=500, detail="Failed to fetch scans")
 
 
 @router.delete("/deep-cookie-scan/{scan_id}")

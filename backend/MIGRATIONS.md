@@ -1,6 +1,10 @@
 # Datenbank-Migrations-Historie
 
-Alle SQL-Dateien werden beim Backend-Start via `init_db()` automatisch ausgeführt (idempotent).
+> **⚠️ HISTORISCH — seit 2026-07-17 gilt: Migrationen ausschließlich via Alembic**
+> (`backend/alembic/`, Baseline `baseline_2026_07`). Die unten gelisteten
+> SQL-Dateien sind in `_archive_pre_baseline/` archiviert und dürfen nicht
+> erneut angewendet werden. Details: CONTRIBUTING.md → „Datenbank-Migrationen".
+
 
 | Datei | Beschreibung |
 |-------|-------------|

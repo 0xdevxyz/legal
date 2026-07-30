@@ -517,7 +517,7 @@ class ComplianceReportGenerator:
             self.styles['Footer']
         ))
         content.append(Paragraph(
-            "© 2025 Complyo - KI-gestützte Website-Compliance | www.complyo.tech",
+            "© 2025 Complyo - KI-gestützte Website-Compliance | www.complyo.de",
             self.styles['Footer']
         ))
         

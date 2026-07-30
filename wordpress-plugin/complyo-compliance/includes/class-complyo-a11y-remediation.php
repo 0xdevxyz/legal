@@ -24,6 +24,7 @@ class Complyo_A11y_Remediation {
     const OPTION_DOC       = 'complyo_a11y_doc_fixes'; // dokumentweite Fixes (lang/skip-link/css)
     const OPTION_LINK      = 'complyo_a11y_link_fixes';// Link-Zweck-Fixes (WCAG 2.4.4)
     const OPTION_LAST_SYNC = 'complyo_a11y_last_sync'; // unix timestamp
+    const OPTION_ETAG      = 'complyo_a11y_manifest_etag'; // letztes ETag des Fix-Manifests
     const CRON_HOOK        = 'complyo_a11y_sync_event';
 
     private static $instance = null;
@@ -118,10 +119,36 @@ class Complyo_A11y_Remediation {
         $url = trailingslashit(COMPLYO_API_BASE)
             . 'api/accessibility/fix-manifest/' . rawurlencode($site_id);
 
-        $res = wp_remote_get($url, array('timeout' => 15));
-        if (is_wp_error($res) || (int) wp_remote_retrieve_response_code($res) !== 200) {
+        // ETag-Revalidierung: Der Endpoint liefert bei unverändertem Manifest 304
+        // (ohne Body). Wir senden das zuletzt gesehene ETag mit If-None-Match, damit
+        // jeder Cron-Lauf statt eines Vollabrufs nur revalidiert.
+        $prev_etag = get_option(self::OPTION_ETAG, '');
+        $request_args = array('timeout' => 15);
+        if (!empty($prev_etag)) {
+            $request_args['headers'] = array('If-None-Match' => $prev_etag);
+        }
+
+        $res = wp_remote_get($url, $request_args);
+        if (is_wp_error($res)) {
             return 0;
         }
+
+        $code = (int) wp_remote_retrieve_response_code($res);
+
+        // 304 Not Modified: Manifest unverändert → keine erneute Verarbeitung nötig.
+        // Bereits persistierte Fixes/Maps bleiben gültig; nur Zeitstempel aktualisieren.
+        if ($code === 304) {
+            update_option(self::OPTION_LAST_SYNC, time());
+            return 0;
+        }
+
+        if ($code !== 200) {
+            return 0;
+        }
+
+        // Neues ETag für die nächste Revalidierung merken (leer → Option leeren).
+        $new_etag = wp_remote_retrieve_header($res, 'etag');
+        update_option(self::OPTION_ETAG, is_string($new_etag) ? $new_etag : '');
 
         $body = json_decode(wp_remote_retrieve_body($res), true);
 

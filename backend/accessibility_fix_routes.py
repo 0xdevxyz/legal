@@ -28,6 +28,7 @@ from compliance_engine.patch_service import (
     patch_service
 )
 from accessibility_patch_generator import AccessibilityPatchGenerator
+from dependencies import rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -180,36 +181,8 @@ class GenerateStatementResponse(BaseModel):
 # Auth Helper
 # =============================================================================
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> Dict[str, Any]:
-    """Verify JWT token and return user data"""
-    try:
-        if not auth_service:
-            raise HTTPException(status_code=500, detail="Auth service not initialized")
-        
-        token = credentials.credentials
-        user_data = auth_service.verify_token(token)
-        
-        if not user_data:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        
-        return user_data
-    except Exception as e:
-        logger.error(f"Authentication failed: {e}")
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-
-async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
-) -> Optional[Dict[str, Any]]:
-    """Optional auth - returns None if not authenticated"""
-    if not credentials:
-        return None
-    try:
-        return await get_current_user(credentials)
-    except HTTPException:
-        return None
+# Kanonische Auth-Dependencies (Phase 2 Auth-Konsolidierung)
+from dependencies import get_current_user, get_current_user_optional as get_optional_user
 
 
 async def require_accessibility_module(user: Dict[str, Any]) -> bool:
@@ -237,7 +210,7 @@ async def require_accessibility_module(user: Dict[str, Any]) -> bool:
 # Endpoints
 # =============================================================================
 
-@accessibility_fix_router.post("/analyze", response_model=AnalyzeResponse)
+@accessibility_fix_router.post("/analyze", response_model=AnalyzeResponse, dependencies=[Depends(rate_limit("a11y_analyze", 10, 60))])
 async def analyze_issues(
     request: AnalyzeRequest,
     user: Dict[str, Any] = Depends(get_current_user)
@@ -284,10 +257,10 @@ async def analyze_issues(
     
     except Exception as e:
         logger.error(f"❌ Analysis failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Analyse fehlgeschlagen: {str(e)}")
+        raise HTTPException(status_code=500, detail="Analyse fehlgeschlagen")
 
 
-@accessibility_fix_router.post("/generate-fixes", response_model=GenerateFixesResponse)
+@accessibility_fix_router.post("/generate-fixes", response_model=GenerateFixesResponse, dependencies=[Depends(rate_limit("a11y_fixes", 5, 60))])
 async def generate_fixes(
     request: GenerateFixesRequest,
     background_tasks: BackgroundTasks,
@@ -340,10 +313,10 @@ async def generate_fixes(
     
     except Exception as e:
         logger.error(f"❌ Fix generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Fix-Generierung fehlgeschlagen: {str(e)}")
+        raise HTTPException(status_code=500, detail="Fix-Generierung fehlgeschlagen")
 
 
-@accessibility_fix_router.post("/download-bundle")
+@accessibility_fix_router.post("/download-bundle", dependencies=[Depends(rate_limit("a11y_bundle", 5, 60))])
 async def download_bundle(
     request: DownloadBundleRequest,
     user: Dict[str, Any] = Depends(get_current_user)
@@ -384,10 +357,10 @@ async def download_bundle(
     
     except Exception as e:
         logger.error(f"❌ Bundle generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Bundle-Generierung fehlgeschlagen: {str(e)}")
+        raise HTTPException(status_code=500, detail="Bundle-Generierung fehlgeschlagen")
 
 
-@accessibility_fix_router.post("/generate-alt-text", response_model=GenerateAltTextResponse)
+@accessibility_fix_router.post("/generate-alt-text", response_model=GenerateAltTextResponse, dependencies=[Depends(rate_limit("a11y_alt", 5, 60))])
 async def generate_alt_text(
     request: GenerateAltTextRequest,
     user: Dict[str, Any] = Depends(get_current_user)
@@ -420,7 +393,7 @@ async def generate_alt_text(
     
     except Exception as e:
         logger.error(f"❌ Alt text generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Alt-Text-Generierung fehlgeschlagen: {str(e)}")
+        raise HTTPException(status_code=500, detail="Alt-Text-Generierung fehlgeschlagen")
 
 
 @accessibility_fix_router.get("/feature-definitions")
@@ -492,7 +465,7 @@ async def get_fix_summary(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@accessibility_fix_router.post("/generate-statement", response_model=GenerateStatementResponse)
+@accessibility_fix_router.post("/generate-statement", response_model=GenerateStatementResponse, dependencies=[Depends(rate_limit("a11y_statement", 5, 60))])
 async def generate_statement(
     request: GenerateStatementRequest,
     user: Dict[str, Any] = Depends(get_current_user)

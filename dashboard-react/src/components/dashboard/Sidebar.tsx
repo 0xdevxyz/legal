@@ -31,6 +31,7 @@ import {
   ListChecks,
   Package,
   BookOpen,
+  Radar,
 } from 'lucide-react';
 
 interface NavItem {
@@ -45,6 +46,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
   { label: 'Journey', icon: Route, href: '/journey' },
+  { label: 'Pflichten-Report', icon: Radar, href: '/pflichten-report' },
   { label: 'Cookies', icon: Cookie, href: '/cookie-compliance' },
   { label: 'Deep Scan', icon: ScanLine, href: '/deep-cookie-scanner' },
   { label: 'Barrierefreiheit', icon: Eye, href: '/accessibility/statement' },

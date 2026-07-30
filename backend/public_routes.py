@@ -19,7 +19,7 @@ from compliance_engine.scanner import ComplianceScanner
 from compliance_engine.priority_engine import priority_engine
 from ai_review_engine import run_ai_review_pass, SOLUTION_MODEL
 from website_crawler import WebsiteCrawler
-from auth_routes import get_current_user
+from dependencies import get_current_user, rate_limit
 from accessibility_post_scan_processor import AccessibilityPostScanProcessor
 from ai_solution_cache_service import AISolutionCache
 
@@ -423,7 +423,13 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         await conn.execute(
                             """
                             UPDATE tracked_websites
-                            SET last_scan_date = NOW(), last_score = $1, status = 'active', scan_count = COALESCE(scan_count, 0) + 1
+                            SET last_scan_date = NOW(), last_score = $1, status = 'active', scan_count = COALESCE(scan_count, 0) + 1,
+                                -- Rescan-Anforderung ist mit diesem Scan erfuellt.
+                                -- Ohne das Zuruecksetzen blieb das Flag dauerhaft TRUE und
+                                -- _flag_websites_for_rescan() markierte danach nie wieder
+                                -- eine Site -> 0 Benachrichtigungen bei jedem Legal-Update.
+                                rescan_required = FALSE, rescan_reason = NULL,
+                                rescan_triggered_by = NULL, rescan_flagged_at = NULL
                             WHERE id = $2
                             """,
                             overall_compliance_score,
@@ -856,7 +862,7 @@ Antworte auf Deutsch, maximal 300 Wörter."""
                 headers={
                     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://complyo.tech",
+                    "HTTP-Referer": "https://complyo.de",
                     "X-Title": "Complyo Compliance Scanner"
                 },
                 json={
@@ -1880,7 +1886,8 @@ async def _generate_mock_analysis(url: str, risk_calculator) -> AnalysisResponse
         timestamp=datetime.now().isoformat()
     )
 
-@public_router.post("/analyze-preview", response_model=Dict[str, Any])
+@public_router.post("/analyze-preview", response_model=Dict[str, Any],
+                    dependencies=[Depends(rate_limit("analyze_preview", 3, 60))])
 async def analyze_website_preview(request: AnalyzeRequest, http_request: Request):
     """
     Preview-Analyse für Landing Page (ohne Details)
@@ -1932,6 +1939,9 @@ async def analyze_website_preview(request: AnalyzeRequest, http_request: Request
                 "total_risk_range": f"{int(total_risk_min):,}€ - {int(total_risk_max):,}€".replace(',', '.'),
                 "issues_count": len(scan_result.get("issues", [])),
                 "critical_count": sum(1 for cat in risk_categories if cat['severity'] == 'critical' and cat['detected']),
+                # Phase 7.1 Lead-Magnet: explizite Regulierungs-Reports
+                "bfsg_report": scan_result.get("bfsg_report"),
+                "ai_act_report": scan_result.get("ai_act_report"),
                 "timestamp": datetime.now().isoformat()
             }
             
@@ -2005,25 +2015,44 @@ async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict
     # Zähle Issues pro Säule
     for pillar_id, pillar_data in all_pillars.items():
         detected_issues = []
-        pillar_risk_min = 0
-        pillar_risk_max = 0
+        issue_risks_min = []
+        issue_risks_max = []
         max_severity = 'info'
-        
+
         for issue in issues:
             issue_text = issue if isinstance(issue, str) else issue.get("description", str(issue))
             risk_data = await risk_calculator.calculate_issue_risk(issue_text)
-            
+
             if risk_data['category'] in pillar_data['categories']:
                 detected_issues.append(issue_text)
-                pillar_risk_min += risk_data['risk_min']
-                pillar_risk_max += risk_data['risk_max']
-                
-                # Update max severity
+                issue_risks_min.append(risk_data['risk_min'])
+                issue_risks_max.append(risk_data['risk_max'])
+
                 if risk_data['severity'] == 'critical':
                     max_severity = 'critical'
                 elif risk_data['severity'] == 'warning' and max_severity != 'critical':
                     max_severity = 'warning'
-        
+
+        # Risiko-Aggregation: NICHT aufsummieren.
+        #
+        # Aus 48 Cookie-Verstoessen auf einer Website werden keine 48 Verfahren,
+        # sondern eines. Das Aufsummieren der Einzelrisiken hat frueher Betraege
+        # bis in den zweistelligen Millionenbereich erzeugt - fuer die Zielgruppe
+        # (KMU) unglaubwuerdig und als Werbeaussage angreifbar.
+        #
+        # Modell: hoechstes Einzelrisiko der Kategorie als Basis, plus einen
+        # unterlinearen Zuschlag fuer die Anzahl der Fundstellen (viele Verstoesse
+        # erhoehen Wahrscheinlichkeit und Bussgeldzumessung, aber nicht linear).
+        # Zuschlag gedeckelt bei +50 %.
+        if detected_issues:
+            escalation = 1.0 + min(0.5, 0.05 * (len(detected_issues) - 1))
+            pillar_risk_min = int(max(issue_risks_min) * escalation)
+            pillar_risk_max = int(max(issue_risks_max) * escalation)
+        else:
+            pillar_risk_min = 0
+            pillar_risk_max = 0
+
+
         result.append({
             'id': pillar_id,
             'label': pillar_data['label'],
@@ -2298,8 +2327,8 @@ async def widget_version():
     """
     return {
         "version": "2.0.0",
-        "cdn_url": "https://cdn.complyo.tech/accessibility-v2.js",
-        "changelog_url": "https://complyo.tech/widget/changelog",
+        "cdn_url": "https://cdn.complyo.de/accessibility-v2.js",
+        "changelog_url": "https://complyo.de/widget/changelog",
         "deprecated_versions": ["1.0.0", "1.5.0"]
     }
 

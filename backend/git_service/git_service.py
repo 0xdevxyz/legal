@@ -307,6 +307,50 @@ class GitHubClient:
             error=data.get("message", "PR-Erstellung fehlgeschlagen")
         )
     
+    async def get_pull_request(self, owner: str, repo: str, number: int) -> Optional[Dict[str, Any]]:
+        """PR-Details (state, merged, merge_commit_sha, base)."""
+        success, data = await self._request("GET", f"/repos/{owner}/{repo}/pulls/{number}")
+        return data if success else None
+
+    async def get_pull_request_files(self, owner: str, repo: str, number: int) -> List[Dict[str, Any]]:
+        """Geaenderte Dateien eines PRs (status: added|modified|removed|renamed)."""
+        dateien: List[Dict[str, Any]] = []
+        seite = 1
+        while True:
+            success, data = await self._request(
+                "GET", f"/repos/{owner}/{repo}/pulls/{number}/files",
+                params={"per_page": 100, "page": seite},
+            )
+            if not success or not data:
+                break
+            dateien.extend(data)
+            if len(data) < 100:
+                break
+            seite += 1
+        return dateien
+
+    async def get_commit_parent(self, owner: str, repo: str, sha: str) -> Optional[str]:
+        """Erster Parent eines Commits — bei einem Merge-Commit der Stand davor."""
+        success, data = await self._request("GET", f"/repos/{owner}/{repo}/commits/{sha}")
+        if success and data.get("parents"):
+            return data["parents"][0].get("sha")
+        return None
+
+    async def close_pull_request(self, owner: str, repo: str, number: int) -> bool:
+        success, _ = await self._request(
+            "PATCH", f"/repos/{owner}/{repo}/pulls/{number}", data={"state": "closed"}
+        )
+        return success
+
+    async def delete_file(
+        self, owner: str, repo: str, path: str, message: str, branch: str, file_sha: str
+    ) -> bool:
+        success, _ = await self._request(
+            "DELETE", f"/repos/{owner}/{repo}/contents/{path}",
+            data={"message": message, "branch": branch, "sha": file_sha},
+        )
+        return success
+
     async def apply_unified_diff(
         self,
         owner: str,
@@ -615,6 +659,114 @@ class GitService:
             logger.error(f"❌ PR creation failed: {e}")
             return PullRequestResult(success=False, error=str(e))
     
+    async def revert_pull_request(
+        self,
+        credentials: GitCredentials,
+        repo_info: RepoInfo,
+        pr_number: int,
+    ) -> PullRequestResult:
+        """Nimmt einen ueber complyo erstellten PR zurueck.
+
+        - Offener PR: wird geschlossen (nichts wurde je gemerged — der Kunde
+          hat den letzten Schritt nie getan).
+        - Gemergter PR: Gegen-PR, der jede Datei auf den Stand VOR dem Merge
+          zurücksetzt (erster Parent des Merge-Commits). Auch der Revert wird
+          nur vorgeschlagen, nie direkt gemerged — gleiche Regel wie hinwaerts.
+        """
+        if repo_info.provider != GitProvider.GITHUB:
+            return PullRequestResult(success=False, error="Revert ist aktuell nur für GitHub verfügbar.")
+
+        client: GitHubClient = self.get_client(repo_info.provider, credentials)
+        pr = await client.get_pull_request(repo_info.owner, repo_info.repo, pr_number)
+        if not pr:
+            return PullRequestResult(success=False, error=f"PR #{pr_number} nicht gefunden.")
+
+        # Fall 1: offen -> schliessen genuegt.
+        if pr.get("state") == "open":
+            ok = await client.close_pull_request(repo_info.owner, repo_info.repo, pr_number)
+            if not ok:
+                return PullRequestResult(success=False, error="PR konnte nicht geschlossen werden.")
+            return PullRequestResult(
+                success=True, pr_number=pr_number, pr_url=pr.get("html_url"),
+                branch_name=pr.get("head", {}).get("ref"), status=PRStatus.CLOSED,
+            )
+
+        if not pr.get("merged_at"):
+            return PullRequestResult(
+                success=False,
+                error="PR ist geschlossen, wurde aber nie gemerged — es gibt nichts zurückzunehmen.",
+            )
+
+        merge_sha = pr.get("merge_commit_sha")
+        vorher_sha = await client.get_commit_parent(repo_info.owner, repo_info.repo, merge_sha)
+        if not vorher_sha:
+            return PullRequestResult(success=False, error="Stand vor dem Merge nicht ermittelbar.")
+
+        # Revert-Branch vom aktuellen Default-Branch abzweigen.
+        datum = datetime.now().strftime("%Y%m%d-%H%M%S")
+        revert_branch = f"revert/pr-{pr_number}-{datum}"
+        created = await client.create_branch(
+            repo_info.owner, repo_info.repo, revert_branch, repo_info.default_branch
+        )
+        if not created:
+            return PullRequestResult(success=False, error="Revert-Branch konnte nicht erstellt werden.")
+
+        dateien = await client.get_pull_request_files(repo_info.owner, repo_info.repo, pr_number)
+        if not dateien:
+            return PullRequestResult(success=False, error="Keine geänderten Dateien im PR gefunden.")
+
+        zurueckgesetzt = []
+        for datei in dateien:
+            pfad = datei.get("filename")
+            status_wert = datei.get("status")
+            nachricht = f"Revert PR #{pr_number}: {pfad}"
+
+            if status_wert == "added":
+                # Datei kam durch den PR — Revert heisst: entfernen.
+                _, aktueller_sha = await client.get_file_content(
+                    repo_info.owner, repo_info.repo, pfad, branch=revert_branch
+                )
+                if aktueller_sha:
+                    ok = await client.delete_file(
+                        repo_info.owner, repo_info.repo, pfad, nachricht,
+                        revert_branch, aktueller_sha,
+                    )
+                    if not ok:
+                        return PullRequestResult(success=False, error=f"'{pfad}' konnte nicht entfernt werden.")
+            else:
+                # modified/removed/renamed: Inhalt von vor dem Merge wiederherstellen.
+                alter_inhalt, _ = await client.get_file_content(
+                    repo_info.owner, repo_info.repo, pfad, branch=vorher_sha
+                )
+                if alter_inhalt is None:
+                    return PullRequestResult(
+                        success=False,
+                        error=f"Stand von '{pfad}' vor dem Merge nicht lesbar — Revert abgebrochen.",
+                    )
+                _, aktueller_sha = await client.get_file_content(
+                    repo_info.owner, repo_info.repo, pfad, branch=revert_branch
+                )
+                ok, _ = await client.update_file(
+                    repo_info.owner, repo_info.repo, pfad, alter_inhalt,
+                    nachricht, revert_branch, file_sha=aktueller_sha,
+                )
+                if not ok:
+                    return PullRequestResult(success=False, error=f"'{pfad}' konnte nicht zurückgesetzt werden.")
+            zurueckgesetzt.append(pfad)
+
+        titel = f"Revert: PR #{pr_number} zurücknehmen"
+        beschreibung = (
+            f"Dieser Pull Request nimmt die Änderungen aus #{pr_number} zurück.\n\n"
+            f"Zurückgesetzte Dateien:\n"
+            + "\n".join(f"- `{p}`" for p in zurueckgesetzt)
+            + "\n\n_Erstellt über complyo. Auch dieser Revert wird nur vorgeschlagen — "
+              "gemerged wird von Ihnen._"
+        )
+        return await client.create_pull_request(
+            repo_info.owner, repo_info.repo, titel, beschreibung,
+            revert_branch, repo_info.default_branch,
+        )
+
     async def _create_github_pr(
         self,
         client: GitHubClient,
@@ -737,7 +889,7 @@ Diese Änderungen verbessern die Barrierefreiheit gemäß:
 ⚠️ Bitte prüfen Sie die semantische Korrektheit der generierten Texte (z.B. Alt-Texte, Labels).
 
 ---
-*Generiert von [Complyo.tech](https://complyo.tech) - Barrierefreiheit leicht gemacht.*
+*Generiert von [Complyo.tech](https://complyo.de) - Barrierefreiheit leicht gemacht.*
 """
         
         return title, body

@@ -5,7 +5,7 @@ import { getApiClient } from '@/lib/api-client';
 const apiClient = getApiClient();
 
 // ✅ URL Validation Helper - Akzeptiert ALLE gängigen Formate
-// Unterstützt: https://, http://, www., nur domain (z.B. complyo.tech)
+// Unterstützt: https://, http://, www., nur domain (z.B. complyo.de)
 const validateAndNormalizeUrl = (url: string): string => {
  // Type-safe check für undefined/null
  if (!url || typeof url !== 'string') {

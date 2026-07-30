@@ -38,7 +38,6 @@ export const useABTestTracking = () => {
       }
       
       const result = await response.json();
-      console.log('✅ Variant Assignment Tracked:', result);
       return result.session_id || generateSessionId();
     } catch (error) {
       console.error('❌ Failed to track variant assignment:', error);
@@ -78,7 +77,6 @@ export const useABTestTracking = () => {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      console.log(`✅ Event Tracked: ${eventName}`, payload);
     } catch (error) {
       console.error(`❌ Failed to track event ${eventName}:`, error);
     }

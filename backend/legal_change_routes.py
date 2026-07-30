@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import json
 
-from auth_routes import get_current_user
+from dependencies import get_current_user
 from dependencies import require_admin
 from database_service import db_service
 from legal_change_monitor import legal_monitor

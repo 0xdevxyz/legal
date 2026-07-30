@@ -52,11 +52,11 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com https://api.complyo.de https://api.complyo.tech",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com https://api.complyo.de",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob: https:",
-              "connect-src 'self' https://api.complyo.de https://api.complyo.tech https://sentry.complyo.de wss:",
+              "connect-src 'self' https://api.complyo.de https://sentry.complyo.de wss:",
               "frame-src https://js.stripe.com",
               "object-src 'none'",
               "base-uri 'self'",
@@ -69,7 +69,7 @@ const nextConfig = {
   },
   
   images: {
-    domains: ['complyo.tech', 'complyo.de', 'app.complyo.tech', 'api.complyo.tech', 'api.complyo.de'],
+    domains: ['complyo.de', 'app.complyo.de', 'api.complyo.de'],
     unoptimized: process.env.NODE_ENV === 'development',
   },
   

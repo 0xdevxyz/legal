@@ -78,7 +78,7 @@ import website_routes  # Website management routes
 import stripe_routes  # NEW: Freemium Stripe integration
 import user_routes  # User profile & domain locks
 from database_service import db_service
-from dependencies import get_current_user
+from dependencies import get_current_user, rate_limit
 from email_service import email_service
 from news_service import NewsService
 from risk_calculator import RiskCalculator
@@ -93,13 +93,19 @@ from ai_compliance_routes import router as ai_compliance_router
 from addon_payment_routes import router as addon_payment_router
 from ai_compliance_worker import start_worker as start_ai_compliance_worker
 from widget_routes import router as widget_router
-from expert_service_routes import router as expert_service_router
+# Stillgelegt 2026-07-29 vor dem Launch: Router ohne Frontend, dessen Tabellen
+# nie angelegt wurden. Code bleibt im Repo — zum Reaktivieren Schema nachziehen
+# (siehe tests/test_schema_completeness.py) und diese Zeilen wieder aktivieren.
+# from expert_service_routes import router as expert_service_router
 
 # Cookie Compliance Module
 from cookie_compliance_routes import router as cookie_compliance_router
 
 # A/B Testing Module for Cookie Banner
 from ab_test_routes import router as ab_test_router
+
+# Pflichten-Report (Phase 7.2 Pflichtenradar)
+from pflichten_report_routes import router as pflichten_report_router
 
 # TCF 2.2 Module
 try:
@@ -132,6 +138,8 @@ from risk_radar_routes import router as risk_radar_router
 from accessibility_fix_routes import accessibility_fix_router, init_routes as init_accessibility_routes
 
 # Git Integration - Automatische PRs für Accessibility-Fixes
+# Reaktiviert 2026-07-30 (Betreiber-Entscheidung: PR-Kanal ist der
+# strategische Auslieferungsweg). Schema: Revision 0010_git_integration.
 from git_routes import git_router, init_git_routes
 
 # Alt-Text AI Generation - KI-generierte Alt-Texte für Bilder
@@ -278,15 +286,66 @@ async def public_widget_cors(request: Request, call_next):
 
     return response
 
-# MCP Auth-Middleware: Bearer-Token auf /mcp-Endpunkten erzwingen
+# MCP Auth-Middleware: echtes JWT auf /mcp-Endpunkten erzwingen
+#
+# Vorher wurde NUR geprüft, ob der Header mit "Bearer " beginnt — jeder beliebige
+# String ("Bearer fake") öffnete den SSE-Stream und lieferte via tools/list die
+# vollständigen Schemata der gesamten API inkl. der ungeschützten Endpunkte.
+# Jetzt wird derselbe Verifikationspfad wie im übrigen Backend benutzt
+# (dependencies.get_current_user: Signatur, Ablauf, aud/iss, JTI-Blacklist,
+# User existiert und ist aktiv). Kein eigener jwt.decode hier.
+#
+# Der Pfad-Präfix "/mcp" trifft ausschliesslich den fastapi-mcp-Mount
+# (siehe mcp_server.setup_mcp); es gibt keine weiteren /mcp*-Routen.
 @app.middleware("http")
 async def mcp_auth_middleware(request: Request, call_next):
     if request.url.path.startswith("/mcp"):
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
+        from fastapi.security import HTTPAuthorizationCredentials
+        from dependencies import get_current_user as _mcp_get_current_user, get_settings as _mcp_get_settings
+
+        auth_header = request.headers.get("Authorization") or ""
+        credentials = None
+        if auth_header.startswith("Bearer "):
+            credentials = HTTPAuthorizationCredentials(
+                scheme="Bearer", credentials=auth_header[len("Bearer "):].strip()
+            )
+
+        try:
+            _mcp_user = await _mcp_get_current_user(
+                request=request,
+                credentials=credentials,
+                settings=_mcp_get_settings(),
+            )
+            # MCP-eigenes Rate-Limit: auch ein legitim authentifizierter Agent
+            # soll kostenverursachende Routen (Scan, KI-Fix) nicht ungebremst
+            # treiben. 30 Requests/Minute je Nutzer; ohne Redis kein Limit
+            # (Auth bleibt der Gate-Keeper, Ausfall drosselt nicht auf 0).
+            try:
+                if _async_redis is not None:
+                    _rl_key = f"mcp_rl:{_mcp_user['id']}"
+                    _zaehler = await _async_redis.incr(_rl_key)
+                    if _zaehler == 1:
+                        await _async_redis.expire(_rl_key, 60)
+                    if _zaehler > 30:
+                        return JSONResponse(
+                            status_code=429,
+                            content={"detail": "MCP-Rate-Limit erreicht (30 Anfragen/Minute). Bitte kurz warten."},
+                            headers={"Retry-After": "60"},
+                        )
+            except Exception as _rl_err:
+                logger.warning(f"MCP-Rate-Limit nicht pruefbar: {_rl_err}")
+        except HTTPException as e:
+            return JSONResponse(
+                status_code=e.status_code,
+                content={"detail": e.detail},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except Exception as e:
+            logger.warning(f"MCP-Auth fehlgeschlagen: {e}")
             return JSONResponse(
                 status_code=401,
-                content={"detail": "MCP requires Bearer token authentication"},
+                content={"detail": "MCP requires valid Bearer token authentication"},
+                headers={"WWW-Authenticate": "Bearer"},
             )
     return await call_next(request)
 
@@ -332,6 +391,22 @@ auth_service = None
 
 # Logger
 logger = logging.getLogger(__name__)
+
+
+def _parse_delete_count(status: str) -> int:
+    """Zeilenzahl aus dem asyncpg-Command-Tag eines DELETE ziehen ("DELETE 42" -> 42).
+
+    Postgres erlaubt in RETURNING keine Aggregatfunktionen: `DELETE ... RETURNING
+    COUNT(*)` wirft "aggregate functions are not allowed in RETURNING". Genau das
+    hat den täglichen GDPR-Cleanup seit jeher bei der ERSTEN Anweisung abgebrochen
+    — es wurde nie etwas gelöscht. conn.execute() liefert stattdessen das
+    Command-Tag, aus dem sich die Zahl zuverlässig lesen lässt.
+    """
+    try:
+        return int(str(status).split()[-1])
+    except (ValueError, IndexError):
+        return 0
+
 
 # Environment variables
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -476,10 +551,8 @@ async def startup_event():
     public_routes.solution_cache = AISolutionCache(db_pool)
     print("✅ AI Solution Cache initialized (70-85% API call reduction)")
     
-    # Initialize Expert Service routes with db_pool
-    import expert_service_routes
-    expert_service_routes.db_pool = db_pool
-    print("✅ Expert service routes initialized with database pool")
+    # Expert Service: stillgelegt 2026-07-29 (kein Frontend, Tabelle
+    # expert_service_requests existiert nicht).
     
     # Start Background Worker for fix-jobs
     try:
@@ -553,9 +626,8 @@ async def startup_event():
     init_legal_document_routes(db_pool, auth_service)
     print("✅ Legal Document routes (DPA Generator) initialized")
     
-    # Initialize Git Integration routes
+    # Git-Integration (Revision 0010): OAuth-State in Redis, Tokens verschluesselt.
     init_git_routes(db_pool, auth_service, _async_redis)
-    print("✅ Git Integration routes initialized")
 
     # Initialize Firebase Admin SDK
     firebase_app = init_firebase_admin()
@@ -616,7 +688,7 @@ async def startup_event():
     app.include_router(ai_compliance_router)  # AI Compliance (ComploAI Guard)
     app.include_router(addon_payment_router)  # Add-on Payments (ComploAI Guard & Priority Support)
     app.include_router(widget_router)  # Complyo Widgets (Cookie Consent & Accessibility)
-    app.include_router(expert_service_router)  # Expert Service Booking
+    # app.include_router(expert_service_router)  # stillgelegt 2026-07-29
     app.include_router(cookie_compliance_router)  # Cookie Compliance Management
     app.include_router(ab_test_router)  # A/B Testing for Cookie Banner
     
@@ -625,10 +697,11 @@ async def startup_event():
         app.include_router(tcf_router)  # TCF 2.2 Transparency & Consent Framework
     
     app.include_router(legal_change_router)  # Legal Change Monitoring (auto-detect law changes)
+    app.include_router(pflichten_report_router)  # Pflichten-Report (Phase 7.2 Pflichtenradar)
     app.include_router(ai_legal_router)  # AI Legal System - NEW
     app.include_router(legal_notification_router)  # Legal News Notifications - NEW
     app.include_router(accessibility_fix_router)  # BFSG Accessibility Fix Pipeline - NEW
-    app.include_router(git_router)  # Git Integration - Automatic PRs - NEW
+    app.include_router(git_router)  # Git-Integration: PRs statt Direktschreiben
     app.include_router(alt_text_router)  # Alt-Text AI Generation - NEW
     app.include_router(deep_cookie_scanner_router)  # Deep Cookie Scanner - Premium Feature
     app.include_router(legal_document_router)  # AUDIT-19: DPA Generator
@@ -704,10 +777,10 @@ async def startup_event():
             try:
                 await asyncio.sleep(24 * 60 * 60)
                 async with db_pool.acquire() as conn:
-                    deleted = await conn.fetchval(
-                        "DELETE FROM ai_solution_cache WHERE generation_date < NOW() - INTERVAL '30 days' RETURNING COUNT(*)"
-                    )
-                    logger.info(f"AI cache cleanup: removed {deleted or 0} entries older than 30 days")
+                    deleted = _parse_delete_count(await conn.execute(
+                        "DELETE FROM ai_solution_cache WHERE generation_date < NOW() - INTERVAL '30 days'"
+                    ))
+                    logger.info(f"AI cache cleanup: removed {deleted} entries older than 30 days")
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -718,28 +791,45 @@ async def startup_event():
 
     # GDPR: daily cleanup of expired sessions and inactive accounts
     async def _daily_gdpr_cleanup():
+        # Aufräum-Statements. Reihenfolge egal — jedes wird einzeln ausgeführt,
+        # damit ein fehlendes Ziel nicht den ganzen Lauf kippt.
+        # Hinweis: ai_call_logs und email_verifications existieren im aktuellen
+        # Schema (alembic/baseline_schema.sql) NICHT. Sie bleiben absichtlich
+        # gelistet, damit der Lauf sie abdeckt, sobald sie angelegt werden — das
+        # Fehlen wird pro Lauf einmal als INFO protokolliert, nicht als Fehler.
+        statements = [
+            ("user_sessions",
+             "DELETE FROM user_sessions WHERE expires_at < NOW()"),
+            ("users (inaktiv > 2 Jahre)",
+             "DELETE FROM users WHERE is_active = FALSE AND updated_at < NOW() - INTERVAL '2 years'"),
+            # Retention cleanup (MED-011)
+            ("cookie_consent_logs",
+             "DELETE FROM cookie_consent_logs WHERE timestamp < NOW() - INTERVAL '1 year'"),
+            ("ai_call_logs",
+             "DELETE FROM ai_call_logs WHERE created_at < NOW() - INTERVAL '90 days'"),
+            ("email_verifications",
+             "DELETE FROM email_verifications WHERE expires_at < NOW()"),
+        ]
+
         await asyncio.sleep(60)
         while True:
             try:
                 async with db_pool.acquire() as conn:
-                    expired_sessions = await conn.fetchval(
-                        "DELETE FROM user_sessions WHERE expires_at < NOW() RETURNING COUNT(*)"
-                    )
-                    old_inactive = await conn.fetchval(
-                        "DELETE FROM users WHERE is_active = FALSE AND updated_at < NOW() - INTERVAL '2 years' RETURNING COUNT(*)"
-                    )
-                    logger.info(f"GDPR cleanup: removed {expired_sessions or 0} expired sessions, {old_inactive or 0} inactive accounts")
-                    # Retention cleanup (MED-011)
-                    deleted_consent = await conn.fetchval(
-                        "DELETE FROM cookie_consent_logs WHERE timestamp < NOW() - INTERVAL '1 year' RETURNING COUNT(*)"
-                    )
-                    deleted_ai_logs = await conn.fetchval(
-                        "DELETE FROM ai_call_logs WHERE created_at < NOW() - INTERVAL '90 days' RETURNING COUNT(*)"
-                    )
-                    deleted_verif = await conn.fetchval(
-                        "DELETE FROM email_verifications WHERE expires_at < NOW() RETURNING COUNT(*)"
-                    )
-                    logger.info(f"Retention cleanup: consent_logs={deleted_consent or 0}, ai_logs={deleted_ai_logs or 0}, email_verif={deleted_verif or 0}")
+                    for label, sql in statements:
+                        # Pro Statement eigenes try: früher scheiterte der GESAMTE
+                        # Lauf am ersten Fehler (und schlief dann 24 h weiter).
+                        try:
+                            n = _parse_delete_count(await conn.execute(sql))
+                            logger.info(f"GDPR cleanup: {label} — {n} Zeile(n) gelöscht")
+                        except asyncpg.exceptions.UndefinedTableError:
+                            logger.info(
+                                f"GDPR cleanup: Tabelle für '{label}' existiert nicht — übersprungen"
+                            )
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as e:
+                            # Bewusst nur dieses eine Statement verlieren, nicht den Lauf.
+                            logger.error(f"GDPR cleanup: '{label}' fehlgeschlagen: {e}")
                 await asyncio.sleep(24 * 60 * 60)
             except asyncio.CancelledError:
                 break
@@ -863,7 +953,7 @@ async def metrics_endpoint(request: Request):
 
 # ==================== NEU: ENHANCED SCAN API ====================
 
-@app.post("/api/v2/analyze/complete")
+@app.post("/api/v2/analyze/complete", dependencies=[Depends(rate_limit("analyze_complete", 3, 60))])
 @limiter.limit("30/minute")
 async def complete_analysis(analyze_request: AnalyzeRequest, request: Request, current_user: dict = Depends(get_current_user)):
     """
@@ -924,7 +1014,7 @@ async def complete_analysis(analyze_request: AnalyzeRequest, request: Request, c
         print(f"Error in complete_analysis: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler bei der erweiterten Analyse: {str(e)}"
+            detail="Fehler bei der erweiterten Analyse"
         )
 
 
@@ -952,7 +1042,7 @@ async def execute_fix(execute_request: ExecuteFixRequest, request: Request, curr
         print(f"Error in execute_fix: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler bei der Fix-Generierung: {str(e)}"
+            detail="Fehler bei der Fix-Generierung"
         )
 
 
@@ -1000,7 +1090,7 @@ async def validate_fix_live(validate_request: ValidateFixRequest, request: Reque
         print(f"Error in validate_fix_live: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler bei der Validierung: {str(e)}"
+            detail="Fehler bei der Validierung"
         )
 
 
@@ -1121,7 +1211,7 @@ async def get_projects(current_user: dict = Depends(get_current_user)):
             detail="Projects could not be loaded"
         )
 
-@app.post("/api/v2/analyze/quick")
+@app.post("/api/v2/analyze/quick", dependencies=[Depends(rate_limit("analyze_quick", 3, 60))])
 async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = Depends(get_current_user)):
     """
     Quick compliance scan (10-20 seconds) for instant feedback
@@ -1174,10 +1264,10 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
         logger.error(f"Quick analysis error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Quick-Scan fehlgeschlagen: {str(e)}"
+            detail="Quick-Scan fehlgeschlagen"
         )
 
-@app.post("/api/v2/analyze")
+@app.post("/api/v2/analyze", dependencies=[Depends(rate_limit("analyze_full", 3, 60))])
 async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depends(get_current_user)):
     """
     Performs a real, in-depth compliance scan of a website.
@@ -1254,7 +1344,16 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
                     json.dumps(pillar_scores)
                 )
                 await connection.execute(
-                    "UPDATE tracked_websites SET last_score = $1, last_scan_date = NOW(), scan_count = scan_count + 1 WHERE id = $2",
+                    # rescan_* wird mitgeloescht: der Scan erfuellt die Anforderung.
+                    # Bleibt das Flag stehen, markiert _flag_websites_for_rescan()
+                    # die Site bei kuenftigen Legal-Updates nie wieder.
+                    """
+                    UPDATE tracked_websites
+                    SET last_score = $1, last_scan_date = NOW(), scan_count = scan_count + 1,
+                        rescan_required = FALSE, rescan_reason = NULL,
+                        rescan_triggered_by = NULL, rescan_flagged_at = NULL
+                    WHERE id = $2
+                    """,
                     scan_result["compliance_score"], tracked_site["id"]
                 )
 
@@ -1275,7 +1374,7 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
         logger.exception(f"Analysis v2 error for url={getattr(request, 'url', 'unknown')}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Analyse fehlgeschlagen: {str(e)}"
+            detail="Analyse fehlgeschlagen"
         )
 
 @app.post("/api/v2/ai-fix")
@@ -1344,7 +1443,7 @@ async def generate_ai_fixes(request: AIFixRequest, current_user: dict = Depends(
         print(f"AI Fix error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"AI-Fix-Generierung fehlgeschlagen: {str(e)}"
+            detail="AI-Fix-Generierung fehlgeschlagen"
         )
 
 # ========== WORKFLOW ENDPOINTS ==========
@@ -1361,7 +1460,8 @@ async def start_user_journey(request: StartJourneyRequest, current_user: dict = 
         await workflow_integration_instance.save_user_journey(journey)
         return {"success": True, "data": journey}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to start journey: {e}")
+        logger.exception("Failed to start journey")
+        raise HTTPException(status_code=500, detail="Failed to start journey")
 
 @app.get("/api/v2/workflow/current-step")
 async def get_current_workflow_step(current_user: dict = Depends(get_current_user)):
@@ -1369,7 +1469,8 @@ async def get_current_workflow_step(current_user: dict = Depends(get_current_use
         current_step = await workflow_engine.get_current_step(str(current_user["id"]))
         return {"success": True, "data": current_step}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get current step: {e}")
+        logger.exception("Failed to get current step")
+        raise HTTPException(status_code=500, detail="Failed to get current step")
 
 @app.post("/api/v2/workflow/complete-step")
 async def complete_workflow_step(request: CompleteStepRequest, current_user: dict = Depends(get_current_user)):
@@ -1381,7 +1482,8 @@ async def complete_workflow_step(request: CompleteStepRequest, current_user: dic
         )
         return {"success": True, "data": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to complete step: {e}")
+        logger.exception("Failed to complete step")
+        raise HTTPException(status_code=500, detail="Failed to complete step")
 
 @app.get("/api/v2/workflow/progress")
 async def get_workflow_progress(current_user: dict = Depends(get_current_user)):
@@ -1389,7 +1491,8 @@ async def get_workflow_progress(current_user: dict = Depends(get_current_user)):
         progress = await workflow_engine.get_journey_progress(str(current_user["id"]))
         return {"success": True, "data": progress}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get progress: {e}")
+        logger.exception("Failed to get progress")
+        raise HTTPException(status_code=500, detail="Failed to get progress")
 
 # ========== SCAN PERSISTENCE ENDPOINTS ==========
 
@@ -1467,7 +1570,7 @@ async def get_latest_scan(current_user: dict = Depends(get_current_user)):
         print(f"Error loading latest scan: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler beim Laden der Scan-Ergebnisse: {str(e)}"
+            detail="Fehler beim Laden der Scan-Ergebnisse"
         )
 
 @app.get("/api/scans/history")
@@ -1506,7 +1609,7 @@ async def get_scan_history(limit: int = 10, current_user: dict = Depends(get_cur
         print(f"Error loading scan history: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler beim Laden der Scan-Historie: {str(e)}"
+            detail="Fehler beim Laden der Scan-Historie"
         )
 
 # ========== FIX JOBS ENDPOINTS ==========
@@ -1589,8 +1692,44 @@ async def create_fix_job(
         print(f"Error creating fix job: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler beim Erstellen des Fix-Jobs: {str(e)}"
+            detail="Fehler beim Erstellen des Fix-Jobs"
         )
+
+def _gate_fix_result(result: dict) -> dict:
+    """Auslieferungs-Gating der Review-Kette (Betreiber-Entscheidung 29.07.2026).
+
+    validated  -> vollstaendig ausliefern (das Gate war gruen; angewendet wird
+                  ohnehin nur durch den Kunden selbst).
+    pending_review -> Inhalt zurueckhalten, bis ein Admin freigibt. Der Kunde
+                  sieht "wird geprueft" statt des Codes.
+    rejected   -> Inhalt zurueckhalten, Hinweis auf Ablehnung.
+
+    Faelle ohne Status (Altbestand vor Revision 0009) gelten als validated —
+    sie wurden bereits ausgeliefert, nachtraegliches Verstecken waere Willkuer.
+    """
+    if not isinstance(result, dict):
+        return result
+    data = result.get("data")
+    container = data if isinstance(data, dict) else result
+    status_wert = container.get("quality_gate_status")
+    if status_wert not in ("pending_review", "rejected"):
+        return result
+
+    zensiert = dict(result)
+    # Alles Inhaltliche raus, Metadaten bleiben (Modell, Zeiten, Gate-Log).
+    inhalt_felder = ("code", "content", "text", "html", "css", "javascript",
+                     "implementation", "steps", "guide", "widget_config", "preview")
+    if isinstance(data, dict):
+        neu_data = {k: v for k, v in data.items() if k not in inhalt_felder}
+        neu_data["under_review"] = status_wert == "pending_review"
+        neu_data["review_status"] = status_wert
+        zensiert["data"] = neu_data
+    else:
+        zensiert = {k: v for k, v in zensiert.items() if k not in inhalt_felder}
+        zensiert["under_review"] = status_wert == "pending_review"
+        zensiert["review_status"] = status_wert
+    return zensiert
+
 
 @app.get("/api/fix-jobs/{job_id}/status")
 async def get_fix_job_status(job_id: str, current_user: dict = Depends(get_current_user)):
@@ -1620,6 +1759,7 @@ async def get_fix_job_status(job_id: str, current_user: dict = Depends(get_curre
             # Parse result wenn vorhanden
             if job_dict.get('result'):
                 job_dict['result'] = json.loads(job_dict['result']) if isinstance(job_dict['result'], str) else job_dict['result']
+                job_dict['result'] = _gate_fix_result(job_dict['result'])
             
             # Konvertiere Timestamps zu ISO-Format
             for key in ['created_at', 'started_at', 'completed_at']:
@@ -1637,7 +1777,7 @@ async def get_fix_job_status(job_id: str, current_user: dict = Depends(get_curre
         print(f"Error getting job status: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler beim Abrufen des Job-Status: {str(e)}"
+            detail="Fehler beim Abrufen des Job-Status"
         )
 
 @app.get("/api/fix-jobs/active")
@@ -1670,6 +1810,10 @@ async def get_active_fix_jobs(current_user: dict = Depends(get_current_user)):
             jobs_list = []
             for job in jobs:
                 job_dict = dict(job)
+                # Review-Gating auch hier — der active-Endpunkt liefert result mit.
+                if job_dict.get('result'):
+                    parsed = json.loads(job_dict['result']) if isinstance(job_dict['result'], str) else job_dict['result']
+                    job_dict['result'] = _gate_fix_result(parsed)
                 # Konvertiere Timestamps
                 for key in ['created_at', 'estimated_completion']:
                     if job_dict.get(key):
@@ -1688,12 +1832,12 @@ async def get_active_fix_jobs(current_user: dict = Depends(get_current_user)):
         print(f"Error getting active jobs: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Fehler beim Abrufen aktiver Jobs: {str(e)}"
+            detail="Fehler beim Abrufen aktiver Jobs"
         )
 
 # ========== REPORTING ENDPOINTS ==========
 
-@app.get("/api/v2/reports/{scan_id}/download")
+@app.get("/api/v2/reports/{scan_id}/download", dependencies=[Depends(rate_limit("report_download", 10, 60))])
 async def download_report(scan_id: str, current_user: dict = Depends(get_current_user)):
     try:
         user_id_raw = current_user.get("id") or current_user.get("user_id") or ""
@@ -1730,7 +1874,7 @@ async def download_report(scan_id: str, current_user: dict = Depends(get_current
         logger.error(f"Report generation error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"PDF-Generierung fehlgeschlagen: {str(e)}"
+            detail="PDF-Generierung fehlgeschlagen"
         )
 
 # ========== AUDIT LOG ENDPOINTS ==========
@@ -1746,10 +1890,13 @@ async def get_audit_log(
         async with db_pool.acquire() as conn:
             rows = await conn.fetch(
                 """
+                -- fix_application_audit ist die Tabelle, die audit_service tatsächlich
+                -- beschreibt. Der Reader las zuvor die nie geschriebene Geistertabelle
+                -- fix_audit_trail (existierte nirgends) -> immer 500. Siehe Alembic 0003.
                 SELECT id, fix_id, fix_category, fix_type, action_type,
                        deployment_method, applied_at, success, error_message,
                        backup_id, rollback_available
-                FROM fix_audit_trail
+                FROM fix_application_audit
                 WHERE user_id = $1
                 ORDER BY applied_at DESC
                 LIMIT $2 OFFSET $3
@@ -1757,9 +1904,12 @@ async def get_audit_log(
                 user_id, limit, offset
             )
         return {"audit_log": [dict(r) for r in rows], "total": len(rows)}
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error fetching audit log: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # echten Fehler serverseitig loggen, generische Meldung an den Client
+        logger.error(f"Error fetching audit log: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @app.get("/api/v2/audit/export")
@@ -1774,7 +1924,7 @@ async def export_audit_log(
                 """
                 SELECT id, fix_id, fix_category, fix_type, action_type,
                        deployment_method, applied_at, success, error_message
-                FROM fix_audit_trail
+                FROM fix_application_audit
                 WHERE user_id = $1
                 ORDER BY applied_at DESC
                 """,
@@ -1795,9 +1945,12 @@ async def export_audit_log(
             media_type="text/csv",
             headers={"Content-Disposition": "attachment; filename=audit_log.csv"}
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error exporting audit log: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # echten Fehler serverseitig loggen, generische Meldung an den Client
+        logger.error(f"Error exporting audit log: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # ========== PAYMENT ENDPOINTS ==========
@@ -1824,7 +1977,8 @@ async def create_checkout_session(
         )
         return {"success": True, "data": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create checkout session: {str(e)}")
+        logger.exception("Failed to create checkout session")
+        raise HTTPException(status_code=500, detail="Failed to create checkout session")
 
 @app.post("/api/v2/payments/create-portal-session")
 async def create_portal_session(current_user: dict = Depends(get_current_user)):
@@ -1835,7 +1989,8 @@ async def create_portal_session(current_user: dict = Depends(get_current_user)):
         )
         return {"success": True, "data": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create portal session: {str(e)}")
+        logger.exception("Failed to create portal session")
+        raise HTTPException(status_code=500, detail="Failed to create portal session")
 
 @app.get("/api/v2/payments/subscription-status")
 async def get_subscription_status(current_user: dict = Depends(get_current_user)):
@@ -1843,7 +1998,8 @@ async def get_subscription_status(current_user: dict = Depends(get_current_user)
         status = await stripe_service.get_subscription_status(current_user["id"])
         return {"success": True, "data": status}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get subscription status: {str(e)}")
+        logger.exception("Failed to get subscription status")
+        raise HTTPException(status_code=500, detail="Failed to get subscription status")
 
 @app.get("/api/v2/payments/history")
 async def get_payment_history(current_user: dict = Depends(get_current_user)):
@@ -1851,7 +2007,8 @@ async def get_payment_history(current_user: dict = Depends(get_current_user)):
         history = await stripe_service.get_payment_history(current_user["id"])
         return {"success": True, "data": history}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get payment history: {str(e)}")
+        logger.exception("Failed to get payment history")
+        raise HTTPException(status_code=500, detail="Failed to get payment history")
 
 @app.get("/api/v2/payments/plans")
 async def get_available_plans():
@@ -1859,7 +2016,8 @@ async def get_available_plans():
         plans = await stripe_service.get_available_plans()
         return {"success": True, "data": plans}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get available plans: {str(e)}")
+        logger.exception("Failed to get available plans")
+        raise HTTPException(status_code=500, detail="Failed to get available plans")
 
 @app.post("/api/v2/payments/webhook")
 async def stripe_webhook(request: Request):

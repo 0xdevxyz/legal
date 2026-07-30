@@ -22,6 +22,7 @@ from cookie_scanner_service import cookie_scanner
 from file_storage_service import file_storage
 from agency_report_generator import AgencyReportGenerator
 from compliance_engine.data_processing_countries import country_processing_info
+from dependencies import rate_limit, require_admin
 
 
 def _enrich_third_country(service: dict) -> dict:
@@ -62,22 +63,28 @@ async def get_current_user_optional(credentials: HTTPAuthorizationCredentials = 
     if not credentials:
         return None
     
-    try:
-        if not auth_service:
-            logger.warning("Auth service not configured")
-            return None
-            
-        token = credentials.credentials
-        user_data = auth_service.verify_token(token)
-        
-        if not user_data:
-            return None
-        
-        logger.info(f"User authenticated: {user_data.get('user_id') or user_data.get('id')}")
-        return user_data
-    except Exception as e:
-        logger.error(f"Authentication failed: {e}")
+    if not auth_service:
+        logger.warning("Auth service not configured")
         return None
+
+    token = credentials.credentials
+    user_data = auth_service.verify_token(token)
+
+    if not user_data:
+        return None
+
+    # Widerrufene Tokens (Logout) ablehnen — verify_token prüft die jti-Blacklist nicht
+    jti = user_data.get("jti")
+    if jti and redis_client:
+        try:
+            if await redis_client.get(f"jwt:blacklist:{jti}"):
+                logger.info("Rejected blacklisted token (jti revoked)")
+                return None
+        except Exception as e:
+            logger.warning(f"JTI blacklist check failed: {e}")
+
+    logger.info(f"User authenticated: {user_data.get('user_id') or user_data.get('id')}")
+    return user_data
 
 async def get_current_user_required(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
     """Verify JWT token and return user data (required - raises 401 if no auth)"""
@@ -195,6 +202,37 @@ async def get_user_site_ids(user_id: Any) -> set:
             if r['site_id']:
                 site_ids.add(r['site_id'])
     return site_ids
+
+
+async def require_site_access(
+    site_id: str,
+    credentials: HTTPAuthorizationCredentials,
+    module: str = 'cookie',
+) -> tuple:
+    """Auth + Ownership für alles, was an einer fremden site_id nichts zu suchen hat.
+
+    Gibt (user, user_id) zurück oder wirft 401/403. Anders als das Save-Muster in
+    `save_banner_config` wird hier NICHT auf die eigene Site zurückgefallen — bei
+    Lese-/Export-/Löschzugriffen wäre ein stiller Fallback sinnlos und bei fremder
+    site_id schlicht falsch.
+
+    Absichtlich NICHT hier anzuwenden: die Endpunkte, die das ausgelieferte Widget
+    ohne Login braucht (`GET /config/{site_id}`, `POST /consent`, `GET /geo-check`,
+    `GET /reconsent-check/{site_id}`, `GET /services`), die öffentliche
+    Cookie-Richtlinie und `POST /revoke` (Widerruf durch den Website-Besucher).
+    """
+    user = await get_current_user_required(credentials)
+    user_id = await get_user_id_from_token(user)
+    await require_module(user, module)
+
+    owned_site_ids = await get_user_site_ids(user_id)
+    if site_id not in owned_site_ids:
+        # Kein Unterschied zwischen "fremd" und "existiert nicht" — sonst wird die
+        # Fehlermeldung zum Site-Scanner.
+        logger.warning(f"User {user_id} denied access to site_id '{site_id}'")
+        raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Website")
+
+    return user, user_id
 
 # ============================================================================
 # Pydantic Models
@@ -519,9 +557,13 @@ async def log_consent(
             "message": "Consent logged successfully"
         }
         
+    except HTTPException:
+        # Eigene HTTPExceptions (z.B. 429 Rate-Limit) unverändert durchreichen —
+        # sonst wandelt der Handler unten sie in ein 500 um.
+        raise
     except Exception as e:
         print(f"Error logging consent: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to log consent: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to log consent")
 
 # ============================================================================
 # Banner Configuration Endpoints
@@ -692,9 +734,11 @@ async def get_my_config(
             "message": "Konfiguration gefunden - 1 Website bereits registriert"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error in get_my_config (user lookup/db): {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get configuration: {type(e).__name__}: {str(e)[:200]}")
+        logger.error(f"Fehler in get_my_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.get("/api/cookie-compliance/config/{site_id}")
@@ -845,7 +889,7 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
         
     except Exception as e:
         print(f"Error getting banner config: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get configuration: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get configuration")
 
 class ExtractColorsRequest(BaseModel):
     url: str = Field(..., description="URL der Website, deren Markenfarben ausgelesen werden sollen")
@@ -925,8 +969,8 @@ async def extract_colors(
     except HTTPException:
         raise
     except Exception as e:
-        logger.warning(f"Live-Farb-Scraping fehlgeschlagen für {payload.url}: {e}")
-        raise HTTPException(status_code=500, detail=f"Farben konnten nicht ausgelesen werden: {type(e).__name__}")
+        logger.warning(f"Live-Farb-Scraping fehlgeschlagen für {payload.url}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Farben konnten nicht ausgelesen werden")
 
 
 @router.post("/api/cookie-compliance/config")
@@ -1073,7 +1117,7 @@ async def create_or_update_config(
         
     except Exception as e:
         print(f"Error saving banner config: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to save configuration: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to save configuration")
 
 @router.patch("/api/cookie-compliance/config/{site_id}")
 async def update_config_partial(
@@ -1146,7 +1190,7 @@ async def update_config_partial(
         raise
     except Exception as e:
         print(f"Error updating config: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update")
 
 # ============================================================================
 # Service Templates Endpoints
@@ -1264,7 +1308,7 @@ async def get_available_services(
 
     except Exception as e:
         print(f"Error getting services: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get services: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get services")
 
 @router.get("/api/cookie-compliance/services/{service_key}")
 async def get_service_detail(
@@ -1298,7 +1342,7 @@ async def get_service_detail(
         raise
     except Exception as e:
         print(f"Error getting service: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get service: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get service")
 
 # ============================================================================
 # Custom Services Endpoints (kundeneigene Dienst-Definitionen)
@@ -1340,7 +1384,7 @@ async def list_custom_services(
         return {"success": True, "total": 0, "data": []}
     except Exception as e:
         logger.error(f"Error listing custom services: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list custom services: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to list custom services")
 
 @router.post("/api/cookie-compliance/custom-services/{site_id}")
 async def create_custom_service(
@@ -1390,7 +1434,7 @@ async def create_custom_service(
         raise HTTPException(status_code=503, detail="Custom-Services-Tabelle noch nicht eingerichtet.")
     except Exception as e:
         logger.error(f"Error creating custom service: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create custom service: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create custom service")
 
 @router.put("/api/cookie-compliance/custom-services/{site_id}/{service_key}")
 async def update_custom_service(
@@ -1423,7 +1467,7 @@ async def update_custom_service(
         raise
     except Exception as e:
         logger.error(f"Error updating custom service: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update custom service: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update custom service")
 
 @router.delete("/api/cookie-compliance/custom-services/{site_id}/{service_key}")
 async def delete_custom_service(
@@ -1447,7 +1491,7 @@ async def delete_custom_service(
         raise
     except Exception as e:
         logger.error(f"Error deleting custom service: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete custom service: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete custom service")
 
 # ============================================================================
 # Statistics Endpoints
@@ -1457,6 +1501,7 @@ async def delete_custom_service(
 async def get_site_statistics(
     site_id: str,
     days: int = 30,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
@@ -1465,6 +1510,7 @@ async def get_site_statistics(
     Query params:
     - days: Number of days to include (default 30)
     """
+    await require_site_access(site_id, credentials)
     try:
         days = max(1, min(days, 365))
         stats_query = """
@@ -1534,22 +1580,27 @@ async def get_site_statistics(
         
     except Exception as e:
         print(f"Error getting statistics: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get statistics: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get statistics")
 
 @router.get("/api/cookie-compliance/consents/{site_id}")
 async def get_consent_logs(
     site_id: str,
     limit: int = 100,
     offset: int = 0,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
     Get consent logs for a site (for DSGVO documentation)
-    
+
+    Authentifiziert + Ownership: Consent-Protokolle sind personenbezogen und
+    dürfen nur vom Betreiber der jeweiligen Site gelesen werden.
+
     Query params:
     - limit: Number of records (default 100, max 1000)
     - offset: Pagination offset
     """
+    await require_site_access(site_id, credentials)
     try:
         if limit > 1000:
             limit = 1000
@@ -1585,7 +1636,7 @@ async def get_consent_logs(
         
     except Exception as e:
         print(f"Error getting consent logs: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get logs: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get logs")
 
 @router.get("/api/cookie-compliance/consents/{site_id}/export")
 async def export_consent_logs_csv(
@@ -1596,11 +1647,10 @@ async def export_consent_logs_csv(
     """
     Export consent logs as CSV for DSGVO proof-of-consent documentation (Art. 7).
 
-    Authenticated + requires the Cookie module. Excel-compatible UTF-8 (BOM),
+    Authenticated + Ownership + requires the Cookie module. Excel-compatible UTF-8 (BOM),
     semicolon-separated. Contains pseudonymized data only (hashed IP, truncated UA).
     """
-    user = await get_current_user_required(credentials)
-    await require_module(user, 'cookie')
+    await require_site_access(site_id, credentials)
     try:
         query = """
             SELECT id, visitor_id, consent_categories, services_accepted,
@@ -1662,7 +1712,7 @@ async def export_consent_logs_csv(
         raise
     except Exception as e:
         print(f"Error exporting consent logs: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to export: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to export")
 
 # ============================================================================
 # Utility Endpoints
@@ -1670,12 +1720,20 @@ async def export_consent_logs_csv(
 
 @router.delete("/api/cookie-compliance/consents/expired")
 async def delete_expired_consents(
+    admin: dict = Depends(require_admin),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
     Manually trigger deletion of expired consent logs (DSGVO: older than 3 years)
-    
-    Usually runs automatically via cron job
+
+    **Nur Admin.** Die SQL-Funktion löscht site-übergreifend über ALLE Kunden —
+    das ist keine Selbstbedienung, sondern ein Betriebs-Werkzeug. Vorher war der
+    Endpunkt unauthentifiziert und damit ein Weg, fremde Consent-Nachweise
+    (Art. 7 DSGVO) zu vernichten.
+
+    Hinweis: Es gibt aktuell KEINEN Cron, der das automatisch aufruft — die
+    Aufbewahrungsfrist wird also nur durchgesetzt, wenn jemand den Endpunkt
+    manuell triggert. Siehe data/features/cookie-consent-management.md.
     """
     try:
         query = "SELECT delete_expired_consents()"
@@ -1688,9 +1746,9 @@ async def delete_expired_consents(
         
     except Exception as e:
         print(f"Error deleting expired consents: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete")
 
-@router.post("/api/cookie-compliance/scan")
+@router.post("/api/cookie-compliance/scan", dependencies=[Depends(rate_limit("cookie_scan", 5, 60))])
 async def scan_website(
     request: Request,
     data: Dict[str, str],
@@ -1847,19 +1905,21 @@ async def scan_website(
         raise
     except Exception as e:
         print(f"Error scanning website: {e}")
-        raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Scan failed")
 
 
 @router.post("/api/cookie-compliance/monitor/check/{site_id}")
 async def monitor_website_check(
     site_id: str,
     data: Dict[str, Any],
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
     Vergleicht einen frischen Scan mit der gespeicherten Baseline.
     Gibt hinzugekommene und entfernte Services zurück.
     """
+    await require_site_access(site_id, credentials)
     try:
         url = data.get('url')
         if not url:
@@ -1919,10 +1979,10 @@ async def monitor_website_check(
         raise
     except Exception as e:
         logger.error(f"Monitor check error for {site_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Monitor check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Monitor check failed")
 
 
-@router.post("/api/cookie-compliance/scan/deep")
+@router.post("/api/cookie-compliance/scan/deep", dependencies=[Depends(rate_limit("cookie_deep", 3, 60))])
 async def scan_website_deep(
     request: Request,
     data: Dict[str, Any],
@@ -2026,7 +2086,7 @@ async def scan_website_deep(
         raise
     except Exception as e:
         print(f"Error in deep scan: {e}")
-        raise HTTPException(status_code=500, detail=f"Deep scan failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Deep scan failed")
 
 
 @router.get("/api/cookie-compliance/scan/capabilities")
@@ -2140,7 +2200,7 @@ async def get_blocking_config(
         
     except Exception as e:
         print(f"Error getting blocking config: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get blocking configuration: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get blocking configuration")
 
 @router.get("/api/cookie-compliance/health")
 async def health_check(db_pool: asyncpg.Pool = Depends(get_db_connection)):
@@ -2222,13 +2282,17 @@ async def get_consent_mode_config(
                 "gtm_container_id": row.get('gtm_container_id')
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_consent_mode_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.post("/api/cookie-compliance/consent-mode-config")
 async def update_consent_mode_config(
     request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
@@ -2240,6 +2304,8 @@ async def update_consent_mode_config(
         
         if not site_id:
             raise HTTPException(status_code=400, detail="site_id required")
+
+        await require_site_access(site_id, credentials)
         
         query = """
             UPDATE cookie_banner_configs SET
@@ -2262,19 +2328,24 @@ async def update_consent_mode_config(
         )
         
         return {"success": True, "updated": result is not None}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in update_consent_mode_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.get("/api/cookie-compliance/age-verification/{site_id}")
 async def get_age_verification_config(
     site_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
     Get age verification (Jugendschutz) configuration
     Art. 8 DSGVO - Altersgrenzen für Minderjährige
     """
+    await require_site_access(site_id, credentials)
     try:
         query = """
             SELECT 
@@ -2313,13 +2384,17 @@ async def get_age_verification_config(
                 "country_age_limits": country_age_limits
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_age_verification_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.post("/api/cookie-compliance/age-verification")
 async def update_age_verification_config(
     request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
@@ -2331,6 +2406,8 @@ async def update_age_verification_config(
         
         if not site_id:
             raise HTTPException(status_code=400, detail="site_id required")
+
+        await require_site_access(site_id, credentials)
         
         query = """
             UPDATE cookie_banner_configs SET
@@ -2349,8 +2426,11 @@ async def update_age_verification_config(
         )
         
         return {"success": True, "updated": result is not None}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in update_age_verification_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # TCF 2.2 Endpoints (UI vorbereitet)
@@ -2406,19 +2486,22 @@ async def get_tcf_vendors(
             "vendor_count": len(vendors)
         }
     except Exception as e:
+        logger.exception("TCF vendor fetch failed")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"TCF vendor fetch failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="TCF vendor fetch failed")
 
 
 @router.get("/api/cookie-compliance/tcf/config/{site_id}")
 async def get_tcf_config(
     site_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
     Get TCF configuration for a site
     """
+    await require_site_access(site_id, credentials)
     try:
         query = """
             SELECT 
@@ -2451,13 +2534,17 @@ async def get_tcf_config(
                 "notice": "TCF erfordert Registrierung bei IAB Europe als CMP"
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_tcf_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.post("/api/cookie-compliance/tcf/config")
 async def update_tcf_config(
     request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
@@ -2469,6 +2556,8 @@ async def update_tcf_config(
         
         if not site_id:
             raise HTTPException(status_code=400, detail="site_id required")
+
+        await require_site_access(site_id, credentials)
         
         query = """
             UPDATE cookie_banner_configs SET
@@ -2487,8 +2576,11 @@ async def update_tcf_config(
         )
         
         return {"success": True, "updated": result is not None}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in update_tcf_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # ============================================================================
@@ -2513,12 +2605,17 @@ async def geo_check(
         # Hash IP for privacy
         ip_hash = hashlib.sha256(client_ip.encode()).hexdigest()[:16]
         
-        # Check cache first
-        cache_query = """
-            SELECT country_code FROM geo_ip_cache 
-            WHERE ip_hash = $1 AND cached_at > NOW() - INTERVAL '24 hours'
-        """
-        cached = await db_pool.fetchrow(cache_query, ip_hash)
+        # Cache-Zugriff darf die Erkennung nicht mitreissen: faellt der Cache aus,
+        # wird trotzdem ausgewertet, nur eben ohne Zwischenspeicher.
+        try:
+            cache_query = """
+                SELECT country_code FROM geo_ip_cache 
+                WHERE ip_hash = $1 AND cached_at > NOW() - INTERVAL '24 hours'
+            """
+            cached = await db_pool.fetchrow(cache_query, ip_hash)
+        except Exception as cache_err:
+            logger.warning(f"geo-check: Cache nicht lesbar ({cache_err})")
+            cached = None
         
         if cached:
             return {
@@ -2528,7 +2625,6 @@ async def geo_check(
             }
         
         # Simple IP-based detection (can be enhanced with MaxMind)
-        # For now, use a basic approach or default to EU
         country_code = "DE"  # Default
         
         # Try to detect from common headers
@@ -2536,14 +2632,16 @@ async def geo_check(
         if cf_country:
             country_code = cf_country
         
-        # Cache result
-        cache_insert = """
-            INSERT INTO geo_ip_cache (ip_hash, country_code)
-            VALUES ($1, $2)
-            ON CONFLICT (ip_hash) DO UPDATE SET 
-                country_code = $2, cached_at = NOW()
-        """
-        await db_pool.execute(cache_insert, ip_hash, country_code)
+        try:
+            cache_insert = """
+                INSERT INTO geo_ip_cache (ip_hash, country_code)
+                VALUES ($1, $2)
+                ON CONFLICT (ip_hash) DO UPDATE SET 
+                    country_code = $2, cached_at = NOW()
+            """
+            await db_pool.execute(cache_insert, ip_hash, country_code)
+        except Exception as cache_err:
+            logger.warning(f"geo-check: Cache nicht schreibbar ({cache_err})")
         
         return {
             "success": True,
@@ -2551,21 +2649,26 @@ async def geo_check(
             "cached": False
         }
     except Exception as e:
+        # Oeffentlicher Endpunkt: die Fehlermeldung bleibt im Log. Sie enthielt
+        # bisher den DB-Fehler im Klartext und gab damit Schemadetails preis.
+        logger.error(f"geo-check fehlgeschlagen: {e}")
         return {
             "success": True,
-            "country_code": "EU",  # Default to EU on error
-            "error": str(e)
+            "country_code": "DE",  # konservativer Rueckfall: Banner wird gezeigt
+            "cached": False
         }
 
 
 @router.get("/api/cookie-compliance/geo-restriction/{site_id}")
 async def get_geo_restriction_config(
     site_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
     Get geo-restriction configuration
     """
+    await require_site_access(site_id, credentials)
     try:
         query = """
             SELECT 
@@ -2603,13 +2706,17 @@ async def get_geo_restriction_config(
                 "mode": "show_in_countries"
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_geo_restriction_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.post("/api/cookie-compliance/geo-restriction")
 async def update_geo_restriction(
     request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
@@ -2621,6 +2728,8 @@ async def update_geo_restriction(
         
         if not site_id:
             raise HTTPException(status_code=400, detail="site_id required")
+
+        await require_site_access(site_id, credentials)
         
         query = """
             UPDATE cookie_banner_configs SET
@@ -2639,19 +2748,24 @@ async def update_geo_restriction(
         )
         
         return {"success": True, "updated": result is not None}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in update_geo_restriction: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # Consent Forwarding
 @router.get("/api/cookie-compliance/forwarding/{site_id}")
 async def get_forwarding_config(
     site_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
     Get consent forwarding configuration
     """
+    await require_site_access(site_id, credentials)
     try:
         query = """
             SELECT 
@@ -2680,13 +2794,17 @@ async def get_forwarding_config(
                 "mode": "one_way"
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_forwarding_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.post("/api/cookie-compliance/forwarding")
 async def update_forwarding_config(
     request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
@@ -2698,6 +2816,8 @@ async def update_forwarding_config(
         
         if not site_id:
             raise HTTPException(status_code=400, detail="site_id required")
+
+        await require_site_access(site_id, credentials)
         
         query = """
             UPDATE cookie_banner_configs SET
@@ -2716,8 +2836,11 @@ async def update_forwarding_config(
         )
         
         return {"success": True, "updated": result is not None}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in update_forwarding_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # ============================================================================
@@ -2873,9 +2996,10 @@ async def generate_cookie_policy(
         policy, configured = await _load_cookie_policy(db_pool, site_id, lang)
         return {"success": True, "policy": policy, "format": "json", "configured": configured}
     except Exception as e:
+        logger.exception("Policy generation failed")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Policy generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Policy generation failed")
 
 
 def _render_cookie_policy_html(policy: dict, lang: str = "de") -> str:
@@ -3016,19 +3140,22 @@ async def public_cookie_policy_page(
         html_out = _render_cookie_policy_html(policy, lang)
         return HTMLResponse(content=html_out, headers={"Cache-Control": "public, max-age=300"})
     except Exception as e:
+        logger.exception("Cookie policy page failed")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Cookie policy page failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Cookie policy page failed")
 
 
 @router.get("/api/cookie-compliance/revisions/{site_id}")
 async def get_config_revisions(
     site_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
     Get configuration revision history
     """
+    await require_site_access(site_id, credentials)
     try:
         query = """
             SELECT 
@@ -3054,18 +3181,23 @@ async def get_config_revisions(
             "revisions": revisions,
             "total": len(revisions)
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_config_revisions: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.get("/api/cookie-compliance/export/{site_id}")
 async def export_config(
     site_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
     Export complete configuration as JSON
     """
+    await require_site_access(site_id, credentials)
     try:
         query = """
             SELECT * FROM cookie_banner_configs
@@ -3095,13 +3227,17 @@ async def export_config(
                 "config": config
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in export_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.post("/api/cookie-compliance/import")
 async def import_config(
     request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
@@ -3114,6 +3250,8 @@ async def import_config(
         
         if not site_id or not import_data:
             raise HTTPException(status_code=400, detail="site_id and import data required")
+
+        await require_site_access(site_id, credentials)
         
         config = import_data.get('config', {})
         
@@ -3148,7 +3286,8 @@ async def import_config(
                 config.get('accent_color', '#9333ea'),
                 config.get('text_color', '#333333'),
                 config.get('bg_color', '#ffffff'),
-                config.get('services', []),
+                # services ist JSONB — der Pool hat keinen json-Codec, rohe Liste => DataError
+                json.dumps(config.get('services', [])),
                 json.dumps(config.get('texts', {})),
                 config.get('consent_mode_enabled', True),
                 json.dumps(config.get('consent_mode_default', {}))
@@ -3161,8 +3300,11 @@ async def import_config(
             "imported": True,
             "site_id": site_id
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in import_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # ============================================================================
@@ -3201,19 +3343,24 @@ async def check_reconsent_required(
             "requires_reconsent": requires_reconsent,
             "current_hash": current_hash
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in check_reconsent_required: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.get("/api/cookie-compliance/bannerless/{site_id}")
 async def get_bannerless_config(
     site_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
     Get bannerless mode configuration
     Only content blockers, no cookie banner
     """
+    await require_site_access(site_id, credentials)
     try:
         query = """
             SELECT bannerless_mode
@@ -3226,8 +3373,11 @@ async def get_bannerless_config(
             "success": True,
             "bannerless_mode": row['bannerless_mode'] if row else False
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_bannerless_config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # =============================================================================
@@ -3260,8 +3410,11 @@ async def revoke_consent(
             truncate_user_agent(request.headers.get("user-agent", ""))
         )
         return {"success": True, "action": "revoke", "site_id": revocation.site_id}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in revoke_consent: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 @router.get("/api/cookie-compliance/revocation-stats/{site_id}")
@@ -3295,8 +3448,11 @@ async def get_revocation_stats(
             "acceptance_rate": round(accept_count / total, 4) if total else 0.0,
             "revocation_rate": round(revoke_count / total, 4) if total else 0.0,
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_revocation_stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # =============================================================================
@@ -3335,8 +3491,11 @@ async def get_service_consent_stats(
                 for svc in services:
                     service_counts[svc] = service_counts.get(svc, 0) + 1
         return {"site_id": site_id, "days": days, "services": service_counts}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_service_consent_stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # =============================================================================
@@ -3420,8 +3579,11 @@ async def get_agency_stats(
                 "site_count": len(sites),
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fehler in get_agency_stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
 # =============================================================================

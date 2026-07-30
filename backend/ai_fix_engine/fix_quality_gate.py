@@ -17,7 +17,7 @@ import re
 import time
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -132,9 +132,13 @@ class FixQualityGate:
         total_ms = int((time.time() - t_start) * 1000)
 
         failed_names = [s.name for s in stages if not s.passed]
-        if all_passed:
-            summary = "Alle 3 Stufen bestanden — Fix validiert"
+        verified = bool(s2.details.get("verified"))
+        if all_passed and verified:
+            summary = "Alle 3 Stufen bestanden + re-scan-verifiziert — Fix validiert"
             status = "validated"
+        elif all_passed:
+            summary = "Syntax+Regression OK, aber nicht re-scan-verifiziert — manuelle Prüfung erforderlich"
+            status = "pending_review"
         else:
             summary = f"Fehlgeschlagen: {', '.join(failed_names)} — manuelle Prüfung erforderlich"
             status = "pending_review"
@@ -228,7 +232,8 @@ class FixQualityGate:
                 name="Re-Scanner",
                 passed=True,
                 duration_ms=int((time.time() - t) * 1000),
-                warnings=["Kein original_html übergeben — Re-Scanner übersprungen"],
+                warnings=["Kein original_html übergeben — Fix nicht verifizierbar"],
+                details={"verified": False, "applied_in_place": False},
             )
 
         try:
@@ -236,13 +241,23 @@ class FixQualityGate:
 
             original_score = self._quick_accessibility_score(original_html)
 
-            # Apply fix to HTML
-            patched_html = self._apply_fix_to_html(fix, original_html)
+            # Apply fix to HTML (echt in-place, wenn moeglich)
+            patched_html, applied_in_place = self._apply_fix_to_html(fix, original_html)
             patched_score = self._quick_accessibility_score(patched_html)
 
             details["original_score"] = original_score
             details["patched_score"] = patched_score
             details["score_delta"] = patched_score - original_score
+            details["applied_in_place"] = applied_in_place
+            # Verifiziert nur, wenn der Fix echt in-place angewandt wurde UND
+            # den Score messbar verbessert. Angehaengte Snippets gelten NIE als
+            # verifiziert (Vorher/Nachher waere sonst aussagelos).
+            details["verified"] = bool(applied_in_place and patched_score > original_score)
+
+            if not applied_in_place:
+                warnings.append(
+                    "Fix nur angehaengt statt in-place angewandt — nicht re-scan-verifiziert"
+                )
 
             if patched_score < original_score - 2:
                 errors.append(
@@ -387,17 +402,61 @@ class FixQualityGate:
 
         return max(0, score)
 
-    def _apply_fix_to_html(self, fix: Dict[str, Any], original_html: str) -> str:
+    def _apply_fix_to_html(self, fix: Dict[str, Any], original_html: str) -> Tuple[str, bool]:
         """
-        Wendet einen Fix auf HTML an (best-effort für Score-Vergleich).
-        Unterstützt einfache Ersetzungen aus fix_code / code_changes.
+        Wendet einen Fix auf das HTML an und meldet, ob das ECHT in-place
+        geschah (Attribute an ein vorhandenes Element gemergt) oder nur als
+        Fallback angehaengt wurde. Nur ein echtes In-place-Apply erlaubt einen
+        belastbaren Vorher/Nachher-Vergleich (siehe _stage2_rescan.verified).
         """
         data = fix.get("data", fix)
-
-        # If there's a direct HTML replacement payload
         fix_code = data.get("fix_code") or data.get("html_fix") or data.get("code")
-        if fix_code and len(fix_code) > 10:
-            # Heuristic: if fix_code is a complete snippet, append it
-            return original_html + "\n<!-- fix applied -->\n" + fix_code
+        if not fix_code or len(fix_code) < 10:
+            return original_html, False
 
-        return original_html
+        try:
+            from bs4 import BeautifulSoup
+
+            frag = BeautifulSoup(fix_code, "html.parser")
+            new_el = frag.find(True)
+            if new_el is not None:
+                soup = BeautifulSoup(original_html, "html.parser")
+                target = self._locate_target(soup, new_el)
+                if target is not None:
+                    # Fehlende/korrigierte Attribute auf das echte Element mergen
+                    # (z.B. alt, lang, aria-label). Bestehende Kinder bleiben.
+                    for attr, val in new_el.attrs.items():
+                        target[attr] = val
+                    return str(soup), True
+        except Exception:
+            pass
+
+        # Fallback: anhaengen — kann NICHT als verifiziert gelten.
+        return original_html + "\n<!-- fix applied -->\n" + fix_code, False
+
+    @staticmethod
+    def _locate_target(soup, new_el):
+        """
+        Findet im Original das Element, das der Fix korrigiert — ueber stabile
+        Identitaet (id, src, href) oder, fuer Dokument-Fixes, das <html>-Tag.
+        Gibt None zurueck, wenn kein eindeutiges Ziel existiert.
+        """
+        tag = new_el.name
+        el_id = new_el.get("id")
+        if el_id:
+            found = soup.find(tag, id=el_id) or soup.find(id=el_id)
+            if found is not None:
+                return found
+        src = new_el.get("src")
+        if src:
+            found = soup.find(tag, src=src)
+            if found is not None:
+                return found
+        href = new_el.get("href")
+        if href:
+            found = soup.find(tag, href=href)
+            if found is not None:
+                return found
+        if tag == "html":
+            return soup.find("html")
+        return None

@@ -50,12 +50,10 @@ export const CookieComplianceWidget: React.FC = () => {
           setSiteId(determinedSiteId);
         }
       } catch (e) {
-        console.log('Could not load website info');
       }
       
       // 2. ✅ Nur Stats laden, wenn eine echte Website existiert
       if (!determinedSiteId) {
-        console.log('Keine Website konfiguriert - überspringe Cookie-Stats');
         return;
       }
       
@@ -68,12 +66,10 @@ export const CookieComplianceWidget: React.FC = () => {
       } catch (err: any) {
         if (err.response?.status === 404) {
           // ✅ Cookie-Compliance noch nicht konfiguriert - graceful ignorieren
-          console.log('Cookie-Compliance noch nicht konfiguriert');
         }
       }
     } catch (error) {
       // ✅ Netzwerkfehler - graceful ignorieren
-      console.log('Cookie-Compliance stats nicht verfügbar');
     }
   };
 
@@ -257,7 +253,7 @@ export const CookieComplianceWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   className="w-full gap-2"
-                  onClick={() => window.open('https://docs.complyo.tech/cookie-compliance', '_blank')}
+                  onClick={() => window.open('https://docs.complyo.de/cookie-compliance', '_blank')}
                 >
                   <ExternalLink className="w-4 h-4" />
                   Dokumentation

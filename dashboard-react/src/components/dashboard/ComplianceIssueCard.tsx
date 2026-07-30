@@ -206,12 +206,6 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   };
 
   const handleConfirmFix = async () => {
-    console.log('🚀 KI-Fix gestartet!', { 
-      hasScanId: !!scanId, 
-      scanId, 
-      issueId: issue.id,
-      issueTitle: issue.title 
-    });
     
     setShowConfirmModal(false);
     
@@ -272,7 +266,6 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
     
     // ✅ PERSISTENCE: Wenn scanId vorhanden, Job erstellen
     if (scanId) {
-      console.log('✅ ScanId vorhanden, erstelle Fix-Job...');
       try {
         const jobData = await createFixJob.mutateAsync({
           scan_id: scanId,
@@ -280,7 +273,6 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
           issue_data: issue
         });
         
-        console.log('✅ Fix-Job erstellt:', jobData);
         
         // Scroll to top to show the active jobs panel
         // ✅ SSR-Check
@@ -333,7 +325,6 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       return;
     }
     
-    console.log('⚠️ Keine ScanId, verwende Fallback-Methode...');
     
     // ✅ FALLBACK: Alte Methode wenn keine scanId (direkt generieren)
     setIsFixing(true);

@@ -68,7 +68,6 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
     const loadSavedWebsite = async () => {
       // ✅ Nur laden wenn noch keine Website im Store ist
       if (currentWebsite?.url) {
-        console.log('✅ Website bereits im Store geladen:', currentWebsite.url);
         return;
       }
       
@@ -79,7 +78,6 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
         const websites = await getTrackedWebsites();
         if (websites && websites.length > 0) {
           const latestWebsite = websites.find(w => w.is_primary) ?? websites[0];
-          console.log('✅ Lade gespeicherte Website:', latestWebsite.url);
           setCurrentWebsite({
             id: String(latestWebsite.id),
             url: latestWebsite.url,
@@ -263,7 +261,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                   <div className="text-right flex-shrink-0">
                     <p className="text-[10px] text-zinc-500">Änderung nur via</p>
                     <a 
-                      href="mailto:support@complyo.tech?subject=Website-Änderung"
+                      href="mailto:support@complyo.de?subject=Website-Änderung"
                       className="text-xs text-blue-400 hover:text-blue-300"
                     >
                       Support

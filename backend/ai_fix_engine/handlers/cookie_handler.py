@@ -56,7 +56,7 @@ class CookieBannerHandler:
             "widget_type": "cookie-consent",
             "integration_code": integration_code,
             "configuration": widget_config,
-            "preview_url": f"https://widgets.complyo.tech/preview/cookie-consent?site={context.get('site_id', 'demo')}",
+            "preview_url": f"https://widgets.complyo.de/preview/cookie-consent?site={context.get('site_id', 'demo')}",
             "features": [
                 "Granulare Consent-Verwaltung (Notwendig, Statistik, Marketing)",
                 "Automatisches Cookie-Blocking vor Consent",
@@ -191,7 +191,7 @@ class CookieBannerHandler:
         
         return f'''<!-- Complyo Cookie Consent Banner -->
 <script 
-  src="https://widgets.complyo.tech/cookie-banner-v2.0.0.min.js" 
+  src="https://widgets.complyo.de/cookie-banner-v2.0.0.min.js" 
   data-site-id="{site_id}"
   data-config='{config_json}'
   async

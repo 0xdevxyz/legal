@@ -112,7 +112,7 @@ class AIApiClient:
                     headers = {
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
-                        "HTTP-Referer": "https://complyo.tech",
+                        "HTTP-Referer": "https://complyo.de",
                         "X-Title": "Complyo AI Fix Engine"
                     }
                     
@@ -275,11 +275,17 @@ class UnifiedFixEngine:
             "guide": GUIDE_FIX_SCHEMA
         }
         
-        # Fallback chain: Primary model -> Fallback model -> Template-based
-        self.fallback_chain = [
+        # Alle AIModel-Werte zeigen aktuell auf dasselbe Modell (kimi-k2.5).
+        # Eine "Fallback-Kette" daraus war wirkungslos: sie hätte bei einem
+        # Modellausfall nur exakt dasselbe Modell erneut befragt und dabei
+        # fälschlich fallback_used=True gemeldet. Ehrlicher: EIN Primärmodell
+        # (call_ai hat eigene Retries) und danach der Template-Fallback.
+        # Dedupliziert, damit echte Alternativmodelle in AIModel automatisch
+        # wieder eine echte Kette ergeben.
+        self.fallback_chain = list(dict.fromkeys([
             AIModel.CLAUDE_SONNET.value,
-            AIModel.GPT4_TURBO.value
-        ]
+            AIModel.GPT4_TURBO.value,
+        ]))
     
     async def generate_fix(
         self,

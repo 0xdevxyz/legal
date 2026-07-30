@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 SHOP_PATTERNS = [
     r'in den warenkorb', r'add to cart', r'zum warenkorb', r'jetzt kaufen',
-    r'buy now', r'jetzt bestellen', r'kaufen', r'bestellen', r'checkout',
+    r'buy now', r'jetzt bestellen', r'\bkaufen\b', r'\bbestellen\b', r'checkout',
     r'warenkorb', r'\bcart\b', r'woocommerce', r'shopify', r'magento',
     r'opencart', r'prestashop', r'shopware', r'wix.*shop', r'oxid',
 ]

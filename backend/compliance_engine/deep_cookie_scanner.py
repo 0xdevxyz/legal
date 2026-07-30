@@ -182,7 +182,16 @@ class DeepCookieScanner:
 
                 # Navigieren (löst initiale Skripte/Tracker aus)
                 try:
-                    await page.goto(url, wait_until="networkidle", timeout=30000)
+                    # DOM-ready statt networkidle: Seiten mit Polling/Chat-Widgets erreichen
+                    # nie Netzwerkruhe und liefen hier bei jedem Scan in den vollen Timeout.
+                    # Netzwerkruhe bekommt danach eine begrenzte Chance — Tracker/Inhalte,
+                    # die bis dahin nicht geladen sind, sieht der Scan eben nicht.
+                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    try:
+                        # Tracker brauchen einen Moment zum Feuern — aber begrenzt.
+                        await page.wait_for_load_state("networkidle", timeout=10000)
+                    except Exception:
+                        pass
                 except Exception as e:
                     logger.warning(f"Navigation langsam/teilweise für {url}: {e}")
 

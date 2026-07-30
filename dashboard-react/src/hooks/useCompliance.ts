@@ -118,7 +118,6 @@ export const useLatestScan = () => {
           // Noch keine Scans vorhanden
           return null;
         }
-        console.log('Latest scan nicht verfügbar');
         return null;
       }
     },
@@ -140,7 +139,6 @@ export const useScanHistory = (limit: number = 10) => {
         if (error?.response?.status === 404) {
           return [];
         }
-        console.log('Scan history nicht verfügbar');
         return [];
       }
     },
@@ -159,11 +157,9 @@ export const useCreateFixJob = () => {
       issue_id: string; 
       issue_data: any;
     }) => {
-      console.log('🔧 Creating fix job with payload:', payload);
       
       try {
         const response = await apiClient.post('/api/fix-jobs', payload);
-        console.log('✅ Fix job created successfully:', response.data);
         return response.data?.data;
       } catch (error: any) {
         console.error('❌ Fix job creation failed:', {
@@ -176,7 +172,6 @@ export const useCreateFixJob = () => {
       }
     },
     onSuccess: () => {
-      console.log('✅ Fix job created, invalidating queries...');
       // Invalidate active jobs to refresh UI
       queryClient.invalidateQueries({ queryKey: ['active-fix-jobs'] });
     },
@@ -221,7 +216,6 @@ export const useActiveFixJobs = () => {
           // Endpoint existiert nicht - return leeres Array
           return [];
         }
-        console.log('Active jobs nicht verfügbar');
         return [];
       }
     },

@@ -4,15 +4,18 @@ Handles lead collection, email verification, and statistics
 Also provides Early-Access Waitlist endpoints with Double-Opt-In.
 """
 
-from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Depends
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, EmailStr, validator
 from typing import Optional, Dict, Any
 import logging
 import secrets
 import hashlib
+import hmac
 import os
 import re
+import httpx
+from dependencies import require_admin
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from database_service import db_service
@@ -21,6 +24,16 @@ from email_service import email_service
 _rate_limit_store: Dict[str, list] = defaultdict(list)
 _RATE_LIMIT_MAX = 3
 _RATE_LIMIT_WINDOW_MINUTES = 10
+
+# Zeitfalle: schneller ausgefüllt als _MIN_FILL_SECONDS ist kein Mensch,
+# älter als _MAX_FORM_AGE_SECONDS ist ein abgestandenes Formular.
+_MIN_FILL_SECONDS = 4
+_MAX_FORM_AGE_SECONDS = 6 * 3600
+
+# Cloudflare Turnstile. Nicht gesetzt = Prüfung aus; Honeypot, Zeitfalle und
+# Rate-Limit greifen unabhängig davon.
+TURNSTILE_SECRET = os.getenv("TURNSTILE_SECRET", "")
+TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +48,10 @@ class WaitlistJoinRequest(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     consent: bool
-    website: Optional[str] = None
+    website: Optional[str] = None          # Honeypot – bleibt bei Menschen leer
     source: Optional[str] = "early-access"
+    form_ts: Optional[int] = None          # Zeitfalle, ms seit Epoch (clientseitig gesetzt)
+    turnstile_token: Optional[str] = None  # cf-turnstile-response
 
     @validator("name")
     def validate_name(cls, v):
@@ -61,7 +76,8 @@ class WaitlistJoinRequest(BaseModel):
 
     @validator("source")
     def validate_source(cls, v):
-        allowed = {"early-access", "complyo.de", "complyo.tech", "landing"}
+        # "complyo.de" stand hier doppelt — Set-Duplikat ohne Wirkung, bereinigt.
+        allowed = {"early-access", "complyo.de", "landing"}
         if v not in allowed:
             return "early-access"
         return v
@@ -79,6 +95,74 @@ class WaitlistJoinResponse(BaseModel):
 def _hash_ip(ip: str) -> str:
     salt = os.getenv("SECRET_SALT", "complyo-salt-2026")
     return hashlib.sha256(f"{ip}{salt}".encode()).hexdigest()
+
+
+def unsubscribe_token_for(email: str) -> str:
+    """Leitet den Abmelde-Token deterministisch aus E-Mail + JWT_SECRET ab (HMAC-SHA256).
+
+    Bewusst kein DB-Feld: der Token muss ohne Migration in bereits versandte
+    E-Mails eingebettet werden können. Deterministisch heisst, derselbe
+    Abmeldelink bleibt dauerhaft gültig — genau das erwartet ein Empfänger,
+    der eine alte Mail wieder aufmacht.
+    """
+    secret = os.getenv("JWT_SECRET") or ""
+    if not secret:
+        # Ohne Secret gibt es keinen prüfbaren Token — dann darf auch nichts
+        # abgemeldet werden (fail closed statt fail open).
+        raise RuntimeError("JWT_SECRET fehlt — Unsubscribe-Token nicht ableitbar")
+    return hmac.new(
+        secret.encode(),
+        f"unsubscribe:{email.strip().lower()}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _verify_unsubscribe_token(email: str, token: Optional[str]) -> bool:
+    """Konstantzeit-Vergleich; jeder Fehlerfall bedeutet 'ungültig'."""
+    if not token:
+        return False
+    try:
+        erwartet = unsubscribe_token_for(email)
+    except RuntimeError as e:
+        logger.error(f"Unsubscribe-Token nicht prüfbar: {e}")
+        return False
+    return hmac.compare_digest(erwartet, token)
+
+
+def _fill_time_plausible(form_ts: Optional[int]) -> bool:
+    """Prüft, wie lange das Formular offen war.
+
+    Ein Bot, der direkt auf den Endpoint POSTet, schickt gar kein form_ts —
+    das allein ist schon ein Ausschlusskriterium.
+    """
+    if not form_ts:
+        return False
+    elapsed = datetime.now(timezone.utc).timestamp() - (form_ts / 1000)
+    return _MIN_FILL_SECONDS <= elapsed <= _MAX_FORM_AGE_SECONDS
+
+
+async def _verify_turnstile(token: Optional[str], remote_ip: str) -> bool:
+    """Fragt Cloudflare, ob das Turnstile-Token echt ist."""
+    if not TURNSTILE_SECRET:
+        return True          # nicht konfiguriert
+    if not token:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(
+                TURNSTILE_VERIFY_URL,
+                data={
+                    "secret": TURNSTILE_SECRET,
+                    "response": token,
+                    "remoteip": remote_ip,
+                },
+            )
+        return bool(resp.json().get("success"))
+    except Exception as e:
+        # Cloudflare nicht erreichbar: lieber durchlassen als echte Anmeldungen
+        # verlieren. Honeypot, Zeitfalle und Rate-Limit greifen weiterhin.
+        logger.warning(f"Turnstile nicht erreichbar, Prüfung übersprungen: {e}")
+        return True
 
 
 def _check_rate_limit(ip_hash: str) -> bool:
@@ -106,12 +190,23 @@ async def join_waitlist(
     """
     Early-Access Waitlist Anmeldung (DSGVO-konform, Double-Opt-In)
     """
+    # Honeypot. 204 statt Fehler: der Bot soll nicht lernen, was ihn verrät.
     if payload.website:
         return Response(status_code=204)
 
     client_ip = http_request.client.host if http_request.client else "0.0.0.0"
     ip_hash = _hash_ip(client_ip)
     user_agent = http_request.headers.get("user-agent", "")[:500]
+
+    # Zeitfalle – ebenfalls stillschweigend
+    if not _fill_time_plausible(payload.form_ts):
+        logger.info("Waitlist: Zeitfalle ausgelöst")
+        return Response(status_code=204)
+
+    # Turnstile
+    if not await _verify_turnstile(payload.turnstile_token, client_ip):
+        logger.info("Waitlist: Turnstile fehlgeschlagen")
+        return Response(status_code=204)
 
     if not _check_rate_limit(ip_hash):
         raise HTTPException(
@@ -463,11 +558,13 @@ async def verify_email(
         )
 
 @lead_router.get("/stats")
-async def get_lead_statistics():
+async def get_lead_statistics(admin: dict = Depends(require_admin)):
     """
-    Get public lead statistics (for demo/transparency purposes)
-    
-    Returns anonymized statistics about lead generation
+    Lead-Statistiken — Admin-only.
+
+    Waren bis 2026-07-17 ohne jede Auth abrufbar ("public ... for transparency"):
+    Gesamt-/Verified-/Converted-Zahlen sind Geschäftszahlen und gehören nicht
+    an die Öffentlichkeit. Kein Aufrufer im Dashboard/Landing hängt daran.
     """
     try:
         stats = await db_service.get_lead_statistics()
@@ -493,11 +590,32 @@ async def get_lead_statistics():
             "timestamp": datetime.now().isoformat()
         }
 
+class UnsubscribeRequest(BaseModel):
+    email: EmailStr
+    token: Optional[str] = None
+
+
 @lead_router.post("/unsubscribe")
-async def unsubscribe_lead(email: EmailStr):
+async def unsubscribe_lead(request: UnsubscribeRequest):
     """
-    Unsubscribe lead from marketing communications (GDPR Article 7)
+    Abmeldung von Marketing-Kommunikation (Art. 7 DSGVO).
+
+    Bis 2026-07-17 genügte eine beliebige E-Mail-Adresse — jeder konnte jeden
+    abmelden. Analog zu GET /verify/{token} ist jetzt ein Token Pflicht; er wird
+    per HMAC aus E-Mail + JWT_SECRET abgeleitet (siehe unsubscribe_token_for)
+    und gehört in den Abmeldelink der versendeten Mails.
+
+    Die Signatur bleibt {email, token} — Aufrufer ohne gültigen Token: 403.
     """
+    email = request.email
+
+    if not _verify_unsubscribe_token(email, request.token):
+        logger.warning(f"Unsubscribe mit ungültigem/fehlendem Token für {email}")
+        raise HTTPException(
+            status_code=403,
+            detail="Ungültiger oder fehlender Abmelde-Token.",
+        )
+
     try:
         success = await db_service.update_lead_status_by_email(email, 'unsubscribed')
         

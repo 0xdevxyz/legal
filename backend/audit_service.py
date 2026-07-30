@@ -62,7 +62,14 @@ class FixAuditService:
         fix_type: str,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
-        metadata: Optional[Dict] = None
+        metadata: Optional[Dict] = None,
+        # Review-Kette (seit Revision 0009): das Quality-Gate-Ergebnis wird im
+        # Audit persistiert — vorher lag es nur in fix_jobs.result und war fuer
+        # die Admin-Review-Queue unsichtbar.
+        website_id: Optional[str] = None,
+        issue_title: Optional[str] = None,
+        quality_gate_status: Optional[str] = None,
+        quality_gate_log: Optional[list] = None,
     ) -> str:
         """
         Loggt die Generierung eines Fixes
@@ -79,12 +86,16 @@ class FixAuditService:
                     INSERT INTO fix_application_audit (
                         id, user_id, fix_id, fix_category, fix_type,
                         action_type, applied_at, ip_address, user_agent,
-                        success, user_confirmed, metadata
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                        success, user_confirmed, metadata,
+                        website_id, issue_title, quality_gate_status, quality_gate_log
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                              $13, $14, $15, $16)
                     """,
                     audit_id, user_id, fix_id, fix_category, fix_type,
                     'generated', datetime.now(), ip_address, user_agent,
-                    True, False, json.dumps(metadata or {})
+                    True, False, json.dumps(metadata or {}),
+                    website_id, issue_title, quality_gate_status,
+                    json.dumps(quality_gate_log) if quality_gate_log is not None else None,
                 )
             
             logger.info(f"✅ Fix generation logged: {fix_id} by user {user_id}")
@@ -154,7 +165,8 @@ class FixAuditService:
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
         user_confirmed: bool = True,
-        metadata: Optional[Dict] = None
+        metadata: Optional[Dict] = None,
+        backup_file_contents: Optional[Dict] = None,
     ) -> str:
         """
         Loggt die Anwendung eines Fixes (FTP, SFTP, PR, etc.)
@@ -210,7 +222,8 @@ class FixAuditService:
                     audit_id=audit_id,
                     backup_location=backup_location,
                     deployment_method=deployment_method,
-                    metadata=metadata
+                    metadata=metadata,
+                    file_contents=backup_file_contents,
                 )
             
             logger.info(f"✅ Fix application logged: {fix_id} via {deployment_method} (success={success})")
@@ -480,9 +493,15 @@ class FixAuditService:
         audit_id: str,
         backup_location: str,
         deployment_method: str,
-        metadata: Optional[Dict] = None
+        metadata: Optional[Dict] = None,
+        file_contents: Optional[Dict] = None,
     ):
-        """Interne Methode zum Loggen eines Backups"""
+        """Interne Methode zum Loggen eines Backups.
+
+        file_contents ({remote_path: {existed, content_b64}}) ist seit Revision
+        0011 die eigentliche Sicherung — Restore laeuft aus der DB, nicht aus
+        dem Container-Dateisystem.
+        """
         try:
             expires_at = datetime.now() + timedelta(days=30)
             
@@ -491,12 +510,14 @@ class FixAuditService:
                     """
                     INSERT INTO fix_backups (
                         backup_id, user_id, audit_id, backup_location,
-                        deployment_method, created_at, expires_at, metadata
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        deployment_method, created_at, expires_at, metadata,
+                        file_contents
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                     """,
                     backup_id, user_id, audit_id, backup_location,
                     deployment_method, datetime.now(), expires_at,
-                    json.dumps(metadata or {})
+                    json.dumps(metadata or {}),
+                    json.dumps(file_contents) if file_contents is not None else None,
                 )
             
             logger.info(f"✅ Backup logged: {backup_id}")

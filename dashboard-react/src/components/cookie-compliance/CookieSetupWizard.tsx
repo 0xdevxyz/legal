@@ -59,7 +59,7 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
 
   const integrationCode = `<!-- Complyo Cookie-Banner -->
 <script
-  src="https://cdn.complyo.tech/cookie-banner.js"
+  src="https://cdn.complyo.de/cookie-banner.js"
   data-site-id="${siteId}"
   async
 ></script>`;

@@ -36,8 +36,8 @@ class WidgetManager:
     
     def __init__(self):
         """Initialize widget manager"""
-        self.base_url = "https://widgets.complyo.tech"
-        self.cdn_url = "https://cdn.complyo.tech/widgets"
+        self.base_url = "https://widgets.complyo.de"
+        self.cdn_url = "https://cdn.complyo.de/widgets"
         
         # Widget-Version-Mapping
         self.versions = {
@@ -58,7 +58,7 @@ class WidgetManager:
         Args:
             site_id: Eindeutige Site-ID
             config: Widget-Konfiguration
-            use_cdn: CDN verwenden (schneller) oder direkt von widgets.complyo.tech
+            use_cdn: CDN verwenden (schneller) oder direkt von widgets.complyo.de
         
         Returns:
             HTML-Code zum Einbinden
@@ -388,7 +388,7 @@ class WidgetManager:
         """
         Gibt Dokumentations-URL für Widget
         """
-        docs_base = "https://docs.complyo.tech"
+        docs_base = "https://docs.complyo.de"
         
         docs_paths = {
             WidgetType.COOKIE_CONSENT: f"{docs_base}/{language}/widgets/cookie-consent",

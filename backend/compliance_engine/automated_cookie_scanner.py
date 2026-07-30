@@ -206,7 +206,7 @@ class CookieScanner:
                     ]
                 )
                 context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (compatible; ComplyoScanner/2.0; +https://complyo.tech/scanner)",
+                    user_agent="Mozilla/5.0 (compatible; ComplyoScanner/2.0; +https://complyo.de/scanner)",
                     locale="de-DE",
                     timezone_id="Europe/Berlin",
                     ignore_https_errors=True,
@@ -224,7 +224,16 @@ class CookieScanner:
 
                 for page_url in pages_to_scan:
                     try:
-                        await page.goto(page_url, wait_until="networkidle", timeout=self.timeout_ms)
+                        # DOM-ready statt networkidle: Seiten mit Polling/Chat-Widgets erreichen
+                        # nie Netzwerkruhe und liefen hier bei jedem Scan in den vollen Timeout.
+                        # Netzwerkruhe bekommt danach eine begrenzte Chance — Tracker/Inhalte,
+                        # die bis dahin nicht geladen sind, sieht der Scan eben nicht.
+                        await page.goto(page_url, wait_until="domcontentloaded", timeout=self.timeout_ms)
+                        try:
+                            # Tracker brauchen einen Moment zum Feuern — aber begrenzt.
+                            await page.wait_for_load_state("networkidle", timeout=10000)
+                        except Exception:
+                            pass
                         await asyncio.sleep(1.5)
                     except Exception as e:
                         logger.warning(f"[Scanner] Fehler beim Laden von {page_url}: {e}")

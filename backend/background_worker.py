@@ -11,6 +11,7 @@ import logging
 
 from ai_fix_engine.unified_fix_engine import UnifiedFixEngine
 from ai_fix_engine.prompts_v2 import ContextBuilder
+from audit_service import FixAuditService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ class BackgroundWorker:
         self.is_running = False
         self.engine = UnifiedFixEngine()
         self.context_builder = ContextBuilder()
+        self.audit = FixAuditService(db_pool)
 
     async def start(self):
         self.is_running = True
@@ -112,9 +114,77 @@ class BackgroundWorker:
             WHERE job_id = $2
         """, json.dumps(result_dict, default=str), job_id)
 
+        # Review-Kette: Gate-Ergebnis ins Audit persistieren. Vorher lag der
+        # Status nur in fix_jobs.result — die Admin-Review-Queue blieb leer und
+        # es gab de facto keine menschliche Freigabe fuer KI-Fixes.
+        # Audit-Fehler brechen den Job NICHT ab (der Fix ist generiert); sie
+        # werden geloggt und der Fix bleibt konservativ auf pending_review,
+        # weil das Gating im Status-Endpunkt auf dem Audit basiert.
+        try:
+            await self._log_fix_audit(conn, job, issue_data, context, result_dict)
+        except Exception as audit_err:
+            logger.error(f"⚠️ Audit-Log fuer Job {job_id} fehlgeschlagen: {audit_err}")
+
         logger.info(f"✅ Job {job_id} completed — model: {fix_result.ai_model_used}, "
                     f"time: {fix_result.generation_time_ms}ms, "
                     f"fallback: {fix_result.fallback_used}")
+
+    async def _resolve_website_id(
+        self, conn: asyncpg.Connection, user_id: Optional[int], url: Optional[str]
+    ) -> Optional[str]:
+        """tracked_websites-UUID zur Scan-URL — best effort, NULL ist ok.
+
+        URL-Normalisierung ist bewusst tolerant (mit/ohne Schema, mit/ohne
+        www, trailing slash), weil scan_history und tracked_websites die URL
+        nicht identisch fuehren.
+        """
+        if not user_id or not url:
+            return None
+        kern = url.strip().lower()
+        for prefix in ("https://", "http://"):
+            if kern.startswith(prefix):
+                kern = kern[len(prefix):]
+        kern = kern.removeprefix("www.").rstrip("/")
+        row = await conn.fetchrow(
+            """
+            SELECT id FROM tracked_websites
+            WHERE user_id = $1
+              AND lower(regexp_replace(url, '^https?://(www\\.)?', '')) IN ($2, $2 || '/')
+            LIMIT 1
+            """,
+            user_id, kern,
+        )
+        return str(row["id"]) if row else None
+
+    async def _log_fix_audit(
+        self,
+        conn: asyncpg.Connection,
+        job: Dict[str, Any],
+        issue_data: Dict[str, Any],
+        context: Dict[str, Any],
+        result_dict: Dict[str, Any],
+    ) -> None:
+        """Schreibt die Audit-Zeile mit dem Quality-Gate-Ergebnis."""
+        data = result_dict.get("data", result_dict) or {}
+        website_id = await self._resolve_website_id(
+            conn, job.get("user_id"), context.get("url")
+        )
+        await self.audit.log_fix_generation(
+            user_id=int(job["user_id"]),
+            fix_id=str(job["job_id"]),
+            fix_category=str(issue_data.get("category") or "unknown"),
+            fix_type=str(data.get("fix_type") or result_dict.get("fix_type") or "unknown"),
+            metadata={
+                "scan_id": str(job.get("scan_id") or ""),
+                "issue_id": str(job.get("issue_id") or ""),
+                "url": context.get("url"),
+                "ai_model": result_dict.get("ai_model_used"),
+            },
+            website_id=website_id,
+            issue_title=issue_data.get("title") or issue_data.get("description"),
+            quality_gate_status=data.get("quality_gate_status"),
+            quality_gate_log=data.get("quality_gate_log"),
+        )
 
     async def _load_context(
         self, conn: asyncpg.Connection, scan_id: Optional[str], issue_data: Dict[str, Any]

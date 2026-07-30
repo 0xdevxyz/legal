@@ -7,7 +7,7 @@ import asyncpg
 import os
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 import logging
 from contextlib import asynccontextmanager
@@ -164,8 +164,12 @@ class DatabaseService:
                 if not lead:
                     return False
                 
-                # Check if token is expired
-                if lead['verification_expires_at'] < datetime.now():
+                # Ablauf pruefen. verification_expires_at ist TIMESTAMPTZ, kommt also
+                # zeitzonenbehaftet aus Postgres. Der Vergleich mit einem naiven
+                # datetime.now() warf einen TypeError, den der Handler unten still zu
+                # "return False" verschluckt hat -- kein Lead konnte je bestaetigen.
+                jetzt = datetime.now(timezone.utc)
+                if lead['verification_expires_at'] < jetzt:
                     return False
                 
                 # Update lead as verified
@@ -177,7 +181,7 @@ class DatabaseService:
                     updated_at = $1
                 WHERE verification_token = $2
                 """
-                await conn.execute(update_query, datetime.now(), verification_token)
+                await conn.execute(update_query, jetzt, verification_token)
                 
                 # Log verification
                 verification_query = """
@@ -188,7 +192,7 @@ class DatabaseService:
                     verification_query,
                     lead['id'],
                     verification_token,
-                    datetime.now(),
+                    jetzt,
                     ip_address,
                     user_agent
                 )

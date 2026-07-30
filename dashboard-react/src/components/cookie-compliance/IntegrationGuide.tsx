@@ -410,10 +410,10 @@ export default function Document() {
                 variant="outline"
                 size="sm"
                 className="border-blue-500 text-blue-400 hover:bg-blue-500/10"
-                onClick={() => window.open('mailto:support@complyo.tech', '_blank')}
+                onClick={() => window.open('mailto:support@complyo.de', '_blank')}
               >
                 <Mail className="w-4 h-4 mr-2" />
-                support@complyo.tech
+                support@complyo.de
               </Button>
             </div>
           </div>

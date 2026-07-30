@@ -285,8 +285,8 @@ export default function GDPRDataManagement() {
             <div className="mt-8 text-center">
               <p className="text-gray-600">
                 Bei Fragen zu Ihren Datenschutzrechten wenden Sie sich an: 
-                <a href="mailto:datenschutz@complyo.tech" className="text-blue-600 hover:underline ml-1">
-                  datenschutz@complyo.tech
+                <a href="mailto:datenschutz@complyo.de" className="text-blue-600 hover:underline ml-1">
+                  datenschutz@complyo.de
                 </a>
               </p>
             </div>

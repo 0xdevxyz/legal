@@ -173,10 +173,10 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
             <div className="text-right">
               <p className="text-xs text-zinc-500">Änderungen nur via Support</p>
               <a
-                href="mailto:support@complyo.tech?subject=Website-Änderung"
+                href="mailto:support@complyo.de?subject=Website-Änderung"
                 className="text-xs text-blue-400 hover:text-blue-300 underline"
               >
-                support@complyo.tech
+                support@complyo.de
               </a>
             </div>
           </div>

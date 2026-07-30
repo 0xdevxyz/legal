@@ -263,7 +263,7 @@ export default function LoginPage() {
                                     Passwort
                                 </label>
                                 <a
-                                    href="mailto:support@complyo.tech"
+                                    href="mailto:support@complyo.de"
                                     className="text-xs transition-colors duration-200 hover:opacity-80"
                                     style={{ color: 'rgba(96,165,250,0.6)' }}
                                 >

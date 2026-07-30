@@ -527,7 +527,7 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
     
     # NEU: Suche im gesamten HTML nach Complyo Widget-URLs (inkl. Preload-Links)
     html_text = str(soup).lower()
-    if 'api.complyo.tech/api/widgets/accessibility' in html_text or 'api.complyo.de/api/widgets/accessibility' in html_text:
+    if 'api.complyo.de/api/widgets/accessibility' in html_text:
         return None  # Complyo Widget URL im HTML gefunden (z.B. als <link rel="preload">)
 
     # Zusätzlich: Suche in allen link-Tags unabhängig von rel-Attribut

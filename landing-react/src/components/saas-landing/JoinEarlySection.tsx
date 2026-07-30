@@ -1,9 +1,22 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, AlertCircle, Loader2, Lock, Mail, User, Phone } from 'lucide-react';
 import { leadsApi } from '@/lib/api';
 
 type FormState = 'idle' | 'loading' | 'success' | 'already_registered' | 'error';
+
+// Site-Key aus dash.cloudflare.com → Turnstile.
+// Nicht gesetzt = Widget bleibt aus; Honeypot und Zeitfalle greifen trotzdem.
+const TURNSTILE_SITEKEY = process.env.NEXT_PUBLIC_TURNSTILE_SITEKEY || '';
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (el: HTMLElement, opts: Record<string, unknown>) => string;
+      reset: (id?: string) => void;
+    };
+  }
+}
 
 export default function JoinEarlySection() {
   const [email, setEmail] = useState('');
@@ -15,6 +28,13 @@ export default function JoinEarlySection() {
   const [errorMsg, setErrorMsg] = useState('');
   const [consentError, setConsentError] = useState(false);
   const [confirmedBanner, setConfirmedBanner] = useState<boolean | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileError, setTurnstileError] = useState(false);
+
+  // Zeitfalle: Zeitpunkt, an dem das Formular sichtbar wurde.
+  const openedAt = useRef<number>(0);
+  const turnstileBox = useRef<HTMLDivElement | null>(null);
+  const turnstileRendered = useRef(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -23,7 +43,42 @@ export default function JoinEarlySection() {
       if (confirmed === '1') setConfirmedBanner(true);
       if (confirmed === '0') setConfirmedBanner(false);
     }
+    openedAt.current = Date.now();
   }, []);
+
+  // Turnstile-Script laden und Widget rendern, sobald das Formular im DOM ist.
+  useEffect(() => {
+    if (!TURNSTILE_SITEKEY || formState === 'success' || formState === 'already_registered') return;
+
+    const scriptId = 'cf-turnstile-script';
+    if (!document.getElementById(scriptId)) {
+      const s = document.createElement('script');
+      s.id = scriptId;
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      s.async = true;
+      s.defer = true;
+      document.head.appendChild(s);
+    }
+
+    let cancelled = false;
+    const tryRender = () => {
+      if (cancelled || turnstileRendered.current) return;
+      if (!window.turnstile || !turnstileBox.current) {
+        window.setTimeout(tryRender, 100);
+        return;
+      }
+      turnstileRendered.current = true;
+      window.turnstile.render(turnstileBox.current, {
+        sitekey: TURNSTILE_SITEKEY,
+        callback: (token: string) => { setTurnstileToken(token); setTurnstileError(false); },
+        'expired-callback': () => setTurnstileToken(''),
+        'error-callback': () => setTurnstileToken(''),
+      });
+    };
+    tryRender();
+
+    return () => { cancelled = true; };
+  }, [formState]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +87,12 @@ export default function JoinEarlySection() {
       return;
     }
     setConsentError(false);
+
+    if (TURNSTILE_SITEKEY && !turnstileToken) {
+      setTurnstileError(true);
+      return;
+    }
+
     setFormState('loading');
     setErrorMsg('');
 
@@ -48,6 +109,8 @@ export default function JoinEarlySection() {
         consent,
         website: honeypot || undefined,
         source,
+        form_ts: openedAt.current || undefined,
+        turnstile_token: turnstileToken || undefined,
       });
 
       if (result.status === 'already_registered') {
@@ -209,6 +272,15 @@ export default function JoinEarlySection() {
                   <p className="text-xs text-red-600 mt-1.5 ml-7">Bitte stimme der Datenschutzerklärung zu.</p>
                 )}
               </div>
+
+              {TURNSTILE_SITEKEY && (
+                <div>
+                  <div ref={turnstileBox} />
+                  {turnstileError && (
+                    <p className="text-xs text-red-600 mt-1.5">Bitte bestätige kurz, dass du kein Bot bist.</p>
+                  )}
+                </div>
+              )}
 
               {formState === 'error' && (
                 <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 text-sm text-red-700">

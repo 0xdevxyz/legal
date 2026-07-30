@@ -1,10 +1,50 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
 
 
-BENCHMARK_PATH = Path(__file__).resolve().parents[2] / "data" / "efre" / "benchmarks" / "legal_classification_v1.jsonl"
+def _resolve_data_file(relative: str):
+    """Sucht eine Datei unterhalb des Repo-`data/`-Verzeichnisses.
+
+    Das Backend-Image enthält nur `backend/` (Dockerfile: `COPY . .` im
+    Backend-Kontext) — `data/` liegt eine Ebene darüber im Repo und wird nicht
+    mitkopiert. Der feste Pfad `parents[2]/data/...` löst deshalb im Container
+    zu `/data/...` auf und existiert dort nicht, während er im Repo-Checkout
+    (so läuft CI) korrekt ist.
+
+    Reihenfolge: explizites COMPLYO_DATA_DIR, dann von __file__ aufwärts nach
+    einem `data/`-Verzeichnis suchen, das die Datei enthält.
+    """
+    env_dir = os.getenv("COMPLYO_DATA_DIR")
+    if env_dir:
+        candidate = Path(env_dir) / relative
+        if candidate.exists():
+            return candidate
+
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "data" / relative
+        if candidate.exists():
+            return candidate
+    return None
+
+
+BENCHMARK_PATH = _resolve_data_file("efre/benchmarks/legal_classification_v1.jsonl")
+
+
+# Bewusst skipif statt xfail: Die Tests sind fachlich in Ordnung und laufen im
+# Repo-Checkout (CI: `pytest tests/` in ./backend) vollständig durch. Fehlt die
+# Benchmark-Datei, fehlt nur die Umgebung (Image ohne repo-`data/`) — dann ist
+# "nicht ausführbar" die ehrliche Aussage, nicht "erwartet kaputt".
+pytestmark = pytest.mark.skipif(
+    BENCHMARK_PATH is None,
+    reason=(
+        "Benchmark-Datei data/efre/benchmarks/legal_classification_v1.jsonl nicht gefunden. "
+        "Im Repo-Checkout vorhanden; das Backend-Image enthält repo-`data/` nicht. "
+        "Per COMPLYO_DATA_DIR oder Mount des Repo-data-Verzeichnisses ausführbar machen."
+    ),
+)
 
 
 class BenchmarkEvaluator:

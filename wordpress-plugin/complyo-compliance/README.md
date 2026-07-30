@@ -47,7 +47,7 @@ Das Cookie-Banner wird automatisch eingebunden und zeigt:
 - Individuelle Einstellungen
 - Cookie-Einstellungen-Link im Footer
 
-**Wichtig:** Die Cookie-Banner-Konfiguration (Farben, Texte, Services) erfolgt über Ihr [Complyo-Dashboard](https://app.complyo.tech).
+**Wichtig:** Die Cookie-Banner-Konfiguration (Farben, Texte, Services) erfolgt über Ihr [Complyo-Dashboard](https://app.complyo.de).
 
 ### Accessibility-Widget
 
@@ -75,21 +75,21 @@ Die Scripts werden im `wp_footer` Hook eingefügt (Priorität 999), um sicherzus
 
 ```html
 <!-- Complyo Cookie Blocker (muss ZUERST geladen werden) -->
-<script src="https://api.complyo.tech/public/cookie-blocker.js" data-site-id="beispiel-de"></script>
+<script src="https://api.complyo.de/public/cookie-blocker.js" data-site-id="beispiel-de"></script>
 
 <!-- Complyo Cookie Banner -->
-<script src="https://api.complyo.tech/api/widgets/cookie-compliance.js" data-site-id="beispiel-de" async></script>
+<script src="https://api.complyo.de/api/widgets/cookie-compliance.js" data-site-id="beispiel-de" async></script>
 
 <!-- Complyo Accessibility Widget -->
-<script src="https://api.complyo.tech/api/widgets/accessibility.js" data-site-id="beispiel-de" data-auto-fix="true" data-show-toolbar="true" async></script>
+<script src="https://api.complyo.de/api/widgets/accessibility.js" data-site-id="beispiel-de" data-auto-fix="true" data-show-toolbar="true" async></script>
 ```
 
 ## Support
 
 Bei Fragen oder Problemen kontaktieren Sie:
-- **E-Mail:** support@complyo.tech
-- **Website:** https://complyo.tech
-- **Dashboard:** https://app.complyo.tech
+- **E-Mail:** support@complyo.de
+- **Website:** https://complyo.de
+- **Dashboard:** https://app.complyo.de
 
 ## Changelog
 
@@ -106,4 +106,4 @@ GPL v2 or later
 
 ## Autor
 
-Complyo - https://complyo.tech
+Complyo - https://complyo.de

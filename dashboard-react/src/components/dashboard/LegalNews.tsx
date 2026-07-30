@@ -154,7 +154,7 @@ export const LegalNews: React.FC = () => {
         
       case 'contact_support':
       case 'consult_legal':
-        window.open('mailto:support@complyo.tech?subject=Rechtsberatung: ' + update.title, '_blank');
+        window.open('mailto:support@complyo.de?subject=Rechtsberatung: ' + update.title, '_blank');
         break;
         
       case 'info_only':
@@ -232,7 +232,6 @@ export const LegalNews: React.FC = () => {
 
       const updates = res.data || [];
       
-      console.log('📥 Legal Updates geladen:', updates?.length || 0);
       
       // Parse Classification-Daten
       const parsedUpdates = (updates || []).map((update: any) => ({

@@ -30,6 +30,10 @@ class LegalArea(str, Enum):
     WETTBEWERBSRECHT = "wettbewerbsrecht"
     VERBRAUCHERSCHUTZ = "verbraucherschutz"
     AI_ACT = "ai_act"
+    # EU-Verpackungsverordnung (PPWR, VO (EU) 2025/40, erste Pflichten ab 12.08.2026).
+    # Trifft Shop-Kunden über Kennzeichnungs- und Informationspflichten; ohne eigenen
+    # Enum-Wert verwarf `_change_from_dict()` jede Meldung dazu komplett.
+    VERPACKUNG = "verpackung"
 
 
 class ChangeSeverity(str, Enum):
@@ -170,9 +174,10 @@ class LegalChangeMonitor:
         try:
             from legal_text_generator import get_legal_text_generator
             generator = get_legal_text_generator(self.db_pool)
-            affected_laws = [area.value for area in change.affected_areas]
+            # LegalArea-Werte werden im Generator via LEGAL_AREA_TO_DOCUMENT_TYPES aufgelöst
+            affected_areas = [area.value for area in change.affected_areas]
             result = await generator.regenerate_affected_users(
-                affected_laws=affected_laws,
+                affected_areas=affected_areas,
                 legal_update_id=str(legal_update_id),
                 severity=change.severity.value,
             )
@@ -538,6 +543,7 @@ Letzte 30 Tage bis heute ({today})
 - Wettbewerbsrecht
 - Verbraucherschutz
 - EU AI Act
+- EU-Verpackungsverordnung (PPWR) — Kennzeichnungs- und Informationspflichten für Shops
 
 # QUELLEN
 - EU-Recht (eur-lex.europa.eu)
@@ -567,6 +573,11 @@ Antworte im JSON-Format:
 }}
 
 Fokussiere auf Änderungen, die KONKRETE Auswirkungen auf Websites haben.
+
+"affected_areas" darf AUSSCHLIESSLICH diese Werte enthalten — jeder andere Wert
+führt dazu, dass die komplette Meldung verworfen wird:
+cookie_compliance | datenschutz | impressum | barrierefreiheit |
+wettbewerbsrecht | verbraucherschutz | ai_act | verpackung
 
 WICHTIG: Antworte AUSSCHLIESSLICH mit dem puren JSON-Objekt — keine Einleitung,
 keine Erklärung, keine Markdown-Codeblöcke, kein Text davor oder danach.

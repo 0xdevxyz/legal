@@ -89,7 +89,7 @@ class NewsService:
             # Fetch RSS-Feed mit User-Agent (viele Seiten blockieren feedparser ohne UA)
             import requests
             headers = {
-                'User-Agent': 'Mozilla/5.0 (compatible; ComplyoBot/1.0; +https://complyo.tech)'
+                'User-Agent': 'Mozilla/5.0 (compatible; ComplyoBot/1.0; +https://complyo.de)'
             }
             
             response = await asyncio.get_event_loop().run_in_executor(

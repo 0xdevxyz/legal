@@ -26,7 +26,9 @@ from compliance_engine.checks import (
     check_agb_compliance,
     check_shop_compliance,
     check_uwg_compliance,
+    check_ai_act_transparency,
 )
+from compliance_engine.checks.shop_check import detect_shop
 from compliance_engine.browser_renderer import smart_fetch_html, detect_client_rendering
 from compliance_engine.checks.cookie_check import consent_render_needed
 
@@ -86,7 +88,7 @@ class ComplianceScanner:
             timeout=aiohttp.ClientTimeout(total=55),
             connector=connector,
             headers={
-                'User-Agent': 'Complyo-Scanner/2.0 (Compliance Bot; +https://complyo.tech/scanner)'
+                'User-Agent': 'Complyo-Scanner/2.0 (Compliance Bot; +https://complyo.de/scanner)'
             }
         )
         return self
@@ -236,17 +238,18 @@ class ComplianceScanner:
             ssl_task = self._check_ssl_security(url, main_page_headers)
             contact_task = self._check_contact_data(url, soup)
             social_task = self._check_social_media_plugins(url, soup)
+            ai_act_task = check_ai_act_transparency(url, soup, request_urls=render_request_urls)
 
             results = await asyncio.gather(
                 barriere_task, impressum_task, datenschutz_task, cookie_task,
                 agb_task, shop_task, declarative_task, uwg_task,
-                ssl_task, contact_task, social_task,
+                ssl_task, contact_task, social_task, ai_act_task,
                 return_exceptions=True
             )
 
             barriere_issues, impressum_issues, datenschutz_issues, cookie_issues, \
                 agb_issues, shop_issues, declarative_issues, uwg_issues, \
-                ssl_issues, contact_issues, social_issues = results
+                ssl_issues, contact_issues, social_issues, ai_act_issues = results
 
             # ✅ v4.0 evidenz-basiert: Wenn der PRIMÄR-Check einer Säule abstürzt
             # (Exception, Seite nicht auswertbar), liegt KEINE Evidenz vor → die
@@ -267,7 +270,7 @@ class ComplianceScanner:
 
             for check_issues in [barriere_issues, impressum_issues, datenschutz_issues,
                                   cookie_issues, agb_issues, shop_issues, declarative_issues, uwg_issues,
-                                  ssl_issues, contact_issues, social_issues]:
+                                  ssl_issues, contact_issues, social_issues, ai_act_issues]:
                 if isinstance(check_issues, Exception):
                     logger.warning(f"Check failed (non-critical): {check_issues}")
                     continue
@@ -361,6 +364,15 @@ class ComplianceScanner:
                 "detected_cms": detected_cms,
                 "is_placeholder": is_placeholder,
                 "scan_notice": scan_notice,
+                # Phase 7.1: explizite Regulierungs-Reports (Lead-Magnet)
+                "bfsg_report": self._build_bfsg_report(
+                    issues, _pillar_scores, _pillar_status,
+                    is_shop=detect_shop(soup),
+                    has_widget=has_accessibility_widget,
+                ),
+                "ai_act_report": self._build_ai_act_report(
+                    ai_act_issues if not isinstance(ai_act_issues, Exception) else []
+                ),
             }
             
             # 🆕 LEGAL UPDATE INTEGRATION: Anwendung aktueller Gesetzesänderungen
@@ -387,6 +399,88 @@ class ComplianceScanner:
         except Exception as e:
             return self._create_error_response(url, f"Scanner-Fehler: {str(e)}")
     
+    @staticmethod
+    def _build_bfsg_report(issues, pillar_scores, pillar_status,
+                           is_shop: bool, has_widget: bool) -> Dict[str, Any]:
+        """
+        Phase 7.1: Expliziter BFSG-Report für den Lead-Magnet.
+
+        Haftungs-Design: keine individuelle Rechtsaussage („Sie sind
+        betroffen"), sondern belegte Indizien + Selbst-Check-Framing (RDG).
+        """
+        a11y_issues = [
+            i for i in issues
+            if ScoreCalculator.categorize(i.category) == "accessibility"
+        ]
+        statement_found = not any(
+            "barrierefreiheitserkl" in (i.title or "").lower() and i.is_missing
+            for i in issues
+        )
+        return {
+            "law": "Barrierefreiheitsstärkungsgesetz (BFSG)",
+            "in_force_since": "2025-06-28",
+            "deadline_passed": True,
+            "enforcement_note": (
+                "Das BFSG gilt seit 28.06.2025. Marktüberwachungsbehörden können "
+                "Dienste untersagen; Bußgelder bis 100.000 € (§ 37 BFSG)."
+            ),
+            "likely_in_scope": is_shop,
+            "scope_note": (
+                "Auf dieser Website wurden Shop-/E-Commerce-Merkmale erkannt — "
+                "elektronischer Geschäftsverkehr für Verbraucher fällt in den "
+                "BFSG-Anwendungsbereich (§ 1 Abs. 3 Nr. 5 BFSG). "
+                "Kleinstunternehmen (<10 MA und ≤2 Mio. € Umsatz) können bei "
+                "Dienstleistungen ausgenommen sein — bitte selbst prüfen."
+                if is_shop else
+                "Keine eindeutigen Shop-/E-Commerce-Merkmale erkannt. Ob das BFSG "
+                "gilt, hängt von Ihren Dienstleistungen ab (z. B. Terminbuchung, "
+                "Kundenkonto, Verträge online) — bitte selbst prüfen."
+            ),
+            "score": round(pillar_scores.get("accessibility", 0)),
+            "status": pillar_status.get("accessibility"),
+            "critical_issues": len([i for i in a11y_issues if i.severity == "critical"]),
+            "warning_issues": len([i for i in a11y_issues if i.severity == "warning"]),
+            "risk_euro": sum(i.risk_euro for i in a11y_issues),
+            "has_accessibility_widget": has_widget,
+            "statement_found": statement_found,
+            "disclaimer": (
+                "Automatisierter Selbst-Check auf Basis technischer Merkmale — "
+                "keine Rechtsberatung. Jede Feststellung nennt ihre Quelle im "
+                "jeweiligen Issue."
+            ),
+        }
+
+    @staticmethod
+    def _build_ai_act_report(ai_act_issues) -> Dict[str, Any]:
+        """Phase 7.1: AI-Act-Transparenz-Zusammenfassung (Art. 50 KI-VO)."""
+        def _meta(i):
+            return i.metadata if isinstance(i, ComplianceIssue) else i.get("metadata", {})
+        def _sev(i):
+            return i.severity if isinstance(i, ComplianceIssue) else i.get("severity")
+        providers = [
+            {
+                "provider": _meta(i).get("provider"),
+                "confidence": _meta(i).get("confidence"),
+                "evidence": _meta(i).get("evidence"),
+                "action_needed": _sev(i) == "warning",
+            }
+            for i in ai_act_issues
+        ]
+        return {
+            "law": "EU AI Act (VO (EU) 2024/1689), Art. 50 Transparenzpflichten",
+            "fines_note": (
+                "Verstöße gegen Transparenzpflichten sind seit 02.08.2026 "
+                "bußgeldbewehrt (bis 15 Mio. € bzw. 3 % Jahresumsatz, Art. 99 KI-VO)."
+            ),
+            "ai_systems_detected": len(providers),
+            "providers": providers,
+            "action_needed": any(p["action_needed"] for p in providers),
+            "disclaimer": (
+                "Automatisierte Erkennung eingebundener Chat-/KI-Systeme mit "
+                "Confidence und Fundstelle — keine Rechtsberatung."
+            ),
+        }
+
     async def _fetch_page(self, url: str) -> Optional[Dict[str, Any]]:
         """
         Fetch webpage content. Gibt Status UND Inhalt zurück (auch bei 4xx/5xx,
@@ -959,20 +1053,40 @@ class ComplianceScanner:
         produktiver Inhalt). Gibt (is_placeholder, art) zurück.
         """
         title = (soup.title.get_text() if soup.title else "").lower()
+        headings = " ".join(
+            h.get_text(" ", strip=True) for h in soup.find_all(["h1", "h2"])
+        ).lower()
         body_text = soup.get_text(" ", strip=True).lower()
+        link_count = len(soup.find_all("a", href=True))
+
+        # ⚠️ Wichtig gegen False Positives: Ein Signalwort ("maintenance",
+        # "baustelle", …) allein reicht NICHT. Solche Wörter kommen auf produktiven
+        # Seiten völlig legitim im Fließtext vor (z.B. Blog-Teaser "Predictive
+        # Maintenance" oder "…während das Team auf der Baustelle ist"). Eine echte
+        # Wartungs-/Baustellen-/Coming-Soon-Seite ist strukturell "dünn" (kaum Links,
+        # wenig Text) UND trägt das Signalwort prominent im Titel/H1/H2. Eine Seite
+        # mit voller Navigation, Footer und viel Inhalt wird daher NIE als Platzhalter
+        # gewertet, egal welches Wort irgendwo im Text auftaucht.
+        is_content_rich = link_count > 10 or len(body_text) > 2000
+        prominent = f"{title} {headings}"
 
         patterns = {
             "Wartungs": ["wartungsmodus", "wartungsarbeiten", "maintenance", "under maintenance", "kurzfristig nicht verfügbar"],
             "Baustellen": ["under construction", "im aufbau", "baustelle", "seite im aufbau", "website is being built"],
             "Coming-Soon": ["coming soon", "demnächst", "in kürze online", "launching soon", "bald verfügbar", "wir sind bald für sie da"],
         }
-        haystack = f"{title} {body_text}"
         for kind, kws in patterns.items():
-            if any(kw in haystack for kw in kws):
+            # Signalwort prominent (Titel/Überschrift) → bewusstes Placeholder-Signal,
+            # aber nur werten, wenn die Seite nicht produktiv-voll ist.
+            if not is_content_rich and any(kw in prominent for kw in kws):
+                return True, kind
+            # Signalwort nur im Fließtext → ausschließlich bei strukturell dünner Seite,
+            # sonst ist es fast immer regulärer Inhalt.
+            if len(body_text) < 600 and link_count <= 3 and any(kw in body_text for kw in kws):
                 return True, kind
 
         # Sehr wenig Inhalt + kaum Links → wahrscheinlich Platzhalter
-        if len(body_text) < 400 and len(soup.find_all("a", href=True)) <= 2:
+        if len(body_text) < 400 and link_count <= 2:
             return True, "Platzhalter"
         return False, ""
 

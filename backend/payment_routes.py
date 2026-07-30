@@ -3,7 +3,8 @@ import stripe
 import json
 import logging
 import uuid
-from fastapi import APIRouter, HTTPException, status, Request
+from fastapi import APIRouter, HTTPException, status, Request, Depends
+from dependencies import get_current_user
 from pydantic import BaseModel
 from typing import List, Dict, Any
 
@@ -30,7 +31,7 @@ if (DEV_MODE or BYPASS_PAYMENT) and ENVIRONMENT == "production":
 
 # Environment variables
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.complyo.tech")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.complyo.de")
 
 # Stripe Price IDs je Plan (im Stripe Dashboard anlegen)
 # free:    kostenlos — 1 Domain, 1 Fix
@@ -54,7 +55,7 @@ logger.info(f"🔧 Payment Routes - DEV_MODE: {DEV_MODE}, BYPASS_PAYMENT: {BYPAS
 
 
 class CreateCheckoutRequest(BaseModel):
-    plan_type: str        # 'single', 'complete', 'expert'
+    plan_type: str        # 'single' | 'pro' | 'agency' | 'expert' | 'update'
     modules: List[str] = []  # Pflicht bei 'single', wird bei 'complete'/'expert' auto-gesetzt
 
 
@@ -63,19 +64,6 @@ class CheckoutResponse(BaseModel):
     session_id: str
 
 
-async def get_current_user_from_auth_header(request: Request):
-    """Get current user from Authorization header"""
-    from dependencies import get_current_user, get_settings
-    from fastapi.security import HTTPAuthorizationCredentials
-
-    auth_header = request.headers.get('Authorization')
-    if not auth_header or not auth_header.startswith('Bearer '):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-
-    token = auth_header.replace('Bearer ', '')
-    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
-    settings = get_settings()
-    return await get_current_user(credentials, settings)
 
 
 def _resolve_modules(plan_type: str, modules: List[str]) -> List[str]:
@@ -87,7 +75,7 @@ def _resolve_modules(plan_type: str, modules: List[str]) -> List[str]:
 
 
 @router.post("/create-checkout", response_model=CheckoutResponse)
-async def create_checkout(request: Request, data: CreateCheckoutRequest):
+async def create_checkout(request: Request, data: CreateCheckoutRequest, current_user: dict = Depends(get_current_user)):
     """
     Erstellt eine Stripe Checkout Session.
 
@@ -98,7 +86,6 @@ async def create_checkout(request: Request, data: CreateCheckoutRequest):
       expert  → 3.990€ einmalig (komplette Überarbeitung durch Complyo)
       update  → 29€/Monat (laufende Updates nach Expertenservice)
     """
-    current_user = await get_current_user_from_auth_header(request)
     user_id: int = current_user['id']
     user_email: str = current_user['email']
     user_name: str = current_user.get('full_name', '')
@@ -262,7 +249,7 @@ async def create_checkout(request: Request, data: CreateCheckoutRequest):
 
     except stripe.error.StripeError as e:
         logger.error(f"Stripe-Fehler: {e}")
-        raise HTTPException(status_code=500, detail=f"Stripe-Fehler: {str(e)}")
+        raise HTTPException(status_code=500, detail="Stripe-Fehler")
     except HTTPException:
         raise
     except Exception as e:
@@ -464,10 +451,9 @@ async def _handle_payment_failed(invoice: Dict[str, Any]):
 # ─── Status & Portal ──────────────────────────────────────────────────────────
 
 @router.get("/subscription-status")
-async def get_subscription_status(request: Request):
+async def get_subscription_status(request: Request, current_user: dict = Depends(get_current_user)):
     """Gibt den aktuellen Subscription-Status des Users zurück."""
     try:
-        current_user = await get_current_user_from_auth_header(request)
         user_id = current_user['id']
 
         async with db_pool.acquire() as conn:
@@ -514,8 +500,12 @@ async def payment_health():
         "stripe_service_initialized": stripe_service is not None,
         "webhook_secret_configured": STRIPE_WEBHOOK_SECRET is not None,
         "prices_configured": {
-            "single_module":  STRIPE_PRICE_SINGLE_MODULE is not None,
-            "complete":       STRIPE_PRICE_COMPLETE is not None,
-            "expert_monthly": STRIPE_PRICE_EXPERT_MONTHLY is not None,
+            "single_module":  bool(STRIPE_PRICE_SINGLE_MODULE),
+            "pro_monthly":    bool(STRIPE_PRICE_PRO_MONTHLY),
+            "pro_yearly":     bool(STRIPE_PRICE_PRO_YEARLY),
+            "agency_monthly": bool(STRIPE_PRICE_AGENCY_MONTHLY),
+            "agency_yearly":  bool(STRIPE_PRICE_AGENCY_YEARLY),
+            "expert":         bool(STRIPE_PRICE_EXPERT),
+            "update_monthly": bool(STRIPE_PRICE_UPDATE_MONTHLY),
         }
     }

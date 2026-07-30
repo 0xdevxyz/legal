@@ -38,7 +38,7 @@ class AIAltTextGenerator:
         self._headers = {
             'Authorization': f'Bearer {self.api_key}',
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://complyo.tech',
+            'HTTP-Referer': 'https://complyo.de',
             'X-Title': 'Complyo Alt-Text Generator',
         }
         
@@ -77,7 +77,7 @@ class AIAltTextGenerator:
     async def _download_as_data_url(self, image_url: str) -> Optional[str]:
         """Lädt ein Bild herunter und gibt eine base64-Data-URL zurück (oder None)."""
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (compatible; ComplyoScanner/1.0; +https://complyo.tech)'}
+            headers = {'User-Agent': 'Mozilla/5.0 (compatible; ComplyoScanner/1.0; +https://complyo.de)'}
             async with aiohttp.ClientSession(headers=headers) as session:
                 async with session.get(
                     image_url, timeout=aiohttp.ClientTimeout(total=20)
