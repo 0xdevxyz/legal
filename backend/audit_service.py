@@ -62,7 +62,14 @@ class FixAuditService:
         fix_type: str,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
-        metadata: Optional[Dict] = None
+        metadata: Optional[Dict] = None,
+        # Review-Kette (seit Revision 0009): das Quality-Gate-Ergebnis wird im
+        # Audit persistiert — vorher lag es nur in fix_jobs.result und war fuer
+        # die Admin-Review-Queue unsichtbar.
+        website_id: Optional[str] = None,
+        issue_title: Optional[str] = None,
+        quality_gate_status: Optional[str] = None,
+        quality_gate_log: Optional[list] = None,
     ) -> str:
         """
         Loggt die Generierung eines Fixes
@@ -79,12 +86,16 @@ class FixAuditService:
                     INSERT INTO fix_application_audit (
                         id, user_id, fix_id, fix_category, fix_type,
                         action_type, applied_at, ip_address, user_agent,
-                        success, user_confirmed, metadata
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                        success, user_confirmed, metadata,
+                        website_id, issue_title, quality_gate_status, quality_gate_log
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                              $13, $14, $15, $16)
                     """,
                     audit_id, user_id, fix_id, fix_category, fix_type,
                     'generated', datetime.now(), ip_address, user_agent,
-                    True, False, json.dumps(metadata or {})
+                    True, False, json.dumps(metadata or {}),
+                    website_id, issue_title, quality_gate_status,
+                    json.dumps(quality_gate_log) if quality_gate_log is not None else None,
                 )
             
             logger.info(f"✅ Fix generation logged: {fix_id} by user {user_id}")

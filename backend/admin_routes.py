@@ -15,6 +15,36 @@ logger = logging.getLogger(__name__)
 admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
+async def _propagate_review_status(db, audit_id: str, neuer_status: str) -> None:
+    """Review-Entscheidung vom Audit in fix_jobs.result spiegeln.
+
+    Die Kunden-Endpunkte (/api/fix-jobs/...) gaten die Auslieferung ueber
+    result->data->quality_gate_status. Ohne diese Spiegelung bliebe ein
+    freigegebener Fix fuer den Kunden weiterhin verborgen. Best effort:
+    schlaegt die Spiegelung fehl, bleibt die Audit-Entscheidung bestehen.
+    """
+    try:
+        await db.execute(
+            """
+            UPDATE fix_jobs
+               -- result ist TEXT (Altbestand), daher Cast hin und zurueck
+               SET result = jsonb_set(
+                     result::jsonb,
+                     '{data,quality_gate_status}',
+                     to_jsonb($2::text),
+                     true
+                   )::text
+             WHERE job_id::text = (
+                     SELECT fix_id FROM fix_application_audit WHERE id = $1
+                   )
+               AND result IS NOT NULL
+            """,
+            audit_id, neuer_status,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Review-Status-Spiegelung fuer Audit {audit_id} fehlgeschlagen: {e}")
+
+
 def _reviewer_name(admin: dict) -> str:
     """Wer die Freigabe erteilt hat — fuer das Audit-Feld reviewed_by.
 
@@ -370,7 +400,7 @@ async def get_fix_review_queue(
 
 @admin_router.get("/fix-review-queue/{fix_id}")
 async def get_fix_review_detail(
-    fix_id: int,
+    fix_id: str,
     admin: dict = Depends(require_admin),
     db=Depends(get_db),
 ):
@@ -405,7 +435,7 @@ async def get_fix_review_detail(
 
 @admin_router.post("/fix-review-queue/{fix_id}/approve")
 async def approve_fix(
-    fix_id: int,
+    fix_id: str,
     admin: dict = Depends(require_admin),
     db=Depends(get_db),
 ):
@@ -434,6 +464,11 @@ async def approve_fix(
                 detail="Fix nicht gefunden oder bereits bearbeitet",
             )
 
+        # Freigabe in fix_jobs.result nachziehen — das Auslieferungs-Gating der
+        # Kunden-Endpunkte liest quality_gate_status aus dem Job-Ergebnis.
+        # audit.fix_id ist die job_id (so schreibt es der Background-Worker).
+        await _propagate_review_status(db, fix_id, "validated")
+
         logger.info(f"Fix {fix_id} approved by admin")
         return {"success": True, "fix_id": fix_id, "new_status": "validated"}
     except HTTPException:
@@ -445,7 +480,7 @@ async def approve_fix(
 
 @admin_router.post("/fix-review-queue/{fix_id}/reject")
 async def reject_fix(
-    fix_id: int,
+    fix_id: str,
     reason: str = Body(..., embed=True),
     admin: dict = Depends(require_admin),
     db=Depends(get_db),
@@ -487,6 +522,8 @@ async def reject_fix(
                 status_code=404,
                 detail="Fix nicht gefunden oder bereits bearbeitet",
             )
+
+        await _propagate_review_status(db, fix_id, "rejected")
 
         logger.info(f"Fix {fix_id} rejected by admin: {reason}")
         return {"success": True, "fix_id": fix_id, "new_status": "rejected", "reason": reason}

@@ -13,7 +13,8 @@ interface StageLog {
 }
 
 interface FixItem {
-  id: number;
+  // Audit-IDs sind UUID-Strings (fix_application_audit.id, VARCHAR)
+  id: string;
   fix_type: string;
   issue_title: string;
   quality_gate_status: string;
@@ -72,7 +73,7 @@ export default function FixReviewPage() {
     fetchQueue();
   }, [fetchQueue]);
 
-  const doAction = async (fixId: number, action: "approve" | "reject") => {
+  const doAction = async (fixId: string, action: "approve" | "reject") => {
     setLoading(true);
     setActionMsg(null);
     try {

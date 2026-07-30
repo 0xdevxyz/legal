@@ -1678,6 +1678,42 @@ async def create_fix_job(
             detail="Fehler beim Erstellen des Fix-Jobs"
         )
 
+def _gate_fix_result(result: dict) -> dict:
+    """Auslieferungs-Gating der Review-Kette (Betreiber-Entscheidung 29.07.2026).
+
+    validated  -> vollstaendig ausliefern (das Gate war gruen; angewendet wird
+                  ohnehin nur durch den Kunden selbst).
+    pending_review -> Inhalt zurueckhalten, bis ein Admin freigibt. Der Kunde
+                  sieht "wird geprueft" statt des Codes.
+    rejected   -> Inhalt zurueckhalten, Hinweis auf Ablehnung.
+
+    Faelle ohne Status (Altbestand vor Revision 0009) gelten als validated —
+    sie wurden bereits ausgeliefert, nachtraegliches Verstecken waere Willkuer.
+    """
+    if not isinstance(result, dict):
+        return result
+    data = result.get("data")
+    container = data if isinstance(data, dict) else result
+    status_wert = container.get("quality_gate_status")
+    if status_wert not in ("pending_review", "rejected"):
+        return result
+
+    zensiert = dict(result)
+    # Alles Inhaltliche raus, Metadaten bleiben (Modell, Zeiten, Gate-Log).
+    inhalt_felder = ("code", "content", "text", "html", "css", "javascript",
+                     "implementation", "steps", "guide", "widget_config", "preview")
+    if isinstance(data, dict):
+        neu_data = {k: v for k, v in data.items() if k not in inhalt_felder}
+        neu_data["under_review"] = status_wert == "pending_review"
+        neu_data["review_status"] = status_wert
+        zensiert["data"] = neu_data
+    else:
+        zensiert = {k: v for k, v in zensiert.items() if k not in inhalt_felder}
+        zensiert["under_review"] = status_wert == "pending_review"
+        zensiert["review_status"] = status_wert
+    return zensiert
+
+
 @app.get("/api/fix-jobs/{job_id}/status")
 async def get_fix_job_status(job_id: str, current_user: dict = Depends(get_current_user)):
     """
@@ -1706,6 +1742,7 @@ async def get_fix_job_status(job_id: str, current_user: dict = Depends(get_curre
             # Parse result wenn vorhanden
             if job_dict.get('result'):
                 job_dict['result'] = json.loads(job_dict['result']) if isinstance(job_dict['result'], str) else job_dict['result']
+                job_dict['result'] = _gate_fix_result(job_dict['result'])
             
             # Konvertiere Timestamps zu ISO-Format
             for key in ['created_at', 'started_at', 'completed_at']:
@@ -1756,6 +1793,10 @@ async def get_active_fix_jobs(current_user: dict = Depends(get_current_user)):
             jobs_list = []
             for job in jobs:
                 job_dict = dict(job)
+                # Review-Gating auch hier — der active-Endpunkt liefert result mit.
+                if job_dict.get('result'):
+                    parsed = json.loads(job_dict['result']) if isinstance(job_dict['result'], str) else job_dict['result']
+                    job_dict['result'] = _gate_fix_result(parsed)
                 # Konvertiere Timestamps
                 for key in ['created_at', 'estimated_completion']:
                     if job_dict.get(key):
