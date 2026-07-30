@@ -273,11 +273,16 @@ async def accessibility_worklist(
             "site_id": site_id,
             "alt_texts": {
                 "pending": alt_pending,
+                # Live-Eintraege mitliefern: der Kunde kann einen freigegebenen
+                # Fix zurueckziehen (approved -> rejected) — der naechste
+                # Manifest-Pull liefert ihn dann nicht mehr aus.
+                "approved": alt_approved,
                 "approved_count": len(alt_approved),
                 "pending_count": len(alt_pending),
             },
             "link_fixes": {
                 "pending": link_pending,
+                "approved": link_approved,
                 "approved_count": len(link_approved),
                 "pending_count": len(link_pending),
             },

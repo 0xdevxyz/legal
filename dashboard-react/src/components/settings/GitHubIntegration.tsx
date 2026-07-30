@@ -13,7 +13,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Github, Loader2, CheckCircle, AlertCircle, GitPullRequest, Plus, ExternalLink,
+  Github, Loader2, CheckCircle, AlertCircle, GitPullRequest, Plus, ExternalLink, Undo2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -131,6 +131,30 @@ export default function GitHubIntegration() {
       window.location.href = res.data.url;
     } catch (e: unknown) {
       setMeldung({ typ: 'fehler', text: fehlertext(e, 'OAuth konnte nicht gestartet werden. Ist die GitHub-App konfiguriert?') });
+      setAktion(false);
+    }
+  };
+
+  const nimmZurueck = async (pr: PullRequestItem) => {
+    const frage = pr.status === 'OPEN'
+      ? `Pull Request ${pr.repo_full_name}#${pr.pr_number} schließen?`
+      : `Revert-PR für ${pr.repo_full_name}#${pr.pr_number} erstellen? Der Gegen-PR stellt den Stand von vor dem Merge wieder her — gemerged wird von Ihnen.`;
+    if (!window.confirm(frage)) return;
+    setAktion(true);
+    setMeldung(null);
+    try {
+      const res = await api.post(`/api/v2/git/prs/${pr.id}/revert`);
+      const d = res.data;
+      setMeldung({
+        typ: 'ok',
+        text: d.action === 'closed'
+          ? `PR #${pr.pr_number} wurde geschlossen.`
+          : `Revert-PR #${d.pr_number} erstellt — bitte auf GitHub prüfen und mergen.`,
+      });
+      await ladeAlles();
+    } catch (e: unknown) {
+      setMeldung({ typ: 'fehler', text: fehlertext(e, 'Zurücknehmen fehlgeschlagen.') });
+    } finally {
       setAktion(false);
     }
   };
@@ -274,12 +298,24 @@ export default function GitHubIntegration() {
                         </span>
                         <span className="dark:text-zinc-500 text-gray-500 truncate">{pr.branch_name}</span>
                       </div>
-                      {pr.pr_url && (
-                        <a href={pr.pr_url} target="_blank" rel="noopener noreferrer"
-                           className="inline-flex items-center gap-1 text-teal-500 hover:text-teal-400">
-                          Ansehen <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {(pr.status === 'OPEN' || pr.status === 'MERGED') && (
+                          <button
+                            onClick={() => nimmZurueck(pr)}
+                            disabled={aktion}
+                            className="inline-flex items-center gap-1 text-sm text-amber-500 hover:text-amber-400 disabled:opacity-50"
+                            title={pr.status === 'OPEN' ? 'PR schließen' : 'Revert-PR erstellen'}
+                          >
+                            <Undo2 className="w-3 h-3" /> Zurücknehmen
+                          </button>
+                        )}
+                        {pr.pr_url && (
+                          <a href={pr.pr_url} target="_blank" rel="noopener noreferrer"
+                             className="inline-flex items-center gap-1 text-teal-500 hover:text-teal-400">
+                            Ansehen <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>

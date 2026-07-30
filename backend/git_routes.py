@@ -20,7 +20,7 @@ from datetime import datetime
 from dependencies import get_current_user
 
 from git_service import (
-    git_service, GitProvider, GitCredentials, RepoInfo, PullRequestResult
+    git_service, GitProvider, GitCredentials, RepoInfo, PullRequestResult, PRStatus
 )
 from git_token_crypto import GitTokenCryptoError, decrypt_token, encrypt_token
 
@@ -476,6 +476,90 @@ async def list_pull_requests(
             }
             for r in rows
         ]
+    }
+
+
+@git_router.post("/prs/{pr_id}/revert")
+async def revert_pull_request(
+    pr_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Nimmt einen ueber complyo erstellten PR zurueck.
+
+    Offene PRs werden geschlossen; gemergte bekommen einen Gegen-PR, der den
+    Stand von vor dem Merge wiederherstellt. Auch der Revert wird nur
+    vorgeschlagen — gemerged wird vom Kunden (gleiche Regel wie hinwaerts).
+    """
+    user_id = user.get("user_id")
+
+    async with db_pool.acquire() as conn:
+        pr_row = await conn.fetchrow(
+            """
+            SELECT p.id, p.pr_number, p.status, p.repo_id,
+                   r.provider, r.owner, r.repo, r.default_branch
+            FROM git_pull_requests p
+            JOIN git_connected_repos r ON p.repo_id = r.id
+            WHERE p.id = $1 AND p.user_id = $2
+            """,
+            pr_id, user_id,
+        )
+    if not pr_row:
+        raise HTTPException(status_code=404, detail="Pull Request nicht gefunden.")
+
+    credentials = await _get_git_credentials(user_id, pr_row["provider"])
+    if not credentials:
+        raise HTTPException(
+            status_code=409,
+            detail="Git-Verbindung abgelaufen. Bitte erneut mit GitHub verbinden.",
+        )
+
+    repo_info = RepoInfo(
+        provider=GitProvider(pr_row["provider"]),
+        owner=pr_row["owner"],
+        repo=pr_row["repo"],
+        default_branch=pr_row["default_branch"],
+    )
+
+    result = await git_service.revert_pull_request(
+        credentials=credentials,
+        repo_info=repo_info,
+        pr_number=pr_row["pr_number"],
+    )
+    if not result.success:
+        raise HTTPException(status_code=422, detail=result.error or "Revert fehlgeschlagen.")
+
+    async with db_pool.acquire() as conn:
+        if result.status == PRStatus.CLOSED:
+            # Offener PR wurde geschlossen — Original-Eintrag nachziehen.
+            await conn.execute(
+                "UPDATE git_pull_requests SET status = 'CLOSED', updated_at = NOW() WHERE id = $1",
+                pr_id,
+            )
+            aktion = "closed"
+        else:
+            # Gegen-PR entstanden: Original als MERGED markieren (Revert setzt
+            # einen Merge voraus) und den Revert-PR fuers Tracking speichern.
+            await conn.execute(
+                "UPDATE git_pull_requests SET status = 'MERGED', updated_at = NOW() WHERE id = $1",
+                pr_id,
+            )
+            await conn.execute(
+                """
+                INSERT INTO git_pull_requests
+                (user_id, repo_id, pr_number, pr_url, branch_name, feature_ids, scan_id, status, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, NOW())
+                """,
+                user_id, pr_row["repo_id"], result.pr_number, result.pr_url,
+                result.branch_name, ["REVERT"], result.status.value,
+            )
+            aktion = "revert_pr_created"
+
+    return {
+        "success": True,
+        "action": aktion,
+        "pr_number": result.pr_number,
+        "pr_url": result.pr_url,
+        "branch_name": result.branch_name,
     }
 
 
