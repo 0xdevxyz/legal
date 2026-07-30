@@ -138,10 +138,9 @@ from risk_radar_routes import router as risk_radar_router
 from accessibility_fix_routes import accessibility_fix_router, init_routes as init_accessibility_routes
 
 # Git Integration - Automatische PRs für Accessibility-Fixes
-# Stillgelegt 2026-07-29 vor dem Launch: Router ohne Frontend, dessen Tabellen
-# nie angelegt wurden. Code bleibt im Repo — zum Reaktivieren Schema nachziehen
-# (siehe tests/test_schema_completeness.py) und diese Zeilen wieder aktivieren.
-# from git_routes import git_router, init_git_routes
+# Reaktiviert 2026-07-30 (Betreiber-Entscheidung: PR-Kanal ist der
+# strategische Auslieferungsweg). Schema: Revision 0010_git_integration.
+from git_routes import git_router, init_git_routes
 
 # Alt-Text AI Generation - KI-generierte Alt-Texte für Bilder
 from alt_text_routes import router as alt_text_router
@@ -609,8 +608,8 @@ async def startup_event():
     init_legal_document_routes(db_pool, auth_service)
     print("✅ Legal Document routes (DPA Generator) initialized")
     
-    # Git-Integration: stillgelegt 2026-07-29 (kein Frontend, Tabellen
-    # git_credentials/git_connected_repos/git_pull_requests existieren nicht).
+    # Git-Integration (Revision 0010): OAuth-State in Redis, Tokens verschluesselt.
+    init_git_routes(db_pool, auth_service, _async_redis)
 
     # Initialize Firebase Admin SDK
     firebase_app = init_firebase_admin()
@@ -684,7 +683,7 @@ async def startup_event():
     app.include_router(ai_legal_router)  # AI Legal System - NEW
     app.include_router(legal_notification_router)  # Legal News Notifications - NEW
     app.include_router(accessibility_fix_router)  # BFSG Accessibility Fix Pipeline - NEW
-    # app.include_router(git_router)  # stillgelegt 2026-07-29
+    app.include_router(git_router)  # Git-Integration: PRs statt Direktschreiben
     app.include_router(alt_text_router)  # Alt-Text AI Generation - NEW
     app.include_router(deep_cookie_scanner_router)  # Deep Cookie Scanner - Premium Feature
     app.include_router(legal_document_router)  # AUDIT-19: DPA Generator

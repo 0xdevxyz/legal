@@ -23,10 +23,6 @@ BEKANNTE_AUSNAHMEN = {
     # Expert-Service: Router am 2026-07-29 stillgelegt (kein Frontend).
     # Vor einer Reaktivierung muss das Schema nachgezogen werden.
     "expert_service_requests",
-    # Git-PR-Deployment: Router am 2026-07-29 stillgelegt (kein Frontend).
-    "git_credentials",
-    "git_connected_repos",
-    "git_pull_requests",
 }
 
 # Nicht-Tabellen bzw. CTEs/Aliasse, die dem Regex sonst ins Netz gehen.

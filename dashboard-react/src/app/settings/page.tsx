@@ -15,16 +15,19 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { safeStorage } from '@/lib/storage';
 import { PageContainer, PageHeader } from '@/components/dashboard/PageShell';
+import GitHubIntegration from '@/components/settings/GitHubIntegration';
+import { Github } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
-type Tab = 'profil' | 'benachrichtigungen' | 'sicherheit' | 'datenschutz';
+type Tab = 'profil' | 'benachrichtigungen' | 'sicherheit' | 'datenschutz' | 'integrationen';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'profil', label: 'Profil', icon: User },
   { id: 'benachrichtigungen', label: 'Benachrichtigungen', icon: Bell },
   { id: 'sicherheit', label: 'Sicherheit', icon: Shield },
   { id: 'datenschutz', label: 'Datenschutz', icon: Globe },
+  { id: 'integrationen', label: 'Integrationen', icon: Github },
 ];
 
 export default function SettingsPage() {
@@ -445,6 +448,8 @@ export default function SettingsPage() {
                 </Card>
               </div>
             )}
+
+            {activeTab === 'integrationen' && <GitHubIntegration />}
           </div>
         </div>
       </div>
