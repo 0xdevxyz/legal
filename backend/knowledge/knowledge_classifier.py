@@ -9,6 +9,11 @@ from knowledge import KnowledgeItem, RawContentItem
 logger = logging.getLogger(__name__)
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+# Base-URL fuer den OpenAI-kompatiblen Client. Default: OpenRouter, sodass der
+# vorhandene OpenRouter-Key (auch fuer Embeddings text-embedding-3-small und
+# Chat gpt-4o-mini) genutzt werden kann. Fuer echtes OpenAI: OPENAI_BASE_URL
+# auf https://api.openai.com/v1 setzen.
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
 
 LAW_AREAS_MAP = {
     "dsgvo": "DSGVO", "gdpr": "DSGVO", "datenschutz": "DSGVO",
@@ -69,7 +74,7 @@ class KnowledgeClassifier:
         if not self._client:
             try:
                 from openai import AsyncOpenAI
-                self._client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+                self._client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
             except ImportError:
                 logger.warning("openai package not installed, using rule-based fallback")
         return self._client

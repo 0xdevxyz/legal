@@ -13,6 +13,11 @@ VAULT_ROOT = Path(os.getenv("KNOWLEDGE_VAULT_PATH", "/home/clawd/saas/legal/know
 META_DIR = VAULT_ROOT / "_meta"
 EMBEDDINGS_CACHE_FILE = META_DIR / "embeddings.json"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+# Base-URL fuer den OpenAI-kompatiblen Client. Default: OpenRouter, sodass der
+# vorhandene OpenRouter-Key (auch fuer Embeddings text-embedding-3-small und
+# Chat gpt-4o-mini) genutzt werden kann. Fuer echtes OpenAI: OPENAI_BASE_URL
+# auf https://api.openai.com/v1 setzen.
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
 EMBEDDING_MODEL = "text-embedding-3-small"
 
 
@@ -64,7 +69,7 @@ class KnowledgeRetriever:
         if not self._openai_client and OPENAI_API_KEY:
             try:
                 from openai import AsyncOpenAI
-                self._openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+                self._openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
             except ImportError:
                 logger.warning("openai not installed, keyword-based fallback will be used")
         return self._openai_client
