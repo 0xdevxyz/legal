@@ -110,7 +110,9 @@ _GEDROSSELTE_ENDPUNKTE = [
     ("legal_text_routes.py", '"/{doc_type}/generate"'),
     ("fix_routes.py", '"/generate"'),                       # slowapi @limiter.limit
     ("fix_apply_routes.py", '"/apply"'),
-    ("fix_apply_routes.py", '"/apply/preview"'),
+    # /apply/preview wurde 2026-07-30 entfernt (Stub mit erfundener Staging-URL);
+    # /rollback ist seither ebenfalls gedrosselt.
+    ("fix_apply_routes.py", '"/rollback"'),
     ("alt_text_routes.py", '"/generate-alt-texts"'),
     ("ai_compliance_routes.py", '"/systems/{system_id}/documentation/generate"'),
     ("ai_legal_routes.py", '"/updates/{update_id}/classify"'),

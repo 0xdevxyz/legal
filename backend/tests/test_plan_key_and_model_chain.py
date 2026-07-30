@@ -23,8 +23,8 @@ import fix_apply_routes
 def test_fix_apply_reads_plan_type_not_plan():
     """Der Key heisst plan_type — 'plan' liefert immer den Default."""
     src = inspect.getsource(fix_apply_routes)
-    assert "current_user.get('plan_type'" in src
-    assert "current_user.get('plan'," not in src, (
+    assert 'get("plan_type")' in src or "get('plan_type'" in src
+    assert "current_user.get('plan'," not in src and 'current_user.get("plan",' not in src, (
         "fix_apply_routes liest weiterhin den nicht existierenden Key 'plan'"
     )
 
@@ -42,9 +42,11 @@ def test_plan_gate_default_is_restrictive():
     """
     Default darf kein privilegierter Plan sein.
     (Vorher: .get('plan', 'ai') — ein erfundener Plan als Default.)
+    Neufassung 30.07.: (plan_type or "free") plus explizite Free-Sperre.
     """
     src = inspect.getsource(fix_apply_routes)
-    assert "current_user.get('plan_type', 'free')" in src
+    assert 'or "free")' in src, "Default muss free (restriktiv) sein"
+    assert 'in ("", "free")' in src, "Free-Plan muss explizit gesperrt sein"
 
 
 # ============================================================================
