@@ -293,6 +293,46 @@ def _find_consent_container(soup):
     return best
 
 
+def _find_prechecked_toggles(banner_el):
+    """
+    Vorangekreuzte Consent-Kategorie-Toggles im Banner (EuGH C-673/17 Planet49,
+    BGH I ZR 7/16 Cookie II: Einwilligung erfordert aktives Opt-in).
+    Zulaessig und daher ausgenommen: disabled-Inputs (uebliches Muster fuer den
+    Notwendig-Toggle) und als notwendig/technisch benannte Kategorien.
+    """
+    if banner_el is None:
+        return []
+    necessary_re = re.compile(
+        r'necessary|notwendig|erforderlich|essen[zt]iell|essential|technisch|required',
+        re.I,
+    )
+    flagged = []
+    for inp in banner_el.find_all('input', {'type': 'checkbox'}):
+        checked = inp.has_attr('checked') or (
+            str(inp.get('aria-checked', '')).lower() == 'true'
+        )
+        if not checked or inp.has_attr('disabled'):
+            continue
+        signature = ' '.join([
+            str(inp.get('id', '')), str(inp.get('name', '')),
+            ' '.join(inp.get('class', []) or []), str(inp.get('value', '')),
+            str(inp.get('aria-label', '')),
+        ])
+        label_text = ''
+        inp_id = inp.get('id')
+        if inp_id:
+            lab = banner_el.find('label', attrs={'for': inp_id})
+            if lab is not None:
+                label_text = lab.get_text(' ', strip=True)
+        parent_label = inp.find_parent('label')
+        if parent_label is not None:
+            label_text += ' ' + parent_label.get_text(' ', strip=True)
+        if necessary_re.search(signature) or necessary_re.search(label_text):
+            continue
+        flagged.append((signature.strip() or label_text.strip() or 'checkbox')[:80])
+    return flagged
+
+
 def consent_render_needed(soup) -> bool:
     """True, wenn ein (vermutlich JS-injizierter) Cookie-Banner/Consent/Tracking
     vorliegt, der NICHT bereits als sichtbarer Container im statischen HTML steht.
@@ -327,7 +367,7 @@ def consent_render_needed(soup) -> bool:
     return False
 
 
-async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, consent_buttons=None) -> List[Dict[str, Any]]:
+async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, consent_buttons=None, request_urls=None) -> List[Dict[str, Any]]:
     """
     Prüft Cookie-Consent-Compliance
     
@@ -518,6 +558,14 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                 has_tracking = True
                 break
 
+    # 4. Netzwerk-Evidenz aus dem Consent-freien Render: Requests an bekannte
+    #    Tracker belegen Tracking auch dann, wenn es statisch unsichtbar ist
+    #    (z.B. per Tag Manager injiziert erst zur Laufzeit).
+    if not has_tracking and request_urls:
+        from ..tracker_catalog import match_tracking_request as _mtr
+        if any(_mtr(u) for u in request_urls):
+            has_tracking = True
+
     if not has_cookie_banner:
         if has_tracking:
             # Tracking vorhanden aber kein Banner → alle Sub-Issues als critical
@@ -612,8 +660,35 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                 is_missing=False
             )))
     else:
+        # Vorangekreuzte Kategorie-Toggles sind unabhängig vom Tracking-Nachweis
+        # unzulässig (EuGH Planet49, BGH Cookie II) — deshalb VOR dem
+        # Ohne-Tracking-Early-Return prüfen. Bei managed CMP kein DOM greifbar.
+        _managed_cmp_early = has_cookie_banner and not has_visible_banner
+        prechecked_toggles = [] if _managed_cmp_early else _find_prechecked_toggles(banner_el)
+        if prechecked_toggles:
+            issues.append(asdict(CookieIssue(
+                category='cookies',
+                severity='warning',
+                title='Vorangekreuzte Cookie-Kategorien im Consent-Banner',
+                description=(
+                    f'{len(prechecked_toggles)} Kategorie-Toggle(s) im Cookie-Banner sind '
+                    f'bereits vorangekreuzt (z.B. {prechecked_toggles[0]}). Eine wirksame '
+                    f'Einwilligung erfordert aktives Opt-in — vorausgewählte Kästchen für '
+                    f'nicht-notwendige Kategorien sind unzulässig.'
+                ),
+                risk_euro=3000,
+                recommendation=(
+                    'Liefern Sie alle nicht-notwendigen Kategorie-Toggles standardmäßig '
+                    'deaktiviert aus. Nur technisch notwendige Cookies dürfen vorbelegt '
+                    '(und gesperrt) sein.'
+                ),
+                legal_basis='EuGH C-673/17 (Planet49), BGH I ZR 7/16 (Cookie II), DSGVO Art. 4 Nr. 11',
+                auto_fixable=True,
+                is_missing=False,
+            )))
+
         # Banner vorhanden — Qualitätsprüfung nur wenn Tracking-Cookies gesetzt werden.
-        # Ohne Tracking: kein Consent nötig → keine Issues, Score 100.
+        # Ohne Tracking: kein Consent nötig → keine weiteren Issues.
         if not has_tracking:
             issues.append(asdict(CookieIssue(
                 category='cookies',
@@ -680,22 +755,29 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
         has_categories = btn['settings'] or managed_cmp or kw_categories
         # 4. Widerrufsmöglichkeit — nachträgliches Ändern
         has_revoke = managed_cmp or kw_revoke
-        # 5. Tracking vor Consent — werden Analytics/Pixel bereits im HTML geladen?
+        # 5. Tracking vor Consent — Evidenz-Hierarchie:
+        #    A) Netzwerk-Mitschnitt des Consent-freien Renders (hart, FP-arm:
+        #       korrekt blockende CMPs feuern keine Requests -> kein Issue;
+        #       Google-Loader mit Consent Mode zaehlen nicht, nur Collect-Hits)
+        #    B) statischer <script src>-Scan NUR wenn kein Render vorlag
+        from ..tracker_catalog import match_tracking_request, match_tracking_script_src
         tracking_before_consent = []
-        tracking_scripts = [
-            ('Google Analytics / GTM', r'google-analytics\.com|googletagmanager\.com/gtag'),
-            ('Facebook Pixel', r'connect\.facebook\.net|facebook\.com/tr'),
-            ('Hotjar', r'static\.hotjar\.com|script\.hotjar\.com'),
-            ('LinkedIn Insight', r'snap\.licdn\.com|linkedin\.com/px'),
-            ('TikTok Pixel', r'analytics\.tiktok\.com'),
-            ('Pinterest', r'pintrk|pinterest\.com/v3'),
-            ('Matomo (extern)', r'matomo\.cloud'),
-        ]
-        for script in soup.find_all('script', src=True):
-            src = script.get('src', '').lower()
-            for name, pattern in tracking_scripts:
-                if re.search(pattern, src, re.I) and name not in tracking_before_consent:
-                    tracking_before_consent.append(name)
+        tracking_evidence_urls = {}
+        if request_urls is not None:
+            for req_url in request_urls:
+                svc = match_tracking_request(req_url)
+                if svc and svc['name'] not in tracking_before_consent:
+                    tracking_before_consent.append(svc['name'])
+                    tracking_evidence_urls[svc['name']] = req_url
+        else:
+            for script in soup.find_all('script', src=True):
+                # Von Blockern neutralisierte Scripts laden nicht -> keine Evidenz.
+                if (script.get('type') or '').lower() in ('text/plain', 'text/template'):
+                    continue
+                src = script.get('src', '').lower()
+                svc = match_tracking_script_src(src)
+                if svc and svc['name'] not in tracking_before_consent:
+                    tracking_before_consent.append(svc['name'])
 
         if not has_reject:
             issues.append(asdict(CookieIssue(
@@ -804,15 +886,31 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
             )))
 
         if tracking_before_consent:
+            if tracking_evidence_urls:
+                _evidence_lines = '; '.join(
+                    f'{name}: {tracking_evidence_urls[name][:120]}'
+                    for name in tracking_before_consent[:5]
+                    if name in tracking_evidence_urls
+                )
+                _evidence_text = (
+                    f'Folgende Tracker wurden im Live-Test nachweislich VOR einer '
+                    f'Einwilligung geladen (Netzwerk-Mitschnitt): '
+                    f'{", ".join(tracking_before_consent)}. '
+                    f'Beweis-Requests: {_evidence_lines}. '
+                )
+            else:
+                _evidence_text = (
+                    f'Folgende Tracking-Scripts werden im HTML geladen bevor eine '
+                    f'Einwilligung eingeholt wird: {", ".join(tracking_before_consent)}. '
+                )
             issues.append(asdict(CookieIssue(
                 category='cookies',
                 severity='critical',
-                title=f'Tracking-Scripts vor Consent geladen ({", ".join(tracking_before_consent[:3])})',
+                title=f'Tracking vor Consent geladen ({", ".join(tracking_before_consent[:3])})',
                 description=(
-                    f'Folgende Tracking-Scripts werden im HTML geladen bevor eine Einwilligung '
-                    f'eingeholt wird: {", ".join(tracking_before_consent)}. '
-                    f'Das ist ein klarer Verstoß gegen DSGVO Art. 6 und TDDDG §25 — '
-                    f'selbst mit Cookie-Banner, wenn das Script im initialen HTML-Load enthalten ist.'
+                    _evidence_text +
+                    'Das ist ein klarer Verstoß gegen DSGVO Art. 6 und TDDDG §25 — '
+                    'selbst mit Cookie-Banner, wenn Tracker vor der Einwilligung laden.'
                 ),
                 risk_euro=10000,
                 recommendation=(
@@ -824,6 +922,7 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                 auto_fixable=True,
                 is_missing=False,
             )))
+
     
     return issues
 

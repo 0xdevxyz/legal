@@ -400,6 +400,18 @@ class ScoreCalculator:
             "overall_score": ScoreCalculator.calculate_overall_score(pillar_scores),
             "pillar_scores": pillar_scores,
             "pillar_status": pillar_status,
+            # Ehrlichkeits-Hinweis: automatisierte A11y-Pruefung deckt nur einen
+            # Teil der WCAG-AA-Kriterien ab — ein hoher Score ist KEIN Nachweis
+            # vollstaendiger Barrierefreiheit.
+            "pillar_notes": {
+                "accessibility": (
+                    "Automatisierte Prüfung (axe-core + Heuristiken) deckt nur einen Teil "
+                    "der WCAG-2.1-AA-Kriterien ab (branchenüblich ~30–40%). Ein Score von "
+                    "100 bedeutet: keine automatisiert erkennbaren Verstöße — er ersetzt "
+                    "keine manuelle Prüfung (Tastaturbedienung, Fokus-Reihenfolge, "
+                    "Screenreader, Verständlichkeit)."
+                ),
+            },
         }
 
     @staticmethod

@@ -121,6 +121,26 @@ def _validate_spec(spec: Dict[str, Any]) -> Optional[str]:
             re.compile(pat)
         except re.error as e:
             return f"invalid html_pattern '{pat}': {e}"
+
+    # Qualitaets-Gate (Regel-SSOT check_spec_rules, siehe Audit 2026-07):
+    from compliance_engine.check_spec_rules import (
+        detection_is_weak, detection_is_inverted, AUTO_CHECK_RISK_CAP,
+    )
+    inverted = detection_is_inverted(spec["detection"])
+    if inverted:
+        return (
+            f"inverted logic: '{inverted}' ist ein Verstoss-Indikator und darf "
+            f"nicht als required_element verlangt werden (der Check wuerde bei "
+            f"konformen Seiten feuern und beim Verstoss schweigen)"
+        )
+    if detection_is_weak(spec["detection"]):
+        return (
+            "weak detection: generische Rechtsseiten-Link-Keywords ohne "
+            "content_requirements bestehen auf jeder Seite mit DS-/Impressum-Link "
+            "— content_requirements ergaenzen oder spezifische html_patterns nutzen"
+        )
+    if spec["risk_euro"] > AUTO_CHECK_RISK_CAP:
+        return f"risk_euro {spec['risk_euro']} ueber KMU-Deckel {AUTO_CHECK_RISK_CAP}"
     return None
 
 
@@ -143,6 +163,11 @@ _SLUG_STOPWORDS = {
     "fehlt", "fehlend", "vorhanden", "erforderlich", "required", "pflicht",
     "website", "websites", "webseite", "seite", "neu", "neue", "und", "der",
     "die", "das", "fuer", "für", "auf", "bei", "von",
+    # Kontextwoerter ohne Unterscheidungskraft in Check-Slugs — verwaesserten
+    # die Jaccard-Aehnlichkeit von Themen-Zwillingen (dsa-transparenzbericht-
+    # online-plattform vs. -hosting). Der Norm-Referenz-Filter in
+    # _is_same_topic schuetzt weiterhin vor Ueber-Dedup.
+    "online", "plattform", "plattformen", "hosting", "dienst", "dienste",
 }
 
 # Beide Schwellen müssen greifen, damit zwei Prüfungen als dasselbe Thema gelten.
@@ -154,9 +179,26 @@ _SLUG_SIMILARITY_THRESHOLD = 0.6
 _TITLE_SIMILARITY_THRESHOLD = 0.6
 
 
+# Praefix-Synonyme: verschiedene Wortbildungen derselben Pflicht (melde-
+# mechanismus/-system/-wege, transparenzbericht-*) sollen als EIN Token
+# zaehlen — sonst rutschen Themen-Zwillinge unter die Jaccard-Schwelle
+# (so entstanden 4 parallele dsa-melde*-Checks im Altbestand).
+_TOKEN_SYNONYM_PREFIXES = (
+    "melde", "transparenzbericht", "kennzeichnung", "kuendigungs",
+    "beschwerde", "transparenzhinweis",
+)
+
+
+def _canon_token(token: str) -> str:
+    for prefix in _TOKEN_SYNONYM_PREFIXES:
+        if token.startswith(prefix):
+            return prefix
+    return token
+
+
 def _slug_tokens(slug: str) -> set:
     return {
-        t for t in re.split(r"[-_\s]+", (slug or "").lower())
+        _canon_token(t) for t in re.split(r"[-_\s]+", (slug or "").lower())
         if len(t) >= 2 and t not in _SLUG_STOPWORDS
     }
 
@@ -293,6 +335,16 @@ async def generate_check_for_legal_update(
         status = "pending_review"
         logger.info(
             f"check_generator: {spec.get('slug')} ist critical -> trotz "
+            f"Auto-Activate auf pending_review (Safety-Governor)"
+        )
+    # Always-gated Checks laufen auf JEDER Kundenseite — ob die vom LLM
+    # erfundenen Detection-Begriffe verbreitet genug sind, kann statisch
+    # nicht validiert werden (Haupttreiber der Cookie-FP-Duplikate im
+    # Altbestand). Ein Mensch gibt frei.
+    if status == "active" and (spec.get("applies_when") or {}).get("always") is True:
+        status = "pending_review"
+        logger.info(
+            f"check_generator: {spec.get('slug')} ist always-gated -> trotz "
             f"Auto-Activate auf pending_review (Safety-Governor)"
         )
 

@@ -43,6 +43,30 @@ def detect_shop(soup: BeautifulSoup) -> bool:
     return matches >= SHOP_THRESHOLD
 
 
+SUBSCRIPTION_PATTERNS = [
+    r'\babonnement\b', r'\babo\b', r'\bsubscription\b', r'\bmitgliedschaft\b',
+    r'\bmembership\b', r'monatlich kündbar', r'jährlich kündbar', r'\brecurring\b',
+    r'pro monat', r'/monat', r'im monat', r'monatsabo', r'jahresabo',
+    r'\btarif\b', r'preisplan', r'pricing plan',
+]
+
+SUBSCRIPTION_THRESHOLD = 2
+
+
+def detect_subscription(soup: BeautifulSoup) -> bool:
+    """
+    Erkennung von Abo-/SaaS-Angeboten OHNE klassischen Warenkorb.
+    Noetig, weil Widerrufsrecht (§355 BGB) und Kündigungsbutton (§312k BGB)
+    auch fuer reine Abo-Dienste gelten — die frueher hinter detect_shop
+    (Warenkorb-Vokabular, Threshold 3) unerreichbar waren.
+    Threshold 2 + Wortgrenzen als FP-Schutz.
+    """
+    html_lower = str(soup).lower()
+    matches = sum(1 for p in SUBSCRIPTION_PATTERNS if re.search(p, html_lower))
+    logger.info(f"Subscription-Detection: {matches}/{SUBSCRIPTION_THRESHOLD} Patterns")
+    return matches >= SUBSCRIPTION_THRESHOLD
+
+
 @dataclass
 class ShopIssue:
     category: str
@@ -326,16 +350,26 @@ async def check_shop_compliance(url: str, soup: BeautifulSoup, session=None) -> 
     Gibt leere Liste zurück wenn keine Shop-Indikatoren erkannt werden (SHOP_THRESHOLD=3).
     Prüft: AGB, Widerrufsbelehrung, PAngV-Preisangaben, Kündigungsbutton.
     """
-    if not detect_shop(soup):
-        logger.info(f"Kein Shop erkannt auf {url} — Shop-Checks übersprungen")
+    is_shop = detect_shop(soup)
+    is_subscription = detect_subscription(soup)
+
+    if not is_shop and not is_subscription:
+        logger.info(f"Kein Shop/Abo erkannt auf {url} — Shop-Checks übersprungen")
         return []
 
-    logger.info(f"Shop erkannt auf {url} — starte Shop-Compliance-Checks")
+    logger.info(
+        f"Shop/Abo erkannt auf {url} (shop={is_shop}, subscription={is_subscription}) "
+        f"— starte Compliance-Checks"
+    )
     issues: List[ShopIssue] = []
 
-    issues.extend(await _check_agb(url, soup, session))
+    # AGB + PAngV sind waren-/preisbezogen -> nur bei echtem Shop.
+    if is_shop:
+        issues.extend(await _check_agb(url, soup, session))
+        issues.extend(await _check_pangv(soup))
+    # Widerruf (§355 BGB) + Kündigungsbutton (§312k BGB) gelten auch fuer
+    # reine Abo-/SaaS-Dienste ohne Warenkorb.
     issues.extend(await _check_widerruf(url, soup, session))
-    issues.extend(await _check_pangv(soup))
     issues.extend(await _check_kuendigungsbutton(soup))
 
     logger.info(f"Shop-Checks: {len(issues)} Issues gefunden")

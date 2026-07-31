@@ -318,37 +318,54 @@ async def check_impressum_compliance(url: str, soup: BeautifulSoup, session=None
                                 url=impressum_url
                             )
                             
+                            # critical: Pflichtfelder jeder Rechtsform.
+                            # warning: rechtsform-/umsatzabhaengige Angaben (USt-IdNr,
+                            # Handelsregister) — nicht jede Firma braucht beide, aber
+                            # ihr Fehlen ist ein haeufiger Abmahnpunkt und wird jetzt
+                            # sichtbar gemacht statt verworfen.
+                            critical_fields = {
+                                "firmenname": (2000, "Firmenname/Name fehlt im Impressum",
+                                               "Die Angabe des vollständigen Firmennamens fehlt im Impressum."),
+                                "adresse": (2000, "Anschrift fehlt im Impressum",
+                                            "Die vollständige Postanschrift fehlt im Impressum."),
+                                "plz_ort": (2000, "PLZ/Ort fehlen im Impressum",
+                                            "Postleitzahl und Ort fehlen in der Anschrift des Impressums."),
+                                "email": (1500, "E-Mail-Adresse fehlt im Impressum",
+                                          "Es fehlt eine E-Mail-Adresse für Kontaktaufnahme."),
+                                "telefon": (1500, "Telefonnummer fehlt im Impressum",
+                                            "Es fehlt eine Telefonnummer für Kontaktaufnahme."),
+                            }
+                            warning_fields = {
+                                "ust_id": (1000, "USt-IdNr nicht gefunden",
+                                           "Im Impressum wurde keine Umsatzsteuer-Identifikationsnummer gefunden. "
+                                           "Falls Ihr Unternehmen eine USt-IdNr besitzt, ist die Angabe Pflicht (§5 Abs. 1 Nr. 6 DDG)."),
+                                "handelsregister": (1000, "Handelsregister-Angabe nicht gefunden",
+                                                    "Im Impressum wurde kein Handelsregister-Eintrag (Registergericht + Nummer) gefunden. "
+                                                    "Für eingetragene Gesellschaften (GmbH, UG, AG, e.K., OHG, KG) ist die Angabe Pflicht (§5 Abs. 1 Nr. 4 DDG)."),
+                            }
                             for field_result in analysis["results"]:
-                                if not field_result["found"] and field_result["field"] in ["firmenname", "adresse", "email", "telefon"]:
-                                    risk_euros = {
-                                        "firmenname": 2000,
-                                        "adresse": 2000,
-                                        "email": 1500,
-                                        "telefon": 1500
-                                    }
-                                    titles = {
-                                        "firmenname": "Firmenname/Name fehlt im Impressum",
-                                        "adresse": "Anschrift fehlt im Impressum",
-                                        "email": "E-Mail-Adresse fehlt im Impressum",
-                                        "telefon": "Telefonnummer fehlt im Impressum"
-                                    }
-                                    descriptions = {
-                                        "firmenname": "Die Angabe des vollständigen Firmennamens fehlt im Impressum.",
-                                        "adresse": "Die vollständige Postanschrift fehlt im Impressum.",
-                                        "email": "Es fehlt eine E-Mail-Adresse für Kontaktaufnahme.",
-                                        "telefon": "Es fehlt eine Telefonnummer für Kontaktaufnahme."
-                                    }
-                                    issues.append(asdict(ImpressumIssue(
-                                        category='impressum',
-                                        severity='critical',
-                                        title=titles[field_result["field"]],
-                                        description=descriptions[field_result["field"]],
-                                        risk_euro=risk_euros[field_result["field"]],
-                                        recommendation=f'Fügen Sie {field_result["field"]} zum Impressum hinzu.',
-                                        legal_basis='DDG §5',
-                                        auto_fixable=False,
-                                        is_missing=False
-                                    )))
+                                fname = field_result["field"]
+                                if field_result["found"]:
+                                    continue
+                                if fname in critical_fields:
+                                    risk, title, desc = critical_fields[fname]
+                                    severity = "critical"
+                                elif fname in warning_fields:
+                                    risk, title, desc = warning_fields[fname]
+                                    severity = "warning"
+                                else:
+                                    continue
+                                issues.append(asdict(ImpressumIssue(
+                                    category='impressum',
+                                    severity=severity,
+                                    title=title,
+                                    description=desc,
+                                    risk_euro=risk,
+                                    recommendation=f'Ergänzen Sie die Angabe ({fname}) im Impressum.',
+                                    legal_basis='DDG §5',
+                                    auto_fixable=False,
+                                    is_missing=False
+                                )))
                             
                             if analysis["quality"] in ["poor", "insufficient"]:
                                 issues.append(asdict(ImpressumIssue(
