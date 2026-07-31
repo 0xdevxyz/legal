@@ -168,6 +168,22 @@ def _is_manual_contrast_hint(issue) -> bool:
     return category == 'kontraste' or 'Kontrast-Prüfung empfohlen' in title
 
 
+def _collect_reported_criteria(issues: list) -> set:
+    """Sammelt alle bereits gemeldeten WCAG-Kriterien (Dataclass- und Dict-Issues)."""
+    reported = set()
+    for it in issues:
+        if isinstance(it, dict):
+            meta = it.get('metadata') or {}
+            reported |= set(meta.get('wcag_criteria') or [])
+            if it.get('wcag_criterion'):
+                reported.add(it['wcag_criterion'])
+        else:
+            meta = getattr(it, 'metadata', None) or {}
+            if isinstance(meta, dict):
+                reported |= set(meta.get('wcag_criteria') or [])
+    return reported
+
+
 def _merge_axe_into_heuristic(heuristic_issues: list, axe_issues: List[Dict[str, Any]]) -> list:
     """
     Führt axe-Issues mit den Heuristik-Issues zusammen.
@@ -215,44 +231,33 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
     
     issues = []
     
-    # 1. Check für Accessibility-Tools/Widgets
+    # 1. Hinweis auf Assistenz-Widget — rein informativ (info, 0 EUR).
+    #    Ein Overlay-Widget stellt KEINE WCAG-/BFSG-Konformitaet her und
+    #    beeinflusst weder Score noch Prueftiefe.
     widget_issue = await _check_accessibility_widget(soup)
     if widget_issue:
         issues.append(widget_issue)
 
-        # Nur konkret prüfbare WCAG-Kriterien direkt am vorliegenden HTML auswerten
-        # (keine pauschalen "vermutlich fehlt"-Issues)
-
-        # WCAG 1.1.1: Bilder ohne Alt-Text — pro Bild ein eigenes Issue mit KI-Vorschlag
+    # WCAG 1.1.1: Alt-Texte — Prueftiefe unabhaengig vom Widget:
+    # Multi-Page, wenn eine Session verfuegbar ist, sonst Single-Page (Enhanced).
+    if session:
+        logger.info(f"🔍 Starting multi-page accessibility scan for {url}")
+        all_pages = await _discover_pages(url, session)
+        logger.info(f"📄 Discovered {len(all_pages)} pages to scan")
+        for page_url in all_pages[:50]:
+            try:
+                page_content = await _fetch_page(page_url, session)
+                if page_content:
+                    page_soup = BeautifulSoup(page_content, 'html.parser')
+                    page_issues = await _check_images_for_alt_text(page_url, page_soup)
+                    issues.extend(page_issues)
+                    logger.info(f"  ✓ {page_url}: {len(page_issues)} issues found")
+            except Exception as e:
+                logger.warning(f"  ✗ Failed to scan {page_url}: {e}")
+                continue
+    else:
         alt_issues = await _check_alt_texts_enhanced(url, soup, session)
         issues.extend(alt_issues)
-
-        # Hinweis: WCAG 3.1.1 (lang), 4.1.2 (Input-Labels) und 1.3.1 (semantisches
-        # HTML) werden weiter unten in den IMMER laufenden Struktur-Checks geprüft
-        # (_check_aria_labels, _check_semantic_html, lang-Check) — hier bewusst
-        # NICHT zusätzlich, um Doppelzählung in Score/Risiko zu vermeiden.
-
-    else:
-        # Widget vorhanden — führe detaillierte Checks durch
-        # Multi-Page Scan für Bilder
-        logger.info(f"🔍 Starting multi-page accessibility scan for {url}")
-        if session:
-            all_pages = await _discover_pages(url, session)
-            logger.info(f"📄 Discovered {len(all_pages)} pages to scan")
-            for page_url in all_pages[:50]:
-                try:
-                    page_content = await _fetch_page(page_url, session)
-                    if page_content:
-                        page_soup = BeautifulSoup(page_content, 'html.parser')
-                        page_issues = await _check_images_for_alt_text(page_url, page_soup)
-                        issues.extend(page_issues)
-                        logger.info(f"  ✓ {page_url}: {len(page_issues)} issues found")
-                except Exception as e:
-                    logger.warning(f"  ✗ Failed to scan {page_url}: {e}")
-                    continue
-        else:
-            alt_issues = await _check_alt_texts_enhanced(url, soup, session)
-            issues.extend(alt_issues)
 
     # Detaillierte WCAG-Struktur-Checks laufen immer — unabhängig vom Widget
     aria_issues = await _check_aria_labels(soup)
@@ -422,12 +427,70 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
 
     # ── axe-core: echte WCAG-2.1-AA-Engine auf dem gerenderten DOM ──────────
     # Ergänzt die HTML-Heuristik um real berechnete Kriterien (Kontrast 1.4.3,
-    # Fokus-Sichtbarkeit 2.4.7, ARIA-Validität, Heading-Order u.v.m.).
+    # ARIA-Validität, Heading-Order, Target-Size u.v.m.). Hinweis: 2.4.7
+    # (Fokus-Sichtbarkeit) prüft axe NICHT — bewusst nicht versprochen.
     # Fail-open: schlägt axe fehl/fehlt Playwright, bleibt das Ergebnis exakt
     # wie zuvor (nur Heuristik).
     axe_issues = await _run_axe_core_safe(url)
     if axe_issues is not None:
         issues = _merge_axe_into_heuristic(issues, axe_issues)
+
+    # ── Tiefen-Checks (zuvor brachliegender Code, jetzt verdrahtet) ─────────
+    # axe bleibt führend: ergänzt wird nur, was noch kein Issue desselben
+    # WCAG-Kriteriums gemeldet hat (kein Doppel-Scoring).
+    reported_criteria = _collect_reported_criteria(issues)
+
+    try:
+        from .aria_checker import ARIAChecker
+        for extra in ARIAChecker().check_aria_compliance(soup, url):
+            crit = extra.get('wcag_criterion')
+            if crit and crit in reported_criteria:
+                continue
+            issues.append(extra)
+            if crit:
+                reported_criteria.add(crit)
+    except Exception as e:
+        logger.warning(f"ARIA-Tiefenprüfung übersprungen: {e}")
+
+    try:
+        from .media_accessibility_check import check_media_accessibility
+        for extra in await check_media_accessibility(url, str(soup)):
+            crit = extra.get('wcag_criterion')
+            if crit and crit in reported_criteria:
+                continue
+            issues.append(extra)
+            if crit:
+                reported_criteria.add(crit)
+    except Exception as e:
+        logger.warning(f"Media-Barrierefreiheitsprüfung übersprungen: {e}")
+
+    if axe_issues is None:
+        # axe lief nicht — statische Kontrastanalyse (Inline-<style>) als
+        # Fallback, damit 1.4.3 nicht komplett unbeleuchtet bleibt.
+        try:
+            from ..contrast_analyzer import ContrastAnalyzer
+            css_blobs = "\n".join(st.string or "" for st in soup.find_all("style"))
+            if css_blobs.strip():
+                for ci in ContrastAnalyzer(target_level="AA").analyze_css_string(css_blobs)[:10]:
+                    issues.append({
+                        'category': 'barrierefreiheit',
+                        'severity': 'warning',
+                        'title': f'WCAG 1.4.3: Kontrast {ci.contrast_ratio:.1f}:1 unter {ci.required_ratio}:1',
+                        'description': (
+                            f'Farbpaar {ci.foreground} auf {ci.background} '
+                            f'(Selektor {ci.selector}) erreicht nur {ci.contrast_ratio:.1f}:1.'
+                        ),
+                        'recommendation': (
+                            f'Vorschlag: Vordergrund {ci.suggested_foreground or ci.foreground} '
+                            f'oder Hintergrund {ci.suggested_background or ci.background} anpassen.'
+                        ),
+                        'legal_basis': 'WCAG 2.1 Level AA (1.4.3), BFSG §12',
+                        'risk_euro': 500,
+                        'auto_fixable': False,
+                        'wcag_criterion': '1.4.3',
+                    })
+        except Exception as e:
+            logger.warning(f"Statische Kontrastanalyse übersprungen: {e}")
 
     # issues enthält gemischt BarrierefreiheitIssue-Instanzen UND bereits per asdict()
     # konvertierte Dicts (AUDIT-09…13 + axe liefern Dicts). asdict() auf ein Dict wirft
@@ -579,20 +642,24 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
         if 'barrierefreiheit' in aria or 'accessibility' in aria or 'einstellung' in aria:
             return None
     
-    # Kein Widget gefunden - HAUPTELEMENT FEHLT
+    # Kein Widget gefunden — reiner Hinweis. Overlay-Widgets stellen KEINE
+    # WCAG-/BFSG-Konformitaet her (fachlicher Konsens: Overlays ersetzen keine
+    # strukturellen Fixes) und duerfen deshalb weder Score noch Risiko treiben.
     return BarrierefreiheitIssue(
         category='barrierefreiheit',
-        severity='critical',
-        title='Kein Barrierefreiheits-Tool/Widget gefunden',
-        description='Es wurde kein Accessibility-Widget (UserWay, AccessiBe, Eye-Able etc.) gefunden. '
-                    'Solche Tools erleichtern die Barrierefreiheit erheblich durch Funktionen wie Schriftvergrößerung, '
-                    'Kontraständerung, Vorlese-Funktion etc.',
-        risk_euro=8000,
-        recommendation='Implementieren Sie ein Accessibility-Widget wie UserWay, AccessiBe oder Eye-Able. '
-                      'Diese bieten sofortige Barrierefreiheit-Features für Ihre Nutzer.',
-        legal_basis='BFSG §12-15',
-        auto_fixable=True,
-        is_missing=True  # ✅ Hauptelement fehlt komplett
+        severity='info',
+        title='Hinweis: Kein Assistenz-Widget gefunden',
+        description='Es wurde kein Accessibility-Assistenz-Widget gefunden. Solche Widgets '
+                    'koennen den Bedienkomfort verbessern (Schriftgroesse, Kontrast, Vorlesen), '
+                    'stellen aber KEINE WCAG-/BFSG-Konformitaet her und ersetzen keine '
+                    'strukturellen Korrekturen im Quellcode.',
+        risk_euro=0,
+        recommendation='Optional: Ein Assistenz-Widget kann ergaenzend eingesetzt werden. '
+                      'Massgeblich fuer die Rechtskonformitaet sind die strukturellen Fixes '
+                      '(Alt-Texte, Kontraste, Tastaturbedienbarkeit) — siehe uebrige Befunde.',
+        legal_basis='BFSG §12-15 (Hinweis, keine Pflicht)',
+        auto_fixable=False,
+        is_missing=False
     )
 
 async def _check_alt_texts(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
@@ -694,7 +761,7 @@ async def _check_alt_texts_enhanced(url: str, soup: BeautifulSoup, session=None)
                 risk_euro=500,
                 recommendation=f'Fügen Sie einen Alt-Text hinzu. AI-Vorschlag: "{suggested_alt}"',
                 legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
-                auto_fixable=True,  # Via Widget fixbar!
+                auto_fixable=True,  # Via Fix-Manifest/KI-Alt-Text behebbar
                 screenshot_url=img_data.get('screenshot_data_url'),
                 element_html=f'<img src="{src}" ... />',
                 fix_code=f'<img src="{src}" alt="{suggested_alt}" />',
@@ -719,7 +786,7 @@ async def _check_alt_texts_enhanced(url: str, soup: BeautifulSoup, session=None)
             description=f'Die Seite enthält {len(issues)} Bilder ohne Alt-Text. '
                        f'Dies ist ein kritisches Barrierefreiheitsproblem.',
             risk_euro=min(len(issues) * 500, 5000),  # Max 5000€
-            recommendation='Nutzen Sie das Complyo Smart-Widget für automatische Alt-Text-Fixes.',
+            recommendation='Nutzen Sie die Complyo KI-Alt-Text-Generierung (Fix-Manifest/Review-Queue) für automatische Korrekturen im Quellcode.',
             legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
             auto_fixable=True
         )

@@ -127,9 +127,9 @@ AXE_RULE_TO_FEATURE: Dict[str, str] = {
     "scrollable-region-focusable": "KEYBOARD",
     "tabindex": "KEYBOARD",
     
-    # Focus (WCAG 2.4.7)
-    "focus-visible": "FOCUS",
-    
+    # Hinweis: 2.4.7 (focus-visible) existiert als axe-Regel NICHT —
+    # das fruehere Mapping war tot und taeuschte Abdeckung vor.
+
     # ARIA (WCAG 4.1.2)
     "aria-allowed-attr": "ARIA",
     "aria-allowed-role": "ARIA",
