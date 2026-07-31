@@ -230,7 +230,7 @@ class ComplianceScanner:
             barriere_task = check_barrierefreiheit_compliance(url, soup, None)
             impressum_task = check_impressum_compliance(url, soup, self.session)
             datenschutz_task = check_datenschutz_compliance(url, soup, self.session, request_urls=render_request_urls)
-            cookie_task = check_cookie_compliance(url, soup, self.session, consent_buttons=consent_buttons)
+            cookie_task = check_cookie_compliance(url, soup, self.session, consent_buttons=consent_buttons, request_urls=render_request_urls)
             agb_task = check_agb_compliance(url, soup, self.session)
             shop_task = check_shop_compliance(url, soup, self.session)
             declarative_task = run_declarative_checks(url, soup, self.session)

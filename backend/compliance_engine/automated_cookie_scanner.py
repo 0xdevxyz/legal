@@ -86,40 +86,9 @@ COOKIE_DB: dict[str, dict] = {
     "csrftoken":     {"provider": "Django",           "category": "necessary",  "duration": "1 Jahr",     "purpose": "CSRF-Schutz"},
 }
 
-# Script URL → Service Mapping
-SCRIPT_SERVICE_MAP: list[tuple[str, dict]] = [
-    ("google-analytics.com/analytics.js",    {"name": "Google Analytics (UA)",  "category": "analytics",  "provider": "Google"}),
-    ("google-analytics.com/ga.js",           {"name": "Google Analytics (legacy)", "category": "analytics", "provider": "Google"}),
-    ("googletagmanager.com/gtm.js",          {"name": "Google Tag Manager",     "category": "analytics",  "provider": "Google"}),
-    ("googletagmanager.com/gtag/js",         {"name": "Google Tag (GA4)",       "category": "analytics",  "provider": "Google"}),
-    ("connect.facebook.net",                 {"name": "Meta Pixel",             "category": "marketing",  "provider": "Meta"}),
-    ("static.hotjar.com",                    {"name": "Hotjar",                 "category": "analytics",  "provider": "Hotjar"}),
-    ("clarity.ms/tag",                       {"name": "Microsoft Clarity",      "category": "analytics",  "provider": "Microsoft"}),
-    ("bat.bing.com",                         {"name": "Microsoft Ads (UET)",    "category": "marketing",  "provider": "Microsoft"}),
-    ("snap.licdn.com",                       {"name": "LinkedIn Insight Tag",   "category": "marketing",  "provider": "LinkedIn"}),
-    ("ads.linkedin.com",                     {"name": "LinkedIn Ads",           "category": "marketing",  "provider": "LinkedIn"}),
-    ("analytics.tiktok.com",                 {"name": "TikTok Pixel",           "category": "marketing",  "provider": "TikTok"}),
-    ("sc-static.net",                        {"name": "Snapchat Pixel",         "category": "marketing",  "provider": "Snapchat"}),
-    ("js.hs-scripts.com",                    {"name": "HubSpot Tracking",       "category": "analytics",  "provider": "HubSpot"}),
-    ("js.hs-analytics.net",                  {"name": "HubSpot Analytics",      "category": "analytics",  "provider": "HubSpot"}),
-    ("widget.intercom.io",                   {"name": "Intercom Chat",          "category": "functional", "provider": "Intercom"}),
-    ("js.intercomcdn.com",                   {"name": "Intercom",               "category": "functional", "provider": "Intercom"}),
-    ("cdn.segment.com",                      {"name": "Segment",                "category": "analytics",  "provider": "Segment"}),
-    ("cdn.amplitude.com",                    {"name": "Amplitude",              "category": "analytics",  "provider": "Amplitude"}),
-    ("cdn.mxpnl.com",                        {"name": "Mixpanel",               "category": "analytics",  "provider": "Mixpanel"}),
-    ("script.hotjar.com",                    {"name": "Hotjar",                 "category": "analytics",  "provider": "Hotjar"}),
-    ("cdn.logrocket.io",                     {"name": "LogRocket",              "category": "analytics",  "provider": "LogRocket"}),
-    ("fullstory.com/s/fs.js",                {"name": "FullStory",              "category": "analytics",  "provider": "FullStory"}),
-    ("maps.googleapis.com",                  {"name": "Google Maps",            "category": "functional", "provider": "Google"}),
-    ("fonts.googleapis.com",                 {"name": "Google Fonts",           "category": "functional", "provider": "Google"}),
-    ("youtube.com/embed",                    {"name": "YouTube",                "category": "marketing",  "provider": "Google"}),
-    ("vimeo.com/video",                      {"name": "Vimeo",                  "category": "marketing",  "provider": "Vimeo"}),
-    ("app.crisp.chat",                       {"name": "Crisp Chat",             "category": "functional", "provider": "Crisp"}),
-    ("crisp.chat",                           {"name": "Crisp Chat",             "category": "functional", "provider": "Crisp"}),
-    ("js.driftt.com",                        {"name": "Drift Chat",             "category": "functional", "provider": "Drift"}),
-    ("cdn.cookielaw.org",                    {"name": "OneTrust CMP",           "category": "necessary",  "provider": "OneTrust"}),
-    ("consent.cookiebot.com",                {"name": "Cookiebot CMP",          "category": "necessary",  "provider": "Usercentrics"}),
-]
+# Script URL -> Service Mapping — SSOT liegt in tracker_catalog.py
+# (Re-Export hier, damit bestehende Importe weiter funktionieren).
+from compliance_engine.tracker_catalog import SCRIPT_SERVICE_MAP  # noqa: F401
 
 
 @dataclass
@@ -423,7 +392,11 @@ def _guess_category(name: str) -> str:
         return "necessary"
     if any(x in n for x in ("lang", "theme", "pref", "locale", "currency", "cart")):
         return "functional"
-    return "necessary"
+    # Unbekannte Cookies duerfen NICHT als "necessary" durchgehen — necessary
+    # wird vor Consent geladen. uncategorized wird downstream wie marketing
+    # behandelt (consent-pflichtig, fail-safe). Gleiches Verhalten wie
+    # deep_cookie_scanner.
+    return "uncategorized"
 
 
 # Synchroner Wrapper für nicht-async Kontexte

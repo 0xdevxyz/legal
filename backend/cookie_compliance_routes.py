@@ -2941,6 +2941,10 @@ async def _load_cookie_policy(db_pool: asyncpg.Pool, site_id: str, lang: str = "
         "functional": {"name": "Funktional" if de else "Functional", "services": []},
         "analytics": {"name": "Statistik" if de else "Statistics", "services": []},
         "marketing": {"name": "Marketing", "services": []},
+        # Unbekannte/unkategorisierte Dienste werden angezeigt statt still
+        # verworfen — und consent-seitig wie marketing behandelt (das Widget
+        # laedt nur necessary vor der Einwilligung; fail-safe).
+        "uncategorized": {"name": "Sonstige" if de else "Other", "services": []},
     }
 
     if row['service_names'] and row['service_names'][0]:
