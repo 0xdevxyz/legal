@@ -24,6 +24,7 @@ import { generateSiteId, isScanHash } from '@/lib/siteIdUtils';
 import { OptimizationModeLock } from './OptimizationModeLock';
 import { ComplianceWizard } from './ComplianceWizard';
 import QuickWins from './QuickWins';
+import { ManualChecksSection } from './ManualChecksSection';
 import apiClient from '@/lib/api';
 
 export const WebsiteAnalysis: React.FC = () => {
@@ -829,6 +830,16 @@ export const WebsiteAnalysis: React.FC = () => {
               })}
             </div>
           </div>
+        )}
+
+        {/* 🧭 Manuell pruefen: Anleitungen fuer nicht-automatisierbare Kriterien */}
+        {analysisData && (
+          <ErrorBoundary componentName="ManualChecksSection">
+            <ManualChecksSection
+              checks={(analysisData as any)?.manual_checks || []}
+              accessibilityNote={(analysisData as any)?.pillar_notes?.accessibility}
+            />
+          </ErrorBoundary>
         )}
 
         {/* ✅ EMPTY STATE - Nur anzeigen wenn wirklich keine Daten */}

@@ -367,6 +367,10 @@ class ComplianceScanner:
                     for pillar, score in _pillar_scores.items()
                 ],
                 "pillar_status": _pillar_status,
+                # Ehrlichkeits-Layer: Automatik-Grenzen + manuelle Pruef-Anleitungen
+                # ("erkennen ODER anleiten" — nichts bleibt stillschweigend offen).
+                "pillar_notes": _scores.get("pillar_notes", {}),
+                "manual_checks": _scores.get("manual_checks", []),
                 "recommendations": self._generate_recommendations(issues),
                 "next_steps": self._generate_next_steps(issues),
                 "has_accessibility_widget": has_accessibility_widget,

@@ -130,6 +130,10 @@ class ComplianceReportGenerator:
             # Recommendations
             story.extend(self._create_recommendations(analysis_data))
             story.append(PageBreak())
+
+            # Manuell zu pruefende Kriterien (Automatik-Grenzen, mit Anleitung)
+            story.extend(self._create_manual_checks_section(analysis_data))
+            story.append(PageBreak())
             
             # Appendix
             story.extend(self._create_appendix(analysis_data, lead_data))
@@ -345,6 +349,55 @@ class ComplianceReportGenerator:
         
         return content
     
+    def _create_manual_checks_section(self, analysis_data: Dict[str, Any]) -> List:
+        """
+        Manuell zu pruefende Kriterien: Punkte, die keine automatische Pruefung
+        zuverlaessig bewerten kann — mit konkreter Schritt-fuer-Schritt-Anleitung.
+        Teil des Ehrlichkeits-Versprechens (erkennen ODER anleiten). Faellt auf
+        den zentralen Katalog zurueck, wenn der Scan (Altbestand) keinen traegt.
+        """
+        content = []
+        checks = analysis_data.get('manual_checks')
+        if not checks:
+            try:
+                from compliance_engine.score_calculator import MANUAL_CHECKS
+                checks = MANUAL_CHECKS
+            except Exception:
+                return content
+
+        pillar_labels = {
+            'accessibility': 'Barrierefreiheit',
+            'gdpr': 'Datenschutz',
+            'legal': 'Rechtstexte',
+            'cookies': 'Cookies',
+        }
+
+        content.append(Paragraph("Manuell zu prüfende Punkte", self.styles['ComplyoTitle']))
+        content.append(Spacer(1, 0.2*inch))
+        content.append(Paragraph(
+            "Kein automatisches Prüfverfahren kann alle rechtlichen Anforderungen "
+            "bewerten — einige Kriterien erfordern eine kurze manuelle Kontrolle. "
+            "Damit nichts offen bleibt, finden Sie hier für jeden dieser Punkte "
+            "eine konkrete Anleitung.",
+            self.styles['Normal'],
+        ))
+        content.append(Spacer(1, 0.25*inch))
+
+        note = (analysis_data.get('pillar_notes') or {}).get('accessibility')
+        if note:
+            content.append(Paragraph(f"<i>{note}</i>", self.styles['Normal']))
+            content.append(Spacer(1, 0.2*inch))
+
+        for check in checks:
+            label = pillar_labels.get(check.get('pillar', ''), check.get('pillar', ''))
+            content.append(Paragraph(
+                f"[{label}] {check.get('title', '')}", self.styles['ComplyoHeading']
+            ))
+            content.append(Paragraph(check.get('anleitung', ''), self.styles['Normal']))
+            content.append(Spacer(1, 0.15*inch))
+
+        return content
+
     def _create_appendix(self, analysis_data: Dict[str, Any], lead_data: Dict[str, Any]) -> List:
         """Create appendix with technical details"""
         content = []
