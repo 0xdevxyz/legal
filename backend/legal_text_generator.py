@@ -85,6 +85,11 @@ _MANDATORY_MARKERS = {
         ("Kontakt (E-Mail/Telefon)", ["telefon", "tel.", "kontakt"], [r"[\w.%+\-]+@[\w.\-]+\.\w{2,}"]),
         ("Anschrift (PLZ + Ort)", [], [r"\b\d{5}\s+[a-zäöü]"]),
         ("Verantwortlicher/Diensteanbieter", ["verantwortlich", "diensteanbieter", "angaben gem", "vertreten durch"], []),
+        # Rechtsform-/umsatzabhaengig — als Marker dennoch sinnvoll, weil der
+        # Generator die Firmendaten kennt; Fehlen landet nur in metadata
+        # (non-blocking) und dient als Review-Signal.
+        ("USt-IdNr", ["ust-id", "umsatzsteuer-identifikationsnummer", "ust.-id"], [r"de\s?\d{9}"]),
+        ("Registereintrag", ["handelsregister", "registergericht", "amtsgericht"], [r"hr[ab]\s?\d+"]),
     ],
     DocumentType.PRIVACY: [
         ("Verantwortlicher", ["verantwortlich"], []),
@@ -95,6 +100,8 @@ _MANDATORY_MARKERS = {
     DocumentType.TOS: [
         ("Geltungsbereich", ["geltungsbereich", "anwendungsbereich"], []),
         ("Vertrag/Leistung", ["vertrag", "leistung"], []),
+        ("Kündigung/Laufzeit", ["kündig", "laufzeit", "beendigung"], []),
+        ("Preise/Vergütung", ["preis", "vergütung", "entgelt", "zahlung"], []),
     ],
     DocumentType.COOKIE_POLICY: [
         ("Cookies", ["cookie"], []),

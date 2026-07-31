@@ -12,6 +12,8 @@ COMPLETE_IMPRINT = """
 <p>Muster GmbH, Musterweg 1, 04109 Leipzig</p>
 <p>Kontakt: info@muster.de</p>
 <p>Verantwortlich für den Inhalt: Max Mustermann</p>
+<p>USt-ID: DE123456789</p>
+<p>Handelsregister: Amtsgericht Leipzig, HRB 12345</p>
 """
 
 COMPLETE_PRIVACY = """
