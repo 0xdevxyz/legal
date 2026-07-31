@@ -743,6 +743,46 @@ async def _check_alt_texts_enhanced(url: str, soup: BeautifulSoup, session=None)
             logger.warning(f"Screenshot capture failed: {e}, falling back to basic check")
             return await _check_alt_texts(soup)
     
+    # Sicherheitsnetz: Der Screenshot-Service sieht nur Bilder, die im Render
+    # tatsaechlich geladen wurden. Bilder ohne alt, die er NICHT erfasst hat
+    # (404/Broken, Lazy-Load, Render-Problem, leeres Ergebnis), werden per
+    # DOM-Check gemeldet — sonst entsteht ein False-Negative-Loch, in dem
+    # eine Seite voller alt-loser Bilder 0 Issues bekommt.
+    from urllib.parse import urljoin as _urljoin
+    covered_srcs = {
+        _urljoin(url, (d.get('src') or '').strip())
+        for d in screenshot_data if (d.get('src') or '').strip()
+    }
+    for img in soup.find_all('img'):
+        src = (img.get('src') or '').strip()
+        alt_val = img.get('alt')
+        if img.get('role') == 'presentation' or img.get('aria-hidden') == 'true':
+            continue
+        if alt_val is not None and str(alt_val).strip() != '':
+            continue
+        if alt_val is not None and str(alt_val) == '':
+            # alt="" = explizit dekorativ markiert -> zulaessig
+            continue
+        if src and _urljoin(url, src) in covered_srcs:
+            continue  # wird unten vom Screenshot-Pfad bewertet
+        filename = src.split('/')[-1] if '/' in src else (src or 'unbekannt')
+        issues.append(BarrierefreiheitIssue(
+            category='barrierefreiheit',
+            severity='critical',
+            title='WCAG 1.1.1: Bild ohne Alt-Text',
+            description=(
+                f'Das Bild "{filename}" hat keinen Alt-Text und ist nicht als '
+                f'dekorativ markiert. Screenreader können es nicht beschreiben.'
+            ),
+            risk_euro=500,
+            recommendation='Fügen Sie ein beschreibendes alt-Attribut hinzu '
+                           '(oder alt="" für rein dekorative Bilder).',
+            legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
+            auto_fixable=True,
+            element_html=str(img)[:300],
+            image_src=src,
+        ))
+
     # Erstelle Issues für jedes Bild ohne Alt-Text
     for img_data in screenshot_data:
         if not img_data.get('has_alt') and not img_data.get('is_decorative'):
