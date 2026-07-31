@@ -258,6 +258,11 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
     3. Drittlandtransfer ohne Einwilligung (HTML + verlinkte CSS + echte Requests)
     """
     issues = []
+    # Text der Datenschutzerklaerungs-SEITE (nicht Homepage). Wird im
+    # Deep-Analyse-Block befuellt und unten fuer die Drittlandtransfer-
+    # Rechtsgrundlagen-Pruefung genutzt (SCC/DPF stehen in der DS-Erklaerung,
+    # nicht auf der Startseite).
+    ds_page_text = None
     
     datenschutz_links = _find_datenschutz_links(soup)
     
@@ -388,6 +393,7 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
                     async with session.get(datenschutz_url, timeout=10) as response:
                         if response.status == 200:
                             datenschutz_html = await response.text()
+                            ds_page_text = datenschutz_html
                             
                             # Deep-Analyse mit Hybrid-Validator
                             validator = HybridValidator()
@@ -473,10 +479,47 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
                         
                 except Exception as e:
                     logger.warning(f"⚠️ Deep-Analyse fehlgeschlagen: {e}")
-                    # Fallback: Keine zusätzlichen Issues
+                    # Kein Silent-Pass: Der Nutzer erfaehrt, dass die inhaltliche
+                    # Pruefung NICHT stattfand (sonst wirkt eine ungepruefte
+                    # Datenschutzerklaerung faelschlich als vollstaendig).
+                    issues.append(asdict(DatenschutzIssue(
+                        category='datenschutz',
+                        severity='info',
+                        title='Inhaltsprüfung der Datenschutzerklärung nicht möglich',
+                        description=(
+                            'Die Datenschutzerklärung wurde gefunden, konnte aber nicht '
+                            'inhaltlich geprüft werden (Seite nicht ladbar oder Analyse '
+                            'fehlgeschlagen). Die Vollständigkeit nach Art. 13/14 DSGVO '
+                            'ist damit NICHT bestätigt.'
+                        ),
+                        risk_euro=0,
+                        recommendation=(
+                            'Prüfen Sie die Erreichbarkeit der Datenschutzerklärung und '
+                            'wiederholen Sie den Scan.'
+                        ),
+                        legal_basis='DSGVO Art. 13/14',
+                        auto_fixable=False,
+                        is_missing=False
+                    )))
         
         except ImportError:
             logger.warning("⚠️ HybridValidator nicht verfügbar - überspringe Deep-Analyse")
+            # Auch dieser Pfad darf nicht still durchlaufen (siehe oben).
+            issues.append(asdict(DatenschutzIssue(
+                category="datenschutz",
+                severity="info",
+                title="Inhaltsprüfung der Datenschutzerklärung nicht möglich",
+                description=(
+                    "Die Datenschutzerklärung wurde gefunden, konnte aber nicht "
+                    "inhaltlich geprüft werden (Analyse-Komponente nicht verfügbar). "
+                    "Die Vollständigkeit nach Art. 13/14 DSGVO ist damit NICHT bestätigt."
+                ),
+                risk_euro=0,
+                recommendation="Wiederholen Sie den Scan; bei wiederholtem Auftreten Support kontaktieren.",
+                legal_basis="DSGVO Art. 13/14",
+                auto_fixable=False,
+                is_missing=False
+            )))
     
     html_raw = str(soup)
     html_text = html_raw.lower()
@@ -529,14 +572,17 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
             found_us_services.append(name)
 
     if found_us_services:
-        # Prüfe ob US-Dienste in der Datenschutzerklärung erwähnt werden
-        # (Heuristik: Prüfe ob Schlüsselwörter wie 'standardvertragsklauseln', 'dsgvo-e.u.s.a.', 'dpf' vorhanden)
+        # Rechtsgrundlagen-Nachweis (SCC/DPF/Angemessenheit) gehoert in die
+        # DATENSCHUTZERKLAERUNG — dort pruefen, wenn die Seite geladen werden
+        # konnte. Homepage nur als Fallback (frueher wurde IMMER die Homepage
+        # geprueft -> systematische False Positives bei korrekt dokumentierten SCCs).
+        transfer_haystack_text = ds_page_text.lower() if ds_page_text else html_text
         has_transfer_basis = bool(re.search(
             r'standardvertragsklausel|standard contractual clause|scc|data privacy framework|dpf|'
             r'angemessenheitsbeschluss|adequacy decision',
-            html_text, re.I
+            transfer_haystack_text, re.I
         ))
-        has_privacy_shield_only = bool(re.search(r'privacy.shield', html_text, re.I)) and not has_transfer_basis
+        has_privacy_shield_only = bool(re.search(r'privacy.shield', transfer_haystack_text, re.I)) and not has_transfer_basis
         if not has_transfer_basis:
             if has_privacy_shield_only:
                 issues.append(asdict(DatenschutzIssue(
