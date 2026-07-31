@@ -10,7 +10,7 @@ from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse
 import re
 from datetime import datetime
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 import ssl
 import certifi
 import logging
@@ -278,7 +278,19 @@ class ComplianceScanner:
                     if isinstance(issue_dict, ComplianceIssue):
                         issues.append(issue_dict)
                     else:
-                        issues.append(ComplianceIssue(**issue_dict))
+                        # Defensiv: Checks liefern Dicts mit teils zusaetzlichen
+                        # Feldern (z.B. wcag_criterion aus dem ARIA-Tiefen-Check).
+                        # Ein unbekanntes Feld darf NIE den gesamten Scan crashen
+                        # — unbekannte Keys wandern nach metadata, bekannte werden
+                        # direkt uebernommen.
+                        known = {fld.name for fld in fields(ComplianceIssue)}
+                        kwargs = {k: v for k, v in issue_dict.items() if k in known}
+                        extra = {k: v for k, v in issue_dict.items() if k not in known}
+                        if extra:
+                            meta = kwargs.get('metadata') or {}
+                            if isinstance(meta, dict):
+                                kwargs['metadata'] = {**meta, **extra}
+                        issues.append(ComplianceIssue(**kwargs))
 
             # ✅ Prüfe ob Accessibility-Widget gefunden wurde
             has_accessibility_widget = not any(
