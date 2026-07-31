@@ -182,6 +182,13 @@ async def run():
                 if not any(a.lower() in str(i.get("title", "")).lower() for a in allow)
             ]
 
+        # Anleitungs-Vollstaendigkeit: JEDES Issue braucht recommendation + legal_basis
+        without_guidance = [
+            i.get("title") for i in issues
+            if not str(i.get("recommendation") or "").strip()
+            or not str(i.get("legal_basis") or "").strip()
+        ]
+
         # Klassifikations-Check: jede Issue-Kategorie muss einer Saeule zuordenbar sein
         unclassified = []
         for i in issues:
@@ -200,6 +207,7 @@ async def run():
             "PRECISION_false_positives": false_positives,
             "bad_criticals": bad_criticals,
             "unclassified_categories": unclassified,
+            "issues_ohne_anleitung": without_guidance,
             "min_criticals_ok": (len(crits) >= spec["min_criticals"]) if "min_criticals" in spec else None,
             "titles": titles,
         }

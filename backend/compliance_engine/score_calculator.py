@@ -37,6 +37,107 @@ class ComplianceIssue:
     risk_euro: float = 0.0
 
 
+# ---------------------------------------------------------------------------
+# Manuelle Pruef-Anleitungen — fuer Kriterien, die KEINE Automatik der Welt
+# zuverlaessig pruefen kann. Prinzip der Plattform: alles Automatisierbare
+# prueft der Scanner; fuer den Rest bekommt der Kunde eine konkrete
+# Schritt-fuer-Schritt-Anleitung statt Schweigen (kein falsches
+# Sicherheitsgefuehl durch einen hohen Score).
+# ---------------------------------------------------------------------------
+MANUAL_CHECKS = [
+    {
+        "pillar": "accessibility",
+        "id": "manual-keyboard",
+        "title": "Tastatur-Bedienbarkeit (WCAG 2.1.1, 2.1.2, 2.4.3, 2.4.7)",
+        "anleitung": (
+            "1. Maus beiseite legen. 2. Mit TAB durch die komplette Seite gehen. "
+            "3. Prüfen: Ist jedes interaktive Element (Links, Buttons, Formulare, "
+            "Menüs) erreichbar? Ist der Fokus immer sichtbar (Umrandung)? Folgt "
+            "die Reihenfolge der Leselogik? Kommen Sie aus Dialogen/Menüs mit "
+            "ESC oder TAB wieder heraus (keine Tastatur-Falle)?"
+        ),
+    },
+    {
+        "pillar": "accessibility",
+        "id": "manual-zoom",
+        "title": "Zoom & Umbruch (WCAG 1.4.4, 1.4.10)",
+        "anleitung": (
+            "1. Im Browser auf 200% zoomen (Strg + Plus). 2. Prüfen: Bleibt aller "
+            "Text lesbar, ohne horizontales Scrollen? Überlappen sich Elemente? "
+            "3. Zusätzlich Fenster auf ~320px Breite ziehen (Responsive-Ansicht)."
+        ),
+    },
+    {
+        "pillar": "accessibility",
+        "id": "manual-screenreader",
+        "title": "Screenreader-Stichprobe (WCAG 1.1.1, 4.1.2)",
+        "anleitung": (
+            "1. Kostenlosen Screenreader starten (Windows: NVDA, macOS: VoiceOver "
+            "mit Cmd+F5). 2. Startseite und ein Formular vorlesen lassen. "
+            "3. Prüfen: Werden Bilder sinnvoll beschrieben? Haben Buttons/Links "
+            "verständliche Namen? Werden Formularfelder korrekt angesagt?"
+        ),
+    },
+    {
+        "pillar": "accessibility",
+        "id": "manual-motion",
+        "title": "Bewegung, Blinken, Animation (WCAG 2.2.2, 2.3.1)",
+        "anleitung": (
+            "Prüfen: Gibt es automatisch bewegte/blinkende Inhalte länger als 5 "
+            "Sekunden (Slider, Videos, Animationen)? Falls ja: Pause/Stopp-Knopf "
+            "vorhanden? Blinkt nichts öfter als 3x pro Sekunde?"
+        ),
+    },
+    {
+        "pillar": "cookies",
+        "id": "manual-reject-test",
+        "title": "Ablehnen-Klick-Test (TDDDG §25)",
+        "anleitung": (
+            "1. Seite im privaten Fenster öffnen, Entwicklertools > Netzwerk-Tab "
+            "öffnen. 2. Im Cookie-Banner ABLEHNEN klicken. 3. Prüfen: Werden "
+            "danach trotzdem Requests an Tracker (google-analytics, facebook, "
+            "doubleclick …) geladen? Unter Anwendung > Cookies: Werden trotzdem "
+            "Marketing-/Statistik-Cookies gesetzt? Beides darf nicht passieren."
+        ),
+    },
+    {
+        "pillar": "gdpr",
+        "id": "manual-avv",
+        "title": "Auftragsverarbeitungsverträge (Art. 28 DSGVO)",
+        "anleitung": (
+            "Für jeden externen Dienst, der personenbezogene Daten verarbeitet "
+            "(Hosting, Newsletter-Tool, Analytics, CRM): Liegt ein "
+            "abgeschlossener AVV vor? Checkliste: Anbieter-Adminbereich prüfen "
+            "(meist unter 'Datenschutz' oder 'DPA'), Vertrag ablegen. Der "
+            "Scanner kann Verträge nicht von außen sehen."
+        ),
+    },
+    {
+        "pillar": "gdpr",
+        "id": "manual-vvt",
+        "title": "Verzeichnis von Verarbeitungstätigkeiten (Art. 30 DSGVO)",
+        "anleitung": (
+            "Intern prüfen: Existiert ein aktuelles VVT (welche Daten, Zwecke, "
+            "Empfänger, Löschfristen)? Pflicht für fast jedes Unternehmen mit "
+            "regelmäßiger Verarbeitung — der Pflichten-Report von Complyo "
+            "erstellt die Grundlage aus Ihrem Firmenprofil."
+        ),
+    },
+    {
+        "pillar": "legal",
+        "id": "manual-branche",
+        "title": "Branchenspezifische Pflichtangaben (§5 DDG, Berufsrecht)",
+        "anleitung": (
+            "Bei erlaubnispflichtigen Tätigkeiten (Handwerk, Makler, Gastronomie, "
+            "Heilberufe, Rechtsberatung): Prüfen, ob Aufsichtsbehörde, Kammer, "
+            "gesetzliche Berufsbezeichnung und berufsrechtliche Regelungen im "
+            "Impressum stehen. Der Scanner erkennt die Branche nicht immer "
+            "zuverlässig von außen."
+        ),
+    },
+]
+
+
 class ScoreCalculator:
     """
     Deterministische Score-Berechnung für Websites — Single Source of Truth (v2.0)
@@ -403,6 +504,10 @@ class ScoreCalculator:
             # Ehrlichkeits-Hinweis: automatisierte A11y-Pruefung deckt nur einen
             # Teil der WCAG-AA-Kriterien ab — ein hoher Score ist KEIN Nachweis
             # vollstaendiger Barrierefreiheit.
+            # Nicht-automatisierbare Kriterien: konkrete Pruef-Anleitungen
+            # statt Schweigen — Teil des Produktversprechens ("erkennen ODER
+            # anleiten", nie stillschweigend auslassen).
+            "manual_checks": MANUAL_CHECKS,
             "pillar_notes": {
                 "accessibility": (
                     "Automatisierte Prüfung (axe-core + Heuristiken) deckt nur einen Teil "
