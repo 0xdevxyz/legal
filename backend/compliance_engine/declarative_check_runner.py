@@ -32,6 +32,11 @@ from compliance_engine.checks.shop_check import detect_shop
 
 logger = logging.getLogger(__name__)
 
+from compliance_engine.check_spec_rules import (
+    detection_is_weak,
+    AUTO_CHECK_RISK_CAP as _RISK_CAP,
+)
+
 
 # ---------------------------------------------------------------------------
 # Registry: lädt aktive Checks aus der DB, gecached mit TTL (analog rule_engine)
@@ -216,7 +221,9 @@ def _issue_dict(check: Dict[str, Any], *, title: str, description: str,
         "severity": severity,
         "title": title,
         "description": description,
-        "risk_euro": int(risk_euro),
+        # Laufzeit-Deckel: schutz vor DB-Altlasten (bis 300.000 EUR risk_euro
+        # in Kundenreports), unabhaengig vom Timing des DB-Cleanups.
+        "risk_euro": min(int(risk_euro), _RISK_CAP),
         "recommendation": check["recommendation"],
         "legal_basis": check["legal_basis"],
         "auto_fixable": False,
@@ -237,6 +244,17 @@ async def _run_single_check(
 ) -> List[Dict[str, Any]]:
     detection = check.get("detection", {})
     dtype = detection.get("type", "required_element")
+
+    # Defense in Depth: neutralisierte Detections (generische Rechtsseiten-
+    # Link-Keywords ohne content_requirements) erzeugen weder Schein-Pass
+    # noch False Positives — sie werden uebersprungen, selbst wenn eine
+    # solche Spec (Altbestand/Migration) noch in der DB liegt.
+    if detection_is_weak(detection):
+        logger.warning(
+            f"Declarative check '{check['slug']}': weak detection "
+            f"(generische Link-Keywords ohne content_requirements) — skipped"
+        )
+        return []
 
     if dtype != "required_element":
         logger.warning(f"Declarative check '{check['slug']}': unsupported detection.type '{dtype}' — skipped")
