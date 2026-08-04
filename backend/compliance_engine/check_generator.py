@@ -263,6 +263,33 @@ async def _find_topic_duplicate(conn, spec: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+async def _find_topic_twin(conn, spec: "Dict[str, Any]") -> "Optional[str]":
+    """
+    Sucht einen bestehenden Check mit demselben THEMA (nicht demselben Namen).
+
+    Ergaenzt `_find_topic_duplicate`: der vergleicht Zeichenketten und uebersieht
+    Zwillinge mit abweichend gebautem Slug. Hier entscheidet die Themen-Tabelle
+    in `check_topics` — eine gepflegte Liste praktischer Pflichten.
+    """
+    from compliance_engine.check_topics import erkenne_thema
+
+    thema = erkenne_thema(spec.get("slug", ""), spec.get("title", ""))
+    if not thema:
+        return None
+
+    rows = await conn.fetch(
+        """
+        SELECT slug, title
+        FROM compliance_checks
+        WHERE status IN ('active', 'pending_review')
+        """
+    )
+    for row in rows:
+        if erkenne_thema(row["slug"], row["title"]) == thema:
+            return row["slug"]
+    return None
+
+
 async def generate_check_for_legal_update(
     db_pool,
     legal_update: Dict[str, Any],
@@ -358,6 +385,17 @@ async def generate_check_for_legal_update(
                 )
                 result["reason"] = f"topic already covered by '{duplicate_of}'"
                 return result
+
+            # Dritte Stufe: gleiches Thema trotz anderem Namen. Nicht verwerfen —
+            # eine Detailpflicht kann dasselbe Thema treffen und trotzdem neu
+            # sein. Ein Mensch entscheidet in der Review-Queue.
+            twin_of = await _find_topic_twin(conn, spec)
+            if twin_of and status == "active":
+                status = "pending_review"
+                logger.info(
+                    f"check_generator: {spec.get('slug')} trifft dasselbe Thema wie "
+                    f"'{twin_of}' -> pending_review statt active (Safety-Governor)"
+                )
 
             inserted = await conn.fetchval(
                 """
