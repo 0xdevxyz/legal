@@ -606,11 +606,11 @@ export default function WebsiteScanner() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <a
-                  href="#waitlist"
+                  href={`${process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de'}/register?plan=free`}
                   className="px-8 py-4 bg-white text-blue-600 font-semibold rounded-xl hover:shadow-2xl transition-all transform hover:scale-105 inline-flex items-center justify-center gap-2"
                 >
                   <TrendingUp className="w-5 h-5" />
-                  Auf Warteliste setzen
+                  Kostenlos registrieren und Fix starten
                 </a>
                 <button
                   onClick={() => { setScanResult(null); setUrl(''); localStorage.removeItem('last_scan_data'); }}

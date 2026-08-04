@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { ArrowRight, Star, CheckCircle2, ShieldCheck, Zap } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ShieldCheck, Zap } from 'lucide-react';
 
 export default function HeroSection() {
   return (
@@ -21,11 +21,13 @@ export default function HeroSection() {
               Websites{' '}
               <span className="text-blue-600">rechtssicher</span>{' '}
               machen mit{' '}
-              <span className="relative inline-block">
-                <span className="text-orange-500">KI</span>
-                <span className="absolute -bottom-1 left-0 right-0 h-1 bg-orange-200 rounded-full" />
+              <span className="whitespace-nowrap">
+                <span className="relative inline-block">
+                  <span className="text-orange-500">KI</span>
+                  <span className="absolute -bottom-1 left-0 right-0 h-1 bg-orange-200 rounded-full" />
+                </span>
+                &#8209;Compliance
               </span>
-              &#8209;Compliance
             </h1>
 
             <p className="text-lg text-gray-500 mb-8 leading-relaxed max-w-xl">
@@ -33,7 +35,7 @@ export default function HeroSection() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 mb-8 text-sm">
-              {['Kostenloser Website-Scan', 'Early-Access-Vorteile', 'Jederzeit abmeldbar'].map((item, i) => (
+              {['Kostenloser Website-Scan', 'Ein Fix gratis', 'Keine Kreditkarte nötig'].map((item, i) => (
                 <div key={i} className="flex items-center gap-1.5 text-gray-500">
                   <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
                   <span>{item}</span>
@@ -42,29 +44,28 @@ export default function HeroSection() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
-              <a href="#waitlist" className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3.5 rounded-xl transition-colors shadow-md shadow-blue-100">
-                Auf Warteliste
+              <a href="#scanner" className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3.5 rounded-xl transition-colors shadow-md shadow-blue-100">
+                Website kostenlos scannen
                 <ArrowRight className="w-4 h-4" />
               </a>
-              <a href="#scanner" className="inline-flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-700 font-semibold px-6 py-3.5 rounded-xl border border-gray-200 transition-colors">
-                Website jetzt scannen
+              <a href="#preise" className="inline-flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-700 font-semibold px-6 py-3.5 rounded-xl border border-gray-200 transition-colors">
+                Preise ansehen
               </a>
             </div>
 
-            <div className="mt-10 flex items-center gap-4">
-              <div className="flex -space-x-2">
-                {['#3B82F6','#8B5CF6','#EC4899','#F97316','#10B981'].map((c,i) => (
-                  <div key={i} className="w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold" style={{backgroundColor: c}}>
-                    {String.fromCharCode(65+i)}
-                  </div>
-                ))}
-              </div>
-              <div>
-                <div className="flex items-center gap-0.5">
-                  {[1,2,3,4,5].map(i => <Star key={i} className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />)}
-                </div>
-                <p className="text-xs text-gray-500 mt-0.5">Werde einer der <strong>ersten Tester</strong></p>
-              </div>
+            <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-gray-500">
+              <span className="inline-flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-blue-600" />
+                Server und Daten in Deutschland
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-orange-500" />
+                Ergebnis in unter 60 Sekunden
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-green-500" />
+                DSGVO, Cookies, Barrierefreiheit und Rechtstexte in einem Scan
+              </span>
             </div>
           </div>
 

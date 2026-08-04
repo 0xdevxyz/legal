@@ -3,7 +3,7 @@ import React from 'react';
 import NavBar from './NavBar';
 import HeroSection from './HeroSection';
 import WebsiteScanner from '../landing/WebsiteScanner';
-import JoinEarlySection from './JoinEarlySection';
+import PricingSection from './PricingSection';
 import FooterSection from './FooterSection';
 
 export default function EarlyAccessLanding() {
@@ -12,7 +12,7 @@ export default function EarlyAccessLanding() {
       <NavBar />
       <HeroSection />
       <WebsiteScanner />
-      <JoinEarlySection />
+      <PricingSection />
       <FooterSection />
     </main>
   );

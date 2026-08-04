@@ -1,11 +1,13 @@
 'use client';
 import React from 'react';
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de';
+
 export default function FooterSection() {
   return (
     <footer className="bg-gray-900 text-gray-400 pt-16 pb-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 mb-14">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-14">
           <div className="lg:col-span-1">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
@@ -17,11 +19,27 @@ export default function FooterSection() {
               Die KI-Compliance-Plattform für Websites. DSGVO, Cookie-Recht und Barrierefreiheit – automatisch und rechtssicher.
             </p>
             <a
-              href="#waitlist"
+              href={`${APP_URL}/register?plan=free`}
               className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
             >
-              Auf Warteliste
+              Kostenlos starten
             </a>
+          </div>
+
+          <div>
+            <h4 className="text-white font-semibold text-sm mb-4">Produkt</h4>
+            <ul className="space-y-2.5 text-sm">
+              {[
+                { label: 'Preise', href: '/#preise' },
+                { label: 'BFSG-Check', href: '/bfsg-check' },
+                { label: 'DSGVO-Check', href: '/dsgvo-website-check' },
+                { label: 'Barrierefreiheit testen', href: '/barrierefreiheit-website-testen' },
+                { label: 'Ratgeber', href: '/ratgeber' },
+                { label: 'Anmelden', href: `${APP_URL}/login` },
+              ].map((l, i) => (
+                <li key={i}><a href={l.href} className="hover:text-white transition-colors">{l.label}</a></li>
+              ))}
+            </ul>
           </div>
 
           <div>
