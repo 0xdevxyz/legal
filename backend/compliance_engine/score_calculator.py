@@ -8,6 +8,7 @@ WICHTIG: Diese Funktion wird überall verwendet statt ad-hoc Berechnungen
 from typing import List, Dict, Any
 from dataclasses import dataclass
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -295,6 +296,70 @@ class ScoreCalculator:
                        + warning_count * ScoreCalculator.SEVERITY_DEDUCTIONS["warning"])
         return max(0, score)
 
+    # ---------------------------------------------------------------------
+    # Sättigung pro Befund-Typ (v4.1)
+    # ---------------------------------------------------------------------
+    # Ein einzelner Befund-Typ darf eine Säule nicht im Alleingang auf 0
+    # ziehen. Anlass: ein zu grober SVG-Check meldete jedes dekorative Icon
+    # einzeln — 59 Phantom-Warnungen (59 × 8 = 472 Punkte Abzug) drückten
+    # complyo.de von 100 auf 28. Fachlich sind 40 fehlende Alt-Texte EIN
+    # Mangel mit viel Arbeit, nicht 40 Mängel. Die ersten Funde derselben
+    # Sorte kosten deshalb voll, danach sättigt der Abzug.
+    MAX_DEDUCTIONS_PER_TYPE = 3
+
+    _TYPE_KEY_NUMBERS = re.compile(r"\d+")
+
+    @staticmethod
+    def issue_type_key(issue) -> str:
+        """
+        Stabiler Typ-Schlüssel eines Issues für die Sättigung.
+
+        Zahlen werden ersetzt, damit "3 Formularfelder ohne Label" und
+        "7 Formularfelder ohne Label" als derselbe Befund-Typ gelten.
+        """
+        title = (getattr(issue, "title", "") or "").strip().lower()
+        title = ScoreCalculator._TYPE_KEY_NUMBERS.sub("#", title)
+        category = (getattr(issue, "category", "") or "").strip().lower()
+        return f"{category}|{title}"
+
+    @staticmethod
+    def count_effective_severities(issues) -> "tuple[int, int]":
+        """
+        Zähle critical/warning für die Score-Berechnung — mit Sättigung.
+
+        Jeder Befund-Typ geht höchstens MAX_DEDUCTIONS_PER_TYPE-mal in den
+        Abzug ein. Die Issue-LISTE bleibt vollständig: der Nutzer sieht
+        weiterhin jeden einzelnen Fund, nur der Score wird nicht verzerrt.
+
+        Returns:
+            (critical_count, warning_count) — bereits gedeckelt
+        """
+        seen: Dict[str, int] = {}
+        critical = 0
+        warning = 0
+        for issue in issues:
+            severity = getattr(issue, "severity", "")
+            if severity not in ("critical", "warning"):
+                continue
+            titel = (getattr(issue, "title", "") or "").strip()
+            if not titel:
+                # Ohne Titel ist kein Befund-Typ bestimmbar. Dann lieber voll
+                # zählen als fremde Befunde fälschlich zusammenwerfen.
+                if severity == "critical":
+                    critical += 1
+                else:
+                    warning += 1
+                continue
+            key = f"{ScoreCalculator.issue_type_key(issue)}|{severity}"
+            seen[key] = seen.get(key, 0) + 1
+            if seen[key] > ScoreCalculator.MAX_DEDUCTIONS_PER_TYPE:
+                continue
+            if severity == "critical":
+                critical += 1
+            else:
+                warning += 1
+        return critical, warning
+
     # Aufwands-Klassifizierung (v4.0) für Bearbeitungshinweise/Priorisierung
     EFFORT_LOW = "gering"      # automatisch / per KI behebbar
     EFFORT_MEDIUM = "mittel"   # manuell, aber überschaubar
@@ -399,7 +464,8 @@ class ScoreCalculator:
         - cookies        (Cookie-Banner / TTDSG / TCF)
 
         Jede Säule: max(0, 100 - (critical×25 + warning×8)),
-        fehlendes Kern-Element (is_missing) → 0.
+        fehlendes Kern-Element (is_missing) → 0. Gleichartige Befunde gehen
+        höchstens MAX_DEDUCTIONS_PER_TYPE-mal in den Abzug ein.
 
         Returns:
             Dict mit pillar_id → score (0-100, int). Säulen ohne Issues = 100.
@@ -412,8 +478,9 @@ class ScoreCalculator:
 
         pillar_scores: Dict[str, int] = {}
         for pillar_id, pillar_issues in buckets.items():
-            critical_count = sum(1 for i in pillar_issues if i.severity == "critical")
-            warning_count = sum(1 for i in pillar_issues if i.severity == "warning")
+            critical_count, warning_count = ScoreCalculator.count_effective_severities(
+                pillar_issues
+            )
             # is_missing wird von vielen Checks auch auf einzelne Warning-Sub-Findings
             # gesetzt ("Widerrufsmöglichkeit fehlt", "Ablehnen-Button fehlt" …). Nur ein
             # komplett fehlendes KERN-Element (Impressum, Datenschutz, Cookie-Banner,
@@ -474,8 +541,9 @@ class ScoreCalculator:
         pillar_scores: Dict[str, int] = {}
         pillar_status: Dict[str, str] = {}
         for pillar_id, pillar_issues in buckets.items():
-            critical_count = sum(1 for i in pillar_issues if i.severity == "critical")
-            warning_count = sum(1 for i in pillar_issues if i.severity == "warning")
+            critical_count, warning_count = ScoreCalculator.count_effective_severities(
+                pillar_issues
+            )
             has_missing_core = any(
                 getattr(i, "is_missing", False) and i.severity == "critical"
                 for i in pillar_issues

@@ -1497,6 +1497,69 @@ def _check_wcag_aaa(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
 # AUDIT-11: Tabellen / SVG / Canvas Accessibility
 # =============================================================================
 
+_SVG_IMAGE_ROLES = {'img', 'graphics-document', 'graphics-symbol', 'graphics-object'}
+_SVG_DECORATIVE_ROLES = {'presentation', 'none'}
+_CONTROL_TAGS = {'button', 'a', 'summary'}
+_CONTROL_ROLES = {'button', 'link', 'menuitem', 'tab', 'checkbox', 'switch'}
+
+
+def _svg_accessible_name(svg) -> str:
+    """Zugänglicher Name eines <svg> (aria-label, aria-labelledby, <title>, <desc>)."""
+    for attr in ('aria-label', 'aria-labelledby'):
+        value = (svg.get(attr) or '').strip()
+        if value:
+            return value
+    for tag in ('title', 'desc'):
+        node = svg.find(tag)
+        if node is not None and node.get_text(strip=True):
+            return node.get_text(strip=True)
+    return ''
+
+
+def _is_control(tag) -> bool:
+    """Ist das Element ein Bedienelement (nativ oder per role)?"""
+    if getattr(tag, 'name', None) in _CONTROL_TAGS:
+        return True
+    return (tag.get('role') or '').strip().lower() in _CONTROL_ROLES
+
+
+def _svg_needs_alternative(svg) -> bool:
+    """
+    True, wenn ein <svg> zwingend einen zugänglichen Namen braucht.
+
+    Bewusst eng gefasst und deckungsgleich mit axe-core: gemeldet werden nur
+    Grafiken mit expliziter Bild-Rolle sowie Icons, die allein ein Bedienelement
+    beschriften. Ein nacktes Deko-Icon neben sichtbarem Text ist kein Verstoß —
+    sonst erzeugt jede Icon-Bibliothek Dutzende Phantom-Issues (complyo.de:
+    59 Stück, Säulen-Score 100 → 0).
+    """
+    if svg.get('aria-hidden') == 'true':
+        return False
+    role = (svg.get('role') or '').strip().lower()
+    if role in _SVG_DECORATIVE_ROLES:
+        return False
+    if _svg_accessible_name(svg):
+        return False
+
+    # Fall 1: explizit als Bild ausgezeichnet → Name ist Pflicht
+    if role in _SVG_IMAGE_ROLES:
+        return True
+
+    # Fall 2: einziger Inhalt eines Bedienelements → das Icon MUSS es benennen
+    control = svg.find_parent(_is_control)
+    if control is None:
+        return False
+    if control.get('aria-hidden') == 'true':
+        return False
+    for attr in ('aria-label', 'aria-labelledby', 'title'):
+        if (control.get(attr) or '').strip():
+            return False
+    # sichtbarer Text im Bedienelement benennt es bereits (Icon ist dann Deko)
+    if control.get_text(strip=True):
+        return False
+    return True
+
+
 def _check_tables_svg_canvas(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
     issues = []
 
@@ -1528,24 +1591,34 @@ def _check_tables_svg_canvas(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
                 auto_fixable=False,
             ))
 
-    # SVG: ohne <title> und role="img"
-    for svg in soup.find_all('svg'):
-        if svg.get('aria-hidden') == 'true':
-            continue
-        missing_title = not svg.find('title')
-        missing_role = svg.get('role') != 'img'
-        if missing_title or missing_role:
-            issues.append(BarrierefreiheitIssue(
-                category='barrierefreiheit',
-                severity='warning',
-                title='WCAG 1.1.1: SVG ohne <title> oder role="img"',
-                description='Ein SVG-Element fehlt entweder ein <title>-Kind-Element oder das Attribut role="img". Screenreader können das Bild nicht beschreiben.',
-                risk_euro=400,
-                recommendation='Fügen Sie <title>Beschreibung</title> als erstes SVG-Kind ein und setzen Sie role="img" auf dem <svg>-Element.',
-                legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
-                auto_fixable=False,
-                element_html=str(svg)[:200],
-            ))
+    # SVG: nur bedeutungstragende Grafiken brauchen eine Textalternative.
+    # Ein nacktes <svg> ohne Rolle wird von Screenreadern nicht als Bild
+    # exponiert — dekorative Icon-Bibliotheken (Lucide, Heroicons …) sind
+    # deshalb KEIN Verstoß. Ein Befund, nicht einer pro Icon: sonst zieht
+    # eine einzige Icon-Bibliothek die Säule Barrierefreiheit auf 0.
+    svg_offenders = [s for s in soup.find_all('svg') if _svg_needs_alternative(s)]
+    if svg_offenders:
+        anzahl = len(svg_offenders)
+        issues.append(BarrierefreiheitIssue(
+            category='barrierefreiheit',
+            severity='warning',
+            title=f'WCAG 1.1.1: {anzahl} SVG-Grafik(en) ohne Textalternative',
+            description=(
+                f'{anzahl} SVG-Grafik(en) tragen Bedeutung — sie sind entweder als Bild '
+                'ausgezeichnet oder beschriften allein einen Button/Link — haben aber '
+                'keinen zugänglichen Namen. Screenreader können sie nicht beschreiben. '
+                'Rein dekorative Icons neben sichtbarem Text sind davon nicht betroffen.'
+            ),
+            risk_euro=400,
+            recommendation=(
+                'Ergänzen Sie <title>Beschreibung</title> als erstes Kind des <svg> oder '
+                'setzen Sie aria-label="Beschreibung". Rein dekorative Grafiken markieren '
+                'Sie stattdessen mit aria-hidden="true".'
+            ),
+            legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
+            auto_fixable=False,
+            element_html=str(svg_offenders[0])[:200],
+        ))
 
     # Canvas: ohne aria-label
     for canvas in soup.find_all('canvas'):

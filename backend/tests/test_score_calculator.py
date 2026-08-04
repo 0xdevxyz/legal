@@ -27,6 +27,7 @@ class _Issue:
     category: str
     severity: str
     is_missing: bool = False
+    title: str = ""
 
 
 class TestMissingCoreContract:
@@ -161,3 +162,81 @@ class TestEvidenceBasedV4:
         assert status["legal"] == PillarStatus.NON_COMPLIANT
         assert status["accessibility"] == PillarStatus.COMPLIANT  # keine Issues, geprüft
         assert status["cookies"] == PillarStatus.COMPLIANT
+
+
+class TestTypSaettigung:
+    """
+    Ein einzelner Befund-Typ darf eine Säule nicht im Alleingang auf 0 ziehen.
+
+    Anlass (echter Schaden, 2026-08-04): ein zu grober WCAG-1.1.1-SVG-Check
+    meldete jedes dekorative Lucide-Icon einzeln — 59 Warnungen à 8 Punkte
+    drückten complyo.de von 100 % auf 28 %.
+    """
+
+    def test_massenbefund_kippt_saeule_nicht(self):
+        issues = [
+            _Issue("barrierefreiheit", "warning", title="SVG ohne Textalternative")
+            for _ in range(59)
+        ]
+        scores = ScoreCalculator.calculate_pillar_scores(issues)
+        # gedeckelt auf 3 × 8 = 24 Abzug statt 59 × 8 = 472
+        assert scores["accessibility"] == 76
+
+    def test_erste_funde_kosten_voll(self):
+        issues = [
+            _Issue("barrierefreiheit", "warning", title="SVG ohne Textalternative")
+            for _ in range(2)
+        ]
+        scores = ScoreCalculator.calculate_pillar_scores(issues)
+        assert scores["accessibility"] == 84  # 100 - 2*8
+
+    def test_verschiedene_typen_zaehlen_einzeln(self):
+        """Sättigung greift pro Typ, nicht pro Säule — echte Vielfalt kostet."""
+        issues = [
+            _Issue("barrierefreiheit", "warning", title="Kontrast zu gering"),
+            _Issue("barrierefreiheit", "warning", title="Skip-Link fehlt"),
+            _Issue("barrierefreiheit", "warning", title="Landmark-Regions fehlen"),
+            _Issue("barrierefreiheit", "warning", title="Formularfelder ohne Label"),
+            _Issue("barrierefreiheit", "warning", title="Semantische Elemente fehlen"),
+        ]
+        scores = ScoreCalculator.calculate_pillar_scores(issues)
+        assert scores["accessibility"] == 60  # 100 - 5*8, nichts gedeckelt
+
+    def test_zahlen_im_titel_bilden_denselben_typ(self):
+        """
+        "3 Formularfelder ohne Label" und "7 Formularfelder ohne Label" sind
+        derselbe Befund-Typ — die Anzahl im Titel darf keinen neuen Typ öffnen,
+        sonst umgeht ein Check die Sättigung durch wechselnde Zahlen.
+        """
+        issues = [
+            _Issue("barrierefreiheit", "warning", title="3 Formularfelder ohne Label"),
+            _Issue("barrierefreiheit", "warning", title="7 Formularfelder ohne Label"),
+            _Issue("barrierefreiheit", "warning", title="9 Formularfelder ohne Label"),
+            _Issue("barrierefreiheit", "warning", title="12 Formularfelder ohne Label"),
+        ]
+        crit, warn = ScoreCalculator.count_effective_severities(issues)
+        assert (crit, warn) == (0, 3)
+
+    def test_critical_und_warning_saettigen_getrennt(self):
+        issues = [_Issue("shop", "critical", title="Widerrufsbelehrung fehlt")] * 10
+        crit, warn = ScoreCalculator.count_effective_severities(issues)
+        assert (crit, warn) == (3, 0)
+
+    def test_ohne_titel_keine_saettigung(self):
+        """Kein Titel → kein bestimmbarer Typ → lieber voll zählen."""
+        issues = [_Issue("datenschutz", "warning") for _ in range(6)]
+        crit, warn = ScoreCalculator.count_effective_severities(issues)
+        assert (crit, warn) == (0, 6)
+
+    def test_issue_liste_bleibt_vollstaendig(self):
+        """
+        Gedeckelt wird nur der SCORE. Der Nutzer muss weiterhin jeden
+        einzelnen Fund sehen — sonst verschwindet Arbeit aus der Liste.
+        """
+        issues = [
+            _Issue("barrierefreiheit", "warning", title="SVG ohne Textalternative")
+            for _ in range(20)
+        ]
+        result = ScoreCalculator.compute_with_status(issues)
+        assert result["pillar_scores"]["accessibility"] == 76
+        assert len(issues) == 20  # Eingabeliste unangetastet

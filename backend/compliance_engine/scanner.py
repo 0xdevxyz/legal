@@ -76,6 +76,55 @@ class ComplianceIssue:
         if self.metadata is None:
             self.metadata = {}
 
+_DEDUP_UMLAUTE = (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss"))
+
+
+def _dedup_key(issue) -> str:
+    """
+    Formunabhaengiger Schluessel eines Befunds.
+
+    Zahlen, Trennzeichen und Umlaute fallen weg, damit "4 Formular-Felder ohne
+    Label" und "4 Formularfelder ohne Label" als derselbe Mangel erkannt werden.
+    """
+    text = (getattr(issue, "title", "") or "").lower()
+    for umlaut, ersatz in _DEDUP_UMLAUTE:
+        text = text.replace(umlaut, ersatz)
+    text = re.sub(r"[^a-z]", "", text)
+    return f"{(getattr(issue, 'category', '') or '').lower()}|{text}"
+
+
+_SEVERITY_RANG = {"critical": 3, "warning": 2, "info": 1}
+
+
+def dedupe_issues(issues: "List[ComplianceIssue]") -> "List[ComplianceIssue]":
+    """
+    Fasst Mehrfachmeldungen desselben Mangels zu einer zusammen.
+
+    Es gewinnt die schwerwiegendste Variante — ein Mangel, den ein Checker als
+    critical und ein anderer als warning meldet, bleibt critical. Die Reihenfolge
+    der uebrigen Befunde bleibt erhalten.
+    """
+    beste = {}
+    reihenfolge = []
+    for issue in issues:
+        key = _dedup_key(issue)
+        if not key.split("|", 1)[1]:
+            # kein verwertbarer Titel → nicht zusammenfassen
+            reihenfolge.append(id(issue))
+            beste[id(issue)] = issue
+            continue
+        vorhanden = beste.get(key)
+        if vorhanden is None:
+            beste[key] = issue
+            reihenfolge.append(key)
+            continue
+        neu_rang = _SEVERITY_RANG.get(getattr(issue, "severity", ""), 0)
+        alt_rang = _SEVERITY_RANG.get(getattr(vorhanden, "severity", ""), 0)
+        if neu_rang > alt_rang:
+            beste[key] = issue
+    return [beste[k] for k in reihenfolge]
+
+
 class ComplianceScanner:
     def __init__(self):
         self.session = None
@@ -322,6 +371,10 @@ class ComplianceScanner:
                 issues, unverified_pillars = await self._ai_verify_unverified_pillars(
                     soup, issues, unverified_pillars
                 )
+
+            # Doppelmeldungen zusammenfassen, BEVOR bewertet und angezeigt wird —
+            # sonst kostet ein Mangel doppelt und steht zweimal im Report.
+            issues = dedupe_issues(issues)
 
             # ✅ v4.0 Klassifizierung: Bearbeitungsaufwand pro Issue (für Hinweise/Priorisierung)
             for _issue in issues:
