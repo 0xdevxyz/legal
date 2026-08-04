@@ -143,7 +143,7 @@ export default function LoginPage() {
         <main
             role="main"
             aria-label="Login"
-            className="min-h-screen flex items-center justify-center relative overflow-hidden"
+            className="on-dark min-h-screen flex items-center justify-center relative overflow-hidden"
             style={{ background: 'linear-gradient(135deg, #050812 0%, #0a0f1e 40%, #0d1428 70%, #050812 100%)' }}
         >
             <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />

@@ -120,13 +120,13 @@ function RegisterForm() {
     };
     
     return (
-        <main role="main" aria-label="Registrierung" className="min-h-screen flex items-center justify-center bg-gray-900 px-4 py-8">
+        <main role="main" aria-label="Registrierung" className="on-dark min-h-screen flex items-center justify-center bg-gray-900 px-4 py-8">
             <section className="bg-gray-800 p-8 rounded-lg max-w-lg w-full border border-gray-700 shadow-xl">
                 <div className="flex items-center justify-center mb-6">
                     <Logo size="xl" />
                 </div>
                 
-                <h1 className="text-3xl font-bold mb-2 text-center">Jetzt registrieren</h1>
+                <h1 className="text-3xl font-bold mb-2 text-center text-white">Jetzt registrieren</h1>
                 
                 <div className="mb-6">
                     <label className="block text-sm font-medium mb-3 text-gray-300">Plan auswählen</label>
@@ -161,7 +161,7 @@ function RegisterForm() {
                     </div>
                     <p className="text-xs text-gray-400 mt-3 leading-relaxed">
                         Komplettservice gesucht? Beim <span className="text-gray-300 font-semibold">Expert-Paket</span> überarbeiten
-                        wir deine Website selbst — 3.900 € netto einmalig, danach 39 €/Monat für laufende Updates.{' '}
+                        wir deine Website selbst — 3.900 € netto einmalig, danach 29 €/Monat für laufende Updates.{' '}
                         <a href="mailto:support@complyo.de?subject=Expert-Paket" className="text-blue-400 hover:underline">
                             Expert-Paket anfragen
                         </a>
@@ -341,7 +341,7 @@ function RegisterForm() {
 export default function RegisterPage() {
     return (
         <Suspense fallback={
-            <main role="main" aria-label="Registrierung wird geladen" className="min-h-screen flex items-center justify-center bg-gray-900">
+            <main role="main" aria-label="Registrierung wird geladen" className="on-dark min-h-screen flex items-center justify-center bg-gray-900">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
             </main>
         }>

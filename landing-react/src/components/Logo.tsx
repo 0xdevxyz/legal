@@ -11,20 +11,20 @@ interface LogoProps {
 
 const sizeConfig = {
   sm: {
-    width: 130,
-    height: 38,
+    width: 120,
+    height: 40,
   },
   md: {
-    width: 170,
-    height: 50,
+    width: 160,
+    height: 54,
   },
   lg: {
     width: 220,
-    height: 64,
+    height: 74,
   },
   xl: {
     width: 280,
-    height: 82,
+    height: 94,
   }
 };
 
@@ -41,8 +41,8 @@ export const Logo: React.FC<LogoProps> = ({
   // light = heller Hintergrund -> logo-light.png (dunkler Text)
   // dark/default = dunkler Hintergrund -> logo-dark.png (heller Text)
   const logoSrc = variant === 'light' 
-    ? '/logo-dark.png'   // Dunkles Logo für hellen Hintergrund
-    : '/logo-light.png'; // Helles Logo für dunklen Hintergrund (default)
+    ? '/logo-dark-trim.png'   // Dunkles Logo für hellen Hintergrund
+    : '/logo-light-trim.png'; // Helles Logo für dunklen Hintergrund (default)
 
   return (
     <div 

@@ -1,5 +1,6 @@
 'use client';
 import React from 'react';
+import { Logo } from '@/components/Logo';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de';
 
@@ -9,11 +10,8 @@ export default function FooterSection() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-14">
           <div className="lg:col-span-1">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">C</span>
-              </div>
-              <span className="text-white font-bold text-xl">complyo</span>
+            <div className="mb-4">
+              <Logo size="sm" />
             </div>
             <p className="text-sm leading-relaxed mb-5">
               Die KI-Compliance-Plattform für Websites. DSGVO, Cookie-Recht und Barrierefreiheit – automatisch und rechtssicher.

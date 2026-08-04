@@ -614,16 +614,20 @@
     @apply text-gray-600;
   }
   
-  /* Force dark text in light mode for content elements */
-  .light h1,
-  .light h2,
-  .light h3,
-  .light h4,
-  .light h5,
-  .light h6,
-  .light p,
-  .light span:not(.bg-clip-text),
-  .light div:not(.bg-clip-text) {
+  /* Force dark text in light mode for content elements.
+     Ausgenommen sind bewusst dunkle Flaechen (.on-dark) — Login und
+     Registrierung bringen ihren eigenen dunklen Hintergrund mit. Ohne die
+     Ausnahme macht dieser Reset dort jedes explizite text-white platt und
+     erzeugt dunkle Schrift auf dunklem Grund. */
+  .light h1:not(.on-dark):not(.on-dark *),
+  .light h2:not(.on-dark):not(.on-dark *),
+  .light h3:not(.on-dark):not(.on-dark *),
+  .light h4:not(.on-dark):not(.on-dark *),
+  .light h5:not(.on-dark):not(.on-dark *),
+  .light h6:not(.on-dark):not(.on-dark *),
+  .light p:not(.on-dark):not(.on-dark *),
+  .light span:not(.bg-clip-text):not(.on-dark):not(.on-dark *),
+  .light div:not(.bg-clip-text):not(.on-dark):not(.on-dark *) {
     color: inherit;
   }
 
