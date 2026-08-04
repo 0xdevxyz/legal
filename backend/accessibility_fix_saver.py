@@ -12,6 +12,31 @@ from typing import List, Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 
+def _als_user_id(wert) -> "Optional[int]":
+    """
+    Bringt user_id auf den Spaltentyp integer.
+
+    Die accessibility_*-Tabellen trugen bis zur Migration am 2026-08-04 eine
+    uuid-Spalte, obwohl users.id integer ist — jeder Insert scheiterte still.
+    Seither ist die Spalte integer, die Aufrufer reichen den Wert aber weiterhin
+    als String durch (`str(user_id)` in public_routes). Leere Werte und
+    Unkonvertierbares werden zu None: ein fehlender Nutzerbezug ist besser als
+    ein abgebrochener Insert, denn die Fixes haengen fachlich an site_id.
+    """
+    if wert is None:
+        return None
+    if isinstance(wert, int):
+        return wert
+    text = str(wert).strip()
+    if not text:
+        return None
+    try:
+        return int(text)
+    except (TypeError, ValueError):
+        logger.warning(f"user_id '{text}' ist keine Zahl — Fix wird ohne Nutzerbezug gespeichert")
+        return None
+
+
 class AccessibilityFixSaver:
     """
     Speichert AI-generierte Alt-Texte und andere Accessibility-Fixes
@@ -24,7 +49,7 @@ class AccessibilityFixSaver:
         self,
         site_id: str,
         scan_id: str,
-        user_id: str,  # UUID als String
+        user_id,  # int oder String — wird normalisiert
         fixes: List[Dict[str, Any]],
         status: str = 'pending'  # Human-in-the-loop: NICHT mehr Auto-Approve
     ) -> int:
@@ -97,7 +122,7 @@ class AccessibilityFixSaver:
                             """,
                             site_id,
                             scan_id,
-                            user_id,
+                            _als_user_id(user_id),
                             fix.get('page_url', ''),
                             fix['image_src'],
                             fix.get('image_filename', ''),
@@ -117,7 +142,15 @@ class AccessibilityFixSaver:
                         # Continue mit nächstem Fix
                         continue
         
-        logger.info(f"✅ Saved {saved_count}/{len(fixes)} alt-text fixes for site_id={site_id}")
+        if fixes and saved_count == 0:
+            # Totalausfall ist immer ein Defekt (Schema, Typen, Rechte) — nie
+            # ein Einzelfall. Genau das blieb hier einen Monat unbemerkt.
+            logger.error(
+                f"❌ KEIN einziger Alt-Text-Fix gespeichert ({len(fixes)} versucht, "
+                f"site_id={site_id}) — Speicherpfad defekt, siehe Fehler oben"
+            )
+        else:
+            logger.info(f"✅ Saved {saved_count}/{len(fixes)} alt-text fixes for site_id={site_id}")
         return saved_count
     
     async def get_fixes_for_site(
@@ -294,8 +327,8 @@ class AccessibilityFixSaver:
                                 site_id, scan_id, user_id, page_url,
                                 fix_type, payload, wcag_criterion, confidence,
                                 source, status, approved_at, created_at, updated_at
-                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                                      CASE WHEN $10 = 'approved' THEN NOW() ELSE NULL END,
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::varchar,
+                                      CASE WHEN $10::varchar = 'approved' THEN NOW() ELSE NULL END,
                                       NOW(), NOW())
                             ON CONFLICT (site_id, fix_type)
                             DO UPDATE SET
@@ -309,7 +342,7 @@ class AccessibilityFixSaver:
                             """,
                             site_id,
                             scan_id,
-                            user_id,
+                            _als_user_id(user_id),
                             fix.get('page_url', ''),
                             fix_type,
                             _json.dumps(fix.get('payload', {})),
@@ -421,7 +454,7 @@ class AccessibilityFixSaver:
                                 page_url = EXCLUDED.page_url,
                                 updated_at = NOW()
                             """,
-                            site_id, scan_id, user_id, fix.get('page_url', ''),
+                            site_id, scan_id, _als_user_id(user_id), fix.get('page_url', ''),
                             href, text, self.link_key(href, text),
                             label, fix.get('confidence', 0.0),
                             fix.get('surrounding_text', ''),
