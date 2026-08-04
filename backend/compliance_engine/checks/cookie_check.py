@@ -568,81 +568,36 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
 
     if not has_cookie_banner:
         if has_tracking:
-            # Tracking vorhanden aber kein Banner → alle Sub-Issues als critical
+            # EIN Befund statt sechs. Fehlt der Banner, folgen Opt-In, Ablehnung,
+            # Informationspflicht, Widerruf und Nachweis zwangslaeufig daraus —
+            # sie sind Anforderungen an die eine Loesung, nicht eigene Maengel.
+            # Frueher standen sie als sechs Eintraege (4x critical) im Report und
+            # kosteten sechsfach, obwohl ein Banner alle auf einmal erledigt.
             issues.append(asdict(CookieIssue(
                 category='cookies',
                 severity='critical',
                 title='Kein Cookie-Consent-Banner vorhanden',
                 description='Es wurde kein Cookie-Consent-Banner gefunden, obwohl Tracking-Scripts geladen werden. '
                            'Ein Cookie-Banner mit Opt-In ist nach TDDDG §25 verpflichtend. '
-                           '⚠️ Es wurden Tracking-Scripts gefunden - Tracking ohne Einwilligung ist illegal!',
+                           '⚠️ Tracking ohne Einwilligung ist illegal.\n\n'
+                           'Der Banner muss sechs Anforderungen zugleich erfüllen:\n'
+                           '1. Opt-In — Cookies erst nach aktiver Zustimmung setzen (TDDDG §25 Abs. 1)\n'
+                           '2. Ablehnung — "Ablehnen" bzw. "Nur notwendige" gleichwertig sichtbar '
+                           '(TDDDG §25 Abs. 1, DSGVO Art. 7 Abs. 3)\n'
+                           '3. Information — welche Cookies, zu welchem Zweck, wie lange (DSGVO Art. 13)\n'
+                           '4. Widerruf — Einwilligung jederzeit einfach zurücknehmbar (DSGVO Art. 7 Abs. 3)\n'
+                           '5. Nachweis — erteilte Einwilligungen dokumentieren (DSGVO Art. 7 Abs. 1)\n'
+                           '6. Granularität — Zustimmung je Zweck, nicht nur pauschal',
                 risk_euro=5000,
-                recommendation='Nutzen Sie die integrierte Complyo Cookie-Compliance-Lösung im Dashboard unter "Cookie-Compliance". '
-                             'Einfach einrichten mit automatischer Cookie-Erkennung, anpassbarem Design und Consent-Statistiken.',
-                legal_basis='TDDDG §25, DSGVO Art. 7 (Einwilligung)',
+                recommendation='Nutzen Sie die integrierte Complyo Cookie-Compliance-Lösung im Dashboard unter '
+                             '"Cookies". Sie erfüllt alle sechs Anforderungen: automatische Cookie-Erkennung, '
+                             'gleichwertiger Ablehnen-Button, Zweck-Kategorien, Widerruf-Link und Consent-Logs '
+                             'als Nachweis.',
+                legal_basis='TDDDG §25, DSGVO Art. 7 und Art. 13',
                 auto_fixable=True,
                 is_missing=True
             )))
-            
-            issues.append(asdict(CookieIssue(
-                category='cookies',
-                severity='critical',
-                title='Opt-In Mechanismus fehlt',
-                description='Es fehlt ein aktiver Opt-In Mechanismus. Cookies dürfen nur nach ausdrücklicher Einwilligung gesetzt werden.',
-                risk_euro=3000,
-                recommendation='Implementieren Sie einen Cookie-Banner, der Cookies nur nach aktiver Zustimmung (Opt-In) setzt.',
-                legal_basis='TDDDG §25 Abs. 1',
-                auto_fixable=False,
-                is_missing=True
-            )))
-            
-            issues.append(asdict(CookieIssue(
-                category='cookies',
-                severity='critical',
-                title='Ablehnungsmöglichkeit fehlt',
-                description='Es fehlt eine klare und einfache Möglichkeit, die Cookie-Nutzung abzulehnen.',
-                risk_euro=2500,
-                recommendation='Fügen Sie eine deutliche "Ablehnen" oder "Nur notwendige Cookies" Option hinzu.',
-                legal_basis='TDDDG §25 Abs. 1, DSGVO Art. 7 Abs. 3',
-                auto_fixable=False,
-                is_missing=True
-            )))
-            
-            issues.append(asdict(CookieIssue(
-                category='cookies',
-                severity='critical',
-                title='Cookie-Informationspflicht nicht erfüllt',
-                description='Es fehlen Informationen über welche Cookies gesetzt werden, zu welchem Zweck und wie lange.',
-                risk_euro=2000,
-                recommendation='Fügen Sie eine detaillierte Cookie-Übersicht hinzu (Typ, Zweck, Speicherdauer).',
-                legal_basis='DSGVO Art. 13',
-                auto_fixable=False,
-                is_missing=True
-            )))
-            
-            issues.append(asdict(CookieIssue(
-                category='cookies',
-                severity='warning',
-                title='Widerrufsmöglichkeit fehlt',
-                description='Es fehlt eine einfache Möglichkeit, die Cookie-Einwilligung nachträglich zu widerrufen.',
-                risk_euro=1500,
-                recommendation='Implementieren Sie eine Widerrufsmöglichkeit (z.B. Link in Datenschutzerklärung oder Footer).',
-                legal_basis='DSGVO Art. 7 Abs. 3',
-                auto_fixable=False,
-                is_missing=True
-            )))
-            
-            issues.append(asdict(CookieIssue(
-                category='cookies',
-                severity='warning',
-                title='Einwilligungsnachweis fehlt',
-                description='Es existiert kein System zum Nachweis der erteilten Cookie-Einwilligungen (Dokumentationspflicht).',
-                risk_euro=1500,
-                recommendation='Implementieren Sie ein System zur Dokumentation der Einwilligungen (Consent-Logs).',
-                legal_basis='DSGVO Art. 7 Abs. 1',
-                auto_fixable=False,
-                is_missing=True
-            )))
+
         else:
             # Kein Tracking erkannt — kein Banner zwingend nötig (nur technisch notwendige Cookies)
             # Hinweis als info-level, kein kritisches Issue

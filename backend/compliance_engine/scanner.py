@@ -76,7 +76,51 @@ class ComplianceIssue:
         if self.metadata is None:
             self.metadata = {}
 
+# Bekannte Fremd-Schreibweisen -> die drei Stufen, die der ScoreCalculator kennt.
+# Alles Unbekannte wird bewusst zu 'warning' statt still zu verschwinden.
+_SEVERITY_ALIASE = {
+    "critical": "critical",
+    "error": "critical",
+    "high": "critical",
+    "serious": "critical",
+    "warning": "warning",
+    "moderate": "warning",
+    "medium": "warning",
+    "minor": "warning",
+    "info": "info",
+    "low": "info",
+    "notice": "info",
+}
+
+
+def normalize_severities(issues: "List[ComplianceIssue]") -> "List[ComplianceIssue]":
+    """
+    Bringt jeden Befund auf critical/warning/info.
+
+    Ohne das faellt ein Befund mit einer fremden Stufe (z.B. 'error') komplett
+    aus Score UND Saeulen-Status heraus — er steht in der Liste, kostet aber
+    nichts. Ein unbekannter Wert wird zu 'warning' hochgezogen, damit ein
+    Mangel im Zweifel zaehlt statt zu verschwinden.
+    """
+    for issue in issues:
+        roh = (getattr(issue, "severity", "") or "").strip().lower()
+        normalisiert = _SEVERITY_ALIASE.get(roh)
+        if normalisiert is None:
+            logger.warning(
+                f"Unbekannte Severity '{roh}' in '{getattr(issue, 'title', '')}' "
+                f"— als 'warning' gewertet"
+            )
+            normalisiert = "warning"
+        issue.severity = normalisiert
+    return issues
+
+
 _DEDUP_UMLAUTE = (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss"))
+
+
+# "WCAG 1.2.2: " am Titelanfang beschreibt die Norm, nicht den Mangel —
+# derselbe Fund mit und ohne dieses Praefix ist ein Fund.
+_WCAG_PRAEFIX = re.compile(r"^\s*wcag\s*[\d.]+\s*[:\-–]\s*")
 
 
 def _dedup_key(issue) -> str:
@@ -85,12 +129,32 @@ def _dedup_key(issue) -> str:
 
     Zahlen, Trennzeichen und Umlaute fallen weg, damit "4 Formular-Felder ohne
     Label" und "4 Formularfelder ohne Label" als derselbe Mangel erkannt werden.
+
+    Gruppiert wird ueber die SAEULE, nicht die Kategorie: "Video ohne
+    Untertitel" kam einmal aus 'barrierefreiheit' und einmal aus
+    'media_accessibility' — zwei Kategorien, eine Saeule, ein Mangel.
     """
     text = (getattr(issue, "title", "") or "").lower()
+    text = _WCAG_PRAEFIX.sub("", text)
     for umlaut, ersatz in _DEDUP_UMLAUTE:
         text = text.replace(umlaut, ersatz)
     text = re.sub(r"[^a-z]", "", text)
-    return f"{(getattr(issue, 'category', '') or '').lower()}|{text}"
+    saeule = ScoreCalculator.categorize(getattr(issue, "category", "") or "")
+    return f"{saeule}|{text}"
+
+
+# Felder, die einen Befund an ein konkretes Element binden. Traegt ein Issue
+# eines davon, ist es eine Fundstelle mit eigenen Fix-Daten — keine
+# Doppelmeldung, auch wenn zehn Geschwister denselben Titel haben.
+_FUNDSTELLEN_FELDER = ("image_src", "suggested_alt", "fix_code", "screenshot_url")
+
+
+def _ist_einzelfundstelle(issue) -> bool:
+    """True, wenn der Befund ein konkretes Element mit eigenen Fix-Daten meint."""
+    return any(
+        (getattr(issue, feld, None) or "").strip()
+        for feld in _FUNDSTELLEN_FELDER
+    )
 
 
 _SEVERITY_RANG = {"critical": 3, "warning": 2, "info": 1}
@@ -107,6 +171,12 @@ def dedupe_issues(issues: "List[ComplianceIssue]") -> "List[ComplianceIssue]":
     beste = {}
     reihenfolge = []
     for issue in issues:
+        if _ist_einzelfundstelle(issue):
+            # Konkretes Element mit eigenen Fix-Daten — jede Fundstelle bleibt
+            # erhalten, sonst verliert die Alt-Text-Pipeline ihre Bilder.
+            reihenfolge.append(id(issue))
+            beste[id(issue)] = issue
+            continue
         key = _dedup_key(issue)
         if not key.split("|", 1)[1]:
             # kein verwertbarer Titel → nicht zusammenfassen
@@ -371,6 +441,10 @@ class ComplianceScanner:
                 issues, unverified_pillars = await self._ai_verify_unverified_pillars(
                     soup, issues, unverified_pillars
                 )
+
+            # Erst die Stufen vereinheitlichen, dann zusammenfassen: sonst
+            # verliert ein 'error'-Befund gegen ein 'warning'-Duplikat.
+            issues = normalize_severities(issues)
 
             # Doppelmeldungen zusammenfassen, BEVOR bewertet und angezeigt wird —
             # sonst kostet ein Mangel doppelt und steht zweimal im Report.

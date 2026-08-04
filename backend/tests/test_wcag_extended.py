@@ -195,12 +195,22 @@ def test_canvas_with_aria_label_no_issue():
 # =============================================================================
 
 def test_video_without_captions():
+    """
+    Titel ohne "WCAG 1.2.2:"-Präfix und Stufe 'critical' statt 'error'.
+
+    Das Präfix machte den Fund für die Zusammenfassung unkenntlich — der
+    Media-Check meldet denselben Mangel als "Video ohne Untertitel", beide
+    standen doppelt im Report. Die Stufe 'error' kannte der ScoreCalculator
+    nicht: der Befund kostete keinen einzigen Punkt. Der Normbezug steht
+    weiterhin in legal_basis.
+    """
     html = '<video src="film.mp4" controls></video>'
     soup = BeautifulSoup(html, 'html.parser')
     issues = _check_video_captions(soup)
     assert len(issues) == 1
-    assert '1.2.2' in issues[0]['title']
-    assert issues[0]['severity'] == 'error'
+    assert issues[0]['title'] == 'Video ohne Untertitel'
+    assert issues[0]['severity'] == 'critical'
+    assert '1.2.2' in issues[0]['legal_basis']
 
 
 def test_video_with_captions_no_error():

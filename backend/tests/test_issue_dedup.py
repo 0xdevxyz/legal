@@ -88,3 +88,47 @@ class TestDoppelmeldungen:
     def test_leere_titel_werden_nicht_verschmolzen(self):
         issues = [_issue(""), _issue("")]
         assert len(dedupe_issues(issues)) == 2
+
+
+
+class TestEinzelfundstellen:
+    """
+    Beinahe-Regression: 18 Bilder ohne Alt-Text tragen denselben Titel, aber
+    jeweils eigenes image_src, suggested_alt und fix_code. Wuerden sie
+    zusammengefasst, bekaeme der AccessibilityPostScanProcessor — der genau
+    diese Liste erhaelt — statt 18 Bildern nur noch eines zur KI-Alt-Text-
+    Generierung. Die Fundstellen muessen einzeln durchkommen; dass sie nicht
+    18-fach in den Score einschlagen, regelt die Typ-Saettigung.
+    """
+
+    def _bild(self, src, alt="Ein Bild"):
+        i = _issue("WCAG 1.1.1: Bild ohne Alt-Text", "critical")
+        i.image_src = src
+        i.suggested_alt = alt
+        i.fix_code = f'<img src="{src}" alt="{alt}" />'
+        return i
+
+    def test_bilder_bleiben_einzeln(self):
+        issues = [self._bild(f"/bild-{n}.jpg", f"Motiv {n}") for n in range(18)]
+        assert len(dedupe_issues(issues)) == 18
+
+    def test_fix_daten_bleiben_erhalten(self):
+        issues = [self._bild("/a.jpg", "Katze"), self._bild("/b.jpg", "Hund")]
+        ergebnis = dedupe_issues(issues)
+        assert {i.suggested_alt for i in ergebnis} == {"Katze", "Hund"}
+        assert {i.image_src for i in ergebnis} == {"/a.jpg", "/b.jpg"}
+
+    def test_ohne_elementbezug_weiterhin_zusammengefasst(self):
+        """Die Schutzregel darf echte Doppelmeldungen nicht durchlassen."""
+        issues = [
+            _issue("4 Formular-Felder ohne Label", "warning"),
+            _issue("4 Formularfelder ohne Label", "critical"),
+        ]
+        assert len(dedupe_issues(issues)) == 1
+
+    def test_leere_fix_felder_zaehlen_nicht_als_fundstelle(self):
+        a = _issue("Gleicher Mangel")
+        b = _issue("Gleicher Mangel")
+        a.image_src = ""
+        b.suggested_alt = "   "
+        assert len(dedupe_issues([a, b])) == 1

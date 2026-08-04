@@ -19,6 +19,8 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+from compliance_engine.axe_translations import uebersetze as uebersetze_axe
+
 # axe-core wird lokal gebundelt und zur Scan-Zeit injiziert — kein externes CDN
 # (SPOF vermieden; vendored axe-core 4.11.4).
 _AXE_CORE_PATH = os.path.join(os.path.dirname(__file__), "vendor", "axe.min.js")
@@ -440,14 +442,21 @@ class AxeScanner:
                 wcag_str = ", ".join(violation.wcag_criteria) if violation.wcag_criteria else "Name, Role, Value"
                 failure = (node.get("failureSummary") or violation.help or "").strip()
 
-                description = violation.description
+                # axe-core liefert help/description nur auf Englisch — in einer
+                # deutschsprachigen Anwendung standen Saetze wie "All page content
+                # should be contained by landmarks" unuebersetzt im Report.
+                titel_de, beschreibung_de = uebersetze_axe(
+                    violation.id, violation.help, violation.description
+                )
+
+                description = beschreibung_de
                 if idx == 0 and extra > 0:
                     description = f"{description} (und {extra} weitere Element(e) mit demselben Problem)"
 
                 issues.append({
                     "category": "barrierefreiheit",
                     "severity": severity,
-                    "title": violation.help or violation.id,
+                    "title": titel_de or violation.id,
                     "description": description,
                     "risk_euro": self._impact_to_risk_euro(violation.impact),
                     "recommendation": failure,

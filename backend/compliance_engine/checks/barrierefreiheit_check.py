@@ -1651,8 +1651,8 @@ def _check_video_captions(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
         if not caption_tracks:
             issues.append(BarrierefreiheitIssue(
                 category='barrierefreiheit',
-                severity='error',
-                title='WCAG 1.2.2: Video ohne Untertitel-Track',
+                severity='critical',
+                title='Video ohne Untertitel',
                 description='Ein <video>-Element hat kein <track kind="captions"> oder <track kind="subtitles">. Gehörlose und schwerhörige Nutzer können den Inhalt nicht konsumieren.',
                 risk_euro=1500,
                 recommendation='Fügen Sie <track kind="captions" src="untertitel.vtt" srclang="de" label="Deutsch"> innerhalb des <video>-Elements ein.',
