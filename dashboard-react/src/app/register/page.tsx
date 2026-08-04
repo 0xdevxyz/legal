@@ -161,7 +161,7 @@ function RegisterForm() {
                     </div>
                     <p className="text-xs text-gray-400 mt-3 leading-relaxed">
                         Komplettservice gesucht? Beim <span className="text-gray-300 font-semibold">Expert-Paket</span> überarbeiten
-                        wir deine Website selbst — 3.900 € netto einmalig, danach 29 €/Monat für laufende Updates.{' '}
+                        wir deine Website selbst — 3.990 € netto einmalig, danach 29 €/Monat für laufende Updates.{' '}
                         <a href="mailto:support@complyo.de?subject=Expert-Paket" className="text-blue-400 hover:underline">
                             Expert-Paket anfragen
                         </a>
