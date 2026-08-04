@@ -212,9 +212,18 @@
 
             // 🔒 Lizenzprüfung: Wurde die Website im Dashboard entfernt, zeigen wir
             // statt des funktionsfähigen Banners einen Hinweis an den Betreiber.
+            const license = this.config.license;
+            const violation = license && license.status && license.status !== 'active';
+
+            // Im Warnmodus bleibt der Banner funktionsfähig — der Verstoß wird nur
+            // protokolliert, damit ein Fehlalarm keine Kundenseite lahmlegt.
+            if (violation) {
+                console.warn('[Complyo] ' + (license.message || 'Lizenzverstoß erkannt.'));
+            }
+
             if (this.config.licenseActive === false) {
-                console.warn('[Complyo] Keine aktive Lizenz für diese Website – Banner deaktiviert.');
-                this.renderLicenseNotice();
+                const severe = !!(license && license.status === 'unlicensed_domain');
+                this.renderLicenseNotice(license && license.message, severe);
                 return;
             }
 
@@ -256,9 +265,64 @@
          * 🔒 Lizenz-Hinweis: Wird angezeigt, wenn für diese Website keine aktive
          * Lizenz mehr besteht (Website wurde im Complyo-Dashboard entfernt).
          */
-        renderLicenseNotice() {
+        renderLicenseNotice(message, severe) {
+            const FALLBACK =
+                'Für dieses Cookie-Banner besteht keine aktive Lizenz. ' +
+                'Bitte wenden Sie sich an Ihren Administrator.';
+            const text = message || FALLBACK;
+
             const show = () => {
                 if (document.getElementById('complyo-license-notice')) return;
+
+                // Nicht lizenzierte Domain: unübersehbare Sperre. Der Betreiber
+                // hat den Einbettungscode auf eine Seite kopiert, für die keine
+                // Lizenz besteht — das soll nicht beiläufig wirken.
+                if (severe) {
+                    const overlay = document.createElement('div');
+                    overlay.id = 'complyo-license-notice';
+                    overlay.setAttribute('role', 'alertdialog');
+                    overlay.setAttribute('aria-modal', 'true');
+                    overlay.setAttribute('aria-label', 'Lizenzhinweis');
+                    overlay.style.cssText = [
+                        'position:fixed', 'inset:0', 'z-index:2147483647',
+                        'background:rgba(9,9,11,.94)', 'color:#f9fafb',
+                        'display:flex', 'align-items:center', 'justify-content:center',
+                        'padding:24px',
+                        'font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif'
+                    ].join(';');
+
+                    const box = document.createElement('div');
+                    box.style.cssText = [
+                        'max-width:620px', 'text-align:center',
+                        'border:1px solid rgba(255,255,255,.14)', 'border-radius:16px',
+                        'background:#18181b', 'padding:32px 28px',
+                        'box-shadow:0 24px 60px rgba(0,0,0,.5)'
+                    ].join(';');
+
+                    const heading = document.createElement('p');
+                    heading.textContent = 'Nicht lizenzierte Nutzung';
+                    heading.style.cssText =
+                        'margin:0 0 12px;font-size:13px;font-weight:700;' +
+                        'letter-spacing:.08em;text-transform:uppercase;color:#00FFF7';
+
+                    const body = document.createElement('p');
+                    body.textContent = text;
+                    body.style.cssText = 'margin:0 0 20px;font-size:17px';
+
+                    const hint = document.createElement('p');
+                    hint.textContent =
+                        'Der Cookie-Banner ist deshalb außer Betrieb. ' +
+                        'Eine Lizenz für diese Domain erhalten Sie über den Complyo-Support.';
+                    hint.style.cssText = 'margin:0;font-size:14px;opacity:.7';
+
+                    box.appendChild(heading);
+                    box.appendChild(body);
+                    box.appendChild(hint);
+                    overlay.appendChild(box);
+                    document.body.appendChild(overlay);
+                    return;
+                }
+
                 const bar = document.createElement('div');
                 bar.id = 'complyo-license-notice';
                 bar.setAttribute('role', 'alert');
@@ -268,9 +332,7 @@
                     'font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif',
                     'text-align:center', 'box-shadow:0 -2px 12px rgba(0,0,0,.25)'
                 ].join(';');
-                bar.textContent =
-                    'Für dieses Cookie-Banner besteht keine aktive Lizenz. ' +
-                    'Bitte wenden Sie sich an Ihren Administrator.';
+                bar.textContent = text;
                 document.body.appendChild(bar);
             };
             if (document.readyState === 'loading') {
@@ -554,6 +616,9 @@
             this.config.isActiveFromServer = serverConfig.is_active === true;
             // 🔒 Lizenzstatus vom Server (false = Website im Dashboard entfernt)
             this.config.licenseActive = serverConfig.license_active !== false;
+            // Details zur Lizenzlage: status ('active' | 'revoked' |
+            // 'unlicensed_domain'), enforced und der anzuzeigende Text.
+            this.config.license = serverConfig.license || null;
             this.configHash = serverConfig.config_hash || null;
 
             // Konfigurierbare Legal-Links (Task 2.5)
@@ -1782,16 +1847,17 @@
                 }
 
                 .complyo-branding-logo {
-                    width: 16px;
+                    width: 15px;
                     height: auto;
-                    color: ${primaryColor};
+                    color: #00FFF7;
                     flex-shrink: 0;
                 }
 
                 .complyo-branding-word {
                     color: ${textColor};
                     font-weight: 600;
-                    letter-spacing: 0.2px;
+                    letter-spacing: -0.1px;
+                    text-transform: lowercase;
                 }
                 
                 /* Responsive */
@@ -1971,12 +2037,12 @@
                     ${this.config.showBranding ? `
                         <div class="complyo-branding">
                             <span class="complyo-branding-prefix">Powered by</span>
-                            <a class="complyo-branding-link" href="https://complyo.de" target="_blank" rel="noopener" aria-label="Complyo">
+                            <a class="complyo-branding-link" href="https://complyo.de" target="_blank" rel="noopener" aria-label="complyo">
                                 <svg class="complyo-branding-logo" viewBox="0 0 30 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-                                    <path d="M15 2 L26 6 V16.5 C26 23.5 21 28.5 15 30.5 C9 28.5 4 23.5 4 16.5 V6 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                                    <path d="M19.2 10.6 C18.2 9.9 16.7 9.5 15 9.5 C12 9.5 9.5 11.5 9.5 14 C9.5 16.5 12 18.5 15 18.5 C16.7 18.5 18.2 18.1 19.2 17.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    <path d="M15 2.5 C11.6 4.8 7.6 6.1 4 6.6 V17.2 C4 24 8.9 28.6 15 30.5 C21.1 28.6 26 24 26 17.2 V6.6 C22.4 6.1 18.4 4.8 15 2.5 Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
+                                    <path d="M8.4 9.9 V17.2 C8.4 21.7 11.4 25 15 26.6 C18.6 25 21.6 21.7 21.6 17.2 V9.9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
                                 </svg>
-                                <span class="complyo-branding-word">Complyo</span>
+                                <span class="complyo-branding-word">complyo</span>
                             </a>
                         </div>
                     ` : ''}

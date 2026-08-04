@@ -744,6 +744,7 @@ async def get_my_config(
 @router.get("/api/cookie-compliance/config/{site_id}")
 async def get_banner_config(
     site_id: str,
+    request: Request,
     db_pool: asyncpg.Pool = Depends(get_db_connection)
 ):
     """
@@ -879,8 +880,10 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
         # 🔒 Laufzeit-Lizenzprüfung: Wurde die Website im Dashboard entfernt,
         # signalisiert license_active=false → der Banner zeigt einen Hinweis
         # statt zu funktionieren (Anti-Missbrauch gegen optimieren+löschen).
-        from license_check import site_has_active_license
-        config['license_active'] = await site_has_active_license(db_pool, site_id)
+        from license_check import evaluate_license
+        _license = await evaluate_license(db_pool, site_id, request)
+        config['license_active'] = _license['active']
+        config['license'] = _license
 
         return {
             "success": True,

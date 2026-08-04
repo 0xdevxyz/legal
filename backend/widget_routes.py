@@ -354,7 +354,7 @@ async def _check_upsell_opportunity(site_id: str):
 
 
 @router.get("/api/widgets/config/{site_id}")
-async def get_widget_config(site_id: str):
+async def get_widget_config(site_id: str, request: Request):
     """
     Get widget configuration for a specific site
     """
@@ -396,26 +396,70 @@ async def get_widget_config(site_id: str):
 
     # 🔒 Laufzeit-Lizenzprüfung: Wurde die Website im Dashboard entfernt, ist die
     # Lizenz entzogen → das Barrierefreiheits-Widget rendert dann nicht mehr.
-    license_active = True
+    license_state = {"status": "active", "enforced": False, "active": True, "message": None}
     if db_pool:
         try:
-            from license_check import site_has_active_license
-            license_active = await site_has_active_license(db_pool, site_id)
+            from license_check import evaluate_license
+            license_state = await evaluate_license(db_pool, site_id, request)
         except Exception as e:
             _logger.warning(f"[Widget Config] License check failed for {site_id}: {e}")
 
     return {
         "success": True,
-        "license_active": license_active,
+        "license_active": license_state["active"],
+        "license": license_state,
         "config": default_config,
     }
 
 
 @router.get("/api/widgets/snippet/{widget_type}")
-async def get_widget_snippet(widget_type: str, site_id: str):
+async def get_widget_snippet(
+    widget_type: str,
+    site_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """
-    Get HTML snippet to embed widget
+    Liefert den HTML-Einbettungscode fuer ein Widget.
+
+    Der Einbettungscode ist das eigentliche Produkt: Er schaltet Banner und
+    Widget auf der Kundenseite scharf. Im Free-Tarif ist er deshalb nicht
+    enthalten — dort bleibt es bei Scan, Konfiguration und Vorschau. Der
+    Endpunkt war bis dahin voellig ungeschuetzt: ohne Anmeldung, ohne
+    Tarifpruefung, mit beliebiger site_id aufrufbar.
     """
+    plan = (current_user.get('plan_type') or 'free').lower()
+    if plan in ('', 'free'):
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "plan_upgrade_required",
+                "plan": plan or "free",
+                "message": (
+                    "Der Einbettungscode ist im Free-Tarif nicht enthalten. "
+                    "Scan, Konfiguration und Vorschau bleiben kostenlos — zum "
+                    "Ausspielen auf deiner Website braucht es einen bezahlten Tarif."
+                ),
+            },
+        )
+
+    # Fremde site_id ist ein Missbrauchssignal, aber kein harter Blocker:
+    # Legacy-Konten haben nicht zwingend eine passende tracked_websites-Zeile.
+    try:
+        if db_pool:
+            from license_check import url_to_site_id
+            rows = await db_pool.fetch(
+                "SELECT url FROM tracked_websites WHERE user_id = $1",
+                current_user.get('id') or current_user.get('user_id'),
+            )
+            own = {url_to_site_id(r["url"]) for r in rows if r["url"]}
+            if own and site_id not in own:
+                logging.getLogger(__name__).warning(
+                    "[Widget Snippet] User %s fordert Snippet fuer fremde site_id %s an",
+                    current_user.get('id'), site_id,
+                )
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"[Widget Snippet] Ownership-Check fehlgeschlagen: {e}")
+
     base_url = "https://api.complyo.de"
     
     snippets = {

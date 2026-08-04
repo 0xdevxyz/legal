@@ -47,7 +47,7 @@ class ExportService:
                     """
                     SELECT 
                         gf.*,
-                        COALESCE(ul.plan_type, 'expert') as plan_type,
+                        COALESCE(ul.plan_type, 'free') as plan_type,
                         COALESCE(ul.exports_this_month, 0) as exports_this_month,
                         COALESCE(ul.exports_max, 999) as exports_max
                     FROM generated_fixes gf
@@ -61,10 +61,11 @@ class ExportService:
                 if not fix:
                     raise Exception("Fix not found or access denied")
                 
-                # Check Export-Limit (nur für AI Plan)
-                if fix['plan_type'] == 'ai':
-                    if fix['exports_this_month'] >= fix['exports_max']:
-                        raise Exception(f"Export-Limit erreicht: {fix['exports_max']}/Monat")
+                # Export-Limit durchsetzen. exports_max = -1 heisst unbegrenzt.
+                _exports_max = fix['exports_max']
+                if _exports_max is not None and _exports_max >= 0:
+                    if fix['exports_this_month'] >= _exports_max:
+                        raise Exception(f"Export-Limit erreicht: {_exports_max}/Monat")
                 
                 # Generiere Export
                 if export_format == 'html':
@@ -85,8 +86,8 @@ class ExportService:
                     fix_id
                 )
                 
-                # Increment Export-Counter (nur für AI Plan)
-                if fix['plan_type'] == 'ai':
+                # Zaehler nur fuehren, wo es auch ein Limit gibt.
+                if _exports_max is not None and _exports_max >= 0:
                     await conn.execute(
                         """
                         UPDATE user_limits

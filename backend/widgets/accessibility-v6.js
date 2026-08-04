@@ -400,6 +400,10 @@
         const L = this.config.legal;
         if (!L.statementUrl && data.accessibility_statement_url) L.statementUrl = data.accessibility_statement_url;
         if (!L.feedback && data.accessibility_feedback) L.feedback = data.accessibility_feedback;
+        const license = data.license;
+        if (license && license.status && license.status !== 'active') {
+          console.warn('[Complyo] ' + (license.message || 'Lizenzverstoß erkannt.'));
+        }
         return data.license_active !== false;
       } catch (e) {
         return true;
