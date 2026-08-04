@@ -43,17 +43,49 @@ interface NavItem {
   requiresComploaiGuard?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
-  { label: 'Journey', icon: Route, href: '/journey' },
-  { label: 'Pflichten-Report', icon: Radar, href: '/pflichten-report' },
-  { label: 'Cookies', icon: Cookie, href: '/cookie-compliance' },
-  { label: 'Deep Scan', icon: ScanLine, href: '/deep-cookie-scanner' },
-  { label: 'Barrierefreiheit', icon: Eye, href: '/accessibility/statement' },
-  { label: 'AI-Compliance', icon: Sparkles, href: '/ai-compliance', requiresComploaiGuard: true },
-  { label: 'Dokumente', icon: FileText, href: '/docs/cms' },
-  { label: 'Agentur', icon: Building2, href: '/agency' },
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
+// Reihenfolge = Arbeitsablauf, nicht Featureliste: erst sehen wo man steht,
+// dann pruefen was gilt, dann die Maengel abarbeiten, dann verwalten.
+const NAV_GROUPS: NavGroup[] = [
+  {
+    title: 'Überblick',
+    items: [
+      { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
+      { label: 'Journey', icon: Route, href: '/journey' },
+    ],
+  },
+  {
+    title: 'Prüfen',
+    items: [
+      // Der Pflichten-Report klaert zuerst, WELCHE Regeln ueberhaupt gelten —
+      // er gehoert vor die Detailscans, nicht dahinter.
+      { label: 'Pflichten-Report', icon: Radar, href: '/pflichten-report' },
+      { label: 'Deep Scan', icon: ScanLine, href: '/deep-cookie-scanner' },
+    ],
+  },
+  {
+    title: 'Umsetzen',
+    items: [
+      { label: 'Cookies', icon: Cookie, href: '/cookie-compliance' },
+      { label: 'Barrierefreiheit', icon: Eye, href: '/accessibility/statement' },
+      { label: 'AI-Compliance', icon: Sparkles, href: '/ai-compliance', requiresComploaiGuard: true },
+    ],
+  },
+  {
+    title: 'Verwalten',
+    items: [
+      { label: 'Dokumente', icon: FileText, href: '/docs/cms' },
+      { label: 'Agentur', icon: Building2, href: '/agency' },
+    ],
+  },
 ];
+
+// Flache Liste fuer den mobilen Schubladen-Modus und Aktiv-Pruefungen.
+const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
 // Secondary destinations — surfaced in the avatar popover and the mobile drawer.
 const ACCOUNT_ITEMS: NavItem[] = [
@@ -143,30 +175,33 @@ export const Sidebar: React.FC = () => {
           className="rail-logo"
           aria-label="Zum Dashboard"
         >
-          <Shield className="w-6 h-6" style={{ color: 'var(--lime)' }} />
+          <Shield className="w-6 h-6 flex-shrink-0" style={{ color: 'var(--lime)' }} />
+          <span className="rail-wordmark">Complyo</span>
         </button>
 
-        {/* Primary nav */}
-        <div className="rail-group">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href);
-            const locked = isLocked(item);
-            return (
-              <button
-                key={item.href}
-                onClick={() => go(navTarget(item))}
-                className={`rail-item${active ? ' active' : ''}`}
-                aria-label={item.label}
-                aria-current={active ? 'page' : undefined}
-              >
-                <Icon className="rail-icon" />
-                {locked && <Lock className="rail-lock" aria-hidden />}
-                <span className="rail-tooltip">{item.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        {/* Primary nav — nach Arbeitsablauf gruppiert */}
+        {NAV_GROUPS.map((group) => (
+          <div key={group.title} className="rail-group" role="group" aria-label={group.title}>
+            <p className="rail-grouptitle">{group.title}</p>
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const active = isActive(item.href);
+              const locked = isLocked(item);
+              return (
+                <button
+                  key={item.href}
+                  onClick={() => go(navTarget(item))}
+                  className={`rail-item${active ? ' active' : ''}`}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  <Icon className="rail-icon" />
+                  <span className="rail-label">{item.label}</span>
+                  {locked && <Lock className="rail-lock" aria-label="Add-on erforderlich" />}
+                </button>
+              );
+            })}
+          </div>
+        ))}
 
         {/* Bottom cluster */}
         <div className="rail-group rail-bottom">
@@ -182,6 +217,7 @@ export const Sidebar: React.FC = () => {
             aria-label={`Benachrichtigungen${unreadCount > 0 ? ` (${unreadCount} ungelesen)` : ''}`}
           >
             <Bell className="rail-icon" />
+            <span className="rail-label">Benachrichtigungen</span>
             {unreadCount > 0 && (
               <span
                 className="rail-badge"
@@ -190,7 +226,6 @@ export const Sidebar: React.FC = () => {
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
-            <span className="rail-tooltip">Benachrichtigungen</span>
           </button>
 
           {/* Theme toggle */}
@@ -204,7 +239,7 @@ export const Sidebar: React.FC = () => {
             ) : (
               <Moon className="rail-icon text-zinc-600" />
             )}
-            <span className="rail-tooltip">{theme === 'dark' ? 'Helles Theme' : 'Dunkles Theme'}</span>
+            <span className="rail-label">{theme === 'dark' ? 'Helles Theme' : 'Dunkles Theme'}</span>
           </button>
 
           {/* Avatar + account popover */}
@@ -216,7 +251,7 @@ export const Sidebar: React.FC = () => {
                 aria-label="Konto-Menü"
                 aria-expanded={showAccount}
               >
-                <div className="relative">
+                <div className="relative flex-shrink-0">
                   <div
                     className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-zinc-950 ring-2 dark:ring-white/10 ring-gray-200"
                     style={{ background: 'var(--lime)' }}
@@ -226,6 +261,10 @@ export const Sidebar: React.FC = () => {
                   </div>
                   <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 dark:border-zinc-900 border-white rounded-full" />
                 </div>
+                <span className="rail-avatar-text">
+                  <span className="rail-avatar-name">{user.full_name || user.email}</span>
+                  <span className="rail-avatar-plan">{planLabel(activePlanType)}</span>
+                </span>
               </button>
 
               {showAccount && (

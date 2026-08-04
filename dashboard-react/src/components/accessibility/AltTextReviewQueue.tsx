@@ -106,7 +106,7 @@ export default function AltTextReviewQueue() {
           )}
           <button
             onClick={loadQueue}
-            className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-gray-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg dark:bg-zinc-800 bg-gray-50 hover:bg-zinc-700 text-gray-400 hover:text-white transition-colors"
             aria-label="Queue neu laden"
           >
             <RefreshCw className="w-4 h-4" />
@@ -115,7 +115,7 @@ export default function AltTextReviewQueue() {
       </div>
 
       {!data || data.items.length === 0 ? (
-        <div className="text-center py-16 bg-zinc-900/50 border border-zinc-800 rounded-xl">
+        <div className="text-center py-16 dark:bg-zinc-900/50 bg-gray-50 border dark:border-zinc-800 border-gray-200 rounded-xl">
           <CheckCircle className="w-10 h-10 text-green-400 mx-auto mb-3" />
           <p className="text-gray-300 font-medium">Keine Alt-Texte in der Queue</p>
           <p className="text-gray-500 text-sm mt-1">Alle KI-Vorschläge wurden bereits bearbeitet.</p>
@@ -134,7 +134,7 @@ export default function AltTextReviewQueue() {
               }`}
             >
               <div className="flex items-start gap-4">
-                <div className="w-16 h-16 flex-shrink-0 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden">
+                <div className="w-16 h-16 flex-shrink-0 rounded-lg dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 flex items-center justify-center overflow-hidden">
                   {item.image_src.startsWith('http') ? (
                     <img
                       src={item.image_src}
@@ -164,12 +164,12 @@ export default function AltTextReviewQueue() {
                     <textarea
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="w-full bg-zinc-800 border border-blue-500/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      className="w-full dark:bg-zinc-800 bg-gray-50 border border-blue-500/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                       rows={2}
                       aria-label="Alt-Text bearbeiten"
                     />
                   ) : (
-                    <p className="text-sm text-gray-200 bg-zinc-800/50 rounded-lg px-3 py-2">
+                    <p className="text-sm text-gray-200 dark:bg-zinc-800/50 bg-gray-50 rounded-lg px-3 py-2">
                       {item.approved_alt || item.suggested_alt}
                     </p>
                   )}
@@ -182,7 +182,7 @@ export default function AltTextReviewQueue() {
                     <>
                       <button
                         onClick={() => setEditingId(null)}
-                        className="px-3 py-1.5 text-xs text-gray-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+                        className="px-3 py-1.5 text-xs text-gray-400 hover:text-white dark:bg-zinc-800 bg-gray-50 hover:bg-zinc-700 rounded-lg transition-colors"
                       >
                         Abbrechen
                       </button>
@@ -200,7 +200,7 @@ export default function AltTextReviewQueue() {
                       <button
                         onClick={() => handleReject(item.id)}
                         disabled={actionLoading === item.id}
-                        className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 rounded-lg transition-colors flex items-center gap-1"
+                        className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 dark:bg-zinc-800 bg-gray-50 hover:bg-zinc-700 disabled:opacity-40 rounded-lg transition-colors flex items-center gap-1"
                       >
                         <XCircle className="w-3.5 h-3.5" />
                         Ablehnen
@@ -210,7 +210,7 @@ export default function AltTextReviewQueue() {
                           setEditingId(item.id);
                           setEditValue(item.suggested_alt);
                         }}
-                        className="px-3 py-1.5 text-xs text-blue-400 hover:text-blue-300 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+                        className="px-3 py-1.5 text-xs text-blue-400 hover:text-blue-300 dark:bg-zinc-800 bg-gray-50 hover:bg-zinc-700 rounded-lg transition-colors"
                       >
                         Bearbeiten
                       </button>

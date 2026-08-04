@@ -406,7 +406,7 @@ export default function JourneyPage() {
                 {!!progress?.estimated_time_remaining && (
                   <p className="mt-0.5 flex items-center justify-end gap-1 text-xs">
                     <Clock className="h-3 w-3" />
-                    noch ca. {progress.estimated_time_remaining} Min
+                    noch {progress.estimated_time_remaining}
                   </p>
                 )}
               </div>

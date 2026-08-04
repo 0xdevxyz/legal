@@ -54,7 +54,7 @@ export default function PrivacyPage() {
                 <h3 className="text-lg font-semibold text-white mb-3">Account-Daten</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-zinc-300">
-                    <thead className="bg-zinc-800/50 text-white">
+                    <thead className="dark:bg-zinc-800/50 bg-gray-50 text-white">
                       <tr>
                         <th className="text-left p-3">Datentyp</th>
                         <th className="text-left p-3">Zweck</th>
@@ -92,7 +92,7 @@ export default function PrivacyPage() {
                 <h3 className="text-lg font-semibold text-white mb-3">Website-Scan-Daten</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-zinc-300">
-                    <thead className="bg-zinc-800/50 text-white">
+                    <thead className="dark:bg-zinc-800/50 bg-gray-50 text-white">
                       <tr>
                         <th className="text-left p-3">Datentyp</th>
                         <th className="text-left p-3">Zweck</th>
@@ -137,7 +137,7 @@ export default function PrivacyPage() {
                   Diese Cookies sind für die Funktionsfähigkeit der Plattform erforderlich.
                 </p>
                 <div className="space-y-3">
-                  <div className="bg-zinc-800/30 rounded-lg p-4">
+                  <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
                     <div className="flex items-start justify-between mb-2">
                       <span className="font-mono text-blue-400">access_token</span>
                       <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">Notwendig</span>
@@ -148,7 +148,7 @@ export default function PrivacyPage() {
                       <strong>Typ:</strong> HTTP-Only Cookie
                     </p>
                   </div>
-                  <div className="bg-zinc-800/30 rounded-lg p-4">
+                  <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
                     <div className="flex items-start justify-between mb-2">
                       <span className="font-mono text-blue-400">refresh_token</span>
                       <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">Notwendig</span>
@@ -169,7 +169,7 @@ export default function PrivacyPage() {
                   Diese Cookies speichern Ihre Präferenzen und sind nicht essentiell.
                 </p>
                 <div className="space-y-3">
-                  <div className="bg-zinc-800/30 rounded-lg p-4">
+                  <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
                     <div className="flex items-start justify-between mb-2">
                       <span className="font-mono text-purple-400">user_preferences</span>
                       <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">Funktional</span>
@@ -180,7 +180,7 @@ export default function PrivacyPage() {
                       <strong>Typ:</strong> localStorage
                     </p>
                   </div>
-                  <div className="bg-zinc-800/30 rounded-lg p-4">
+                  <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
                     <div className="flex items-start justify-between mb-2">
                       <span className="font-mono text-purple-400">cookie_consent</span>
                       <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">Funktional</span>
@@ -257,31 +257,31 @@ export default function PrivacyPage() {
             </p>
             
             <div className="space-y-3">
-              <div className="flex items-start gap-3 p-3 bg-zinc-800/30 rounded-lg">
+              <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 15 DSGVO</span>
                 <span className="text-zinc-300">Auskunft über gespeicherte Daten</span>
               </div>
-              <div className="flex items-start gap-3 p-3 bg-zinc-800/30 rounded-lg">
+              <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 16 DSGVO</span>
                 <span className="text-zinc-300">Berichtigung unrichtiger Daten</span>
               </div>
-              <div className="flex items-start gap-3 p-3 bg-zinc-800/30 rounded-lg">
+              <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 17 DSGVO</span>
                 <span className="text-zinc-300">Löschung gespeicherter Daten ("Recht auf Vergessenwerden")</span>
               </div>
-              <div className="flex items-start gap-3 p-3 bg-zinc-800/30 rounded-lg">
+              <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 18 DSGVO</span>
                 <span className="text-zinc-300">Einschränkung der Verarbeitung</span>
               </div>
-              <div className="flex items-start gap-3 p-3 bg-zinc-800/30 rounded-lg">
+              <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 20 DSGVO</span>
                 <span className="text-zinc-300">Datenportabilität (Export als JSON/CSV)</span>
               </div>
-              <div className="flex items-start gap-3 p-3 bg-zinc-800/30 rounded-lg">
+              <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 21 DSGVO</span>
                 <span className="text-zinc-300">Widerspruch gegen Datenverarbeitung</span>
               </div>
-              <div className="flex items-start gap-3 p-3 bg-zinc-800/30 rounded-lg">
+              <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 77 DSGVO</span>
                 <span className="text-zinc-300">Beschwerde bei Aufsichtsbehörde</span>
               </div>
@@ -296,27 +296,27 @@ export default function PrivacyPage() {
             </div>
             
             <div className="grid md:grid-cols-2 gap-4">
-              <div className="bg-zinc-800/30 rounded-lg p-4">
+              <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
                 <h3 className="text-white font-semibold mb-2">🔒 Verschlüsselung</h3>
                 <p className="text-zinc-400 text-sm">TLS 1.3 für alle Verbindungen</p>
               </div>
-              <div className="bg-zinc-800/30 rounded-lg p-4">
+              <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
                 <h3 className="text-white font-semibold mb-2">🔑 Passwort-Schutz</h3>
                 <p className="text-zinc-400 text-sm">bcrypt Hashing mit Salt</p>
               </div>
-              <div className="bg-zinc-800/30 rounded-lg p-4">
+              <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
                 <h3 className="text-white font-semibold mb-2">🗄️ Datenbank</h3>
                 <p className="text-zinc-400 text-sm">PostgreSQL mit Row-Level Security</p>
               </div>
-              <div className="bg-zinc-800/30 rounded-lg p-4">
+              <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
                 <h3 className="text-white font-semibold mb-2">💾 Backups</h3>
                 <p className="text-zinc-400 text-sm">Tägliche verschlüsselte Backups</p>
               </div>
-              <div className="bg-zinc-800/30 rounded-lg p-4">
+              <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
                 <h3 className="text-white font-semibold mb-2">🌍 Server-Standort</h3>
                 <p className="text-zinc-400 text-sm">EU-Rechenzentren (Deutschland)</p>
               </div>
-              <div className="bg-zinc-800/30 rounded-lg p-4">
+              <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
                 <h3 className="text-white font-semibold mb-2">🔐 Zugriffskontrolle</h3>
                 <p className="text-zinc-400 text-sm">2FA für Admin-Zugriffe</p>
               </div>
@@ -344,7 +344,7 @@ export default function PrivacyPage() {
         </div>
 
         {/* Footer */}
-        <div className="mt-12 pt-6 border-t border-zinc-700 text-center text-zinc-500 text-sm">
+        <div className="mt-12 pt-6 border-t dark:border-zinc-700 border-gray-200 text-center text-zinc-500 text-sm">
           <p>Diese Datenschutzerklärung wurde zuletzt am 23. November 2025 aktualisiert.</p>
           <p className="mt-2">
             <a href="/dashboard" className="text-blue-400 hover:text-blue-300">← Zurück zum Dashboard</a>

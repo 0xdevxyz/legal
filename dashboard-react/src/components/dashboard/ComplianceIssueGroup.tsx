@@ -267,7 +267,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
             {/* Expand Button */}
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors text-sm font-medium"
+              className="flex items-center gap-2 px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-zinc-700 text-white rounded-lg transition-colors text-sm font-medium"
             >
               {isExpanded ? (
                 <>
@@ -293,7 +293,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                 {group.completed_count} / {group.total_count} behoben
               </span>
             </div>
-            <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+            <div className="h-2 dark:bg-zinc-800 bg-gray-50 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-500"
                 style={{ width: `${progress}%` }}
@@ -356,7 +356,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
 
       {/* Expanded Content: Issue Cards */}
       {isExpanded && (
-        <div className="border-t border-zinc-800/50 bg-black/20">
+        <div className="border-t dark:border-zinc-800/50 border-gray-200 bg-black/20">
           <div className="p-6 space-y-4">
             {/* Parent Issue (if exists) */}
             {group.parent_issue && (
@@ -400,7 +400,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                 {hasMore && !showAllIssues && (
                   <button
                     onClick={() => setShowAllIssues(true)}
-                    className="mt-4 w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    className="mt-4 w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors"
                   >
                     Zeige {(group.sub_issues ?? []).length - 3} weitere Problem{(group.sub_issues ?? []).length - 3 > 1 ? 'e' : ''}
                   </button>
@@ -409,7 +409,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                 {showAllIssues && hasMore && (
                   <button
                     onClick={() => setShowAllIssues(false)}
-                    className="mt-4 w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    className="mt-4 w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors"
                   >
                     Weniger anzeigen
                   </button>
@@ -431,7 +431,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
           
           {/* Modal Content */}
           <div className="relative min-h-screen flex items-start justify-center p-4 pt-10 pb-20">
-            <div className="relative w-full max-w-4xl bg-zinc-950 rounded-2xl shadow-2xl border border-zinc-800">
+            <div className="relative w-full max-w-4xl dark:bg-zinc-950 bg-white rounded-2xl shadow-2xl border dark:border-zinc-800 border-gray-200">
               {/* Close Button */}
               <button
                 onClick={() => setShowLegalWizard(null)}

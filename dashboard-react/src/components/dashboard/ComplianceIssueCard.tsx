@@ -791,8 +791,8 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
            !issue.title?.toLowerCase().includes('datenschutz') &&
            !issue.title?.toLowerCase().includes('impressum') && (
             <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-4 mb-4">
-              <p className="text-sm text-zinc-700 font-medium mb-2">So beheben Sie dieses Problem:</p>
-              <ol className="list-decimal list-inside text-sm text-zinc-600 space-y-2">
+              <p className="text-sm dark:text-zinc-700 text-gray-700 font-medium mb-2">So beheben Sie dieses Problem:</p>
+              <ol className="list-decimal list-inside text-sm dark:text-zinc-600 text-gray-600 space-y-2">
                 <li>Lesen Sie die Beschreibung des Problems oben sorgfältig durch</li>
                 <li>Klicken Sie auf <strong>"KI-Fix starten"</strong> für eine automatisch generierte Lösung</li>
                 <li>Kopieren Sie den generierten Code oder Text und fügen Sie ihn in Ihre Website ein</li>
@@ -859,7 +859,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
           {planType === 'free' && (
             <div className="flex items-center gap-2 px-3 py-2 bg-zinc-100 border border-zinc-300 rounded-lg">
               <Lock className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-              <span className="text-xs text-zinc-600">
+              <span className="text-xs dark:text-zinc-600 text-gray-600">
                 KI-Fix erfordert einen kostenpflichtigen Plan — Klick zeigt Upgrade-Optionen
               </span>
             </div>
@@ -868,7 +868,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
           {/* Hinweis wenn andere Seite gelockt ist — aber Fix trotzdem möglich */}
           {isOtherSiteLocked && (
             <div className="flex items-center gap-2 px-3 py-2 bg-zinc-100 border border-zinc-300 rounded-lg mb-2">
-              <span className="text-xs text-zinc-600">
+              <span className="text-xs dark:text-zinc-600 text-gray-600">
                 Hinweis: Ihre KI-Fixes sind personalisiert für <strong>{lockedOptimizationUrl}</strong>. Der Fix gilt für die analysierte Seite.
               </span>
             </div>
@@ -900,7 +900,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       {isAnalysisOnly && (
         <div className="mt-4 flex items-center gap-2 px-3 py-2 bg-zinc-100 border border-zinc-300 rounded-lg">
           <Lock className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-          <span className="text-xs text-zinc-600">
+          <span className="text-xs dark:text-zinc-600 text-gray-600">
             Fixes sind nur für Ihre registrierte Website verfügbar. Wechseln Sie zurück, um Optimierungen zu starten.
           </span>
         </div>
