@@ -11,10 +11,11 @@ const API_BASE = getApiBaseUrl();
 
 interface SocialLoginButtonsProps {
   plan?: string;
+  modules?: string[];
   mode?: 'login' | 'register';
 }
 
-export default function SocialLoginButtons({ plan = 'ki', mode = 'login' }: SocialLoginButtonsProps) {
+export default function SocialLoginButtons({ plan = 'pro', modules = [], mode = 'login' }: SocialLoginButtonsProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,9 +56,10 @@ export default function SocialLoginButtons({ plan = 'ki', mode = 'login' }: Soci
       setAccessToken(data.access_token);
       try { localStorage.setItem('user', JSON.stringify(data.user)); } catch {}
 
-      if (mode === 'register') {
+      if (mode === 'register' && plan !== 'free') {
         const checkoutData = await apiClient.post<{ checkout_url: string }>('/api/stripe/create-checkout', {
           plan,
+          modules,
           billing_period: 'monthly',
           success_url: `${window.location.origin}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${window.location.origin}/register`,

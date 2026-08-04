@@ -20,7 +20,7 @@ function RegisterForm() {
     const { register } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const initialPlan = searchParams?.get('plan') || 'complete';
+    const initialPlan = searchParams?.get('plan') || 'pro';
     const initialModule = searchParams?.get('module') || '';
     
     const [plan, setPlan] = useState(initialPlan);
@@ -56,6 +56,7 @@ function RegisterForm() {
     };
     
     const calculatePrice = () => {
+        if (plan === 'free') return { monthly: 0, yearly: 0, setup: 0 };
         if (plan === 'agency') return { monthly: 299, yearly: 2990, setup: 0 };
         if (plan === 'pro') return { monthly: 49, yearly: 490, setup: 0 };
         return { monthly: selectedModules.length * 19, yearly: 0, setup: 0 };
@@ -76,9 +77,16 @@ function RegisterForm() {
         
         try {
             await register({ ...formData, plan, modules: selectedModules });
+
+            // Free-Tarif: kein Checkout, direkt ins Dashboard.
+            if (plan === 'free') {
+                router.push('/dashboard');
+                return;
+            }
             
             const checkoutData = await apiClient.post('/api/stripe/create-checkout', {
                 plan: plan,
+                modules: selectedModules,
                 billing_period: 'monthly',
                 success_url: `${window.location.origin}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
                 cancel_url: `${window.location.origin}/register`
@@ -97,12 +105,14 @@ function RegisterForm() {
     };
     
     const getPlanName = () => {
+        if (plan === 'free') return 'Free';
         if (plan === 'agency') return 'Agentur';
         if (plan === 'pro') return 'Pro-Paket';
         return `Einzelne Säule${selectedModules.length > 1 ? 'n' : ''}`;
     };
     
     const getPriceDisplay = () => {
+        if (plan === 'free') return 'Kostenlos';
         if (price.yearly > 0) {
             return `${price.monthly}€/Monat oder ${price.yearly}€/Jahr`;
         }
@@ -120,46 +130,42 @@ function RegisterForm() {
                 
                 <div className="mb-6">
                     <label className="block text-sm font-medium mb-3 text-gray-300">Plan auswählen</label>
-                    <div className="grid grid-cols-3 gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setPlan('single')}
-                            className={`p-3 rounded-lg border text-center transition-all ${
-                                plan === 'single' 
-                                    ? 'border-blue-500 bg-blue-500/20 text-blue-400' 
-                                    : 'border-gray-600 hover:border-gray-500 text-gray-400'
-                            }`}
-                        >
-                            <div className="text-sm font-semibold">Einzelmodul</div>
-                            <div className="text-xs mt-1">19€/Säule</div>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setPlan('complete')}
-                            className={`p-3 rounded-lg border text-center transition-all relative ${
-                                plan === 'complete' 
-                                    ? 'border-purple-500 bg-purple-500/20 text-purple-400' 
-                                    : 'border-gray-600 hover:border-gray-500 text-gray-400'
-                            }`}
-                        >
-                            <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-purple-500 text-white text-[10px] px-2 py-0.5 rounded-full">Beliebt</div>
-                            <div className="text-sm font-semibold">Komplett</div>
-                            <div className="text-xs mt-1">49€/Monat</div>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setPlan('expert')}
-                            className={`p-3 rounded-lg border text-center transition-all ${
-                                plan === 'expert' 
-                                    ? 'border-yellow-500 bg-yellow-500/20 text-yellow-400' 
-                                    : 'border-gray-600 hover:border-gray-500 text-gray-400'
-                            }`}
-                        >
-                            <Crown className="w-4 h-4 mx-auto mb-1" />
-                            <div className="text-sm font-semibold">Expert</div>
-                            <div className="text-xs mt-1">2.990€+</div>
-                        </button>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                            { id: 'free',   name: 'Free',        price: '0 €',         hint: '1 Fix' },
+                            { id: 'single', name: 'Einzelsäule', price: '19 €/Monat',  hint: 'je Säule' },
+                            { id: 'pro',    name: 'Pro',         price: '49 €/Monat',  hint: '1 Domain', popular: true },
+                            { id: 'agency', name: 'Agentur',     price: '299 €/Monat', hint: '25 Projekte' },
+                        ].map((p) => (
+                            <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => setPlan(p.id)}
+                                aria-pressed={plan === p.id}
+                                className={`relative p-3 rounded-lg border text-center transition-all ${
+                                    plan === p.id
+                                        ? 'border-blue-500 bg-blue-500/20 text-blue-400'
+                                        : 'border-gray-600 hover:border-gray-500 text-gray-400'
+                                }`}
+                            >
+                                {p.popular && (
+                                    <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-purple-500 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap">
+                                        Beliebt
+                                    </div>
+                                )}
+                                <div className="text-sm font-semibold">{p.name}</div>
+                                <div className="text-xs mt-1">{p.price}</div>
+                                <div className="text-[11px] text-gray-400 mt-0.5">{p.hint}</div>
+                            </button>
+                        ))}
                     </div>
+                    <p className="text-xs text-gray-400 mt-3 leading-relaxed">
+                        Komplettservice gesucht? Beim <span className="text-gray-300 font-semibold">Expert-Paket</span> überarbeiten
+                        wir deine Website selbst — 3.900 € netto einmalig, danach 39 €/Monat für laufende Updates.{' '}
+                        <a href="mailto:support@complyo.de?subject=Expert-Paket" className="text-blue-400 hover:underline">
+                            Expert-Paket anfragen
+                        </a>
+                    </p>
                 </div>
                 
                 {plan === 'single' && (
@@ -227,7 +233,7 @@ function RegisterForm() {
                 )}
                 
                 <div className="mb-6">
-                    <SocialLoginButtons plan={plan} mode="register" />
+                    <SocialLoginButtons plan={plan} modules={selectedModules} mode="register" />
                 </div>
                 
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -307,7 +313,7 @@ function RegisterForm() {
                             </>
                         ) : (
                             <>
-                                Weiter zur Zahlung
+                                {plan === 'free' ? 'Kostenlos starten' : 'Weiter zur Zahlung'}
                                 <CheckCircle className="w-5 h-5" />
                             </>
                         )}
