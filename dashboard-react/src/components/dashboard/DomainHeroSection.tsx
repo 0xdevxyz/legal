@@ -286,8 +286,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                     </button>
                   </div>
                 )}
-                <div className="flex flex-col sm:flex-row gap-3 w-full">
-                <div className="flex-1 relative group">
+                <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 w-full">
+                <div className="flex-1 min-w-[16rem] relative group">
                   <Globe className="absolute left-5 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-400 group-focus-within:text-[#25bac8] transition-colors" />
                   <label htmlFor="website-url-input" className="sr-only">Website-URL eingeben</label>
                   <input
