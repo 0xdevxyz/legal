@@ -170,6 +170,12 @@ def dedupe_issues(issues: "List[ComplianceIssue]") -> "List[ComplianceIssue]":
     """
     beste = {}
     reihenfolge = []
+    fundstellen = {}  # key -> Seiten, auf denen derselbe Mangel auftrat
+
+    def _seite_von(iss):
+        meta = getattr(iss, "metadata", None) or {}
+        return meta.get("page_url")
+
     for issue in issues:
         if _ist_einzelfundstelle(issue):
             # Konkretes Element mit eigenen Fix-Daten — jede Fundstelle bleibt
@@ -183,6 +189,13 @@ def dedupe_issues(issues: "List[ComplianceIssue]") -> "List[ComplianceIssue]":
             reihenfolge.append(id(issue))
             beste[id(issue)] = issue
             continue
+
+        seite = _seite_von(issue)
+        if seite:
+            fundstellen.setdefault(key, [])
+            if seite not in fundstellen[key]:
+                fundstellen[key].append(seite)
+
         vorhanden = beste.get(key)
         if vorhanden is None:
             beste[key] = issue
@@ -192,7 +205,22 @@ def dedupe_issues(issues: "List[ComplianceIssue]") -> "List[ComplianceIssue]":
         alt_rang = _SEVERITY_RANG.get(getattr(vorhanden, "severity", ""), 0)
         if neu_rang > alt_rang:
             beste[key] = issue
-    return [beste[k] for k in reihenfolge]
+
+    # Fundstellen an den ueberlebenden Befund heften. Das ist der eigentliche
+    # Gewinn der Mehrseiten-Pruefung: nicht MEHR Befunde, sondern zu wissen,
+    # auf welchen Seiten derselbe Mangel zu beheben ist.
+    ergebnis = []
+    for k in reihenfolge:
+        iss = beste[k]
+        seiten = fundstellen.get(k) or []
+        if len(seiten) > 1:
+            iss.metadata = {
+                **(iss.metadata or {}),
+                "fundstellen": seiten,
+                "seiten_betroffen": len(seiten),
+            }
+        ergebnis.append(iss)
+    return ergebnis
 
 
 class ComplianceScanner:
@@ -215,6 +243,173 @@ class ComplianceScanner:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.session:
             await self.session.close()
+
+    # ------------------------------------------------------------------
+    # Mehrseiten-Pruefung
+    # ------------------------------------------------------------------
+    # Checks, die pro Unterseite etwas Neues finden koennen. Alles andere
+    # (SSL, Security-Header, Cookie-Banner, Impressums-Existenz, KI-Systeme)
+    # gilt seitenweit und wird nur auf der Startseite geprueft.
+    SEITENSPEZIFISCHE_KATEGORIEN = {
+        "barrierefreiheit", "media_accessibility", "tastaturbedienung",
+        "kontraste", "shop", "uwg", "datenschutz",
+    }
+
+    async def _pruefe_unterseite(self, seite_url: str, klasse: str) -> "List[ComplianceIssue]":
+        """
+        Schlanke Pruefung einer Unterseite.
+
+        Gibt Issues zurueck, die bereits mit der Fundstelle versehen sind —
+        ohne page_url waere im Report nicht erkennbar, WO der Mangel sitzt,
+        und der Nutzer muesste jede Seite selbst suchen.
+        """
+        from .checks.barrierefreiheit_check import check_barrierefreiheit_compliance_smart
+        from .checks.shop_check import check_shop_compliance
+        from .declarative_check_runner import run_declarative_checks
+
+        issues: "List[ComplianceIssue]" = []
+        try:
+            seite = await self._fetch_page(seite_url)
+            if not seite or seite.get("status_code", 0) >= 400:
+                logger.info(f"Unterseite nicht auswertbar: {seite_url}")
+                return []
+            html = seite["content"]
+            soup = BeautifulSoup(html, "html.parser")
+        except Exception as e:
+            logger.warning(f"Unterseite {seite_url} nicht abrufbar: {e}")
+            return []
+
+        aufgaben = [check_barrierefreiheit_compliance_smart(seite_url, html, self.session)]
+        # Shop-Pflichten nur dort, wo verkauft wird — auf einer Impressumsseite
+        # nach dem Bestellbutton zu suchen, ergibt keinen Sinn.
+        if klasse in ("interaktion", "angebot"):
+            aufgaben.append(check_shop_compliance(seite_url, soup, self.session))
+        aufgaben.append(run_declarative_checks(seite_url, soup, self.session))
+
+        ergebnisse = await asyncio.gather(*aufgaben, return_exceptions=True)
+
+        known = {fld.name for fld in fields(ComplianceIssue)}
+        for erg in ergebnisse:
+            if isinstance(erg, Exception):
+                logger.warning(f"Check auf {seite_url} fehlgeschlagen: {erg}")
+                continue
+            for roh in (erg or []):
+                if isinstance(roh, ComplianceIssue):
+                    issue = roh
+                else:
+                    kwargs = {k: v for k, v in roh.items() if k in known}
+                    extra = {k: v for k, v in roh.items() if k not in known}
+                    issue = ComplianceIssue(**kwargs)
+                    if extra:
+                        issue.metadata = {**(issue.metadata or {}), **extra}
+                if issue.category not in self.SEITENSPEZIFISCHE_KATEGORIEN:
+                    continue
+                # Fundstelle festhalten
+                issue.metadata = {**(issue.metadata or {}), "page_url": seite_url}
+                issues.append(issue)
+        return issues
+
+    async def scan_website_multipage(
+        self, url: str, max_seiten: int = 10
+    ) -> Dict[str, Any]:
+        """
+        Prueft Startseite plus die rechtlich relevantesten Unterseiten.
+
+        Args:
+            url:        Startseite
+            max_seiten: Budget fuer Unterseiten (0 = wie scan_website)
+
+        Returns:
+            Das Ergebnis von scan_website, ergaenzt um die Unterseiten-Befunde
+            und einen Block `pages_scanned`. Score und Saeulen werden ueber
+            ALLE Seiten neu berechnet.
+        """
+        from .page_discovery import entdecke_seiten
+
+        ergebnis = await self.scan_website(url)
+        if max_seiten <= 0 or ergebnis.get("scan_status") == "error" or ergebnis.get("error"):
+            return ergebnis
+
+        try:
+            entdeckung = await entdecke_seiten(url, session=self.session, max_seiten=max_seiten)
+        except Exception as e:
+            logger.warning(f"Seitensuche fehlgeschlagen, bleibe bei der Startseite: {e}")
+            return ergebnis
+
+        if not entdeckung.seiten:
+            ergebnis["pages_scanned"] = {
+                "total": 1, "urls": [url],
+                "note": "Keine weiteren prüfenswerten Unterseiten gefunden.",
+            }
+            return ergebnis
+
+        # Unterseiten parallel, aber gedrosselt — wir sind Gast auf fremden Servern.
+        semaphor = asyncio.Semaphore(4)
+
+        async def eine(seite):
+            async with semaphor:
+                return await self._pruefe_unterseite(seite.url, seite.klasse)
+
+        listen = await asyncio.gather(
+            *[eine(s) for s in entdeckung.seiten], return_exceptions=True
+        )
+
+        neue: "List[ComplianceIssue]" = []
+        geprueft = [url]
+        for seite, liste in zip(entdeckung.seiten, listen):
+            if isinstance(liste, Exception):
+                logger.warning(f"Unterseite {seite.url} fehlgeschlagen: {liste}")
+                continue
+            geprueft.append(seite.url)
+            neue.extend(liste)
+
+        if not neue:
+            ergebnis["pages_scanned"] = {"total": len(geprueft), "urls": geprueft}
+            return ergebnis
+
+        # Bestehende Startseiten-Issues zurueckholen und zusammenfuehren.
+        alt_dicts = ergebnis.get("issues") or []
+        known = {fld.name for fld in fields(ComplianceIssue)}
+        alt: "List[ComplianceIssue]" = []
+        for d in alt_dicts:
+            kwargs = {k: v for k, v in d.items() if k in known}
+            extra = {k: v for k, v in d.items() if k not in known}
+            iss = ComplianceIssue(**kwargs)
+            if extra:
+                iss.metadata = {**(iss.metadata or {}), **extra}
+            iss.metadata = {**(iss.metadata or {}), "page_url": iss.metadata.get("page_url", url)}
+            alt.append(iss)
+
+        alle = normalize_severities(alt + neue)
+        # Derselbe Mangel auf fuenf Unterseiten ist EINE Aufgabe, nicht fuenf.
+        # dedupe_issues fasst ueber die Saeule zusammen; die erste Fundstelle
+        # bleibt erhalten, die Anzahl merken wir uns separat.
+        vor_dedup = len(alle)
+        alle = dedupe_issues(alle)
+
+        _scores = ScoreCalculator.compute_with_status(alle)
+        ergebnis["issues"] = [asdict(i) for i in alle]
+        ergebnis["overall_score"] = _scores["overall_score"]
+        ergebnis["compliance_score"] = _scores["overall_score"]
+        ergebnis["pillar_scores"] = _scores["pillar_scores"]
+        ergebnis["pillar_status"] = _scores["pillar_status"]
+        ergebnis["total_issues"] = len(alle)
+        ergebnis["critical_issues"] = len([i for i in alle if i.severity == "critical"])
+        ergebnis["warning_issues"] = len([i for i in alle if i.severity == "warning"])
+        ergebnis["total_risk_euro"] = sum(i.risk_euro for i in alle)
+        ergebnis["pages_scanned"] = {
+            "total": len(geprueft),
+            "urls": geprueft,
+            "subpage_issues": len(neue),
+            "merged_duplicates": vor_dedup - len(alle),
+            "sitemap_used": entdeckung.sitemap_gefunden,
+            "note": entdeckung.hinweis or None,
+        }
+        logger.info(
+            f"Mehrseiten-Scan {url}: {len(geprueft)} Seiten, {len(neue)} Unterseiten-Befunde, "
+            f"{vor_dedup - len(alle)} zusammengefasst, Score {_scores['overall_score']}"
+        )
+        return ergebnis
 
     async def scan_website(self, url: str) -> Dict[str, Any]:
         """

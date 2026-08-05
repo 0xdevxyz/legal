@@ -102,6 +102,28 @@ class AnalysisResponse(BaseModel):
     scan_duration_ms: Optional[int] = None
     timestamp: str
 
+# Wieviele Unterseiten je Tarif zusaetzlich zur Startseite geprueft werden.
+# Bis 08/2026 wurde ausschliesslich die Startseite geprueft — die
+# Widerrufsbelehrung auf /agb und das Formular ohne Datenschutzhinweis auf
+# /kontakt blieben damit systematisch unentdeckt.
+UNTERSEITEN_JE_TARIF = {
+    "free":    3,    # Pflichtseiten als Appetitmacher
+    "single":  8,
+    "pro":     20,
+    "update":  20,
+    "expert":  40,
+    "agency":  40,
+    "agency2": 40,
+}
+UNTERSEITEN_STANDARD = 3
+
+
+def _seitenbudget(user: dict) -> int:
+    """Seitenbudget aus dem Tarif des angemeldeten Nutzers."""
+    plan = (user or {}).get("plan_type") or (user or {}).get("plan") or "free"
+    return UNTERSEITEN_JE_TARIF.get(str(plan).lower(), UNTERSEITEN_STANDARD)
+
+
 @public_router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_website_public(request: AnalyzeRequest, http_request: Request, current_user: dict = Depends(get_current_user)):
     """
@@ -165,9 +187,10 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
         scan_result = None  # für Fallback im except: erfolgreicher Scan darf nicht verloren gehen
         try:
             crawler = WebsiteCrawler(timeout=10)
+            seitenbudget = _seitenbudget(current_user)
             async with ComplianceScanner() as scanner:
                 scan_result, website_structure = await asyncio.gather(
-                    scanner.scan_website(url),
+                    scanner.scan_website_multipage(url, max_seiten=seitenbudget),
                     crawler.crawl_website(url),
                     return_exceptions=True
                 )
