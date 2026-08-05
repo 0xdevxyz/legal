@@ -650,13 +650,13 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
         severity='info',
         title='Hinweis: Kein Assistenz-Widget gefunden',
         description='Es wurde kein Accessibility-Assistenz-Widget gefunden. Solche Widgets '
-                    'koennen den Bedienkomfort verbessern (Schriftgroesse, Kontrast, Vorlesen), '
-                    'stellen aber KEINE WCAG-/BFSG-Konformitaet her und ersetzen keine '
+                    'können den Bedienkomfort verbessern (Schriftgröße, Kontrast, Vorlesen), '
+                    'stellen aber KEINE WCAG-/BFSG-Konformität her und ersetzen keine '
                     'strukturellen Korrekturen im Quellcode.',
         risk_euro=0,
-        recommendation='Optional: Ein Assistenz-Widget kann ergaenzend eingesetzt werden. '
-                      'Massgeblich fuer die Rechtskonformitaet sind die strukturellen Fixes '
-                      '(Alt-Texte, Kontraste, Tastaturbedienbarkeit) — siehe uebrige Befunde.',
+        recommendation='Optional: Ein Assistenz-Widget kann ergänzend eingesetzt werden. '
+                      'Maßgeblich für die Rechtskonformität sind die strukturellen Fixes '
+                      '(Alt-Texte, Kontraste, Tastaturbedienbarkeit) — siehe übrige Befunde.',
         legal_basis='BFSG §12-15 (Hinweis, keine Pflicht)',
         auto_fixable=False,
         is_missing=False

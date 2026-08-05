@@ -33,7 +33,7 @@ export function ClientGroup({ client }: ClientGroupProps) {
       : 'text-zinc-500';
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+    <div className="dark:bg-zinc-900 bg-white border dark:border-zinc-800 border-gray-200 rounded-xl overflow-hidden">
       <div className="px-6 py-4 flex items-center justify-between gap-4">
         <button
           onClick={() => setExpanded(v => !v)}
@@ -81,7 +81,7 @@ export function ClientGroup({ client }: ClientGroupProps) {
         <div className="px-6 pb-3 -mt-2 text-red-400 text-xs">{error}</div>
       )}
       {expanded && (
-        <div className="px-6 pb-4 border-t border-zinc-800 pt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="px-6 pb-4 border-t dark:border-zinc-800 border-gray-200 pt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div>
             <p className="text-xs text-zinc-500">Sites</p>
             <p className="text-white font-semibold">{client.site_count}</p>

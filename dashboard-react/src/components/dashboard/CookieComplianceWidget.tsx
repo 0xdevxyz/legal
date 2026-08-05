@@ -132,7 +132,7 @@ export const CookieComplianceWidget: React.FC = () => {
                     {stats?.summary?.acceptance_rate?.toFixed(1) || '--'}%
                   </span>
                 </div>
-                <div className="w-full bg-zinc-800 rounded-full h-2">
+                <div className="w-full dark:bg-zinc-800 bg-gray-50 rounded-full h-2">
                   <div 
                     className="bg-gradient-to-r from-green-500 to-emerald-500 h-2 rounded-full transition-all duration-500"
                     style={{ width: `${stats?.summary?.acceptance_rate || 0}%` }}

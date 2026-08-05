@@ -446,7 +446,7 @@ export const WebsiteAnalysis: React.FC = () => {
                 <div className="text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--lime)' }}>📊 Analysierte Website</div>
                 <div className="text-2xl font-bold text-white mb-1">{currentWebsite.name || currentWebsite.url}</div>
                 <div className="flex items-center gap-3 text-sm text-zinc-400">
-                  <span className="font-mono bg-zinc-900/70 px-3 py-1 rounded-lg border border-zinc-700">{currentWebsite.url}</span>
+                  <span className="font-mono bg-zinc-900/70 px-3 py-1 rounded-lg border dark:border-zinc-700 border-gray-200">{currentWebsite.url}</span>
                   <span className="flex items-center gap-2">
                     <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                     {formatRelativeTime(currentWebsite.lastScan)}
@@ -612,7 +612,7 @@ export const WebsiteAnalysis: React.FC = () => {
                   <div 
                     key={pillar.id}
                     ref={(el) => { pillarRefs.current[pillar.id] = el; }}
-                    className="glass-card rounded-2xl overflow-hidden border border-zinc-800/50 hover:border-zinc-700/70 transition-all"
+                    className="glass-card rounded-2xl overflow-hidden border dark:border-zinc-800/50 border-gray-200 hover:border-zinc-700/70 transition-all"
                   >
                     {/* Header - Klickbar */}
                     <button
@@ -695,7 +695,7 @@ export const WebsiteAnalysis: React.FC = () => {
 
                     {/* Ausklappbare Details */}
                     {isExpanded && issueCount > 0 && (
-                      <div className="border-t border-zinc-800/50 p-6 bg-black/20 animate-slide-down">
+                      <div className="border-t dark:border-zinc-800/50 border-gray-200 p-6 bg-black/20 animate-slide-down">
                         <div className="space-y-4">
                           {/* ✨ NEU: Gruppierte Issues (wenn vorhanden) */}
                           {(() => {
@@ -819,7 +819,7 @@ export const WebsiteAnalysis: React.FC = () => {
                     
                     {/* Leerer Zustand wenn keine Issues */}
                     {isExpanded && issueCount === 0 && (
-                      <div className="border-t border-zinc-800/50 p-6 bg-black/20 text-center">
+                      <div className="border-t dark:border-zinc-800/50 border-gray-200 p-6 bg-black/20 text-center">
                         <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-3" />
                         <p className="text-zinc-300 font-medium">Keine Issues gefunden</p>
                         <p className="text-zinc-500 text-sm mt-1">Diese Kategorie ist vollständig compliant! 🎉</p>

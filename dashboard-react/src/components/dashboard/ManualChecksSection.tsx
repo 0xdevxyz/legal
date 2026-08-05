@@ -60,7 +60,7 @@ export const ManualChecksSection: React.FC<Props> = ({ checks, accessibilityNote
       </button>
 
       {open && (
-        <div className="border-t border-zinc-800/50 p-4 space-y-3 bg-black/20">
+        <div className="border-t dark:border-zinc-800/50 border-gray-200 p-4 space-y-3 bg-black/20">
           {accessibilityNote && (
             <div className="flex gap-2 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20 text-sm text-zinc-300">
               <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />

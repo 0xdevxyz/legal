@@ -372,7 +372,7 @@ export const LegalNews: React.FC = () => {
             className={`flex-1 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
               activeTab === 'updates'
                 ? 'bg-[#25bac8]/15 text-[#25bac8] border-2 border-[#25bac8]/50 shadow-lg shadow-[#25bac8]/10'
-                : 'bg-zinc-900/50 border border-zinc-800/50 text-zinc-400 hover:bg-zinc-800/60 hover:text-white hover:border-zinc-700/60'
+                : 'dark:bg-zinc-900/50 bg-gray-50 border dark:border-zinc-800/50 border-gray-200 text-zinc-400 hover:bg-zinc-800/60 hover:text-white hover:border-zinc-700/60'
             }`}
           >
             <Bell className="w-4 h-4 inline mr-2" />
@@ -388,7 +388,7 @@ export const LegalNews: React.FC = () => {
             className={`flex-1 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
               activeTab === 'news'
                 ? 'bg-[#25bac8]/15 text-[#25bac8] border-2 border-[#25bac8]/50 shadow-lg shadow-[#25bac8]/10'
-                : 'bg-zinc-900/50 border border-zinc-800/50 text-zinc-400 hover:bg-zinc-800/60 hover:text-white hover:border-zinc-700/60'
+                : 'dark:bg-zinc-900/50 bg-gray-50 border dark:border-zinc-800/50 border-gray-200 text-zinc-400 hover:bg-zinc-800/60 hover:text-white hover:border-zinc-700/60'
             }`}
           >
             <Newspaper className="w-4 h-4 inline mr-2" />

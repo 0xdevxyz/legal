@@ -69,7 +69,7 @@ export const CardFooter: React.FC<{ children: React.ReactNode; className?: strin
   children, 
   className 
 }) => (
-  <div className={cn('mt-5 pt-5 border-t border-zinc-800/50', className)}>
+  <div className={cn('mt-5 pt-5 border-t dark:border-zinc-800/50 border-gray-200', className)}>
     {children}
   </div>
 );
