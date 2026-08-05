@@ -159,6 +159,15 @@ export default function PricingSection() {
               Kein Selbermachen: Wir setzen die Befunde auf deiner Seite um und übergeben sie rechtssicher.
               Einmalig 3.990 € netto, danach 29 € im Monat für laufende Updates, damit es auch so bleibt.
             </p>
+            {/* Foerderhinweis bewusst im Konjunktiv: Programme aendern sich, und
+                eine Zusage auf der Preisseite waere ein Werbeversprechen. */}
+            <p className="text-gray-400 text-xs leading-relaxed max-w-2xl mt-3">
+              <span className="font-semibold text-gray-300">Förderfähig?</span>{' '}
+              Für kleine und mittlere Unternehmen kann eine BAFA-Beratungsförderung
+              in Frage kommen — in den neuen Bundesländern mit einem höheren
+              Fördersatz als in den alten. Ob das für dich gilt und in welcher Höhe,
+              klären wir vorab gemeinsam; verbindlich entscheidet die BAFA.
+            </p>
           </div>
           <a
             href="mailto:support@complyo.de?subject=Anfrage%20Expert-Paket"
