@@ -231,6 +231,43 @@ class GitHubClient:
         
         return None, None
     
+    async def get_tree(
+        self,
+        owner: str,
+        repo: str,
+        branch: str = "main",
+    ) -> List[Dict[str, Any]]:
+        """
+        Kompletter Dateibaum des Repos (rekursiv).
+
+        Grundlage fuer den deterministischen Patch-Builder: er muss wissen,
+        welche Template-Dateien existieren, ohne jede einzeln zu raten.
+
+        Returns:
+            Liste von {"path": ..., "size": ...} fuer Blobs; leere Liste bei
+            Fehlern. `truncated` grosser Repos wird geloggt, nicht verschwiegen.
+        """
+        sha = await self.get_branch_sha(owner, repo, branch)
+        if not sha:
+            return []
+        success, data = await self._request(
+            "GET",
+            f"/repos/{owner}/{repo}/git/trees/{sha}",
+            params={"recursive": "1"},
+        )
+        if not success:
+            return []
+        if data.get("truncated"):
+            logger.warning(
+                f"Repo-Baum {owner}/{repo} ist abgeschnitten (GitHub-Limit) — "
+                f"Patch-Builder sieht nicht alle Dateien"
+            )
+        return [
+            {"path": e.get("path", ""), "size": e.get("size")}
+            for e in (data.get("tree") or [])
+            if e.get("type") == "blob"
+        ]
+
     async def update_file(
         self,
         owner: str,

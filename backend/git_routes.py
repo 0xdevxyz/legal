@@ -406,6 +406,120 @@ async def apply_patches(
     )
 
 
+class ApplyApprovedFixesRequest(BaseModel):
+    """Ein-Klick-Fix: freigegebene Fixes einer Site als PR."""
+    repo_id: str = Field(..., description="Verbundenes Repository")
+    site_id: str = Field(..., description="Site, deren freigegebene Fixes angewendet werden")
+
+
+@git_router.post("/apply-approved-fixes")
+async def apply_approved_fixes(
+    request: ApplyApprovedFixesRequest,
+    user: Dict[str, Any] = Depends(get_current_user)
+) -> ApplyPatchesResponse:
+    """
+    Ein Klick: freigegebene Fixes -> Pull Request. Ohne LLM.
+
+    Der Weg bis hierher war zweigeteilt: die KI erzeugt Vorschlaege (einmal,
+    mit menschlicher Freigabe in der Worklist), und ein EXTERNER Agent via MCP
+    musste daraus Patches formulieren. Dieser Endpunkt ersetzt den Agenten
+    durch Mechanik: Manifest lesen, Repo-Baum holen, Kandidaten-Templates
+    laden, guarded transformieren, PR erstellen. Deterministisch — dieselben
+    freigegebenen Fixes ergeben denselben PR. Gemerged wird weiterhin nur vom
+    Kunden; Revert bleibt verfuegbar.
+    """
+    from fix_patch_builder import baue_patches, ist_kandidat, MAX_DATEIEN
+    from widget_routes import db_pool as widget_db_pool
+    from accessibility_fix_saver import AccessibilityFixSaver
+
+    user_id = user.get("user_id")
+
+    repo_data = await _get_connected_repo(user_id, request.repo_id)
+    if not repo_data:
+        return ApplyPatchesResponse(success=False, error="Repository nicht gefunden")
+    credentials = await _get_git_credentials(user_id, repo_data["provider"])
+    if not credentials:
+        return ApplyPatchesResponse(success=False, error="Git-Verbindung abgelaufen. Bitte erneut verbinden.")
+    if repo_data["provider"] != "github":
+        return ApplyPatchesResponse(success=False, error="Ein-Klick-Fix ist aktuell nur für GitHub verfügbar.")
+
+    # Freigegebene Fixes laden — dieselbe Quelle wie das Fix-Manifest.
+    pool = widget_db_pool or db_pool
+    if not pool:
+        return ApplyPatchesResponse(success=False, error="Datenbank nicht verfügbar.")
+    saver = AccessibilityFixSaver(pool)
+    manifest = {
+        "alt_texts": await saver.get_fixes_for_site(request.site_id, status="approved"),
+        "document_fixes": await saver.get_document_fixes_for_site(request.site_id, status="approved"),
+    }
+    if not manifest["alt_texts"] and not manifest["document_fixes"]:
+        return ApplyPatchesResponse(
+            success=False,
+            error="Keine freigegebenen Fixes vorhanden. Bitte zuerst Vorschläge in der Worklist prüfen und freigeben.",
+        )
+
+    repo_info = RepoInfo(
+        provider=GitProvider(repo_data["provider"]),
+        owner=repo_data["owner"],
+        repo=repo_data["repo"],
+        default_branch=repo_data["default_branch"],
+    )
+    client = git_service.get_client(repo_info.provider, credentials)
+
+    baum = await client.get_tree(repo_info.owner, repo_info.repo, repo_info.default_branch)
+    kandidaten = [e["path"] for e in baum if ist_kandidat(e["path"], e.get("size"))][:MAX_DATEIEN]
+    if not kandidaten:
+        return ApplyPatchesResponse(
+            success=False,
+            error=(
+                "Keine bearbeitbaren Template-Dateien (.html/.php/.twig …) im Repository gefunden. "
+                "Für Build-basierte Projekte (React/Vue) nutzen Sie den MCP-Agenten-Weg."
+            ),
+        )
+
+    dateien: Dict[str, str] = {}
+    for pfad in kandidaten:
+        inhalt, _sha = await client.get_file_content(
+            repo_info.owner, repo_info.repo, pfad, repo_info.default_branch
+        )
+        if inhalt:
+            dateien[pfad] = inhalt
+
+    patches = baue_patches(manifest, dateien)
+    if not patches:
+        return ApplyPatchesResponse(
+            success=False,
+            error=(
+                "Die freigegebenen Fixes treffen keine Datei in diesem Repository "
+                "(Bilder nicht gefunden oder bereits versorgt). Nichts zu tun."
+            ),
+        )
+
+    feature_ids = sorted({p["feature_id"] for p in patches})
+    logger.info(
+        f"Ein-Klick-Fix: {len(patches)} Patch(es) aus {len(dateien)} Dateien "
+        f"für {repo_info.full_name} (site {request.site_id})"
+    )
+    result = await git_service.create_accessibility_pr(
+        credentials=credentials,
+        repo_info=repo_info,
+        patches=patches,
+        feature_ids=feature_ids,
+        scan_id=None,
+    )
+    if result.success:
+        if db_pool:
+            await _save_pr_record(user_id, request.repo_id, result, feature_ids, None)
+        return ApplyPatchesResponse(
+            success=True,
+            branch_name=result.branch_name,
+            pr_url=result.pr_url,
+            pr_number=result.pr_number,
+            files_changed=[p["file_path"] for p in patches],
+        )
+    return ApplyPatchesResponse(success=False, error=result.error)
+
+
 @git_router.get("/status")
 async def git_connection_status(
     user: Dict[str, Any] = Depends(get_current_user)
