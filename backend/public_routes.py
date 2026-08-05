@@ -73,6 +73,10 @@ class ComplianceIssue(BaseModel):
     auto_fixable: bool
     is_missing: bool = False  # True wenn komplettes Hauptelement fehlt (für 0-Score-Logik)
     effort: str = "mittel"  # v4.0: Bearbeitungsaufwand — gering | mittel | experte
+    # Zusatzdaten des Scanners. Traegt beim Mehrseiten-Scan die Fundstellen
+    # ("fundstellen", "seiten_betroffen") — ohne sie sieht der Nutzer nur DASS
+    # etwas fehlt, nicht auf welcher seiner Seiten.
+    metadata: Optional[Dict[str, Any]] = None
 
 class PillarScore(BaseModel):
     """Score für eine Compliance-Säule"""
@@ -116,6 +120,27 @@ UNTERSEITEN_JE_TARIF = {
     "agency2": 40,
 }
 UNTERSEITEN_STANDARD = 3
+
+
+def _fundstellen_metadata(issue: dict) -> "Optional[Dict[str, Any]]":
+    """
+    Reicht genau die Metadaten weiter, die das Dashboard anzeigt.
+
+    Bewusst eine Auswahl statt des ganzen metadata-Blocks: dort liegen auch
+    interne Felder (Selektoren, axe-Regel-IDs, Screenshot-Rohdaten), die im
+    Frontend nichts verloren haben und die Antwort unnoetig aufblaehen.
+    """
+    meta = issue.get("metadata")
+    if not isinstance(meta, dict):
+        return None
+    heraus = {}
+    if meta.get("seiten_betroffen"):
+        heraus["seiten_betroffen"] = meta["seiten_betroffen"]
+    if meta.get("fundstellen"):
+        heraus["fundstellen"] = meta["fundstellen"]
+    if meta.get("page_url"):
+        heraus["page_url"] = meta["page_url"]
+    return heraus or None
 
 
 def _seitenbudget(user: dict) -> int:
@@ -257,7 +282,9 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             # Convert string issues to structured objects
             structured_issues = []
             if scan_result.get("issues"):
-                for idx, issue in enumerate(scan_result["issues"][:30]):  # Limit to 30 issues (für vollständige Compliance-Prüfung aller 4 Säulen)
+                for idx, issue in enumerate(scan_result["issues"][:60]):  # Limit: mit der
+                    # Mehrseiten-Pruefung kommen mehr echte Befunde zusammen; ein
+                    # stilles Abschneiden waere von "alles geprueft" nicht zu unterscheiden.
                     # ✅ FIX: Prüfe ob Issue bereits strukturiert ist (von Check-Modulen)
                     if isinstance(issue, dict) and 'severity' in issue:
                         # Issue kommt von Check-Modulen - behalte Original-Severity!
@@ -297,6 +324,7 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                                 issue.get('auto_fixable', False),
                                 issue.get('is_missing', False),
                             ),
+                            metadata=_fundstellen_metadata(issue),
                         )
                         structured_issues.append(structured_issue)
                     else:

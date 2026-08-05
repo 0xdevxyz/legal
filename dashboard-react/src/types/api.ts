@@ -33,6 +33,15 @@ export interface ComplianceIssue {
   suggested_alt?: string;
   screenshot_url?: string;
   fix_code?: string;
+  /** Zusatzdaten des Scanners. Beim Mehrseiten-Scan stehen hier die
+   *  Fundstellen: auf welchen Seiten derselbe Mangel auftritt. */
+  metadata?: {
+    page_url?: string;
+    /** Alle betroffenen Seiten — erst ab zwei gesetzt. */
+    fundstellen?: string[];
+    seiten_betroffen?: number;
+    [key: string]: unknown;
+  };
 }
 
 // Positive Check

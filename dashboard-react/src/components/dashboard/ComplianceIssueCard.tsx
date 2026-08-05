@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { ComplianceIssue, FixResult } from '@/types/api';
 import { generateFix, generateLegalText, type LegalDocumentType } from '@/lib/api';
-import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie, Lock, Image as ImageIcon, Pencil, Eye, ArrowRight } from 'lucide-react';
+import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie, Lock, Image as ImageIcon, Pencil, Eye, ArrowRight, Globe, ChevronDown } from 'lucide-react';
 import { StripePaywallModal } from './StripePaywallModal';
 import { ConfirmFixModal } from './ConfirmFixModal';
 import { FixModal } from './FixModal';
@@ -420,6 +420,16 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
 
       {/* Beschreibung */}
       <p className="text-gray-700 mb-4 leading-relaxed">{issue.description}</p>
+
+      {/* Fundstellen aus dem Mehrseiten-Scan. Ohne diese Liste weiß der Nutzer
+          nur DASS etwas fehlt, nicht WO — und muss jede Seite selbst
+          durchgehen. Genau die Arbeit soll das Werkzeug abnehmen. */}
+      {(issue.metadata?.seiten_betroffen ?? 0) > 1 && (
+        <FundstellenListe
+          seiten={issue.metadata?.fundstellen ?? []}
+          anzahl={issue.metadata?.seiten_betroffen ?? 0}
+        />
+      )}
 
       {/* Empfohlene Maßnahme — issue-spezifische Handlungsempfehlung vom Check.
           Immer sichtbar, sobald vorhanden. Garantiert, dass jedes Problem (auch
@@ -955,3 +965,58 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
 };
 
 export default ComplianceIssueCard;
+
+
+/**
+ * Listet die Seiten, auf denen derselbe Mangel gefunden wurde.
+ *
+ * Bewusst eingeklappt: bei zwanzig betroffenen Seiten soll die Karte nicht
+ * zur Tapete werden. Die Anzahl steht aber immer sichtbar da — sie ist die
+ * eigentliche Information ("das betrifft nicht nur die Startseite").
+ */
+const FundstellenListe: React.FC<{ seiten: string[]; anzahl: number }> = ({ seiten, anzahl }) => {
+  const [offen, setOffen] = useState(false);
+
+  const kurz = (u: string) => {
+    try {
+      const p = new URL(u).pathname;
+      return p === '/' || p === '' ? 'Startseite' : p;
+    } catch {
+      return u;
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-lg border dark:border-zinc-700/50 border-gray-200 dark:bg-zinc-800/30 bg-gray-50 px-3 py-2">
+      <button
+        type="button"
+        onClick={() => setOffen(!offen)}
+        className="flex w-full items-center gap-2 text-left text-sm font-semibold dark:text-zinc-200 text-gray-800"
+        aria-expanded={offen}
+      >
+        <Globe className="h-4 w-4 flex-shrink-0 dark:text-zinc-400 text-gray-500" aria-hidden />
+        <span>Auf {anzahl} Seiten gefunden</span>
+        <ChevronDown
+          className={`ml-auto h-4 w-4 flex-shrink-0 transition-transform ${offen ? 'rotate-180' : ''}`}
+          aria-hidden
+        />
+      </button>
+      {offen && (
+        <ul className="mt-2 space-y-1 border-t dark:border-zinc-700/50 border-gray-200 pt-2">
+          {seiten.map((s) => (
+            <li key={s} className="text-xs dark:text-zinc-400 text-gray-600">
+              <a
+                href={s}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline break-all"
+              >
+                {kurz(s)}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
