@@ -124,6 +124,7 @@ export const Sidebar: React.FC = () => {
       case 'pro': return 'Pro-Paket';
       case 'agency': return 'Agentur';
       case 'single': return 'Einzelne Säule';
+      case 'monitor': return 'Monitoring';
       case 'expert': return 'Expertenservice';
       case 'update': return 'Updateservice';
       default: return 'Kostenlos';

@@ -65,6 +65,8 @@ STRIPE_PRICES = {
     "agency_monthly":  os.getenv("STRIPE_PRICE_AGENCY_MONTHLY", None),   # 299€/Monat
     "agency_yearly":   os.getenv("STRIPE_PRICE_AGENCY_YEARLY", None),    # 2.990€/Jahr
     "single_monthly":  os.getenv("STRIPE_PRICE_SINGLE_MODULE", None),    # 19€/Monat
+    "monitor_monthly": os.getenv("STRIPE_PRICE_MONITOR_MONTHLY", None),  # 19€/Monat
+    "monitor_yearly":  os.getenv("STRIPE_PRICE_MONITOR_YEARLY", None),   # 190€/Jahr
     # ── Agency Add-ons (greifen, wenn die 25 Projekte voll sind) ──────────────
     # agency_extra: +1 Website, 19€/Monat (nutzt den Single-Preis als Fallback)
     "agency_extra_monthly": os.getenv("STRIPE_PRICE_AGENCY_EXTRA_SITE")
@@ -81,6 +83,9 @@ PLAN_WEBSITES_MAX = {
     "free":   1,
     "single": 1,
     "pro":    1,
+    # Monitoring: 10 beobachtete Websites. Der zweistufige Wachdienst
+    # (Leichtcheck taeglich, Vollscan nur bei Grund) macht das wirtschaftlich.
+    "monitor": 10,
     "agency": 25,
     "expert": 1,
     "update": 1,
@@ -99,7 +104,7 @@ ALL_MODULES = ['cookie', 'accessibility', 'legal_texts', 'monitoring']
 # Nur diese Pläne sind per Selbstbedienung buchbar. Alles andere wird abgelehnt,
 # statt still auf pro_monthly zurückzufallen (sonst zahlt der Kunde 49€ für einen
 # Plan, den er nie gewählt hat).
-SELF_SERVE_PLANS = {'single', 'pro', 'agency', 'agency_extra', 'agency2'}
+SELF_SERVE_PLANS = {'single', 'pro', 'agency', 'agency_extra', 'agency2', 'monitor'}
 
 
 def _resolve_modules(plan, modules=None):
@@ -556,6 +561,8 @@ async def get_plans():
     return {
         "plans": [
             {"id": "free", "name": "Free", "price_monthly": 0, "price_yearly": 0, "websites_max": 1, "fixes_limit": 1},
+            {"id": "monitor", "name": "Monitoring", "price_monthly": 19, "price_yearly": 190, "websites_max": 10, "fixes_limit": 0,
+             "price_id_monthly": STRIPE_PRICES.get("monitor_monthly"), "price_id_yearly": STRIPE_PRICES.get("monitor_yearly")},
             {"id": "pro", "name": "Pro", "price_monthly": 49, "price_yearly": 490, "websites_max": 1, "fixes_limit": 999999,
              "price_id_monthly": STRIPE_PRICES.get("pro_monthly"), "price_id_yearly": STRIPE_PRICES.get("pro_yearly")},
             {"id": "agency", "name": "Agency", "price_monthly": 299, "price_yearly": 2990, "websites_max": 25, "fixes_limit": 999999,

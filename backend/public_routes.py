@@ -113,6 +113,7 @@ class AnalysisResponse(BaseModel):
 UNTERSEITEN_JE_TARIF = {
     "free":    3,    # Pflichtseiten als Appetitmacher
     "single":  8,
+    "monitor": 10,
     "pro":     20,
     "update":  20,
     "expert":  40,

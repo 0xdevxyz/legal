@@ -13,7 +13,7 @@ import { PageContainer, PageHeader } from '@/components/dashboard/PageShell';
 
 const PLAN_LABELS: Record<string, string> = {
   free: 'Kostenlos', single: 'Einzelne Säule', pro: 'Pro-Paket',
-  agency: 'Agentur', expert: 'Expertenservice', update: 'Updateservice',
+  agency: 'Agentur', expert: 'Expertenservice', update: 'Updateservice', monitor: 'Monitoring',
   unknown: 'Unbekannt',
 };
 
@@ -89,7 +89,7 @@ interface SubStatus {
 }
 
 const PLAN_RANK: Record<string, number> = {
-  free: 0, single: 1, pro: 2, agency: 3, expert: 2, update: 1,
+  free: 0, single: 1, monitor: 1, pro: 2, agency: 3, expert: 2, update: 1,
 };
 
 const MAX_RETRIES = 6;

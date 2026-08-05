@@ -49,6 +49,22 @@ const PLANS: Plan[] = [
     href: APP_URL + '/register?plan=single',
   },
   {
+    id: 'monitor',
+    name: 'Monitoring',
+    price: '19 €',
+    period: '/Monat',
+    note: 'oder 190 € im Jahr',
+    description: 'Wachdienst für bis zu 10 Websites.',
+    features: [
+      'Bis zu 10 Websites im täglichen Wachdienst',
+      'Alarm bei Score-Sturz oder neuen kritischen Befunden',
+      'Automatischer Neu-Check, sobald sich die Rechtslage ändert',
+      'Score-Verlauf je Website, monatlich kündbar',
+    ],
+    cta: 'Monitoring buchen',
+    href: APP_URL + '/register?plan=monitor',
+  },
+  {
     id: 'pro',
     name: 'Pro',
     price: '49 €',
@@ -99,7 +115,7 @@ export default function PricingSection() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 items-stretch">
           {PLANS.map((plan) => (
             <div
               key={plan.id}
