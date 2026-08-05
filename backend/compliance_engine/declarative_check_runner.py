@@ -112,6 +112,36 @@ def init_declarative_check_registry(db_pool) -> DeclarativeCheckRegistry:
 # ---------------------------------------------------------------------------
 # Gate-Auswertung: ist die Prüfung für diese Seite relevant?
 # ---------------------------------------------------------------------------
+def _sichtbarer_text(soup: BeautifulSoup, html_lower: str) -> str:
+    """
+    Sichtbarer Seitentext in Kleinschreibung — ohne Skripte, Stile und Attribute.
+
+    Das Gate fragt "geht es auf dieser Seite fachlich um X?". Ein Klassenname
+    wie "partner-logo" oder eine JS-Variable "review" beantwortet das nicht.
+    """
+    try:
+        kopie = soup
+        text = kopie.get_text(separator=" ")
+    except Exception:
+        return html_lower
+    return " ".join(text.split()).lower()
+
+
+def _keyword_trifft(keyword: str, text: str) -> bool:
+    """
+    Trifft das Keyword als eigenes Wort — oder als Anfang eines Kompositums?
+
+    Wortanfang statt beidseitiger Wortgrenze, weil deutsche Komposita sonst
+    durchrutschen: "Abomodell" und "Grünstrom" SOLLEN treffen. Am Wortende
+    wird nicht geschnitten, dafuer aber am Anfang — so trifft "abo" nicht mehr
+    "Laborbericht" und "grün" nicht mehr "Hintergrund".
+    """
+    k = (keyword or "").strip().lower()
+    if not k:
+        return False
+    return re.search(r"(?<![\w])" + re.escape(k), text) is not None
+
+
 def _gate_passes(applies_when: Dict[str, Any], soup: BeautifulSoup, html_lower: str) -> bool:
     if not applies_when or applies_when.get("always") is True:
         return True
@@ -122,11 +152,16 @@ def _gate_passes(applies_when: Dict[str, Any], soup: BeautifulSoup, html_lower: 
             return False
 
     kw_any = applies_when.get("keywords_any")
-    if kw_any and not any(k.lower() in html_lower for k in kw_any):
+    kw_all = applies_when.get("keywords_all")
+    if not kw_any and not kw_all:
+        return True
+
+    text = _sichtbarer_text(soup, html_lower)
+
+    if kw_any and not any(_keyword_trifft(k, text) for k in kw_any):
         return False
 
-    kw_all = applies_when.get("keywords_all")
-    if kw_all and not all(k.lower() in html_lower for k in kw_all):
+    if kw_all and not all(_keyword_trifft(k, text) for k in kw_all):
         return False
 
     return True

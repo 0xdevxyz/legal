@@ -216,6 +216,12 @@ class ScoreCalculator:
         "info":     0,
     }
 
+    # Untergrenze fuer Saeulen ohne kritischen Befund. Ohne sie kollabiert eine
+    # Saeule schon bei 13 Warnungen auf 0 und ist von einem echten Totalausfall
+    # nicht mehr zu unterscheiden. 20 ist bewusst niedrig genug, um weh zu tun,
+    # und hoch genug, um "es steht etwas, aber es fehlt viel" zu zeigen.
+    WARNING_ONLY_FLOOR = 20
+
     # Legacy-Gewichte (v1, für Rückwärtskompatibilität in alten Methoden)
     WEIGHTS = {
         "critical": -20,
@@ -292,8 +298,18 @@ class ScoreCalculator:
         """
         if has_missing_core:
             return 0
-        score = 100 - (critical_count * ScoreCalculator.SEVERITY_DEDUCTIONS["critical"]
-                       + warning_count * ScoreCalculator.SEVERITY_DEDUCTIONS["warning"])
+
+        critical_abzug = critical_count * ScoreCalculator.SEVERITY_DEDUCTIONS["critical"]
+        warning_abzug = warning_count * ScoreCalculator.SEVERITY_DEDUCTIONS["warning"]
+        score = 100 - (critical_abzug + warning_abzug)
+
+        # Boden fuer reine Warnungen: 0 muss Totalausfall bedeuten, nicht
+        # "viele Kleinigkeiten". panoart360.de stand auf 0 bei 14 Warnungen
+        # und keinem einzigen kritischen Verstoss — dieselbe Null wie eine
+        # Seite ganz ohne Datenschutzerklaerung. Wer kritische Befunde oder
+        # ein fehlendes Kern-Element hat, faellt weiterhin bis 0 durch.
+        if critical_count == 0:
+            return max(ScoreCalculator.WARNING_ONLY_FLOOR, score)
         return max(0, score)
 
     # ---------------------------------------------------------------------

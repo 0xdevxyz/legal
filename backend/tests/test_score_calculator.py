@@ -240,3 +240,52 @@ class TestTypSaettigung:
         result = ScoreCalculator.compute_with_status(issues)
         assert result["pillar_scores"]["accessibility"] == 76
         assert len(issues) == 20  # Eingabeliste unangetastet
+
+
+class TestWarnungsBoden:
+    """
+    0 muss Totalausfall bedeuten, nicht "viele Kleinigkeiten".
+
+    panoart360.de stand auf DSGVO 0/100 bei 14 Warnungen und keinem einzigen
+    kritischen Verstoß — Impressum da, Datenschutzerklärung da. Dieselbe Null
+    wie eine Seite ganz ohne Datenschutzerklärung.
+    """
+
+    def test_viele_warnungen_fallen_nicht_auf_null(self):
+        issues = [
+            _Issue("datenschutz", "warning", title=f"Lücke {w}")
+            for w in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N")
+        ]
+        scores = ScoreCalculator.calculate_pillar_scores(issues)
+        assert scores["gdpr"] == ScoreCalculator.WARNING_ONLY_FLOOR
+
+    def test_wenige_warnungen_rechnen_normal(self):
+        issues = [_Issue("datenschutz", "warning", title="Eine Lücke")]
+        assert ScoreCalculator.calculate_pillar_scores(issues)["gdpr"] == 92
+
+    def test_critical_faellt_weiterhin_bis_null(self):
+        """Der Boden gilt nur ohne kritischen Befund."""
+        issues = [_Issue("datenschutz", "critical", title=f"Verstoß {n}") for n in "ABCD"]
+        assert ScoreCalculator.calculate_pillar_scores(issues)["gdpr"] == 0
+
+    def test_fehlendes_kernelement_bleibt_null(self):
+        issues = [_Issue("datenschutz", "critical", is_missing=True, title="Datenschutzerklärung fehlt")]
+        assert ScoreCalculator.calculate_pillar_scores(issues)["gdpr"] == 0
+
+    def test_boden_gilt_auch_gemischt_ohne_critical(self):
+        """
+        Titel ohne durchlaufende Nummern — sonst greift die Typ-Sättigung und
+        der Boden wird gar nicht erst erreicht.
+        """
+        themen = [
+            "Widerrufsbelehrung unvollständig", "AGB ohne Gerichtsstand",
+            "Preisangabe ohne Versandkosten", "Lieferzeit fehlt",
+            "Zahlungsarten unklar", "Garantiebedingungen fehlen",
+            "Streitschlichtung nicht genannt", "Kündigungsfrist unklar",
+            "Vertragstext nicht abrufbar", "Bestellbestätigung fehlt",
+            "Rücksendekosten ungeklärt", "Mängelhaftung unvollständig",
+            "Verfügbarkeit nicht angegeben", "Mindestlaufzeit unklar",
+        ]
+        issues = [_Issue("shop", "warning", title=t) for t in themen]
+        issues += [_Issue("shop", "info", title="Hinweis")]
+        assert ScoreCalculator.calculate_pillar_scores(issues)["legal"] == ScoreCalculator.WARNING_ONLY_FLOOR

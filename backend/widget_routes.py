@@ -550,34 +550,12 @@ async def get_alt_text_fixes_for_widget(site_id: str):
             fix_saver = AccessibilityFixSaver(db_pool)
             fixes = await fix_saver.get_fixes_for_site(site_id, status='approved')
         else:
-            # Fallback: Demo-Daten wenn DB nicht verfügbar
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"DB pool not available, using demo data for site_id={site_id}")
-            
-            fixes = [
-                {
-                    "image_src": "/images/logo.png",
-                    "image_filename": "logo.png",
-                    "suggested_alt": "Firmenlogo Mustermann GmbH",
-                    "page_url": "/",
-                    "confidence": 0.95
-                },
-                {
-                    "image_src": "/images/team.jpg",
-                    "image_filename": "team.jpg",
-                    "suggested_alt": "Team-Foto der Mitarbeiter",
-                    "page_url": "/about",
-                    "confidence": 0.89
-                },
-                {
-                    "image_src": "/images/product.png",
-                    "image_filename": "product.png",
-                    "suggested_alt": "Produktabbildung Premium-Modell",
-                    "page_url": "/products",
-                    "confidence": 0.92
-                }
-            ]
+            # Kein Demo-Fallback: erfundene Alt-Texte ("Firmenlogo Mustermann
+            # GmbH") duerfen nie in einem Kundenprojekt landen.
+            raise HTTPException(
+                status_code=503,
+                detail="Datenbank nicht verfügbar — Fixes können nicht geladen werden."
+            )
         
         return JSONResponse(
             content={
@@ -700,55 +678,42 @@ async def generate_accessibility_patches(
         Download-URL für ZIP-Datei
     """
     try:
-        # ✅ FIX: Load real fixes from database
-        fixes = []
-        
-        try:
-            from main import get_db_pool
-            db_pool = await get_db_pool()
-            
-            # Query Alt-Text Fixes
-            alt_text_query = """
-                SELECT 
-                    'alt_text' as type,
-                    page_url,
-                    image_src,
-                    image_filename,
-                    suggested_alt,
-                    confidence
+        # Freigegebene Fixes aus der Datenbank laden.
+        # Kein Demo-Fallback: hier wurden frueher Beispieldaten
+        # ("Firmenlogo", "/images/logo.png") ins Kundenpaket geschrieben, weil
+        # ein falscher Import (`from main import ...` — es gibt nur
+        # main_production) den except-Zweig bei JEDEM Aufruf ausloeste.
+        if not db_pool:
+            raise HTTPException(
+                status_code=503,
+                detail="Datenbank nicht verfügbar — Patch-Paket kann nicht erstellt werden."
+            )
+
+        async with db_pool.acquire() as conn:
+            alt_text_fixes = await conn.fetch(
+                """
+                SELECT 'alt_text' AS type, page_url, image_src, image_filename,
+                       suggested_alt, confidence
                 FROM accessibility_alt_text_fixes
-                WHERE site_id = $1
-                  AND status = 'approved'
+                WHERE site_id = $1 AND status = 'approved'
                 ORDER BY created_at DESC
-            """
-            
-            alt_text_fixes = await db_pool.fetch(alt_text_query, site_id)
-            fixes.extend([dict(fix) for fix in alt_text_fixes])
-            
-            logger.info(f"✅ Loaded {len(fixes)} real fixes from database for site {site_id}")
-            
-        except Exception as db_error:
-            logger.warning(f"⚠️ Could not load fixes from DB: {db_error}. Using demo data.")
-            # Fallback to demo data if DB not available
-            fixes = [
-                {
-                    "type": "alt_text",
-                    "page_url": "/",
-                    "image_src": "/images/logo.png",
-                    "image_filename": "logo.png",
-                    "suggested_alt": "Firmenlogo",
-                    "confidence": 0.95
-                },
-                {
-                    "type": "alt_text",
-                    "page_url": "/",
-                    "image_src": "/images/hero.jpg",
-                    "image_filename": "hero.jpg",
-                    "suggested_alt": "Hero-Bild der Website",
-                    "confidence": 0.89
-                }
-            ]
-        
+                """,
+                site_id,
+            )
+
+        fixes = [dict(f) for f in alt_text_fixes]
+        logger.info(f"Patch-Paket für {site_id}: {len(fixes)} freigegebene Fixes geladen")
+
+        if not fixes:
+            # Ehrlich bleiben: ohne freigegebene Fixes gibt es nichts zu patchen.
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Noch keine freigegebenen Fixes vorhanden. Prüfen und bestätigen "
+                    "Sie die Vorschläge zuerst in der Barrierefreiheits-Worklist."
+                ),
+            )
+
         # Generate patches
         generator = AccessibilityPatchGenerator()
         zip_buffer = await generator.generate_patch_bundle(
