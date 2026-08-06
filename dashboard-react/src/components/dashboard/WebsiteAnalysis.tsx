@@ -584,6 +584,18 @@ export const WebsiteAnalysis: React.FC = () => {
         {/* ✅ 4-SÄULEN COMPLIANCE-ANALYSE */}
         {!isActuallyLoading && findings.length > 0 && (
           <div>
+            {/* Klartext-Bewertung: ein Satz, der den Score erklaert, bevor die
+                Kategorien kommen. Nennt die kritischen Befunde beim Namen und
+                zaehlt auch das BESTANDENE — der Nutzer soll sehen, was schon
+                in Ordnung ist, nicht nur was fehlt. */}
+            <VerdictHeader
+              score={complianceScore}
+              issues={findings}
+              positiveChecks={(analysisData as any)?.positive_checks ?? []}
+              detectedCms={(analysisData as any)?.detected_cms}
+              pagesScanned={(analysisData as any)?.pages_scanned?.total}
+            />
+
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-white flex items-center gap-2">
                 <span className="w-1 h-6 rounded-full" style={{ background: 'var(--lime)' }}></span>
@@ -879,6 +891,68 @@ export const WebsiteAnalysis: React.FC = () => {
         />
       </ErrorBoundary>
     )}
+    </div>
+  );
+};
+
+
+/** Klartext-Bewertung ueber der Kategorien-Analyse. */
+const VerdictHeader: React.FC<{
+  score: number;
+  issues: Array<{ severity?: string; title?: string }>;
+  positiveChecks: Array<unknown>;
+  detectedCms?: string | null;
+  pagesScanned?: number;
+}> = ({ score, issues, positiveChecks, detectedCms, pagesScanned }) => {
+  const kritisch = issues.filter((i) => i.severity === 'critical');
+  const warnungen = issues.filter((i) => i.severity === 'warning').length;
+  const hinweise = issues.filter((i) => i.severity === 'info').length;
+
+  const ueberschrift =
+    score >= 90 ? 'Sehr gut aufgestellt.'
+    : score >= 70 ? 'Solide Basis — wenige Punkte offen.'
+    : score >= 40 ? 'Verbesserungsbedarf erkannt.'
+    : 'Dringender Handlungsbedarf.';
+
+  // Die kritischen Befunde beim Namen nennen — der Score allein erklaert nichts.
+  const kritischText = kritisch.length > 0
+    ? `Kritisch: ${kritisch.slice(0, 2).map((i) => i.title).join(' und ')}${kritisch.length > 2 ? ` — und ${kritisch.length - 2} weitere` : ''}.`
+    : 'Keine kritischen Verstöße gefunden.';
+
+  return (
+    <div className="mb-6 rounded-2xl border dark:border-zinc-700/50 border-gray-200 dark:bg-zinc-900/60 bg-white p-5">
+      <h3 className="text-2xl font-bold dark:text-white text-gray-900 mb-1.5">{ueberschrift}</h3>
+      <p className="text-sm dark:text-zinc-400 text-gray-600 leading-relaxed max-w-3xl">
+        {kritischText}
+        {pagesScanned && pagesScanned > 1 ? ` Geprüft wurden ${pagesScanned} Seiten Ihrer Website.` : ''}
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold">
+        {positiveChecks.length > 0 && (
+          <span className="px-2.5 py-1 rounded-full bg-green-500/15 text-green-500 border border-green-500/30">
+            ✓ {positiveChecks.length} bestanden
+          </span>
+        )}
+        {kritisch.length > 0 && (
+          <span className="px-2.5 py-1 rounded-full bg-red-500/15 text-red-500 border border-red-500/30">
+            {kritisch.length} kritisch
+          </span>
+        )}
+        {warnungen > 0 && (
+          <span className="px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/30">
+            {warnungen} Warnungen
+          </span>
+        )}
+        {hinweise > 0 && (
+          <span className="px-2.5 py-1 rounded-full dark:bg-zinc-700/50 bg-gray-100 dark:text-zinc-400 text-gray-600 border dark:border-zinc-600 border-gray-200">
+            {hinweise} Hinweise
+          </span>
+        )}
+        {detectedCms && (
+          <span className="px-2.5 py-1 rounded-full bg-blue-500/15 text-blue-500 border border-blue-500/30">
+            {detectedCms}
+          </span>
+        )}
+      </div>
     </div>
   );
 };

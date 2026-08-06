@@ -99,6 +99,7 @@ class AnalysisResponse(BaseModel):
     grouping_stats: Optional[Dict[str, Any]] = {}  # ✅ NEU: Gruppierungs-Statistiken
     has_accessibility_widget: Optional[bool] = False  # ✅ NEU: Widget-Status
     detected_cms: Optional[str] = None  # v4.0: erkanntes Grundsystem (z.B. WordPress)
+    pages_scanned: Optional[Dict[str, Any]] = None  # Mehrseiten-Scan: welche Seiten geprueft wurden
     is_placeholder: Optional[bool] = False  # v4.0: Platzhalter-/Baustellenseite
     scan_notice: Optional[str] = None  # v4.0: Hinweis (z.B. Maintenance/Go-Live)
     riskAmount: str
@@ -266,6 +267,7 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         "reason": reason,
                         "status_code": status_code_seen,
                         "detected_cms": detected_cms,
+                        "pages_scanned": scan_result.get("pages_scanned"),
                         "message": _titles.get(reason, _titles["unreachable"]),
                         "details": error_message,
                         "suggestions": _suggestions.get(reason, [

@@ -8,6 +8,7 @@ import { analyzeWebsite, getTrackedWebsites } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/contexts/AuthContext';
+import ScanProgressPanel from './ScanProgressPanel';
 
 interface DomainHeroSectionProps {
   onAnalyze?: (url: string) => void;
@@ -326,6 +327,9 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                 </Button>
               </div>
               </div>
+
+              {/* Live-Ansicht: die realen Pruefgruppen statt Spinner-Blackbox */}
+              {isAnalyzing && <ScanProgressPanel url={url.trim() || currentWebsite?.url || ''} />}
 
               {/* ✅ v4.0: Hinweis bei Platzhalter-/Baustellenseiten (Scan erfolgreich, aber nicht produktiv) */}
               {scanNotice && (
