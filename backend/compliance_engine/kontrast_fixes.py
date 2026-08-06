@@ -222,7 +222,7 @@ def baue_kontrast_entscheidungen(
             eintrag["loesbar"] = False
             eintrag["hinweis"] = (
                 "Mit dieser Vordergrundfarbe nicht erreichbar — der Hintergrund "
-                "muesste angepasst werden."
+                "müsste angepasst werden."
             )
         entscheidungen.append(eintrag)
 
