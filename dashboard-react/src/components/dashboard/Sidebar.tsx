@@ -73,6 +73,10 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Cookies', icon: Cookie, href: '/cookie-compliance' },
       { label: 'Barrierefreiheit', icon: Eye, href: '/accessibility/statement' },
+      // Der Kern-Arbeitsschritt des Produkts: Vorschlaege pruefen, freigeben,
+      // ausliefern (Widget/Download/PR). Gehoert ins Hauptmenue, nicht ins
+      // Avatar-Popover — dort hat ihn niemand gefunden.
+      { label: 'Fixes & Freigaben', icon: ListChecks, href: '/accessibility/worklist' },
       { label: 'AI-Compliance', icon: Sparkles, href: '/ai-compliance', requiresComploaiGuard: true },
     ],
   },
@@ -92,7 +96,6 @@ const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 const ACCOUNT_ITEMS: NavItem[] = [
   { label: 'Erste Schritte', icon: BookOpen, href: '/docs/erste-schritte' },
   { label: 'Rechts-Wissen', icon: BookOpen, href: '/knowledge' },
-  { label: 'A11y-Worklist', icon: ListChecks, href: '/accessibility/worklist' },
   { label: 'EU-Vergleich', icon: Globe, href: '/compliance/countries' },
   { label: 'Add-ons', icon: Package, href: '/dashboard/addons' },
   { label: 'Einstellungen', icon: Settings, href: '/settings' },
