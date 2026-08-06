@@ -17,6 +17,7 @@ import { CheckCircle, XCircle, Loader2, RefreshCw, ImageIcon, Link2, FileCheck2,
 import { apiClient } from '@/lib/api';
 import { useActiveSite } from '@/contexts/ActiveSiteContext';
 import { generateSiteId } from '@/lib/siteIdUtils';
+import PullRequestCard from './PullRequestCard';
 
 interface AltItem {
   id: number;
@@ -312,6 +313,13 @@ export default function AccessibilityWorklist() {
           </div>
         )}
       </section>
+
+      {/* Ein-Klick-Auslieferung: freigegebene Fixes als PR ins Kundenrepo.
+          Lebt bewusst hier — Freigeben und Ausliefern sind ein Arbeitsgang. */}
+      <PullRequestCard
+        siteId={siteId}
+        approvedCount={data.alt_texts.approved_count + data.link_fixes.approved_count + data.document_fixes.count}
+      />
     </div>
   );
 }

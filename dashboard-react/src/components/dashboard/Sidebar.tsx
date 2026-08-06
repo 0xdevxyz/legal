@@ -89,6 +89,7 @@ const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
 // Secondary destinations — surfaced in the avatar popover and the mobile drawer.
 const ACCOUNT_ITEMS: NavItem[] = [
+  { label: 'Erste Schritte', icon: BookOpen, href: '/docs/erste-schritte' },
   { label: 'Rechts-Wissen', icon: BookOpen, href: '/knowledge' },
   { label: 'A11y-Worklist', icon: ListChecks, href: '/accessibility/worklist' },
   { label: 'EU-Vergleich', icon: Globe, href: '/compliance/countries' },
