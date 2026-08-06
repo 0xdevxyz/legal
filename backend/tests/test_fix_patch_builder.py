@@ -40,10 +40,43 @@ class TestAltTexte:
         assert len(patches) == 1
         assert "alt=" in patches[0]["new_content"]
 
-    def test_vorhandenes_alt_wird_nie_angefasst(self):
-        """Guarded: auch alt="" ist eine bewusste Entscheidung (dekorativ)."""
-        dateien = {"a.html": '<html lang="de"><img src="team.jpg" alt=""><img src="team.jpg" alt="Alt"></html>'}
+    def test_echter_alt_text_wird_nie_ueberschrieben(self):
+        """Ein gesetzter Alt-Text ist eine getroffene Entscheidung."""
+        dateien = {"a.html": '<html lang="de"><img src="team.jpg" alt="Vorhandener Text"></html>'}
         assert baue_patches(MANIFEST, dateien) == []
+
+    def test_leeres_alt_wird_gefuellt(self):
+        """
+        WordPress schreibt alt="" an jedes Bild ohne hinterlegten Alt-Text —
+        das ist keine Dekorativ-Markierung, sondern der Standardfall. Frueher
+        blockierte der Guard genau hier und der PR-Weg tat auf WordPress-Seiten
+        gar nichts, waehrend das Laufzeit-Widget (`if (img && !img.alt)`) die
+        gleichen Fixes laengst anwendete. Beide Kanaele, eine Regel.
+        """
+        dateien = {"a.html": '<html lang="de"><img src="team.jpg" alt="" class="x"></html>'}
+        patches = baue_patches(MANIFEST, dateien)
+        assert len(patches) == 1
+        neu = patches[0]["new_content"]
+        assert 'alt="Unser Team vor dem Firmensitz in &quot;Zwickau&quot;"' in neu
+        assert 'class="x"' in neu          # Rest des Tags bleibt
+        assert neu.count("alt=") == 1      # kein zweites alt-Attribut
+
+    def test_nichtssagender_vorschlag_wird_nicht_ausgeliefert(self):
+        """
+        "Bild: Image 20" besteht axe und hilft niemandem. Im echten Bestand
+        waren 5 von 14 Vorschlaegen fuer spedition-mahn.de von dieser Sorte.
+        """
+        manifest = {"alt_texts": [{"image_src": "/img/image-20.jpg",
+                                   "suggested_alt": "Bild: Image 20"}]}
+        dateien = {"a.html": '<html lang="de"><img src="/img/image-20.jpg" alt=""></html>'}
+        assert baue_patches(manifest, dateien) == []
+
+    def test_data_alt_gilt_nicht_als_versorgt(self):
+        """data-alt ist ein Lazy-Loader-Attribut, kein Alt-Text."""
+        dateien = {"a.html": '<html lang="de"><img data-alt="x" src="team.jpg"></html>'}
+        patches = baue_patches(MANIFEST, dateien)
+        assert len(patches) == 1
+        assert ' alt="Unser Team' in patches[0]["new_content"]
 
     def test_fremde_bilder_bleiben_unberuehrt(self):
         dateien = {"a.html": '<html lang="de"><img src="logo-anders.svg"></html>'}

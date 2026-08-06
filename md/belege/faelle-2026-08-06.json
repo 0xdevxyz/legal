@@ -1,0 +1,202 @@
+[
+  {
+    "site_id": "panoart360-de",
+    "url": "https://panoart360.de",
+    "gemessen_am": "2026-08-06 22:34",
+    "manifest_status": "approved",
+    "alt_texte_brauchbar": 0,
+    "alt_texte_verworfen": [],
+    "aenderung": "keine Aenderung",
+    "vorher": {
+      "verstoesse_gesamt": 50,
+      "regeln": {
+        "landmark-one-main": 1,
+        "region": 49
+      },
+      "kritisch": 0,
+      "bilder": {
+        "bilder": 13,
+        "ohne_alt": 0,
+        "leeres_alt": 0,
+        "mit_alt_text": 13,
+        "stumm": 0
+      }
+    },
+    "nachher": {
+      "verstoesse_gesamt": 50,
+      "regeln": {
+        "landmark-one-main": 1,
+        "region": 49
+      },
+      "kritisch": 0,
+      "bilder": {
+        "bilder": 13,
+        "ohne_alt": 0,
+        "leeres_alt": 0,
+        "mit_alt_text": 13,
+        "stumm": 0
+      }
+    },
+    "differenz_je_regel": {},
+    "dateien": {
+      "vorher": "/out/panoart360-de.vorher.html",
+      "nachher": "/out/panoart360-de.nachher.html"
+    }
+  },
+  {
+    "site_id": "spedition-mahn-de",
+    "url": "https://spedition-mahn.de",
+    "gemessen_am": "2026-08-06 22:34",
+    "manifest_status": "pending",
+    "alt_texte_brauchbar": 9,
+    "alt_texte_verworfen": [
+      {
+        "datei": "image-1.jpg",
+        "vorschlag": "Bild: Image 1",
+        "confidence": 0.7
+      },
+      {
+        "datei": "image-20.jpg",
+        "vorschlag": "Bild: Image 20",
+        "confidence": 0.7
+      },
+      {
+        "datei": "image-21.jpg",
+        "vorschlag": "Bild: Image 21",
+        "confidence": 0.7
+      },
+      {
+        "datei": "image-22.jpg",
+        "vorschlag": "Bild: Image 22",
+        "confidence": 0.7
+      },
+      {
+        "datei": "image-23.jpg",
+        "vorschlag": "Bild: Image 23",
+        "confidence": 0.7
+      }
+    ],
+    "aenderung": "Alt-Texte für 18 Bild(er)",
+    "vorher": {
+      "verstoesse_gesamt": 35,
+      "regeln": {
+        "heading-order": 15,
+        "image-redundant-alt": 1,
+        "region": 19
+      },
+      "kritisch": 0,
+      "bilder": {
+        "bilder": 37,
+        "ohne_alt": 0,
+        "leeres_alt": 20,
+        "mit_alt_text": 17,
+        "stumm": 20
+      }
+    },
+    "nachher": {
+      "verstoesse_gesamt": 35,
+      "regeln": {
+        "heading-order": 15,
+        "image-redundant-alt": 1,
+        "region": 19
+      },
+      "kritisch": 0,
+      "bilder": {
+        "bilder": 37,
+        "ohne_alt": 0,
+        "leeres_alt": 2,
+        "mit_alt_text": 35,
+        "stumm": 2
+      }
+    },
+    "differenz_je_regel": {},
+    "dateien": {
+      "vorher": "/out/spedition-mahn-de.vorher.html",
+      "nachher": "/out/spedition-mahn-de.nachher.html"
+    }
+  },
+  {
+    "site_id": "ferienpark-waldenburg-de",
+    "url": "https://ferienpark-waldenburg.de",
+    "gemessen_am": "2026-08-06 22:34",
+    "manifest_status": "approved",
+    "alt_texte_brauchbar": 17,
+    "alt_texte_verworfen": [],
+    "aenderung": "Alt-Texte für 19 Bild(er)",
+    "vorher": {
+      "verstoesse_gesamt": 2,
+      "regeln": {
+        "region": 2
+      },
+      "kritisch": 0,
+      "bilder": {
+        "bilder": 45,
+        "ohne_alt": 1,
+        "leeres_alt": 18,
+        "mit_alt_text": 26,
+        "stumm": 19
+      }
+    },
+    "nachher": {
+      "verstoesse_gesamt": 2,
+      "regeln": {
+        "region": 2
+      },
+      "kritisch": 0,
+      "bilder": {
+        "bilder": 45,
+        "ohne_alt": 0,
+        "leeres_alt": 0,
+        "mit_alt_text": 45,
+        "stumm": 0
+      }
+    },
+    "differenz_je_regel": {},
+    "dateien": {
+      "vorher": "/out/ferienpark-waldenburg-de.vorher.html",
+      "nachher": "/out/ferienpark-waldenburg-de.nachher.html"
+    }
+  },
+  {
+    "site_id": "zua-zwickau-de",
+    "url": "https://zua-zwickau.de",
+    "gemessen_am": "2026-08-06 22:34",
+    "manifest_status": "approved",
+    "alt_texte_brauchbar": 1,
+    "alt_texte_verworfen": [],
+    "aenderung": "Alt-Texte für 1 Bild(er)",
+    "vorher": {
+      "verstoesse_gesamt": 1,
+      "regeln": {
+        "heading-order": 1
+      },
+      "kritisch": 0,
+      "bilder": {
+        "bilder": 12,
+        "ohne_alt": 0,
+        "leeres_alt": 1,
+        "mit_alt_text": 11,
+        "stumm": 1
+      }
+    },
+    "nachher": {
+      "verstoesse_gesamt": 1,
+      "regeln": {
+        "heading-order": 1
+      },
+      "kritisch": 0,
+      "bilder": {
+        "bilder": 12,
+        "ohne_alt": 0,
+        "leeres_alt": 0,
+        "mit_alt_text": 12,
+        "stumm": 0
+      }
+    },
+    "differenz_je_regel": {},
+    "dateien": {
+      "vorher": "/out/zua-zwickau-de.vorher.html",
+      "nachher": "/out/zua-zwickau-de.nachher.html"
+    }
+  }
+]

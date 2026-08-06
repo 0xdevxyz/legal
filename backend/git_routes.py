@@ -428,7 +428,7 @@ async def apply_approved_fixes(
     freigegebenen Fixes ergeben denselben PR. Gemerged wird weiterhin nur vom
     Kunden; Revert bleibt verfuegbar.
     """
-    from fix_patch_builder import baue_patches, ist_kandidat, MAX_DATEIEN
+    from fix_patch_builder import baue_patches, ist_kandidat, zaehle_pr_faehig, MAX_DATEIEN
     from widget_routes import db_pool as widget_db_pool
     from accessibility_fix_saver import AccessibilityFixSaver
 
@@ -452,7 +452,24 @@ async def apply_approved_fixes(
         "alt_texts": await saver.get_fixes_for_site(request.site_id, status="approved"),
         "document_fixes": await saver.get_document_fixes_for_site(request.site_id, status="approved"),
     }
-    if not manifest["alt_texts"] and not manifest["document_fixes"]:
+    # Link-Zwecke werden hier nur GEZAEHLT, nicht angewendet — sie gehen ueber
+    # Widget/Plugin raus (Begruendung in fix_patch_builder.zaehle_pr_faehig).
+    # Ohne diese Zahl lautete die Fehlermeldung faelschlich "keine Fixes
+    # freigegeben", obwohl der Kunde gerade welche freigegeben hatte.
+    link_fixes = await saver.get_link_fixes_for_site(request.site_id, status="approved")
+    zaehlung = zaehle_pr_faehig(manifest["alt_texts"], link_fixes, manifest["document_fixes"])
+
+    if zaehlung["deliverable"] == 0:
+        if zaehlung["manifest_only"] > 0:
+            return ApplyPatchesResponse(
+                success=False,
+                error=(
+                    f"Ihre {zaehlung['manifest_only']} freigegebenen Fixes werden über das "
+                    f"Widget bzw. WordPress-Plugin ausgeliefert und nicht als Code-Änderung — "
+                    f"für einen Pull Request braucht es Alt-Texte oder dokumentweite Fixes "
+                    f"(Sprache, Sprunglink)."
+                ),
+            )
         return ApplyPatchesResponse(
             success=False,
             error="Keine freigegebenen Fixes vorhanden. Bitte zuerst Vorschläge in der Worklist prüfen und freigeben.",

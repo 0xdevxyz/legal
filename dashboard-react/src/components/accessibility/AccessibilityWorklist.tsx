@@ -48,12 +48,24 @@ interface DocItem {
   confidence: number;
 }
 
+/**
+ * Was der PR-Weg von den freigegebenen Fixes wirklich in Code schreiben kann.
+ * Kommt vom Backend (fix_patch_builder.zaehle_pr_faehig) — die Regel darf hier
+ * nicht nachgebaut werden, sonst verspricht der Knopf irgendwann etwas
+ * anderes, als der Patch-Builder liefert.
+ */
+interface PrDeliverable {
+  deliverable: number;
+  manifest_only: number;
+}
+
 interface Worklist {
   success: boolean;
   alt_texts: { pending: AltItem[]; approved: AltItem[]; approved_count: number; pending_count: number };
   link_fixes: { pending: LinkItem[]; approved: LinkItem[]; approved_count: number; pending_count: number };
   document_fixes: { items: DocItem[]; count: number };
   totals: { needs_review: number; live: number };
+  pr_deliverable?: PrDeliverable;
 }
 
 const EMPTY: Worklist = {
@@ -62,6 +74,7 @@ const EMPTY: Worklist = {
   link_fixes: { pending: [], approved: [], approved_count: 0, pending_count: 0 },
   document_fixes: { items: [], count: 0 },
   totals: { needs_review: 0, live: 0 },
+  pr_deliverable: { deliverable: 0, manifest_only: 0 },
 };
 
 const DOC_LABEL: Record<string, string> = {
@@ -318,7 +331,8 @@ export default function AccessibilityWorklist() {
           Lebt bewusst hier — Freigeben und Ausliefern sind ein Arbeitsgang. */}
       <PullRequestCard
         siteId={siteId}
-        approvedCount={data.alt_texts.approved_count + data.link_fixes.approved_count + data.document_fixes.count}
+        approvedCount={data.pr_deliverable?.deliverable ?? 0}
+        manifestOnlyCount={data.pr_deliverable?.manifest_only ?? 0}
       />
     </div>
   );

@@ -268,9 +268,17 @@ async def accessibility_worklist(
         link_approved = await saver.get_link_fixes_for_site(site_id, status='approved')
         doc_fixes = await saver.get_document_fixes_for_site(site_id, status='approved')
 
+        # Wie viele der freigegebenen Fixes der PR-Weg tatsaechlich in Code
+        # schreiben kann. Die Regel steht im Patch-Builder, nicht hier und
+        # nicht im Frontend — sonst laeuft die Zahl auf dem Knopf irgendwann
+        # gegen das, was der Builder wirklich tut.
+        from fix_patch_builder import zaehle_pr_faehig
+        pr_deliverable = zaehle_pr_faehig(alt_approved, link_approved, doc_fixes)
+
         return {
             "success": True,
             "site_id": site_id,
+            "pr_deliverable": pr_deliverable,
             "alt_texts": {
                 "pending": alt_pending,
                 # Live-Eintraege mitliefern: der Kunde kann einen freigegebenen
