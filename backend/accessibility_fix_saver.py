@@ -338,6 +338,11 @@ class AccessibilityFixSaver:
                                 scan_id = EXCLUDED.scan_id,
                                 page_url = EXCLUDED.page_url,
                                 source = EXCLUDED.source,
+                                status = EXCLUDED.status,
+                                approved_at = CASE
+                                    WHEN EXCLUDED.status = 'approved'
+                                    THEN COALESCE(accessibility_document_fixes.approved_at, NOW())
+                                    ELSE NULL END,
                                 updated_at = NOW()
                             """,
                             site_id,
@@ -349,7 +354,13 @@ class AccessibilityFixSaver:
                             fix.get('wcag_criterion'),
                             fix.get('confidence', 1.0),
                             fix.get('source', 'scan'),
-                            status,
+                            # Ein Fix darf seinen Status selbst bestimmen. Der
+                            # Parameter bleibt die Vorgabe fuer alle uebrigen.
+                            # Grund: `kontrast-css` aendert das Aussehen der
+                            # Kundenseite und darf nicht wie ein Skip-Link
+                            # stillschweigend live gehen — der Betreiber sieht
+                            # eine geaenderte Linkfarbe sofort.
+                            fix.get('status') or status,
                         )
                         saved += 1
                     except Exception as e:

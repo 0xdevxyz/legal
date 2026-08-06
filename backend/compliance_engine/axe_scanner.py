@@ -66,6 +66,12 @@ class AxeScanResult:
     total_violations: int = 0
     by_impact: Dict[str, int] = field(default_factory=dict)
     by_wcag: Dict[str, int] = field(default_factory=dict)
+
+    # Im Browser verifizierte Kontrast-Reparaturen (siehe kontrast_verifizierer).
+    # Entstehen waehrend des Scans, weil sie die geoeffnete Seite brauchen: der
+    # Vorschlag wird eingespielt und nachgemessen. Ein zweiter Browserlauf
+    # spaeter waere dieselbe Arbeit ein zweites Mal.
+    kontrast_fixes: Optional[Dict[str, Any]] = None
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -75,6 +81,7 @@ class AxeScanResult:
             "passes": self.passes,
             "incomplete": self.incomplete,
             "inapplicable": self.inapplicable,
+            "kontrast_fixes": self.kontrast_fixes,
             "total_violations": self.total_violations,
             "by_impact": self.by_impact,
             "by_wcag": self.by_wcag
@@ -305,7 +312,8 @@ class AxeScanner:
         self,
         url: str,
         wcag_level: str = "wcag21aa",
-        timeout: int = 30000
+        timeout: int = 30000,
+        mit_kontrast_fixes: bool = False,
     ) -> AxeScanResult:
         """
         Scannt eine einzelne Seite mit axe-core
@@ -368,8 +376,24 @@ class AxeScanner:
                     }}
                 """)
                 
-                # Parse Ergebnisse
-                return self._parse_results(url, results)
+                ergebnis = self._parse_results(url, results)
+
+                # Kontrast-Reparatur solange die Seite offen ist. Danach ist
+                # das Dokument veraendert (eingespieltes CSS) — deshalb erst
+                # NACH dem regulaeren Parsen, und nichts darf danach noch
+                # gemessen werden.
+                if mit_kontrast_fixes:
+                    try:
+                        from compliance_engine.kontrast_verifizierer import (
+                            verifizierte_kontrast_fixes,
+                        )
+                        ergebnis.kontrast_fixes = await verifizierte_kontrast_fixes(page)
+                    except Exception as e:
+                        # Fail-open wie der Rest des Scans: ohne Kontrast-Fixes
+                        # ist der Scan schlechter, aber nicht kaputt.
+                        logger.warning(f"Kontrast-Fixes uebersprungen: {e}")
+
+                return ergebnis
             
             except Exception as e:
                 logger.error(f"❌ axe-core Scan fehlgeschlagen: {e}")
@@ -591,7 +615,8 @@ axe_scanner = AxeScanner()
 
 async def run_axe_scan(
     url: str,
-    wcag_level: str = "wcag21aa"
+    wcag_level: str = "wcag21aa",
+    mit_kontrast_fixes: bool = True,
 ) -> Tuple[AxeScanResult, List[Dict[str, Any]]]:
     """
     Führt axe-core Scan durch und gibt Ergebnisse zurück
@@ -603,7 +628,7 @@ async def run_axe_scan(
     Returns:
         Tuple von (AxeScanResult, strukturierte Issues)
     """
-    result = await axe_scanner.scan_page(url, wcag_level)
+    result = await axe_scanner.scan_page(url, wcag_level, mit_kontrast_fixes=mit_kontrast_fixes)
     issues = axe_scanner.convert_to_structured_issues(result)
     
     logger.info(f"✅ axe-core Scan abgeschlossen: {result.total_violations} Violations, {len(issues)} Issues")

@@ -8,7 +8,7 @@ import asyncpg
 import json
 import logging
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from accessibility_fix_saver import AccessibilityFixSaver
 from site_id_utils import derive_site_id
 
@@ -291,7 +291,46 @@ class AccessibilityPostScanProcessor:
                 'source': 'scan',
             })
 
+        # 1.4.3 Kontrast — im Browser verifizierte Farbentscheidungen.
+        #
+        # Bewusst NICHT auto-freigegeben wie die uebrigen dokumentweiten Fixes:
+        # Farbe ist Gestaltung. Ein Skip-Link ergaenzt etwas Unsichtbares, eine
+        # geaenderte Linkfarbe sieht der Betreiber sofort. Deshalb `status`
+        # 'pending' — das Manifest liefert nur 'approved' aus, es aendert sich
+        # also nichts an der Kundenseite, bevor jemand zugestimmt hat.
+        kontrast = self._kontrast_fix_aus_issues(accessibility_issues)
+        if kontrast:
+            fixes.append(kontrast)
+
         return fixes
+
+    @staticmethod
+    def _kontrast_fix_aus_issues(
+        accessibility_issues: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """Holt die verifizierten Kontrast-Regeln aus dem Scan-Befund."""
+        for issue in accessibility_issues:
+            meta = issue.get("metadata") or {}
+            if meta.get("source") != "complyo-kontrast-fix":
+                continue
+            regeln = meta.get("css_rules") or []
+            if not regeln:
+                return None
+            return {
+                "fix_type": "kontrast-css",
+                "payload": {
+                    "rules": regeln,
+                    "entscheidungen": meta.get("entscheidungen") or [],
+                    "vorher": meta.get("vorher"),
+                    "nachher": meta.get("nachher"),
+                },
+                "wcag_criterion": "1.4.3",
+                "confidence": 0.95,
+                "page_url": issue.get("page_url"),
+                "source": "scan",
+                "status": "pending",
+            }
+        return None
 
     # =========================================================================
     # WCAG 2.4.4 — Link-Zweck (nichtssagende Linktexte)

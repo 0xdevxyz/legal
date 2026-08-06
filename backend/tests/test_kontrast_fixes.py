@@ -240,3 +240,34 @@ class TestCssRobustheit:
         css = als_css(e)
         assert css.count("color:") == 2
         assert ",\n" not in css
+
+
+class TestManifestFormat:
+    def test_regeln_haben_das_format_des_manifests(self):
+        """`a11y_remediation.js` erwartet {selector, declarations} — sonst nichts."""
+        from compliance_engine.kontrast_fixes import als_css_regeln
+        e = baue_kontrast_entscheidungen([
+            _knoten("#a86100", "#edebe5", 4.02, ".a"),
+            _knoten("#a86100", "#edebe5", 4.02, ".b"),
+        ])
+        regeln = als_css_regeln(e)
+        assert len(regeln) == 2
+        assert set(regeln[0]) == {"selector", "declarations"}
+        assert regeln[0]["declarations"].startswith("color: #")
+        assert "!important" in regeln[0]["declarations"]
+
+    def test_unbestaetigtes_wird_nicht_ausgeliefert(self):
+        """
+        Was die Nachmessung im Browser nicht bestanden hat, geht nicht raus —
+        sonst waere die Zusage "verifiziert" nur ein Wort.
+        """
+        from compliance_engine.kontrast_fixes import als_css_regeln
+        e = baue_kontrast_entscheidungen([_knoten("#a86100", "#edebe5", 4.02, ".a")])
+        e[0]["bestaetigt"] = False
+        assert als_css_regeln(e) == []
+
+    def test_bestaetigtes_wird_ausgeliefert(self):
+        from compliance_engine.kontrast_fixes import als_css_regeln
+        e = baue_kontrast_entscheidungen([_knoten("#a86100", "#edebe5", 4.02, ".a")])
+        e[0]["bestaetigt"] = True
+        assert len(als_css_regeln(e)) == 1

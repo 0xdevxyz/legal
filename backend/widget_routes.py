@@ -623,17 +623,27 @@ async def get_fix_manifest(site_id: str, request: Request):
         _logger.warning(f"[Fix-Manifest] DB-Pool nicht verfügbar für {site_id}")
 
     # CSS-Regeln aus document_fixes herausziehen (Channels mögen es getrennt).
+    # `css-rule` traegt genau eine Regel, `kontrast-css` buendelt viele: die
+    # Tabelle laesst nur eine Zeile je (site_id, fix_type) zu, und eine
+    # Kontrast-Reparatur besteht aus einer Regel je Selektor.
     css_rules = [
         f["payload"] for f in document_fixes
         if f.get("fix_type") == "css-rule" and isinstance(f.get("payload"), dict)
     ]
+    for f in document_fixes:
+        if f.get("fix_type") == "kontrast-css" and isinstance(f.get("payload"), dict):
+            css_rules.extend([
+                r for r in (f["payload"].get("rules") or [])
+                if isinstance(r, dict) and r.get("selector") and r.get("declarations")
+            ])
 
     manifest = {
         "success": True,
         "version": "1.1.0",
         "site_id": site_id,
         "alt_texts": alt_texts,
-        "document_fixes": [f for f in document_fixes if f.get("fix_type") != "css-rule"],
+        "document_fixes": [f for f in document_fixes
+                           if f.get("fix_type") not in ("css-rule", "kontrast-css")],
         "link_fixes": link_fixes,
         "css_rules": css_rules,
         "counts": {

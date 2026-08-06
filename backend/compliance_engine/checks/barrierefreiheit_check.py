@@ -134,6 +134,41 @@ async def _run_axe_core_safe(url: str, timeout: float = 35.0) -> Optional[List[D
             logger.warning(f"⚠️ axe-core lieferte kein valides Ergebnis: {result.by_impact.get('error')}")
             return None
         logger.info(f"✅ axe-core: {result.total_violations} Violations → {len(axe_issues)} Issues")
+
+        # Verifizierte Kontrast-Reparaturen mitnehmen. Sie entstehen im selben
+        # Browserlauf (die Nachmessung braucht die geoeffnete Seite) und werden
+        # als eigener Befund durchgereicht, damit der Post-Scan-Prozessor sie zu
+        # einem dokumentweiten Fix machen kann — ohne dass jede Schicht
+        # dazwischen eine neue Signatur braucht.
+        kf = getattr(result, "kontrast_fixes", None)
+        if kf and kf.get("entscheidungen"):
+            from compliance_engine.kontrast_fixes import als_css_regeln
+            regeln = als_css_regeln(kf["entscheidungen"])
+            if regeln:
+                axe_issues.append({
+                    "category": "barrierefreiheit",
+                    "severity": "info",
+                    "title": "Kontrast-Reparatur vorbereitet",
+                    "description": (
+                        f"{kf['vorher']} Kontrast-Fundstellen lassen sich ueber "
+                        f"{len(kf['entscheidungen'])} Farbentscheidung(en) beheben "
+                        f"({kf['vorher'] - kf['nachher']} im Browser nachgemessen)."
+                    ),
+                    "risk_euro": 0,
+                    "recommendation": "Farben in der Worklist pruefen und freigeben.",
+                    "legal_basis": "WCAG 2.1 (1.4.3), BFSG §12",
+                    "auto_fixable": True,
+                    "is_missing": False,
+                    "rechtspflicht": True,
+                    "metadata": {
+                        "source": "complyo-kontrast-fix",
+                        "css_rules": regeln,
+                        "entscheidungen": kf["entscheidungen"],
+                        "vorher": kf["vorher"],
+                        "nachher": kf["nachher"],
+                    },
+                })
+
         return axe_issues
     except ImportError:
         logger.warning("⚠️ axe-core/Playwright nicht verfügbar – Scan läuft heuristisch weiter")

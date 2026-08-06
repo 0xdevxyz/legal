@@ -313,3 +313,28 @@ def als_css(entscheidungen: List[Dict[str, Any]]) -> str:
         for selektor in selektoren:
             zeilen.append(f"{selektor} {{ color: {e['vorschlag']} !important; }}")
     return "\n".join(zeilen) + "\n"
+
+
+def als_css_regeln(entscheidungen: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """
+    Dieselben Fixes im Format des Fix-Manifests: [{selector, declarations}].
+
+    Der Auslieferungsweg existiert bereits — `a11y_remediation.js` baut aus
+    `css_rules` ein `<style>` und haengt es an den Kopf, genau so, wie die
+    Verifikation es im Browser nachgemessen hat. Deshalb hier kein neuer Kanal,
+    nur das passende Format.
+
+    Eine Regel je Selektor statt einer kommagetrennten Gruppe: ein einzelner
+    ungueltiger Selektor aus fremdem Markup wuerde sonst die ganze Regel und
+    damit alle uebrigen Fixes derselben Entscheidung mitreissen.
+    """
+    regeln: List[Dict[str, str]] = []
+    for e in entscheidungen:
+        if not e.get("bestaetigt", e.get("loesbar")) or not e.get("vorschlag"):
+            continue
+        for selektor in sorted(set(e.get("selektoren") or [])):
+            regeln.append({
+                "selector": selektor,
+                "declarations": f"color: {e['vorschlag']} !important;",
+            })
+    return regeln
