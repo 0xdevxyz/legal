@@ -85,6 +85,60 @@ class AxeScanResult:
 # axe Rule to Feature Mapping
 # =============================================================================
 
+# =============================================================================
+# WCAG-Stufen -> axe-Tags
+# =============================================================================
+#
+# axe-Tags sind FLACH, nicht hierarchisch. `wcag21aa` bezeichnet ausschliesslich
+# die Regeln, die WCAG 2.1 auf Stufe AA NEU eingefuehrt hat — nicht die aus 2.0
+# uebernommenen. Wer nur diesen einen Tag setzt, prueft einen Bruchteil.
+#
+# Genau das war hier der Fall: `runOnly: [wcag21aa, best-practice]` liess
+# `image-alt`, `link-name`, `label`, `color-contrast`, `button-name`,
+# `html-has-lang` und die gesamte ARIA-Familie aus — allesamt WCAG 2.0. Auf
+# spedition-mahn.de meldete der Scan 35 Befunde, samt und sonders
+# "best-practice", und uebersah 13x link-name, 7x color-contrast, 6x
+# nested-interactive (serious) sowie 3x aria-required-parent (critical).
+# Das Feature-Mapping unten kennt diese Regeln laengst — sie konnten nur nie
+# feuern. Der Fehler war der Filter, nicht das Modell.
+#
+# EN 301 549 (und damit das BFSG) verweist auf WCAG 2.1 Stufe AA. Das schliesst
+# 2.0 A und AA vollstaendig ein; die Mengen sind deshalb kumulativ. WCAG 2.2
+# bleibt bewusst draussen: rechtlich nicht gefordert, und ein Befund, den
+# niemand einfordern kann, gehoert nicht in einen Pflichten-Report.
+WCAG_TAG_MENGEN: Dict[str, List[str]] = {
+    "wcag2a":   ["wcag2a"],
+    "wcag2aa":  ["wcag2a", "wcag2aa"],
+    "wcag21a":  ["wcag2a", "wcag21a"],
+    "wcag21aa": ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
+}
+
+
+def axe_tags_fuer(wcag_level: str, mit_best_practice: bool = True) -> List[str]:
+    """Vollstaendige Tag-Liste fuer eine WCAG-Stufe.
+
+    `best-practice` bleibt drin, weil Landmark- und Ueberschriften-Befunde
+    echten Nutzen haben — sie muessen im Bericht aber als Empfehlung kenntlich
+    sein und nicht als Rechtspflicht (siehe `ist_rechtspflicht`).
+    """
+    tags = list(WCAG_TAG_MENGEN.get(wcag_level, WCAG_TAG_MENGEN["wcag21aa"]))
+    if mit_best_practice:
+        tags.append("best-practice")
+    return tags
+
+
+def ist_rechtspflicht(tags: List[str]) -> bool:
+    """Faellt dieser Befund unter WCAG 2.1 AA — oder ist er nur Empfehlung?
+
+    Der Unterschied ist der Kern der Glaubwuerdigkeit: `region` und
+    `heading-order` sind best-practice und keine BFSG-Pflicht. Sie als Verstoss
+    zu verkaufen waere genau die Angstmacherei, die man einem
+    Compliance-Anbieter am schnellsten uebelnimmt.
+    """
+    rechtlich = set(WCAG_TAG_MENGEN["wcag21aa"])
+    return any(t in rechtlich for t in tags)
+
+
 AXE_RULE_TO_FEATURE: Dict[str, str] = {
     # Alt-Text (WCAG 1.1.1)
     "image-alt": "ALT_TEXT",
@@ -94,6 +148,14 @@ AXE_RULE_TO_FEATURE: Dict[str, str] = {
     "svg-img-alt": "ALT_TEXT",
     "role-img-alt": "ALT_TEXT",
     
+    # Sprache (WCAG 3.1.1, 3.1.2) — der Patch-Builder setzt lang mechanisch,
+    # die Regeln hatten aber keine Feature-Zuordnung und galten damit als
+    # "nicht auto-fixable", obwohl genau dieser Fix existiert.
+    "html-has-lang": "LANGUAGE",
+    "html-lang-valid": "LANGUAGE",
+    "html-xml-lang-mismatch": "LANGUAGE",
+    "valid-lang": "LANGUAGE",
+
     # Kontrast (WCAG 1.4.3, 1.4.11)
     "color-contrast": "CONTRAST",
     "color-contrast-enhanced": "CONTRAST",
@@ -145,6 +207,9 @@ AXE_RULE_TO_FEATURE: Dict[str, str] = {
     "aria-required-attr": "ARIA",
     "aria-required-children": "ARIA",
     "aria-required-parent": "ARIA",
+    # Verschachtelte Bedienelemente (Link im Button o. ae.) — auf echten
+    # WordPress-Seiten haeufig und bisher ohne Zuordnung.
+    "nested-interactive": "ARIA",
     "aria-roledescription": "ARIA",
     "aria-roles": "ARIA",
     "aria-text": "ARIA",
@@ -286,13 +351,15 @@ class AxeScanner:
                 # Warte kurz auf Script-Laden
                 await page.wait_for_function("typeof axe !== 'undefined'", timeout=5000)
                 
-                # Führe axe-core aus
+                # Führe axe-core aus. Die Tag-Menge wird aufgeloest, nicht
+                # durchgereicht — axe-Tags sind flach (siehe WCAG_TAG_MENGEN).
                 axe_config = {
                     "runOnly": {
                         "type": "tag",
-                        "values": [wcag_level, "best-practice"]
+                        "values": axe_tags_fuer(wcag_level)
                     }
                 }
+                logger.info(f"axe-core Regelsatz: {', '.join(axe_config['runOnly']['values'])}")
                 
                 results = await page.evaluate(f"""
                     async () => {{
@@ -431,9 +498,17 @@ class AxeScanner:
 
         for violation in scan_result.violations:
             extra = max(0, len(violation.nodes) - MAX_NODES_PER_RULE)
-            # Für jeden betroffenen Node ein Issue
+            # Trennt Rechtspflicht von Empfehlung. Vorher trug JEDER Befund
+            # "BFSG §12" — auch `region` und `heading-order`, die reine
+            # axe-Empfehlungen sind. Einem Compliance-Anbieter nimmt man
+            # nichts schneller uebel als eine erfundene Pflicht.
+            pflicht = ist_rechtspflicht(violation.tags)
             for idx, node in enumerate(violation.nodes[:MAX_NODES_PER_RULE]):
                 severity = self._impact_to_severity(violation.impact)
+                if not pflicht:
+                    # Empfehlungen erzeugen keinen Rechtsdruck: hoechstens
+                    # Hinweis-Rang, kein Bussgeldrisiko in der Summe.
+                    severity = "info" if severity in ("critical", "high") else severity
 
                 # target ist eine Liste von Selektoren → ersten als String verwenden
                 target = node.get("target") or []
@@ -458,14 +533,19 @@ class AxeScanner:
                     "severity": severity,
                     "title": titel_de or violation.id,
                     "description": description,
-                    "risk_euro": self._impact_to_risk_euro(violation.impact),
+                    "risk_euro": self._impact_to_risk_euro(violation.impact) if pflicht else 0,
                     "recommendation": failure,
-                    "legal_basis": f"WCAG 2.1 ({wcag_str}), BFSG §12",
+                    "legal_basis": (
+                        f"WCAG 2.1 ({wcag_str}), BFSG §12" if pflicht
+                        else "Empfehlung (axe best-practice) — nicht aus WCAG 2.1 AA gefordert"
+                    ),
                     "auto_fixable": violation.feature_id in ["ALT_TEXT", "CONTRAST", "FOCUS", "LANDMARKS"],
                     "is_missing": False,
                     "element_html": node.get("html", ""),
+                    "rechtspflicht": pflicht,
                     "metadata": {
                         "source": "axe-core",
+                        "rechtspflicht": pflicht,
                         "axe_rule_id": violation.id,
                         "axe_impact": violation.impact,
                         "axe_help_url": violation.help_url,
