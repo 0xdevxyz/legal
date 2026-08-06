@@ -1847,10 +1847,11 @@
                 }
 
                 .complyo-branding-logo {
-                    width: 15px;
-                    height: auto;
-                    color: #00FFF7;
-                    flex-shrink: 0;
+                    height: 14px;
+                    width: auto;
+                    display: inline-block;
+                    vertical-align: middle;
+                    opacity: 0.85;
                 }
 
                 .complyo-branding-word {
@@ -2038,11 +2039,7 @@
                         <div class="complyo-branding">
                             <span class="complyo-branding-prefix">Powered by</span>
                             <a class="complyo-branding-link" href="https://complyo.de" target="_blank" rel="noopener" aria-label="complyo">
-                                <svg class="complyo-branding-logo" viewBox="0 0 30 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-                                    <path d="M15 2.5 C11.6 4.8 7.6 6.1 4 6.6 V17.2 C4 24 8.9 28.6 15 30.5 C21.1 28.6 26 24 26 17.2 V6.6 C22.4 6.1 18.4 4.8 15 2.5 Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
-                                    <path d="M8.4 9.9 V17.2 C8.4 21.7 11.4 25 15 26.6 C18.6 25 21.6 21.7 21.6 17.2 V9.9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                                <span class="complyo-branding-word">complyo</span>
+                                <img class="complyo-branding-logo" src="https://complyo.de/logo-dark-trim.png" alt="complyo" height="14" loading="lazy" decoding="async" />
                             </a>
                         </div>
                     ` : ''}

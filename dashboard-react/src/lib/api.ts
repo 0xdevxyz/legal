@@ -74,12 +74,17 @@ export const ensureCsrfCookie = async (): Promise<void> => {
 };
 
 // ✅ Website Analysis API Call
-export const analyzeWebsite = async (url: string, legalUpdateId?: number): Promise<ComplianceAnalysis> => {
+export const analyzeWebsite = async (url: string, legalUpdateId?: number, scanToken?: string): Promise<ComplianceAnalysis> => {
  try {
    const normalizedUrl = validateAndNormalizeUrl(url);
    const payload: Record<string, any> = { url: normalizedUrl };
    if (legalUpdateId !== undefined) {
      payload.legal_update_id = legalUpdateId;
+   }
+   if (scanToken) {
+     // Unter diesem Token meldet der Scanner den echten Fortschritt —
+     // das Panel pollt /api/v2/analyze-progress/{token}.
+     payload.scan_token = scanToken;
    }
 
   const response: AxiosResponse<{ success: boolean; data: ComplianceAnalysis }> = await apiClient.post('/api/v2/analyze', payload);

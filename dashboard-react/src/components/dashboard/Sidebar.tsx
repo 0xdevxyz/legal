@@ -7,6 +7,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { useComploaiGuard } from '@/hooks/useComploaiGuard';
+import Logo from '@/components/Logo';
 import { SiteSwitcher } from '@/components/dashboard/SiteSwitcher';
 import {
   LayoutDashboard,
@@ -155,10 +156,7 @@ export const Sidebar: React.FC = () => {
           className="flex items-center gap-2"
           aria-label="Zum Dashboard"
         >
-          <Shield className="w-6 h-6" style={{ color: 'var(--lime)' }} />
-          <span className="font-black text-base tracking-tight dark:text-white text-gray-900">
-            Complyo
-          </span>
+          <Logo size="sm" />
         </button>
         <button
           onClick={() => setShowMobileMenu(true)}
@@ -177,8 +175,7 @@ export const Sidebar: React.FC = () => {
           className="rail-logo"
           aria-label="Zum Dashboard"
         >
-          <Shield className="w-6 h-6 flex-shrink-0" style={{ color: 'var(--lime)' }} />
-          <span className="rail-wordmark">Complyo</span>
+          <Logo size="sm" />
         </button>
 
         {/* Primary nav — nach Arbeitsablauf gruppiert */}

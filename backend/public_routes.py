@@ -47,6 +47,9 @@ def set_db_pool(pool):
 class AnalyzeRequest(BaseModel):
     url: str
     legal_update_id: Optional[int] = None
+    # Vom Client erzeugtes Token; darunter meldet der Scanner den echten
+    # Fortschritt (GET /v2/analyze-progress/{token}).
+    scan_token: Optional[str] = None
 
 class IssueLocation(BaseModel):
     area: str
@@ -215,9 +218,16 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
         try:
             crawler = WebsiteCrawler(timeout=10)
             seitenbudget = _seitenbudget(current_user)
+            from compliance_engine import scan_progress as _fortschritt
+            if request.scan_token and _fortschritt.token_gueltig(request.scan_token):
+                _fortschritt.starte(request.scan_token)
+            else:
+                request.scan_token = None
             async with ComplianceScanner() as scanner:
                 scan_result, website_structure = await asyncio.gather(
-                    scanner.scan_website_multipage(url, max_seiten=seitenbudget),
+                    scanner.scan_website_multipage(
+                        url, max_seiten=seitenbudget, progress_token=request.scan_token
+                    ),
                     crawler.crawl_website(url),
                     return_exceptions=True
                 )
@@ -267,7 +277,6 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         "reason": reason,
                         "status_code": status_code_seen,
                         "detected_cms": detected_cms,
-                        "pages_scanned": scan_result.get("pages_scanned"),
                         "message": _titles.get(reason, _titles["unreachable"]),
                         "details": error_message,
                         "suggestions": _suggestions.get(reason, [
@@ -551,6 +560,10 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                             # Generiere scan_id basierend auf website_id + timestamp
                             scan_id = f"scan-{website_id}-{int(datetime.now().timestamp())}"
                             
+                            from compliance_engine import scan_progress as _fs
+                            _fs.setze_phase(request.scan_token, "KI-Analysen")
+                            _fs.registriere_checks(request.scan_token, "KI-Analysen",
+                                                   ["Alt-Text-Vorschläge (Bild-KI)"])
                             post_process_result = await processor.process_scan_results(
                                 scan_id=scan_id,
                                 user_id=str(user_id),
@@ -590,6 +603,11 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             if not isinstance(grouping_stats, dict):
                 grouping_stats = {}
             
+            # Fortschritt abschliessen: die Live-Anzeige darf nie unfertig
+            # stehenbleiben, wenn die Antwort schon unterwegs ist.
+            from compliance_engine import scan_progress as _fs_ende
+            _fs_ende.abschliessen(request.scan_token)
+
             response_data = AnalysisResponse(
                 success=True,
                 url=scan_result.get("url", url),
@@ -602,6 +620,7 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 grouping_stats=grouping_stats,  # ✅ NEU: Gruppierungs-Statistiken (immer Dict)
                 has_accessibility_widget=scan_result.get("has_accessibility_widget", False),
                 detected_cms=scan_result.get("detected_cms"),
+                pages_scanned=scan_result.get("pages_scanned"),
                 is_placeholder=scan_result.get("is_placeholder", False),
                 scan_notice=scan_result.get("scan_notice"),
                 riskAmount=total_risk_data['total_risk_range'],
@@ -2463,3 +2482,100 @@ async def download_code_package(
 
  
 
+
+@public_router.get("/v2/analyze-progress/{token}")
+async def analyze_progress(token: str, current_user: dict = Depends(get_current_user)):
+    """
+    Echter Scan-Fortschritt zum Client-Token.
+
+    Die Checks melden sich selbst beim Abschluss; hier wird nur gelesen.
+    Unbekanntes Token liefert einen leeren Stand statt 404 — der Client
+    pollt ab dem ersten Moment, noch bevor starte() gelaufen ist.
+    """
+    from compliance_engine import scan_progress as _fortschritt
+    if not _fortschritt.token_gueltig(token):
+        raise HTTPException(status_code=400, detail="Ungültiges Token")
+    return _fortschritt.hole(token) or {"phase": "Scan startet", "gruppen": [], "fertig": False}
+
+
+_SCREENSHOT_VERZEICHNIS = "/tmp/complyo-screenshots"
+_SCREENSHOT_TTL = 24 * 3600
+_screenshot_semaphor = asyncio.Semaphore(2)
+
+
+def _host_ist_privat(hostname: str) -> bool:
+    """SSRF-Schutz: keine Screenshots interner Adressen."""
+    import ipaddress
+    import socket
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return True
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return True
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return True
+    return False
+
+
+@public_router.get("/v2/site-screenshot")
+async def site_screenshot(url: str, current_user: dict = Depends(get_current_user)):
+    """
+    Screenshot der analysierten Website fuer die Hero-Vorschau.
+
+    24h-Cache auf Platte: der Anblick der eigenen Startseite aendert sich
+    selten, ein Playwright-Start pro Aufruf waere Verschwendung. Der
+    SSRF-Guard ist Pflicht — sonst waere das ein Kamera-Proxy ins interne
+    Netz ("http://10.0.0.5/admin" als Bild).
+    """
+    import hashlib
+    import os
+    import time as _time
+    from urllib.parse import urlparse
+    from fastapi.responses import FileResponse
+
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    teile = urlparse(url)
+    if teile.scheme not in ("http", "https") or not teile.hostname or teile.port not in (None, 80, 443):
+        raise HTTPException(status_code=400, detail="Ungültige URL")
+    if _host_ist_privat(teile.hostname):
+        raise HTTPException(status_code=400, detail="Adresse nicht erlaubt")
+
+    os.makedirs(_SCREENSHOT_VERZEICHNIS, exist_ok=True)
+    schluessel = hashlib.sha256(f"{teile.scheme}://{teile.netloc}{teile.path}".encode()).hexdigest()[:32]
+    pfad = os.path.join(_SCREENSHOT_VERZEICHNIS, f"{schluessel}.png")
+
+    if os.path.exists(pfad) and _time.time() - os.path.getmtime(pfad) < _SCREENSHOT_TTL:
+        return FileResponse(pfad, media_type="image/png",
+                            headers={"Cache-Control": "private, max-age=3600"})
+
+    async with _screenshot_semaphor:
+        # Doppelpruefung: waehrend des Wartens kann ein paralleler Aufruf
+        # dasselbe Bild schon erzeugt haben.
+        if os.path.exists(pfad) and _time.time() - os.path.getmtime(pfad) < _SCREENSHOT_TTL:
+            return FileResponse(pfad, media_type="image/png",
+                                headers={"Cache-Control": "private, max-age=3600"})
+        try:
+            from playwright.async_api import async_playwright
+            async with async_playwright() as pw:
+                browser = await pw.chromium.launch(
+                    args=["--no-sandbox", "--disable-dev-shm-usage"]
+                )
+                try:
+                    seite = await browser.new_page(viewport={"width": 1280, "height": 800})
+                    await seite.goto(url, timeout=20000, wait_until="domcontentloaded")
+                    await seite.wait_for_timeout(1500)
+                    await seite.screenshot(path=pfad, full_page=False)
+                finally:
+                    await browser.close()
+        except Exception as e:
+            logger.warning(f"Screenshot fehlgeschlagen für {url}: {e}")
+            raise HTTPException(status_code=502, detail="Screenshot nicht möglich")
+
+    return FileResponse(pfad, media_type="image/png",
+                        headers={"Cache-Control": "private, max-age=3600"})

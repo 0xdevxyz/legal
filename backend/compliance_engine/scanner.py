@@ -310,7 +310,7 @@ class ComplianceScanner:
         return issues
 
     async def scan_website_multipage(
-        self, url: str, max_seiten: int = 10
+        self, url: str, max_seiten: int = 10, progress_token: "Optional[str]" = None
     ) -> Dict[str, Any]:
         """
         Prueft Startseite plus die rechtlich relevantesten Unterseiten.
@@ -326,7 +326,7 @@ class ComplianceScanner:
         """
         from .page_discovery import entdecke_seiten
 
-        ergebnis = await self.scan_website(url)
+        ergebnis = await self.scan_website(url, progress_token=progress_token)
         if max_seiten <= 0 or ergebnis.get("scan_status") == "error" or ergebnis.get("error"):
             return ergebnis
 
@@ -344,11 +344,29 @@ class ComplianceScanner:
             return ergebnis
 
         # Unterseiten parallel, aber gedrosselt — wir sind Gast auf fremden Servern.
+        from . import scan_progress as _fortschritt
+        from urllib.parse import urlparse as _urlparse
+
+        def _seitenlabel(u: str) -> str:
+            pfad = _urlparse(u).path or "/"
+            return "Startseite" if pfad in ("", "/") else pfad
+
+        if progress_token:
+            _fortschritt.setze_phase(progress_token, "Unterseiten werden geprüft")
+            _fortschritt.registriere_checks(
+                progress_token, "Mehrseiten-Prüfung",
+                ["Unterseiten entdecken (Sitemap)"] + [_seitenlabel(s.url) for s in entdeckung.seiten],
+            )
+            _fortschritt.melde(progress_token, "Mehrseiten-Prüfung", "Unterseiten entdecken (Sitemap)")
+
         semaphor = asyncio.Semaphore(4)
 
         async def eine(seite):
             async with semaphor:
-                return await self._pruefe_unterseite(seite.url, seite.klasse)
+                try:
+                    return await self._pruefe_unterseite(seite.url, seite.klasse)
+                finally:
+                    _fortschritt.melde(progress_token, "Mehrseiten-Prüfung", _seitenlabel(seite.url))
 
         listen = await asyncio.gather(
             *[eine(s) for s in entdeckung.seiten], return_exceptions=True
@@ -411,13 +429,15 @@ class ComplianceScanner:
         )
         return ergebnis
 
-    async def scan_website(self, url: str) -> Dict[str, Any]:
+    async def scan_website(self, url: str, progress_token: "Optional[str]" = None) -> Dict[str, Any]:
         """
         Comprehensive compliance scan of a website
         Returns detailed compliance report with risk assessment
         """
         start_time = datetime.now()
         issues = []
+        from . import scan_progress as _fortschritt
+        _fortschritt.setze_phase(progress_token, "Seite wird geladen")
         
         try:
             # Normalize URL
@@ -553,6 +573,26 @@ class ComplianceScanner:
             contact_task = self._check_contact_data(url, soup)
             social_task = self._check_social_media_plugins(url, soup)
             ai_act_task = check_ai_act_transparency(url, soup, request_urls=render_request_urls)
+
+            if progress_token:
+                _fortschritt.setze_phase(progress_token, "Prüfungen laufen")
+                _n = _fortschritt.nach
+                _RECHT = "Rechtstexte & Pflichtangaben"
+                _DSC = "Datenschutz & Cookies"
+                _A11Y = "Barrierefreiheit (BFSG)"
+                _TECH = "Technik & Sicherheit"
+                barriere_task = _n(barriere_task, progress_token, _A11Y, "axe-core & WCAG-Heuristiken (~100 Regeln)")
+                impressum_task = _n(impressum_task, progress_token, _RECHT, "Impressum")
+                agb_task = _n(agb_task, progress_token, _RECHT, "AGB & Widerruf")
+                shop_task = _n(shop_task, progress_token, _RECHT, "Shop-Pflichten (Button-Lösung, §312k)")
+                uwg_task = _n(uwg_task, progress_token, _RECHT, "Werbekennzeichnung (UWG)")
+                declarative_task = _n(declarative_task, progress_token, _RECHT, "Aktuelle Rechts-Checks (EUR-Lex)")
+                datenschutz_task = _n(datenschutz_task, progress_token, _DSC, "Datenschutzerklärung & Drittlandtransfer")
+                cookie_task = _n(cookie_task, progress_token, _DSC, "Cookie-Banner & Tracking (Netzwerk-Evidenz)")
+                ssl_task = _n(ssl_task, progress_token, _TECH, "SSL & Security-Header")
+                contact_task = _n(contact_task, progress_token, _TECH, "Kontaktformular (Art. 13)")
+                social_task = _n(social_task, progress_token, _TECH, "Social-Media-Plugins")
+                ai_act_task = _n(ai_act_task, progress_token, _TECH, "KI-Systeme & AI-Act-Transparenz")
 
             results = await asyncio.gather(
                 barriere_task, impressum_task, datenschutz_task, cookie_task,

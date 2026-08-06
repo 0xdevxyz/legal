@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, TrendingUp, Bot, Globe, RefreshCw, Lock, Info, X, Zap, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDashboardStore } from '@/stores/dashboard';
-import { analyzeWebsite, getTrackedWebsites } from '@/lib/api';
+import { analyzeWebsite, getTrackedWebsites, apiClient } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,6 +24,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
   const isAgency = user?.plan_type === 'agency' || user?.plan_type === 'expert';
   const [url, setUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [scanToken, setScanToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [autoTriggerInfo, setAutoTriggerInfo] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<{
@@ -138,7 +139,14 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
       const domain = urlObj.hostname;
 
       // Call API
-      const result = await analyzeWebsite(domain, legalUpdateId);
+      // Client erzeugt das Fortschritts-Token — es muss VOR der Anfrage
+      // existieren, damit das Panel vom ersten Moment an pollen kann.
+      const token =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `scan-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      setScanToken(token);
+      const result = await analyzeWebsite(domain, legalUpdateId, token);
 
       // Update store with website
       setCurrentWebsite({
@@ -329,7 +337,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
               </div>
 
               {/* Live-Ansicht: die realen Pruefgruppen statt Spinner-Blackbox */}
-              {isAnalyzing && <ScanProgressPanel url={url.trim() || currentWebsite?.url || ''} />}
+              {isAnalyzing && <ScanProgressPanel url={url.trim() || currentWebsite?.url || ''} token={scanToken} />}
 
               {/* ✅ v4.0: Hinweis bei Platzhalter-/Baustellenseiten (Scan erfolgreich, aber nicht produktiv) */}
               {scanNotice && (
@@ -445,12 +453,11 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
               <div className="absolute inset-2 rounded-full border border-[#25bac8]/25 animate-pulse" />
               <div className="absolute inset-12 rounded-full border border-[#25bac8]/15 animate-pulse" style={{ animationDelay: '0.2s' }} />
               <div className="absolute inset-20 rounded-full border border-[#25bac8]/10 animate-pulse" style={{ animationDelay: '0.4s' }} />
-              {/* center mark */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="p-7 rounded-[2rem] bg-zinc-900/50 backdrop-blur-md border border-white/[0.06] shadow-2xl">
-                  <ShieldCheck className="w-16 h-16 lg:w-20 lg:h-20" style={{ color: 'var(--lime)' }} strokeWidth={1.5} />
-                </div>
-              </div>
+              {/* Website-Vorschau: der echte Screenshot der analysierten Site.
+                  Der Deko-Haken bleibt nur als Fallback, solange kein Bild da
+                  ist — eine Vorschau der EIGENEN Seite sagt "wir haben deine
+                  Website wirklich angesehen", ein Icon sagt nichts. */}
+              <HeroVorschau url={currentWebsite?.url} />
             </div>
           </div>
         </div>
@@ -490,3 +497,59 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
   );
 };
 
+
+/**
+ * Screenshot der analysierten Website im Hero — geladen ueber das Backend
+ * (Auth-Header noetig, daher Blob statt <img src>); Fallback ist der
+ * bisherige Schild-Haken.
+ */
+const HeroVorschau: React.FC<{ url?: string | null }> = ({ url }) => {
+  const [bild, setBild] = useState<string | null>(null);
+
+  useEffect(() => {
+    let aktiv = true;
+    let objektUrl: string | null = null;
+    setBild(null);
+    if (!url) return;
+    apiClient
+      .get('/api/v2/site-screenshot', { params: { url }, responseType: 'blob' })
+      .then((r) => {
+        if (!aktiv) return;
+        objektUrl = URL.createObjectURL(r.data as Blob);
+        setBild(objektUrl);
+      })
+      .catch(() => {
+        /* kein Screenshot -> Fallback bleibt stehen */
+      });
+    return () => {
+      aktiv = false;
+      if (objektUrl) URL.revokeObjectURL(objektUrl);
+    };
+  }, [url]);
+
+  if (!bild) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="p-7 rounded-[2rem] bg-zinc-900/50 backdrop-blur-md border border-white/[0.06] shadow-2xl">
+          <ShieldCheck className="w-16 h-16 lg:w-20 lg:h-20" style={{ color: 'var(--lime)' }} strokeWidth={1.5} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="absolute inset-0 flex items-center justify-center p-4">
+      <div className="w-full max-w-md rounded-2xl overflow-hidden border dark:border-white/10 border-gray-200 shadow-2xl bg-white">
+        {/* Browser-Rahmen, damit das Bild als Website lesbar ist */}
+        <div className="flex items-center gap-1.5 px-3 py-2 dark:bg-zinc-800 bg-gray-100 border-b dark:border-zinc-700 border-gray-200">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+          <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
+          <span className="ml-2 text-[10px] truncate dark:text-zinc-400 text-gray-500">{url}</span>
+        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={bild} alt={`Vorschau von ${url}`} className="w-full h-auto" />
+      </div>
+    </div>
+  );
+};
