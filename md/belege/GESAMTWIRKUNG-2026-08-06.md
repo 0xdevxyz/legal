@@ -6,8 +6,8 @@ plus best-practice. Das complyo-Widget war bei der Aufnahme blockiert — gemess
 wird der Zustand, den ein Besucher ohne complyo vorfindet.
 
 **Alle Reparaturen in einem Lauf**, nicht aus getrennten Läufen addiert: Fixes
-beeinflussen einander (ein  verändert die region-Zählung, ein
-Alt-Text löst zugleich ).
+beeinflussen einander (ein `role="main"` verändert die `region`-Zählung, ein
+Alt-Text löst zugleich `link-name`).
 
 | | vorher | nachher | behoben |
 |---|---:|---:|---:|
@@ -40,6 +40,10 @@ Alt-Text löst zugleich ).
 | `heading-order` | 42 | Welche Zeile welche Ebene ist, ist redaktionell |
 | `page-has-heading-one` | 8 | dito |
 
+Diese Liste ist kein Rückstand, sondern eine Grenze: Mechanik hat kein Urteil.
+Wo eines nötig ist, schlägt complyo vor und ein Mensch entscheidet — oder es
+bleibt liegen.
+
 ## Der Aufwand für den Kunden
 
 Die 252 behobenen Pflicht-Fundstellen kosten **rund drei bis vier Freigaben je
@@ -48,11 +52,20 @@ Fundstellen ab), dazu die Link-Beschriftungen. Struktur-Fixes (Hauptinhalt,
 Zoom-Sperre, Einbettungstitel) ändern das Aussehen nicht und gehen ohne
 Rückfrage raus.
 
+## Was axe nicht misst
+
+`alt=""` gilt für axe als gültige Dekorativ-Markierung — WordPress schreibt es
+aber an jedes Bild ohne Mediathek-Alt-Text. Auf denselben 24 Seiten sind
+**190 von 384 Bildern stumm**, ohne dass axe einen einzigen Verstoß meldet.
+Wer nur axe-Zahlen vergleicht, misst ausgerechnet den Teil nicht, der
+Screenreader-Nutzern am meisten bringt.
+
 ## Wie das nachzurechnen ist
 
+```bash
+docker run --rm -v $(pwd)/backend:/src -v /tmp/bestand:/out -w /src legal-backend python tools/bestandsaufnahme.py --datei /sites.txt --out /out
 ```
-docker run --rm -v \$(pwd)/backend:/src -v /tmp/bestand:/out -w /src legal-backend \
-  python tools/bestandsaufnahme.py --datei /sites.txt --out /out
-docker run --rm -v \$(pwd)/backend:/src -v /tmp/bestand:/out -w /src legal-backend \
-  python tools/gesamtwirkung.py --ordner /out
+
+```bash
+docker run --rm -v $(pwd)/backend:/src -v /tmp/bestand:/out -w /src legal-backend python tools/gesamtwirkung.py --ordner /out
 ```
