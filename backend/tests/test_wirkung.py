@@ -26,6 +26,17 @@ def _lese(*teile):
         return fh.read()
 
 
+def _nur_code(quelltext: str) -> str:
+    """Docstrings und Kommentare entfernen.
+
+    Zum dritten Mal in dieser Sitzung hat ein Waechter an der Erklaerung
+    angeschlagen, die den Fehler beschreibt. Ein Test, der Prosa liest, prueft
+    nichts.
+    """
+    ohne_docstrings = re.sub(r'"""[\s\S]*?"""', "", quelltext)
+    return "\n".join(re.sub(r"#.*$", "", z) for z in ohne_docstrings.splitlines())
+
+
 class TestDatensparsamkeit:
     def test_tabelle_hat_keine_besucherspalte(self):
         """Was nicht gespeichert werden kann, kann auch nicht auslaufen."""
@@ -87,9 +98,9 @@ class TestStoertNie:
         204 auch im Fehlerfall: eine Messung darf die Seite des Kunden nie
         stoeren, auch nicht durch einen roten Eintrag im Netzwerk-Reiter.
         """
-        src = _lese("wirkung_routes.py")
+        src = _nur_code(_lese("wirkung_routes.py"))
         block = src[src.index("async def melde_wirkung"):src.index("async def wirkung_preflight")]
-        assert block.count("status_code=204") >= 2
+        assert block.count("_keine_antwort()") >= 3
         assert "raise HTTPException" not in block
 
     def test_datenbankfehler_wird_geschluckt_aber_geloggt(self):
@@ -128,3 +139,27 @@ class TestVerdrahtung:
     def test_rate_limit_ist_gesetzt(self):
         src = _lese("wirkung_routes.py")
         assert 'rate_limit("wirkung"' in src
+
+
+class TestAntwortIstWirklichLeer:
+    """
+    Beim Ausrollen im Log aufgefallen: `JSONResponse(status_code=204,
+    content=None)` schreibt `null` in den Koerper, und uvicorn wirft dann bei
+    JEDER Meldung "Response content longer than Content-Length".
+
+    Nach aussen blieb das unsichtbar — das Widget meldet fail-silent. Eine
+    Statistik, die stillschweigend Fehler produziert, ist schlimmer als keine.
+    """
+
+    def test_kein_json_koerper_bei_204(self):
+        """Der Docstring darf den Fehler nennen — der Code nicht enthalten."""
+        assert "JSONResponse(status_code=204" not in _nur_code(_lese("wirkung_routes.py"))
+
+    def test_es_gibt_eine_gemeinsame_leerantwort(self):
+        src = _nur_code(_lese("wirkung_routes.py"))
+        assert "def _keine_antwort()" in src
+        assert "Response(status_code=204" in src
+
+    def test_der_grund_steht_dabei(self):
+        src = _lese("wirkung_routes.py")
+        assert "Content-Length" in src

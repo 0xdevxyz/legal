@@ -33,7 +33,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from dependencies import rate_limit
@@ -77,6 +77,19 @@ class WirkungsMeldung(BaseModel):
     erwartet: Dict[str, int] = Field(default_factory=dict)
 
 
+def _keine_antwort() -> Response:
+    """Eine 204-Antwort — ohne Koerper.
+
+    `JSONResponse(status_code=204, content=None)` sieht harmlos aus, schreibt
+    aber `null` in den Koerper und uvicorn wirft dann bei JEDER Meldung
+    "Response content longer than Content-Length". Im Log stand das nach dem
+    Ausrollen sofort; nach aussen blieb es unsichtbar, weil das Widget
+    fail-silent meldet. Eine Statistik, die stillschweigend Fehler produziert,
+    ist schlimmer als keine.
+    """
+    return Response(status_code=204, headers={"Access-Control-Allow-Origin": "*"})
+
+
 def _pfad_saeubern(pfad: str) -> str:
     """
     Nur der Pfad, ohne Parameter und Anker.
@@ -94,7 +107,7 @@ def _pfad_saeubern(pfad: str) -> str:
 
 
 @router.post("/{site_id}", dependencies=[Depends(rate_limit("wirkung", 120, 60))])
-async def melde_wirkung(site_id: str, request: Request) -> JSONResponse:
+async def melde_wirkung(site_id: str, request: Request) -> Response:
     """
     Nimmt die Bilanz eines Seitenaufrufs entgegen.
 
@@ -112,18 +125,15 @@ async def melde_wirkung(site_id: str, request: Request) -> JSONResponse:
     Antwortet immer 204: die Messung darf die Seite des Kunden nie stoeren,
     auch nicht durch eine Fehlermeldung im Netzwerk-Reiter.
     """
-    leer = JSONResponse(status_code=204, content=None,
-                        headers={"Access-Control-Allow-Origin": "*"})
     try:
         roh = await request.body()
         meldung = WirkungsMeldung.model_validate_json(roh)
     except Exception:
         # Unbrauchbarer Koerper: verwerfen, nicht meckern.
-        return leer
+        return _keine_antwort()
 
     if not db_pool:
-        return JSONResponse(status_code=204, content=None,
-                            headers={"Access-Control-Allow-Origin": "*"})
+        return _keine_antwort()
 
     arten = {
         "alt_texte": meldung.alt_texte,
@@ -164,13 +174,12 @@ async def melde_wirkung(site_id: str, request: Request) -> JSONResponse:
         # niemals eine Kundenseite beeintraechtigen.
         logger.warning(f"Wirkungsmeldung {site_id} nicht gespeichert: {e}")
 
-    return JSONResponse(status_code=204, content=None,
-                        headers={"Access-Control-Allow-Origin": "*"})
+    return _keine_antwort()
 
 
 @router.options("/{site_id}")
-async def wirkung_preflight(site_id: str) -> JSONResponse:
-    return JSONResponse(status_code=204, content=None, headers={
+async def wirkung_preflight(site_id: str) -> Response:
+    return Response(status_code=204, headers={
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "content-type",
