@@ -140,6 +140,33 @@ async def _run_axe_core_safe(url: str, timeout: float = 35.0) -> Optional[List[D
         # als eigener Befund durchgereicht, damit der Post-Scan-Prozessor sie zu
         # einem dokumentweiten Fix machen kann — ohne dass jede Schicht
         # dazwischen eine neue Signatur braucht.
+        sf = getattr(result, "struktur_fixes", None)
+        if sf and (sf.get("fixes") or sf.get("css_rules")):
+            axe_issues.append({
+                "category": "barrierefreiheit",
+                "severity": "info",
+                "title": "Struktur-Reparatur vorbereitet",
+                "description": (
+                    f"{sf['vorher']} Struktur-Fundstellen, davon "
+                    f"{sf['vorher'] - sf['nachher']} im Browser nachgemessen behoben "
+                    f"(Hauptinhalt, Zoom-Sperre, Einbettungen)."
+                ),
+                "risk_euro": 0,
+                "recommendation": "Wird ueber Widget bzw. Plugin ausgeliefert.",
+                "legal_basis": "WCAG 2.1 (1.3.1, 1.4.4, 4.1.2), BFSG §12",
+                "auto_fixable": True,
+                "is_missing": False,
+                "rechtspflicht": True,
+                "metadata": {
+                    "source": "complyo-struktur-fix",
+                    "fixes": sf["fixes"],
+                    "css_rules": sf["css_rules"],
+                    "haupt_selektor": sf.get("haupt_selektor"),
+                    "vorher": sf["vorher"],
+                    "nachher": sf["nachher"],
+                },
+            })
+
         kf = getattr(result, "kontrast_fixes", None)
         if kf and kf.get("entscheidungen"):
             from compliance_engine.kontrast_fixes import als_css_regeln

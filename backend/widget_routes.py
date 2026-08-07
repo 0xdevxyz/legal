@@ -631,6 +631,11 @@ async def get_fix_manifest(site_id: str, request: Request):
         if f.get("fix_type") == "css-rule" and isinstance(f.get("payload"), dict)
     ]
     for f in document_fixes:
+        if f.get("fix_type") == "struktur" and isinstance(f.get("payload"), dict):
+            css_rules.extend([
+                r for r in (f["payload"].get("css_rules") or [])
+                if isinstance(r, dict) and r.get("selector") and r.get("declarations")
+            ])
         if f.get("fix_type") == "kontrast-css" and isinstance(f.get("payload"), dict):
             css_rules.extend([
                 r for r in (f["payload"].get("rules") or [])
@@ -644,6 +649,14 @@ async def get_fix_manifest(site_id: str, request: Request):
         "alt_texts": alt_texts,
         "document_fixes": [f for f in document_fixes
                            if f.get("fix_type") not in ("css-rule", "kontrast-css")],
+        # Attribut-Setzungen aus der Struktur-Reparatur — die Channels wenden
+        # sie guarded an (nur wo nichts steht). Getrennt von css_rules, weil es
+        # Markup betrifft und nicht Darstellung.
+        "struktur_fixes": next(
+            (f["payload"].get("fixes") or [] for f in document_fixes
+             if f.get("fix_type") == "struktur" and isinstance(f.get("payload"), dict)),
+            [],
+        ),
         "link_fixes": link_fixes,
         "css_rules": css_rules,
         "counts": {

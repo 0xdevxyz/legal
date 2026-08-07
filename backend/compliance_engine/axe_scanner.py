@@ -72,6 +72,9 @@ class AxeScanResult:
     # Vorschlag wird eingespielt und nachgemessen. Ein zweiter Browserlauf
     # spaeter waere dieselbe Arbeit ein zweites Mal.
     kontrast_fixes: Optional[Dict[str, Any]] = None
+    # Ebenso die Struktur-Reparatur (role=main, viewport, iframe-Titel …).
+    # Laeuft im selben Lauf, weil sie denselben geoeffneten Baum braucht.
+    struktur_fixes: Optional[Dict[str, Any]] = None
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -82,6 +85,7 @@ class AxeScanResult:
             "incomplete": self.incomplete,
             "inapplicable": self.inapplicable,
             "kontrast_fixes": self.kontrast_fixes,
+            "struktur_fixes": self.struktur_fixes,
             "total_violations": self.total_violations,
             "by_impact": self.by_impact,
             "by_wcag": self.by_wcag
@@ -383,6 +387,17 @@ class AxeScanner:
                 # NACH dem regulaeren Parsen, und nichts darf danach noch
                 # gemessen werden.
                 if mit_kontrast_fixes:
+                    # Struktur ZUERST: sie setzt Attribute am Baum, der
+                    # Kontrast-Schritt spielt danach CSS ein und veraendert die
+                    # Farben. Andersherum wuerde die Struktur-Nachmessung auf
+                    # einer bereits umgefaerbten Seite laufen.
+                    try:
+                        from compliance_engine.struktur_verifizierer import (
+                            verifizierte_struktur_fixes,
+                        )
+                        ergebnis.struktur_fixes = await verifizierte_struktur_fixes(page)
+                    except Exception as e:
+                        logger.warning(f"Struktur-Fixes uebersprungen: {e}")
                     try:
                         from compliance_engine.kontrast_verifizierer import (
                             verifizierte_kontrast_fixes,

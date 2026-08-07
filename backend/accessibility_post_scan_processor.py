@@ -302,7 +302,43 @@ class AccessibilityPostScanProcessor:
         if kontrast:
             fixes.append(kontrast)
 
+        # 1.3.1 / 1.4.4 / 4.1.2 — Struktur. Anders als Farbe sind diese Fixes
+        # auto-sicher: ein role="main" am nachgemessenen Container, ein
+        # entsperrter Zoom und ein Titel an einer Einbettung aendern das
+        # Aussehen nicht. Sie gehen deshalb wie die uebrigen dokumentweiten
+        # Fixes freigegeben raus.
+        struktur = self._struktur_fix_aus_issues(accessibility_issues)
+        if struktur:
+            fixes.append(struktur)
+
         return fixes
+
+    @staticmethod
+    def _struktur_fix_aus_issues(
+        accessibility_issues: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """Holt die verifizierten Struktur-Fixes aus dem Scan-Befund."""
+        for issue in accessibility_issues:
+            meta = issue.get("metadata") or {}
+            if meta.get("source") != "complyo-struktur-fix":
+                continue
+            if not (meta.get("fixes") or meta.get("css_rules")):
+                return None
+            return {
+                "fix_type": "struktur",
+                "payload": {
+                    "fixes": meta.get("fixes") or [],
+                    "css_rules": meta.get("css_rules") or [],
+                    "haupt_selektor": meta.get("haupt_selektor"),
+                    "vorher": meta.get("vorher"),
+                    "nachher": meta.get("nachher"),
+                },
+                "wcag_criterion": "1.3.1",
+                "confidence": 0.95,
+                "page_url": issue.get("page_url"),
+                "source": "scan",
+            }
+        return None
 
     @staticmethod
     def _kontrast_fix_aus_issues(

@@ -40,6 +40,7 @@
 
   var map = Object.create(null);   // normalisierter Dateiname -> alt-text
   var docFixes = [];               // dokumentweite Fixes
+  var strukturFixes = [];          // Attribut-Setzungen (role, tabindex, title …)
   var linkFixes = [];              // [{link_href, link_text, suggested_label}]
   var cssRules = [];               // [{selector, declarations}]
   var ready = false;
@@ -92,6 +93,16 @@
     // bevorzugtes Ziel (z.B. "#main") sonst gängige Hauptinhalts-Container.
     var el = null;
     if (preferred) { try { el = document.querySelector(preferred); } catch (e) {} }
+    // Gemessenes Ziel aus der Struktur-Reparatur schlaegt jede Rateliste.
+    if (!el) {
+      for (var i = 0; i < strukturFixes.length; i++) {
+        if (strukturFixes[i] && strukturFixes[i].attribut === 'role' &&
+            strukturFixes[i].wert === 'main') {
+          try { el = document.querySelector(strukturFixes[i].selector); } catch (e) {}
+          if (el) break;
+        }
+      }
+    }
     if (!el) el = document.querySelector('main, [role="main"], #content, #content-main, #primary');
     return el;
   }
@@ -123,6 +134,37 @@
     if (document.querySelector('main, [role="main"]')) return; // bereits vorhanden
     var el = resolveMainTarget(null);
     if (el && !el.getAttribute('role')) el.setAttribute('role', 'main');
+  }
+
+  // Attribut-Setzungen aus der Struktur-Reparatur.
+  //
+  // Der Unterschied zu applyLandmarkMain(): dort wird zur Laufzeit GERATEN
+  // (feste Selektorliste). Hier kommt der Selektor aus der Messung — beim Scan
+  // wurde `role="main"` gesetzt, axe erneut laufen gelassen und nur behalten,
+  // was die region-Befunde wirklich abgeraeumt hat. Im echten Bestand heissen
+  // die Container `.wrapper`, `#main`, `#Content`, `#Wrapper` — die geratene
+  // Liste traf die wenigsten davon.
+  function applyStrukturFixes() {
+    if (!strukturFixes.length) return 0;
+    var gesetzt = 0;
+    for (var i = 0; i < strukturFixes.length; i++) {
+      var f = strukturFixes[i];
+      if (!f || !f.selector || !f.attribut) continue;
+      var ziele;
+      try { ziele = document.querySelectorAll(f.selector); }
+      catch (e) { continue; }   // Selektor aus fremdem Markup
+      for (var j = 0; j < ziele.length; j++) {
+        var el = ziele[j];
+        // Das viewport-Meta ist der einzige Fall, in dem ueberschrieben wird:
+        // dort steht die Zoom-Sperre, die weg soll. Alles andere guarded.
+        if (f.attribut === 'content' && el.tagName === 'META') {
+          el.setAttribute('content', f.wert); gesetzt++;
+        } else if (!el.getAttribute(f.attribut)) {
+          el.setAttribute(f.attribut, f.wert); gesetzt++;
+        }
+      }
+    }
+    return gesetzt;
   }
 
   // CSS einmalig in den <head> injizieren (Fokus/Kontrast + Skip-Link-Styling).
@@ -182,6 +224,11 @@
     if (!ready) return;
     applyAltTexts();
     applyHtmlLang();
+    // Struktur VOR dem Sprunglink: sie setzt das gemessene role="main" (und
+    // gibt dem Container notfalls eine id). Erst danach hat applySkipLink()
+    // ein aufloesbares Ziel — vorher landete der Link ins Nirgendwo und wurde
+    // deshalb gar nicht erst injiziert.
+    applyStrukturFixes();
     applySkipLink();
     applyLandmarkMain();
     applyLinkLabels();
@@ -225,6 +272,7 @@
       }
     }
     docFixes = d.document_fixes || [];
+    strukturFixes = d.struktur_fixes || [];
     linkFixes = d.link_fixes || [];
     cssRules = d.css_rules || [];
   }
