@@ -9,10 +9,23 @@ import json
 import logging
 import re
 from typing import List, Dict, Any, Optional
-from accessibility_fix_saver import AccessibilityFixSaver
+from accessibility_fix_saver import AccessibilityFixSaver, _als_user_id
 from site_id_utils import derive_site_id
 
 logger = logging.getLogger(__name__)
+
+
+_IMG_SRC = re.compile(
+    r"""(?<![\w-])(?:data-)?src\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.I
+)
+
+
+def _src_aus_markup(html: str) -> str:
+    """Bildadresse aus dem Markup des Befunds — `data-src` fuer Lazy-Loader."""
+    m = _IMG_SRC.search(html or "")
+    if not m:
+        return ""
+    return (m.group(1) or m.group(2) or "").strip()
 
 
 class AccessibilityPostScanProcessor:
@@ -192,7 +205,12 @@ class AccessibilityPostScanProcessor:
                             site_url    = EXCLUDED.site_url,
                             updated_at  = NOW()
                     """,
-                    str(user_id), site_id, site_url, json.dumps(fix_package),
+                    # Die Spalte ist integer, die Aufrufer reichen einen String
+                    # durch (`str(user_id)` in public_routes). Ohne die
+                    # Umwandlung scheitert JEDER Insert — im Log stand seit
+                    # jeher "Statement-Paket konnte nicht gespeichert werden".
+                    # Derselbe Helfer wie in accessibility_fix_saver.
+                    _als_user_id(user_id), site_id, site_url, json.dumps(fix_package),
                 )
             logger.info(
                 f"📝 Statement-Paket gespeichert: {site_url} "
@@ -582,9 +600,31 @@ class AccessibilityPostScanProcessor:
         
         for idx, issue in enumerate(alt_text_issues):
             # Extrahiere Bild-Informationen aus Issue
-            image_src = issue.get('element', {}).get('src', '') or \
-                       issue.get('image_src', '') or \
-                       f'/image-{idx + 1}.jpg'
+            # Die Bild-Adresse muss aus dem Befund kommen — erfinden lassen
+            # sich Dateinamen nicht.
+            #
+            # Frueher stand hier ein Rueckfall auf `/image-{idx}.jpg`. Der
+            # erzeugte Eintraege fuer Dateien, die es nicht gibt; die Vision
+            # bekam einen 404 und die Kontext-Heuristik machte daraus
+            # "Bild: Image 20" mit Konfidenz 0,7. Im Bestand von
+            # spedition-mahn.de waren 5 von 14 Vorschlaegen von dieser Sorte —
+            # Texte, die jede automatische Pruefung bestehen und keinem
+            # Menschen helfen.
+            #
+            # axe liefert das Markup des Elements in `element_html`; daraus
+            # laesst sich die src lesen. Ist auch das leer, wird der Befund
+            # uebersprungen: kein Vorschlag ist besser als einer fuer ein Bild,
+            # das nicht existiert.
+            image_src = (
+                issue.get('element', {}).get('src', '')
+                or issue.get('image_src', '')
+                or _src_aus_markup(issue.get('element_html') or issue.get('html') or '')
+            )
+            if not image_src:
+                logger.debug(
+                    "Alt-Text uebersprungen: Befund ohne ermittelbare Bildadresse"
+                )
+                continue
             
             # Generiere Filename
             filename = image_src.split('/')[-1] if '/' in image_src else image_src

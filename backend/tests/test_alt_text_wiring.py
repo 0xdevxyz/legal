@@ -44,7 +44,16 @@ async def test_alt_text_falls_back_when_vision_unavailable(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_alt_text_skips_vision_for_non_http_src(monkeypatch):
+async def test_befund_ohne_bildadresse_erzeugt_keinen_vorschlag(monkeypatch):
+    """
+    Frueher entstand hier ein Heuristik-Vorschlag fuer einen erfundenen
+    Dateinamen (`/image-{idx}.jpg`). Die Vision bekam einen 404, die Heuristik
+    machte "Bild: Image 20" daraus, und der Text landete als freigebbarer
+    Vorschlag in der Worklist — bei spedition-mahn.de 5 von 14.
+
+    Neue Zusage: ohne ermittelbare Bildadresse gibt es keinen Vorschlag. Kein
+    Vorschlag ist besser als einer fuer ein Bild, das nicht existiert.
+    """
     calls = {"n": 0}
 
     async def fake(self, image_url, context="", language="de"):
@@ -53,10 +62,35 @@ async def test_alt_text_skips_vision_for_non_http_src(monkeypatch):
 
     monkeypatch.setattr(altgen.AIAltTextGenerator, "generate_alt_text", fake)
     proc = AccessibilityPostScanProcessor(db_pool=None)
-    # Synthetischer Platzhalter-Pfad ohne echte Domain -> urljoin gegen leere site_url
     issues = [{"image_src": "", "page_url": ""}]
 
     fixes = await proc._generate_alt_text_fixes(issues, "")
 
-    assert calls["n"] == 0  # Vision nicht aufgerufen ohne ladbare URL
-    assert fixes[0]["alt_text_source"] == "heuristic"
+    assert calls["n"] == 0     # Vision gar nicht erst gefragt
+    assert fixes == []         # und nichts erfunden
+
+
+@pytest.mark.asyncio
+async def test_adresse_aus_dem_markup_rettet_den_befund(monkeypatch):
+    """
+    axe liefert das Markup in `element_html` — auch wenn `image_src` fehlt,
+    steht die Adresse dort. Genau diese Befunde gingen frueher verloren und
+    kamen als Phantom zurueck.
+    """
+    calls = {"n": 0}
+
+    async def fake(self, image_url, context="", language="de"):
+        calls["n"] += 1
+        return {"alt_text": "Gelber Sattelzug", "confidence": 0.9,
+                "source": "claude_vision"}
+
+    monkeypatch.setattr(altgen.AIAltTextGenerator, "generate_alt_text", fake)
+    proc = AccessibilityPostScanProcessor(db_pool=None)
+    issues = [{"element_html": '<img src="/uploads/lkw.jpg" class="hero">',
+               "page_url": "https://kunde.de/"}]
+
+    fixes = await proc._generate_alt_text_fixes(issues, "https://kunde.de/")
+
+    assert calls["n"] == 1
+    assert fixes[0]["image_filename"] == "lkw.jpg"
+    assert fixes[0]["suggested_alt"] == "Gelber Sattelzug"
