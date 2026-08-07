@@ -31,11 +31,12 @@ import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from compliance_engine.nachweis_generator import (
     baue_nachweis, erklaerung_aus_nachweis, nachweis_token,
 )
+from compliance_engine.nachweis_seite import nachweis_als_html
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,15 @@ async def oeffentlicher_nachweis(site_id: str, token: str) -> JSONResponse:
         alt_texte_live=daten["alt_live"],
         gemessen_am=daten["gemessen_am"],
     )
+
+    # Betriebsdaten aus dem Widget: was auf echten Seitenaufrufen tatsaechlich
+    # ankommt. Der Scan misst einen Zeitpunkt und eine Seite; das hier misst
+    # laufend und alle. Fehlt es, steht das ausdruecklich da statt einer Null.
+    from wirkung_routes import wirkung_fuer_site
+    nachweis["im_betrieb"] = await wirkung_fuer_site(site_id) or {
+        "hinweis": "Noch keine Betriebsdaten — das Widget hat sich noch nicht gemeldet.",
+    }
+
     return JSONResponse(
         content=nachweis,
         headers={
@@ -171,6 +181,24 @@ async def oeffentlicher_nachweis(site_id: str, token: str) -> JSONResponse:
             # muss aber nach einer Reparatur zeitnah stimmen.
             "Cache-Control": "public, max-age=900",
         },
+    )
+
+
+@router.get("/{site_id}/{token}/seite", response_class=HTMLResponse)
+async def nachweis_seite(site_id: str, token: str) -> HTMLResponse:
+    """
+    Die lesbare Fassung — das, was man einer Pruefstelle schickt.
+
+    Eigenstaendige Seite ohne fremde Schriften, ohne Analyse-Skript, ohne
+    Rahmenwerk. Ein Nachweis, der selbst Daten an Dritte abgibt, waere ein
+    schlechter Witz; einer ueber Barrierefreiheit, der selbst nicht
+    barrierefrei ist, waere schlimmer.
+    """
+    antwort = await oeffentlicher_nachweis(site_id, token)
+    return HTMLResponse(
+        content=nachweis_als_html(json.loads(antwort.body)),
+        headers={"Cache-Control": "public, max-age=900",
+                 "X-Content-Type-Options": "nosniff"},
     )
 
 

@@ -254,6 +254,20 @@ def erklaerung_aus_nachweis(nachweis: Dict[str, Any], anbieter: str,
             "",
         ]
 
+    betrieb = nachweis.get("im_betrieb") or {}
+    if betrieb.get("seiten_beobachtet"):
+        zeilen += [
+            f"Die Wirksamkeit wird laufend im Betrieb geprüft: auf "
+            f"**{betrieb['seiten_beobachtet']} Seiten** dieser Website wurden bei "
+            f"echten Aufrufen **{betrieb['reparaturen_angewendet']} Reparaturen** "
+            f"angewendet; zuletzt bestätigt am {betrieb['zuletzt_bestaetigt']}."
+            + (f" Bei **{betrieb['ziele_verfehlt']}** Reparaturen wurde das Ziel "
+               f"nicht mehr gefunden — das deutet auf eine Änderung an der "
+               f"Website hin und wird geprüft."
+               if betrieb.get("ziele_verfehlt") else ""),
+            "",
+        ]
+
     if nachweis["offen"]:
         zeilen += ["## Nicht barrierefreie Inhalte", "",
                    "Die folgenden Abweichungen bestehen fort. Für jede ist "

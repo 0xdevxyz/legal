@@ -45,6 +45,24 @@
   var cssRules = [];               // [{selector, declarations}]
   var ready = false;
 
+  // ---- Wirkungsbilanz --------------------------------------------------------
+  //
+  // Das Widget ist die einzige Stelle, die weiss, was auf einer ECHTEN Seite
+  // gerade tatsaechlich angekommen ist. Der Scan misst die Startseite zu einem
+  // Zeitpunkt; hier laeuft die Pruefung bei jedem Aufruf, auf jeder Unterseite,
+  // im Browser eines echten Besuchers.
+  //
+  // Der wertvolle Teil ist nicht `angewendet`, sondern `verfehlt`: ein Fix, der
+  // ausgeliefert wurde und dessen Ziel es nicht mehr gibt. Genau so sieht ein
+  // Theme-Update aus, das eine Klasse umbenennt — und genau das faellt sonst
+  // erst beim naechsten Scan auf, Wochen spaeter.
+  var bilanz = {
+    alt_texte: { angewendet: 0, verfehlt: 0 },
+    link_labels: { angewendet: 0, verfehlt: 0 },
+    struktur: { angewendet: 0, verfehlt: 0 },
+    css_regeln: { angewendet: 0, verfehlt: 0 }
+  };
+
   // Basis-Dateiname (klein) inkl. Entfernung der WP-Größensuffixe (-300x200).
   function norm(p) {
     if (!p) return '';
@@ -69,7 +87,21 @@
       var cur = img.getAttribute('alt');
       if (cur && cur.trim() !== '') continue; // vorhandenes alt nie überschreiben
       var alt = altFor(img);
-      if (alt) img.setAttribute('alt', alt);
+      if (alt) { img.setAttribute('alt', alt); bilanz.alt_texte.angewendet++; }
+    }
+    // Verfehlt: ein freigegebener Alt-Text, dessen Bild auf dieser Seite nicht
+    // (mehr) vorkommt. Auf Unterseiten ist das normal — deshalb wird es
+    // gezaehlt und nicht gemeldet; erst die Auswertung ueber viele Aufrufe
+    // zeigt, ob ein Bild ueberall verschwunden ist.
+    var gesehen = {};
+    for (var k = 0; k < imgs.length; k++) {
+      var q = norm(imgs[k].getAttribute('src') || imgs[k].currentSrc || '');
+      if (q) gesehen[q] = 1;
+    }
+    for (var schluessel in map) {
+      if (Object.prototype.hasOwnProperty.call(map, schluessel) && !gesehen[schluessel]) {
+        bilanz.alt_texte.verfehlt++;
+      }
     }
   }
 
@@ -152,15 +184,19 @@
       if (!f || !f.selector || !f.attribut) continue;
       var ziele;
       try { ziele = document.querySelectorAll(f.selector); }
-      catch (e) { continue; }   // Selektor aus fremdem Markup
+      catch (e) { bilanz.struktur.verfehlt++; continue; }  // ungueltiger Selektor
+      // Kein Treffer heisst: das Ziel gibt es auf dieser Seite nicht mehr. Das
+      // ist die Regressionsmeldung, auf die es ankommt — genau so sieht ein
+      // Theme-Update aus, das eine Klasse umbenannt hat.
+      if (!ziele.length) { bilanz.struktur.verfehlt++; continue; }
       for (var j = 0; j < ziele.length; j++) {
         var el = ziele[j];
         // Das viewport-Meta ist der einzige Fall, in dem ueberschrieben wird:
         // dort steht die Zoom-Sperre, die weg soll. Alles andere guarded.
         if (f.attribut === 'content' && el.tagName === 'META') {
-          el.setAttribute('content', f.wert); gesetzt++;
+          el.setAttribute('content', f.wert); gesetzt++; bilanz.struktur.angewendet++;
         } else if (!el.getAttribute(f.attribut)) {
-          el.setAttribute(f.attribut, f.wert); gesetzt++;
+          el.setAttribute(f.attribut, f.wert); gesetzt++; bilanz.struktur.angewendet++;
         }
       }
     }
@@ -176,7 +212,15 @@
       '.complyo-skip-link:focus{left:0;}';
     for (var i = 0; i < cssRules.length; i++) {
       var r = cssRules[i];
-      if (r && r.selector && r.declarations) css += r.selector + '{' + r.declarations + '}';
+      if (!r || !r.selector || !r.declarations) continue;
+      css += r.selector + '{' + r.declarations + '}';
+      // Trifft die Regel auf dieser Seite ueberhaupt etwas? Eine Kontrastregel
+      // ohne Ziel ist entweder eine Unterseite ohne dieses Element — oder ein
+      // Selektor, den ein Theme-Update zerlegt hat.
+      var trifft = 0;
+      try { trifft = document.querySelectorAll(r.selector).length; } catch (e) { trifft = -1; }
+      if (trifft > 0) bilanz.css_regeln.angewendet++;
+      else if (trifft < 0) bilanz.css_regeln.verfehlt++;
     }
     var style = document.createElement('style');
     style.id = 'complyo-a11y-style';
@@ -216,7 +260,7 @@
       var txt = (a.textContent || '').trim();
       if (!txt) continue;
       var label = labelForLink(txt, a.getAttribute('href') || '');
-      if (label) a.setAttribute('aria-label', label);
+      if (label) { a.setAttribute('aria-label', label); bilanz.link_labels.angewendet++; }
     }
   }
 
@@ -277,6 +321,56 @@
     cssRules = d.css_rules || [];
   }
 
+  // ---- Rueckmeldung an complyo ----------------------------------------------
+  //
+  // Was gemeldet wird: der Pfad (ohne Parameter und Anker) und Zaehler. Sonst
+  // nichts. Keine Kennung, kein Verweis, kein Zeitstempel des Besuchers — die
+  // Meldung sagt etwas ueber die SEITE aus, nicht ueber den Menschen davor.
+  // Deshalb braucht sie auch keine Einwilligung: sie verarbeitet keine
+  // personenbezogenen Daten.
+  //
+  // Einmal je Seite und Sitzung. Ein Besucher, der zehnmal blaettert, erzeugt
+  // zehn Pfade, aber keine zehn Meldungen derselben Seite.
+  function melde() {
+    var pfad;
+    try {
+      pfad = location.pathname.slice(0, 200);
+      var schluessel = 'complyo_wirkung_' + siteId + pfad;
+      if (sessionStorage.getItem(schluessel)) return;
+      sessionStorage.setItem(schluessel, '1');
+    } catch (e) { return; }   // Speicher gesperrt: dann eben keine Meldung
+
+    var daten = {
+      pfad: pfad,
+      alt_texte: bilanz.alt_texte,
+      link_labels: bilanz.link_labels,
+      struktur: bilanz.struktur,
+      css_regeln: bilanz.css_regeln,
+      erwartet: {
+        alt_texte: Object.keys(map).length,
+        link_labels: linkFixes.length,
+        struktur: strukturFixes.length,
+        css_regeln: cssRules.length
+      }
+    };
+
+    var url = apiBase.replace(/\/+$/, '') +
+      '/api/wirkung/' + encodeURIComponent(siteId);
+    try {
+      var koerper = JSON.stringify(daten);
+      // sendBeacon haelt die Meldung am Leben, wenn der Besucher sofort
+      // weiterklickt. Ohne Fallback waere die Aussage auf schnellen Seiten
+      // systematisch verzerrt.
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(url, new Blob([koerper], { type: 'application/json' }));
+      } else {
+        fetch(url, { method: 'POST', body: koerper, keepalive: true,
+                     headers: { 'content-type': 'application/json' } })
+          .catch(function () {});
+      }
+    } catch (e) { /* fail-silent: eine Messung darf nie die Seite stoeren */ }
+  }
+
   function load() {
     var url = apiBase.replace(/\/+$/, '') +
       '/api/accessibility/fix-manifest/' + encodeURIComponent(siteId);
@@ -291,6 +385,9 @@
         // Nach-Hydration-Sicherheitsnetz für späte SPA-Renders:
         setTimeout(apply, 1000);
         setTimeout(apply, 3000);
+        // Erst melden, wenn auch spaete Renders versorgt sind — sonst zaehlt
+        // die Bilanz einen halben Seitenaufbau.
+        setTimeout(melde, 3500);
       })
       .catch(function () { /* fail-silent */ });
   }
