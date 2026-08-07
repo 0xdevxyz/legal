@@ -201,11 +201,20 @@ STRUKTUR_ANWENDEN_JS = r"""
   // Guarded wie ueberall: nur setzen, wo nichts steht.
   let gesetzt = 0;
   for (const f of fixes) {
+    // Ein fehlender <title> existiert nicht — er wird angelegt.
+    if (f.attribut === '__text__' && f.selector === 'title' &&
+        !document.querySelector('title')) {
+      const t = document.createElement('title');
+      document.head.appendChild(t);
+    }
     let ziele = [];
     try { ziele = Array.from(document.querySelectorAll(f.selector)); }
     catch (e) { continue; }
     for (const el of ziele) {
-      if (f.attribut === 'content' && el.tagName === 'META') {
+      if (f.attribut === '__text__') {
+        // <title> traegt keinen Attributwert, sondern Text.
+        el.textContent = f.wert; gesetzt++;
+      } else if (f.attribut === 'content' && el.tagName === 'META') {
         el.setAttribute('content', f.wert); gesetzt++;
       } else if (!el.hasAttribute(f.attribut) || !el.getAttribute(f.attribut)) {
         el.setAttribute(f.attribut, f.wert); gesetzt++;

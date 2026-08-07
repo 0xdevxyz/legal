@@ -9,9 +9,13 @@ Messung ist das Einzige, was den Unterschied zeigt.
 """
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 from compliance_engine.axe_scanner import AXE_CORE_JS, axe_tags_fuer
+from compliance_engine.formular_fixes import (
+    FORMULARFELDER_JS, beschriftung_fuer_feld, titel_aus_seite,
+)
 from compliance_engine.struktur_fixes import (
     HAUPTINHALT_JS, STRUKTUR_ANWENDEN_JS, baue_struktur_css, baue_struktur_fixes,
 )
@@ -22,6 +26,8 @@ logger = logging.getLogger(__name__)
 BETROFFENE_REGELN = [
     "region", "landmark-one-main", "meta-viewport", "frame-title",
     "scrollable-region-focusable", "link-in-text-block",
+    # Formularseite: Beschriftungen, Seitentitel, ARIA-Elternrollen.
+    "label", "select-name", "document-title",
 ]
 
 SETZZEIT_MS = 300
@@ -73,6 +79,8 @@ async def verifizierte_struktur_fixes(page) -> Dict[str, Any]:
 
     fixes = baue_struktur_fixes(vorher, haupt_selektor)
     css_rules = baue_struktur_css(vorher)
+    fixes.extend(await _formular_fixes(page, vorher))
+    fixes.extend(await _titel_fix(page, vorher))
 
     if not fixes and not css_rules:
         anzahl = sum(len(v) for v in vorher.values())
@@ -123,3 +131,66 @@ async def verifizierte_struktur_fixes(page) -> Dict[str, Any]:
         "je_regel": je_regel,
         "haupt_selektor": haupt_selektor,
     }
+
+
+# =============================================================================
+# Formularseite
+# =============================================================================
+
+async def _formular_fixes(page, befunde) -> List[Dict[str, Any]]:
+    """Beschriftungen fuer Felder ohne Label — oder aria-hidden fuer Koeder."""
+    knoten = befunde.get("label", []) + befunde.get("select-name", [])
+    selektoren = [(n.get("target") or [None])[0] for n in knoten]
+    selektoren = [s for s in selektoren if s]
+    if not selektoren:
+        return []
+
+    await page.evaluate("(s) => { window.__complyoFeldSelektoren = s; }", selektoren)
+    try:
+        felder = await page.evaluate(FORMULARFELDER_JS)
+    except Exception as e:
+        logger.warning(f"Formularfelder nicht lesbar: {e}")
+        return []
+
+    fixes: List[Dict[str, Any]] = []
+    for feld in felder:
+        vorschlag = beschriftung_fuer_feld(feld["attribute"], feld["umgebungstext"])
+        if not vorschlag:
+            continue
+        if vorschlag.get("honeypot"):
+            # Ein Spam-Koeder braucht kein Label, sondern Unsichtbarkeit fuer
+            # alle. Ihn zu beschriften waere formal richtig und praktisch
+            # falsch: der Screenreader saegte ein Feld an, das niemand
+            # ausfuellen darf.
+            fixes.append({
+                "selector": feld["selector"], "attribut": "aria-hidden",
+                "wert": "true", "regel": "label",
+                "begruendung": "Spam-Koeder — fuer alle unsichtbar statt beschriftet.",
+            })
+            continue
+        fixes.append({
+            "selector": feld["selector"], "attribut": "aria-label",
+            "wert": vorschlag["label"], "regel": "label",
+            "begruendung": f"Beschriftung abgeleitet aus: {vorschlag['quelle']}.",
+        })
+    return fixes
+
+
+
+async def _titel_fix(page, befunde) -> List[Dict[str, Any]]:
+    """Fehlender `<title>` — WCAG 2.4.2, der erste Text, den ein Screenreader ansagt."""
+    if not befunde.get("document-title"):
+        return []
+    daten = await page.evaluate("""() => ({
+        h1: (document.querySelector('h1') || {}).innerText || '',
+        og: (document.querySelector('meta[property="og:title"]') || {}).content || '',
+        host: location.hostname,
+    })""")
+    titel = titel_aus_seite(daten["h1"], daten["og"], daten["host"])
+    if not titel:
+        return []
+    return [{
+        "selector": "title", "attribut": "__text__", "wert": titel,
+        "regel": "document-title",
+        "begruendung": "Seite ohne Titel — abgeleitet aus der Hauptueberschrift.",
+    }]
