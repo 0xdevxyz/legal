@@ -134,6 +134,68 @@ async def _run_axe_core_safe(url: str, timeout: float = 35.0) -> Optional[List[D
             logger.warning(f"⚠️ axe-core lieferte kein valides Ergebnis: {result.by_impact.get('error')}")
             return None
         logger.info(f"✅ axe-core: {result.total_violations} Violations → {len(axe_issues)} Issues")
+
+        # Verifizierte Kontrast-Reparaturen mitnehmen. Sie entstehen im selben
+        # Browserlauf (die Nachmessung braucht die geoeffnete Seite) und werden
+        # als eigener Befund durchgereicht, damit der Post-Scan-Prozessor sie zu
+        # einem dokumentweiten Fix machen kann — ohne dass jede Schicht
+        # dazwischen eine neue Signatur braucht.
+        sf = getattr(result, "struktur_fixes", None)
+        if sf and (sf.get("fixes") or sf.get("css_rules")):
+            axe_issues.append({
+                "category": "barrierefreiheit",
+                "severity": "info",
+                "title": "Struktur-Reparatur vorbereitet",
+                "description": (
+                    f"{sf['vorher']} Struktur-Fundstellen, davon "
+                    f"{sf['vorher'] - sf['nachher']} im Browser nachgemessen behoben "
+                    f"(Hauptinhalt, Zoom-Sperre, Einbettungen)."
+                ),
+                "risk_euro": 0,
+                "recommendation": "Wird ueber Widget bzw. Plugin ausgeliefert.",
+                "legal_basis": "WCAG 2.1 (1.3.1, 1.4.4, 4.1.2), BFSG §12",
+                "auto_fixable": True,
+                "is_missing": False,
+                "rechtspflicht": True,
+                "metadata": {
+                    "source": "complyo-struktur-fix",
+                    "fixes": sf["fixes"],
+                    "css_rules": sf["css_rules"],
+                    "haupt_selektor": sf.get("haupt_selektor"),
+                    "vorher": sf["vorher"],
+                    "nachher": sf["nachher"],
+                },
+            })
+
+        kf = getattr(result, "kontrast_fixes", None)
+        if kf and kf.get("entscheidungen"):
+            from compliance_engine.kontrast_fixes import als_css_regeln
+            regeln = als_css_regeln(kf["entscheidungen"])
+            if regeln:
+                axe_issues.append({
+                    "category": "barrierefreiheit",
+                    "severity": "info",
+                    "title": "Kontrast-Reparatur vorbereitet",
+                    "description": (
+                        f"{kf['vorher']} Kontrast-Fundstellen lassen sich ueber "
+                        f"{len(kf['entscheidungen'])} Farbentscheidung(en) beheben "
+                        f"({kf['vorher'] - kf['nachher']} im Browser nachgemessen)."
+                    ),
+                    "risk_euro": 0,
+                    "recommendation": "Farben in der Worklist pruefen und freigeben.",
+                    "legal_basis": "WCAG 2.1 (1.4.3), BFSG §12",
+                    "auto_fixable": True,
+                    "is_missing": False,
+                    "rechtspflicht": True,
+                    "metadata": {
+                        "source": "complyo-kontrast-fix",
+                        "css_rules": regeln,
+                        "entscheidungen": kf["entscheidungen"],
+                        "vorher": kf["vorher"],
+                        "nachher": kf["nachher"],
+                    },
+                })
+
         return axe_issues
     except ImportError:
         logger.warning("⚠️ axe-core/Playwright nicht verfügbar – Scan läuft heuristisch weiter")

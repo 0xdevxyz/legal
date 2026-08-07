@@ -1,0 +1,614 @@
+[
+  {
+    "fixes": [
+      {
+        "selector": "div.wrapper",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 5,
+    "nachher": 2,
+    "je_regel": {
+      "landmark-one-main": [
+        1,
+        0
+      ],
+      "region": [
+        4,
+        2
+      ]
+    },
+    "haupt_selektor": "div.wrapper",
+    "datei": "bauschlosserei-claus.de.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "#sp-page",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 2,
+    "nachher": 0,
+    "je_regel": {
+      "landmark-one-main": [
+        1,
+        0
+      ],
+      "region": [
+        1,
+        0
+      ]
+    },
+    "haupt_selektor": "#sp-page",
+    "datei": "boehme-energie.com.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "div.homepage-blocks",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      },
+      {
+        "selector": "meta[name=viewport]",
+        "attribut": "content",
+        "wert": "width=device-width, initial-scale=1",
+        "regel": "meta-viewport",
+        "begruendung": "Zoom war gesperrt (WCAG 1.4.4 verlangt 200 %)."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 24,
+    "nachher": 0,
+    "je_regel": {
+      "region": [
+        22,
+        0
+      ],
+      "landmark-one-main": [
+        1,
+        0
+      ],
+      "meta-viewport": [
+        1,
+        0
+      ]
+    },
+    "haupt_selektor": "div.homepage-blocks",
+    "datei": "boehme.it.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "div.wpb-content-wrapper",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 10,
+    "nachher": 0,
+    "je_regel": {
+      "landmark-one-main": [
+        1,
+        0
+      ],
+      "region": [
+        9,
+        0
+      ]
+    },
+    "haupt_selektor": "div.wpb-content-wrapper",
+    "datei": "breathhealingart.com.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "div.site-container",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 2,
+    "nachher": 0,
+    "je_regel": {
+      "landmark-one-main": [
+        1,
+        0
+      ],
+      "region": [
+        1,
+        0
+      ]
+    },
+    "haupt_selektor": "div.site-container",
+    "datei": "cb-reisen.de.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "#page_wrapper",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      },
+      {
+        "selector": "meta[name=viewport]",
+        "attribut": "content",
+        "wert": "width=device-width, initial-scale=1",
+        "regel": "meta-viewport",
+        "begruendung": "Zoom war gesperrt (WCAG 1.4.4 verlangt 200 %)."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 15,
+    "nachher": 1,
+    "je_regel": {
+      "region": [
+        14,
+        1
+      ],
+      "meta-viewport": [
+        1,
+        0
+      ]
+    },
+    "haupt_selektor": "#page_wrapper",
+    "datei": "container-spindler.de.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "#kontakt",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      },
+      {
+        "selector": "iframe",
+        "attribut": "title",
+        "wert": "Karte von Google Maps",
+        "regel": "frame-title",
+        "begruendung": "Einbettung ohne Titel — abgeleitet aus der Quelle."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 17,
+    "nachher": 7,
+    "je_regel": {
+      "region": [
+        15,
+        7
+      ],
+      "landmark-one-main": [
+        1,
+        0
+      ],
+      "frame-title": [
+        1,
+        0
+      ]
+    },
+    "haupt_selektor": "#kontakt",
+    "datei": "doener-bistro-baku.de.html"
+  },
+  {
+    "fixes": [],
+    "css_rules": [],
+    "vorher": 2,
+    "nachher": 2,
+    "je_regel": {},
+    "haupt_selektor": null,
+    "datei": "ferienpark-waldenburg.de.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "#top",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 28,
+    "nachher": 1,
+    "je_regel": {
+      "landmark-one-main": [
+        1,
+        0
+      ],
+      "region": [
+        27,
+        1
+      ]
+    },
+    "haupt_selektor": "#top",
+    "datei": "fv-wolkenburg.de.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "meta[name=viewport]",
+        "attribut": "content",
+        "wert": "width=device-width, initial-scale=1",
+        "regel": "meta-viewport",
+        "begruendung": "Zoom war gesperrt (WCAG 1.4.4 verlangt 200 %)."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 1,
+    "nachher": 0,
+    "je_regel": {
+      "meta-viewport": [
+        1,
+        0
+      ]
+    },
+    "haupt_selektor": null,
+    "datei": "ghp-ingenieure.de.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": ".reviews-scroll",
+        "attribut": "tabindex",
+        "wert": "0",
+        "regel": "scrollable-region-focusable",
+        "begruendung": "Scrollbereich war per Tastatur nicht erreichbar."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 57,
+    "nachher": 56,
+    "je_regel": {
+      "landmark-one-main": [
+        1,
+        1
+      ],
+      "scrollable-region-focusable": [
+        1,
+        0
+      ],
+      "region": [
+        55,
+        55
+      ]
+    },
+    "haupt_selektor": null,
+    "datei": "konditorei-limbach.de.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "meta[name=viewport]",
+        "attribut": "content",
+        "wert": "width=device-width, initial-scale=1",
+        "regel": "meta-viewport",
+        "begruendung": "Zoom war gesperrt (WCAG 1.4.4 verlangt 200 %)."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 1,
+    "nachher": 0,
+    "je_regel": {
+      "meta-viewport": [
+        1,
+        0
+      ]
+    },
+    "haupt_selektor": null,
+    "datei": "lindner-maschinenbau.de.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "#scroll-to-top",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 2,
+    "nachher": 1,
+    "je_regel": {
+      "region": [
+        2,
+        1
+      ]
+    },
+    "haupt_selektor": "#scroll-to-top",
+    "datei": "naturheilpraxis-decker.de.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "div.wpb-content-wrapper",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 20,
+    "nachher": 0,
+    "je_regel": {
+      "region": [
+        20,
+        0
+      ]
+    },
+    "haupt_selektor": "div.wpb-content-wrapper",
+    "datei": "naturheilzentrum-freitag.de.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "div.wpb-content-wrapper",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      },
+      {
+        "selector": "meta[name=viewport]",
+        "attribut": "content",
+        "wert": "width=device-width, initial-scale=1",
+        "regel": "meta-viewport",
+        "begruendung": "Zoom war gesperrt (WCAG 1.4.4 verlangt 200 %)."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 21,
+    "nachher": 0,
+    "je_regel": {
+      "region": [
+        20,
+        0
+      ],
+      "meta-viewport": [
+        1,
+        0
+      ]
+    },
+    "haupt_selektor": "div.wpb-content-wrapper",
+    "datei": "osteopathie-limbach.de.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "#complyo-main",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 9,
+    "nachher": 0,
+    "je_regel": {
+      "landmark-one-main": [
+        1,
+        0
+      ],
+      "region": [
+        8,
+        0
+      ]
+    },
+    "haupt_selektor": "#complyo-main",
+    "datei": "partyservice-wanka.de.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "div.art-box-body.art-sheet-body",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 20,
+    "nachher": 0,
+    "je_regel": {
+      "landmark-one-main": [
+        1,
+        0
+      ],
+      "region": [
+        19,
+        0
+      ]
+    },
+    "haupt_selektor": "div.art-box-body.art-sheet-body",
+    "datei": "physiomueller.de.html"
+  },
+  {
+    "fixes": [],
+    "css_rules": [],
+    "vorher": 0,
+    "nachher": 0,
+    "je_regel": {},
+    "haupt_selektor": null,
+    "datei": "reinhardt.coffee.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "#perspective",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      },
+      {
+        "selector": "meta[name=viewport]",
+        "attribut": "content",
+        "wert": "width=device-width, initial-scale=1",
+        "regel": "meta-viewport",
+        "begruendung": "Zoom war gesperrt (WCAG 1.4.4 verlangt 200 %)."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 38,
+    "nachher": 2,
+    "je_regel": {
+      "region": [
+        37,
+        2
+      ],
+      "meta-viewport": [
+        1,
+        0
+      ]
+    },
+    "haupt_selektor": "#perspective",
+    "datei": "rhino.cafe.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "div.elementor.elementor-12735",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 19,
+    "nachher": 0,
+    "je_regel": {
+      "region": [
+        19,
+        0
+      ]
+    },
+    "haupt_selektor": "div.elementor.elementor-12735",
+    "datei": "spedition-mahn.de.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "#wp-block-themeisle-blocks-advanced-column-7a21d599",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 6,
+    "nachher": 0,
+    "je_regel": {
+      "landmark-one-main": [
+        1,
+        0
+      ],
+      "region": [
+        5,
+        0
+      ]
+    },
+    "haupt_selektor": "#wp-block-themeisle-blocks-advanced-column-7a21d599",
+    "datei": "susanne-fischer.online.html"
+  },
+  {
+    "fixes": [
+      {
+        "selector": "#main-content",
+        "attribut": "role",
+        "wert": "main",
+        "regel": "region",
+        "begruendung": "Inhalt ausserhalb jeder Landmark — der Container wurde aus den bemaengelten Knoten bestimmt, nicht geraten."
+      },
+      {
+        "selector": "meta[name=viewport]",
+        "attribut": "content",
+        "wert": "width=device-width, initial-scale=1.0",
+        "regel": "meta-viewport",
+        "begruendung": "Zoom war gesperrt (WCAG 1.4.4 verlangt 200 %)."
+      }
+    ],
+    "css_rules": [],
+    "vorher": 3,
+    "nachher": 0,
+    "je_regel": {
+      "region": [
+        1,
+        0
+      ],
+      "landmark-one-main": [
+        1,
+        0
+      ],
+      "meta-viewport": [
+        1,
+        0
+      ]
+    },
+    "haupt_selektor": "#main-content",
+    "datei": "tc-limbach.de.html"
+  },
+  {
+    "fixes": [],
+    "css_rules": [],
+    "vorher": 50,
+    "nachher": 50,
+    "je_regel": {},
+    "haupt_selektor": null,
+    "datei": "zahnarztpraxis-mittweida.de.html"
+  },
+  {
+    "fixes": [],
+    "css_rules": [
+      {
+        "selector": ".elementor-element-0e9f8be > .elementor-widget-container > p > a[href$=\"leistungen\"]",
+        "declarations": "text-decoration: underline !important;"
+      },
+      {
+        "selector": ".elementor-element-4471b1e > .elementor-widget-container > p > a[href$=\"leistungen\"]",
+        "declarations": "text-decoration: underline !important;"
+      },
+      {
+        "selector": ".elementor-element-879f7cd > .elementor-widget-container > p > a[href$=\"leistungen\"]",
+        "declarations": "text-decoration: underline !important;"
+      }
+    ],
+    "vorher": 3,
+    "nachher": 0,
+    "je_regel": {
+      "link-in-text-block": [
+        3,
+        0
+      ]
+    },
+    "haupt_selektor": null,
+    "datei": "zua-zwickau.de.html"
+  }
+]

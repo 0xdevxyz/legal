@@ -248,6 +248,58 @@ async def approve_link(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class KontrastFreigabeRequest(BaseModel):
+    """Freigabe EINER Farbentscheidung."""
+    site_id: str
+    index: int
+    approved: bool
+    eigene_farbe: Optional[str] = None
+
+
+@router.post("/approve-kontrast")
+async def approve_kontrast(
+    request: KontrastFreigabeRequest,
+    current_user: Dict[str, Any] = Depends(get_required_user)
+):
+    """
+    Gibt eine Farbentscheidung frei oder lehnt sie ab.
+
+    Anders als Alt-Texte betrifft eine Farbe die Gestaltung — deshalb wird je
+    Entscheidung freigegeben, nicht je Seite, und `eigene_farbe` erlaubt einen
+    abweichenden Ton. Der wird geprueft: erreicht er die geforderte Ratio
+    nicht, lehnt der Endpunkt ab. Sonst waere "erfuellt WCAG 2.1 AA" eine
+    Behauptung, die der naechste Klick widerlegt.
+    """
+    await require_site_ownership(request.site_id, current_user)
+    try:
+        user_id = current_user.get("user_id") or current_user.get("id")
+        saver = AccessibilityFixSaver(db_pool)
+        try:
+            ergebnis = await saver.set_kontrast_freigabe(
+                site_id=request.site_id,
+                index=request.index,
+                status='approved' if request.approved else 'rejected',
+                eigene_farbe=request.eigene_farbe,
+                user_id=user_id,
+            )
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if not ergebnis["ok"]:
+            raise HTTPException(status_code=422, detail=ergebnis["fehler"])
+        return {
+            "success": True,
+            "index": request.index,
+            "status": 'approved' if request.approved else 'rejected',
+            "entscheidung": ergebnis["entscheidung"],
+            "freigegeben": ergebnis["freigegeben"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error approving contrast decision: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/worklist")
 async def accessibility_worklist(
     site_id: str = Query(..., description="Site ID"),
@@ -267,10 +319,21 @@ async def accessibility_worklist(
         link_pending = await saver.get_link_fixes_for_site(site_id, status='pending')
         link_approved = await saver.get_link_fixes_for_site(site_id, status='approved')
         doc_fixes = await saver.get_document_fixes_for_site(site_id, status='approved')
+        # Farbentscheidungen ohne Status-Filter: die Worklist muss gerade das
+        # Offene zeigen, sonst gaebe es nichts freizugeben.
+        kontrast = await saver.get_kontrast_entscheidungen(site_id)
+
+        # Wie viele der freigegebenen Fixes der PR-Weg tatsaechlich in Code
+        # schreiben kann. Die Regel steht im Patch-Builder, nicht hier und
+        # nicht im Frontend — sonst laeuft die Zahl auf dem Knopf irgendwann
+        # gegen das, was der Builder wirklich tut.
+        from fix_patch_builder import zaehle_pr_faehig
+        pr_deliverable = zaehle_pr_faehig(alt_approved, link_approved, doc_fixes)
 
         return {
             "success": True,
             "site_id": site_id,
+            "pr_deliverable": pr_deliverable,
             "alt_texts": {
                 "pending": alt_pending,
                 # Live-Eintraege mitliefern: der Kunde kann einen freigegebenen
@@ -290,8 +353,21 @@ async def accessibility_worklist(
                 "items": doc_fixes,          # auto-approved, read-only
                 "count": len(doc_fixes),
             },
+            "kontrast": {
+                "entscheidungen": kontrast,
+                "offen": len([e for e in kontrast if e.get("freigabe") == "pending"]),
+                "freigegeben": len([e for e in kontrast if e.get("freigabe") == "approved"]),
+                # Was eine Freigabe wert ist: so viele Fundstellen haengen an
+                # den noch offenen Entscheidungen.
+                "stellen_offen": sum(
+                    int(e.get("stellen") or 0) for e in kontrast
+                    if e.get("freigabe") == "pending"
+                ),
+            },
             "totals": {
-                "needs_review": len(alt_pending) + len(link_pending),
+                "needs_review": (len(alt_pending) + len(link_pending)
+                                 + len([e for e in kontrast
+                                        if e.get("freigabe") == "pending"])),
                 "live": len(alt_approved) + len(link_approved) + len(doc_fixes),
             },
         }

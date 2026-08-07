@@ -18,6 +18,7 @@ import { apiClient } from '@/lib/api';
 import { useActiveSite } from '@/contexts/ActiveSiteContext';
 import { generateSiteId } from '@/lib/siteIdUtils';
 import PullRequestCard from './PullRequestCard';
+import KontrastFreigabe, { type KontrastEntscheidung } from './KontrastFreigabe';
 
 interface AltItem {
   id: number;
@@ -48,12 +49,32 @@ interface DocItem {
   confidence: number;
 }
 
+/**
+ * Was der PR-Weg von den freigegebenen Fixes wirklich in Code schreiben kann.
+ * Kommt vom Backend (fix_patch_builder.zaehle_pr_faehig) — die Regel darf hier
+ * nicht nachgebaut werden, sonst verspricht der Knopf irgendwann etwas
+ * anderes, als der Patch-Builder liefert.
+ */
+interface PrDeliverable {
+  deliverable: number;
+  manifest_only: number;
+}
+
+interface KontrastBlock {
+  entscheidungen: KontrastEntscheidung[];
+  offen: number;
+  freigegeben: number;
+  stellen_offen: number;
+}
+
 interface Worklist {
   success: boolean;
   alt_texts: { pending: AltItem[]; approved: AltItem[]; approved_count: number; pending_count: number };
   link_fixes: { pending: LinkItem[]; approved: LinkItem[]; approved_count: number; pending_count: number };
   document_fixes: { items: DocItem[]; count: number };
   totals: { needs_review: number; live: number };
+  pr_deliverable?: PrDeliverable;
+  kontrast?: KontrastBlock;
 }
 
 const EMPTY: Worklist = {
@@ -62,6 +83,8 @@ const EMPTY: Worklist = {
   link_fixes: { pending: [], approved: [], approved_count: 0, pending_count: 0 },
   document_fixes: { items: [], count: 0 },
   totals: { needs_review: 0, live: 0 },
+  pr_deliverable: { deliverable: 0, manifest_only: 0 },
+  kontrast: { entscheidungen: [], offen: 0, freigegeben: 0, stellen_offen: 0 },
 };
 
 const DOC_LABEL: Record<string, string> = {
@@ -291,6 +314,16 @@ export default function AccessibilityWorklist() {
         )}
       </section>
 
+      {/* Farben & Kontrast — die einzigen Fixes, die das Aussehen aendern,
+          deshalb je Entscheidung freizugeben statt automatisch live. */}
+      {data.kontrast && data.kontrast.entscheidungen.length > 0 && (
+        <KontrastFreigabe
+          siteId={siteId}
+          entscheidungen={data.kontrast.entscheidungen}
+          onGeaendert={load}
+        />
+      )}
+
       {/* Dokumentweite Fixes (read-only, auto-sicher) */}
       <section>
         <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-200 mb-3">
@@ -318,7 +351,8 @@ export default function AccessibilityWorklist() {
           Lebt bewusst hier — Freigeben und Ausliefern sind ein Arbeitsgang. */}
       <PullRequestCard
         siteId={siteId}
-        approvedCount={data.alt_texts.approved_count + data.link_fixes.approved_count + data.document_fixes.count}
+        approvedCount={data.pr_deliverable?.deliverable ?? 0}
+        manifestOnlyCount={data.pr_deliverable?.manifest_only ?? 0}
       />
     </div>
   );

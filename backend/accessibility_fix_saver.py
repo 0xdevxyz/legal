@@ -338,6 +338,11 @@ class AccessibilityFixSaver:
                                 scan_id = EXCLUDED.scan_id,
                                 page_url = EXCLUDED.page_url,
                                 source = EXCLUDED.source,
+                                status = EXCLUDED.status,
+                                approved_at = CASE
+                                    WHEN EXCLUDED.status = 'approved'
+                                    THEN COALESCE(accessibility_document_fixes.approved_at, NOW())
+                                    ELSE NULL END,
                                 updated_at = NOW()
                             """,
                             site_id,
@@ -349,7 +354,13 @@ class AccessibilityFixSaver:
                             fix.get('wcag_criterion'),
                             fix.get('confidence', 1.0),
                             fix.get('source', 'scan'),
-                            status,
+                            # Ein Fix darf seinen Status selbst bestimmen. Der
+                            # Parameter bleibt die Vorgabe fuer alle uebrigen.
+                            # Grund: `kontrast-css` aendert das Aussehen der
+                            # Kundenseite und darf nicht wie ein Skip-Link
+                            # stillschweigend live gehen — der Betreiber sieht
+                            # eine geaenderte Linkfarbe sofort.
+                            fix.get('status') or status,
                         )
                         saved += 1
                     except Exception as e:
@@ -533,6 +544,139 @@ class AccessibilityFixSaver:
                     status, fix_id
                 )
             return True
+
+    async def set_kontrast_freigabe(
+        self,
+        site_id: str,
+        index: int,
+        status: str,
+        eigene_farbe: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Gibt EINE Farbentscheidung frei oder lehnt sie ab.
+
+        Warum je Entscheidung und nicht je Zeile: die Tabelle haelt genau eine
+        Zeile je (site_id, fix_type), aber darin stecken mehrere Farbpaare. Ein
+        Betreiber will seine Linkfarbe vielleicht aendern und die Schriftfarbe
+        im Footer nicht — alles-oder-nichts waere hier die falsche Frage.
+
+        Ausgeliefert wird immer nur, was freigegeben ist: `payload["rules"]`
+        wird bei jeder Freigabe aus den zugestimmten Entscheidungen neu
+        gebaut, und die Zeile bleibt 'pending', solange keine einzige zugestimmt
+        ist. Das Manifest liefert nur 'approved' aus — solange also niemand
+        klickt, aendert sich auf der Kundenseite nichts.
+
+        `eigene_farbe` erlaubt einen abweichenden Ton. Er wird NICHT blind
+        uebernommen: erreicht er die geforderte Ratio nicht, wird die Freigabe
+        abgelehnt. Eine Zusage "erfuellt WCAG" darf nicht daran scheitern, dass
+        jemand eine huebschere Farbe eingetippt hat.
+
+        Returns:
+            {"ok": bool, "fehler": str|None, "entscheidung": dict|None,
+             "freigegeben": int}
+        """
+        from compliance_engine.kontrast_fixes import (
+            als_css_regeln, kontrast as _kontrast, _hex_zu_rgb,
+        )
+        import json as _json
+
+        if status not in ("approved", "rejected", "pending"):
+            return {"ok": False, "fehler": f"Unbekannter Status: {status}"}
+
+        async with self.db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT id, user_id, payload FROM accessibility_document_fixes
+                   WHERE site_id = $1 AND fix_type = 'kontrast-css'""",
+                site_id,
+            )
+            if not row:
+                return {"ok": False, "fehler": "Keine Kontrast-Entscheidungen für diese Site."}
+            if (user_id is not None and row["user_id"] is not None
+                    and str(row["user_id"]) != str(user_id)):
+                raise PermissionError("not authorized for this fix")
+
+            payload = row["payload"]
+            if isinstance(payload, str):
+                payload = _json.loads(payload)
+            entscheidungen = payload.get("entscheidungen") or []
+            if not 0 <= index < len(entscheidungen):
+                return {"ok": False, "fehler": "Diese Entscheidung gibt es nicht."}
+
+            eintrag = entscheidungen[index]
+
+            if eigene_farbe and status == "approved":
+                vg = _hex_zu_rgb(eigene_farbe)
+                hg = _hex_zu_rgb(eintrag.get("hintergrund", ""))
+                if not vg or not hg:
+                    return {"ok": False, "fehler": "Farbe nicht lesbar (erwartet z. B. #3a5f8a)."}
+                erreicht = round(_kontrast(vg, hg), 2)
+                ziel = float(eintrag.get("ziel_ratio") or 4.5)
+                if erreicht < ziel:
+                    return {
+                        "ok": False,
+                        "fehler": (
+                            f"{eigene_farbe} erreicht auf {eintrag.get('hintergrund')} nur "
+                            f"{erreicht}:1 — gefordert sind {ziel}:1. Nicht übernommen."
+                        ),
+                    }
+                eintrag["vorschlag"] = eigene_farbe
+                eintrag["neue_ratio"] = erreicht
+                eintrag["quelle_farbe"] = "vom Betreiber gewählt"
+
+            eintrag["freigabe"] = status
+
+            # Nur Zugestimmtes wird ausgeliefert.
+            freigegeben = [e for e in entscheidungen if e.get("freigabe") == "approved"]
+            payload["entscheidungen"] = entscheidungen
+            payload["rules"] = als_css_regeln(
+                [dict(e, bestaetigt=True) for e in freigegeben]
+            )
+
+            zeilen_status = "approved" if freigegeben else "pending"
+            await conn.execute(
+                # $2 wird zweimal gebraucht — einmal als Spaltenwert (varchar),
+                # einmal im Vergleich (text). Ohne die Angabe kann Postgres den
+                # Typ nicht eindeutig herleiten und lehnt die Anweisung ab.
+                """UPDATE accessibility_document_fixes
+                   SET payload = $1, status = $2::varchar,
+                       approved_at = CASE WHEN $2::varchar = 'approved'
+                                          THEN NOW() ELSE NULL END,
+                       updated_at = NOW()
+                   WHERE id = $3""",
+                _json.dumps(payload), zeilen_status, row["id"],
+            )
+
+        logger.info(
+            f"Kontrast-Freigabe site={site_id} #{index} -> {status}; "
+            f"{len(freigegeben)} von {len(entscheidungen)} live"
+        )
+        return {"ok": True, "fehler": None, "entscheidung": eintrag,
+                "freigegeben": len(freigegeben)}
+
+    async def get_kontrast_entscheidungen(self, site_id: str) -> List[Dict[str, Any]]:
+        """Alle Farbentscheidungen einer Site — unabhaengig vom Freigabestand.
+
+        Bewusst ohne Status-Filter: die Worklist muss auch das Offene zeigen,
+        sonst gaebe es nichts zu entscheiden.
+        """
+        import json as _json
+        async with self.db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT payload FROM accessibility_document_fixes
+                   WHERE site_id = $1 AND fix_type = 'kontrast-css'""",
+                site_id,
+            )
+        if not row:
+            return []
+        payload = row["payload"]
+        if isinstance(payload, str):
+            payload = _json.loads(payload)
+        entscheidungen = payload.get("entscheidungen") or []
+        for i, e in enumerate(entscheidungen):
+            e.setdefault("freigabe", "pending")
+            e["index"] = i
+        return entscheidungen
 
     async def get_stats_for_site(
         self,

@@ -433,6 +433,64 @@ class GitHubClient:
         
         return CommitResult(success=False, error="Commit fehlgeschlagen")
     
+    async def apply_new_content(
+        self,
+        owner: str,
+        repo: str,
+        branch: str,
+        file_path: str,
+        new_content: str,
+        commit_message: str,
+        base_sha256: Optional[str] = None,
+    ) -> CommitResult:
+        """
+        Schreibt den fertig berechneten Zielzustand einer Datei.
+
+        Bevorzugter Weg gegenueber `apply_unified_diff`. Der Patch-Builder
+        kennt den gewuenschten Endzustand bereits exakt; ihn in einen Diff zu
+        verwandeln und den hier von Hand wieder anzuwenden, ist eine verlustige
+        Rundreise: `_apply_diff` ist ein vereinfachter Applier ohne
+        Kontextpruefung, und `splitlines()` im Builder gegen `split("\\n")`
+        hier zerlegt CRLF-Dateien unterschiedlich. Das Ergebnis waere still
+        falscher Inhalt in einem Kunden-Repository.
+
+        Statt dessen: Datei erneut lesen, Fingerabdruck gegen den Stand
+        pruefen, auf dem der Patch berechnet wurde, und nur bei Gleichstand
+        schreiben. Aendert jemand die Datei dazwischen, bricht der Patch ab,
+        statt fremde Arbeit zu ueberschreiben.
+        """
+        content, file_sha = await self.get_file_content(owner, repo, file_path, branch)
+        if content is None:
+            return CommitResult(success=False, error=f"Datei '{file_path}' nicht gefunden")
+
+        if base_sha256:
+            import hashlib
+            aktuell = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            if aktuell != base_sha256:
+                return CommitResult(
+                    success=False,
+                    error=(
+                        f"'{file_path}' hat sich seit der Analyse geaendert — "
+                        f"nicht ueberschrieben. Bitte neu scannen."
+                    ),
+                )
+
+        if content == new_content:
+            # Nichts zu tun. Kein leerer Commit, kein Rauschen im PR.
+            return CommitResult(success=False, error=f"'{file_path}': keine Aenderung noetig")
+
+        success, commit_sha = await self.update_file(
+            owner, repo, file_path, new_content, commit_message, branch, file_sha
+        )
+        if success:
+            return CommitResult(
+                success=True,
+                commit_sha=commit_sha,
+                branch_name=branch,
+                files_changed=[file_path],
+            )
+        return CommitResult(success=False, error=f"Commit fuer '{file_path}' fehlgeschlagen")
+
     def _apply_diff(self, original: str, diff: str) -> str:
         """
         Wendet einen Unified Diff auf Text an
@@ -822,23 +880,54 @@ class GitService:
         if not success:
             return PullRequestResult(success=False, error=f"Branch-Erstellung: {result}")
         
-        # 2. Patches committen
+        # 2. Patches committen.
+        #    Vorrang hat `new_content` (der Patch-Builder kennt den Zielzustand
+        #    exakt). `unified_diff` bleibt der Weg fuer Patches, die von aussen
+        #    kommen — der MCP-Agent liefert nur Diffs.
         files_changed = []
+        fehler: List[str] = []
         for patch in patches:
-            if patch.get("unified_diff") and patch.get("file_path"):
-                commit_result = await client.apply_unified_diff(
-                    owner, repo, branch_name,
-                    patch["file_path"],
-                    patch["unified_diff"],
-                    f"fix({patch.get('feature_id', 'a11y')}): {patch.get('description', 'Accessibility fix')[:50]}"
+            pfad = patch.get("file_path")
+            if not pfad:
+                continue
+            nachricht = (
+                f"fix({patch.get('feature_id', 'a11y')}): "
+                f"{patch.get('description', 'Accessibility fix')[:50]}"
+            )
+
+            if patch.get("new_content") is not None:
+                commit_result = await client.apply_new_content(
+                    owner, repo, branch_name, pfad,
+                    patch["new_content"], nachricht,
+                    base_sha256=patch.get("base_sha256"),
                 )
-                if commit_result.success:
-                    files_changed.extend(commit_result.files_changed)
-        
+            elif patch.get("unified_diff"):
+                commit_result = await client.apply_unified_diff(
+                    owner, repo, branch_name, pfad,
+                    patch["unified_diff"], nachricht,
+                )
+            else:
+                continue
+
+            if commit_result.success:
+                files_changed.extend(commit_result.files_changed)
+            else:
+                fehler.append(commit_result.error or f"{pfad}: unbekannter Fehler")
+                logger.warning(f"Patch nicht angewendet — {commit_result.error}")
+
         if not files_changed:
+            # Die Ursache mitgeben statt sie zu verschlucken: "Keine Dateien
+            # geaendert" allein ist fuer den Kunden nicht handlungsfaehig.
+            grund = "; ".join(fehler[:3]) if fehler else "keine anwendbaren Patches"
             return PullRequestResult(
                 success=False,
-                error="Keine Dateien geändert"
+                error=f"Keine Dateien geändert ({grund})"
+            )
+
+        if fehler:
+            logger.warning(
+                f"PR {owner}/{repo}: {len(files_changed)} Datei(en) geaendert, "
+                f"{len(fehler)} Patch(es) uebersprungen"
             )
         
         # 3. PR erstellen

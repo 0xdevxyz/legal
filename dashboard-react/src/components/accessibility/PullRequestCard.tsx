@@ -34,9 +34,16 @@ interface ApplyResult {
   error?: string;
 }
 
-export const PullRequestCard: React.FC<{ siteId: string; approvedCount: number }> = ({
+export const PullRequestCard: React.FC<{
+  siteId: string;
+  /** Freigegebene Fixes, die dieser Weg wirklich in Code schreiben kann. */
+  approvedCount: number;
+  /** Freigegebene Fixes, die über Widget/Plugin gehen statt über den PR. */
+  manifestOnlyCount?: number;
+}> = ({
   siteId,
   approvedCount,
+  manifestOnlyCount = 0,
 }) => {
   const [repos, setRepos] = useState<ConnectedRepo[]>([]);
   const [repoId, setRepoId] = useState<string>('');
@@ -139,7 +146,16 @@ export const PullRequestCard: React.FC<{ siteId: string; approvedCount: number }
 
       {approvedCount === 0 && repos.length > 0 && (
         <p className="mt-2 text-xs dark:text-zinc-500 text-gray-500">
-          Noch keine freigegebenen Fixes — prüfen Sie zuerst die Vorschläge oben.
+          {manifestOnlyCount > 0
+            ? `Ihre ${manifestOnlyCount} freigegebenen Fixes gehen über Widget bzw. WordPress-Plugin raus — für einen Pull Request braucht es Alt-Texte oder dokumentweite Fixes.`
+            : 'Noch keine freigegebenen Fixes — prüfen Sie zuerst die Vorschläge oben.'}
+        </p>
+      )}
+
+      {approvedCount > 0 && manifestOnlyCount > 0 && (
+        <p className="mt-2 text-xs dark:text-zinc-500 text-gray-500">
+          {manifestOnlyCount} weitere freigegebene Fixes (Linktexte, CSS) liefert das
+          Widget bzw. das WordPress-Plugin aus — sie sind nicht Teil dieses Pull Requests.
         </p>
       )}
 

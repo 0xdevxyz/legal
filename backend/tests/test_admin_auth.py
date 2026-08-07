@@ -92,7 +92,12 @@ class TestFixReviewSeite:
         not os.path.exists(_PAGE_FILE), reason="Dashboard-Quelltext nicht im Container"
     )
     def test_kein_public_admin_key_im_frontend(self):
-        src = _quelltext(_PAGE_FILE)
+        # Kommentare ausblenden — wie beim Backend-Pendant oben. Die Begruendung
+        # im Quelltext nennt den alten Variablennamen absichtlich; ohne diese
+        # Zeile schlaegt der Waechter an der eigenen Erklaerung an.
+        src = "\n".join(
+            re.sub(r"//.*$", "", z) for z in _quelltext(_PAGE_FILE).splitlines()
+        )
         assert "NEXT_PUBLIC_ADMIN_API_KEY" not in src, (
             "NEXT_PUBLIC_-Variablen landen im ausgelieferten JS-Bundle — "
             "ein Admin-Schlüssel gehört dort niemals hin"

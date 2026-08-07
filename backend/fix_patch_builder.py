@@ -26,6 +26,7 @@ Ein vorhandenes alt="" (bewusst dekorativ markiert) wird nie ueberschrieben —
 dieselbe Regel, die auch WordPress-Plugin und Runtime-Widget befolgen.
 """
 import difflib
+import hashlib
 import logging
 import posixpath
 import re
@@ -47,12 +48,40 @@ AUSGESCHLOSSENE_PFADE = re.compile(
 MAX_DATEIEN = 200          # Schutz gegen Monorepos
 MAX_DATEI_BYTES = 400_000  # Templates sind klein; alles darueber ist Asset/Generat
 
+# Welche dokumentweiten Fix-Typen dieser Builder wirklich in eine Datei
+# schreiben kann. css-rule und landmark-main stehen bewusst NICHT hier (siehe
+# baue_patches) — sie werden ueber Widget/Plugin ausgeliefert, nicht per PR.
+#
+# Diese Menge ist die einzige Quelle der Wahrheit dafuer, was der PR-Knopf
+# verspricht. Sie wird ueber `zaehle_pr_faehig` bis in die Worklist
+# durchgereicht, damit der Knopf nie mehr ankuendigt, als er liefern kann.
+PR_FAEHIGE_DOKUMENT_FIXES = frozenset({"html-lang", "skip-link"})
+
 _IMG_TAG = re.compile(r"<img\b[^>]*?/?>", re.I | re.S)
-_SRC_ATTR = re.compile(r"""\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.I)
-_HAS_ALT = re.compile(r"\balt\s*=", re.I)
+# (?<![\w-]) haelt data-alt / data-src von den echten Attributen fern. Ohne die
+# Sperre galt ein Bild mit data-alt="…" faelschlich als versorgt.
+_SRC_ATTR = re.compile(r"""(?<![\w-])src\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.I)
+_ALT_ATTR = re.compile(r"""(?<![\w-])alt\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.I)
 _HTML_TAG = re.compile(r"<html\b[^>]*>", re.I)
-_HAS_LANG = re.compile(r"\blang\s*=", re.I)
+_HAS_LANG = re.compile(r"(?<![\w-])lang\s*=", re.I)
 _BODY_TAG = re.compile(r"<body\b[^>]*>", re.I)
+
+# Vorschlaege, die ein Attribut fuellen und nichts erklaeren ("Bild: Image 20").
+# Sie bestehen axe, weil axe nur die Existenz des Attributs prueft — und sind
+# fuer einen Screenreader-Nutzer trotzdem wertlos. Im echten Bestand waren 5
+# von 14 Vorschlaegen fuer spedition-mahn.de von dieser Sorte (06.08.2026);
+# ungefiltert waeren sie als "Barrierefreiheit hergestellt" in einen
+# Kunden-Pull-Request gewandert.
+_NICHTSSAGEND = re.compile(
+    r"^\s*(bild|image|foto|photo|grafik)?\s*[:\-]?\s*"
+    r"(bild|image|foto|photo|img)?\s*[_\-]?\d*\s*$",
+    re.I,
+)
+
+
+def ist_nichtssagend(alt: str) -> bool:
+    """Fuellt das Attribut, erklaert aber nichts — gehoert in keinen PR."""
+    return bool(_NICHTSSAGEND.match(alt or ""))
 
 
 def ist_kandidat(pfad: str, groesse: Optional[int] = None) -> bool:
@@ -64,6 +93,62 @@ def ist_kandidat(pfad: str, groesse: Optional[int] = None) -> bool:
     if groesse is not None and groesse > MAX_DATEI_BYTES:
         return False
     return True
+
+
+def zaehle_pr_faehig(
+    alt_texte: List[Dict[str, Any]],
+    link_fixes: List[Dict[str, Any]],
+    dokument_fixes: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Teilt freigegebene Fixes in "kann der PR-Weg ausliefern" und "kann er nicht".
+
+    Der Grund fuer diese Funktion ist ein Fehler, der ohne sie unvermeidlich
+    ist: die Worklist zaehlte alle freigegebenen Fixes zusammen und schrieb die
+    Summe auf den PR-Knopf. Wer nur Link-Zwecke freigegeben hatte, sah "3
+    freigegebene Fixes als PR vorschlagen", klickte — und bekam "Keine
+    freigegebenen Fixes vorhanden". Der Knopf hat etwas versprochen, das dieser
+    Weg nie liefern konnte.
+
+    Was der PR-Weg NICHT kann und warum:
+      - link_fixes (WCAG 2.4.4): Ein besserer Linktext ist redaktionell. Ihn
+        als aria-label zu setzen, wuerde den sichtbaren Text vom zugaenglichen
+        Namen trennen und WCAG 2.5.3 (Label in Name) verletzen — ein Fix, der
+        einen neuen Fehler baut. Auslieferung erfolgt ueber Widget/Plugin.
+      - css-rule: wirkt erst mit einer Include-Aenderung, deren Ort je Projekt
+        verschieden ist (Ermessen).
+      - landmark-main: Inhalte in <main> zu wickeln ist Strukturchirurgie.
+
+    Returns:
+        {"deliverable": int, "manifest_only": int, "by_type": {...}}
+        `deliverable` ist die Zahl, die auf dem Knopf stehen darf.
+    """
+    doc_faehig = [
+        f for f in dokument_fixes
+        if f.get("fix_type") in PR_FAEHIGE_DOKUMENT_FIXES
+    ]
+    doc_rest = len(dokument_fixes) - len(doc_faehig)
+
+    return {
+        "deliverable": len(alt_texte) + len(doc_faehig),
+        "manifest_only": len(link_fixes) + doc_rest,
+        "by_type": {
+            "alt_texts": len(alt_texte),
+            "document_fixes": len(doc_faehig),
+            "link_fixes_manifest_only": len(link_fixes),
+            "document_fixes_manifest_only": doc_rest,
+        },
+    }
+
+
+def inhalt_hash(inhalt: str) -> str:
+    """Fingerabdruck der Datei, auf der ein Patch beruht.
+
+    Der Committer prueft damit, dass die Datei zwischen Lesen und Schreiben
+    unveraendert geblieben ist. Ohne diese Pruefung koennte ein Patch, der auf
+    einem alten Stand berechnet wurde, fremde Aenderungen ueberschreiben.
+    """
+    return hashlib.sha256(inhalt.encode("utf-8")).hexdigest()
 
 
 def _basename(src: str) -> str:
@@ -78,20 +163,42 @@ def _escape_attr(text: str) -> str:
 
 def _setze_alt_texte(inhalt: str, alt_texte: List[Dict[str, Any]]) -> "tuple[str, list[str]]":
     """
-    Ergaenzt alt="..." an <img>-Tags, deren src-Dateiname zu einem
-    freigegebenen Fix passt UND die noch kein alt-Attribut tragen.
+    Setzt alt="..." an <img>-Tags, deren src-Dateiname zu einem freigegebenen
+    Fix passt und die noch keinen echten Alt-Text tragen.
 
     Der Abgleich laeuft ueber den Dateinamen, nicht die volle URL: im Manifest
     steht "https://kunde.de/wp-content/uploads/team.jpg", im Template
     "/assets/img/team.jpg" oder "{{ base }}/team.jpg". Der Dateiname ist die
     stabile Schnittmenge. Kollisionsrisiko (gleicher Name, anderes Bild) ist
     akzeptiert — der Kunde sieht jede Zeile im PR-Diff.
+
+    Zur Regel "was gilt als versorgt":
+        alt="Gelber Sattelzug"  ->  nie anfassen. Eine getroffene Entscheidung.
+        alt=""                  ->  fuellen, wenn ein freigegebener Fix vorliegt.
+        kein alt                ->  ergaenzen.
+
+    Das leere alt war frueher ebenfalls tabu, mit der Begruendung "bewusst als
+    dekorativ markiert". Fuer handgeschriebenes HTML stimmt das; fuer den
+    tatsaechlichen Bestand nicht: WordPress schreibt alt="" an JEDES Bild, dem
+    in der Mediathek kein Alt-Text hinterlegt ist. Auf spedition-mahn.de trugen
+    20 von 37 Bildern ein leeres alt — der mechanische Fix hat dort deshalb
+    nichts veraendert, obwohl neun gepruefte Alt-Texte bereitlagen.
+
+    Ausschlaggebend fuer die Aenderung ist aber nicht die Haeufigkeit, sondern
+    die Konsistenz: das Laufzeit-Widget (widgets/accessibility-v6.js,
+    `if (img && !img.alt)`) fuellt leere alt-Attribute seit jeher — auf
+    Kundenseiten, die live sind. PR-Weg und Widget lieferten damit fuer
+    dieselben freigegebenen Fixes verschiedene Ergebnisse. Zwei Kanaele, eine
+    Regel; die menschliche Freigabe in der Worklist ist der Schutz, den der
+    pauschale Guard ersetzen sollte.
     """
     nach_name: Dict[str, str] = {}
     for fix in alt_texte:
         name = _basename(fix.get("image_src") or fix.get("image_filename") or "")
         text = (fix.get("suggested_alt") or "").strip()
-        if name and text:
+        # Nichtssagende Vorschlaege gar nicht erst einsammeln: ein PR, der
+        # alt="Bild: Image 20" einbaut, behauptet eine Reparatur, die keine ist.
+        if name and text and not ist_nichtssagend(text):
             nach_name.setdefault(name, text)
 
     if not nach_name:
@@ -101,8 +208,10 @@ def _setze_alt_texte(inhalt: str, alt_texte: List[Dict[str, Any]]) -> "tuple[str
 
     def ersetze(match: "re.Match[str]") -> str:
         tag = match.group(0)
-        if _HAS_ALT.search(tag):
-            return tag  # guarded: vorhandenes alt (auch alt="") bleibt
+        alt_match = _ALT_ATTR.search(tag)
+        if alt_match and (alt_match.group(1) or alt_match.group(2) or "").strip():
+            return tag  # echter Alt-Text: eine Entscheidung, die bleibt
+
         src_match = _SRC_ATTR.search(tag)
         if not src_match:
             return tag
@@ -110,13 +219,19 @@ def _setze_alt_texte(inhalt: str, alt_texte: List[Dict[str, Any]]) -> "tuple[str
         text = nach_name.get(name)
         if not text:
             return tag
+
+        angewendet.append(name)
+        if alt_match:
+            # Leeres alt vorhanden -> nur dessen Wert ersetzen, die Position im
+            # Tag bleibt, damit der Diff eine Zeile bleibt. Immer in doppelten
+            # Anfuehrungszeichen: _escape_attr maskiert genau die.
+            anfang, ende = alt_match.span()
+            return tag[:anfang] + f'alt="{_escape_attr(text)}"' + tag[ende:]
+
         einschub = f' alt="{_escape_attr(text)}"'
         if tag.endswith("/>"):
-            neu = tag[:-2].rstrip() + einschub + " />"
-        else:
-            neu = tag[:-1] + einschub + ">"
-        angewendet.append(name)
-        return neu
+            return tag[:-2].rstrip() + einschub + " />"
+        return tag[:-1] + einschub + ">"
 
     return _IMG_TAG.sub(ersetze, inhalt), angewendet
 
@@ -237,8 +352,9 @@ def baue_patches(
         )
         patches.append({
             "file_path": pfad,
-            "unified_diff": diff,
-            "new_content": inhalt,  # falls der Kanal ganze Dateien bevorzugt
+            "unified_diff": diff,           # fuer Anzeige/Review — nicht zum Wiederanwenden
+            "new_content": inhalt,          # das ist der massgebliche Zielzustand
+            "base_sha256": inhalt_hash(original),
             "feature_id": feature,
             "description": "; ".join(beschreibungen),
         })
