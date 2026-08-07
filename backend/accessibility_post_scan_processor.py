@@ -350,6 +350,8 @@ class AccessibilityPostScanProcessor:
                     "haupt_selektor": meta.get("haupt_selektor"),
                     "vorher": meta.get("vorher"),
                     "nachher": meta.get("nachher"),
+                    # Grundlage der Tabelle im Pruefnachweis.
+                    "je_regel": meta.get("je_regel") or {},
                 },
                 "wcag_criterion": "1.3.1",
                 "confidence": 0.95,

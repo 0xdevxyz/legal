@@ -100,3 +100,25 @@ class TestRuntime:
         block = block[:block.index("// CSS einmalig")]
         assert "el.tagName === 'META'" in block
         assert "!el.getAttribute(f.attribut)" in block
+
+
+class TestNachweisBekommtSeineZahlen:
+    """
+    Der Pruefnachweis baut seine Tabelle aus `je_regel`. Fehlt das Feld, bleibt
+    die Messung leer und der Nachweis antwortet 404 — obwohl Reparaturen
+    gespeichert sind. Genau so ist es beim ersten echten Kundenscan passiert.
+    """
+
+    def test_check_reicht_je_regel_weiter(self):
+        src = _lese("compliance_engine", "checks", "barrierefreiheit_check.py")
+        block = src[src.index("complyo-struktur-fix"):]
+        assert '"je_regel"' in block[:1200]
+
+    def test_prozessor_speichert_je_regel(self):
+        src = _lese("accessibility_post_scan_processor.py")
+        block = src[src.index("_struktur_fix_aus_issues"):]
+        assert '"je_regel"' in block[:2000]
+
+    def test_nachweis_liest_je_regel(self):
+        src = _lese("nachweis_routes.py")
+        assert 'payload.get("je_regel")' in src

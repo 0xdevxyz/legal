@@ -164,6 +164,11 @@ async def _run_axe_core_safe(url: str, timeout: float = 35.0) -> Optional[List[D
                     "haupt_selektor": sf.get("haupt_selektor"),
                     "vorher": sf["vorher"],
                     "nachher": sf["nachher"],
+                    # Je Regel vorher/nachher — daraus baut der Pruefnachweis
+                    # seine Tabelle. Ohne diese Zeile bleibt die Messung dort
+                    # leer und der Nachweis antwortet 404, obwohl Reparaturen
+                    # gespeichert sind.
+                    "je_regel": sf.get("je_regel") or {},
                 },
             })
 
