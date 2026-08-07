@@ -43,6 +43,13 @@ EXEMPT_PREFIXES = (
     "/widget/",
     "/api/widget/",
     "/api/leads/",
+    # Wirksamkeitsmeldung des A11y-Widgets. Gleicher Fall wie die
+    # Consent-Meldung oben: sie kommt cross-origin von der Kundendomain, ohne
+    # Sitzungscookie und ohne Bearer-Token — der Double-Submit-Check kann dort
+    # nie aufgehen. Ohne diese Ausnahme wird jede Meldung mit 403 verworfen und
+    # die Selbstueberwachung ist wirkungslos, ohne dass es jemandem auffaellt.
+    # Die Meldung traegt nur Pfad und Zaehler; es gibt nichts zu missbrauchen.
+    "/api/wirkung/",
     "/mcp",
 )
 
