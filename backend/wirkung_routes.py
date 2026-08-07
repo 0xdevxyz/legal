@@ -94,9 +94,7 @@ def _pfad_saeubern(pfad: str) -> str:
 
 
 @router.post("/{site_id}", dependencies=[Depends(rate_limit("wirkung", 120, 60))])
-async def melde_wirkung(
-    site_id: str, meldung: WirkungsMeldung, request: Request
-) -> JSONResponse:
+async def melde_wirkung(site_id: str, request: Request) -> JSONResponse:
     """
     Nimmt die Bilanz eines Seitenaufrufs entgegen.
 
@@ -104,9 +102,25 @@ async def melde_wirkung(
     Anmeldung haben kann. Missbrauch waere hoechstens verfaelschte Statistik —
     es gibt nichts zu lesen und nichts auszuloesen. Rate-Limit trotzdem.
 
+    Der Koerper wird SELBST geparst statt ueber ein Pydantic-Argument: das
+    Widget schickt `text/plain`, weil `application/json` kein CORS-sicherer
+    Inhaltstyp ist und einen Preflight ausloest — den `sendBeacon` nicht kann.
+    Mit einem Body-Modell wuerde FastAPI den Inhaltstyp pruefen und die Meldung
+    mit 422 abweisen. Beim ersten Live-Test auf einer Kundenseite ist genau das
+    passiert (dort noch als CORS-Fehler im Browser).
+
     Antwortet immer 204: die Messung darf die Seite des Kunden nie stoeren,
     auch nicht durch eine Fehlermeldung im Netzwerk-Reiter.
     """
+    leer = JSONResponse(status_code=204, content=None,
+                        headers={"Access-Control-Allow-Origin": "*"})
+    try:
+        roh = await request.body()
+        meldung = WirkungsMeldung.model_validate_json(roh)
+    except Exception:
+        # Unbrauchbarer Koerper: verwerfen, nicht meckern.
+        return leer
+
     if not db_pool:
         return JSONResponse(status_code=204, content=None,
                             headers={"Access-Control-Allow-Origin": "*"})

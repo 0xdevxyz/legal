@@ -361,11 +361,18 @@
       // sendBeacon haelt die Meldung am Leben, wenn der Besucher sofort
       // weiterklickt. Ohne Fallback waere die Aussage auf schnellen Seiten
       // systematisch verzerrt.
+      // text/plain statt application/json — und das ist kein Schludern:
+      // application/json ist kein CORS-sicherer Inhaltstyp und loest einen
+      // Preflight aus. sendBeacon kann keinen Preflight; die Meldung wird dann
+      // stillschweigend verworfen. Genau so ist es beim ersten Live-Test auf
+      // zua-zwickau.de passiert. text/plain gehoert zu den safelisted types,
+      // damit geht die Meldung ohne Vorabfrage raus. Der Server liest den
+      // Koerper ohnehin selbst als JSON.
       if (navigator.sendBeacon) {
-        navigator.sendBeacon(url, new Blob([koerper], { type: 'application/json' }));
+        navigator.sendBeacon(url, new Blob([koerper], { type: 'text/plain;charset=UTF-8' }));
       } else {
-        fetch(url, { method: 'POST', body: koerper, keepalive: true,
-                     headers: { 'content-type': 'application/json' } })
+        fetch(url, { method: 'POST', body: koerper, keepalive: true, mode: 'cors',
+                     headers: { 'content-type': 'text/plain;charset=UTF-8' } })
           .catch(function () {});
       }
     } catch (e) { /* fail-silent: eine Messung darf nie die Seite stoeren */ }
