@@ -144,6 +144,7 @@ from git_routes import git_router, init_git_routes
 
 # Alt-Text AI Generation - KI-generierte Alt-Texte für Bilder
 from alt_text_routes import router as alt_text_router
+from agentur_a11y_routes import router as agentur_a11y_router, init_agentur_a11y_routes
 
 # Deep Cookie Scanner - Premium Feature
 from deep_cookie_scanner_routes import router as deep_cookie_scanner_router
@@ -703,11 +704,17 @@ async def startup_event():
     app.include_router(accessibility_fix_router)  # BFSG Accessibility Fix Pipeline - NEW
     app.include_router(git_router)  # Git-Integration: PRs statt Direktschreiben
     app.include_router(alt_text_router)  # Alt-Text AI Generation - NEW
+    # Portfolioweite Barrierefreiheit (Agentur-Tarif): eine Liste statt
+    # zwanzig Worklists. Ohne diesen Registriereintrag laeuft der ganze
+    # Agentur-Weg ins Leere — die Routen existieren dann nur auf der Platte.
+    app.include_router(agentur_a11y_router)
     app.include_router(deep_cookie_scanner_router)  # Deep Cookie Scanner - Premium Feature
     app.include_router(legal_document_router)  # AUDIT-19: DPA Generator
     app.include_router(knowledge_router)  # Knowledge Base - Rechts-Updates & Gesetzes-Vault
     
     # Initialize Alt-Text routes
+    init_agentur_a11y_routes(db_pool)
+
     import alt_text_routes
     alt_text_routes.db_pool = db_pool
     alt_text_routes.auth_service = auth_service

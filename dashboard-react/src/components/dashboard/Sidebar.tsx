@@ -85,6 +85,11 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Dokumente', icon: FileText, href: '/docs/cms' },
       { label: 'Agentur', icon: Building2, href: '/agency' },
+      // Portfolioweite Barrierefreiheit. Steht bewusst als eigener Punkt und
+      // nicht in der Agentur-Uebersicht versteckt: es ist die Arbeit, fuer die
+      // der Agentur-Tarif bezahlt wird — zwanzig Websites in einer Liste
+      // statt zwanzig Mal die aktive Website wechseln.
+      { label: 'Portfolio-A11y', icon: Building2, href: '/agency/barrierefreiheit' },
     ],
   },
 ];
