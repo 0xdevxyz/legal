@@ -155,15 +155,42 @@ async def serve_accessibility_widget(request: Request, version: str = "6"):
     Serve the Accessibility Widget JavaScript (v6 only)
     """
     widget_filename = 'accessibility-v6.js'
-    
+
     widget_path = os.path.join(WIDGET_DIR, widget_filename)
-    
+
     if not os.path.exists(widget_path):
         raise HTTPException(status_code=404, detail=f"Widget {widget_filename} not found")
-    
+
     # Read widget content
     with open(widget_path, 'r', encoding='utf-8') as f:
         content = f.read()
+
+    # Die Remediation anhaengen — der Grund ist eine Luecke, die beim Ausrollen
+    # aufgefallen ist:
+    #
+    # accessibility-v6.js holt ausschliesslich Alt-Texte, ueber einen eigenen
+    # Endpunkt. Kontrast-, Struktur- und Linkname-Reparaturen laufen dagegen
+    # ueber das Fix-Manifest, das nur a11y_remediation.js liest — und die Datei
+    # wird unter einer ANDEREN Adresse ausgeliefert (/api/widgets/a11y-fixes.js).
+    # Auf den Kundenseiten steht aber ueberall dieses Skript hier. Ergebnis:
+    # alles ausser Alt-Texten erreichte niemanden, ohne dass es auffiel.
+    #
+    # Statt 25 Kunden ein zweites Skript einbauen zu lassen, kommen beide
+    # Teile aus derselben Adresse. Die Remediation ist eine eigenstaendige
+    # IIFE und liest ihre Konfiguration aus `script[data-site-id]` — also aus
+    # genau dem Tag, mit dem dieses Skript geladen wurde.
+    #
+    # Doppelt gesetzte Alt-Texte sind kein Problem: beide Wege ueberschreiben
+    # ein vorhandenes `alt` nie, wer zuerst kommt gewinnt.
+    remediation_path = os.path.join(WIDGET_DIR, 'a11y_remediation.js')
+    if os.path.exists(remediation_path):
+        with open(remediation_path, 'r', encoding='utf-8') as f:
+            content += "\n;/* --- complyo a11y remediation (Fix-Manifest) --- */\n" + f.read()
+    else:
+        logging.getLogger(__name__).warning(
+            "a11y_remediation.js fehlt — Kontrast-, Struktur- und "
+            "Linkname-Reparaturen werden nicht ausgeliefert"
+        )
     
     # Return as JavaScript with correct MIME type
     etag = f'"{hashlib.md5(content.encode()).hexdigest()}"'
