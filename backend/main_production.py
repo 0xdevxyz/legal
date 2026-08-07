@@ -145,6 +145,7 @@ from git_routes import git_router, init_git_routes
 # Alt-Text AI Generation - KI-generierte Alt-Texte für Bilder
 from alt_text_routes import router as alt_text_router
 from agentur_a11y_routes import router as agentur_a11y_router, init_agentur_a11y_routes
+from nachweis_routes import router as nachweis_router, init_nachweis_routes
 
 # Deep Cookie Scanner - Premium Feature
 from deep_cookie_scanner_routes import router as deep_cookie_scanner_router
@@ -708,12 +709,16 @@ async def startup_event():
     # zwanzig Worklists. Ohne diesen Registriereintrag laeuft der ganze
     # Agentur-Weg ins Leere — die Routen existieren dann nur auf der Platte.
     app.include_router(agentur_a11y_router)
+    # Oeffentlicher Pruefnachweis — bewusst ohne Anmeldung: ein Nachweis, den
+    # nur der Betreiber sieht, ist ein Bericht und kein Nachweis.
+    app.include_router(nachweis_router)
     app.include_router(deep_cookie_scanner_router)  # Deep Cookie Scanner - Premium Feature
     app.include_router(legal_document_router)  # AUDIT-19: DPA Generator
     app.include_router(knowledge_router)  # Knowledge Base - Rechts-Updates & Gesetzes-Vault
     
     # Initialize Alt-Text routes
     init_agentur_a11y_routes(db_pool)
+    init_nachweis_routes(db_pool)
 
     import alt_text_routes
     alt_text_routes.db_pool = db_pool
