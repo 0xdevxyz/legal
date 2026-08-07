@@ -1,0 +1,555 @@
+[
+  {
+    "datei": "bauschlosserei-claus.de.html",
+    "vorher": {
+      "pflicht": 8,
+      "empfehlung": 7,
+      "regeln": {
+        "color-contrast": 4,
+        "heading-order": 1,
+        "image-alt": 2,
+        "landmark-one-main": 1,
+        "link-name": 2,
+        "page-has-heading-one": 1,
+        "region": 4
+      }
+    },
+    "nachher": {
+      "pflicht": 2,
+      "empfehlung": 6,
+      "regeln": {
+        "heading-order": 1,
+        "image-alt": 2,
+        "landmark-banner-is-top-level": 1,
+        "landmark-contentinfo-is-top-level": 1,
+        "page-has-heading-one": 1,
+        "region": 2
+      }
+    }
+  },
+  {
+    "datei": "boehme-energie.com.html",
+    "vorher": {
+      "pflicht": 1,
+      "empfehlung": 2,
+      "regeln": {
+        "document-title": 1,
+        "landmark-one-main": 1,
+        "region": 1
+      }
+    },
+    "nachher": {
+      "pflicht": 1,
+      "empfehlung": 0,
+      "regeln": {
+        "document-title": 1
+      }
+    }
+  },
+  {
+    "datei": "boehme.it.html",
+    "vorher": {
+      "pflicht": 12,
+      "empfehlung": 23,
+      "regeln": {
+        "color-contrast": 9,
+        "landmark-one-main": 1,
+        "link-name": 2,
+        "meta-viewport": 1,
+        "region": 22
+      }
+    },
+    "nachher": {
+      "pflicht": 0,
+      "empfehlung": 0,
+      "regeln": {}
+    }
+  },
+  {
+    "datei": "breathhealingart.com.html",
+    "vorher": {
+      "pflicht": 11,
+      "empfehlung": 17,
+      "regeln": {
+        "color-contrast": 7,
+        "document-title": 1,
+        "empty-heading": 1,
+        "heading-order": 5,
+        "landmark-one-main": 1,
+        "link-name": 3,
+        "page-has-heading-one": 1,
+        "region": 9
+      }
+    },
+    "nachher": {
+      "pflicht": 1,
+      "empfehlung": 7,
+      "regeln": {
+        "document-title": 1,
+        "empty-heading": 1,
+        "heading-order": 5,
+        "page-has-heading-one": 1
+      }
+    }
+  },
+  {
+    "datei": "cb-reisen.de.html",
+    "vorher": {
+      "pflicht": 1,
+      "empfehlung": 3,
+      "regeln": {
+        "landmark-one-main": 1,
+        "link-name": 1,
+        "page-has-heading-one": 1,
+        "region": 1
+      }
+    },
+    "nachher": {
+      "pflicht": 0,
+      "empfehlung": 1,
+      "regeln": {
+        "page-has-heading-one": 1
+      }
+    }
+  },
+  {
+    "datei": "container-spindler.de.html",
+    "vorher": {
+      "pflicht": 20,
+      "empfehlung": 16,
+      "regeln": {
+        "button-name": 1,
+        "color-contrast": 12,
+        "heading-order": 2,
+        "link-name": 6,
+        "meta-viewport": 1,
+        "region": 14
+      }
+    },
+    "nachher": {
+      "pflicht": 0,
+      "empfehlung": 4,
+      "regeln": {
+        "heading-order": 2,
+        "landmark-banner-is-top-level": 1,
+        "region": 1
+      }
+    }
+  },
+  {
+    "datei": "doener-bistro-baku.de.html",
+    "vorher": {
+      "pflicht": 9,
+      "empfehlung": 17,
+      "regeln": {
+        "color-contrast": 7,
+        "frame-title": 1,
+        "heading-order": 1,
+        "landmark-one-main": 1,
+        "region": 15,
+        "select-name": 1
+      }
+    },
+    "nachher": {
+      "pflicht": 1,
+      "empfehlung": 8,
+      "regeln": {
+        "heading-order": 1,
+        "region": 7,
+        "select-name": 1
+      }
+    }
+  },
+  {
+    "datei": "ferienpark-waldenburg.de.html",
+    "vorher": {
+      "pflicht": 12,
+      "empfehlung": 2,
+      "regeln": {
+        "color-contrast": 10,
+        "image-alt": 1,
+        "link-name": 1,
+        "region": 2
+      }
+    },
+    "nachher": {
+      "pflicht": 1,
+      "empfehlung": 2,
+      "regeln": {
+        "image-alt": 1,
+        "region": 2
+      }
+    }
+  },
+  {
+    "datei": "fv-wolkenburg.de.html",
+    "vorher": {
+      "pflicht": 16,
+      "empfehlung": 36,
+      "regeln": {
+        "heading-order": 7,
+        "label": 1,
+        "landmark-one-main": 1,
+        "landmark-unique": 1,
+        "link-name": 15,
+        "region": 27
+      }
+    },
+    "nachher": {
+      "pflicht": 4,
+      "empfehlung": 11,
+      "regeln": {
+        "heading-order": 7,
+        "label": 1,
+        "landmark-banner-is-top-level": 1,
+        "landmark-contentinfo-is-top-level": 1,
+        "landmark-unique": 1,
+        "link-name": 3,
+        "region": 1
+      }
+    }
+  },
+  {
+    "datei": "ghp-ingenieure.de.html",
+    "vorher": {
+      "pflicht": 15,
+      "empfehlung": 8,
+      "regeln": {
+        "color-contrast": 12,
+        "heading-order": 2,
+        "landmark-main-is-top-level": 1,
+        "landmark-no-duplicate-banner": 1,
+        "landmark-no-duplicate-main": 1,
+        "landmark-unique": 2,
+        "link-name": 2,
+        "meta-viewport": 1,
+        "page-has-heading-one": 1
+      }
+    },
+    "nachher": {
+      "pflicht": 0,
+      "empfehlung": 8,
+      "regeln": {
+        "heading-order": 2,
+        "landmark-main-is-top-level": 1,
+        "landmark-no-duplicate-banner": 1,
+        "landmark-no-duplicate-main": 1,
+        "landmark-unique": 2,
+        "page-has-heading-one": 1
+      }
+    }
+  },
+  {
+    "datei": "konditorei-limbach.de.html",
+    "vorher": {
+      "pflicht": 12,
+      "empfehlung": 56,
+      "regeln": {
+        "color-contrast": 11,
+        "landmark-one-main": 1,
+        "region": 55,
+        "scrollable-region-focusable": 1
+      }
+    },
+    "nachher": {
+      "pflicht": 0,
+      "empfehlung": 56,
+      "regeln": {
+        "landmark-one-main": 1,
+        "region": 55
+      }
+    }
+  },
+  {
+    "datei": "lindner-maschinenbau.de.html",
+    "vorher": {
+      "pflicht": 9,
+      "empfehlung": 12,
+      "regeln": {
+        "color-contrast": 5,
+        "heading-order": 3,
+        "landmark-complementary-is-top-level": 3,
+        "landmark-main-is-top-level": 1,
+        "landmark-no-duplicate-main": 1,
+        "landmark-unique": 3,
+        "meta-viewport": 1,
+        "nested-interactive": 3,
+        "page-has-heading-one": 1
+      }
+    },
+    "nachher": {
+      "pflicht": 3,
+      "empfehlung": 12,
+      "regeln": {
+        "heading-order": 3,
+        "landmark-complementary-is-top-level": 3,
+        "landmark-main-is-top-level": 1,
+        "landmark-no-duplicate-main": 1,
+        "landmark-unique": 3,
+        "nested-interactive": 3,
+        "page-has-heading-one": 1
+      }
+    }
+  },
+  {
+    "datei": "naturheilpraxis-decker.de.html",
+    "vorher": {
+      "pflicht": 7,
+      "empfehlung": 3,
+      "regeln": {
+        "link-name": 7,
+        "page-has-heading-one": 1,
+        "region": 2
+      }
+    },
+    "nachher": {
+      "pflicht": 1,
+      "empfehlung": 7,
+      "regeln": {
+        "color-contrast": 1,
+        "page-has-heading-one": 1,
+        "region": 6
+      }
+    }
+  },
+  {
+    "datei": "naturheilzentrum-freitag.de.html",
+    "vorher": {
+      "pflicht": 24,
+      "empfehlung": 28,
+      "regeln": {
+        "color-contrast": 21,
+        "label": 1,
+        "landmark-complementary-is-top-level": 7,
+        "landmark-unique": 1,
+        "link-name": 2,
+        "region": 20
+      }
+    },
+    "nachher": {
+      "pflicht": 1,
+      "empfehlung": 8,
+      "regeln": {
+        "label": 1,
+        "landmark-complementary-is-top-level": 7,
+        "landmark-unique": 1
+      }
+    }
+  },
+  {
+    "datei": "osteopathie-limbach.de.html",
+    "vorher": {
+      "pflicht": 16,
+      "empfehlung": 20,
+      "regeln": {
+        "color-contrast": 15,
+        "meta-viewport": 1,
+        "region": 20
+      }
+    },
+    "nachher": {
+      "pflicht": 5,
+      "empfehlung": 0,
+      "regeln": {
+        "color-contrast": 5
+      }
+    }
+  },
+  {
+    "datei": "partyservice-wanka.de.html",
+    "vorher": {
+      "pflicht": 13,
+      "empfehlung": 11,
+      "regeln": {
+        "color-contrast": 13,
+        "heading-order": 1,
+        "landmark-one-main": 1,
+        "landmark-unique": 1,
+        "region": 8
+      }
+    },
+    "nachher": {
+      "pflicht": 1,
+      "empfehlung": 2,
+      "regeln": {
+        "color-contrast": 1,
+        "heading-order": 1,
+        "landmark-unique": 1
+      }
+    }
+  },
+  {
+    "datei": "physiomueller.de.html",
+    "vorher": {
+      "pflicht": 0,
+      "empfehlung": 21,
+      "regeln": {
+        "landmark-one-main": 1,
+        "page-has-heading-one": 1,
+        "region": 19
+      }
+    },
+    "nachher": {
+      "pflicht": 0,
+      "empfehlung": 1,
+      "regeln": {
+        "page-has-heading-one": 1
+      }
+    }
+  },
+  {
+    "datei": "reinhardt.coffee.html",
+    "vorher": {
+      "pflicht": 13,
+      "empfehlung": 7,
+      "regeln": {
+        "color-contrast": 8,
+        "image-alt": 1,
+        "label": 3,
+        "landmark-complementary-is-top-level": 3,
+        "landmark-no-duplicate-contentinfo": 1,
+        "landmark-unique": 2,
+        "link-name": 1,
+        "page-has-heading-one": 1
+      }
+    },
+    "nachher": {
+      "pflicht": 4,
+      "empfehlung": 7,
+      "regeln": {
+        "image-alt": 1,
+        "label": 3,
+        "landmark-complementary-is-top-level": 3,
+        "landmark-no-duplicate-contentinfo": 1,
+        "landmark-unique": 2,
+        "page-has-heading-one": 1
+      }
+    }
+  },
+  {
+    "datei": "rhino.cafe.html",
+    "vorher": {
+      "pflicht": 15,
+      "empfehlung": 40,
+      "regeln": {
+        "color-contrast": 9,
+        "heading-order": 3,
+        "image-alt": 2,
+        "link-name": 1,
+        "meta-viewport": 1,
+        "region": 37,
+        "select-name": 2
+      }
+    },
+    "nachher": {
+      "pflicht": 4,
+      "empfehlung": 5,
+      "regeln": {
+        "heading-order": 3,
+        "image-alt": 2,
+        "region": 2,
+        "select-name": 2
+      }
+    }
+  },
+  {
+    "datei": "spedition-mahn.de.html",
+    "vorher": {
+      "pflicht": 29,
+      "empfehlung": 35,
+      "regeln": {
+        "aria-required-parent": 3,
+        "color-contrast": 7,
+        "heading-order": 15,
+        "image-redundant-alt": 1,
+        "link-name": 13,
+        "nested-interactive": 6,
+        "region": 19
+      }
+    },
+    "nachher": {
+      "pflicht": 10,
+      "empfehlung": 16,
+      "regeln": {
+        "aria-required-parent": 3,
+        "heading-order": 15,
+        "image-redundant-alt": 1,
+        "link-name": 1,
+        "nested-interactive": 6
+      }
+    }
+  },
+  {
+    "datei": "susanne-fischer.online.html",
+    "vorher": {
+      "pflicht": 0,
+      "empfehlung": 6,
+      "regeln": {
+        "landmark-one-main": 1,
+        "region": 5
+      }
+    },
+    "nachher": {
+      "pflicht": 0,
+      "empfehlung": 0,
+      "regeln": {}
+    }
+  },
+  {
+    "datei": "tc-limbach.de.html",
+    "vorher": {
+      "pflicht": 3,
+      "empfehlung": 2,
+      "regeln": {
+        "color-contrast": 2,
+        "landmark-one-main": 1,
+        "meta-viewport": 1,
+        "region": 1
+      }
+    },
+    "nachher": {
+      "pflicht": 0,
+      "empfehlung": 0,
+      "regeln": {}
+    }
+  },
+  {
+    "datei": "zahnarztpraxis-mittweida.de.html",
+    "vorher": {
+      "pflicht": 22,
+      "empfehlung": 51,
+      "regeln": {
+        "color-contrast": 22,
+        "heading-order": 1,
+        "region": 50
+      }
+    },
+    "nachher": {
+      "pflicht": 0,
+      "empfehlung": 51,
+      "regeln": {
+        "heading-order": 1,
+        "region": 50
+      }
+    }
+  },
+  {
+    "datei": "zua-zwickau.de.html",
+    "vorher": {
+      "pflicht": 23,
+      "empfehlung": 1,
+      "regeln": {
+        "color-contrast": 20,
+        "heading-order": 1,
+        "link-in-text-block": 3
+      }
+    },
+    "nachher": {
+      "pflicht": 0,
+      "empfehlung": 1,
+      "regeln": {
+        "heading-order": 1
+      }
+    }
+  }
+]
