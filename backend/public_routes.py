@@ -567,18 +567,30 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                             post_process_result = await processor.process_scan_results(
                                 scan_id=scan_id,
                                 user_id=str(user_id),
-                                scan_data={
-                                    'issues': [
-                                        {
-                                            'id': i.id,
-                                            'category': i.category,
-                                            'severity': i.severity,
-                                            'title': i.title,
-                                            'description': i.description
-                                        }
-                                        for i in structured_issues
-                                    ]
-                                },
+                                # Die ROHEN Befunde weiterreichen, nicht die fuer
+                                # das Dashboard zurechtgeschnittenen.
+                                #
+                                # `structured_issues` traegt nur id/category/
+                                # severity/title/description plus die Metadaten,
+                                # die `_fundstellen_metadata` durchlaesst — und
+                                # das ist bewusst wenig, weil es ans Frontend
+                                # geht. Der Post-Scan-Prozessor ist aber ein
+                                # Backend-Verbraucher und braucht mehr:
+                                #
+                                #   - `metadata.source` == "complyo-kontrast-fix"
+                                #     bzw. "complyo-struktur-fix", sonst werden
+                                #     die im Browser verifizierten Reparaturen
+                                #     NIE gespeichert.
+                                #   - `element.src` des Bildes, sonst greift die
+                                #     Notloesung `/image-N.jpg` und die Vision
+                                #     beschreibt eine Datei, die es nicht gibt
+                                #     ("Bild: Image 20").
+                                #
+                                # Beides ist lange unbemerkt geblieben, weil der
+                                # Aufruf erfolgreich aussieht: der Prozessor
+                                # findet die Marker nicht und meldet schlicht
+                                # null erzeugte Fixes.
+                                scan_data={'issues': scan_result.get("issues") or []},
                                 site_url=scan_result.get("url", url)
                             )
                             
