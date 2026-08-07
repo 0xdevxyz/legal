@@ -11,6 +11,7 @@ Features:
 
 import asyncio
 import json
+import re
 import logging
 import os
 from typing import Dict, List, Any, Optional, Tuple
@@ -341,7 +342,30 @@ class AxeScanner:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
-            
+
+            # Das eigene Widget waehrend der Messung blockieren.
+            #
+            # Ohne diese Sperre misst der Scan eine Seite, die complyo bereits
+            # repariert hat: das Widget setzt Alt-Texte, role="main" und die
+            # freigegebenen Farben zur Laufzeit. Der Scan faende dann nichts
+            # mehr — und wuerde den gespeicherten Messwert mit einer Null
+            # ueberschreiben.
+            #
+            # Die Folge waere absurd: je besser die Reparatur wirkt, desto
+            # leerer wird der Pruefnachweis, der sie belegen soll. Genau das
+            # ist beim ersten echten Kundenscan passiert (zua-zwickau.de,
+            # struktur 3->0 im ersten Lauf, im zweiten gar kein Befund mehr).
+            #
+            # Gemessen wird deshalb immer der Zustand, den ein Besucher OHNE
+            # complyo vorfaende.
+            try:
+                await page.route(
+                    re.compile(r"https?://api\.complyo\.(de|tech)/"),
+                    lambda route: asyncio.ensure_future(route.abort()),
+                )
+            except Exception as e:  # pragma: no cover - Playwright-Eigenheit
+                logger.warning(f"Widget-Sperre nicht gesetzt: {e}")
+
             try:
                 # Seite laden. "networkidle" ist bewusst NICHT das primaere
                 # Kriterium: Seiten mit dauerhaftem Polling, Chat-Widgets oder

@@ -66,3 +66,39 @@ class TestMappingBleibtErreichbar:
         for regel in ("image-alt", "color-contrast", "label", "link-name",
                       "button-name", "html-has-lang"):
             assert regel in AXE_RULE_TO_FEATURE, f"{regel} ohne Feature-Zuordnung"
+
+
+class TestScanMisstOhneDasEigeneWidget:
+    """
+    Der Scan muss das complyo-Widget blockieren.
+
+    Ohne die Sperre misst er eine Seite, die complyo bereits repariert hat —
+    das Widget setzt Alt-Texte, role="main" und freigegebene Farben zur
+    Laufzeit. Der Scan faende nichts mehr und wuerde den gespeicherten
+    Messwert mit einer Null ueberschreiben.
+
+    Die Folge waere absurd: je besser die Reparatur wirkt, desto leerer der
+    Pruefnachweis, der sie belegen soll. Beim ersten echten Kundenscan auf
+    zua-zwickau.de ist genau das passiert.
+    """
+
+    def test_die_sperre_steht_im_scanner(self):
+        import os
+        pfad = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "compliance_engine", "axe_scanner.py",
+        )
+        with open(pfad, encoding="utf-8") as fh:
+            src = fh.read()
+        assert "page.route" in src
+        assert "api\\.complyo\\." in src or "api\\\\.complyo" in src
+
+    def test_der_grund_steht_dabei(self):
+        import os
+        pfad = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "compliance_engine", "axe_scanner.py",
+        )
+        with open(pfad, encoding="utf-8") as fh:
+            src = fh.read()
+        assert "OHNE" in src and "Pruefnachweis" in src
