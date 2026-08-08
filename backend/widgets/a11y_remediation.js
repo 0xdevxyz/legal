@@ -43,6 +43,7 @@
   var strukturFixes = [];          // Attribut-Setzungen (role, tabindex, title …)
   var linkFixes = [];              // [{link_href, link_text, suggested_label}]
   var cssRules = [];               // [{selector, declarations}]
+  var unbekannteKennung = false;   // data-site-id kennt complyo nicht
   var ready = false;
 
   // ---- Wirkungsbilanz --------------------------------------------------------
@@ -56,11 +57,23 @@
   // ausgeliefert wurde und dessen Ziel es nicht mehr gibt. Genau so sieht ein
   // Theme-Update aus, das eine Klasse umbenennt — und genau das faellt sonst
   // erst beim naechsten Scan auf, Wochen spaeter.
+  //
+  // `dokument_fixes` hat gefehlt: Skip-Link und landmark-main liefen ganz
+  // ausserhalb der Bilanz. Findet `resolveMainTarget()` kein Ziel, unterbleibt
+  // der Skip-Link stillschweigend — genau der Fall, den diese Ueberwachung
+  // melden soll, und ausgerechnet der war unsichtbar.
+  //
+  // Drei Zustaende statt zwei. "unnoetig" ist kein Fehlschlag: dass eine Seite
+  // laengst ein <main> hat und `landmark-main` deshalb nichts tut, ist der
+  // Normalfall und darf keinen Regressionsalarm ausloesen. Wer beides in einen
+  // Topf wirft, erzeugt Rauschen — und eine Warnung, der niemand glaubt, ist
+  // schlechter als keine.
   var bilanz = {
     alt_texte: { angewendet: 0, verfehlt: 0 },
     link_labels: { angewendet: 0, verfehlt: 0 },
     struktur: { angewendet: 0, verfehlt: 0 },
-    css_regeln: { angewendet: 0, verfehlt: 0 }
+    css_regeln: { angewendet: 0, verfehlt: 0 },
+    dokument_fixes: { angewendet: 0, verfehlt: 0, unnoetig: 0 }
   };
 
   // Basis-Dateiname (klein) inkl. Entfernung der WP-Größensuffixe (-300x200).
@@ -142,10 +155,20 @@
   function applySkipLink() {
     var p = fixPayload('skip-link');
     if (!p) return;
-    if (document.querySelector('a[data-complyo-skip-link]')) return; // schon injiziert
+    if (document.querySelector('a[data-complyo-skip-link]')) {
+      bilanz.dokument_fixes.unnoetig++;   // schon injiziert
+      return;
+    }
 
     var target = resolveMainTarget(p.target);
-    if (!target) return; // ohne auflösbares Ziel keinen Dangling-Link injizieren
+    if (!target) {
+      // Ohne aufloesbares Ziel keinen ins Leere zeigenden Link injizieren —
+      // ein "Zum Inhalt springen", das nirgends landet, ist fuer Tastatur-
+      // nutzer schlechter als gar keins. Aber melden: das ist ein
+      // ausgelieferter Fix, der nicht ankommt.
+      bilanz.dokument_fixes.verfehlt++;
+      return;
+    }
     if (!target.id) target.id = 'complyo-main';
     var href = '#' + target.id;
 
@@ -156,16 +179,31 @@
     a.textContent = p.label || 'Zum Inhalt springen';
     if (document.body && document.body.firstChild) {
       document.body.insertBefore(a, document.body.firstChild);
+      bilanz.dokument_fixes.angewendet++;
     } else if (document.body) {
       document.body.appendChild(a);
+      bilanz.dokument_fixes.angewendet++;
+    } else {
+      bilanz.dokument_fixes.verfehlt++;
     }
   }
 
   function applyLandmarkMain() {
     if (!fixPayload('landmark-main')) return;
-    if (document.querySelector('main, [role="main"]')) return; // bereits vorhanden
+    if (document.querySelector('main, [role="main"]')) {
+      // Die Seite bringt ihren Hauptbereich selbst mit. Kein Fehlschlag,
+      // sondern der Normalfall — deshalb "unnoetig" und nicht "verfehlt".
+      bilanz.dokument_fixes.unnoetig++;
+      return;
+    }
     var el = resolveMainTarget(null);
-    if (el && !el.getAttribute('role')) el.setAttribute('role', 'main');
+    if (el && !el.getAttribute('role')) {
+      el.setAttribute('role', 'main');
+      bilanz.dokument_fixes.angewendet++;
+    } else {
+      // Kein Container gefunden, dem sich der Hauptbereich zuordnen liesse.
+      bilanz.dokument_fixes.verfehlt++;
+    }
   }
 
   // Attribut-Setzungen aus der Struktur-Reparatur.
@@ -319,6 +357,22 @@
     strukturFixes = d.struktur_fixes || [];
     linkFixes = d.link_fixes || [];
     cssRules = d.css_rules || [];
+
+    // Kennt complyo diese site_id? Ein leeres Manifest bedeutet zweierlei —
+    // "nichts zu tun" oder "falsche Kennung eingebaut". Auf loqal.io stand im
+    // Skript-Tag eine Scan-Kennung statt der Site-ID; die Seite haette nie
+    // eine Reparatur bekommen, und nichts haette darauf hingewiesen.
+    //
+    // Ein Hinweis in der Konsole, damit es beim Hinsehen auffaellt, und eine
+    // Meldung an complyo, damit es auch ohne Hinsehen auffaellt.
+    if (d.bekannt === false) {
+      unbekannteKennung = true;
+      try {
+        console.warn('[complyo] Die eingebaute data-site-id "' + siteId +
+          '" ist unbekannt. Es werden keine Reparaturen ausgeliefert. ' +
+          'Bitte die Kennung aus dem complyo-Dashboard uebernehmen.');
+      } catch (e) {}
+    }
   }
 
   // ---- Rueckmeldung an complyo ----------------------------------------------
@@ -346,6 +400,8 @@
       link_labels: bilanz.link_labels,
       struktur: bilanz.struktur,
       css_regeln: bilanz.css_regeln,
+      dokument_fixes: bilanz.dokument_fixes,
+      unbekannte_kennung: unbekannteKennung,
       erwartet: {
         alt_texte: Object.keys(map).length,
         link_labels: linkFixes.length,

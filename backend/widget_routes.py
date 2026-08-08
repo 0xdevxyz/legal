@@ -669,10 +669,42 @@ async def get_fix_manifest(site_id: str, request: Request):
                 if isinstance(r, dict) and r.get("selector") and r.get("declarations")
             ])
 
+    # Kennt complyo diese site_id ueberhaupt?
+    #
+    # Der Anlass ist ein echter Fund: auf loqal.io laedt das Cookie-Widget mit
+    # `data-site-id="loqal-io"`, das Barrierefreiheits-Widget daneben mit
+    # `data-site-id="scan_5_1783852724"` — einer Scan-Kennung. Das Manifest
+    # antwortete mit 200 und einem leeren Koerper, das Widget wendete brav
+    # nichts an, und niemand konnte es merken. Die Seite haette auch nach jeder
+    # Freigabe nie eine Reparatur bekommen.
+    #
+    # Ein leeres Manifest hat zwei voellig verschiedene Bedeutungen: "hier gibt
+    # es nichts zu tun" und "du fragst unter der falschen Kennung". Beide mit
+    # derselben Antwort zu beantworten, ist der Fehler. Deshalb dieses Feld —
+    # das Widget meldet es zurueck, und der Betreiber erfaehrt, dass sein
+    # Einbau ins Leere laeuft.
+    bekannt = bool(alt_texts or document_fixes or link_fixes)
+    if not bekannt and db_pool:
+        try:
+            async with db_pool.acquire() as conn:
+                bekannt = bool(await conn.fetchval(
+                    """SELECT 1 FROM tracked_websites
+                       WHERE replace(
+                               regexp_replace(
+                                 regexp_replace(lower(url), '^https?://(www\\.)?', ''),
+                                 '[/?#:].*$', ''),
+                               '.', '-') = $1
+                       LIMIT 1""",
+                    site_id))
+        except Exception as e:
+            _logger.warning(f"[Fix-Manifest] Bekanntheitspruefung fuer {site_id}: {e}")
+            bekannt = True   # im Zweifel nicht warnen
+
     manifest = {
         "success": True,
         "version": "1.1.0",
         "site_id": site_id,
+        "bekannt": bekannt,
         "alt_texts": alt_texts,
         "document_fixes": [f for f in document_fixes
                            if f.get("fix_type") not in ("css-rule", "kontrast-css")],

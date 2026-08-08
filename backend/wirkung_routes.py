@@ -30,7 +30,7 @@ Glaubwürdigkeit. Die Tabelle hat schlicht keine Spalte, in die ein Besucher
 passen würde.
 """
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
@@ -65,6 +65,11 @@ CREATE INDEX IF NOT EXISTS idx_wirkung_site ON accessibility_wirkung (site_id);
 class Zaehler(BaseModel):
     angewendet: int = Field(0, ge=0, le=100000)
     verfehlt: int = Field(0, ge=0, le=100000)
+    # Ein Fix, der nichts zu tun hatte, weil die Seite den Zustand schon
+    # mitbringt — etwa `landmark-main` auf einer Seite mit eigenem <main>.
+    # Das ist KEIN Fehlschlag und darf keinen Regressionsalarm ausloesen.
+    # Wer beides zusammenwirft, erzeugt eine Warnung, der niemand glaubt.
+    unnoetig: int = Field(0, ge=0, le=100000)
 
 
 class WirkungsMeldung(BaseModel):
@@ -74,6 +79,13 @@ class WirkungsMeldung(BaseModel):
     link_labels: Zaehler = Zaehler()
     struktur: Zaehler = Zaehler()
     css_regeln: Zaehler = Zaehler()
+    # Skip-Link und landmark-main liefen frueher ganz ausserhalb der Bilanz.
+    # Blieb der Skip-Link mangels aufloesbarem Ziel aus, meldete das niemand —
+    # ausgerechnet der Fall, fuer den diese Ueberwachung da ist.
+    dokument_fixes: Zaehler = Zaehler()
+    # Das Widget laeuft, aber unter einer Kennung, die complyo nicht kennt.
+    # Dann ist die Seite eingebunden und bekommt trotzdem nie eine Reparatur.
+    unbekannte_kennung: bool = False
     erwartet: Dict[str, int] = Field(default_factory=dict)
 
 
@@ -140,16 +152,32 @@ async def melde_wirkung(site_id: str, request: Request) -> Response:
         "link_labels": meldung.link_labels,
         "struktur": meldung.struktur,
         "css_regeln": meldung.css_regeln,
+        "dokument_fixes": meldung.dokument_fixes,
     }
     angewendet = sum(z.angewendet for z in arten.values())
+    # `unnoetig` fliesst bewusst in KEINE der beiden Summen: es ist weder
+    # geleistete Arbeit noch ein Fehlschlag, sondern die Feststellung, dass
+    # nichts zu tun war.
     verfehlt = sum(z.verfehlt for z in arten.values())
     erwartet = sum(int(v) for v in meldung.erwartet.values() if isinstance(v, int))
 
     import json as _json
-    je_art = _json.dumps({
-        name: {"angewendet": z.angewendet, "verfehlt": z.verfehlt}
+    _inhalt = {
+        name: {"angewendet": z.angewendet, "verfehlt": z.verfehlt,
+               "unnoetig": z.unnoetig}
         for name, z in arten.items()
-    })
+    }
+    if meldung.unbekannte_kennung:
+        _inhalt["unbekannte_kennung"] = True
+        # Laut ins Log: hier hat jemand complyo eingebaut und bekommt nichts.
+        # Auf loqal.io stand eine Scan-Kennung im Skript-Tag statt der
+        # Site-ID; die Seite haette auch nach jeder Freigabe nie eine
+        # Reparatur erhalten, und niemand konnte es bemerken.
+        logger.warning(
+            "Widget meldet sich unter unbekannter Kennung %r (Pfad %s) — "
+            "diese Website bekommt keine Reparaturen ausgeliefert",
+            site_id, _pfad_saeubern(meldung.pfad))
+    je_art = _json.dumps(_inhalt)
 
     try:
         async with db_pool.acquire() as conn:
@@ -185,6 +213,37 @@ async def wirkung_preflight(site_id: str) -> Response:
         "Access-Control-Allow-Headers": "content-type",
         "Access-Control-Max-Age": "86400",
     })
+
+
+async def falsch_eingebaute_kennungen(grenze: int = 50) -> List[Dict[str, Any]]:
+    """
+    Kennungen, unter denen sich ein Widget meldet, die complyo aber nicht kennt.
+
+    Das ist der Betriebsblick auf einen Fund, den nur das Widget liefern kann:
+    jemand hat complyo eingebaut, das Skript laeuft, und trotzdem kommt nichts
+    an — weil im `data-site-id` etwas anderes steht als die Site-ID. Ein
+    Scanner koennte das nie feststellen; er ist nicht dabei, wenn die Seite
+    geladen wird.
+
+    Fuer den Betrieb ist es eine Warnliste, fuer den Vertrieb ein Beleg: das
+    Produkt merkt, wenn es selbst falsch eingebaut ist.
+    """
+    if not db_pool:
+        return []
+    async with db_pool.acquire() as conn:
+        zeilen = await conn.fetch(
+            """SELECT site_id, count(*) AS pfade, sum(aufrufe) AS aufrufe,
+                      max(zuletzt) AS zuletzt
+               FROM accessibility_wirkung
+               WHERE je_art ? 'unbekannte_kennung'
+               GROUP BY site_id ORDER BY sum(aufrufe) DESC LIMIT $1""",
+            grenze,
+        )
+    return [
+        {"site_id": z["site_id"], "seiten": z["pfade"], "aufrufe": z["aufrufe"],
+         "zuletzt": z["zuletzt"].strftime("%Y-%m-%d %H:%M")}
+        for z in zeilen
+    ]
 
 
 async def wirkung_fuer_site(site_id: str) -> Optional[Dict[str, Any]]:

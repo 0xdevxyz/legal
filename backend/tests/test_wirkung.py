@@ -45,9 +45,27 @@ class TestDatensparsamkeit:
             assert verboten not in wr.SCHEMA.lower(), verboten
 
     def test_meldung_kennt_nur_pfad_und_zaehler(self):
+        """
+        Die Feldmenge ist bewusst festgenagelt.
+
+        Sie darf wachsen — `dokument_fixes` und `unbekannte_kennung` kamen
+        hinzu, nachdem im Browser aufgefallen war, dass Skip-Link und
+        landmark-main ganz ausserhalb der Bilanz liefen und dass ein falsch
+        eingebautes Widget sich nicht bemerkbar machen konnte. Aber sie darf
+        nur um Aussagen ueber die SEITE wachsen, nie um eine ueber den
+        Menschen davor. Dieser Test ist die Stelle, an der jemand darueber
+        nachdenken muss.
+        """
         felder = set(wr.WirkungsMeldung.model_fields)
         assert felder == {"pfad", "alt_texte", "link_labels", "struktur",
-                          "css_regeln", "erwartet"}
+                          "css_regeln", "dokument_fixes", "unbekannte_kennung",
+                          "erwartet"}
+
+    def test_kein_feld_beschreibt_den_besucher(self):
+        for feld in wr.WirkungsMeldung.model_fields:
+            for verboten in ("ip", "agent", "referrer", "session", "besucher",
+                             "cookie", "fingerprint", "id_"):
+                assert verboten not in feld.lower(), feld
 
     def test_abfrageparameter_werden_abgeschnitten(self):
         assert wr._pfad_saeubern("/kontakt/?utm_source=news") == "/kontakt/"
