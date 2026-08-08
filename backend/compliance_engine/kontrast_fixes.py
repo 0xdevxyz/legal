@@ -159,6 +159,46 @@ def _sammle(node: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return None
 
 
+# Wie viele Einzelselektoren eine Entscheidung hoechstens mitfuehrt.
+#
+# Der Deckel muss sein: eine Regel je Selektor, und eine kaputte Seite kann
+# tausende Fundstellen desselben Farbpaars haben — das Manifest laedt der
+# Besucher mit. Er war 50 und war damit gefaehrlich niedrig: eine Entscheidung
+# meldete "1500 Stellen", das erzeugte CSS erreichte 50, und der Kunde gab sie
+# im Glauben frei, alle 1500 seien behoben. Die Nachmessung sah es (1500 -> 1450),
+# aber in der Freigabemaske stand die grosse Zahl.
+#
+# Jetzt hoeher UND ausgewiesen: `abgedeckt` sagt, wie viele Stellen das CSS
+# wirklich trifft. Wo beides auseinanderfaellt, muss die Oberflaeche es zeigen.
+SELEKTOR_DECKEL = 200
+
+
+def _selektor_aus_ziel(ziel: Any) -> Optional[str]:
+    """
+    Der CSS-Selektor einer axe-Fundstelle — oder None, wenn es keinen gibt.
+
+    axe liefert `target` normalerweise als Liste von Zeichenketten. Liegt das
+    Element in einem Shadow DOM, ist der Eintrag stattdessen selbst eine Liste:
+    `[["mein-element", "p.text"]]` — erst der Wirt, dann der Selektor darin.
+
+    Das hat frueher `sorted(set(...))` mit `TypeError: unhashable type: 'list'`
+    abgeraeumt, und weil der Aufrufer fail-open ist, verlor die Seite damit
+    JEDE Kontrastreparatur — nicht nur die eine Fundstelle. Ein einziges Web
+    Component genuegte. Cookie-Banner (Usercentrics, Cookiebot) und Chat-Widgets
+    benutzen genau diese Technik, das trifft also keineswegs Randfaelle.
+
+    Ein Shadow DOM laesst sich von aussen mit CSS nicht erreichen. Deshalb hier
+    None: die Stelle wird gezaehlt und im Nachweis als nicht erreichbar
+    benannt, statt als repariert zu gelten.
+    """
+    if not ziel:
+        return None
+    erster = ziel[0] if isinstance(ziel, (list, tuple)) else ziel
+    if isinstance(erster, (list, tuple)):
+        return None
+    return erster if isinstance(erster, str) and erster.strip() else None
+
+
 def baue_kontrast_entscheidungen(
     nodes: List[Dict[str, Any]],
     max_gruppen: int = 25,
@@ -197,12 +237,17 @@ def baue_kontrast_entscheidungen(
             "ist_ratio": round(float(daten.get("contrastRatio") or kontrast(vg, hg)), 2),
             "stellen": 0,
             "selektoren": [],
+            "im_shadow_dom": 0,
             "beispiel_html": "",
         })
         eintrag["stellen"] += 1
-        ziel_sel = node.get("target") or []
-        if ziel_sel and len(eintrag["selektoren"]) < 50:
-            eintrag["selektoren"].append(ziel_sel[0])
+        sel = _selektor_aus_ziel(node.get("target"))
+        if sel is None:
+            # Im Shadow DOM. Von aussen mit CSS nicht erreichbar — mitzaehlen,
+            # nicht so tun, als waere es repariert.
+            eintrag["im_shadow_dom"] += 1
+        elif len(eintrag["selektoren"]) < SELEKTOR_DECKEL:
+            eintrag["selektoren"].append(sel)
         if not eintrag["beispiel_html"]:
             eintrag["beispiel_html"] = (node.get("html") or "")[:200]
 
@@ -224,6 +269,24 @@ def baue_kontrast_entscheidungen(
                 "Mit dieser Vordergrundfarbe nicht erreichbar — der Hintergrund "
                 "müsste angepasst werden."
             )
+        # Wie viele Stellen das erzeugte CSS wirklich trifft. Weicht die Zahl
+        # von `stellen` ab, muss die Freigabemaske das zeigen — sonst gibt der
+        # Kunde eine grosse Zahl frei und bekommt eine kleine.
+        eintrag["abgedeckt"] = len(eintrag["selektoren"])
+        if eintrag["abgedeckt"] < eintrag["stellen"]:
+            rest = eintrag["stellen"] - eintrag["abgedeckt"]
+            teile = []
+            if eintrag["im_shadow_dom"]:
+                teile.append(
+                    f"{eintrag['im_shadow_dom']} davon liegen in einem Shadow DOM "
+                    f"und sind von aussen mit CSS nicht erreichbar"
+                )
+            if rest - eintrag["im_shadow_dom"] > 0:
+                teile.append(
+                    f"{rest - eintrag['im_shadow_dom']} weitere werden nicht "
+                    f"einzeln adressiert (Deckel bei {SELEKTOR_DECKEL} Selektoren)"
+                )
+            eintrag["deckung_hinweis"] = "; ".join(teile)
         entscheidungen.append(eintrag)
 
     entscheidungen.sort(key=lambda e: (not e["loesbar"], -e["stellen"]))
@@ -284,6 +347,20 @@ def verschaerfe(entscheidung: Dict[str, Any], gemessene_ratio: float) -> bool:
     return True
 
 
+def _nur_zeichenketten(selektoren: Any) -> List[str]:
+    """
+    Sortierte, eindeutige Selektoren — verschachtelte Eintraege fliegen raus.
+
+    `_selektor_aus_ziel()` laesst sie gar nicht erst herein. Diese zweite
+    Schranke gilt dem Altbestand: in der Datenbank liegen Entscheidungen, die
+    vor der Reparatur entstanden sind, und eine davon wuerde beim Ausliefern
+    wieder `TypeError: unhashable type: 'list'` werfen — dann still, weil der
+    Aufrufer fail-open ist.
+    """
+    return sorted({s for s in (selektoren or [])
+                   if isinstance(s, str) and s.strip()})
+
+
 def als_css(entscheidungen: List[Dict[str, Any]]) -> str:
     """
     Die freigegebenen Entscheidungen als CSS.
@@ -297,7 +374,7 @@ def als_css(entscheidungen: List[Dict[str, Any]]) -> str:
     for e in entscheidungen:
         if not e.get("loesbar") or not e.get("vorschlag"):
             continue
-        selektoren = sorted(set(e["selektoren"]))
+        selektoren = _nur_zeichenketten(e["selektoren"])
         if not selektoren:
             continue
         zeilen.append(
@@ -332,7 +409,7 @@ def als_css_regeln(entscheidungen: List[Dict[str, Any]]) -> List[Dict[str, str]]
     for e in entscheidungen:
         if not e.get("bestaetigt", e.get("loesbar")) or not e.get("vorschlag"):
             continue
-        for selektor in sorted(set(e.get("selektoren") or [])):
+        for selektor in _nur_zeichenketten(e.get("selektoren")):
             regeln.append({
                 "selector": selektor,
                 "declarations": f"color: {e['vorschlag']} !important;",

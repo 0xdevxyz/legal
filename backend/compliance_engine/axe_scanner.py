@@ -373,7 +373,30 @@ class AxeScanner:
                 # in den Timeout ("Timeout 30000ms exceeded"). DOM-ready reicht
                 # fuer axe; danach geben wir Netzwerkruhe eine kurze Chance,
                 # ohne den Scan daran scheitern zu lassen.
-                await page.goto(url, timeout=timeout, wait_until="domcontentloaded")
+                antwort = await page.goto(url, timeout=timeout,
+                                          wait_until="domcontentloaded")
+
+                # Der Rueckgabewert von goto() wurde frueher verworfen. Damit
+                # vermass der Scanner die Fehlerseite des Hosters, als waere sie
+                # die Kundenseite: ein Tippfehler in der Adresse oder eine
+                # Stunde Ausfall genuegten. Die Befunde landeten unter der
+                # echten site_id, ueberschrieben die gueltige Messung, und der
+                # Pruefnachweis behauptete anschliessend, eine Seite gemessen zu
+                # haben, die dem Kunden nie gehoert hat.
+                #
+                # Fuer ein Produkt, dessen ganzer Wert "nachgemessen und
+                # belegbar" ist, ist das der teuerste denkbare Fehler. Deshalb
+                # hier hart: kein Ergebnis statt eines falschen.
+                if antwort is None:
+                    return self._create_empty_result(
+                        url, "Seite nicht erreichbar — keine Antwort erhalten")
+                if antwort.status >= 400:
+                    return self._create_empty_result(
+                        url,
+                        f"Seite antwortet mit HTTP {antwort.status} — "
+                        f"gemessen wurde nicht, weil das die Fehlerseite waere "
+                        f"und nicht die Website")
+
                 try:
                     await page.wait_for_load_state("networkidle", timeout=5000)
                 except Exception:
