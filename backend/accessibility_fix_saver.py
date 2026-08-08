@@ -110,10 +110,53 @@ class AccessibilityFixSaver:
                                 created_at,
                                 updated_at
                             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
-                            ON CONFLICT (site_id, image_src) 
+                            ON CONFLICT (site_id, image_src)
                             DO UPDATE SET
-                                suggested_alt = EXCLUDED.suggested_alt,
-                                confidence = EXCLUDED.confidence,
+                                -- Der Vorschlag wird NUR ersetzt, solange
+                                -- niemand ueber ihn entschieden hat.
+                                --
+                                -- Vorher galt das unbedingt. Ein Kunde gab
+                                -- "Firmengebaeude der Spedition in Zwickau"
+                                -- frei; der naechste Scan formulierte
+                                -- "Ein LKW steht vor einer Halle", und weil
+                                -- der Status unangetastet blieb, ging der neue
+                                -- Text ALS FREIGEGEBEN auf die Website. Der
+                                -- Kunde hatte ihn nie gesehen.
+                                --
+                                -- Damit war die zentrale Zusage des Produkts
+                                -- ausgehebelt: kein Bild bekommt ungeprueft
+                                -- eine Beschreibung. Nachgewiesen an einem
+                                -- Durchstich, nicht vermutet.
+                                --
+                                -- Eine abweichende Neuformulierung geht nicht
+                                -- verloren, sie wandert nach image_context.
+                                -- Wenn sich das Bild hinter der Adresse
+                                -- geaendert hat, ist das dort auffindbar —
+                                -- aber es aendert nichts, ohne dass ein Mensch
+                                -- es entscheidet.
+                                suggested_alt = CASE
+                                    WHEN accessibility_alt_text_fixes.status = 'pending'
+                                    THEN EXCLUDED.suggested_alt
+                                    ELSE accessibility_alt_text_fixes.suggested_alt
+                                END,
+                                confidence = CASE
+                                    WHEN accessibility_alt_text_fixes.status = 'pending'
+                                    THEN EXCLUDED.confidence
+                                    ELSE accessibility_alt_text_fixes.confidence
+                                END,
+                                image_context = CASE
+                                    WHEN accessibility_alt_text_fixes.status <> 'pending'
+                                     AND EXCLUDED.suggested_alt IS DISTINCT FROM
+                                         accessibility_alt_text_fixes.suggested_alt
+                                    THEN COALESCE(accessibility_alt_text_fixes.image_context,
+                                                  '{}'::jsonb)
+                                         || jsonb_build_object(
+                                                'abweichender_vorschlag',
+                                                EXCLUDED.suggested_alt,
+                                                'bemerkt_am', NOW()::text,
+                                                'scan_id', EXCLUDED.scan_id)
+                                    ELSE accessibility_alt_text_fixes.image_context
+                                END,
                                 scan_id = EXCLUDED.scan_id,
                                 page_title = EXCLUDED.page_title,
                                 surrounding_text = EXCLUDED.surrounding_text,
@@ -332,15 +375,48 @@ class AccessibilityFixSaver:
                                       NOW(), NOW())
                             ON CONFLICT (site_id, fix_type)
                             DO UPDATE SET
-                                payload = EXCLUDED.payload,
+                                -- Eine erteilte Freigabe ueberlebt den
+                                -- naechsten Scan.
+                                --
+                                -- Vorher stand hier `status = EXCLUDED.status`.
+                                -- Kontrast-Fixes werden immer als 'pending'
+                                -- gespeichert, also setzte JEDER Wiederholungs-
+                                -- scan eine erteilte Farbfreigabe zurueck — die
+                                -- Reparatur verschwand still von der Kunden-
+                                -- website. Bei woechentlichem Scan haelt so
+                                -- keine Freigabe eine Woche, und niemand
+                                -- bekommt es mit: die Farben sehen wieder aus
+                                -- wie vorher, das Dashboard zeigt "offen".
+                                --
+                                -- Der neue Vorschlag geht nicht verloren; er
+                                -- liegt unter `neuer_vorschlag` im Payload und
+                                -- wartet auf eine Entscheidung. Bis dahin
+                                -- bleibt die alte, freigegebene Reparatur
+                                -- aktiv — sie war einmal nachgemessen, und
+                                -- veraltete Selektoren melden sich ohnehin
+                                -- ueber die Wirkungsueberwachung.
+                                status = CASE
+                                    WHEN accessibility_document_fixes.status = 'approved'
+                                    THEN 'approved'
+                                    ELSE EXCLUDED.status
+                                END,
+                                payload = CASE
+                                    WHEN accessibility_document_fixes.status = 'approved'
+                                     AND EXCLUDED.status <> 'approved'
+                                    THEN accessibility_document_fixes.payload
+                                         || jsonb_build_object(
+                                                'neuer_vorschlag', EXCLUDED.payload,
+                                                'bemerkt_am', NOW()::text)
+                                    ELSE EXCLUDED.payload
+                                END,
                                 wcag_criterion = EXCLUDED.wcag_criterion,
                                 confidence = EXCLUDED.confidence,
                                 scan_id = EXCLUDED.scan_id,
                                 page_url = EXCLUDED.page_url,
                                 source = EXCLUDED.source,
-                                status = EXCLUDED.status,
                                 approved_at = CASE
-                                    WHEN EXCLUDED.status = 'approved'
+                                    WHEN accessibility_document_fixes.status = 'approved'
+                                      OR EXCLUDED.status = 'approved'
                                     THEN COALESCE(accessibility_document_fixes.approved_at, NOW())
                                     ELSE NULL END,
                                 updated_at = NOW()
@@ -458,8 +534,22 @@ class AccessibilityFixSaver:
                             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())
                             ON CONFLICT (site_id, link_key)
                             DO UPDATE SET
-                                suggested_label = EXCLUDED.suggested_label,
-                                confidence = EXCLUDED.confidence,
+                                -- Wie bei den Bildbeschreibungen: eine bereits
+                                -- entschiedene Beschriftung wird nicht durch
+                                -- eine neue ersetzt. Sonst traegt die Freigabe
+                                -- des Kunden einen Text, den er nie gesehen
+                                -- hat — und der Link sagt Besuchern etwas
+                                -- anderes, als jemand geprueft hat.
+                                suggested_label = CASE
+                                    WHEN accessibility_link_fixes.status = 'pending'
+                                    THEN EXCLUDED.suggested_label
+                                    ELSE accessibility_link_fixes.suggested_label
+                                END,
+                                confidence = CASE
+                                    WHEN accessibility_link_fixes.status = 'pending'
+                                    THEN EXCLUDED.confidence
+                                    ELSE accessibility_link_fixes.confidence
+                                END,
                                 surrounding_text = EXCLUDED.surrounding_text,
                                 scan_id = EXCLUDED.scan_id,
                                 page_url = EXCLUDED.page_url,
