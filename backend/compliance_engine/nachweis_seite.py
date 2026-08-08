@@ -109,6 +109,27 @@ def nachweis_als_html(n: Dict[str, Any]) -> str:
                       "<p>In der automatisierten Prüfung sind keine Abweichungen "
                       "offen geblieben.</p>")
 
+    # Geprueft und nachgemessen, aber noch nicht freigegeben. Gehoert in das
+    # technische Protokoll — nicht in die Barrierefreiheitserklaerung: die ist
+    # die Aussage des Betreibers ueber den Zustand seiner Website, nicht ueber
+    # unseren Arbeitsstand.
+    vorbereitet_html = ""
+    if n.get("vorbereitet"):
+        punkte = "".join(
+            f"<li><strong><code>{_e(v['regel'])}</code></strong>: "
+            f"{_e(v['fundstellen'])} Fundstellen, nach der Reparatur gemessen "
+            f"{_e(v['nach_reparatur_gemessen'])} — {_e(v['stand'])}</li>"
+            for v in n["vorbereitet"]
+        )
+        vorbereitet_html = (
+            '<h2 id="vorbereitet">Geprüft, aber nicht ausgeliefert</h2>'
+            "<p>Für die folgenden Abweichungen liegt eine Reparatur vor, die im "
+            "Browser nachgemessen wurde. Sie ist <strong>nicht aktiv</strong>, "
+            "weil die Freigabe des Betreibers aussteht — und zählt oben deshalb "
+            "als offen.</p>"
+            f"<ul>{punkte}</ul>"
+        )
+
     reparaturen = n.get("reparaturen") or []
     rep_html = ""
     if reparaturen:
@@ -152,6 +173,16 @@ def nachweis_als_html(n: Dict[str, Any]) -> str:
             f"sind hinterlegt und freigegeben. Automatische Prüfwerkzeuge erfassen "
             f"diese nicht, weil ein leeres <code>alt</code>-Attribut als gültig gilt.</p>"
         )
+    # Die offenen gehoeren daneben, nicht weggelassen: dieser Nachweis
+    # unterscheidet sich von einem Siegel dadurch, dass er die eigenen Luecken
+    # zeigt. Eine davon wegzulassen, weil sie unfertig aussieht, gaebe genau
+    # das auf.
+    if n.get("bildbeschreibungen_offen"):
+        bilder += (
+            f"<p>Für <strong>{n['bildbeschreibungen_offen']} weitere Bilder</strong> "
+            f"liegt ein Vorschlag vor, der noch nicht freigegeben ist. Bis dahin "
+            f"sind diese Bilder für Screenreader nicht beschrieben.</p>"
+        )
 
     return f"""<!doctype html>
 <html lang="de">
@@ -186,6 +217,7 @@ def nachweis_als_html(n: Dict[str, Any]) -> str:
             "Fundstellen vor und nach der Reparatur")}
 
   {offen_html}
+  {vorbereitet_html}
 
   <h2 id="reparaturen">Was geändert wurde</h2>
   {rep_html or "<p>Keine Reparaturen ausgeliefert.</p>"}

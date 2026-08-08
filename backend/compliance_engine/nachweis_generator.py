@@ -137,6 +137,8 @@ def baue_nachweis(
     messung_nachher: Dict[str, int],
     fixes: List[Dict[str, Any]],
     alt_texte_live: int = 0,
+    alt_texte_offen: int = 0,
+    vorbereitet: Optional[List[Dict[str, Any]]] = None,
     gemessen_am: Optional[str] = None,
     axe_version: str = "4.11.4",
     regelsatz: str = "WCAG 2.1 AA + best-practice",
@@ -148,6 +150,9 @@ def baue_nachweis(
         messung_vorher/-nachher: {axe_regel: fundstellen}, aus demselben Lauf.
         fixes: die ausgelieferten Reparaturen mit ihrer Begründung.
         alt_texte_live: freigegebene Bildbeschreibungen (axe sieht sie nicht).
+        alt_texte_offen: vorgeschlagen, aber noch nicht freigegeben — gehoert
+            in den Nachweis, weil ein Protokoll, das nur die erledigte Arbeit
+            zeigt, wieder ein Siegel waere.
 
     Returns:
         Ein Protokoll, das ohne weitere Erklärung lesbar ist — auch von
@@ -186,6 +191,21 @@ def baue_nachweis(
             for f in fixes
         ],
         "bildbeschreibungen_live": alt_texte_live,
+        "bildbeschreibungen_offen": alt_texte_offen,
+        # Geprueft, nachgemessen, aber vom Betreiber noch nicht freigegeben.
+        # Diese Zeilen zaehlen NICHT als behoben — sie stehen weiter oben unter
+        # "offen". Sie hier zu nennen ist trotzdem richtig: sie belegen, dass
+        # die Methode auch fuer den Rest greift, und sie machen sichtbar, dass
+        # die verbleibende Arbeit eine Entscheidung ist, kein Aufwand.
+        "vorbereitet": [
+            {
+                "regel": v.get("regel"),
+                "fundstellen": v.get("fundstellen"),
+                "nach_reparatur_gemessen": v.get("nachgemessen"),
+                "stand": "nicht freigegeben — nicht ausgeliefert",
+            }
+            for v in (vorbereitet or [])
+        ],
         "offen": [
             {
                 "regel": z["regel"],
@@ -251,6 +271,19 @@ def erklaerung_aus_nachweis(nachweis: Dict[str, Any], anbieter: str,
             f"Bildbeschreibungen** hinterlegt und freigegeben. Automatische "
             f"Prüfwerkzeuge erfassen diese nicht, weil ein leeres "
             f"`alt`-Attribut als gültig gilt.",
+            "",
+        ]
+
+    # Noch nicht freigegebene Bildbeschreibungen sind nicht barrierefreier
+    # Inhalt — und zwar bekannter. Das BFSG verlangt genau diese Angabe. Sie
+    # wegzulassen, weil sie unfertig aussieht, waere der teuerste Fehler:
+    # eine Erklaerung, die eine bekannte Luecke verschweigt, ist falsch.
+    if nachweis.get("bildbeschreibungen_offen"):
+        zeilen += [
+            f"Für **{nachweis['bildbeschreibungen_offen']} weitere Bilder** "
+            f"liegt ein Beschreibungsvorschlag vor, der noch nicht freigegeben "
+            f"ist. Bis zur Freigabe sind diese Bilder für Screenreader nicht "
+            f"beschrieben.",
             "",
         ]
 
