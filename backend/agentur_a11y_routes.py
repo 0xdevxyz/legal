@@ -51,6 +51,11 @@ db_pool = None
 # oder 0,700, nichts dazwischen. Als Standard deshalb 0,9.
 VISION_SCHWELLE = 0.9
 
+# Ab wann gilt eine Website als verstummt. Eine Woche ist grosszuegig: selbst
+# eine kleine Handwerkerseite hat in sieben Tagen Besucher. Wer sich laenger
+# nicht meldet, hat das Skript nicht mehr drin.
+STILL_AB_TAGEN = 7
+
 
 class SammelfreigabeRequest(BaseModel):
     """Portfolioweite Alt-Text-Freigabe ab einer Konfidenzschwelle."""
@@ -119,17 +124,26 @@ async def _auslieferung(site_id: str) -> Dict[str, Any]:
     """
     Meldet sich auf dieser Website ueberhaupt ein Widget?
 
-    Drei Zustaende, und nur der erste ist gut:
+    Fuenf Zustaende, und nur der erste ist gut:
 
-      "laeuft"        das Widget hat sich gemeldet und wendet an
-      "nichts_da"     freigegebene Reparaturen, aber nie eine Meldung —
-                      das Skript fehlt auf der Seite oder wird blockiert
-      "nichts_zu_tun" nichts freigegeben, also auch nichts zu erwarten
+      "laeuft"         meldet sich, und die Reparaturen finden ihr Ziel
+      "greift_nicht"   meldet sich, aber die meisten Reparaturen laufen ins
+                       Leere — Theme-Update, Umbau, falsche Selektoren
+      "verstummt"      hat sich lange nicht mehr gemeldet; das Skript wurde
+                       vermutlich entfernt
+      "nichts_da"      freigegebene Reparaturen, nie eine Meldung — das Skript
+                       fehlt auf der Seite oder wird blockiert
+      "nichts_zu_tun"  nichts freigegeben, also auch nichts zu erwarten
 
-    Der mittlere Fall ist der gefaehrliche: das Dashboard zeigt "erledigt",
-    der Besucher sieht nichts davon, und der Betreiber erfaehrt es erst, wenn
-    ihn jemand darauf anspricht. Genau so lag es beim Durchlauf auf zwei von
-    drei Agenturseiten.
+    Die drei mittleren sind der eigentliche Grund fuer diese Funktion: das
+    Dashboard zeigte "erledigt", der Besucher sah nichts davon, und der
+    Betreiber erfuhr es erst, wenn ihn jemand darauf ansprach.
+
+    Warum es nicht bei "hat sich mal gemeldet" bleibt: spedition-mahn.de hatte
+    GENAU EINEN Aufruf, dabei 1 angewendet und **33 verfehlt**, und im HTML
+    steht das Skript inzwischen gar nicht mehr. Eine Anzeige, die daraus
+    "laeuft" macht, ist eine falsche Entwarnung — und damit schlimmer als
+    keine Anzeige.
     """
     if not db_pool:
         return {"auslieferung": "unbekannt"}
@@ -143,26 +157,52 @@ async def _auslieferung(site_id: str) -> Dict[str, Any]:
             site_id) or 0
         meldung = await conn.fetchrow(
             """SELECT COUNT(*) AS seiten, MAX(zuletzt) AS zuletzt,
-                      SUM(angewendet) AS angewendet, SUM(verfehlt) AS verfehlt
+                      SUM(angewendet) AS angewendet, SUM(verfehlt) AS verfehlt,
+                      SUM(aufrufe) AS aufrufe,
+                      NOW() - MAX(zuletzt) AS her
                FROM accessibility_wirkung WHERE site_id = $1""",
             site_id)
 
     seiten = int((meldung and meldung["seiten"]) or 0)
-    if seiten:
-        return {
-            "auslieferung": "laeuft",
-            "zuletzt_gesehen": meldung["zuletzt"].strftime("%Y-%m-%d %H:%M"),
-            "angewendet": int(meldung["angewendet"] or 0),
-            "verfehlt": int(meldung["verfehlt"] or 0),
-        }
-    if freigegeben:
-        return {
-            "auslieferung": "nichts_da",
-            "hinweis": (f"{freigegeben} Reparaturen sind freigegeben, es hat "
-                        f"sich aber noch nie ein Widget von dieser Website "
-                        f"gemeldet. Vermutlich fehlt das Skript auf der Seite."),
-        }
-    return {"auslieferung": "nichts_zu_tun"}
+    if not seiten:
+        if freigegeben:
+            return {
+                "auslieferung": "nichts_da",
+                "hinweis": (f"{freigegeben} Reparaturen sind freigegeben, es hat "
+                            f"sich aber noch nie ein Widget von dieser Website "
+                            f"gemeldet. Vermutlich fehlt das Skript auf der Seite."),
+            }
+        return {"auslieferung": "nichts_zu_tun"}
+
+    angewendet = int(meldung["angewendet"] or 0)
+    verfehlt = int(meldung["verfehlt"] or 0)
+    tage_her = (meldung["her"].days if meldung["her"] else 0)
+
+    basis = {
+        "zuletzt_gesehen": meldung["zuletzt"].strftime("%Y-%m-%d %H:%M"),
+        "angewendet": angewendet,
+        "verfehlt": verfehlt,
+        "seiten_beobachtet": seiten,
+        "aufrufe": int(meldung["aufrufe"] or 0),
+    }
+
+    # Laenger als eine Woche kein Lebenszeichen: auf einer Website mit
+    # Besuchern heisst das, dass das Skript weg ist.
+    if tage_her >= STILL_AB_TAGEN:
+        return {**basis, "auslieferung": "verstummt",
+                "hinweis": (f"Seit {tage_her} Tagen keine Meldung mehr. Auf einer "
+                            f"besuchten Website heisst das meist, dass das Skript "
+                            f"entfernt wurde.")}
+
+    # Mehr verfehlt als angewendet: die Reparaturen finden ihre Ziele nicht
+    # mehr. Das ist das Bild eines Theme-Updates.
+    if verfehlt > angewendet:
+        return {**basis, "auslieferung": "greift_nicht",
+                "hinweis": (f"{verfehlt} von {verfehlt + angewendet} Reparaturen "
+                            f"haben ihr Ziel nicht gefunden. Die Seite wurde "
+                            f"vermutlich umgebaut — ein neuer Scan ist faellig.")}
+
+    return {**basis, "auslieferung": "laeuft"}
 
 
 @router.get("/worklist")
@@ -243,9 +283,12 @@ async def agentur_worklist(
             "offen": sum(s["offen_gesamt"] for s in je_site),
             "stellen": sum(s["stellen_offen"] for s in je_site),
             "alt_texte_sammelbar": sum(s["alt_texte_sammelbar"] for s in je_site),
-            # Die Zahl, die vor jeder Erfolgsmeldung kommen muss.
+            # Die Zahl, die vor jeder Erfolgsmeldung kommen muss: auf wie
+            # vielen Websites kommt die freigegebene Arbeit NICHT an.
             "websites_ohne_auslieferung": len(
-                [s for s in je_site if s.get("auslieferung") == "nichts_da"]),
+                [s for s in je_site
+                 if s.get("auslieferung") in ("nichts_da", "verstummt",
+                                              "greift_nicht")]),
         },
     }
 
