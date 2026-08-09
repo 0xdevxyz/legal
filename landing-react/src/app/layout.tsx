@@ -71,9 +71,15 @@ export default function RootLayout({
         />
         
         {children}
+        {/* data-site-id MUSS die stabile Site-ID sein (derive_site_id), nicht
+            eine Scan-Kennung. Hier stand "scan-91778ad450e1": das Manifest
+            antwortete darauf mit "200, nichts zu tun", das Widget wendete brav
+            nichts an, und ausgerechnet die eigene Website bekam nie eine der
+            freigegebenen Reparaturen. Seit das Manifest ein Feld `bekannt`
+            fuehrt, warnt das Widget in der Konsole, wenn das hier falsch ist. */}
         <Script
           src="https://api.complyo.de/api/widgets/accessibility.js?version=6"
-          data-site-id="scan-91778ad450e1"
+          data-site-id="complyo-de"
           data-auto-fix="true"
           data-show-toolbar="true"
           strategy="afterInteractive"
