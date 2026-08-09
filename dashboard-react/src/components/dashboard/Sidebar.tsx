@@ -42,6 +42,14 @@ interface NavItem {
   // Gated behind the comploai_guard add-on; shown with a lock and routed to the
   // upsell until the add-on is active.
   requiresComploaiGuard?: boolean;
+  // Nur im Agentur-/Expert-Tarif nutzbar. Beim Durchlauf als Pro-Kunde standen
+  // "Agentur" und "Portfolio-A11y" ungeschuetzt im Menue — Funktionen fuer
+  // 299 EUR im Menue eines 49-EUR-Tarifs.
+  //
+  // Bewusst mit Schloss statt versteckt: was der groessere Tarif kann, soll
+  // sichtbar sein. Ein Menuepunkt, der wortlos nichts tut, ist ein Fehler;
+  // einer, der zeigt was er kostet, ist ein Angebot.
+  requiresAgency?: boolean;
 }
 
 interface NavGroup {
@@ -84,12 +92,13 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'Verwalten',
     items: [
       { label: 'Dokumente', icon: FileText, href: '/docs/cms' },
-      { label: 'Agentur', icon: Building2, href: '/agency' },
+      { label: 'Agentur', icon: Building2, href: '/agency', requiresAgency: true },
       // Portfolioweite Barrierefreiheit. Steht bewusst als eigener Punkt und
       // nicht in der Agentur-Uebersicht versteckt: es ist die Arbeit, fuer die
       // der Agentur-Tarif bezahlt wird — zwanzig Websites in einer Liste
       // statt zwanzig Mal die aktive Website wechseln.
-      { label: 'Portfolio-A11y', icon: Building2, href: '/agency/barrierefreiheit' },
+      { label: 'Portfolio-A11y', icon: Building2, href: '/agency/barrierefreiheit',
+        requiresAgency: true },
     ],
   },
 ];
@@ -116,9 +125,25 @@ export const Sidebar: React.FC = () => {
   const [showAccount, setShowAccount] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
-  const navTarget = (item: NavItem) =>
-    item.requiresComploaiGuard && !hasComploaiGuard ? '/ai-compliance/upgrade' : item.href;
-  const isLocked = (item: NavItem) => !!item.requiresComploaiGuard && !hasComploaiGuard;
+  // Tarife, die das Portfolio verwalten duerfen. `expert` ist dabei, weil der
+  // Expertenservice mehrere Websites einschliesst — dieselbe Menge wie die
+  // Ownership-Pruefung im Backend (website_routes: is_agency).
+  const AGENTUR_TARIFE = ['agency', 'expert'];
+  const hatAgentur = AGENTUR_TARIFE.includes(user?.plan_type ?? 'free');
+
+  const navTarget = (item: NavItem) => {
+    if (item.requiresComploaiGuard && !hasComploaiGuard) return '/ai-compliance/upgrade';
+    // Gesperrte Agentur-Punkte fuehren zur Tarifuebersicht statt auf eine
+    // Seite, die dann leer bleibt oder mit 403 antwortet.
+    if (item.requiresAgency && !hatAgentur) return '/subscription';
+    return item.href;
+  };
+  const isLocked = (item: NavItem) =>
+    (!!item.requiresComploaiGuard && !hasComploaiGuard) ||
+    (!!item.requiresAgency && !hatAgentur);
+  const sperrGrund = (item: NavItem) =>
+    item.requiresAgency && !hatAgentur ? 'Im Agentur-Tarif enthalten'
+                                       : 'Add-on erforderlich';
 
   const { data: notifData } = useQuery({
     queryKey: ['notifications-unread-count'],
@@ -203,7 +228,7 @@ export const Sidebar: React.FC = () => {
                 >
                   <Icon className="rail-icon" />
                   <span className="rail-label">{item.label}</span>
-                  {locked && <Lock className="rail-lock" aria-label="Add-on erforderlich" />}
+                  {locked && <Lock className="rail-lock" aria-label={sperrGrund(item)} />}
                 </button>
               );
             })}
@@ -355,7 +380,7 @@ export const Sidebar: React.FC = () => {
                   >
                     <Icon className="w-4 h-4" />
                     {item.label}
-                    {locked && <Lock className="w-3.5 h-3.5 ml-auto opacity-60" aria-label="Add-on erforderlich" />}
+                    {locked && <Lock className="w-3.5 h-3.5 ml-auto opacity-60" aria-label={sperrGrund(item)} />}
                   </button>
                 );
               })}
