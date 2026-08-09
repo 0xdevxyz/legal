@@ -17,6 +17,41 @@ _LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "900"))  # 15 min
 def _utcnow():
     return datetime.now(timezone.utc)
 
+
+# Module, die es gibt, und die Tarife, die per Definition ALLE enthalten.
+# Doppelt gefuehrt zu payment_routes/stripe_routes — dort wird beim Kauf
+# geschrieben, hier beim Lesen geprueft.
+_ALLE_MODULE = ['cookie', 'accessibility', 'legal_texts', 'monitoring']
+_VOLLZUGANG_TARIFE = ('pro', 'agency', 'expert', 'update')
+
+
+def _module_zugang(plan_type: str, gebuchte: list) -> list:
+    """
+    Welche Module ein Konto benutzen darf.
+
+    Bisher kam die Antwort ausschliesslich aus `user_modules`. Der Tarif war
+    dabei die eigentliche Wahrheit — `_resolve_modules()` im Kaufweg gibt fuer
+    pro/agency/expert/update grundsaetzlich ALLE Module zurueck. Die Zeilen in
+    `user_modules` sind nur die Buchhaltung dazu.
+
+    Faellt diese Buchhaltung aus, sieht ein zahlender Kunde "Modul nicht
+    aktiviert" — obwohl sein Tarif es einschliesst. Wege dorthin gibt es
+    mehrere: ein verlorener Stripe-Webhook, eine Tarifaenderung von Hand, eine
+    Migration, ein eingespieltes Backup. Genau dieser Fall ist im Kaufweg schon
+    einmal aufgetreten.
+
+    Deshalb hier abgeleitet statt nachgeschlagen: wer den Tarif hat, hat die
+    Module. Zusaetzlich gebuchte Einzelmodule kommen dazu — ein Konto verliert
+    durch diese Regel nie etwas.
+    """
+    zugang = list(gebuchte or [])
+    if (plan_type or '').lower() in _VOLLZUGANG_TARIFE:
+        for m in _ALLE_MODULE:
+            if m not in zugang:
+                zugang.append(m)
+    return zugang
+
+
 class AuthService:
     def __init__(self, db_pool: asyncpg.Pool, redis_client=None):
         self.db_pool = db_pool
@@ -75,7 +110,8 @@ class AuthService:
                 """,
                 user_id
             )
-            result['active_modules'] = [r['module_id'] for r in modules]
+            result['active_modules'] = _module_zugang(
+                result['plan_type'], [r['module_id'] for r in modules])
 
             return result
     

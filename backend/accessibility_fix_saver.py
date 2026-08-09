@@ -37,6 +37,31 @@ def _als_user_id(wert) -> "Optional[int]":
         return None
 
 
+def _pruefe_site_zugehoerigkeit(row, erlaubte_sites) -> None:
+    """
+    Gehoert dieser Fix zu einer Website, die der Aufrufer betreuen darf?
+
+    Vorher wurde stattdessen `row['user_id']` mit dem angemeldeten Nutzer
+    verglichen — also gefragt: "hast DU diese Zeile erzeugt?". Das ist die
+    falsche Frage. Ein Fix gehoert zu einer WEBSITE, nicht zu dem Konto, unter
+    dem zufaellig der Scan lief.
+
+    Die Folgen waren im Durchlauf sofort da: eine Seite wechselt den Betreuer —
+    Agenturwechsel, Uebergabe an den Kunden, ein Kollege hat gescannt — und
+    niemand kann mehr etwas freigeben. Der Endpunkt antwortete mit 403, die
+    Oberflaeche zeigte davon nichts, der Knopf tat einfach nichts mehr.
+
+    `erlaubte_sites` ist die Menge der site_ids, die der Aufrufer schon
+    autorisiert hat (require_site_ownership). None bedeutet: der Aufrufer hat
+    nicht autorisiert — dann wird nichts durchgelassen, denn "keine Angabe"
+    darf nie "darf alles" heissen.
+    """
+    if erlaubte_sites is None:
+        raise PermissionError("keine autorisierten Sites uebergeben")
+    if row["site_id"] not in erlaubte_sites:
+        raise PermissionError("fix gehoert zu einer fremden website")
+
+
 class AccessibilityFixSaver:
     """
     Speichert AI-generierte Alt-Texte und andere Accessibility-Fixes
@@ -257,22 +282,25 @@ class AccessibilityFixSaver:
         fix_id: int,
         status: str,
         custom_alt: Optional[str] = None,
-        user_id: Optional[str] = None
+        erlaubte_sites: Optional[set] = None
     ) -> bool:
         """
-        Setzt den Status eines Fixes (approve/reject/deploy). Optionaler user_id-Check.
+        Setzt den Status eines Fixes (approve/reject/deploy).
+
+        `erlaubte_sites` sind die site_ids, die der Aufrufer bereits autorisiert
+        hat. Frueher stand hier ein user_id-Vergleich gegen den Erzeuger der
+        Zeile — siehe _pruefe_site_zugehoerigkeit().
         status ∈ ('pending','approved','rejected','deployed').
         Gibt True zurück, wenn eine Zeile aktualisiert wurde.
         """
         async with self.db_pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT id, user_id FROM accessibility_alt_text_fixes WHERE id = $1",
+                "SELECT id, user_id, site_id FROM accessibility_alt_text_fixes WHERE id = $1",
                 fix_id
             )
             if not row:
                 return False
-            if user_id is not None and row['user_id'] is not None and str(row['user_id']) != str(user_id):
-                raise PermissionError("not authorized for this fix")
+            _pruefe_site_zugehoerigkeit(row, erlaubte_sites)
 
             approved_at = "NOW()" if status == 'approved' else "approved_at"
             if custom_alt is not None:
@@ -607,17 +635,16 @@ class AccessibilityFixSaver:
         fix_id: int,
         status: str,
         custom_label: Optional[str] = None,
-        user_id: Optional[str] = None
+        erlaubte_sites: Optional[set] = None
     ) -> bool:
-        """Approve/Reject eines Link-Fixes (optionaler user_id-Check)."""
+        """Approve/Reject eines Link-Fixes; autorisiert ueber die Website."""
         async with self.db_pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT id, user_id FROM accessibility_link_fixes WHERE id = $1", fix_id
+                "SELECT id, user_id, site_id FROM accessibility_link_fixes WHERE id = $1", fix_id
             )
             if not row:
                 return False
-            if user_id is not None and row['user_id'] is not None and str(row['user_id']) != str(user_id):
-                raise PermissionError("not authorized for this fix")
+            _pruefe_site_zugehoerigkeit(row, erlaubte_sites)
             approved_at = "NOW()" if status == 'approved' else "approved_at"
             if custom_label is not None:
                 await conn.execute(
@@ -641,7 +668,7 @@ class AccessibilityFixSaver:
         index: int,
         status: str,
         eigene_farbe: Optional[str] = None,
-        user_id: Optional[str] = None,
+        erlaubte_sites: Optional[set] = None,
     ) -> Dict[str, Any]:
         """
         Gibt EINE Farbentscheidung frei oder lehnt sie ab.
@@ -676,15 +703,14 @@ class AccessibilityFixSaver:
 
         async with self.db_pool.acquire() as conn:
             row = await conn.fetchrow(
-                """SELECT id, user_id, payload FROM accessibility_document_fixes
+                """SELECT id, user_id, site_id, payload
+                   FROM accessibility_document_fixes
                    WHERE site_id = $1 AND fix_type = 'kontrast-css'""",
                 site_id,
             )
             if not row:
                 return {"ok": False, "fehler": "Keine Kontrast-Entscheidungen für diese Site."}
-            if (user_id is not None and row["user_id"] is not None
-                    and str(row["user_id"]) != str(user_id)):
-                raise PermissionError("not authorized for this fix")
+            _pruefe_site_zugehoerigkeit(row, erlaubte_sites)
 
             payload = row["payload"]
             if isinstance(payload, str):

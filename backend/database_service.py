@@ -546,11 +546,36 @@ class DatabaseService:
                     AND (expires_at IS NULL OR expires_at > NOW())
                 """
                 result = await conn.fetchrow(query, uid, module_id)
-                return result is not None
+                if result is not None:
+                    return True
+
+                # Kein Eintrag — aber der Tarif kann das Modul einschliessen.
+                #
+                # pro/agency/expert/update enthalten laut Kaufweg
+                # (_resolve_modules) grundsaetzlich ALLE Module; die Zeilen in
+                # user_modules sind nur die Buchhaltung dazu. Faellt sie aus —
+                # verlorener Webhook, Tarifaenderung von Hand, Migration,
+                # eingespieltes Backup — sah ein zahlender Kunde bisher
+                # "Modul nicht aktiviert". Beim Oberflaechen-Durchlauf ist
+                # genau das passiert.
+                return await self._tarif_schliesst_modul_ein(conn, uid, module_id)
 
         except Exception as e:
             logger.error(f"Error checking user module: {e}")
             return False
+
+    # Tarife, die per Definition alle Module enthalten, und die Modulliste.
+    # Doppelt gefuehrt zu payment_routes/stripe_routes: dort wird beim Kauf
+    # geschrieben, hier beim Lesen geprueft.
+    _VOLLZUGANG_TARIFE = ('pro', 'agency', 'expert', 'update')
+    _ALLE_MODULE = ('cookie', 'accessibility', 'legal_texts', 'monitoring')
+
+    async def _tarif_schliesst_modul_ein(self, conn, uid: int, module_id: str) -> bool:
+        if module_id not in self._ALLE_MODULE:
+            return False
+        plan = await conn.fetchval(
+            "SELECT plan_type FROM user_limits WHERE user_id = $1", uid)
+        return (plan or '').lower() in self._VOLLZUGANG_TARIFE
 
     async def get_user_modules(self, user_id: str) -> List[str]:
         """
@@ -566,7 +591,17 @@ class DatabaseService:
                     AND (expires_at IS NULL OR expires_at > NOW())
                 """
                 rows = await conn.fetch(query, uid)
-                return [row['module_id'] for row in rows]
+                module = [row['module_id'] for row in rows]
+
+                # Dieselbe Ableitung wie in check_user_module(): der Tarif ist
+                # die Wahrheit, user_modules die Buchhaltung.
+                plan = await conn.fetchval(
+                    "SELECT plan_type FROM user_limits WHERE user_id = $1", uid)
+                if (plan or '').lower() in self._VOLLZUGANG_TARIFE:
+                    for m in self._ALLE_MODULE:
+                        if m not in module:
+                            module.append(m)
+                return module
 
         except Exception as e:
             logger.error(f"Error getting user modules: {e}")

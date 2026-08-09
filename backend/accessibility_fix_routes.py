@@ -20,6 +20,10 @@ import json
 from datetime import datetime
 from jinja2 import Environment, select_autoescape
 from site_id_utils import derive_site_id
+# Bringt user_id auf den Spaltentyp integer. Die accessibility_*-Tabellen
+# fuehren user_id als integer, die Aufrufer reichen den Wert aber aus den
+# JWT-Claims als String durch.
+from accessibility_fix_saver import _als_user_id
 
 from compliance_engine.feature_engine import (
     feature_engine
@@ -465,6 +469,93 @@ async def get_fix_summary(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def _besitzt_website(user: Dict[str, Any], site_id: str) -> bool:
+    """
+    Gehoert diese Website dem angemeldeten Konto?
+
+    Die alte Abfrage band die Erklaerung an den Nutzer, der den SCAN ausgeloest
+    hat. Wechselt eine Seite den Betreuer — Agenturwechsel, Uebergabe an den
+    Kunden, ein Kollege hat gescannt — faellt die Erklaerung stillschweigend auf
+    "Nicht bewertet" zurueck. Die Zugehoerigkeit gehoert an die gefuehrte
+    Website, nicht an eine Scan-Historie.
+    """
+    uid = _als_user_id(user.get("user_id") or user.get("id"))
+    if uid is None or not db_pool:
+        return False
+    async with db_pool.acquire() as conn:
+        return bool(await conn.fetchval(
+            """SELECT 1 FROM tracked_websites
+               WHERE user_id = $1
+                 AND replace(
+                       regexp_replace(
+                         regexp_replace(lower(url), '^https?://(www\\.)?', ''),
+                         '[/?#:].*$', ''),
+                       '.', '-') = $2
+               LIMIT 1""",
+            uid, site_id))
+
+
+async def _erklaerung_aus_pruefnachweis(request, user) -> Optional["GenerateStatementResponse"]:
+    """
+    Die Erklaerung aus der Messung — oder None, wenn es keine gibt.
+
+    Jede Zahl darin ist auf ein Protokoll zurueckfuehrbar, das oeffentlich
+    abrufbar ist; die offenen Punkte stehen mit Begruendung darin. Genau das
+    ist der Unterschied zu einer Vorlage, die jemand ausfuellt.
+    """
+    if not await _besitzt_website(user, request.site_id):
+        return None
+    try:
+        import nachweis_routes
+        from compliance_engine.nachweis_generator import (
+            baue_nachweis, erklaerung_aus_nachweis, nachweis_token,
+        )
+        daten = await nachweis_routes._daten_fuer(request.site_id)
+        if not daten:
+            return None
+
+        nachweis = baue_nachweis(
+            site_id=request.site_id, site_url=daten["site_url"],
+            messung_vorher=daten["vorher"], messung_nachher=daten["nachher"],
+            fixes=daten["fixes"], alt_texte_live=daten["alt_live"],
+            alt_texte_offen=daten["alt_offen"],
+            vorbereitet=daten["vorbereitet"], gemessen_am=daten["gemessen_am"],
+        )
+
+        import os as _os
+        geheim = _os.getenv("COMPLYO_NACHWEIS_SECRET", "")
+        basis = _os.getenv("COMPLYO_PUBLIC_URL", "https://complyo.de").rstrip("/")
+        link = (f"{basis}/nachweis/{request.site_id}/"
+                f"{nachweis_token(request.site_id, geheim)}") if geheim else ""
+
+        markdown = erklaerung_aus_nachweis(
+            nachweis,
+            anbieter=request.site_url or daten["site_url"],
+            kontakt=request.contact_email or "über das Kontaktformular dieser Website",
+            nachweis_url=link,
+        )
+        # Der Kunde bekommt HTML zum Einsetzen. Bewusst schlicht und ohne
+        # fremde Ressourcen — eine Erklaerung ueber Barrierefreiheit, die
+        # selbst Daten an Dritte abgibt, waere ein schlechter Witz.
+        import html as _html
+        absaetze = "".join(
+            f"<p>{_html.escape(z)}</p>" if not z.startswith(("#", "-", "*"))
+            else (f"<h2>{_html.escape(z.lstrip('# '))}</h2>" if z.startswith("#")
+                  else f"<li>{_html.escape(z.lstrip('- '))}</li>")
+            for z in markdown.splitlines() if z.strip()
+        )
+        return GenerateStatementResponse(
+            html=f"<article lang=\"de\">{absaetze}</article>",
+            markdown=markdown,
+            filename="barrierefreiheitserklaerung.html",
+        )
+    except Exception as e:
+        # Fail-open auf den alten Weg: lieber die schwaechere Erklaerung als
+        # gar keine. Aber laut im Log, denn hier faellt der USP aus.
+        logger.error(f"Erklaerung aus dem Pruefnachweis fehlgeschlagen: {e}")
+        return None
+
+
 @accessibility_fix_router.post("/generate-statement", response_model=GenerateStatementResponse, dependencies=[Depends(rate_limit("a11y_statement", 5, 60))])
 async def generate_statement(
     request: GenerateStatementRequest,
@@ -478,6 +569,26 @@ async def generate_statement(
     await require_accessibility_module(user)
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database not available")
+
+    # Zuerst der Pruefnachweis: die Erklaerung entsteht aus der MESSUNG.
+    #
+    # Bis hierher las dieser Endpunkt ausschliesslich
+    # `accessibility_fix_packages` — einen aelteren Speicher, der an den Nutzer
+    # gebunden ist, der den Scan ausgeloest hat. Fuer zua-zwickau.de lieferte er
+    # "Konformitaetsstatus: Nicht bewertet" und "Es sind aktuell keine nicht
+    # barrierefreien Inhalte bekannt", waehrend fuer dieselbe Website ein
+    # Protokoll mit 22 Abweichungen und 19 offenen Kontrast-Fundstellen vorlag.
+    #
+    # Das ist nicht nur schwach, sondern falsch: eine Barrierefreiheits-
+    # erklaerung, die bekannte Barrieren verschweigt, ist eine unrichtige
+    # Erklaerung — bei einem Compliance-Anbieter der teuerste denkbare Fehler.
+    # Und es war ausgerechnet der Knopf, den der Kunde dafuer drueckt.
+    #
+    # Der richtige Erzeuger existierte bereits (nachweis_generator), nur hat
+    # ihn die Oberflaeche nie aufgerufen.
+    aus_nachweis = await _erklaerung_aus_pruefnachweis(request, user)
+    if aus_nachweis:
+        return aus_nachweis
 
     # Defaults (used when no scan data exists)
     conformity_text = "Konformitätsstatus: Nicht bewertet — bisher wurde keine Barrierefreiheits-Prüfung durchgeführt."
@@ -494,7 +605,16 @@ async def generate_statement(
             LIMIT 1
             """,
             request.site_id,
-            str(user.get("user_id")),
+            # `str(...)` gegen eine integer-Spalte: asyncpg lehnt das ab, und
+            # zwar mit 500. Damit scheiterte JEDER Aufruf von
+            # "Barrierefreiheitserklaerung generieren" — das Kernstueck des
+            # Pro-Tarifs, und der Fehler lag offen sichtbar in der Oberflaeche.
+            # Gefunden beim Durchlauf als Pro-Kunde.
+            #
+            # Dieselbe Verwechslung hatte am 04.08. schon die Alt-Text-
+            # Speicherung sechs Wochen lang still lahmgelegt; deshalb dort der
+            # Helfer, der hier nachgenutzt wird.
+            _als_user_id(user.get("user_id") or user.get("id")),
         )
 
     if row:
@@ -843,7 +963,12 @@ async def save_fix_package_to_db(user_id: str, site_url: str, fix_package: Dict[
                 VALUES ($1, $2, $3, $4, NOW())
                 ON CONFLICT (user_id, site_id)
                 DO UPDATE SET fix_package = $4, updated_at = NOW()
-            """, str(user_id), site_id, site_url, json.dumps(fix_package))
+            # Wie beim Lesen: die Spalte ist integer. Mit `str(...)` warf
+            # asyncpg hier eine DataError — und weil der Aufrufer den Fehler
+            # nur protokolliert, wurde das Fix-Paket NIE gespeichert, ohne
+            # dass es jemandem auffiel. Die Barrierefreiheitserklaerung fand
+            # dadurch grundsaetzlich keine Messdaten.
+            """, _als_user_id(user_id), site_id, site_url, json.dumps(fix_package))
         
         logger.info(f"✅ Fix package saved for {site_url}")
     

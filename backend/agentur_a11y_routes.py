@@ -115,6 +115,56 @@ def _ist_brauchbar(fix: Dict[str, Any], schwelle: float) -> bool:
     return not ist_nichtssagend(fix.get("suggested_alt") or "")
 
 
+async def _auslieferung(site_id: str) -> Dict[str, Any]:
+    """
+    Meldet sich auf dieser Website ueberhaupt ein Widget?
+
+    Drei Zustaende, und nur der erste ist gut:
+
+      "laeuft"        das Widget hat sich gemeldet und wendet an
+      "nichts_da"     freigegebene Reparaturen, aber nie eine Meldung —
+                      das Skript fehlt auf der Seite oder wird blockiert
+      "nichts_zu_tun" nichts freigegeben, also auch nichts zu erwarten
+
+    Der mittlere Fall ist der gefaehrliche: das Dashboard zeigt "erledigt",
+    der Besucher sieht nichts davon, und der Betreiber erfaehrt es erst, wenn
+    ihn jemand darauf anspricht. Genau so lag es beim Durchlauf auf zwei von
+    drei Agenturseiten.
+    """
+    if not db_pool:
+        return {"auslieferung": "unbekannt"}
+    async with db_pool.acquire() as conn:
+        freigegeben = await conn.fetchval(
+            """SELECT
+                 (SELECT COUNT(*) FROM accessibility_alt_text_fixes
+                  WHERE site_id = $1 AND status = 'approved')
+               + (SELECT COUNT(*) FROM accessibility_document_fixes
+                  WHERE site_id = $1 AND status = 'approved')""",
+            site_id) or 0
+        meldung = await conn.fetchrow(
+            """SELECT COUNT(*) AS seiten, MAX(zuletzt) AS zuletzt,
+                      SUM(angewendet) AS angewendet, SUM(verfehlt) AS verfehlt
+               FROM accessibility_wirkung WHERE site_id = $1""",
+            site_id)
+
+    seiten = int((meldung and meldung["seiten"]) or 0)
+    if seiten:
+        return {
+            "auslieferung": "laeuft",
+            "zuletzt_gesehen": meldung["zuletzt"].strftime("%Y-%m-%d %H:%M"),
+            "angewendet": int(meldung["angewendet"] or 0),
+            "verfehlt": int(meldung["verfehlt"] or 0),
+        }
+    if freigegeben:
+        return {
+            "auslieferung": "nichts_da",
+            "hinweis": (f"{freigegeben} Reparaturen sind freigegeben, es hat "
+                        f"sich aber noch nie ein Widget von dieser Website "
+                        f"gemeldet. Vermutlich fehlt das Skript auf der Seite."),
+        }
+    return {"auslieferung": "nichts_zu_tun"}
+
+
 @router.get("/worklist")
 async def agentur_worklist(
     current_user: Dict[str, Any] = Depends(get_required_user)
@@ -166,6 +216,18 @@ async def agentur_worklist(
             # sondern wie viele Fundstellen daran haengen.
             "stellen_offen": sum(int(e.get("stellen") or 0) for e in offene_farben),
             "offen_gesamt": len(alt_pending) + len(link_pending) + len(offene_farben),
+            # Kommt die freigegebene Arbeit auf der Website ueberhaupt an?
+            #
+            # Beim Durchlauf durch die Oberflaeche war das der teuerste Befund:
+            # von vier angefassten Kundenseiten lieferte genau EINE aus. Auf
+            # ferienpark-waldenburg.de laeuft das Cookie-Widget, das
+            # Barrierefreiheits-Widget fehlt ganz; auf spedition-mahn.de
+            # ebenfalls. Freigegeben war dort alles, angekommen nichts — und
+            # das Dashboard meldete zufrieden "erledigt".
+            #
+            # Eine Zahl, die niemand sieht, ist keine Reparatur. Deshalb steht
+            # der Auslieferungszustand jetzt neben der Arbeit.
+            **(await _auslieferung(sid)),
         })
 
     kontrast_offen.sort(key=lambda e: -int(e.get("stellen") or 0))
@@ -181,6 +243,9 @@ async def agentur_worklist(
             "offen": sum(s["offen_gesamt"] for s in je_site),
             "stellen": sum(s["stellen_offen"] for s in je_site),
             "alt_texte_sammelbar": sum(s["alt_texte_sammelbar"] for s in je_site),
+            # Die Zahl, die vor jeder Erfolgsmeldung kommen muss.
+            "websites_ohne_auslieferung": len(
+                [s for s in je_site if s.get("auslieferung") == "nichts_da"]),
         },
     }
 
@@ -260,6 +325,12 @@ async def sammelfreigabe(
         sites = [s for s in sites if s["site_id"] in set(request.site_ids)]
 
     saver = AccessibilityFixSaver(db_pool)
+    # Die Sites, die dieser Agentur gehoeren — der Speicher autorisiert ueber
+    # die Website, nicht ueber den Erzeuger der Zeile. Vorher wurde
+    # `row['user_id']` verglichen, und weil hier PermissionError still
+    # uebersprungen wird, meldete eine Sammelfreigabe eine Erfolgszahl,
+    # waehrend sie jeden von einem Kollegen gescannten Fix ausliess.
+    erlaubte = {s["site_id"] for s in sites}
     freigegeben = 0
     je_site: Dict[str, int] = {}
     for site in sites:
@@ -275,7 +346,8 @@ async def sammelfreigabe(
             if fix_id is None:
                 continue
             try:
-                await saver.set_status(fix_id=fix_id, status="approved", user_id=user_id)
+                await saver.set_status(fix_id=fix_id, status="approved",
+                                       erlaubte_sites=erlaubte)
             except PermissionError:
                 continue
             freigegeben += 1
@@ -321,7 +393,8 @@ async def farben_freigeben(
     freigegeben, stellen = 0, 0
     for e in offen:
         ergebnis = await saver.set_kontrast_freigabe(
-            request.site_id, index=e["index"], status="approved", user_id=user_id
+            request.site_id, index=e["index"], status="approved",
+            erlaubte_sites=sites,
         )
         if ergebnis.get("ok"):
             freigegeben += 1

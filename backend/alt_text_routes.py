@@ -182,15 +182,22 @@ async def approve_alt_text(
     request: ApproveAltTextRequest,
     current_user: Dict[str, Any] = Depends(get_required_user)
 ):
-    """Genehmigt (approved) oder lehnt ab (rejected) einen Alt-Text; optional Text überschreiben."""
+    """Genehmigt (approved) oder lehnt ab (rejected) einen Alt-Text; optional Text überschreiben.
+
+    Autorisiert ueber die WEBSITE, nicht ueber den Erzeuger der Zeile. Vorher
+    verglich der Speicher `row['user_id']` mit dem angemeldeten Nutzer — ein
+    Fix, den ein Kollege oder eine fruehere Agentur gescannt hatte, liess sich
+    danach von niemandem mehr freigeben (403, in der Oberflaeche unsichtbar).
+    """
     try:
-        user_id = current_user.get("user_id") or current_user.get("id")
+        erlaubte = await get_user_site_ids(
+            current_user.get("user_id") or current_user.get("id"))
         saver = AccessibilityFixSaver(db_pool)
         new_status = 'approved' if request.approved else 'rejected'
         try:
             ok = await saver.set_status(
                 fix_id=request.fix_id, status=new_status,
-                custom_alt=request.custom_alt, user_id=user_id
+                custom_alt=request.custom_alt, erlaubte_sites=erlaubte
             )
         except PermissionError:
             raise HTTPException(status_code=403, detail="Not authorized")
@@ -226,15 +233,19 @@ async def approve_link(
     request: ApproveLinkRequest,
     current_user: Dict[str, Any] = Depends(get_required_user)
 ):
-    """Genehmigt/lehnt einen Link-aria-Vorschlag ab; optional Label überschreiben."""
+    """Genehmigt/lehnt einen Link-aria-Vorschlag ab; optional Label überschreiben.
+
+    Wie bei den Alt-Texten ueber die Website autorisiert.
+    """
     try:
-        user_id = current_user.get("user_id") or current_user.get("id")
+        erlaubte = await get_user_site_ids(
+            current_user.get("user_id") or current_user.get("id"))
         saver = AccessibilityFixSaver(db_pool)
         new_status = 'approved' if request.approved else 'rejected'
         try:
             ok = await saver.set_link_status(
                 fix_id=request.fix_id, status=new_status,
-                custom_label=request.custom_label, user_id=user_id
+                custom_label=request.custom_label, erlaubte_sites=erlaubte
             )
         except PermissionError:
             raise HTTPException(status_code=403, detail="Not authorized")
@@ -272,7 +283,8 @@ async def approve_kontrast(
     """
     await require_site_ownership(request.site_id, current_user)
     try:
-        user_id = current_user.get("user_id") or current_user.get("id")
+        erlaubte = await get_user_site_ids(
+            current_user.get("user_id") or current_user.get("id"))
         saver = AccessibilityFixSaver(db_pool)
         try:
             ergebnis = await saver.set_kontrast_freigabe(
@@ -280,7 +292,7 @@ async def approve_kontrast(
                 index=request.index,
                 status='approved' if request.approved else 'rejected',
                 eigene_farbe=request.eigene_farbe,
-                user_id=user_id,
+                erlaubte_sites=erlaubte,
             )
         except PermissionError:
             raise HTTPException(status_code=403, detail="Not authorized")
