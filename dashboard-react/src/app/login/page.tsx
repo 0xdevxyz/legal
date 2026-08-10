@@ -185,6 +185,8 @@ export default function LoginPage() {
 
                     {error && (
                         <div
+                            role="alert"
+                            aria-live="assertive"
                             className="mb-5 p-3.5 rounded-xl flex items-start gap-3 text-sm animate-errorfade"
                             style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
                         >
@@ -232,6 +234,7 @@ export default function LoginPage() {
                                 />
                                 <input
                                     id="email"
+                                    autoComplete="username"
                                     type="email"
                                     placeholder="ihre@email.com"
                                     value={formData.email}
@@ -277,6 +280,7 @@ export default function LoginPage() {
                                 />
                                 <input
                                     id="password"
+                                    autoComplete="current-password"
                                     type={showPassword ? 'text' : 'password'}
                                     placeholder="••••••••••••"
                                     value={formData.password}

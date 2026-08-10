@@ -226,7 +226,8 @@ function RegisterForm() {
                 </div>
                 
                 {error && (
-                    <div className="mb-4 p-3 bg-red-900 bg-opacity-50 border border-red-500 rounded flex items-center gap-2 text-red-200">
+                    <div role="alert" aria-live="assertive"
+                         className="mb-4 p-3 bg-red-900 bg-opacity-50 border border-red-500 rounded flex items-center gap-2 text-red-200">
                         <AlertCircle className="w-5 h-5 flex-shrink-0" />
                         <span className="text-sm">{error}</span>
                     </div>
@@ -243,6 +244,7 @@ function RegisterForm() {
                         </label>
                         <input
                             id="email"
+                            autoComplete="email"
                             type="email"
                             placeholder="ihre@email.com"
                             value={formData.email}
@@ -259,6 +261,7 @@ function RegisterForm() {
                         </label>
                         <input
                             id="password"
+                            autoComplete="new-password"
                             type="password"
                             placeholder="Mindestens 8 Zeichen"
                             value={formData.password}
@@ -276,6 +279,7 @@ function RegisterForm() {
                         </label>
                         <input
                             id="full_name"
+                            autoComplete="name"
                             type="text"
                             placeholder="Max Mustermann"
                             value={formData.full_name}
@@ -292,6 +296,7 @@ function RegisterForm() {
                         </label>
                         <input
                             id="company"
+                            autoComplete="organization"
                             type="text"
                             placeholder="Ihr Unternehmen"
                             value={formData.company}
@@ -330,8 +335,10 @@ function RegisterForm() {
                 
                 <div className="mt-6 text-xs text-gray-500 text-center">
                     Mit der Registrierung stimmen Sie unseren{' '}
-                    <a href="/agb" className="text-blue-400 hover:underline">AGB</a> und der{' '}
-                    <a href="/datenschutz" className="text-blue-400 hover:underline">Datenschutzerklärung</a> zu.
+                    <a href="https://complyo.de/agb" target="_blank" rel="noopener noreferrer"
+                       className="text-blue-400 hover:underline">AGB</a> und der{' '}
+                    <a href="https://complyo.de/datenschutz" target="_blank" rel="noopener noreferrer"
+                       className="text-blue-400 hover:underline">Datenschutzerklärung</a> zu.
                 </div>
             </section>
         </main>
