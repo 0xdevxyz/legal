@@ -648,15 +648,34 @@ async def get_archive(
             """
             params = [user_id]
             param_count = 2
-            
+
+            # Die Zaehlabfrage muss dieselbe Menge treffen wie die Seitenabfrage.
+            #
+            # `count_query` wurde nie angelegt — weder hier noch sonst irgendwo
+            # in der Datei. Beide Zeilen darunter (`count_query += …` und das
+            # `fetchval(count_query, …)`) liefen damit in einen NameError:
+            # dieser Endpunkt (Archiv aelterer Rechtsaenderungen) stuerzte bei
+            # JEDEM Aufruf ab, mit und ohne Severity-Filter. Gefunden von ruff
+            # (F821), nachdem derselbe Fehlertyp den kompletten Scan
+            # lahmgelegt hatte.
+            #
+            # Dieselbe WHERE-Bedingung wie oben, nur ohne die Spaltenliste.
+            count_query = """
+                SELECT COUNT(*)
+                FROM legal_updates lu
+                WHERE lu.published_at < (
+                    SELECT published_at FROM legal_updates
+                    ORDER BY published_at DESC
+                    LIMIT 1 OFFSET 5
+                )
+            """
+
             if severity:
                 query += f" AND lu.severity = ${param_count}"
                 params.append(severity)
                 param_count += 1
-                count_query += f" AND lu.severity = $1"
-            
-            # Count total
-            # ✅ FIX: Erstelle separate COUNT-Query
+                count_query += " AND lu.severity = $1"
+
             count_params = []
             if severity:
                 count_params.append(severity)

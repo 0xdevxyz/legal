@@ -498,7 +498,15 @@ class DeploymentEngine:
             logger.error(f"⚠️ Backup failed: {e}")
             return backup_id  # Return ID even if backup fails
     
-    async def rollback(
+    # Umbenannt, weil weiter unten eine ZWEITE Methode `rollback` steht — mit
+    # anderer Signatur. Python liess die zweite gewinnen, diese hier war
+    # unerreichbar. Ein Aufruf im alten Format haette einen TypeError ergeben,
+    # und beim Lesen sieht man die Ueberdeckung nicht.
+    #
+    # Aufgerufen wird derzeit keine von beiden. Statt ungelesenen Code in einer
+    # Deployment-Maschine zu loeschen, ist sie hier nur entschattet: die
+    # Ueberdeckung ist weg, die Entscheidung ueber das Loeschen bleibt.
+    async def rollback_mit_deployment_id(
         self,
         deployment_id: str,
         backup_id: str,

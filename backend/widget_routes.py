@@ -35,6 +35,13 @@ def set_db_pool(pool):
     return pool
 
 # Widget directory
+# Modul-Logger. Er fehlte, obwohl `logger.info(...)` an drei Stellen steht —
+# darunter die Widget-Analytik und das Patch-Paket. Jede dieser Zeilen haette
+# beim Ausfuehren einen NameError geworfen und die Antwort zerrissen.
+# Gefunden von ruff (F821), nachdem derselbe Fehlertyp als fehlender
+# `import re` den kompletten Scan lahmgelegt hatte.
+logger = logging.getLogger(__name__)
+
 WIDGET_DIR = os.path.join(os.path.dirname(__file__), 'widgets')
 
 
@@ -820,7 +827,10 @@ async def generate_accessibility_patches(
             "download_url": f"/api/accessibility/patches/download/{download_id}",
             "file_size": len(zip_buffer.getvalue()),
             "expires_in": "1 Stunde",
-            "patches_count": len(demo_fixes)
+            # Hiess `demo_fixes` — ein Rest aus der Demo-Fassung. Die Liste
+            # heisst `fixes`; `demo_fixes` gab es nie, der Aufruf endete
+            # im NameError statt mit einem Download.
+            "patches_count": len(fixes)
         }
         
     except Exception as e:

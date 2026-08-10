@@ -862,11 +862,17 @@ def _determine_issue_area(category: str) -> str:
         'tracking': 'Header/Scripts',
         'urheberrecht': 'Content/Bilder',
         'markenrecht': 'Content/Logos',
-        'preisangaben': 'Produktseiten',
         'uwg': 'Content/Werbung',
+        # Stand zweimal drin ('Produktseiten' und 'Produktseiten/Shop'); der
+        # zweite Wert gewann still. Bei einer Zuordnungstabelle fuer
+        # Rechtsbereiche ist eine stille Ueberschreibung genau das, was
+        # niemand bemerkt.
         'preisangaben': 'Produktseiten/Shop',
         'shop': 'Online-Shop',
-        'widerrufsbelehrung': 'Online-Shop',
+        # 'widerrufsbelehrung' stand hier ein zweites Mal ('Online-Shop') und
+        # ueberschrieb still das praezisere 'Footer/Checkout' weiter oben. Bei
+        # einer Tabelle, die dem Kunden sagt, WO er den Mangel findet, ist die
+        # unschaerfere Angabe der Rueckschritt.
         'avv': 'Datenschutz',
         'security': 'HTTP-Header/Server',
     }
@@ -2008,7 +2014,11 @@ async def _generate_mock_analysis(url: str, risk_calculator) -> AnalysisResponse
         compliance_score=score,
         estimated_risk_euro=total_risk_data['total_risk_range'],
         issues=structured_issues,
-        has_accessibility_widget=scan_result.get('has_accessibility_widget', False),
+        # `scan_result` gibt es in dieser Funktion nicht — sie ist der
+        # RUECKFALL, wenn der echte Scan scheitert. Das Sicherheitsnetz
+        # riss also selbst: NameError statt Ersatzantwort. Ein Mock hat
+        # kein Scanergebnis, also False.
+        has_accessibility_widget=False,
         riskAmount=total_risk_data['total_risk_range'],
         score=score,
         scan_duration_ms=scan_duration,

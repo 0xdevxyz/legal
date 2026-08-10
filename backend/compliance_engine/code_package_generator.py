@@ -160,8 +160,8 @@ complyo-accessibility-fixes/
 ├── accessibility.css            # CSS-Fixes (erforderlich!)
 ├── fixes.json                   # Metadaten
 └── {framework}/                 # Framework-spezifische Dateien
-    ├── alt-text-fixes.{ext}     # Image-Alt-Text-Beispiele
-    ├── aria-fixes.{ext}          # ARIA-Label-Beispiele
+    ├── alt-text-fixes.{{ext}}     # Image-Alt-Text-Beispiele
+    ├── aria-fixes.{{ext}}          # ARIA-Label-Beispiele
     └── components/               # Beispiel-Komponenten
 ```
 
