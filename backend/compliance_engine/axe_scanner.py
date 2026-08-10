@@ -76,6 +76,14 @@ class AxeScanResult:
     # Ebenso die Struktur-Reparatur (role=main, viewport, iframe-Titel …).
     # Laeuft im selben Lauf, weil sie denselben geoeffneten Baum braucht.
     struktur_fixes: Optional[Dict[str, Any]] = None
+
+    # Hat die Seite waehrend der Messung das complyo-Widget geladen?
+    #
+    # Nur im Wirkungsscan interessant (dort ist die Sperre aus). Er kann damit
+    # "gar kein Widget eingebaut" von "Widget laeuft, bewirkt aber nichts"
+    # unterscheiden — zwei voellig verschiedene Befunde, die in der Messung
+    # gleich aussehen: beide Male ist die Differenz null.
+    widget_geladen: Optional[bool] = None
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -319,6 +327,7 @@ class AxeScanner:
         wcag_level: str = "wcag21aa",
         timeout: int = 30000,
         mit_kontrast_fixes: bool = False,
+        widget_blockieren: bool = True,
     ) -> AxeScanResult:
         """
         Scannt eine einzelne Seite mit axe-core
@@ -358,13 +367,36 @@ class AxeScanner:
             #
             # Gemessen wird deshalb immer der Zustand, den ein Besucher OHNE
             # complyo vorfaende.
+            #
+            # `widget_blockieren=False` dreht das absichtlich um: dann misst
+            # der Scan, was ein Besucher WIRKLICH vorfindet — mit allem, was
+            # complyo zur Laufzeit repariert. Nur so herum ist die Auslieferung
+            # ueberhaupt messbar (siehe scan_wirkung()).
+            # Mitschreiben, ob das Widget ueberhaupt angefordert wird.
+            # Kostet nichts und beantwortet im Wirkungsscan die entscheidende
+            # Frage.
+            widget_gesehen = {"ja": False}
+
+            def _merke_widget(anfrage):
+                try:
+                    if "api.complyo." in (anfrage.url or ""):
+                        widget_gesehen["ja"] = True
+                except Exception:  # pragma: no cover
+                    pass
+
             try:
-                await page.route(
-                    re.compile(r"https?://api\.complyo\.(de|tech)/"),
-                    lambda route: asyncio.ensure_future(route.abort()),
-                )
+                page.on("request", _merke_widget)
             except Exception as e:  # pragma: no cover - Playwright-Eigenheit
-                logger.warning(f"Widget-Sperre nicht gesetzt: {e}")
+                logger.warning(f"Widget-Beobachtung nicht moeglich: {e}")
+
+            if widget_blockieren:
+                try:
+                    await page.route(
+                        re.compile(r"https?://api\.complyo\.(de|tech)/"),
+                        lambda route: asyncio.ensure_future(route.abort()),
+                    )
+                except Exception as e:  # pragma: no cover - Playwright-Eigenheit
+                    logger.warning(f"Widget-Sperre nicht gesetzt: {e}")
 
             try:
                 # Seite laden. "networkidle" ist bewusst NICHT das primaere
@@ -428,6 +460,7 @@ class AxeScanner:
                 """)
                 
                 ergebnis = self._parse_results(url, results)
+                ergebnis.widget_geladen = widget_gesehen["ja"]
 
                 # Kontrast-Reparatur solange die Seite offen ist. Danach ist
                 # das Dokument veraendert (eingespieltes CSS) — deshalb erst

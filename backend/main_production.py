@@ -147,6 +147,10 @@ from alt_text_routes import router as alt_text_router
 from agentur_a11y_routes import router as agentur_a11y_router, init_agentur_a11y_routes
 from nachweis_routes import router as nachweis_router, init_nachweis_routes
 from wirkung_routes import router as wirkung_router, init_wirkung_routes
+# Der Wirkungsscan: misst dieselbe Seite ohne und mit complyo-Widget.
+from wirkungsscan_routes import (
+    router as wirkungsscan_router, init_wirkungsscan_routes,
+)
 
 # Deep Cookie Scanner - Premium Feature
 from deep_cookie_scanner_routes import router as deep_cookie_scanner_router
@@ -716,6 +720,7 @@ async def startup_event():
     # Wirksamkeitsueberwachung: das Widget meldet je Seite, was angekommen ist
     # und was ins Leere lief. Oeffentlich, weil es auf Kundendomains laeuft.
     app.include_router(wirkung_router)
+    app.include_router(wirkungsscan_router)
     app.include_router(deep_cookie_scanner_router)  # Deep Cookie Scanner - Premium Feature
     app.include_router(legal_document_router)  # AUDIT-19: DPA Generator
     app.include_router(knowledge_router)  # Knowledge Base - Rechts-Updates & Gesetzes-Vault
@@ -724,6 +729,7 @@ async def startup_event():
     init_agentur_a11y_routes(db_pool)
     init_nachweis_routes(db_pool)
     await init_wirkung_routes(db_pool)
+    await init_wirkungsscan_routes(db_pool)
 
     import alt_text_routes
     alt_text_routes.db_pool = db_pool

@@ -466,6 +466,41 @@
             return false;
         }
         
+        /**
+         * Schwarz oder Weiss — was auf dieser Farbe besser lesbar ist.
+         *
+         * Beide Kandidaten werden nach WCAG 2.1 (relative Leuchtdichte)
+         * gemessen und der bessere gewinnt. Auf einer beliebigen Markenfarbe
+         * erreicht mindestens einer der beiden 4,5:1 — die Markenfarbe selbst
+         * muss deshalb nie angefasst werden.
+         */
+        static lesbareSchrift(hintergrund) {
+            try {
+                const kanal = (v) => {
+                    v = v / 255;
+                    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+                };
+                const leuchtdichte = (hex) => {
+                    const m = String(hex).trim().replace(/^#/, '');
+                    const voll = m.length === 3 ? m.split('').map(c => c + c).join('') : m;
+                    if (!/^[0-9a-fA-F]{6}$/.test(voll)) return null;
+                    const r = parseInt(voll.slice(0, 2), 16);
+                    const g = parseInt(voll.slice(2, 4), 16);
+                    const b = parseInt(voll.slice(4, 6), 16);
+                    return 0.2126 * kanal(r) + 0.7152 * kanal(g) + 0.0722 * kanal(b);
+                };
+                const l = leuchtdichte(hintergrund);
+                if (l === null) return '#ffffff';   // unlesbare Angabe: wie bisher
+                const gegenWeiss = 1.05 / (l + 0.05);
+                const gegenSchwarz = (l + 0.05) / 0.05;
+                // #1a1a1a statt reinem Schwarz: auf hellen Marken angenehmer
+                // und immer noch deutlich ueber der Vorgabe.
+                return gegenWeiss >= gegenSchwarz ? '#ffffff' : '#1a1a1a';
+            } catch (e) {
+                return '#ffffff';
+            }
+        }
+
         async loadServerConfig() {
             try {
                 // Check for A/B test variant first
@@ -1502,7 +1537,7 @@
                 
                 .complyo-btn-primary {
                     background: ${primaryColor};
-                    color: white;
+                    color: ${primaryTextColor};
                     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
                 }
                 
@@ -3264,6 +3299,19 @@
             if (existing) existing.remove();
             
             const primaryColor = this.config.primaryColor || '#7c3aed';
+            // Lesbare Schriftfarbe fuer den Hauptknopf.
+            //
+            // Der Knopf trug immer `color: white`, egal welche Markenfarbe
+            // dahinterlag. Auf zua-zwickau.de ergab das weiss auf #1597a3 =
+            // 3,5:1 — WCAG 1.4.3 verlangt 4,5:1. complyo lieferte damit auf
+            // jeder Kundenseite mit heller Markenfarbe einen eigenen
+            // Barrierefreiheitsfehler aus. Gefunden hat es der Wirkungsscan:
+            // MIT complyo war ein Kontrastbefund MEHR da als ohne.
+            //
+            // Die Markenfarbe bleibt unangetastet — geaendert wird nur die
+            // Schrift darauf. Genau die Regel, die complyo auf Kundenseiten
+            // anwendet, jetzt auch auf sich selbst.
+            const primaryTextColor = this.constructor.lesbareSchrift(primaryColor);
             
             const button = document.createElement('button');
             button.id = 'complyo-cookie-settings-btn';
