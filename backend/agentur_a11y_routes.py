@@ -162,6 +162,22 @@ async def _auslieferung(site_id: str) -> Dict[str, Any]:
                       NOW() - MAX(zuletzt) AS her
                FROM accessibility_wirkung WHERE site_id = $1""",
             site_id)
+        # Die Aufschluesselung je Art — der Alarm braucht sie, weil
+        # Alt-Text-Fehlschlaege anders zu lesen sind als selektorgebundene.
+        je_art_zeilen = await conn.fetch(
+            "SELECT je_art FROM accessibility_wirkung WHERE site_id = $1", site_id)
+
+    import json as _json
+    je_art = []
+    for z in je_art_zeilen:
+        w = z["je_art"]
+        if isinstance(w, str):
+            try:
+                w = _json.loads(w)
+            except (ValueError, TypeError):
+                continue
+        if isinstance(w, dict):
+            je_art.append(w)
 
     seiten = int((meldung and meldung["seiten"]) or 0)
     if not seiten:
@@ -194,13 +210,44 @@ async def _auslieferung(site_id: str) -> Dict[str, Any]:
                             f"besuchten Website heisst das meist, dass das Skript "
                             f"entfernt wurde.")}
 
-    # Mehr verfehlt als angewendet: die Reparaturen finden ihre Ziele nicht
-    # mehr. Das ist das Bild eines Theme-Updates.
-    if verfehlt > angewendet:
+    # Greifen die Reparaturen noch?
+    #
+    # Die erste Regel war `verfehlt > angewendet` ueber ALLE Arten — und schlug
+    # damit ausgerechnet im gesunden Fall Alarm. Auf zua-zwickau.de stand
+    # "0 angewendet, 5 verfehlt", obwohl dort alles stimmt:
+    #
+    #   * angewendet = 0, weil die Bilder ihre Alt-Texte laengst TRAGEN. Das
+    #     Widget ueberschreibt ein vorhandenes `alt` nie — es gibt schlicht
+    #     nichts zu tun.
+    #   * verfehlt = 5, weil ein freigegebener Alt-Text zu einem Bild gehoert,
+    #     das auf DIESER Seite nicht vorkommt. Auf Unterseiten ist das der
+    #     Normalfall; das Widget sagt das in seinem eigenen Kommentar.
+    #
+    # Alt-Text-Fehlschlaege sind also kein Regressionssignal, sondern Rauschen
+    # aus der Seitenstruktur. Sie fliessen hier nicht mehr in den Alarm ein.
+    #
+    # Selektor-gebundene Reparaturen sind etwas anderes: eine CSS-Regel oder
+    # eine Struktur-Setzung wurde auf einer konkreten Seite gemessen und soll
+    # dort greifen. Trifft dort KEINE davon mehr, ist das das Bild eines
+    # Theme-Updates.
+    #
+    # Lieber ein Alarm zu wenig als einer zu viel: eine Warnung, der niemand
+    # glaubt, ist so wertlos wie eine falsche Entwarnung.
+    selektor_arten = ("css_regeln", "struktur", "link_labels", "dokument_fixes")
+    s_angewendet = s_verfehlt = 0
+    for eintrag in (je_art or []):
+        for art in selektor_arten:
+            werte = (eintrag or {}).get(art) or {}
+            s_angewendet += int(werte.get("angewendet") or 0)
+            s_verfehlt += int(werte.get("verfehlt") or 0)
+
+    if s_verfehlt and not s_angewendet:
         return {**basis, "auslieferung": "greift_nicht",
-                "hinweis": (f"{verfehlt} von {verfehlt + angewendet} Reparaturen "
-                            f"haben ihr Ziel nicht gefunden. Die Seite wurde "
-                            f"vermutlich umgebaut — ein neuer Scan ist faellig.")}
+                "hinweis": (f"{s_verfehlt} selektorgebundene Reparaturen haben ihr "
+                            f"Ziel nicht gefunden, keine einzige hat gegriffen. "
+                            f"Die Seite wurde vermutlich umgebaut — ein neuer Scan "
+                            f"ist faellig. (Nicht gefundene Bilder zaehlen hier "
+                            f"nicht mit: die kommen auf Unterseiten normal vor.)")}
 
     return {**basis, "auslieferung": "laeuft"}
 

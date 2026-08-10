@@ -39,10 +39,34 @@ class TestZustaende:
                         "nichts_da", "nichts_zu_tun"):
             assert f'"{zustand}"' in q, zustand
 
-    def test_verfehlt_ueberwiegt_ist_kein_laeuft(self):
-        """Mehr verfehlte als angewendete Reparaturen heisst: greift nicht."""
+    def test_alt_texte_loesen_keinen_alarm_aus(self):
+        """
+        Die erste Regel war `verfehlt > angewendet` ueber ALLE Arten und
+        schlug damit im GESUNDEN Fall Alarm: zua-zwickau.de meldete
+        "0 angewendet, 5 verfehlt", weil die Bilder ihre Alt-Texte laengst
+        tragen (nichts anzuwenden) und die freigegebenen Alt-Texte zu Bildern
+        gehoeren, die auf dieser Unterseite nicht vorkommen (normal).
+
+        Alt-Text-Fehlschlaege sind Rauschen aus der Seitenstruktur, kein
+        Regressionssignal. Der Alarm darf sie nicht mitzaehlen.
+        """
         q = _quelle()
-        assert "verfehlt > angewendet" in q
+        assert "verfehlt > angewendet" not in q, \
+            "Alter Alarm zurueck — er feuert auf gesunden Websites"
+        assert "selektor_arten" in q
+        i = q.index("selektor_arten")
+        block = q[i:i + 200]
+        assert "alt_texte" not in block, \
+            "Alt-Texte gehoeren nicht in den Alarm"
+        for art in ("css_regeln", "struktur", "link_labels", "dokument_fixes"):
+            assert art in block, art
+
+    def test_alarm_nur_wenn_gar_nichts_greift(self):
+        """
+        Lieber ein Alarm zu wenig als einer zu viel: erst wenn KEINE einzige
+        selektorgebundene Reparatur mehr greift, ist es ein Befund.
+        """
+        assert "if s_verfehlt and not s_angewendet:" in _quelle()
 
     def test_alte_meldung_ist_kein_laeuft(self):
         q = _quelle()
