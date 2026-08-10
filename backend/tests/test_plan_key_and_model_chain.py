@@ -86,3 +86,50 @@ def test_chain_collapses_to_one_entry_while_models_are_identical():
         # Echte Alternativmodelle vorhanden -> Kette darf länger sein
         chain = list(dict.fromkeys([AIModel.CLAUDE_SONNET.value, AIModel.GPT4_TURBO.value]))
         assert len(chain) > 1
+
+
+def test_kein_modul_liest_den_schluessel_plan():
+    """
+    `get_current_user()` liefert `plan_type` — den Schluessel `plan` gibt es
+    nicht. Wer ihn liest, bekommt None (bei `.get`) oder einen KeyError (bei
+    `[...]`), und der KeyError ist ein 500 im Nutzerpfad.
+
+    Dieser Test gab es schon — aber nur fuer `fix_apply_routes`. In
+    `fix_routes.py` hat derselbe Fehler deshalb ueberlebt und warf bei JEDEM
+    Fix-Export einen KeyError (`current_user['plan']`). Gefunden hat ihn erst
+    ruff, ueber die unbenutzte Variable daneben.
+
+    Ein Waechter, der nur die eine Datei kennt, in der der Fehler damals
+    gefunden wurde, faengt ihn beim naechsten Mal nicht.
+    """
+    import os
+    import re
+
+    wurzel = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    treffer = []
+    muster = re.compile(r"""current_user\s*(?:\[\s*['"]plan['"]\s*\]"""
+                        r"""|\.get\(\s*['"]plan['"])""")
+
+    for verzeichnis, _, dateien in os.walk(wurzel):
+        if any(teil in verzeichnis for teil in
+               ("_archive", "__pycache__", "node_modules", "/tests")):
+            continue
+        for datei in dateien:
+            if not datei.endswith(".py"):
+                continue
+            pfad = os.path.join(verzeichnis, datei)
+            try:
+                with open(pfad, encoding="utf-8") as fh:
+                    for nr, zeile in enumerate(fh, 1):
+                        if zeile.lstrip().startswith("#"):
+                            continue
+                        if muster.search(zeile):
+                            treffer.append(f"{datei}:{nr}: {zeile.strip()[:70]}")
+            except (OSError, UnicodeDecodeError):
+                continue
+
+    assert not treffer, (
+        "current_user['plan'] gibt es nicht — get_current_user liefert "
+        "'plan_type'. Ein Subskript-Zugriff ist ein 500 im Nutzerpfad:\n  "
+        + "\n  ".join(treffer)
+    )

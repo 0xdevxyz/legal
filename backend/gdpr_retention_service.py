@@ -306,8 +306,20 @@ class GDPRRetentionService:
             Ihr Complyo Team
             """
             
-            # Would send actual email in production
-            logger.info(f"Deletion notification would be sent to {lead['email']}")
+            # Frueher stand hier nur "Would send actual email in production"
+            # samt einer Logzeile, die so tat, als waere etwas passiert.
+            # Fuer einen Anbieter, der DSGVO-Konformitaet verkauft, ist eine
+            # nicht verschickte Loeschankuendigung kein Schoenheitsfehler.
+            from email_service import email_service
+            versandt = email_service._send_email(
+                to_email=lead["email"], subject=subject,
+                html_body=email_content.replace("\n", "<br>"),
+                text_body=email_content)
+            if versandt:
+                logger.info("Loeschankuendigung an %s verschickt", lead["email"])
+            else:
+                logger.error("Loeschankuendigung an %s NICHT verschickt",
+                             lead["email"])
             
         except Exception as e:
             logger.error(f"Error sending deletion notification: {e}")
@@ -332,8 +344,19 @@ class GDPRRetentionService:
             Ihr Complyo Team
             """
             
-            # Would send actual email in production
-            logger.info(f"Deletion confirmation would be sent to {lead['email']}")
+            # Wie die Ankuendigung: sie wurde nie verschickt, die Logzeile
+            # tat nur so. Eine Loeschbestaetigung nach Art. 17 DSGVO ist die
+            # Zusage, die ein Betroffener am ehesten einfordert.
+            from email_service import email_service
+            versandt = email_service._send_email(
+                to_email=lead["email"], subject=subject,
+                html_body=email_content.replace("\n", "<br>"),
+                text_body=email_content)
+            if versandt:
+                logger.info("Loeschbestaetigung an %s verschickt", lead["email"])
+            else:
+                logger.error("Loeschbestaetigung an %s NICHT verschickt",
+                             lead["email"])
             
         except Exception as e:
             logger.error(f"Error sending deletion confirmation: {e}")

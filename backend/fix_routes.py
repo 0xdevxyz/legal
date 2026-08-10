@@ -287,7 +287,16 @@ async def export_fix(
             )
         
         user_id = int(current_user['id'])
-        plan_type = current_user['plan']
+        # `current_user['plan']` stand hier und war gleich doppelt falsch:
+        # `get_current_user()` liefert `plan_type`, nie `plan` — der
+        # Subskript-Zugriff warf einen KeyError, also 500 bei JEDEM
+        # Fix-Export. Und gebraucht wurde der Wert gar nicht: der Export
+        # laeuft laut Kommentar unten fuer alle Plaene ueber den
+        # export_service.
+        #
+        # Derselbe Fehler war in fix_apply_routes.py schon einmal repariert
+        # worden, samt Waechtertest — der prueft aber nur jenes Modul. Hier
+        # hat er ueberlebt. Der Waechter deckt jetzt alle Module ab.
         
         logger.info(f"Exporting fix {request.fix_id} for user {user_id} in format {request.export_format}")
         
@@ -413,7 +422,11 @@ async def get_user_limits(
                 return {
                     'success': True,
                     'limits': {
-                        'plan_type': current_user.get('plan', 'ai'),
+                        # Las den Schluessel `plan` (den es nicht gibt) und fiel deshalb
+            # IMMER auf 'ai' zurueck — einen Tarif aus einem frueheren
+            # Modell, den heute nichts mehr kennt. Jeder Nutzer wurde hier
+            # als 'ai' ausgewiesen, unabhaengig von seinem echten Tarif.
+            'plan_type': current_user.get('plan_type', 'free'),
                         'websites_count': 0,
                         'websites_max': 1,
                         'exports_this_month': 0,

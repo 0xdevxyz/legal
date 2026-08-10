@@ -42,7 +42,11 @@ REGELN = ",".join([
     "F601",  # doppelter Dict-Schluessel-> stille Ueberschreibung
     "F502",  # Formatierungsfehler
     "F522",  # unbekanntes Format-Feld
-    "E999",  # Syntaxfehler
+    # E999 (Syntaxfehler) steht bewusst NICHT dabei: die Regel wurde aus ruff
+    # entfernt, weil Syntaxfehler ohnehin immer gemeldet werden. Sie zu
+    # selektieren laesst ruff mit "Rule `E999` was removed" abbrechen — dieser
+    # Waechter ist genau daran einmal gescheitert. Gut so: ein Waechter, der
+    # bei einer Werkzeugaenderung still durchwinkt, ist keiner.
 ])
 
 
@@ -60,10 +64,19 @@ def _ruff_da() -> bool:
             "Test undefinierte Namen ab, bevor ein Kunde sie ausloest"),
 )
 def test_keine_laufzeitfehler_im_quelltext():
+    # `--no-cache`: der Quelltext liegt in den Testlaeufen als Volume unter
+    # /app, und ruff darf dort seinen Zwischenspeicher nicht anlegen
+    # ("Permission denied at /app/.ruff_cache"). Ohne das Flag scheitert der
+    # Waechter an der Umgebung statt am Code — genau die Sorte Fehlalarm, die
+    # in diesem Audit schon 34 Phantom-Fehlschlaege erzeugt hat.
     ergebnis = subprocess.run(
-        ["ruff", "check", ".", "--select", REGELN, "--output-format", "concise"],
+        ["ruff", "check", ".", "--select", REGELN, "--no-cache",
+         "--output-format", "concise"],
         cwd=WURZEL, capture_output=True, text=True, timeout=300,
     )
+    if ergebnis.stderr and "Cause:" in ergebnis.stderr:
+        pytest.fail("ruff konnte nicht laufen (Umgebung, nicht Code):\n"
+                    + ergebnis.stderr.strip()[:400])
     if ergebnis.returncode != 0:
         zeilen = [z for z in ergebnis.stdout.splitlines() if z.strip()]
         pytest.fail(
@@ -80,7 +93,22 @@ class TestDieRegelauswahlBleibtEng:
 
     def test_nur_fehlerklassen(self):
         for regel in REGELN.split(","):
-            assert regel.startswith(("F", "E9")), regel
+            assert regel.startswith("F"), regel
+
+    def test_alle_regeln_kennt_das_werkzeug(self):
+        """
+        Eine Regel, die ruff nicht (mehr) kennt, laesst den ganzen Lauf
+        abbrechen — dann prueft der Waechter gar nichts mehr. Genau das ist
+        mit E999 passiert.
+        """
+        if not _ruff_da():
+            pytest.skip("ruff nicht installiert")
+        ergebnis = subprocess.run(
+            ["ruff", "check", "--select", REGELN, "--output-format", "concise",
+             "--no-cache", "-"],
+            input="", cwd=WURZEL, capture_output=True, text=True, timeout=60)
+        assert "was removed" not in (ergebnis.stderr or ""), ergebnis.stderr.strip()
+        assert "Unknown rule" not in (ergebnis.stderr or ""), ergebnis.stderr.strip()
 
     def test_die_wichtigste_ist_dabei(self):
         assert "F821" in REGELN, "undefinierte Namen sind der Grund fuer diesen Test"
