@@ -25,6 +25,25 @@ import pytest
 
 ltg = pytest.importorskip("legal_text_generator")
 
+# Ohne gemounteten Wissensspeicher hat dieser Test nichts zu pruefen — und
+# meldete sonst einen Produktfehler, der keiner ist.
+#
+# Die Anwendung bekommt den Speicher als Volume (`./knowledge:/data/knowledge`).
+# Wer die Tests in einem nackten Container startet, hat ihn nicht. Im Audit vom
+# 10.08.2026 galten die daraus entstehenden 32 roten Tests tagelang als
+# "vorbestehende Fehlschlaege" — die Vorlagen lagen in der Produktion
+# vollstaendig vor.
+#
+# Bewusst ohne Import aus conftest.py: die liegt nicht im Modulpfad.
+_VAULT = os.getenv("KNOWLEDGE_VAULT_PATH", "/data/knowledge")
+_VAULT_DA = os.path.isdir(os.path.join(_VAULT, "templates", "legal"))
+
+pytestmark = pytest.mark.skipif(
+    not _VAULT_DA,
+    reason=(f"Wissensspeicher fehlt unter {_VAULT} — mit "
+            f"-v $(pwd)/knowledge:/data/knowledge:ro starten"),
+)
+
 
 def _requested_laws_from_source() -> list[str]:
     """Extrahiert alle in `_load_laws_context([...], ...)` angeforderten Gesetzes-

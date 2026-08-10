@@ -230,17 +230,43 @@ class TestKeinReturningCount:
         )
 
 
+def _main_production():
+    """
+    `main_production` importieren — oder den Test ueberspringen.
+
+    `pytest.importorskip` reicht hier nicht: es faengt nur ImportError. Der
+    Import der ganzen Anwendung scheitert in einer nackten Testumgebung aber
+    anders — `RuntimeError: STRIPE_SECRET_KEY environment variable is
+    required!` oder eine doppelte Prometheus-Registrierung, wenn das Modul im
+    selben Prozess ein zweites Mal geladen wird.
+
+    Ergebnis waren zwei rote Tests, die wie ein Produktfehler aussahen und
+    keiner waren. Sie haben im Audit echte Arbeit gekostet: 34 Fehlschlaege
+    galten lange als "vorbestehend", 32 davon waren ein fehlender
+    Volume-Mount und diese zwei ein fehlender Umgebungswert.
+
+    Die eigentliche Ursache steht daneben: fuer eine reine Hilfsfunktion wie
+    `_parse_delete_count` die komplette Anwendung zu importieren ist zu viel.
+    Gehoert sie eines Tages in ein eigenes Modul, kann dieser Helfer weg.
+    """
+    try:
+        import main_production
+        return main_production
+    except Exception as e:  # ImportError, RuntimeError, Registry-Kollision …
+        pytest.skip(f"main_production nicht importierbar: {type(e).__name__}: {e}")
+
+
 class TestParseDeleteCount:
     """Verhalten des Helfers. Braucht das echte Modul -> läuft im Backend-Container."""
 
     def test_command_tag_wird_geparst(self):
-        mp = pytest.importorskip("main_production")
+        mp = _main_production()
         assert mp._parse_delete_count("DELETE 42") == 42
         assert mp._parse_delete_count("DELETE 0") == 0
 
     def test_unerwartetes_tag_wirft_nicht(self):
         """Der Cleanup darf nicht am Logging der Zeilenzahl sterben."""
-        mp = pytest.importorskip("main_production")
+        mp = _main_production()
         assert mp._parse_delete_count("") == 0
         assert mp._parse_delete_count("DELETE") == 0
         assert mp._parse_delete_count(None) == 0

@@ -18,6 +18,25 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from legal_text_generator import LegalTextGenerator, DocumentType  # noqa: E402
 
+# Ohne gemounteten Wissensspeicher hat dieser Test nichts zu pruefen — und
+# meldete sonst einen Produktfehler, der keiner ist.
+#
+# Die Anwendung bekommt den Speicher als Volume (`./knowledge:/data/knowledge`).
+# Wer die Tests in einem nackten Container startet, hat ihn nicht. Im Audit vom
+# 10.08.2026 galten die daraus entstehenden 32 roten Tests tagelang als
+# "vorbestehende Fehlschlaege" — die Vorlagen lagen in der Produktion
+# vollstaendig vor.
+#
+# Bewusst ohne Import aus conftest.py: die liegt nicht im Modulpfad.
+_VAULT = os.getenv("KNOWLEDGE_VAULT_PATH", "/data/knowledge")
+_VAULT_DA = os.path.isdir(os.path.join(_VAULT, "templates", "legal"))
+
+pytestmark = pytest.mark.skipif(
+    not _VAULT_DA,
+    reason=(f"Wissensspeicher fehlt unter {_VAULT} — mit "
+            f"-v $(pwd)/knowledge:/data/knowledge:ro starten"),
+)
+
 
 def _bare_generator() -> LegalTextGenerator:
     """Instanz ohne __init__ (kein DB-Pool nötig) für reine Logik-Tests."""
