@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from uuid import UUID
+import asyncpg
 import traceback
 import logging
 from dependencies import get_current_user
@@ -28,7 +29,17 @@ router = APIRouter(prefix="/api/v2/websites", tags=["websites"])
 # Pydantic Models
 class WebsiteCreate(BaseModel):
     url: str
-    score: int
+    # Der Score ist ein ERGEBNIS, keine Eigenschaft beim Anlegen.
+    #
+    # Als Pflichtfeld war er eine Sackgasse: eine Agentur, die zwanzig
+    # Kundenseiten einpflegt und danach scannen will, bekam 422 "Field
+    # required". Nur der Weg "erst scannen, dann anlegen" funktionierte —
+    # genau der, den die Oberflaeche zufaellig geht.
+    #
+    # Jetzt optional mit 0 (= noch nicht bewertet). Aufrufer, die einen Score
+    # mitschicken, verhalten sich unveraendert; die Aenderung kann nichts
+    # brechen, sie erlaubt nur mehr.
+    score: int = 0
     # "de" | "eu" — Feld weggelassen = Wert unangetastet lassen (bzw. Account-Default
     # erben beim Anlegen); explizit null/"" = Override löschen.
     jurisdiction: Optional[str] = None
@@ -336,9 +347,29 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
             
     except HTTPException:
         raise
+    except asyncpg.UniqueViolationError:
+        # `tracked_websites.url` ist GLOBAL eindeutig — eine Domain gehoert
+        # genau einem Konto. Das ist Absicht und passt zum Rest: Fixes,
+        # Fix-Manifest und Pruefnachweis haengen alle an der site_id (der
+        # Domain), nicht am Konto. Zwei Konten mit derselben Domain wuerden
+        # sich Freigaben und Nachweis teilen.
+        #
+        # Falsch war nur die Antwort. Der Kunde bekam HTTP 500 "Failed to save
+        # website" — ohne jeden Hinweis, was er tun soll. Beim Audit-Durchstich
+        # ist genau das passiert, und es ist der wahrscheinlichste Fall
+        # ueberhaupt: die Domain wurde frueher unter einem Testkonto oder von
+        # der betreuenden Agentur angelegt.
+        logger.info("Domain %s ist bereits einem anderen Konto zugeordnet", data.url)
+        raise HTTPException(
+            status_code=409,
+            detail=(f"Die Domain {data.url} ist bereits einem complyo-Konto "
+                    f"zugeordnet. Eine Domain kann immer nur von einem Konto "
+                    f"betreut werden. Wenn sie Ihnen gehört, übernimmt der "
+                    f"Support sie für Sie: support@complyo.de"),
+        )
     except Exception as e:
-        print(f"❌ Error saving website: {str(e)}")
-        print(traceback.format_exc())
+        logger.error("Website %s konnte nicht gespeichert werden: %r",
+                     getattr(data, "url", "?"), e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to save website")
 
 @router.delete("/{website_id}")

@@ -202,9 +202,23 @@ async def require_accessibility_module(user: Dict[str, Any]) -> bool:
     has_module = await db_service.check_user_module(user_id, 'accessibility')
     
     if not has_module:
+        # Ein gesperrtes Modul ist ein Angebot, keine Sackgasse.
+        #
+        # Vorher stand hier "Bitte upgraden Sie Ihren Plan" — ohne zu sagen,
+        # WAS gesperrt ist, was es kostet und wo man es bekommt. Beim
+        # Audit-Durchstich war das der letzte Punkt, an dem ein Neukunde
+        # stehenblieb: Scan lief, Befunde da, und dann eine Absage ohne Weg.
+        #
+        # Bewusst weiter eine Zeichenkette und kein Objekt: Oberflaechen, die
+        # `detail` direkt anzeigen, wuerden an einem Objekt zerbrechen.
         raise HTTPException(
-            status_code=403, 
-            detail="Modul 'Barrierefreiheit' nicht gebucht. Bitte upgraden Sie Ihren Plan."
+            status_code=403,
+            detail=("Im Free-Tarif ist Barrierefreiheit als Scan und Vorschau "
+                    "enthalten. Reparaturen, Freigaben und die "
+                    "Barrierefreiheitserklärung gehören zur Säule "
+                    "„Barrierefreiheit\u201c (19 €/Monat) oder zum Pro-Paket "
+                    "(49 €/Monat, alle vier Säulen für eine Domain). "
+                    "Freischalten unter „Abo & Rechnung\u201c.")
         )
     
     return True

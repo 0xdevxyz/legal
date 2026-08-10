@@ -10,6 +10,12 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 import os
+# `datetime.now()` steht in vier Mail-Vorlagen (Loeschbestaetigung,
+# Datenexport, Warteliste), der Import fehlte. Diese Mails brachen beim
+# Zusammenbauen ab und wurden NIE verschickt — ohne Spur beim Empfaenger,
+# der nur nichts bekam. Gefunden vom Waechtertest fuer fehlende Importe,
+# nachdem derselbe Fehler den Hauptscan abgeraeumt hatte.
+from datetime import datetime
 from typing import Optional, Dict, Any
 import logging
 from jinja2 import Template

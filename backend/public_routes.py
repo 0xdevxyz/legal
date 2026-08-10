@@ -10,6 +10,20 @@ from typing import Dict, Any, Optional, List
 import logging
 import json
 import os
+# `re` wird in _recommendation_to_steps() benutzt und fehlte hier.
+#
+# Folge: JEDER Scan brach ab, sobald ein Befund eine Empfehlung mitbrachte —
+# NameError im Erzeugen der Loesungsschritte, nach aussen ein HTTP 400 mit
+# "Die Website konnte nicht gescannt werden". Ein Neukunde traf das beim
+# allerersten Klick, und der Text legte nahe, seine Website sei schuld.
+#
+# Gefunden beim Audit-Durchstich an naturheilzentrum.online.
+#
+# Derselbe Waechtertest (tests/test_fehlende_importe.py) hat sofort ein
+# zweites Loch in dieser Datei gefunden: `io.BytesIO` im ZIP-Download, ohne
+# `io`. Wer sein Code-Paket herunterladen wollte, bekam einen Abbruch.
+import io
+import re
 import asyncio
 import aiohttp
 import ipaddress
@@ -659,12 +673,42 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 except Exception as fb_err:
                     logger.error(f"Fallback-Response fehlgeschlagen: {fb_err}", exc_info=True)
 
+            # Was der Kunde liest, haengt davon ab, WER schuld ist.
+            #
+            # Vorher stand hier immer derselbe Text plus `str(scanner_error)`.
+            # Beim Audit las ein Neukunde deshalb: "Die Website konnte nicht
+            # gescannt werden. name 're' is not defined. Stellen Sie sicher,
+            # dass die Website online ist." — ein Fehler in UNSEREM Code,
+            # praesentiert als Problem SEINER Website, garniert mit einem
+            # Python-Innenleben, mit dem er nichts anfangen kann.
+            #
+            # Fuer ein Produkt, das Vertrauen verkauft, ist das teuer: der
+            # Kunde sucht den Fehler bei sich und findet ihn nie.
+            unser_fehler = isinstance(
+                scanner_error, (NameError, AttributeError, TypeError,
+                                ImportError, KeyError, IndexError))
+            if unser_fehler:
+                logger.error("Scanfehler in eigenem Code fuer %s: %r",
+                             url, scanner_error, exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "error": "SCANNER_ERROR",
+                        "message": ("Beim Prüfen ist auf unserer Seite etwas "
+                                    "schiefgegangen — nicht an Ihrer Website."),
+                        "suggestions": [
+                            "Bitte versuchen Sie es in ein paar Minuten erneut",
+                            "Der Fehler ist bei uns protokolliert und wird geprüft",
+                        ],
+                    },
+                )
             raise HTTPException(
                 status_code=400,
                 detail={
                     "error": "SCANNER_ERROR",
                     "message": f"Die Website '{url}' konnte nicht gescannt werden.",
-                    "details": str(scanner_error),
+                    # Bewusst ohne `str(scanner_error)`: interne Meldungen
+                    # helfen dem Kunden nicht und verraten Aufbau-Details.
                     "suggestions": [
                         "Stellen Sie sicher, dass die Website online ist",
                         "Prüfen Sie, ob die URL korrekt ist",

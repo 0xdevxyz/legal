@@ -32,7 +32,18 @@ class RegisterRequest(BaseModel):
     password: str
     full_name: str
     company: Optional[str] = None
-    plan: str = "ki"  # 'ki' oder 'expert'
+    # Der Standardtarif einer Selbstregistrierung.
+    #
+    # Hier stand "ki" — ein Rest aus einem frueheren Tarifmodell. Den Tarif
+    # kennt heute niemand mehr: weder `_resolve_modules` im Kaufweg noch der
+    # Modul-Zugang noch die Tarifanzeige. Wer sich registrierte, landete
+    # darauf und bekam anschliessend auf JEDEN Modulaufruf 403 — Scan ging
+    # (oeffentlich), alles danach nicht. Beim Audit-Durchstich war das der
+    # letzte verbleibende Fehler.
+    #
+    # `free` ist der Tarif, den das Modell fuer genau diesen Fall vorsieht:
+    # 1 Fix, Cookies nutzbar, Rest Scan + Vorschau.
+    plan: str = "free"
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -47,6 +58,13 @@ class TokenResponse(BaseModel):
 class RefreshRequest(BaseModel):
     refresh_token: str
 
+# Die Tarife, die es wirklich gibt. Deckungsgleich mit `_resolve_modules`
+# im Kaufweg (payment_routes/stripe_routes).
+BEKANNTE_TARIFE = frozenset({
+    'free', 'single', 'monitor', 'pro', 'agency', 'expert', 'update',
+})
+
+
 async def init_user_limits(user_id: int, plan_type: str):
     """Initialize user_limits for new user"""
     async with db_pool.acquire() as conn:
@@ -57,6 +75,12 @@ async def init_user_limits(user_id: int, plan_type: str):
         )
         
         if not exists:
+            # Ein unbekannter Tarif ist schlimmer als der kleinste: er
+            # verriegelt alles, ohne dass irgendwo etwas davon steht.
+            if plan_type not in BEKANNTE_TARIFE:
+                logger.warning("Unbekannter Tarif %r bei Nutzer %s — nutze 'free'",
+                               plan_type, user_id)
+                plan_type = 'free'
             websites_max = 1
             exports_max = -1 if plan_type == 'expert' else 10
             
