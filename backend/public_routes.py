@@ -515,8 +515,12 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         logger.info(f"✅ Updated website ID {website_id}")
                     
                     # 2. Save scan to scan_history
-                    scan_id = f"scan_{user_id_int}_{int(datetime.now().timestamp())}"
-                    await conn.execute(
+                    # Eigener try-Block (Audit 11.08.): Schema-Drift in genau diesem
+                    # INSERT (legal_update_id/website_id) übersprang früher still die
+                    # komplette Fix-Erzeugung dahinter. Persistenzfehler bleiben jetzt lokal.
+                    try:
+                        scan_id = f"scan_{user_id_int}_{int(datetime.now().timestamp())}"
+                        await conn.execute(
                         """
                         INSERT INTO scan_history (
                             scan_id, user_id, website_id, url, website_name, scan_timestamp,
@@ -563,8 +567,10 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         len(structured_issues),
                         scan_result.get("scan_duration_ms"),
                         legal_update_id
-                    )
-                    logger.info(f"Saved scan history for website ID {website_id}" + (f" (triggered by legal update {legal_update_id})" if legal_update_id else ""))
+                        )
+                        logger.info(f"Saved scan history for website ID {website_id}" + (f" (triggered by legal update {legal_update_id})" if legal_update_id else ""))
+                    except Exception as persist_error:
+                        logger.error(f"❌ scan_history-Persistenz fehlgeschlagen — Fix-Erzeugung läuft trotzdem weiter: {persist_error}")
                     
                     # 🚀 NEU: Post-Process Accessibility-Issues (Alt-Text-Generierung)
                     try:
@@ -2057,8 +2063,10 @@ async def analyze_website_preview(request: AnalyzeRequest, http_request: Request
                 scan_result = await scanner.scan_website(url)
             
             if scan_result.get("error"):
-                # Fallback zu Mock
-                return await _generate_preview_mock(url, risk_calculator)
+                # Kein Mock mehr (Audit 11.08.): erfundene Befunde mit success:true
+                # täuschten Interessenten. Ehrlicher Fehler; die Landing zeigt
+                # dafür ihren bestehenden Fehlerzustand (WebsiteScanner hasData-Check).
+                return _preview_scan_fehler(url, scan_result.get("error_message"))
             
             # Aggregiere Issues nach Kategorien
             risk_categories = await _aggregate_risk_categories(
@@ -2086,7 +2094,8 @@ async def analyze_website_preview(request: AnalyzeRequest, http_request: Request
             
         except Exception as scanner_error:
             logger.error(f"Preview scanner error: {scanner_error}", exc_info=True)
-            return await _generate_preview_mock(url, risk_calculator)
+            # Kein Mock mehr — siehe oben.
+            return _preview_scan_fehler(url)
         
     except HTTPException:
         raise
@@ -2206,57 +2215,20 @@ async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict
     
     return result
 
-async def _generate_preview_mock(url: str, risk_calculator) -> Dict[str, Any]:
-    """Mock Preview wenn Scanner fehlschlägt"""
-    
-    # FIXED: Deterministischer Pseudo-Random Generator basierend auf URL
-    def seeded_value(seed: str, min_val: int, max_val: int) -> int:
-        """Generiere deterministische Werte basierend auf Seed (URL)"""
-        hash_val = 0
-        for char in seed:
-            hash_val = ((hash_val << 5) - hash_val) + ord(char)
-            hash_val = hash_val & 0xFFFFFFFF  # 32-bit integer
-        normalized = abs(hash_val) / 0xFFFFFFFF
-        return int(normalized * (max_val - min_val + 1)) + min_val
-    
-    # Mock Issues
-    mock_issues = [
-        "Es wurde kein Link zum Impressum gefunden",
-        "Cookie-Banner fehlt",
-        "Datenschutzerklärung nicht gefunden",
-        "Fehlende Alt-Texte für Barrierefreiheit"
-    ]
-    
-    # FIXED: Deterministisch bestimmen, wie viele Issues angezeigt werden
-    num_issues = seeded_value(url + "count", 2, 4)
-    # Deterministisch Issues auswählen basierend auf URL
-    selected_indices = []
-    for i in range(num_issues):
-        seed_idx = seeded_value(url + f"issue_{i}", 0, len(mock_issues) - 1)
-        if seed_idx not in selected_indices:
-            selected_indices.append(seed_idx)
-    # Falls Duplikate, einfach die ersten num_issues nehmen
-    if len(selected_indices) < num_issues:
-        selected_indices = list(range(min(num_issues, len(mock_issues))))
-    
-    selected = [mock_issues[i] for i in selected_indices[:num_issues]]
-    
-    risk_categories = await _aggregate_risk_categories(selected, risk_calculator)
-    
-    total_risk_min = sum(cat['risk_min'] for cat in risk_categories if cat['detected'])
-    total_risk_max = sum(cat['risk_max'] for cat in risk_categories if cat['detected'])
-    
-    # FIXED: Deterministischer Score basierend auf URL
-    score = seeded_value(url + "score", 30, 60)
-    
+def _preview_scan_fehler(url: str, detail: str | None = None) -> Dict[str, Any]:
+    """Ehrliche Fehlerantwort der Landing-Preview.
+
+    Ersetzt den früheren Mock (Audit 11.08.): der lieferte bei Scannerfehlern
+    aus dem URL-Hash gewürfelte Befunde mit success:true und Score 30-60 —
+    Interessenten sahen erfundene Verstöße. Bewusst OHNE score-Feld, damit
+    der hasData-Check der Landing (WebsiteScanner.tsx) den Fehlerzustand zeigt.
+    """
     return {
-        "success": True,
+        "success": False,
+        "error": "scan_failed",
+        "message": detail or "Die Website konnte nicht automatisch gescannt werden. "
+                             "Bitte prüfen Sie die URL oder versuchen Sie es später erneut.",
         "url": url,
-        "score": score,
-        "risk_categories": risk_categories,
-        "total_risk_range": f"{int(total_risk_min):,}€ - {int(total_risk_max):,}€".replace(',', '.'),
-        "issues_count": len(selected),
-        "critical_count": sum(1 for cat in risk_categories if cat['severity'] == 'critical' and cat['detected']),
         "timestamp": datetime.now().isoformat()
     }
 
@@ -2415,46 +2387,9 @@ def convert_issues_to_fixes(issues: List[Dict], base_url: str) -> Dict[str, List
     return fixes
 
 
-@v1_router.post("/sites/{site_id}/widget-feedback")
-async def widget_feedback(
-    site_id: str,
-    feedback: Dict[str, Any]
-):
-    """
-    Empfängt Feedback vom Widget über angewendete Fixes
-    
-    Hilft bei Monitoring und Analytics:
-    - Welche Fixes wurden angewendet?
-    - Gab es Fehler?
-    - Performance-Metriken
-    """
-    try:
-        logger.info(f"Widget feedback from {site_id}: {feedback.get('event')}")
-
-        from main_production import db_pool as main_db_pool
-        if main_db_pool:
-            async with main_db_pool.acquire() as conn:
-                await conn.execute(
-                    """INSERT INTO widget_events
-                       (site_id, widget_type, event_name, event_data)
-                       VALUES ($1, $2, $3, $4)""",
-                    site_id,
-                    "widget-feedback",
-                    feedback.get("event", "feedback"),
-                    json.dumps(feedback),
-                )
-
-        return {
-            "success": True,
-            "message": "Feedback received"
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to process widget feedback: {e}")
-        return {
-            "success": False,
-            "message": "Failed to process feedback"
-        }
+# /sites/{site_id}/widget-feedback wurde entfernt (Audit 11.08.): kein einziges
+# Widget/Plugin rief den Endpunkt je auf, widget_events blieb seit je leer.
+# Die echte Selbstüberwachung läuft über POST /api/wirkung (wirkung_routes).
 
 
 @v1_router.get("/widget/version")

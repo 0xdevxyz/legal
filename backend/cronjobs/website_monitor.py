@@ -198,13 +198,19 @@ async def _benachrichtige(conn, site: dict, alt: Optional[float], neu: float, kr
     kritisch_gestiegen = False
     if kritisch > 0:
         try:
+            # Audit 11.08.: vorher `WHERE website_id = $1 ORDER BY scan_date`
+            # — scan_history.website_id war in allen Zeilen NULL (uuid-vs-int-
+            # Drift) und die Spalte heißt scan_timestamp; die Query warf immer
+            # und der Alarm blieb still. Jetzt zusätzlich über user_id+url
+            # joinen. Kein OFFSET: dieser Cron schreibt selbst kein
+            # scan_history, die neueste Zeile IST der letzte erfasste Scan.
             vorher = await conn.fetchval(
                 """
                 SELECT critical_issues FROM scan_history
-                WHERE website_id = $1
-                ORDER BY scan_date DESC OFFSET 1 LIMIT 1
+                WHERE website_id = $1 OR (user_id = $2 AND url = $3)
+                ORDER BY scan_timestamp DESC LIMIT 1
                 """,
-                site["id"],
+                site["id"], site["user_id"], site["url"],
             )
             kritisch_gestiegen = vorher is not None and kritisch > vorher
         except Exception:
@@ -314,13 +320,27 @@ async def main():
                     site["id"], float(score), abdruck,
                 )
                 try:
+                    # Auf das Ziel-Dict-Format normalisieren (Spiegel von
+                    # main_production): der Scanner liefert die Listenform
+                    # [{pillar, score, status}], score_history soll aber
+                    # einheitlich das Dict inkl. critical_issues tragen.
+                    _liste = ergebnis.get("pillar_scores") or []
+                    _by = {p.get("pillar"): p.get("score", 0)
+                           for p in _liste if isinstance(p, dict)}
+                    _pillar_dict = {
+                        "accessibility": _by.get("accessibility", 0),
+                        "gdpr": _by.get("gdpr", 0),
+                        "legal": _by.get("legal", 0),
+                        "cookies": _by.get("cookies", 0),
+                        "critical_issues": int(kritisch or 0),
+                    }
                     await conn.execute(
                         """
                         INSERT INTO score_history (website_id, user_id, overall_score, pillar_scores)
                         VALUES ($1, $2, $3, $4)
                         """,
                         site["id"], site["user_id"], float(score),
-                        __import__("json").dumps(ergebnis.get("pillar_scores") or {}),
+                        __import__("json").dumps(_pillar_dict),
                     )
                 except Exception as e:
                     logger.warning(f"   Score-Verlauf nicht geschrieben: {e}")

@@ -7,6 +7,23 @@
 
 ---
 
+## [2026-08-11]
+
+### Backend
+- Dashboard-Scanpfad `POST /api/v2/analyze` vollwertig: Multipage-Scan mit Seitenbudget, KI-Review (fail-open) und Accessibility-Post-Prozessor (Alt-Texte/Fix-Manifest) — vorher Single-Page ohne Fix-Erzeugung; `scan_token` (Live-Fortschritt) und `legal_update_id` werden jetzt angenommen und persistiert (`backend/main_production.py`)
+- Landing-Preview: Mock-Antwort bei Scannerfehlern entfernt — statt aus dem URL-Hash gewürfelter Befunde mit `success:true` kommt ein ehrlicher Fehlerzustand (`backend/public_routes.py:_preview_scan_fehler`)
+- `scan_history`-Persistenz im Analyze-Pfad in eigenen try-Block: Schema-Drift übersprang vorher still die komplette Fix-Erzeugung (`backend/public_routes.py`)
+- Toter Endpunkt `POST /sites/{site_id}/widget-feedback` entfernt (wurde von keinem Widget aufgerufen; Selbstüberwachung läuft über `POST /api/wirkung`)
+- Website-Monitor: Alarm-Vergleichsquery repariert (`scan_timestamp` statt `scan_date`, Join über `user_id`+`url` wegen NULL-`website_id`) — der „kritische Befunde gestiegen"-Alarm war seit je stumm; `score_history.pillar_scores` auf einheitliches Dict-Format inkl. `critical_issues` normalisiert (`backend/cronjobs/website_monitor.py`)
+- DSGVO-Cleanup erweitert: `leads`-Retention (Ablauf + Löschantrag > 30 Tage) im Daily-Cleanup, `cookie_consent_logs` einheitlich 24 Monate (vorher 1 Jahr hier, 24 Monate in der Policy, 3 Jahre DB-Default); GDPR-Retention-Service-Loop (Löschankündigungen/-bestätigungen, Kontolöschungen) wird jetzt beim Start tatsächlich gestartet (`backend/main_production.py`)
+- `tests/test_schema_completeness.py`: Schema-Parser erkennt `op.create_table`-Revisionen (z. B. 0014 `gdpr_deletion_requests`) — der Test meldete die Tabelle fälschlich als fehlend
+
+### Infrastruktur
+- `scripts/legal_updates_dedup.sql` gegen Produktion ausgeführt: 719 → 330 `legal_updates` (Titel-Duplikate entfernt, Referenzen in `notifications`/`pflichten_events` umgehängt, Backup-Tabelle angelegt); Reihenfolge beachtet — erst Monitor-Deploy, dann Dedup, damit der alte Cron keine neuen Duplikate erzeugt
+- backend/dashboard/landing neu gebaut und deployt (inkl. Audit-Stand c5876a4); Testsuite im Backend-Image: 1348 passed, 86 skipped
+
+---
+
 ## [2026-05-23]
 
 ### Security — HttpOnly-Härtung Access-Token (Phase 5)

@@ -41,6 +41,10 @@ def _schema_tabellen() -> set:
             text = fh.read()
         for m in re.finditer(r"CREATE TABLE (?:IF NOT EXISTS )?(?:public\.)?[\"']?(\w+)", text, re.I):
             namen.add(m.group(1).lower())
+        # Revisionen, die op.create_table statt rohem SQL nutzen (z. B. 0014
+        # gdpr_deletion_requests), zählen ebenfalls zum Schema.
+        for m in re.finditer(r"op\.create_table\(\s*[\"'](\w+)[\"']", text):
+            namen.add(m.group(1).lower())
     return namen
 
 

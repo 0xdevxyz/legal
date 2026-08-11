@@ -164,6 +164,12 @@ from knowledge_routes import router as knowledge_router
 # Models for new endpoints
 class AnalyzeRequest(BaseModel):
     url: str
+    # Das Dashboard sendet beide Felder seit jeher mit — sie wurden hier nur
+    # nie angenommen (Audit 11.08.): scan_token treibt die Live-Fortschritts-
+    # anzeige, legal_update_id verknüpft den Scan mit dem auslösenden
+    # Rechts-Update (Spalte existiert seit Migration 0015).
+    scan_token: Optional[str] = None
+    legal_update_id: Optional[int] = None
 
 class ExecuteFixRequest(BaseModel):
     fix_id: str
@@ -827,9 +833,19 @@ async def startup_event():
              "DELETE FROM user_sessions WHERE expires_at < NOW()"),
             ("users (inaktiv > 2 Jahre)",
              "DELETE FROM users WHERE is_active = FALSE AND updated_at < NOW() - INTERVAL '2 years'"),
-            # Retention cleanup (MED-011)
+            # Retention cleanup (MED-011). 24 Monate = die eine, vereinheitlichte
+            # Frist (Audit 11.08.): vorher behauptete /api/gdpr/privacy-policy
+            # 24 Monate, der DB-Default lag bei 3 Jahren und hier stand 1 Jahr.
             ("cookie_consent_logs",
-             "DELETE FROM cookie_consent_logs WHERE timestamp < NOW() - INTERVAL '1 year'"),
+             "DELETE FROM cookie_consent_logs WHERE timestamp < NOW() - INTERVAL '24 months'"),
+            # Leads-Retention (Audit 11.08.): der Daily-Cleanup deckte leads nie
+            # ab; die Spalten stammen aus Migration 0015. Löschanträge räumt der
+            # zweistufige Prozess (gdpr_deletion_requests) — hier nur der
+            # Sicherheitsnetz-Abbau abgelaufener bzw. bestätigt-alter Einträge.
+            ("leads (Retention abgelaufen)",
+             "DELETE FROM leads WHERE data_retention_until < NOW() AND deletion_requested = FALSE"),
+            ("leads (Löschantrag > 30 Tage)",
+             "DELETE FROM leads WHERE deletion_requested = TRUE AND deletion_requested_at < NOW() - INTERVAL '30 days'"),
             ("ai_call_logs",
              "DELETE FROM ai_call_logs WHERE created_at < NOW() - INTERVAL '90 days'"),
             ("email_verifications",
@@ -864,6 +880,16 @@ async def startup_event():
 
     asyncio.create_task(_daily_gdpr_cleanup())
     logger.info("✅ Daily GDPR cleanup task scheduled")
+
+    # Betroffenenrechte-Loop (Audit 11.08.): verschickt Löschankündigungen/
+    # -bestätigungen und führt bestätigte Kontolöschungen aus. Wurde nie
+    # gestartet — der Service existierte nur als Definition.
+    try:
+        from gdpr_retention_service import gdpr_service
+        asyncio.create_task(gdpr_service.start_automated_cleanup())
+        logger.info("✅ GDPR retention service loop scheduled")
+    except Exception as e:
+        logger.error(f"GDPR retention service konnte nicht starten: {e}")
 
     print("✅ All routers initialized successfully")
 
@@ -1298,14 +1324,52 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
     Performs a real, in-depth compliance scan of a website.
     """
     try:
+        # Vollwertiger Scanpfad (Audit 11.08.): vorher Single-Page ohne jede
+        # Fix-Erzeugung — Multipage, KI-Review und Post-Prozessor hingen alle
+        # am /api/analyze-Endpunkt, den kein Frontend aufruft.
+        from public_routes import _seitenbudget
+        from compliance_engine import scan_progress as _fortschritt
+        scan_token = request.scan_token
+        if scan_token and _fortschritt.token_gueltig(scan_token):
+            _fortschritt.starte(scan_token)
+        else:
+            scan_token = None
         async with ComplianceScanner() as scanner:
             scan_result = await asyncio.wait_for(
-                scanner.scan_website(request.url),
-                timeout=120.0
+                scanner.scan_website_multipage(
+                    request.url,
+                    max_seiten=_seitenbudget(current_user),
+                    progress_token=scan_token,
+                ),
+                timeout=300.0
             )
-        
+
         if scan_result.get("error"):
+            _fortschritt.abschliessen(scan_token)
             raise HTTPException(status_code=400, detail=scan_result.get("error_message", "Scan failed"))
+
+        # KI-Review (fail-open): verfeinert Befunde und erzeugt individuelle
+        # Lösungen. Scanner-Issues sind Dicts, die Review-Engine liest per
+        # .get() — kompatibel. Ein KI-Fehler darf den Scan nie brechen.
+        _issues = scan_result.get("issues") or []
+        if _issues:
+            try:
+                from public_routes import OPENROUTER_API_KEY as _openrouter_key
+                if _openrouter_key:
+                    from ai_review_engine import run_ai_review_pass
+                    scan_result["issues"] = await run_ai_review_pass(
+                        issues=_issues,
+                        scan_result={
+                            "url": scan_result.get("url", request.url),
+                            "tech_stack": scan_result.get("tech_stack", {}),
+                            "tracking_services": scan_result.get("tracking_services", []),
+                            "detected_cookies": scan_result.get("detected_cookies", []),
+                        },
+                        max_reviews=20,
+                        max_solutions=15,
+                    )
+            except Exception as _rev_err:
+                logger.warning(f"KI-Review übersprungen (nicht kritisch): {_rev_err}")
 
         async with db_pool.acquire() as connection:
             user_id_raw = current_user.get("id") or current_user.get("user_id") or ""
@@ -1320,8 +1384,8 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
                 """
                 INSERT INTO scan_history (
                     scan_id, user_id, url, scan_duration_ms, compliance_score, total_risk_euro,
-                    critical_issues, warning_issues, total_issues, scan_data
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    critical_issues, warning_issues, total_issues, scan_data, legal_update_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 """,
                 scan_id,
                 user_id_value,
@@ -1332,7 +1396,8 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
                 scan_result["critical_issues"],
                 scan_result["warning_issues"],
                 scan_result["total_issues"],
-                json.dumps(scan_result, default=str)
+                json.dumps(scan_result, default=str),
+                request.legal_update_id
             )
             user_id_int = user_id_value
             new_scan = await connection.fetchrow("SELECT id, scan_id FROM scan_history WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", user_id_int)
@@ -1381,6 +1446,31 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
                     """,
                     scan_result["compliance_score"], tracked_site["id"]
                 )
+
+        # Fix-Erzeugung (Alt-Texte, Kontrast-/Struktur-Marker) — fail-open wie
+        # im /api/analyze-Pfad; ein Fehler hier darf den Scan nie brechen.
+        try:
+            if db_pool:
+                from accessibility_post_scan_processor import AccessibilityPostScanProcessor
+                if scan_token:
+                    _fortschritt.setze_phase(scan_token, "KI-Analysen")
+                    _fortschritt.registriere_checks(scan_token, "KI-Analysen",
+                                                    ["Alt-Text-Vorschläge (Bild-KI)"])
+                _pp = await AccessibilityPostScanProcessor(db_pool).process_scan_results(
+                    scan_id=new_scan['scan_id'],
+                    user_id=str(user_id_value),
+                    scan_data={'issues': scan_result.get("issues") or []},
+                    site_url=scan_result.get("url", request.url),
+                )
+                if _pp.get('success'):
+                    logger.info(f"Post-Processing (v2): {_pp.get('message')}")
+                else:
+                    logger.warning(f"Post-Processing (v2) ohne Ergebnis: {_pp.get('error') or _pp.get('message') or 'unbekannt'}")
+        except Exception as _pp_err:
+            logger.error(f"Accessibility-Post-Processing (v2) fehlgeschlagen: {_pp_err}")
+        finally:
+            # Die Live-Anzeige darf nie unfertig stehenbleiben.
+            _fortschritt.abschliessen(scan_token)
 
         return {
             "success": True,
