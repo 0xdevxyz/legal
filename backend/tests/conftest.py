@@ -10,6 +10,15 @@ import sys
 os.environ.setdefault("JWT_SECRET", "test-secret-key-for-testing-only")
 os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost/test")
 
+# Stripe-Schluessel fuer Zusatzmodule: `addon_payment_routes` verlangt sie beim
+# Import. Fehlten sie, sprang der Import und die 19 Tests in
+# test_addon_plan_escalation.py uebersprangen mit dem Grund "laeuft im
+# Backend-Container" — sie liefen aber AUCH im Backend-Container nie. Ein
+# irrefuehrender Skip-Grund ist schlimmer als ein roter Test: er sieht wie
+# Absicht aus. (Dieselbe Falle wie beim Wissensspeicher weiter unten.)
+os.environ.setdefault("STRIPE_WEBHOOK_SECRET_ADDONS", "whsec_test_nur_fuer_tests")
+os.environ.setdefault("STRIPE_SECRET_KEY", "sk_test_nur_fuer_tests")
+
 # Make backend package importable from tests/ subdirectory
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 

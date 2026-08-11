@@ -142,7 +142,26 @@ async def get_oauth_url(
     """
     if provider not in ["github", "gitlab"]:
         raise HTTPException(status_code=400, detail="Unterstützte Provider: github, gitlab")
-    
+
+    # Ohne registrierte OAuth-App ist die Anmeldung bei GitHub sinnlos: die URL
+    # wuerde mit leerem client_id gebaut und der Kunde landete auf einer
+    # GitHub-Fehlerseite, ohne zu erfahren, dass der Fehler bei uns liegt.
+    _schluessel = {
+        "github": (git_service.github_client_id, git_service.github_client_secret),
+        "gitlab": (git_service.gitlab_client_id, git_service.gitlab_client_secret),
+    }[provider]
+    if not all(_schluessel):
+        logger.error(f"OAuth fuer {provider} angefragt, aber client_id/secret sind leer.")
+        _name = {"github": "GitHub", "gitlab": "GitLab"}[provider]
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"Die Verbindung zu {_name} ist auf unserer Seite noch nicht "
+                "eingerichtet. Ihre Fixes können Sie in der Zwischenzeit als "
+                "Patch-Datei herunterladen oder über das complyo-Widget ausliefern."
+            ),
+        )
+
     # Generiere State für CSRF-Schutz
     state = secrets.token_urlsafe(32)
     await _set_oauth_state(state, {

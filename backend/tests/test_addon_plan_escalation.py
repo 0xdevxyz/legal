@@ -50,7 +50,11 @@ except Exception:  # pragma: no cover - fastapi/DB fehlen ausserhalb des Contain
 
 def _addon_modul():
     if _APR is None:
-        pytest.skip("addon_payment_routes nicht importierbar (läuft im Backend-Container)")
+        pytest.skip(
+            "addon_payment_routes nicht importierbar — der Import verlangt "
+            "STRIPE_WEBHOOK_SECRET_ADDONS und STRIPE_SECRET_KEY. tests/conftest.py "
+            "setzt Testwerte; wer ohne conftest importiert, muss sie selbst setzen."
+        )
     return _APR
 
 

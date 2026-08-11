@@ -41,3 +41,9 @@ pytest-asyncio>=0.23.0
 # OpenAI-kompatibler Client fuer Embeddings/Chat (via OpenRouter-Base-URL)
 openai>=1.40,<2
 ruff>=0.6
+
+# Nur fuer tests/test_secure_deploy_rollback_e2e.py: echter FTP-Server im Testprozess,
+# damit der Rollback des Direct-Deploy nicht nur behauptet, sondern gelaufen ist.
+pyftpdlib==2.2.0  # Achtung: nutzt weiterhin asyncore/asynchat. Beim Sprung auf
+                  # Python 3.12+ faellt das weg — dann braucht der Rollback-Test
+                  # einen anderen FTP-Server, sonst ueberspringt er sich still.
