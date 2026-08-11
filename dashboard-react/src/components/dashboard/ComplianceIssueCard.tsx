@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { ComplianceIssue, FixResult } from '@/types/api';
 import { generateFix } from '@/lib/api';
-import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie, Lock, Image as ImageIcon, Pencil, Eye, ArrowRight, Globe, ChevronDown, X } from 'lucide-react';
+import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie, Lock, Image as ImageIcon, Pencil, Eye, ArrowRight, Globe, ChevronDown, X, Loader2 } from 'lucide-react';
 import { StripePaywallModal } from './StripePaywallModal';
 import { ConfirmFixModal } from './ConfirmFixModal';
 import { FixModal } from './FixModal';
@@ -15,6 +15,7 @@ import { UnifiedFixButton } from './UnifiedFixButton';
 import { useRouter } from 'next/navigation';
 import { useDashboardStore } from '@/stores/dashboard';
 import { apiClient } from '@/lib/api-client';
+import { generateSiteId } from '@/lib/siteIdUtils';
 import { LegalDocumentGenerator, type WizardDocType } from '@/components/legal/LegalDocumentGenerator';
 
 // Hilfsfunktion: Ist es ein Cookie-Problem?
@@ -163,6 +164,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   const [showAIPreview, setShowAIPreview] = useState(false);
   const [altTextValue, setAltTextValue] = useState(issue.suggested_alt || '');
   const [altTextSaved, setAltTextSaved] = useState(false);
+  const [altTextSaving, setAltTextSaving] = useState(false);
   const [showLegalWizard, setShowLegalWizard] = useState<WizardDocType | null>(null);
   
   const domain = websiteUrl ? extractDomain(websiteUrl) : undefined;
@@ -197,6 +199,60 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       showToast('Code kopiert!', 'success');
     } catch {
       showToast('Kopieren fehlgeschlagen', 'error');
+    }
+  };
+
+  // Speichern geht über den kanonischen Freigabeweg (accessibility_alt_text_fixes):
+  // Die Karte kennt keine fix_id, deshalb wird die Zeile der Site über die
+  // Worklist gesucht — der Post-Scan-Processor legt sie als 'pending' an. Fehlt
+  // sie (Scan von vor dem Processor), legt generate-alt-texts sie an. Erst die
+  // Freigabe mit custom_alt macht den eingegebenen Text zum ausgelieferten Fix.
+  const speichereAltText = async () => {
+    const altText = altTextValue.trim();
+    const bildSrc = issue.image_src;
+    if (!altText || !bildSrc) return;
+    if (!websiteUrl) {
+      showToast('Keine Website zugeordnet — Speichern nicht möglich', 'error');
+      return;
+    }
+    const siteId = generateSiteId(websiteUrl);
+    type FixZeile = { id: number; image_src?: string; image_filename?: string };
+    const findeFixId = async (): Promise<number | null> => {
+      const worklist = await apiClient.get<{
+        alt_texts?: { pending?: FixZeile[]; approved?: FixZeile[] };
+      }>('/api/accessibility/worklist', { site_id: siteId });
+      const zeilen = [
+        ...(worklist.alt_texts?.pending ?? []),
+        ...(worklist.alt_texts?.approved ?? []),
+      ];
+      const dateiname = bildSrc.split('/').pop();
+      const treffer =
+        zeilen.find((z) => z.image_src === bildSrc) ??
+        zeilen.find((z) => z.image_filename && z.image_filename === dateiname);
+      return treffer?.id ?? null;
+    };
+    setAltTextSaving(true);
+    try {
+      let fixId = await findeFixId();
+      if (fixId === null) {
+        await apiClient.post('/api/accessibility/generate-alt-texts', {
+          site_id: siteId,
+          images: [{ url: bildSrc }],
+        });
+        fixId = await findeFixId();
+      }
+      if (fixId === null) throw new Error('Kein Fix-Eintrag für dieses Bild');
+      await apiClient.post('/api/accessibility/approve-alt-text', {
+        fix_id: fixId,
+        approved: true,
+        custom_alt: altText,
+      });
+      setAltTextSaved(true);
+      showToast('Alt-Text freigegeben — geht mit dem nächsten Manifest-Abruf live', 'success');
+    } catch {
+      showToast('Speichern fehlgeschlagen', 'error');
+    } finally {
+      setAltTextSaving(false);
     }
   };
 
@@ -494,25 +550,14 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={async () => {
-                    if (!altTextValue.trim()) return;
-                    try {
-                      await apiClient.post('/api/accessibility/alt-text', {
-                        image_src: issue.image_src,
-                        alt_text: altTextValue.trim(),
-                        fix_code: `<img src="${issue.image_src}" alt="${altTextValue.trim()}" />`,
-                      });
-                      setAltTextSaved(true);
-                      showToast('Alt-Text gespeichert!', 'success');
-                    } catch {
-                      showToast('Speichern fehlgeschlagen', 'error');
-                    }
-                  }}
-                  disabled={!altTextValue.trim() || altTextSaved}
+                  onClick={speichereAltText}
+                  disabled={!altTextValue.trim() || altTextSaved || altTextSaving}
                   className="flex items-center gap-1.5 px-4 py-1.5 bg-[#25bac8] hover:bg-[#45d6e2] disabled:bg-gray-300 text-zinc-950 text-sm font-bold rounded-lg transition-colors"
                 >
-                  {altTextSaved ? <Check className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-                  {altTextSaved ? 'Gespeichert' : 'Alt-Text speichern'}
+                  {altTextSaving
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Check className="w-4 h-4" />}
+                  {altTextSaved ? 'Freigegeben' : altTextSaving ? 'Wird gespeichert…' : 'Alt-Text speichern'}
                 </button>
                 {issue.fix_code && (
                   <button

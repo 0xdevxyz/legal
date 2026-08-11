@@ -15,5 +15,4 @@ export type {
 } from './FixWizard';
 export { FixStepCard } from './FixStepCard';
 export { default as StatementGenerator } from './StatementGenerator';
-export { default as AltTextReviewQueue } from './AltTextReviewQueue';
 
