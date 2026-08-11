@@ -1296,7 +1296,13 @@
         
         getStyles() {
             const { primaryColor, accentColor, textColor, bgColor, layout, position } = this.config;
-            
+            // WCAG 1.4.3: Schrift auf Marken-/Akzentfarbe automatisch lesbar
+            // halten — dieselbe Regel wie beim Floating-Button. Der Hover
+            // wechselt den Hintergrund auf accentColor, braucht also eine
+            // eigene Textfarbe.
+            const primaryTextColor = this.constructor.lesbareSchrift(primaryColor);
+            const accentTextColor = this.constructor.lesbareSchrift(accentColor);
+
             return `
                 /* Complyo Cookie Banner Styles v${VERSION} - Modern Edition */
                 .complyo-cookie-banner {
@@ -1543,6 +1549,7 @@
                 
                 .complyo-btn-primary:hover {
                     background: ${accentColor};
+                    color: ${accentTextColor};
                     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
                     transform: translateY(-1px);
                 }

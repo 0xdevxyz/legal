@@ -65,8 +65,8 @@ export default function RootLayout({
         {/* Cookie-Banner Script - lädt Content Blocker + Banner in einem Bundle */}
         <Script
           src="https://api.complyo.de/api/widgets/cookie-compliance.js"
-          data-site-id="complyo-tech"
-          data-complyo-site-id="complyo-tech"
+          data-site-id="complyo-de"
+          data-complyo-site-id="complyo-de"
           strategy="afterInteractive"
         />
         
