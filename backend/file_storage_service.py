@@ -4,6 +4,7 @@ Handles file uploads for AI Compliance documentation
 Supports local storage (default) and can be extended for S3
 """
 
+import logging
 import os
 import uuid
 import hashlib
@@ -12,6 +13,8 @@ from typing import Optional, Tuple, Dict, Any
 from pathlib import Path
 import aiofiles
 import mimetypes
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.doc', '.xlsx', '.xls', '.txt', '.html', '.htm'}
 ALLOWED_MIME_TYPES = {
@@ -35,9 +38,29 @@ class FileStorageService:
         self._ensure_storage_dir()
     
     def _ensure_storage_dir(self):
-        Path(self.storage_path).mkdir(parents=True, exist_ok=True)
-        ai_docs_path = Path(self.storage_path) / 'ai_documentation'
-        ai_docs_path.mkdir(parents=True, exist_ok=True)
+        """Legt das Ablageverzeichnis an — scheitert aber nicht beim Import.
+
+        Diese Klasse wird am Modulende einmal instanziiert (`file_storage`).
+        Warf `mkdir` dabei, starb nicht der Upload, sondern der **Import** von
+        `file_storage_service` — und mit ihm jedes Modul, das ihn irgendwo in
+        der Kette zieht. In der CI riss das sieben Testdateien beim Einsammeln
+        mit (`PermissionError: /app`), obwohl mit ihnen nichts verkehrt war.
+
+        Ein Verzeichnis, das beim Start fehlt, ist ein Betriebsproblem und
+        gehoert ins Log. Ein Upload in ein nicht anlegbares Verzeichnis ist ein
+        Fehler — und der faellt weiterhin auf, weil `_get_user_dir()` das
+        Verzeichnis beim tatsaechlichen Schreiben erneut anlegt.
+        """
+        try:
+            Path(self.storage_path).mkdir(parents=True, exist_ok=True)
+            ai_docs_path = Path(self.storage_path) / 'ai_documentation'
+            ai_docs_path.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            logger.warning(
+                f"Ablageverzeichnis {self.storage_path} nicht anlegbar ({e}). "
+                f"Uploads schlagen fehl, bis der Pfad schreibbar ist oder "
+                f"FILE_STORAGE_PATH auf ein anderes Verzeichnis zeigt."
+            )
     
     def _get_user_dir(self, user_id: int) -> Path:
         user_dir = Path(self.storage_path) / 'ai_documentation' / str(user_id)
