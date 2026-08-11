@@ -21,6 +21,7 @@
 ### Infrastruktur
 - `scripts/legal_updates_dedup.sql` gegen Produktion ausgeführt: 719 → 330 `legal_updates` (Titel-Duplikate entfernt, Referenzen in `notifications`/`pflichten_events` umgehängt, Backup-Tabelle angelegt); Reihenfolge beachtet — erst Monitor-Deploy, dann Dedup, damit der alte Cron keine neuen Duplikate erzeugt
 - backend/dashboard/landing neu gebaut und deployt (inkl. Audit-Stand c5876a4); Testsuite im Backend-Image: 1348 passed, 86 skipped
+- E-Mail-Versand live: SMTP auf eigenen Mailserver umgestellt (mail.complyo.de:587/STARTTLS, Absender noreply@complyo.de) — Demo-Modus in Produktion beendet, Zustellung mit Testmail verifiziert; Zugangsdaten nur in der Server-.env
 
 ---
 
