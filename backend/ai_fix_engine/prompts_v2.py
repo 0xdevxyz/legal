@@ -2,7 +2,7 @@
 Complyo AI Fix Engine - Prompt Management System v2.0
 
 Strukturierte Prompts mit JSON-Schema-Validation für alle Fix-Typen.
-Optimiert für Claude 3.5 Sonnet und GPT-4.
+Aktuelles Modell: moonshotai/kimi-k2.5 (via OpenRouter, siehe AIModel).
 
 © 2025 Complyo.tech
 """
@@ -21,7 +21,17 @@ class FixType(Enum):
 
 
 class AIModel(Enum):
-    """Unterstützte AI-Modelle"""
+    """
+    Unterstützte AI-Modelle (alle Aufrufe laufen über OpenRouter).
+
+    Ehrlich benannt: Aktuell ist genau EIN Modell konfiguriert — kimi-k2.5.
+    Die alten Namen CLAUDE_SONNET/GPT4/GPT4_TURBO waren irreführend, sie
+    zeigten alle auf dasselbe kimi-Modell. Sie bleiben unten als deprecated
+    Aliasse erhalten (gleicher Wert = Enum-Alias auf KIMI_K25), damit
+    Bestandscode und -tests nicht brechen. Neue Referenzen: KIMI_K25.
+    """
+    KIMI_K25 = "moonshotai/kimi-k2.5"
+    # Deprecated Aliasse — NICHT mehr verwenden, zeigen auf KIMI_K25:
     CLAUDE_SONNET = "moonshotai/kimi-k2.5"
     GPT4 = "moonshotai/kimi-k2.5"
     GPT4_TURBO = "moonshotai/kimi-k2.5"
@@ -279,7 +289,7 @@ Generiere einen vollständigen, sofort einsetzbaren Code-Fix für das genannte P
 
         return {
             "prompt": prompt,
-            "model": AIModel.CLAUDE_SONNET.value,
+            "model": AIModel.KIMI_K25.value,
             "temperature": 0.2,
             "max_tokens": 3000,
             "schema": CODE_FIX_SCHEMA
@@ -502,7 +512,7 @@ Antworte NUR mit dem JSON im TEXT_FIX_SCHEMA-Format."""
 
         return {
             "prompt": prompt,
-            "model": AIModel.CLAUDE_SONNET.value,
+            "model": AIModel.KIMI_K25.value,
             "temperature": 0.1,
             "max_tokens": 4500,
             "schema": TEXT_FIX_SCHEMA
@@ -620,7 +630,7 @@ Generiere die Widget-Integration:"""
         
         return {
             "prompt": prompt,
-            "model": AIModel.GPT4_TURBO.value,  # Schneller für einfachere Widget-Tasks
+            "model": AIModel.KIMI_K25.value,  # ein konfiguriertes Modell für alle Fix-Typen
             "temperature": 0.2,
             "max_tokens": 1500,
             "schema": WIDGET_FIX_SCHEMA
@@ -714,7 +724,7 @@ WICHTIG:
 
         return {
             "prompt": prompt,
-            "model": AIModel.CLAUDE_SONNET.value,
+            "model": AIModel.KIMI_K25.value,
             "temperature": 0.3,
             "max_tokens": 3500,
             "schema": GUIDE_FIX_SCHEMA

@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Scale, AlertTriangle, Info, Lightbulb, Bell, Newspaper, ChevronRight, 
+import {
+  Scale, AlertTriangle, Info, Lightbulb, Bell, Newspaper, ChevronRight,
   ExternalLink, X, Clock, Search, Shield, FileText, Eye, Zap,
-  TrendingUp, Archive, ThumbsUp, ThumbsDown, AlertCircle
+  TrendingUp, Archive, ThumbsUp, ThumbsDown, AlertCircle, Check
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -66,6 +66,29 @@ interface NewsItem {
   url?: string;
 }
 
+// Persönliche Benachrichtigung aus user_legal_notifications
+// (GET /api/notifications, siehe backend/notification_routes.py)
+interface UserNotification {
+  id: number;
+  notification_type: string;
+  is_read: boolean;
+  created_at: string;
+  title?: string | null;
+  severity?: string | null;
+  url?: string | null;
+}
+
+interface NotificationsResponse {
+  notifications: UserNotification[];
+  unread_count: number;
+  limit: number;
+  offset: number;
+}
+
+const NOTIFICATION_TYPE_LABEL: Record<string, string> = {
+  rescan_required: 'Neuer Scan empfohlen',
+};
+
 export const LegalNews: React.FC = () => {
   const router = useRouter();
   const { setPendingRescanContext, currentWebsite } = useDashboardStore();
@@ -78,11 +101,45 @@ export const LegalNews: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null); // ✅ Fehlerstatus für API
   const [showArchive, setShowArchive] = useState(false);
   const [selectedUpdate, setSelectedUpdate] = useState<LegalUpdate | null>(null);
+  const [unreadNotifications, setUnreadNotifications] = useState<UserNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     fetchLegalUpdates();
     fetchRSSNews();
+    fetchNotifications();
   }, []);
+
+  // Ungelesene persönliche Benachrichtigungen (dezent, oberhalb der Tabs).
+  // Fehler bleiben still — die Karte funktioniert auch ohne Leseweg.
+  const fetchNotifications = async () => {
+    try {
+      const data = await httpApiClient.get<NotificationsResponse>('/api/notifications', {
+        unread_only: true,
+        limit: 5,
+      });
+      setUnreadNotifications(data.notifications || []);
+      setUnreadCount(data.unread_count || 0);
+    } catch {
+      setUnreadNotifications([]);
+      setUnreadCount(0);
+    }
+  };
+
+  const markNotificationRead = async (id: number) => {
+    try {
+      await httpApiClient.post(`/api/notifications/${id}/read`);
+      // Lokal ausblenden, Zähler runter; bei >5 Ungelesenen rückt nachgeladen nach
+      const remaining = unreadNotifications.filter((n) => n.id !== id);
+      setUnreadNotifications(remaining);
+      setUnreadCount((c) => Math.max(0, c - 1));
+      if (remaining.length === 0 && unreadCount > 1) {
+        fetchNotifications();
+      }
+    } catch {
+      // still — beim nächsten Laden erscheint sie wieder
+    }
+  };
 
   const triggerRescan = (update: LegalUpdate, focusCategory?: RescanContext['focus_category']) => {
     setPendingRescanContext({
@@ -403,6 +460,54 @@ export const LegalNews: React.FC = () => {
       </CardHeader>
 
       <CardContent>
+        {/* Persönliche Benachrichtigungen (user_legal_notifications) — dezent,
+            nur sichtbar solange etwas ungelesen ist */}
+        {unreadCount > 0 && (
+          <div className="mb-5 rounded-xl border dark:border-zinc-800/50 border-gray-200 dark:bg-zinc-900/50 bg-gray-50 overflow-hidden">
+            <div className="px-4 py-2.5 flex items-center gap-2 border-b dark:border-zinc-800/50 border-gray-200">
+              <Bell className="w-4 h-4 text-[#25bac8]" />
+              <span className="text-sm font-semibold dark:text-zinc-200 text-gray-800">
+                Benachrichtigungen
+              </span>
+              <span className="ml-auto bg-[#25bac8] text-zinc-950 text-xs px-2 py-0.5 rounded-full font-bold">
+                {unreadCount} ungelesen
+              </span>
+            </div>
+            <ul className="divide-y dark:divide-zinc-800/50 divide-gray-200">
+              {unreadNotifications.map((n) => (
+                <li key={n.id} className="px-4 py-2.5 flex items-start gap-3">
+                  <span
+                    className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
+                      n.severity === 'critical'
+                        ? 'bg-red-500'
+                        : n.severity === 'warning'
+                        ? 'bg-orange-400'
+                        : 'bg-[#25bac8]'
+                    }`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm dark:text-zinc-200 text-gray-800 truncate">
+                      {n.title || NOTIFICATION_TYPE_LABEL[n.notification_type] || 'Benachrichtigung'}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {NOTIFICATION_TYPE_LABEL[n.notification_type] || n.notification_type}
+                      {' · '}
+                      {new Date(n.created_at).toLocaleDateString('de-DE')}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => markNotificationRead(n.id)}
+                    title="Als gelesen markieren"
+                    className="shrink-0 p-1.5 rounded-lg text-zinc-400 hover:text-[#25bac8] hover:bg-[#25bac8]/10 transition-colors"
+                  >
+                    <Check className="w-4 h-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {activeTab === 'updates' ? (
           // Gesetzesänderungen Tab mit KI-Klassifizierung
           legalUpdates.length > 0 ? (

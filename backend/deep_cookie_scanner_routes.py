@@ -243,6 +243,72 @@ async def get_scan_usage(
     }
 
 
+# WICHTIG: Diese Route muss VOR /deep-cookie-scan/{scan_id} registriert sein.
+# FastAPI matcht Routen in Registrierungsreihenfolge — stand sie dahinter,
+# verschattete {scan_id} (int) den Pfad 'my-scans' und lieferte 422.
+@router.get("/deep-cookie-scan/my-scans")
+async def get_my_scans(
+    limit: int = Query(10, ge=1, le=50),
+    current_user: Dict = Depends(get_current_user),
+    connection: asyncpg.Connection = Depends(get_db_connection),
+):
+    """
+    Get user's recent completed scans for import into Cookie Configurator
+
+    Query Parameters:
+        limit: Maximum number of scans to return (default: 10, max: 50)
+
+    Response:
+        {
+            "scans": [
+                {
+                    "scan_id": 123,
+                    "url": "https://example.com",
+                    "created_at": "2026-04-20T14:30:00Z",
+                    "total_cookies": 47,
+                    "unique_services": 12
+                },
+                ...
+            ]
+        }
+    """
+    user_id = current_user["id"]
+
+    try:
+        scans = await connection.fetch(
+            """
+            SELECT
+                id as scan_id,
+                url,
+                created_at,
+                total_cookies,
+                unique_services
+            FROM deep_cookie_scans
+            WHERE user_id = $1 AND status = 'completed'
+            ORDER BY created_at DESC
+            LIMIT $2
+            """,
+            int(user_id),
+            limit
+        )
+
+        return {
+            "scans": [
+                {
+                    "scan_id": scan["scan_id"],
+                    "url": scan["url"],
+                    "created_at": scan["created_at"].isoformat(),
+                    "total_cookies": scan["total_cookies"],
+                    "unique_services": scan["unique_services"],
+                }
+                for scan in scans
+            ]
+        }
+    except Exception as e:
+        logger.exception("Failed to fetch scans")
+        raise HTTPException(status_code=500, detail="Failed to fetch scans")
+
+
 @router.get("/deep-cookie-scan/{scan_id}")
 async def get_scan_status(
     scan_id: int,
@@ -675,73 +741,6 @@ async def background_scan_job(scan_id: int, url: str):
                 )
         except Exception as inner:
             logger.error(f"[DeepScan {scan_id}] konnte Fehlerstatus nicht speichern: {inner}")
-"""
-Additional API endpoint for Scanner Import Panel
-
-Add this endpoint to 03_deep_cookie_scanner_routes.py after the existing endpoints
-"""
-
-@router.get("/deep-cookie-scan/my-scans")
-async def get_my_scans(
-    limit: int = Query(10, ge=1, le=50),
-    current_user: Dict = Depends(get_current_user),
-    connection: asyncpg.Connection = Depends(get_db_connection),
-):
-    """
-    Get user's recent completed scans for import into Cookie Configurator
-    
-    Query Parameters:
-        limit: Maximum number of scans to return (default: 10, max: 50)
-    
-    Response:
-        {
-            "scans": [
-                {
-                    "scan_id": 123,
-                    "url": "https://example.com",
-                    "created_at": "2026-04-20T14:30:00Z",
-                    "total_cookies": 47,
-                    "unique_services": 12
-                },
-                ...
-            ]
-        }
-    """
-    user_id = current_user["id"]
-    
-    try:
-        scans = await connection.fetch(
-            """
-            SELECT 
-                id as scan_id,
-                url,
-                created_at,
-                total_cookies,
-                unique_services
-            FROM deep_cookie_scans
-            WHERE user_id = $1 AND status = 'completed'
-            ORDER BY created_at DESC
-            LIMIT $2
-            """,
-            int(user_id),
-            limit
-        )
-        
-        return {
-            "scans": [
-                {
-                    "scan_id": scan["scan_id"],
-                    "url": scan["url"],
-                    "created_at": scan["created_at"].isoformat(),
-                    "total_cookies": scan["total_cookies"],
-                    "unique_services": scan["unique_services"],
-                }
-                for scan in scans
-            ]
-        }
-    except Exception as e:
-        logger.exception("Failed to fetch scans")
-        raise HTTPException(status_code=500, detail="Failed to fetch scans")
 
 
 @router.delete("/deep-cookie-scan/{scan_id}")

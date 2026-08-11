@@ -8,11 +8,40 @@
 
 (function() {
     'use strict';
-    
+
+    // site_id ermitteln: Vorrang hat das data-site-id-Attribut des einbindenden
+    // <script>-Tags — genau so binden die WP-/Joomla-Plugins diese Datei ein.
+    // document.currentScript ist bei async/defer oder verzoegerter Ausfuehrung
+    // null, dann Fallback: das eigene Script-Tag per src-Match suchen. Zuletzt
+    // greift der server-seitig ersetzte Platzhalter (falls er ersetzt wurde).
+    const SERVER_SITE_ID = 'SITE_ID_PLACEHOLDER';
+    function detectSiteId() {
+        let el = document.currentScript;
+        if (!el || !el.dataset || !el.dataset.siteId) {
+            el = null;
+            const scripts = document.querySelectorAll('script[src]');
+            for (let i = 0; i < scripts.length; i++) {
+                const s = scripts[i];
+                if (/cookie-blocker(\.min)?\.js/.test(s.src || '') && s.dataset && s.dataset.siteId) {
+                    el = s;
+                    break;
+                }
+            }
+        }
+        if (el && el.dataset && el.dataset.siteId) {
+            return el.dataset.siteId;
+        }
+        // Nur verwenden, wenn der Platzhalter tatsaechlich ersetzt wurde
+        if (SERVER_SITE_ID && SERVER_SITE_ID.indexOf('PLACEHOLDER') === -1) {
+            return SERVER_SITE_ID;
+        }
+        return null;
+    }
+
     const ComplyoCookieBlocker = {
         // Configuration
         config: {
-            siteId: 'SITE_ID_PLACEHOLDER',
+            siteId: detectSiteId(),
             apiUrl: 'https://api.complyo.de',
             blockedScripts: [],
             blockedIframes: [],
@@ -103,13 +132,18 @@
          * Load configuration from API
          */
         loadConfiguration: async function() {
+            if (!this.config.siteId) {
+                console.warn('[Complyo] Keine site_id gefunden — bitte data-site-id am <script>-Tag setzen. Es gelten nur die statischen Block-Patterns.');
+                return;
+            }
             try {
-                const response = await fetch(`${this.config.apiUrl}/api/cookie-compliance/config/${this.config.siteId}`);
+                const response = await fetch(`${this.config.apiUrl}/api/cookie-compliance/config/${encodeURIComponent(this.config.siteId)}`);
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.success && data.config) {
-                        this.config.serviceConfig = data.config;
-                        this.buildBlockingPatterns(data.config.services || []);
+                    // Der Endpoint liefert {success, data} — nicht {success, config}
+                    if (data.success && data.data) {
+                        this.config.serviceConfig = data.data;
+                        this.buildBlockingPatterns(data.data.services || []);
                     }
                 }
             } catch (error) {

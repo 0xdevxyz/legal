@@ -110,7 +110,18 @@ async def _licensed_site_ids(pool, site_id: str):
             "SELECT user_id FROM cookie_banner_configs WHERE site_id = $1 LIMIT 1",
             site_id,
         )
-        if not cfg or cfg["user_id"] is None:
+        if not cfg:
+            # Bislang stiller Fail-open. Der WARN-Log schafft die
+            # Entscheidungsgrundlage fuer enforcement=block: Erst wenn hier
+            # ueber laengere Zeit keine legitimen Kunden mehr auftauchen,
+            # darf der Schalter guten Gewissens umgelegt werden.
+            logger.warning(
+                "[Lizenz] unbekannte site_id %s: in keiner Config-Tabelle "
+                "gefunden — fail-open, Widget bleibt aktiv",
+                site_id,
+            )
+            return None
+        if cfg["user_id"] is None:
             return None
         rows = await pool.fetch(
             "SELECT url FROM tracked_websites WHERE user_id = $1",

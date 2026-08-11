@@ -51,7 +51,7 @@ except ImportError:
     logger.warning("⚠️ TCF 2.2 module not available")
 
 # Import centralized Score Calculator (✅ FIX: Einzige Source of Truth)
-from compliance_engine.score_calculator import ScoreCalculator
+from compliance_engine.score_calculator import ScoreCalculator, PillarStatus
 
 @dataclass
 class ComplianceIssue:
@@ -405,11 +405,33 @@ class ComplianceScanner:
         vor_dedup = len(alle)
         alle = dedupe_issues(alle)
 
-        _scores = ScoreCalculator.compute_with_status(alle)
+        # Ungeprüfte Säulen aus dem Erst-Scan durchreichen: scheiterte dort z.B.
+        # der axe-Check, lag für die Säule KEINE Evidenz vor (Status UNVERIFIED).
+        # Ohne diese Menge rechnete der Mehrseiten-Rescore die Säule wieder auf
+        # 100/compliant hoch — genau die falsche Entwarnung, die das
+        # UNVERIFIED-Prinzip verhindern soll. Liefern Unterseiten Issues für die
+        # Säule, gewinnen die Issues (echte Evidenz schlägt fehlende Evidenz).
+        unverified_pillars = {
+            pillar for pillar, status in (ergebnis.get("pillar_status") or {}).items()
+            if status == PillarStatus.UNVERIFIED
+        }
+
+        _scores = ScoreCalculator.compute_with_status(alle, unverified_pillars)
         ergebnis["issues"] = [asdict(i) for i in alle]
         ergebnis["overall_score"] = _scores["overall_score"]
         ergebnis["compliance_score"] = _scores["overall_score"]
-        ergebnis["pillar_scores"] = _scores["pillar_scores"]
+        # EIN Format für pillar_scores: dieselbe Liste wie beim Einzelseiten-Scan
+        # (scan_website, s.u.). Vorher stand hier das rohe Dict {pillar: score} —
+        # je nach Scan-Weg landeten dadurch zwei Formate in score_history, und
+        # das Dashboard fand seine Säulen nicht (.find() auf einem Dict).
+        ergebnis["pillar_scores"] = [
+            {
+                "pillar": pillar,
+                "score": round(score),
+                "status": _scores["pillar_status"].get(pillar),
+            }
+            for pillar, score in _scores["pillar_scores"].items()
+        ]
         ergebnis["pillar_status"] = _scores["pillar_status"]
         ergebnis["total_issues"] = len(alle)
         ergebnis["critical_issues"] = len([i for i in alle if i.severity == "critical"])

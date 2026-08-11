@@ -20,6 +20,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Prometheus-Zähler für OpenRouter-Aufrufe (Muster wie ai_review_engine).
+# Fail-open: ohne metrics-Modul (z.B. isolierte Tests) laufen die Calls ohne Zähler.
+try:
+    from metrics import openrouter_requests_total as _openrouter_counter
+except Exception:
+    _openrouter_counter = None
+
 
 class LegalArea(str, Enum):
     """Rechtsbereiche"""
@@ -145,28 +152,90 @@ class LegalChangeMonitor:
     
     async def monitor_legal_changes(self) -> List[LegalChange]:
         """
-        Überwacht automatisch Gesetzesänderungen
+        Extrahiert Rechtsänderungen aus den neuen RSS-News seit dem letzten Lauf.
+
+        Grounding statt freier LLM-Recherche: Das LLM bekommt AUSSCHLIESSLICH
+        das Material der RSS-News-Pipeline (legal_news, täglicher fetch_news-Cron)
+        als Quelle. Ohne neue News gibt es KEINEN LLM-Call — der Lauf endet mit
+        0 Änderungen. Das verhindert halluzinierte "Gesetzesänderungen" ohne
+        belegbare Quelle.
         """
         logger.info("🔍 Starting legal change monitoring...")
-        
-        # KI-basierte Recherche von aktuellen Gesetzesänderungen
-        prompt = self._build_monitoring_prompt()
-        
+
+        news_items = await self._fetch_news_since_last_run()
+        if not news_items:
+            logger.info("✅ 0 neue News seit letztem Lauf — kein LLM-Call, 0 Änderungen")
+            return []
+
+        prompt = self._build_monitoring_prompt(news_items)
+
         try:
             changes_data = await self._call_ai_api(prompt)
             changes = self._parse_legal_changes(changes_data)
-            
-            logger.info(f"✅ Detected {len(changes)} legal changes")
+
+            logger.info(f"✅ Detected {len(changes)} legal changes aus {len(news_items)} News")
             return changes
-            
+
         except Exception as e:
             logger.error(f"❌ Legal change monitoring failed: {e}")
             return []
 
+    async def _fetch_news_since_last_run(self) -> List[Dict[str, Any]]:
+        """
+        Liest neue Einträge der RSS-News-Pipeline (Tabelle legal_news, befüllt
+        vom täglichen 06:00-Cron cronjobs/fetch_news.py) seit dem letzten
+        erfolgreichen Monitor-Lauf (legal_monitoring_logs.scan_date).
+
+        Ohne db_pool gibt es keine Quellen — dann bewusst leere Liste statt
+        eines ungegroundeten LLM-Calls.
+        """
+        if not self.db_pool:
+            logger.warning("_fetch_news_since_last_run: kein db_pool — keine Quellen verfügbar")
+            return []
+        try:
+            async with self.db_pool.acquire() as conn:
+                last_run = await conn.fetchval(
+                    """
+                    SELECT MAX(scan_date) FROM legal_monitoring_logs
+                    WHERE status = 'completed'
+                    """
+                )
+                if last_run:
+                    rows = await conn.fetch(
+                        """
+                        SELECT id, title, summary, url, source, published_date,
+                               news_type, severity, keywords
+                        FROM legal_news
+                        WHERE is_active = TRUE
+                          AND COALESCE(fetched_date, created_at) > $1
+                        ORDER BY published_date DESC NULLS LAST
+                        LIMIT 50
+                        """,
+                        last_run,
+                    )
+                else:
+                    # Erster Lauf ohne Log-Historie: letzte 7 Tage als Startfenster
+                    rows = await conn.fetch(
+                        """
+                        SELECT id, title, summary, url, source, published_date,
+                               news_type, severity, keywords
+                        FROM legal_news
+                        WHERE is_active = TRUE
+                          AND COALESCE(fetched_date, created_at) > NOW() - INTERVAL '7 days'
+                        ORDER BY published_date DESC NULLS LAST
+                        LIMIT 50
+                        """
+                    )
+            return [dict(r) for r in rows]
+        except Exception as e:
+            logger.error(f"_fetch_news_since_last_run failed: {e}", exc_info=True)
+            return []
+
     async def on_legal_change(self, change: "LegalChange", legal_update_id: str) -> Dict[str, Any]:
         """
-        Hook: Wird nach dem Persistieren einer Gesetzesänderung aufgerufen.
-        Triggert Re-Generation betroffener Rechtstexte für alle User (severity >= medium).
+        Hook: Wird nach dem Persistieren einer NEUEN (Nicht-Duplikat-)Gesetzesänderung
+        aufgerufen. Triggert Re-Generation betroffener Rechtstexte für alle User.
+        Aufrufer (monitor_and_persist) ruft nur bei severity high/critical.
         """
         if not self.db_pool:
             return {"skipped": True, "reason": "no db_pool"}
@@ -230,6 +299,7 @@ class LegalChangeMonitor:
         summary: Dict[str, Any] = {
             "detected": 0,
             "new_saved": 0,
+            "duplicates": 0,
             "pipeline_results": [],
             "regeneration_results": [],
             "generated_checks": [],
@@ -250,7 +320,10 @@ class LegalChangeMonitor:
             try:
                 saved_id = await self._save_change_to_db(change)
                 if saved_id is None:
-                    continue  # duplicate — already processed
+                    # Duplikat (oder DB-Fehler) — bewusst KOMPLETT überspringen:
+                    # keine Pipeline, keine Notifications, keine Re-Generation.
+                    summary["duplicates"] += 1
+                    continue
 
                 summary["new_saved"] += 1
                 legal_update_dict = {
@@ -265,7 +338,15 @@ class LegalChangeMonitor:
                 pipeline_result["title"] = change.title
                 summary["pipeline_results"].append(pipeline_result)
 
-                regen_result = await self.on_legal_change(change, str(saved_id))
+                # Re-Generation NUR bei hoher Dringlichkeit: medium/low/info lösen
+                # keine flächendeckende Rechtstext-Regeneration mehr aus.
+                if change.severity in (ChangeSeverity.HIGH, ChangeSeverity.CRITICAL):
+                    regen_result = await self.on_legal_change(change, str(saved_id))
+                else:
+                    regen_result = {
+                        "skipped": True,
+                        "reason": f"severity '{change.severity.value}' < high",
+                    }
                 regen_result["legal_update_id"] = saved_id
                 summary["regeneration_results"].append(regen_result)
 
@@ -282,6 +363,7 @@ class LegalChangeMonitor:
         logger.info(
             f"monitor_and_persist: {summary['detected']} detected, "
             f"{summary['new_saved']} new, "
+            f"{summary['duplicates']} duplicates skipped, "
             f"{len(summary['pipeline_results'])} pipeline runs, "
             f"{len(summary['regeneration_results'])} regen runs, "
             f"{_checks_created} new compliance checks"
@@ -292,20 +374,23 @@ class LegalChangeMonitor:
         """
         Speichert eine LegalChange in die legal_updates Tabelle.
 
+        Duplikat-Erkennung: Vergleich über den normalisierten Titel OHNE
+        Datumsfenster. Das frühere `AND published_at::date = heute` hat dieselbe
+        Änderung an jedem Folgetag erneut gespeichert (83× identische Einträge
+        über Wochen).
+
         Returns:
-            ID des neuen Eintrags oder None wenn bereits vorhanden (duplicate title+date).
+            ID des neuen Eintrags oder None wenn bereits vorhanden (gleicher Titel).
         """
         try:
             async with self.db_pool.acquire() as conn:
                 existing = await conn.fetchval(
                     """
                     SELECT id FROM legal_updates
-                    WHERE title = $1
-                      AND published_at::date = $2::date
+                    WHERE lower(trim(title)) = lower(trim($1))
                     LIMIT 1
                     """,
                     change.title,
-                    change.detected_at,
                 )
                 if existing:
                     return None
@@ -513,29 +598,76 @@ Antworte im JSON-Format:
         }
         
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                self.base_url,
-                headers=headers,
-                json=payload
-            )
-            response.raise_for_status()
+            try:
+                response = await client.post(
+                    self.base_url,
+                    headers=headers,
+                    json=payload
+                )
+                response.raise_for_status()
+            except Exception:
+                # Jeder fehlgeschlagene OpenRouter-Call zählt als error
+                if _openrouter_counter:
+                    _openrouter_counter.labels(status="error").inc()
+                raise
+
+            if _openrouter_counter:
+                _openrouter_counter.labels(status="success").inc()
+
             data = response.json()
-            
+
             return data['choices'][0]['message']['content']
     
-    def _build_monitoring_prompt(self) -> str:
+    def _build_monitoring_prompt(self, news_items: List[Dict[str, Any]]) -> str:
         """
-        Erstellt den Prompt für die Gesetzesänderungs-Überwachung
+        Erstellt den Prompt für die Extraktion von Rechtsänderungen aus
+        RSS-News-Material (Grounding).
+
+        Anti-Halluzination: Das LLM darf AUSSCHLIESSLICH aus dem übergebenen
+        Quellmaterial extrahieren — keine freie Recherche, kein eigenes Wissen.
+        Das Ausgabeformat (JSON mit "changes"-Array) bleibt exakt das, was
+        _parse_legal_changes / monitor_and_persist erwarten.
         """
-        today = datetime.now().strftime("%Y-%m-%d")
-        
+        material_teile = []
+        for item in news_items:
+            published = item.get("published_date")
+            published_str = (
+                published.strftime("%Y-%m-%d")
+                if hasattr(published, "strftime")
+                else str(published or "unbekannt")
+            )
+            summary = (item.get("summary") or "").strip()
+            material_teile.append(
+                f"### News #{item.get('id')}\n"
+                f"Titel: {item.get('title', '')}\n"
+                f"Quelle: {item.get('source') or 'unbekannt'}\n"
+                f"URL: {item.get('url') or '-'}\n"
+                f"Veröffentlicht: {published_str}\n"
+                f"Zusammenfassung: {summary[:600] or '-'}"
+            )
+        material = "\n\n".join(material_teile)
+
         return f"""
-Recherchiere aktuelle Gesetzesänderungen im Bereich Web-Compliance für deutsche Websites.
+Extrahiere Gesetzesänderungen im Bereich Web-Compliance für deutsche Websites
+AUSSCHLIESSLICH aus dem folgenden Quellmaterial (RSS-News unserer Pipeline).
 
-# ZEITRAUM
-Letzte 30 Tage bis heute ({today})
+# QUELLMATERIAL ({len(news_items)} News-Einträge)
+{material}
 
-# BEREICHE
+# STRIKTE REGELN (Anti-Halluzination)
+- Verwende NUR Informationen, die im Quellmaterial oben stehen.
+- Ergänze NICHTS aus eigenem Wissen — keine Gesetze, Urteile oder Fristen,
+  die nicht im Material vorkommen.
+- Jede gemeldete Änderung muss sich auf mindestens einen News-Eintrag
+  zurückführen lassen; nutze dessen URL als "source_url" und dessen Quelle
+  als "source".
+- Steht ein Inkrafttretens-Datum nicht im Material, nutze das
+  Veröffentlichungsdatum der News als "effective_date".
+- Reine Meinungsartikel, Ratgeber oder Produktwerbung ohne konkrete neue
+  Rechtspflicht sind KEINE Änderung — weglassen.
+- Fasse mehrere News zum selben Sachverhalt zu EINER Änderung zusammen.
+
+# RELEVANTE BEREICHE
 - Cookie-Compliance & ePrivacy
 - DSGVO / Datenschutz
 - Impressumspflicht
@@ -545,15 +677,9 @@ Letzte 30 Tage bis heute ({today})
 - EU AI Act
 - EU-Verpackungsverordnung (PPWR) — Kennzeichnungs- und Informationspflichten für Shops
 
-# QUELLEN
-- EU-Recht (eur-lex.europa.eu)
-- Deutsche Gesetzgebung
-- Datenschutzkonferenz
-- BfDI (Bundesbeauftragter für Datenschutz)
-- Relevante Gerichtsurteile
-
 # AUFGABE
-Liste alle relevanten Gesetzesänderungen, Urteile oder neue Anforderungen auf.
+Liste alle Gesetzesänderungen, Urteile oder neuen Anforderungen aus dem
+Quellmaterial auf, die KONKRETE Auswirkungen auf Websites haben.
 
 Antworte im JSON-Format:
 {{
@@ -572,8 +698,6 @@ Antworte im JSON-Format:
     ]
 }}
 
-Fokussiere auf Änderungen, die KONKRETE Auswirkungen auf Websites haben.
-
 "affected_areas" darf AUSSCHLIESSLICH diese Werte enthalten — jeder andere Wert
 führt dazu, dass die komplette Meldung verworfen wird:
 cookie_compliance | datenschutz | impressum | barrierefreiheit |
@@ -581,7 +705,8 @@ wettbewerbsrecht | verbraucherschutz | ai_act | verpackung
 
 WICHTIG: Antworte AUSSCHLIESSLICH mit dem puren JSON-Objekt — keine Einleitung,
 keine Erklärung, keine Markdown-Codeblöcke, kein Text davor oder danach.
-Wenn keine relevanten Änderungen vorliegen, antworte mit {{"changes": []}}.
+Wenn das Quellmaterial keine relevanten Änderungen enthält, antworte mit
+{{"changes": []}}.
 """
     
     @staticmethod

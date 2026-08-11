@@ -115,6 +115,45 @@ _MANDATORY_MARKERS = {
 }
 
 
+# Unausgefüllte Platzhalter wie "[Firmenname]" oder "[E-MAIL AUSFÜLLEN]" im
+# fertigen Dokument. Mindestlänge 3 verhindert Treffer auf Kurzformen wie "[1]".
+PLACEHOLDER_PATTERN = re.compile(r"\[[^\]]{3,}\]")
+
+
+class UnvollstaendigeAngabenError(ValueError):
+    """Das generierte Dokument enthält unausgefüllte Platzhalter.
+
+    Wird von ``_save()`` VOR dem Persistieren geworfen — ein Dokument voller
+    Platzhalter darf weder gespeichert noch als fertiger Rechtstext
+    ausgeliefert werden. Die Route übersetzt diesen Fehler in HTTP 422.
+    """
+
+    def __init__(self, placeholders: List[str]):
+        self.placeholders = placeholders
+        super().__init__(
+            "Das generierte Dokument enthält unausgefüllte Platzhalter: "
+            + ", ".join(placeholders)
+            + ". Bitte ergänzen Sie die fehlenden Angaben und generieren Sie erneut."
+        )
+
+
+def find_placeholders(html: str) -> List[str]:
+    """Findet unausgefüllte Platzhalter (z.B. "[Firmenname]") im Dokument.
+
+    Ausnahme: der bewusste UNFERTIG-Fallback bei KI-Ausfall
+    (``_fallback_template``) — er ist bereits unmissverständlich als unfertig
+    markiert und darf nicht zusätzlich blockiert werden.
+    """
+    text = html or ""
+    if 'data-document-status="incomplete"' in text:
+        return []
+    seen: List[str] = []
+    for match in PLACEHOLDER_PATTERN.findall(text):
+        if match not in seen:
+            seen.append(match)
+    return seen
+
+
 def validate_document_content(doc_type: "DocumentType", html: str) -> List[str]:
     """Prueft, ob die wichtigsten Pflicht-Marker im generierten Dokument vorkommen.
     Rueckgabe: Liste fehlender Marker-Labels (leer = vollstaendig). Heuristisch und
@@ -166,6 +205,8 @@ LAW_NAME_TO_LEGAL_AREA: Dict[str, str] = {
     "dsgvo": "datenschutz",
     "bdsg": "datenschutz",
     "ttdsg": "cookie_compliance",
+    # TTDSG heißt seit Mai 2024 TDDDG — beide Namen auflösen können
+    "tdddg": "cookie_compliance",
     "eprivacy": "cookie_compliance",
     "impressumspflicht": "impressum",
     "ddg": "impressum",
@@ -228,6 +269,10 @@ class GeneratedDocument:
     generated_at: str
     disclaimer: str
     metadata: Dict[str, Any]
+    # False, wenn die DB-Speicherung fehlgeschlagen ist — das Dokument wurde
+    # dann zwar generiert, aber NICHT persistiert (keine Historie, kein
+    # Auto-Update). Die Route reicht das Feld an das Frontend durch.
+    persisted: bool = True
 
 
 class LegalTextGenerator:
@@ -277,6 +322,7 @@ class LegalTextGenerator:
             generated_at=datetime.now().isoformat(),
             disclaimer=DISCLAIMER_LONG,
             metadata={"user_data_hash": self._hash(user_data)},
+            persisted=doc_id is not None,
         )
 
     async def generate_privacy_policy(
@@ -359,6 +405,7 @@ class LegalTextGenerator:
                 "complyo_clause": bool(complyo_context),
                 "user_data_hash": self._hash(user_data),
             },
+            persisted=doc_id is not None,
         )
 
     async def generate_tos(
@@ -398,6 +445,7 @@ class LegalTextGenerator:
             generated_at=datetime.now().isoformat(),
             disclaimer=DISCLAIMER_LONG,
             metadata={"business_type": business_type, "user_data_hash": self._hash(user_data)},
+            persisted=doc_id is not None,
         )
 
     async def generate_cookie_policy(
@@ -437,6 +485,7 @@ class LegalTextGenerator:
             generated_at=datetime.now().isoformat(),
             disclaimer=DISCLAIMER_LONG,
             metadata={"cookie_count": len(cookie_inventory or []), "user_data_hash": self._hash(user_data)},
+            persisted=doc_id is not None,
         )
 
     async def generate_withdrawal(
@@ -471,6 +520,7 @@ class LegalTextGenerator:
             generated_at=datetime.now().isoformat(),
             disclaimer=DISCLAIMER_LONG,
             metadata={"user_data_hash": self._hash(user_data)},
+            persisted=doc_id is not None,
         )
 
     async def get_active_document(
@@ -626,7 +676,22 @@ class LegalTextGenerator:
                     logger.error(f"OpenRouter Fehler {resp.status}: {err}")
                     return self._fallback_template(prompt)
                 data = await resp.json()
-                return data["choices"][0]["message"]["content"]
+                html = self._strip_markdown_fences(data["choices"][0]["message"]["content"])
+                if not html.startswith("<"):
+                    logger.warning(
+                        "KI-Antwort beginnt nicht mit '<' — vermutlich kein reines HTML "
+                        f"(Anfang: {html[:80]!r})"
+                    )
+                return html
+
+    @staticmethod
+    def _strip_markdown_fences(text: str) -> str:
+        """Entfernt Markdown-Code-Fences (```html ... ```), die das Modell trotz
+        Systemanweisung gelegentlich um den HTML-Code legt."""
+        cleaned = (text or "").strip()
+        cleaned = re.sub(r"^```(html)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        return cleaned.strip()
 
     def _build_prompt(
         self,
@@ -641,11 +706,13 @@ class LegalTextGenerator:
         for key, value in fill_data.items():
             filled = filled.replace(f"{{{{{key}}}}}", str(value))
 
+        # Aktuelle Gesetzesbezeichnungen: TMG→DDG (seit 05/2024), §55 RStV→§18 MStV,
+        # TTDSG→TDDDG. Veraltete Zitate im Prompt landen sonst im generierten Text.
         doc_labels = {
-            DocumentType.IMPRINT: "Impressum gemäß §5 TMG / §55 RStV",
-            DocumentType.PRIVACY: "Datenschutzerklärung gemäß DSGVO Art. 13-14 & TTDSG",
+            DocumentType.IMPRINT: "Impressum gemäß §5 DDG / §18 MStV",
+            DocumentType.PRIVACY: "Datenschutzerklärung gemäß DSGVO Art. 13-14 & TDDDG",
             DocumentType.TOS: "Allgemeine Geschäftsbedingungen (AGB)",
-            DocumentType.COOKIE_POLICY: "Cookie-Richtlinie gemäß TTDSG & DSGVO",
+            DocumentType.COOKIE_POLICY: "Cookie-Richtlinie gemäß TDDDG & DSGVO",
             DocumentType.WITHDRAWAL: "Widerrufsbelehrung inkl. Muster-Widerrufsformular gemäß §312g, §355 BGB & Art. 246a EGBGB",
         }
         return (
@@ -694,7 +761,7 @@ class LegalTextGenerator:
                         content = f.read()
                     parts.append(f"### {name}\n{content[:2000]}")
                     break
-        return "\n\n".join(parts) if parts else "Aktuelle DSGVO- und TMG-Anforderungen beachten."
+        return "\n\n".join(parts) if parts else "Aktuelle DSGVO-, DDG- und TDDDG-Anforderungen beachten."
 
     async def _save(
         self,
@@ -706,6 +773,17 @@ class LegalTextGenerator:
         regeneration_trigger: str,
         user_data: Optional[Dict[str, Any]] = None,
     ) -> Optional[int]:
+        placeholders = find_placeholders(html_content)
+        if placeholders:
+            # Blockierend statt nur Warnung: ein Dokument voller Platzhalter ist
+            # kein speicher- oder auslieferbarer Rechtstext. Der bewusste
+            # UNFERTIG-Fallback bei KI-Ausfall ist in find_placeholders ausgenommen.
+            logger.error(
+                f"Generiertes Dokument enthält unausgefüllte Platzhalter (user={user_id}, "
+                f"type={doc_type.value}): {', '.join(placeholders)} — Generierung abgebrochen"
+            )
+            raise UnvollstaendigeAngabenError(placeholders)
+
         missing_markers = validate_document_content(doc_type, html_content)
         if missing_markers:
             logger.warning(
@@ -754,7 +832,13 @@ class LegalTextGenerator:
                 )
                 return doc_id
         except Exception as e:
-            logger.error(f"Fehler beim Speichern des Dokuments (user={user_id}, type={doc_type}): {e}")
+            # ALARM: Das Dokument wurde generiert, aber NICHT persistiert — der
+            # Nutzer sieht den Text zwar (Response mit persisted=false), aber
+            # Historie und Auto-Update fehlen. Muss im Monitoring auffallen.
+            logger.error(
+                f"ALARM Rechtstext-Persistenz fehlgeschlagen (user={user_id}, "
+                f"type={doc_type.value}): Dokument generiert, aber NICHT gespeichert — {e}"
+            )
             return None
 
     @staticmethod

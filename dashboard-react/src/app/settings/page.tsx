@@ -124,8 +124,9 @@ export default function SettingsPage() {
     }
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/api/user/change-password`, {
-        method: 'POST',
+      // Live existiert PUT /api/user/password — POST /change-password gab es nie.
+      const res = await fetch(`${API_BASE}/api/user/password`, {
+        method: 'PUT',
         headers: getHeaders(),
         body: JSON.stringify({ current_password: passwords.current, new_password: passwords.next }),
       });
@@ -141,6 +142,7 @@ export default function SettingsPage() {
 
   const handleExportData = async () => {
     try {
+      // GDPR-Export: aggregiert users + zugehörige Tabellen (gdpr_retention_service)
       const res = await fetch(`${API_BASE}/api/user/export-data`, {
         headers: getHeaders(),
       });

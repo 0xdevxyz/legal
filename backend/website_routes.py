@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from uuid import UUID
 import asyncpg
+import json
 import traceback
 import logging
 from dependencies import get_current_user
@@ -25,6 +26,37 @@ db_pool = None
 auth_service = None
 
 router = APIRouter(prefix="/api/v2/websites", tags=["websites"])
+
+
+def _kritische_aus_pillar_scores(wert: Any) -> int:
+    """
+    Liest die critical-Zählung aus einem score_history-Eintrag — robust für
+    den Altbestand, der in DREI Gestalten vorliegt:
+
+      - Dict  {"accessibility": .., "critical_issues": ..}   (Writer in
+        main_production; das Zielformat)
+      - Dict ohne "critical_issues"                          (website_monitor,
+        alter Mehrseiten-Rescore: rohes {pillar: score})
+      - Liste [{"pillar": .., "score": ..}, ...]             (website_monitor,
+        Einzelseiten-Ergebnis)
+
+    Dazu kommt: asyncpg liefert JSONB ohne registrierten Codec als STRING —
+    der frühere `isinstance(.., dict)`-Check lief deshalb auf JEDER Zeile ins
+    Leere und meldete critical=0. Erst parsen, dann unterscheiden.
+
+    Für Formen ohne critical-Information ist 0 "unbekannt", nicht "keine".
+    """
+    if isinstance(wert, str):
+        try:
+            wert = json.loads(wert)
+        except (ValueError, TypeError):
+            return 0
+    if isinstance(wert, dict):
+        try:
+            return int(wert.get("critical_issues") or 0)
+        except (ValueError, TypeError):
+            return 0
+    return 0
 
 # Pydantic Models
 class WebsiteCreate(BaseModel):
@@ -580,8 +612,7 @@ async def get_score_history(
             
             result = []
             for entry in history:
-                pillar_scores = entry["pillar_scores"] or {}
-                critical_count = pillar_scores.get("critical_issues", 0) if isinstance(pillar_scores, dict) else 0
+                critical_count = _kritische_aus_pillar_scores(entry["pillar_scores"])
                 result.append({
                     "date": entry["date"].isoformat() if entry["date"] else None,
                     "score": entry["score"] or 0,

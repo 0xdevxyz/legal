@@ -8,8 +8,6 @@ import { useToast } from '@/components/ui/Toast';
 import { LegalDocumentGenerator, type WizardDocType } from '@/components/legal/LegalDocumentGenerator';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api-client';
-import { generateLegalText, type LegalDocumentType } from '@/lib/api';
-import { useAuth } from '@/contexts/AuthContext';
 
 interface IssueGroup {
   group_id: string;
@@ -46,7 +44,6 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
   isAnalysisOnly = false
 }) => {
   const { showToast } = useToast();
-  const { user } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [isFixingAll, setIsFixingAll] = useState(false);
@@ -67,10 +64,10 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
 
   // Label-Map für UI-Texte
   const DOC_LABELS: Record<WizardDocType, { title: string; basis: string; cta: string }> = {
-    impressum:   { title: 'Impressum erstellen',            basis: 'ein rechtssicheres Impressum nach § 5 TMG',                 cta: 'Impressum Generator starten' },
+    impressum:   { title: 'Impressum erstellen',            basis: 'ein rechtssicheres Impressum nach § 5 DDG',                 cta: 'Impressum Generator starten' },
     datenschutz: { title: 'Datenschutzerklärung erstellen', basis: 'eine DSGVO-konforme Datenschutzerklärung',                  cta: 'Datenschutz Generator starten' },
     agb:         { title: 'AGB erstellen',                  basis: 'rechtssichere Allgemeine Geschäftsbedingungen',             cta: 'AGB Generator starten' },
-    cookie:      { title: 'Cookie-Richtlinie erstellen',    basis: 'eine TTDSG-konforme Cookie-Richtlinie',                     cta: 'Cookie-Richtlinie Generator starten' },
+    cookie:      { title: 'Cookie-Richtlinie erstellen',    basis: 'eine TDDDG-konforme Cookie-Richtlinie',                     cta: 'Cookie-Richtlinie Generator starten' },
     widerruf:    { title: 'Widerrufsbelehrung erstellen',   basis: 'eine Widerrufsbelehrung inkl. Muster-Widerrufsformular',    cta: 'Widerruf Generator starten' },
   };
 
@@ -132,40 +129,19 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                           group.title.toLowerCase().includes('impressum');
       
       if (isLegalText) {
-        const textType: LegalDocumentType = group.title.toLowerCase().includes('impressum') ? 'imprint' : 'privacy';
-
-        if (!user?.company && !user?.full_name) {
-          showToast('Bitte hinterlegen Sie zuerst Ihre Firmendaten im Profil.', 'error');
-          return;
-        }
-
-        const data = await generateLegalText(textType, {
-          user_data: {
-            company_name: user.company || user.full_name,
-            email: user.email,
-          },
-          language: 'de',
-        });
-
-        // Auto-Download
-        if (typeof document !== 'undefined' && data.html_content) {
-          const filename = textType === 'imprint' ? 'impressum.html' : 'datenschutzerklaerung.html';
-          const blob = new Blob([data.html_content], { type: 'text/html;charset=utf-8' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        }
-
+        // KEINE Direktgenerierung aus company_name+email: Das Profil enthält
+        // weder Adresse noch Rechtsform noch Vertretungsberechtigten — das
+        // Ergebnis wäre ein Dokument voller [Platzhalter]. Stattdessen Weiche
+        // in den geführten Generator, der alle Pflichtangaben abfragt.
+        const wizardType: WizardDocType = group.title.toLowerCase().includes('impressum') ? 'impressum' : 'datenschutz';
         showToast(
-          `✅ ${textType === 'imprint' ? 'Impressum' : 'Datenschutzerklärung'} generiert und heruntergeladen! Ersetzen Sie den alten Text auf Ihrer Website.`, 
-          'success', 
-          7000
+          'Für ein vollständiges Dokument fehlen Stammdaten (Adresse, Rechtsform, Vertretungsberechtigter). Der Assistent fragt alle Angaben ab.',
+          'info',
+          6000
         );
+        setShowLegalWizard(wizardType);
+        // Kein onStartFix: es wurde noch nichts behoben, nur der Assistent geöffnet.
+        return;
       } else {
         // ✅ TECHNISCHE FIXES: Batch-Fix API nutzen
         let result: any;
@@ -446,10 +422,12 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                   documentType={showLegalWizard}
                   onComplete={(data) => {
                     setShowLegalWizard(null);
+                    // Bewusst kein "Ersetzen Sie den alten Text": das Dokument
+                    // ist ungeprüft und muss erst vom Nutzer kontrolliert werden.
                     showToast(
-                      `✅ ${DOC_LABELS[showLegalWizard].title.replace(' erstellen', '')} erfolgreich erstellt!`,
+                      `${DOC_LABELS[showLegalWizard].title.replace(' erstellen', '')} erstellt. Bitte prüfen Sie das Dokument, bevor Sie es veröffentlichen.`,
                       'success',
-                      5000
+                      6000
                     );
                   }}
                   onBack={() => setShowLegalWizard(null)}

@@ -45,13 +45,6 @@ logger = logging.getLogger(__name__)
 WIDGET_DIR = os.path.join(os.path.dirname(__file__), 'widgets')
 
 
-class WidgetTrackingEvent(BaseModel):
-    siteId: str
-    event: str
-    timestamp: str
-    metadata: Optional[Dict[str, Any]] = None
-
-
 class WidgetAnalyticsRequest(BaseModel):
     site_id: str
     feature: str
@@ -267,40 +260,12 @@ async def serve_a11y_remediation_widget(request: Request):
     return Response(content=content, media_type='application/javascript', headers=headers)
 
 
-@router.post("/api/widgets/track")
-async def track_widget_event(event: WidgetTrackingEvent):
-    """
-    Track widget events (consent decisions, accessibility usage, etc.)
-    """
-    try:
-        if db_pool:
-            async with db_pool.acquire() as conn:
-                await conn.execute(
-                    """INSERT INTO widget_events
-                       (site_id, widget_type, event_name, event_data)
-                       VALUES ($1, $2, $3, $4)""",
-                    event.siteId,
-                    "tracking",
-                    event.event,
-                    json.dumps(event.metadata) if event.metadata else "{}",
-                )
-        else:
-            logger = logging.getLogger(__name__)
-            logger.warning(f"[Widget Tracking] DB not available - {event.siteId}: {event.event}")
-
-        return {
-            "success": True,
-            "message": "Event tracked"
-        }
-
-    except Exception as e:
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error tracking widget event: {e}")
-        return {
-            "success": False,
-            "message": "Tracking failed"
-        }
-
+# Hinweis: Die frühere Route POST /api/widgets/track (+ Modell WidgetTrackingEvent)
+# wurde ersatzlos entfernt. Kein Widget und kein Frontend rief sie auf (belegt per
+# grep über backend/, dashboard-react/, landing-react/, widgets/ — 0 Treffer außer
+# der Route selbst), und die Zieltabelle widget_events war nach Monaten Betrieb
+# leer (count = 0, geprüft 11.08.2026). Die tatsächliche Selbstüberwachung läuft
+# über POST /api/wirkung/{site_id} (wirkung_routes.py).
 
 @router.post("/api/widgets/analytics")
 async def track_widget_analytics(
@@ -393,6 +358,13 @@ async def get_widget_config(site_id: str, request: Request):
     Get widget configuration for a specific site
     """
     _logger = logging.getLogger(__name__)
+
+    # Unangepasstes Snippet (z.B. 'SITE_ID_PLACEHOLDER') mit 400 sichtbar machen,
+    # statt still die Default-Config zu liefern. Zentrale Pruefung samt
+    # WARN-Log mit Referer liegt in cookie_compliance_routes.
+    from cookie_compliance_routes import reject_placeholder_site_id
+    reject_placeholder_site_id(site_id, request)
+
     default_config = {
         "cookie_consent": {
             "enabled": True,
@@ -707,14 +679,20 @@ async def get_fix_manifest(site_id: str, request: Request):
             _logger.warning(f"[Fix-Manifest] Bekanntheitspruefung fuer {site_id}: {e}")
             bekannt = True   # im Zweifel nicht warnen
 
+    # Erst filtern, dann zählen: css-rule/kontrast-css werden separat als
+    # css_rules ausgeliefert. `counts` zählte früher die UNGEFILTERTE Liste —
+    # counts.document_fixes=4 bei 3 Einträgen im Manifest, und jede Auswertung,
+    # die counts gegen die Bilanz hält, ging von falschen Sollwerten aus.
+    sichtbare_document_fixes = [f for f in document_fixes
+                                if f.get("fix_type") not in ("css-rule", "kontrast-css")]
+
     manifest = {
         "success": True,
         "version": "1.1.0",
         "site_id": site_id,
         "bekannt": bekannt,
         "alt_texts": alt_texts,
-        "document_fixes": [f for f in document_fixes
-                           if f.get("fix_type") not in ("css-rule", "kontrast-css")],
+        "document_fixes": sichtbare_document_fixes,
         # Attribut-Setzungen aus der Struktur-Reparatur — die Channels wenden
         # sie guarded an (nur wo nichts steht). Getrennt von css_rules, weil es
         # Markup betrifft und nicht Darstellung.
@@ -727,7 +705,7 @@ async def get_fix_manifest(site_id: str, request: Request):
         "css_rules": css_rules,
         "counts": {
             "alt_texts": len(alt_texts),
-            "document_fixes": len(document_fixes),
+            "document_fixes": len(sichtbare_document_fixes),
             "link_fixes": len(link_fixes),
         },
     }

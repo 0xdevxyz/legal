@@ -249,6 +249,35 @@ class LegalUpdateIntegration:
         
         return priority_boost
     
+    async def _is_duplicate_update(self, update_id: Optional[int]) -> bool:
+        """
+        Lesende Duplikat-Prüfung: existiert ein ÄLTERER legal_updates-Eintrag
+        mit gleichem normalisiertem Titel? Dann ist dieser Eintrag ein Duplikat
+        und darf keine neue Benachrichtigungswelle auslösen — das Original hat
+        seine Notifications bereits erzeugt.
+
+        Fail-open: bei DB-Fehlern wird wie bisher benachrichtigt.
+        """
+        if not update_id:
+            return False
+        try:
+            async with self.db_pool.acquire() as conn:
+                older = await conn.fetchval(
+                    """
+                    SELECT 1
+                    FROM legal_updates lu
+                    JOIN legal_updates dup ON dup.id = $1
+                    WHERE lu.id < dup.id
+                      AND lower(trim(lu.title)) = lower(trim(dup.title))
+                    LIMIT 1
+                    """,
+                    update_id,
+                )
+            return older is not None
+        except Exception as e:
+            logger.error(f"_is_duplicate_update({update_id}) failed: {e}")
+            return False
+
     async def create_scan_notification_for_users(
         self, 
         update_id: int,
@@ -352,10 +381,18 @@ class LegalUpdateIntegration:
             )
             result["websites_flagged"] = websites_flagged
 
-            # 4. Notifications erstellen
+            # 4. Notifications erstellen — NUR bei Nicht-Duplikat. Duplikate
+            #    (gleicher Titel bereits älter in legal_updates) haben ihre
+            #    Benachrichtigungswelle schon beim Original ausgelöst; ohne
+            #    diesen Guard bekam jeder User dieselbe Meldung zigfach.
             if update_id and affected_categories:
-                await self.create_scan_notification_for_users(update_id, affected_categories)
-                result["notifications_queued"] = websites_flagged
+                if await self._is_duplicate_update(update_id):
+                    logger.info(
+                        f"process_new_legal_update #{update_id}: Duplikat — keine Notifications"
+                    )
+                else:
+                    await self.create_scan_notification_for_users(update_id, affected_categories)
+                    result["notifications_queued"] = websites_flagged
 
             logger.info(
                 f"process_new_legal_update #{update_id}: "

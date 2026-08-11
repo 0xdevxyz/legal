@@ -447,6 +447,62 @@ async def get_db_connection():
         raise HTTPException(status_code=500, detail="Database not initialized")
     return db_pool
 
+
+# Offensichtlich unangepasste site_ids: der Platzhalter aus dem Einbau-Snippet
+# sowie Werte, die entstehen, wenn ein Plugin/Template die Variable nicht fuellt.
+_PLACEHOLDER_SITE_IDS = {
+    "site_id_placeholder", "", "null", "undefined", "none",
+    "{site_id}", "your-site-id",
+}
+
+
+def reject_placeholder_site_id(site_id: str, request: Optional[Request] = None) -> None:
+    """
+    Lehnt offensichtlich unangepasste site_ids mit 400 ab.
+
+    Hintergrund: Mindestens ein Kunde hat das Snippet mit 'SITE_ID_PLACEHOLDER'
+    installiert — der Config-Endpoint lieferte dafuer 200 mit Default-Config,
+    und der Einbaufehler blieb unsichtbar. Das WARN-Log enthaelt den Referer,
+    damit der Betreiber den betroffenen Kunden identifizieren kann.
+    """
+    if (site_id or "").strip().lower() not in _PLACEHOLDER_SITE_IDS:
+        return
+    referer = "unbekannt"
+    if request is not None:
+        referer = request.headers.get("referer") or request.headers.get("origin") or "unbekannt"
+    logger.warning(
+        f"[Cookie-Config] Platzhalter-site_id '{site_id}' abgelehnt — "
+        f"Snippet wurde nicht angepasst. Referer: {referer}"
+    )
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "Ungueltige site_id: Der Platzhalter aus dem Einbau-Snippet wurde nicht "
+            "ersetzt. Bitte data-site-id im <script>-Tag auf die eigene Site-ID "
+            "setzen (zu finden im Complyo-Dashboard unter Einbau)."
+        ),
+    )
+
+
+def compute_config_hash(services) -> str:
+    """
+    Stabiler Hash ueber die einwilligungsrelevanten Teile der Banner-Config.
+
+    Bewusst NUR die Services: neue/entfernte Dienste (= Zwecke) erfordern eine
+    neue Einwilligung, Design- oder Textaenderungen nicht. Der Hash wird beim
+    Config-Save gespeichert und im reconsent-check mit dem Hash verglichen,
+    unter dem der Besucher zuletzt eingewilligt hat.
+
+    Die Reihenfolge der Services ist irrelevant (nur der Bestand zaehlt),
+    daher werden die Element-Repraesentationen sortiert.
+    """
+    items = sorted(
+        json.dumps(s, sort_keys=True, ensure_ascii=False, default=str)
+        for s in (services or [])
+    )
+    payload = "[" + ",".join(items) + "]"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
 # ============================================================================
 # Consent Logging Endpoints
 # ============================================================================
@@ -549,7 +605,25 @@ async def log_consent(
             1 if categories.marketing else 0,
             1 if categories.functional else 0
         )
-        
+
+        # Reconsent-Steuerung: Nach der ersten neuen Einwilligung das
+        # site-weite requires_reconsent-Flag zuruecksetzen. Besucher, die noch
+        # unter einem aelteren Config-Stand eingewilligt haben, faengt weiterhin
+        # der Hash-Vergleich im reconsent-check-Endpoint ab.
+        # Bewusst ueber eine eigene Connection (acquire), damit der Stats-Upsert
+        # oben der einzige direkte Pool-execute dieses Endpoints bleibt.
+        try:
+            async with db_pool.acquire() as conn:
+                await conn.execute(
+                    "UPDATE cookie_banner_configs SET requires_reconsent = false "
+                    "WHERE site_id = $1 AND requires_reconsent = true",
+                    consent.site_id,
+                )
+        except Exception as reconsent_err:
+            # Nicht fatal (z.B. Migration ausstehend) — das Consent-Log selbst
+            # ist zu diesem Zeitpunkt bereits erfolgreich gespeichert.
+            logger.warning(f"[Consent] requires_reconsent nicht zurueckgesetzt: {reconsent_err}")
+
         return {
             "success": True,
             "consent_id": result['id'],
@@ -756,6 +830,10 @@ async def get_banner_config(
     - Active services
     - Advanced settings
     """
+    # Unangepasstes Snippet sofort sichtbar machen (400 + WARN mit Referer)
+    # statt still eine Default-Config zu liefern. Bewusst VOR dem try-Block:
+    # das except unten wandelt HTTPExceptions in 500 um.
+    reject_placeholder_site_id(site_id, request)
     try:
         query = """
             SELECT
@@ -1010,10 +1088,48 @@ async def create_or_update_config(
             )
             config.site_id = fallback
         
+        # Reconsent-Steuerung: Hash der einwilligungsrelevanten Config (Services).
+        # Aendert sich der Hash gegenueber dem gespeicherten Stand, muessen die
+        # Besucher neu einwilligen (requires_reconsent = true). Zurueckgesetzt
+        # wird das Flag in log_consent nach der ersten neuen Einwilligung;
+        # Besucher mit altem Stand faengt weiterhin der Hash-Vergleich im
+        # reconsent-check-Endpoint ab.
+        new_config_hash = compute_config_hash(config.services)
+
+        async def _persist_config_hash():
+            try:
+                await db_pool.execute(
+                    """
+                    UPDATE cookie_banner_configs SET
+                        requires_reconsent = CASE
+                            WHEN config_hash IS NOT NULL
+                                 AND config_hash IS DISTINCT FROM $2
+                            THEN true ELSE requires_reconsent END,
+                        config_hash = $2
+                    WHERE site_id = $1
+                    """,
+                    config.site_id, new_config_hash,
+                )
+            except Exception as hash_err:
+                # Nicht fatal: Fehlt die Spalte requires_reconsent noch
+                # (Migration ausstehend), soll der Config-Save trotzdem
+                # funktionieren — dann wenigstens den Hash aktualisieren.
+                logger.warning(
+                    f"[Cookie-Config] requires_reconsent nicht aktualisiert "
+                    f"({hash_err}) — versuche nur config_hash."
+                )
+                try:
+                    await db_pool.execute(
+                        "UPDATE cookie_banner_configs SET config_hash = $2 WHERE site_id = $1",
+                        config.site_id, new_config_hash,
+                    )
+                except Exception as hash_err2:
+                    logger.warning(f"[Cookie-Config] config_hash nicht aktualisiert: {hash_err2}")
+
         # Check if config exists
         check_query = "SELECT id FROM cookie_banner_configs WHERE site_id = $1"
         existing = await db_pool.fetchrow(check_query, config.site_id)
-        
+
         if existing:
             # Update existing
             update_query = """
@@ -1060,6 +1176,9 @@ async def create_or_update_config(
                 config.imprint_url,
                 user_id
             )
+
+            # Reconsent-Hash nach dem eigentlichen Update pflegen (siehe oben)
+            await _persist_config_hash()
 
             return {
                 "success": True,
@@ -1111,6 +1230,9 @@ async def create_or_update_config(
                 config.imprint_url
             )
             
+            # Erst-Save: Hash setzen (config_hash war NULL → kein Reconsent)
+            await _persist_config_hash()
+
             return {
                 "success": True,
                 "message": "Configuration created",
@@ -3326,6 +3448,13 @@ async def check_reconsent_required(
 ):
     """
     Check if reconsent is required due to config changes
+
+    Zwei ODER-verknuepfte Wahrheiten:
+    1. Hash-Vergleich: Der Client schickt den config_hash, unter dem der
+       Besucher zuletzt eingewilligt hat — weicht er vom gespeicherten ab,
+       hat sich die Config geaendert → Reconsent.
+    2. Site-weites Flag requires_reconsent: wird beim Config-Save mit
+       geaendertem Hash gesetzt und in log_consent zurueckgesetzt.
     """
     try:
         query = """
@@ -3333,18 +3462,34 @@ async def check_reconsent_required(
             FROM cookie_banner_configs
             WHERE site_id = $1 AND is_active = true
         """
-        row = await db_pool.fetchrow(query, site_id)
-        
+        try:
+            row = await db_pool.fetchrow(query, site_id)
+        except asyncpg.exceptions.UndefinedColumnError:
+            # Migration fuer requires_reconsent noch nicht eingespielt —
+            # dann ist der Hash-Vergleich die alleinige Wahrheit.
+            logger.warning(
+                "[Reconsent] Spalte requires_reconsent fehlt (Migration ausstehend) — "
+                "nutze nur den Hash-Vergleich."
+            )
+            row = await db_pool.fetchrow(
+                """
+                SELECT config_hash, false AS requires_reconsent
+                FROM cookie_banner_configs
+                WHERE site_id = $1 AND is_active = true
+                """,
+                site_id,
+            )
+
         if not row:
             return {"success": True, "requires_reconsent": False}
-        
+
         current_hash = row['config_hash']
         requires_reconsent = row['requires_reconsent'] or False
-        
+
         # Compare hashes if provided
         if config_hash and current_hash and config_hash != current_hash:
             requires_reconsent = True
-        
+
         return {
             "success": True,
             "requires_reconsent": requires_reconsent,

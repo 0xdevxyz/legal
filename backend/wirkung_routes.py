@@ -159,7 +159,17 @@ async def melde_wirkung(site_id: str, request: Request) -> Response:
     # geleistete Arbeit noch ein Fehlschlag, sondern die Feststellung, dass
     # nichts zu tun war.
     verfehlt = sum(z.verfehlt for z in arten.values())
-    erwartet = sum(int(v) for v in meldung.erwartet.values() if isinstance(v, int))
+    # `erwartet` deckt dieselben FUENF Arten ab wie die Bilanz — inklusive
+    # dokument_fixes. Vorher fehlten sie auf beiden Seiten (Widget schickte
+    # vier Arten, hier wurde blind summiert): jede Quote angewendet/erwartet
+    # war damit strukturell falsch, sobald dokumentweite Fixes im Spiel waren.
+    # Nur bekannte Arten zaehlen — der Endpunkt ist oeffentlich, fremde
+    # Schluessel duerfen das Soll nicht aufblasen.
+    erwartet = sum(
+        int(meldung.erwartet[name])
+        for name in arten
+        if isinstance(meldung.erwartet.get(name), int)
+    )
 
     import json as _json
     _inhalt = {

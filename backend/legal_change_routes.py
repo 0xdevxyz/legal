@@ -590,16 +590,19 @@ async def _run_legal_monitoring():
         detected = summary.get("detected", 0)
         checks_created = sum(1 for c in summary.get("generated_checks", []) if c.get("created"))
 
-        # Log
+        # Log — scan_date = Startzeit des Laufs, damit _fetch_news_since_last_run
+        # beim nächsten Lauf keine News verpasst, die während des Laufs eintrafen.
         async with db_service.pool.acquire() as conn:
             execution_time = (datetime.now() - start_time).total_seconds()
             await conn.execute(
                 """
                 INSERT INTO legal_monitoring_logs (
-                    changes_detected, status, execution_time_seconds
-                ) VALUES ($1, 'completed', $2)
+                    scan_date, changes_detected, sources_checked, status, execution_time_seconds
+                ) VALUES ($1, $2, $3, 'completed', $4)
                 """,
+                start_time,
                 detected,
+                ["legal_news"],
                 execution_time
             )
 
@@ -718,12 +721,26 @@ async def activate_compliance_check(
     return {"success": True, "slug": slug, "status": "active"}
 
 
+class DismissCheckRequest(BaseModel):
+    """Optionale Ablehnungs-Begründung für /checks/{id}/dismiss."""
+    reason: Optional[str] = None
+
+
 @router.post("/checks/{check_id}/dismiss")
 async def dismiss_compliance_check(
     check_id: int,
+    body: Optional[DismissCheckRequest] = None,
     admin: dict = Depends(require_admin),
 ):
-    """Verwirft einen Check ('disabled')."""
+    """
+    Verwirft einen Check ('disabled').
+
+    Eine optionale Begründung (Body: {"reason": "..."}) wird an
+    generation_notes angehängt — so bleibt nachvollziehbar, WARUM ein
+    auto-generierter Check abgelehnt wurde, ohne die Generierungs-Herkunft
+    zu überschreiben.
+    """
+    reason = (body.reason or "").strip() if body else ""
     async with db_service.pool.acquire() as conn:
         slug = await conn.fetchval(
             """
@@ -731,12 +748,18 @@ async def dismiss_compliance_check(
             SET status = 'disabled',
                 reviewed_by = $2,
                 reviewed_at = NOW(),
-                updated_at = NOW()
+                updated_at = NOW(),
+                generation_notes = CASE
+                    WHEN $3 = '' THEN generation_notes
+                    ELSE COALESCE(generation_notes || E'\\n\\n', '')
+                         || 'Abgelehnt (' || to_char(NOW(), 'YYYY-MM-DD') || '): ' || $3
+                END
             WHERE id = $1
             RETURNING slug
             """,
             check_id,
             str(admin.get("email") or admin.get("id") or "admin"),
+            reason,
         )
     if not slug:
         raise HTTPException(status_code=404, detail="Check nicht gefunden")
@@ -744,5 +767,5 @@ async def dismiss_compliance_check(
     if _dcr.declarative_check_registry:
         await _dcr.declarative_check_registry.get_active_checks(force_refresh=True)
 
-    return {"success": True, "slug": slug, "status": "disabled"}
+    return {"success": True, "slug": slug, "status": "disabled", "reason_saved": bool(reason)}
 

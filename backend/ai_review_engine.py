@@ -35,6 +35,36 @@ _HEADERS = {
     "X-Title": "Complyo AI Review Engine",
 }
 
+# Prometheus-Zähler für OpenRouter-Aufrufe (wie ai_fix_engine.unified_fix_engine).
+# Fail-open: ohne metrics-Modul (z.B. isolierte Tests) laufen die Calls ohne Zähler.
+try:
+    from metrics import openrouter_requests_total as _openrouter_counter
+except Exception:
+    _openrouter_counter = None
+
+# Solution-Cache-Wiring (Lernkreislauf): Die in main_production initialisierte
+# AISolutionCache-Instanz hängt an public_routes.solution_cache. Bisher lief
+# generate_individual_solution IMMER gegen das LLM — der Cache war eine
+# Attrappe. Tests/Integration können hier direkt eine Instanz setzen.
+solution_cache = None
+
+# Eigener Kategorien-Namespace im Cache: Diese Engine speichert strukturiertes
+# JSON ({ai_solution, steps, code_snippet}), public_routes speichert Fließtext.
+# Ohne Namespace würde ein Fuzzy-Match dem jeweils anderen Verbraucher das
+# falsche Format liefern (rohes JSON in der Nutzer-UI).
+_CACHE_CATEGORY_PREFIX = "review:"
+
+
+def _get_solution_cache():
+    """Liefert die Cache-Instanz: explizit gesetzte, sonst die aus public_routes."""
+    if solution_cache is not None:
+        return solution_cache
+    try:
+        import public_routes
+        return getattr(public_routes, "solution_cache", None)
+    except Exception:
+        return None
+
 
 async def _call_ai(prompt: str, model: str, max_tokens: int = 600, temperature: float = 0.2) -> Optional[str]:
     if not OPENROUTER_API_KEY:
@@ -54,11 +84,17 @@ async def _call_ai(prompt: str, model: str, max_tokens: int = 600, temperature: 
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
+                    if _openrouter_counter:
+                        _openrouter_counter.labels(status="success").inc()
                     return data["choices"][0]["message"]["content"].strip()
                 logger.warning(f"AI call {model} status {resp.status}")
+                if _openrouter_counter:
+                    _openrouter_counter.labels(status="error").inc()
                 return None
     except Exception as e:
         logger.warning(f"AI call failed ({model}): {e}")
+        if _openrouter_counter:
+            _openrouter_counter.labels(status="error").inc()
         return None
 
 
@@ -254,6 +290,34 @@ async def generate_individual_solution(
     other_issues = "\n".join(f"  - {t}" for t in all_issue_titles[:8]) or "  - (keine weiteren)"
     category = issue.get('category', '')
     title = issue.get('title', '')
+    description = issue.get('description', '') or ''
+
+    # ── Cache-Lookup VOR dem LLM-Call (Lernkreislauf) ──
+    # Fingerprint aus Kategorie (namespaced) + Titel + Beschreibung; Treffer
+    # sparen den API-Call komplett. Fail-open: Cache-Fehler → normaler LLM-Weg.
+    cache = _get_solution_cache()
+    cache_category = f"{_CACHE_CATEGORY_PREFIX}{category or 'unbekannt'}"
+    if cache is not None:
+        try:
+            cached = await cache.get_cached_solution(
+                category=cache_category,
+                title=title,
+                description=description,
+                use_fuzzy=True,
+            )
+            if cached and cached.get("solution"):
+                try:
+                    parsed = json.loads(cached["solution"])
+                except (ValueError, TypeError):
+                    parsed = None
+                if isinstance(parsed, dict) and parsed.get("ai_solution"):
+                    logger.info(f"🎯 Lösung aus Cache ({cached.get('match_type', '?')}): {title[:50]}")
+                    return parsed
+                # Altbestand/Fließtext im Cache → als reine ai_solution verwenden
+                logger.info(f"🎯 Textlösung aus Cache ({cached.get('match_type', '?')}): {title[:50]}")
+                return {"ai_solution": cached["solution"]}
+        except Exception as e:
+            logger.error(f"❌ Solution-Cache-Lookup fehlgeschlagen ({title[:40]}): {e}")
 
     prompt = f"""Du bist ein Experte für Website-Compliance (deutsches Recht, DSGVO, WCAG 2.1).
 
@@ -304,7 +368,21 @@ WICHTIG für code_snippet:
             f"Website: {url} | CMS: {cms} | Problem: {title}\nErstelle 4 konkrete Lösungsschritte auf Deutsch.",
             SOLUTION_MODEL, max_tokens=400, temperature=0.4
         )
-        return {"ai_solution": plain} if plain else None
+        result = {"ai_solution": plain} if plain else None
+
+    # ── Erfolgreiche LLM-Lösung in den Cache schreiben ──
+    if result and cache is not None:
+        try:
+            await cache.store_solution(
+                category=cache_category,
+                title=title,
+                description=description,
+                solution=json.dumps(result, ensure_ascii=False),
+                model=SOLUTION_MODEL,
+            )
+        except Exception as e:
+            logger.error(f"❌ Solution-Cache-Store fehlgeschlagen ({title[:40]}): {e}")
+
     return result
 
 

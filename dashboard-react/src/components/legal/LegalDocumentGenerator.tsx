@@ -30,10 +30,10 @@ const DOC_CONFIG: Record<WizardDocType, {
   slug: string;         // Dateiname/URL-Pfad
   legalBasis: string;
 }> = {
-  impressum:   { label: 'Impressum',            short: 'Impressum',   emoji: '📋', backendType: 'imprint',       slug: 'impressum',  legalBasis: 'nach § 5 TMG' },
+  impressum:   { label: 'Impressum',            short: 'Impressum',   emoji: '📋', backendType: 'imprint',       slug: 'impressum',  legalBasis: 'nach § 5 DDG' },
   datenschutz: { label: 'Datenschutzerklärung', short: 'Datenschutz', emoji: '🔒', backendType: 'privacy',       slug: 'datenschutz', legalBasis: 'nach DSGVO' },
   agb:         { label: 'AGB',                   short: 'AGB',         emoji: '📜', backendType: 'tos',           slug: 'agb',        legalBasis: 'nach BGB §305 ff.' },
-  cookie:      { label: 'Cookie-Richtlinie',     short: 'Cookies',     emoji: '🍪', backendType: 'cookie-policy', slug: 'cookie-richtlinie', legalBasis: 'nach TTDSG & DSGVO' },
+  cookie:      { label: 'Cookie-Richtlinie',     short: 'Cookies',     emoji: '🍪', backendType: 'cookie-policy', slug: 'cookie-richtlinie', legalBasis: 'nach TDDDG & DSGVO' },
   widerruf:    { label: 'Widerrufsbelehrung',    short: 'Widerruf',    emoji: '↩️', backendType: 'withdrawal',    slug: 'widerruf',   legalBasis: 'nach § 312g, § 355 BGB' },
 };
 
@@ -125,6 +125,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [finalContent, setFinalContent] = useState('');
   const [copied, setCopied] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   
   // Company Data
   const [companyData, setCompanyData] = useState<Partial<CompanyData>>({
@@ -219,6 +220,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
 
   const handleGenerate = async () => {
     setIsGenerating(true);
+    setGenerationError(null);
 
     try {
       const type: LegalDocumentType = DOC_CONFIG[documentType].backendType;
@@ -282,281 +284,18 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
       setFinalContent(data.html_content || data.plain_text || '');
       setStep(5);
     } catch (error) {
+      // Kein stiller Fallback auf ein lokales Platzhalter-Template: der Nutzer
+      // bekommt einen sichtbaren Fehlerzustand statt eines untergeschobenen
+      // Dokuments ohne Disclaimer.
       console.error('Fehler bei Rechtstext-Generierung:', error);
-      const content = generateLocalContent();
-      setFinalContent(content);
-      setStep(5);
+      setGenerationError(
+        error instanceof Error
+          ? error.message
+          : 'Generierung fehlgeschlagen. Bitte versuchen Sie es erneut.'
+      );
     } finally {
       setIsGenerating(false);
     }
-  };
-
-  const generateLocalContent = () => {
-    switch (documentType) {
-      case 'impressum': return generateImpressum();
-      case 'datenschutz': return generateDatenschutz();
-      case 'agb': return generateAGB();
-      case 'cookie': return generateCookie();
-      case 'widerruf': return generateWiderruf();
-      default: return generateImpressum();
-    }
-  };
-
-  // Minimaler lokaler Fallback (nur falls die KI-Generierung fehlschlägt).
-  const localDocShell = (title: string, body: string) => `<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8">
-  <title>${title} - ${companyData.company_name || ''}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
-    h1 { color: #1a1a1a; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }
-    h2 { color: #0066cc; margin-top: 30px; }
-    p, li { margin: 10px 0; }
-  </style>
-</head>
-<body>
-${body}
-  <p style="margin-top: 40px; font-size: 12px; color: #666;"><em>Stand: ${new Date().toLocaleDateString('de-DE')}</em></p>
-</body>
-</html>`;
-
-  const generateAGB = () => localDocShell('AGB', `
-  <h1>Allgemeine Geschäftsbedingungen</h1>
-  <h2>1. Anbieter</h2>
-  <p>${companyData.company_name || '[Firmenname]'} ${companyData.legal_form || ''}<br>
-  ${companyData.address || ''}, ${companyData.postal_code || ''} ${companyData.city || ''}<br>
-  E-Mail: ${companyData.email || '[E-Mail]'}</p>
-  ${companyData.service_description ? `<h2>2. Leistungsbeschreibung</h2><p>${companyData.service_description}</p>` : ''}
-  ${companyData.pricing_model ? `<h2>3. Preise</h2><p>${companyData.pricing_model}</p>` : ''}
-  ${companyData.payment_methods ? `<h2>4. Zahlungsarten</h2><p>${companyData.payment_methods}</p>` : ''}
-  ${(companyData.min_contract_duration || companyData.cancellation_period || companyData.auto_renewal) ? `<h2>5. Vertragslaufzeit & Kündigung</h2><p>Mindestlaufzeit: ${companyData.min_contract_duration || '–'}<br>Kündigungsfrist: ${companyData.cancellation_period || '–'}<br>Automatische Verlängerung: ${companyData.auto_renewal || '–'}</p>` : ''}
-  <h2>6. Widerrufsrecht</h2>
-  <p>Verbraucher haben ein Widerrufsrecht von 14 Tagen. Details siehe Widerrufsbelehrung.</p>
-  <h2>7. Anwendbares Recht & Gerichtsstand</h2>
-  <p>Es gilt deutsches Recht.${companyData.jurisdiction ? ` Gerichtsstand (B2B): ${companyData.jurisdiction}.` : ''}</p>`);
-
-  const generateCookie = () => localDocShell('Cookie-Richtlinie', `
-  <h1>Cookie-Richtlinie</h1>
-  <h2>Verantwortlicher</h2>
-  <p>${companyData.company_name || '[Firmenname]'}<br>E-Mail: ${companyData.email || '[E-Mail]'}</p>
-  <h2>Verwendete Cookie-Kategorien</h2>
-  <ul>
-    <li><strong>Technisch notwendige Cookies</strong> – keine Einwilligung erforderlich (§ 25 Abs. 2 TTDSG)</li>
-    <li><strong>Funktionale Cookies</strong> – Einwilligung erforderlich</li>
-    <li><strong>Analyse-/Statistik-Cookies</strong> – Einwilligung erforderlich</li>
-    <li><strong>Marketing-/Tracking-Cookies</strong> – Einwilligung erforderlich</li>
-  </ul>
-  ${companyData.consent_tool ? `<h2>Einwilligungsmanagement</h2><p>Consent-Tool: ${companyData.consent_tool}. Die Einwilligung kann jederzeit widerrufen werden.</p>` : ''}
-  ${companyData.third_party_services ? `<h2>Drittanbieter</h2><p>${companyData.third_party_services}</p>` : ''}
-  ${companyData.privacy_url ? `<p>Weitere Informationen in unserer <a href="${companyData.privacy_url}">Datenschutzerklärung</a>.</p>` : ''}`);
-
-  const generateWiderruf = () => localDocShell('Widerrufsbelehrung', `
-  <h1>Widerrufsbelehrung</h1>
-  <h2>Widerrufsrecht</h2>
-  <p>Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen.</p>
-  <p>Um Ihr Widerrufsrecht auszuüben, müssen Sie uns (${companyData.company_name || '[Firmenname]'}, ${companyData.address || ''}, ${companyData.postal_code || ''} ${companyData.city || ''}, E-Mail: ${companyData.email || '[E-Mail]'}) mittels einer eindeutigen Erklärung über Ihren Entschluss informieren.</p>
-  ${companyData.withdrawal_exceptions ? `<h2>Erlöschen / Ausnahmen</h2><p>${companyData.withdrawal_exceptions}</p>` : ''}
-  <h2>Muster-Widerrufsformular</h2>
-  <p>An: ${companyData.company_name || '[Firmenname]'}, ${companyData.address || ''}, ${companyData.postal_code || ''} ${companyData.city || ''}, E-Mail: ${companyData.email || '[E-Mail]'}<br>
-  – Hiermit widerrufe(n) ich/wir den von mir/uns abgeschlossenen Vertrag<br>
-  – Bestellt am / erhalten am<br>
-  – Name des/der Verbraucher(s)<br>
-  – Anschrift des/der Verbraucher(s)<br>
-  – Datum</p>`);
-
-  const generateImpressum = () => {
-    return `<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8">
-  <title>Impressum - ${companyData.company_name || ''}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
-    h1 { color: #1a1a1a; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }
-    h2 { color: #0066cc; margin-top: 30px; }
-    p { margin: 10px 0; }
-  </style>
-</head>
-<body>
-  <h1>Impressum</h1>
-  
-  <h2>Angaben gemäß § 5 TMG</h2>
-  <p>
-    ${companyData.company_name || '[Firmenname]'}<br>
-    ${companyData.legal_form || ''}<br>
-    ${companyData.address || '[Straße und Hausnummer]'}<br>
-    ${companyData.postal_code || '[PLZ]'} ${companyData.city || '[Stadt]'}<br>
-    ${companyData.country || 'Deutschland'}
-  </p>
-  
-  <h2>Vertreten durch</h2>
-  <p>${companyData.representative || '[Geschäftsführer/Vertretungsberechtigter]'}</p>
-  
-  <h2>Kontakt</h2>
-  <p>
-    E-Mail: ${companyData.email || '[E-Mail-Adresse]'}<br>
-    ${companyData.phone ? `Telefon: ${companyData.phone}<br>` : ''}
-    ${companyData.website ? `Website: ${companyData.website}` : ''}
-  </p>
-  
-  ${companyData.ust_id ? `
-  <h2>Umsatzsteuer-ID</h2>
-  <p>Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz:<br>
-  ${companyData.ust_id}</p>
-  ` : ''}
-  
-  ${companyData.registration_number ? `
-  <h2>Registereintrag</h2>
-  <p>Handelsregisternummer: ${companyData.registration_number}</p>
-  ` : ''}
-  
-  ${features.has_shop ? `
-  <h2>Online-Streitbeilegung (OS)</h2>
-  <p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: 
-  <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener">https://ec.europa.eu/consumers/odr</a></p>
-  <p>Unsere E-Mail-Adresse finden Sie oben im Impressum.</p>
-  
-  <h2>Verbraucherstreitbeilegung/Universalschlichtungsstelle</h2>
-  <p>Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer 
-  Verbraucherschlichtungsstelle teilzunehmen.</p>
-  ` : `
-  <h2>EU-Streitschlichtung</h2>
-  <p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: 
-  <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener">https://ec.europa.eu/consumers/odr</a></p>
-  `}
-  
-  <p style="margin-top: 40px; font-size: 12px; color: #666;">
-    <em>Stand: ${new Date().toLocaleDateString('de-DE')}</em>
-  </p>
-</body>
-</html>`;
-  };
-
-  const generateDatenschutz = () => {
-    return `<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8">
-  <title>Datenschutzerklärung - ${companyData.company_name || ''}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
-    h1 { color: #1a1a1a; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }
-    h2 { color: #0066cc; margin-top: 30px; }
-    h3 { color: #444; margin-top: 20px; }
-    p, li { margin: 10px 0; }
-    ul { padding-left: 20px; }
-  </style>
-</head>
-<body>
-  <h1>Datenschutzerklärung</h1>
-  
-  <h2>1. Datenschutz auf einen Blick</h2>
-  <h3>Allgemeine Hinweise</h3>
-  <p>Die folgenden Hinweise geben einen einfachen Überblick darüber, was mit Ihren personenbezogenen Daten 
-  passiert, wenn Sie diese Website besuchen.</p>
-  
-  <h2>2. Verantwortliche Stelle</h2>
-  <p>Die verantwortliche Stelle für die Datenverarbeitung auf dieser Website ist:</p>
-  <p>
-    ${companyData.company_name || '[Firmenname]'}<br>
-    ${companyData.address || '[Straße und Hausnummer]'}<br>
-    ${companyData.postal_code || '[PLZ]'} ${companyData.city || '[Stadt]'}
-  </p>
-  <p>
-    ${companyData.phone ? `Telefon: ${companyData.phone}<br>` : ''}
-    E-Mail: ${companyData.email || '[E-Mail-Adresse]'}
-  </p>
-  
-  <h2>3. Datenerfassung auf dieser Website</h2>
-  
-  <h3>Cookies</h3>
-  <p>Unsere Website verwendet Cookies. Dabei handelt es sich um kleine Textdateien, die Ihr Webbrowser 
-  auf Ihrem Endgerät speichert.</p>
-  
-  <h3>Server-Log-Dateien</h3>
-  <p>Der Provider der Seiten erhebt und speichert automatisch Informationen in sogenannten Server-Log-Dateien.</p>
-  
-  ${features.has_contact_form ? `
-  <h3>Kontaktformular</h3>
-  <p>Wenn Sie uns per Kontaktformular Anfragen zukommen lassen, werden Ihre Angaben aus dem Anfrageformular 
-  inklusive der von Ihnen dort angegebenen Kontaktdaten zwecks Bearbeitung der Anfrage und für den Fall 
-  von Anschlussfragen bei uns gespeichert. Diese Daten geben wir nicht ohne Ihre Einwilligung weiter.</p>
-  <p>Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung) bzw. Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse).</p>
-  ` : ''}
-  
-  ${features.has_newsletter ? `
-  <h3>Newsletter</h3>
-  <p>Wenn Sie den auf der Website angebotenen Newsletter beziehen möchten, benötigen wir von Ihnen eine 
-  E-Mail-Adresse sowie Informationen, welche uns die Überprüfung gestatten, dass Sie der Inhaber der 
-  angegebenen E-Mail-Adresse sind und mit dem Empfang des Newsletters einverstanden sind (Double-Opt-In).</p>
-  <p>Rechtsgrundlage: Art. 6 Abs. 1 lit. a DSGVO (Einwilligung).</p>
-  ` : ''}
-  
-  ${features.has_user_accounts ? `
-  <h3>Registrierung/Kundenkonto</h3>
-  <p>Sie können sich auf unserer Website registrieren, um zusätzliche Funktionen nutzen zu können. 
-  Die dabei eingegebenen Daten verwenden wir nur zum Zwecke der Nutzung des jeweiligen Angebotes.</p>
-  <p>Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung).</p>
-  ` : ''}
-  
-  ${features.has_shop ? `
-  <h2>4. Online-Shop / E-Commerce</h2>
-  <h3>Bestellungen</h3>
-  <p>Für die Abwicklung Ihrer Bestellung benötigen wir Ihre persönlichen Daten. Diese Daten 
-  werden zur Vertragsabwicklung gespeichert und nach Ablauf der gesetzlichen Aufbewahrungsfristen gelöscht.</p>
-  <p>Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung).</p>
-  
-  ${features.has_payment ? `
-  <h3>Zahlungsdienstleister</h3>
-  <p>Wir nutzen externe Zahlungsdienstleister. Dabei werden Ihre Zahlungsdaten direkt an den 
-  jeweiligen Dienstleister übermittelt. Diese Anbieter unterliegen ebenfalls den Datenschutzbestimmungen.</p>
-  ` : ''}
-  ` : ''}
-  
-  ${features.has_analytics ? `
-  <h2>${features.has_shop ? '5' : '4'}. Analyse-Tools</h2>
-  ${features.analytics_tools.includes('Google Analytics') ? `
-  <h3>Google Analytics</h3>
-  <p>Diese Website nutzt Funktionen des Webanalysedienstes Google Analytics. Anbieter ist die 
-  Google Ireland Limited, Gordon House, Barrow Street, Dublin 4, Irland.</p>
-  <p>Google Analytics verwendet sog. "Cookies". Die durch das Cookie erzeugten Informationen über 
-  Ihre Benutzung dieser Website werden in der Regel an einen Server von Google in den USA übertragen.</p>
-  <p>Wir haben die IP-Anonymisierung aktiviert. Dadurch wird Ihre IP-Adresse von Google innerhalb 
-  der EU gekürzt.</p>
-  <p>Rechtsgrundlage: Art. 6 Abs. 1 lit. a DSGVO (Einwilligung via Cookie-Banner).</p>
-  ` : `
-  <h3>Webanalyse</h3>
-  <p>Diese Website nutzt Webanalyse-Tools zur statistischen Auswertung der Besucherzugriffe. 
-  Die Analyse erfolgt erst nach Ihrer Einwilligung über unseren Cookie-Banner.</p>
-  `}
-  ` : ''}
-  
-  ${features.has_social_media ? `
-  <h2>${features.has_shop ? (features.has_analytics ? '6' : '5') : (features.has_analytics ? '5' : '4')}. Social Media</h2>
-  <h3>Social Media Plugins</h3>
-  <p>Auf unserer Website können Social-Media-Plugins eingebunden sein. Diese Plugins werden erst 
-  nach Ihrer Einwilligung aktiviert (2-Klick-Lösung oder Cookie-Consent).</p>
-  ` : ''}
-  
-  <h2>${features.has_shop ? (features.has_analytics ? (features.has_social_media ? '7' : '6') : (features.has_social_media ? '6' : '5')) : (features.has_analytics ? (features.has_social_media ? '6' : '5') : (features.has_social_media ? '5' : '4'))}. Ihre Rechte</h2>
-  <p>Sie haben folgende Rechte:</p>
-  <ul>
-    <li><strong>Auskunftsrecht (Art. 15 DSGVO)</strong>: Sie können Auskunft über Ihre von uns verarbeiteten personenbezogenen Daten verlangen.</li>
-    <li><strong>Berichtigung (Art. 16 DSGVO)</strong>: Sie können die Berichtigung unrichtiger Daten verlangen.</li>
-    <li><strong>Löschung (Art. 17 DSGVO)</strong>: Sie können die Löschung Ihrer Daten verlangen.</li>
-    <li><strong>Einschränkung (Art. 18 DSGVO)</strong>: Sie können die Einschränkung der Verarbeitung verlangen.</li>
-    <li><strong>Datenübertragbarkeit (Art. 20 DSGVO)</strong>: Sie können Ihre Daten in maschinenlesbarem Format erhalten.</li>
-    <li><strong>Widerspruch (Art. 21 DSGVO)</strong>: Sie können der Verarbeitung widersprechen.</li>
-    <li><strong>Widerruf (Art. 7 Abs. 3 DSGVO)</strong>: Sie können Ihre Einwilligung jederzeit widerrufen.</li>
-    <li><strong>Beschwerde (Art. 77 DSGVO)</strong>: Sie können sich bei einer Aufsichtsbehörde beschweren.</li>
-  </ul>
-  
-  <p style="margin-top: 40px; font-size: 12px; color: #666;">
-    <em>Stand: ${new Date().toLocaleDateString('de-DE')}</em>
-  </p>
-</body>
-</html>`;
   };
 
   const handleCopy = () => {
@@ -1036,6 +775,20 @@ ${body}
                 und passen Sie es bei Bedarf an Ihre spezifische Situation an.
               </p>
             </div>
+
+            {/* Sichtbarer Fehlerzustand — es gibt bewusst KEINEN lokalen Fallback-Text */}
+            {generationError && (
+              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <p className="text-sm font-semibold text-red-300 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  Generierung fehlgeschlagen
+                </p>
+                <p className="text-sm text-red-200 mt-1">{generationError}</p>
+                <p className="text-xs text-red-300/80 mt-2">
+                  Es wurde kein Dokument erstellt. Bitte prüfen Sie Ihre Angaben und versuchen Sie es erneut.
+                </p>
+              </div>
+            )}
 
             <div className="flex justify-between pt-4">
               <Button onClick={() => setStep(3)} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-zinc-300 hover:bg-zinc-800">

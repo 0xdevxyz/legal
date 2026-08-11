@@ -7,7 +7,7 @@ Strategie:
 - 10% der Fälle: KI-Analyse bei Unsicherheit (~2s)
 """
 
-import anthropic
+import aiohttp
 import os
 import logging
 from typing import Dict, Any, Optional
@@ -17,6 +17,18 @@ from enum import Enum
 from .checks.deep_content_analyzer import DeepContentAnalyzer, ContentValidation
 
 logger = logging.getLogger(__name__)
+
+# KI läuft über OpenRouter (wie ai_review_engine / legal_text_generator).
+# Vorher: direkter anthropic.Anthropic-Client mit ANTHROPIC_API_KEY — der Key
+# war im Deployment nie gesetzt, "KI für Grenzfälle" lief daher nie.
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+VALIDATOR_MODEL = os.getenv("COMPLYO_VALIDATOR_MODEL", "anthropic/claude-haiku-4.5")
+
+# Prometheus-Zähler für OpenRouter-Aufrufe (fail-open ohne metrics-Modul)
+try:
+    from metrics import openrouter_requests_total as _openrouter_counter
+except Exception:
+    _openrouter_counter = None
 
 
 class ValidationMethod(Enum):
@@ -49,14 +61,13 @@ class HybridValidator:
         """Initialisiert Validator"""
         self.analyzer = DeepContentAnalyzer()
         
-        # KI-Client (Claude)
-        self.ai_client = None
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if api_key:
-            self.ai_client = anthropic.Anthropic(api_key=api_key)
-            logger.info("✅ Hybrid Validator mit KI-Support initialisiert")
+        # KI via OpenRouter (Claude Haiku) — Key ist im Deployment gesetzt
+        self.api_key = os.getenv("OPENROUTER_API_KEY", "")
+        self.model = VALIDATOR_MODEL
+        if self.api_key:
+            logger.info(f"✅ Hybrid Validator mit KI-Support initialisiert (OpenRouter, {self.model})")
         else:
-            logger.warning("⚠️ ANTHROPIC_API_KEY nicht gesetzt - nur Pattern-Matching verfügbar")
+            logger.warning("⚠️ OPENROUTER_API_KEY nicht gesetzt - nur Pattern-Matching verfügbar")
         
         # Thresholds für KI-Trigger
         self.uncertain_threshold = 0.6  # < 0.6 Confidence → KI-Check
@@ -110,8 +121,8 @@ class HybridValidator:
         
         elif validation.confidence < self.uncertain_threshold:
             # ❓ UNSICHER: KI-Check nötig
-            
-            if not self.ai_client:
+
+            if not self.api_key:
                 # Kein KI verfügbar → Pattern-Result verwenden (mit Warnung)
                 processing_time = int((time.time() - start_time) * 1000)
                 
@@ -196,31 +207,47 @@ class HybridValidator:
         )
         
         try:
-            # Claude API Call
-            response = self.ai_client.messages.create(
-                model="claude-3-5-sonnet-20241022",
-                max_tokens=500,
-                temperature=0,  # Deterministisch
-                messages=[{
-                    "role": "user",
-                    "content": prompt
-                }]
-            )
-            
+            # OpenRouter API Call (async, HTTP-Muster wie ai_review_engine._call_ai)
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    OPENROUTER_URL,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://complyo.de",
+                        "X-Title": "Complyo Hybrid Validator",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "max_tokens": 500,
+                        "temperature": 0,  # Deterministisch
+                    },
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as resp:
+                    if resp.status != 200:
+                        if _openrouter_counter:
+                            _openrouter_counter.labels(status="error").inc()
+                        raise RuntimeError(f"OpenRouter Status {resp.status}")
+                    data = await resp.json()
+
+            if _openrouter_counter:
+                _openrouter_counter.labels(status="success").inc()
+
             # Parse Response
-            ai_response = response.content[0].text
-            
+            ai_response = data["choices"][0]["message"]["content"]
+
             # Extrahiere strukturierte Daten
             result = self._parse_ai_response(ai_response, pattern_result)
-            
+
             logger.info(f"✅ KI-Validierung für {field_name}: {result['found']} (Confidence: {result['confidence']:.2f})")
-            
+
             return result
-        
+
         except Exception as e:
             logger.error(f"❌ KI-Validierung fehlgeschlagen: {e}")
-            
-            # Fallback zu Pattern-Result
+
+            # Fallback zu Pattern-Result (fail-open, wie zuvor)
             return {
                 "found": pattern_result.found,
                 "confidence": pattern_result.confidence * 0.7,  # Reduzierte Confidence

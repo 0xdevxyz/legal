@@ -8,7 +8,7 @@ from typing import Optional
 from datetime import datetime
 import logging
 from database_service import db_service
-from dependencies import require_admin
+from dependencies import require_admin, get_db
 
 logger = logging.getLogger(__name__)
 
@@ -64,41 +64,53 @@ def _reviewer_name(admin: dict) -> str:
 # cookie_compliance_routes, legal_change_routes und i18n_api genutzt.
 
 @admin_router.get("/dashboard/overview")
-async def admin_dashboard_overview(admin: dict = Depends(require_admin)):
+async def admin_dashboard_overview(
+    admin: dict = Depends(require_admin),
+    db=Depends(get_db),
+):
     """
-    Get comprehensive dashboard overview for admin
+    Dashboard-Uebersicht fuer den Admin — nur echte, gezaehlte Werte.
+
+    Bis 2026-08 standen hier erfundene Kennzahlen ('uptime 99.9%',
+    email_service 'active', avg_verification_time '< 5 minutes'). Was diese
+    API nicht messen kann, behauptet sie nicht mehr — Nicht-Ermittelbares
+    wird weggelassen statt erfunden.
     """
     try:
-        # Get lead statistics
+        # Lead-Statistik (echte Zaehlung ueber db_service)
         stats = await db_service.get_lead_statistics()
-        
-        # Additional admin-specific metrics
-        sources = {"landing_page": stats["total_leads"]}
-        recent_leads = []
+
         status_breakdown = {
             "new": stats["total_leads"] - stats["verified_leads"],
             "verified": stats["verified_leads"] - stats["converted_leads"],
             "converted": stats["converted_leads"]
         }
-        
+
+        # Kennzahlen zaehlen statt behaupten
+        users_total = await db.fetchval("SELECT COUNT(*) FROM users")
+        websites_total = await db.fetchval("SELECT COUNT(*) FROM tracked_websites")
+        scans_7d = await db.fetchval(
+            "SELECT COUNT(*) FROM scan_history WHERE scan_date >= NOW() - INTERVAL '7 days'"
+        )
+
+        # Echter Zustand des Mailversands statt hartkodiertem 'active'
+        from email_service import email_service
+
         return {
             "overview": stats,
-            "lead_sources": sources,
-            "recent_activity": len(recent_leads),
             "status_breakdown": status_breakdown,
+            "metrics": {
+                "users": users_total or 0,
+                "tracked_websites": websites_total or 0,
+                "scans_last_7_days": scans_7d or 0,
+            },
             "system_status": {
                 "storage_type": "database",
                 "gdpr_compliant": True,
-                "email_service": "active",
-                "pdf_generation": "active"
+                "email_service": "demo" if email_service.demo_mode else "active",
             },
-            "performance_metrics": {
-                "avg_verification_time": "< 5 minutes",
-                "avg_report_generation": "< 30 seconds",
-                "uptime": "99.9%"
-            }
         }
-        
+
     except Exception as e:
         logger.error(f"Error getting admin dashboard overview: {e}")
         raise HTTPException(status_code=500, detail="Error loading dashboard")
@@ -108,35 +120,48 @@ async def get_all_leads(
     admin: dict = Depends(require_admin),
     status: Optional[str] = Query(None, description="Filter by status"),
     verified: Optional[bool] = Query(None, description="Filter by verification status"),
-    limit: int = Query(50, description="Number of leads to return"),
-    offset: int = Query(0, description="Pagination offset")
+    limit: int = Query(50, ge=1, le=200, description="Number of leads to return"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    db=Depends(get_db),
 ):
     """
-    Get paginated list of all leads with filtering options
+    Paginierte Lead-Liste mit Filtern.
+
+    Bis 2026-08 stand hier hartkodiert `leads = []` — der Endpunkt lieferte
+    immer eine leere Liste und sah dabei fertig aus. Jetzt echte Query.
+    Bewusst nur unkritische Spalten (kein verification_token, keine
+    Consent-IP) — das ist die Admin-Listenansicht, nicht der Datenexport.
     """
     try:
-        # Database mode
-        total_count = 0
-        leads = []
-        
-        # Sanitize lead data for admin view (remove sensitive fields)
-        sanitized_leads = []
-        for lead in leads:
-            sanitized_lead = {
-                "id": lead["id"],
-                "email": lead["email"],
-                "name": lead["name"],
-                "company": lead.get("company"),
-                "source": lead.get("source"),
-                "status": lead.get("status"),
-                "email_verified": lead.get("email_verified"),
-                "created_at": lead.get("created_at"),
-                "verified_at": lead.get("verified_at"),
-                "last_contacted": lead.get("last_contacted"),
-                "url_analyzed": lead.get("url_analyzed")
-            }
-            sanitized_leads.append(sanitized_lead)
-        
+        filters = []
+        params: list = []
+        if status is not None:
+            params.append(status)
+            filters.append(f"status = ${len(params)}")
+        if verified is not None:
+            params.append(verified)
+            filters.append(f"email_verified = ${len(params)}")
+        where_sql = ("WHERE " + " AND ".join(filters)) if filters else ""
+
+        total_count = await db.fetchval(
+            f"SELECT COUNT(*) FROM leads {where_sql}", *params
+        ) or 0
+
+        rows = await db.fetch(
+            f"""
+            SELECT id, email, name, company, source, status, email_verified,
+                   created_at, verified_at, url_analyzed
+            FROM leads
+            {where_sql}
+            ORDER BY created_at DESC
+            LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
+            """,
+            *params,
+            limit,
+            offset,
+        )
+        sanitized_leads = [dict(row) for row in rows]
+
         return {
             "leads": sanitized_leads,
             "pagination": {
@@ -150,7 +175,7 @@ async def get_all_leads(
                 "verified": verified
             }
         }
-        
+
     except Exception as e:
         logger.error(f"Error getting leads: {e}")
         raise HTTPException(status_code=500, detail="Error loading leads")
@@ -277,65 +302,86 @@ async def delete_lead_gdpr(
 @admin_router.get("/analytics/trends")
 async def get_analytics_trends(
     admin: dict = Depends(require_admin),
-    days: int = Query(30, description="Number of days for trend analysis")
+    days: int = Query(30, ge=1, le=365, description="Number of days for trend analysis"),
+    db=Depends(get_db),
 ):
     """
-    Get analytics trends for the specified time period
+    Scans pro Tag aus scan_history fuer den gewaehlten Zeitraum.
+
+    Bis 2026-08 stand hier hartkodiert `trends = []` — lauter Nullwerte, die
+    wie ein ruhiger Zeitraum aussahen. Jetzt echte Tagesaggregation.
     """
     try:
-        # Database mode - would implement SQL-based analytics
-        trends = []
-        
+        rows = await db.fetch(
+            """
+            SELECT scan_date::date AS tag, COUNT(*) AS scans
+            FROM scan_history
+            WHERE scan_date >= CURRENT_DATE - $1::int
+            GROUP BY scan_date::date
+            ORDER BY scan_date::date
+            """,
+            days,
+        )
+        trends = [{"date": r["tag"].isoformat(), "scans": r["scans"]} for r in rows]
+        total_scans = sum(t["scans"] for t in trends)
+
         return {
             "time_period": f"{days} days",
             "trends": trends,
             "summary": {
-                "total_period_leads": len([t for t in trends]),
-                "avg_daily_leads": round(sum(t["leads_collected"] for t in trends) / max(len(trends), 1), 2),
-                "peak_day": max(trends, key=lambda x: x["leads_collected"])["date"] if trends else None
+                "total_scans": total_scans,
+                # Durchschnitt ueber den Zeitraum, nicht nur ueber Tage mit Scans
+                "avg_daily_scans": round(total_scans / max(days, 1), 2),
+                "peak_day": max(trends, key=lambda t: t["scans"])["date"] if trends else None
             }
         }
-        
+
     except Exception as e:
         logger.error(f"Error getting analytics trends: {e}")
         raise HTTPException(status_code=500, detail="Error loading analytics trends")
 
 @admin_router.get("/system/health")
-async def admin_system_health(admin: dict = Depends(require_admin)):
+async def admin_system_health(
+    admin: dict = Depends(require_admin),
+    db=Depends(get_db),
+):
     """
-    Get comprehensive system health status for admin monitoring
+    Systemzustand aus echten Pruefungen.
+
+    Bis 2026-08 lieferte der Endpunkt erfundene Werte ('uptime 99.9%',
+    email_service 'active', avg_response_time '< 200ms'). Die sind ersatzlos
+    gestrichen: Was diese API nicht messen kann, behauptet sie nicht.
     """
     try:
+        # DB-Zustand real pruefen statt 'connected' zu behaupten
+        try:
+            await db.fetchval("SELECT 1")
+            db_status = "connected"
+        except Exception as db_exc:  # noqa: BLE001
+            logger.error(f"System-Health: DB-Check fehlgeschlagen: {db_exc}")
+            db_status = "error"
+
+        # Echter Modus des Mailversands aus dem Singleton (demo_mode haengt
+        # an SMTP_USERNAME/SMTP_PASSWORD, siehe email_service.py)
+        from email_service import email_service
+
         return {
             "database": {
-                "status": "connected",
+                "status": db_status,
                 "type": "postgresql"
             },
             "email_service": {
-                "status": "active",
-                "mode": "demo"  # Would check actual SMTP config in production
-            },
-            "pdf_generation": {
-                "status": "active",
-                "engine": "reportlab"
-            },
-            "api": {
-                "status": "healthy",
-                "version": "2.2.0"
+                "status": "demo" if email_service.demo_mode else "active",
+                "mode": "demo" if email_service.demo_mode else "smtp"
             },
             "gdpr_compliance": {
                 "double_opt_in": True,
                 "data_retention": "730 days",
                 "audit_trail": True,
                 "consent_tracking": True
-            },
-            "performance": {
-                "uptime": "99.9%",
-                "avg_response_time": "< 200ms",
-                "memory_usage": "moderate"
             }
         }
-        
+
     except Exception as e:
         logger.error(f"Error getting system health: {e}")
         raise HTTPException(status_code=500, detail="Error getting system health")

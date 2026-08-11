@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import { ComplianceIssue, FixResult } from '@/types/api';
-import { generateFix, generateLegalText, type LegalDocumentType } from '@/lib/api';
-import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie, Lock, Image as ImageIcon, Pencil, Eye, ArrowRight, Globe, ChevronDown } from 'lucide-react';
+import { generateFix } from '@/lib/api';
+import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie, Lock, Image as ImageIcon, Pencil, Eye, ArrowRight, Globe, ChevronDown, X } from 'lucide-react';
 import { StripePaywallModal } from './StripePaywallModal';
 import { ConfirmFixModal } from './ConfirmFixModal';
 import { FixModal } from './FixModal';
@@ -15,7 +15,7 @@ import { UnifiedFixButton } from './UnifiedFixButton';
 import { useRouter } from 'next/navigation';
 import { useDashboardStore } from '@/stores/dashboard';
 import { apiClient } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { LegalDocumentGenerator, type WizardDocType } from '@/components/legal/LegalDocumentGenerator';
 
 // Hilfsfunktion: Ist es ein Cookie-Problem?
 const isCookieIssue = (issue: ComplianceIssue): boolean => {
@@ -59,6 +59,20 @@ const usesDedicatedSolution = (issue: ComplianceIssue): boolean => {
   ) return true;
 
   return false;
+};
+
+// Weiche: Rechtstext-Issues gehen in den geführten Generator — alle 5
+// Dokumenttypen (Impressum, Datenschutz, AGB→tos, Widerruf→withdrawal,
+// Cookie-Richtlinie→cookie-policy). Direktgenerierung nur aus
+// Firmenname+E-Mail erzeugte Dokumente voller [Platzhalter].
+const getLegalWizardType = (issue: ComplianceIssue): WizardDocType | null => {
+  const title = issue.title?.toLowerCase() || '';
+  if (title.includes('impressum')) return 'impressum';
+  if (title.includes('datenschutz')) return 'datenschutz';
+  if (title.includes('agb') || title.includes('geschäftsbedingung')) return 'agb';
+  if (title.includes('widerruf') || title.includes('withdrawal')) return 'widerruf';
+  if (title.includes('cookie-richtlinie') || title.includes('cookie-policy')) return 'cookie';
+  return null;
 };
 
 const extractDomain = (url: string): string => {
@@ -131,8 +145,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   const router = useRouter();
   const createFixJob = useCreateFixJob();
   const { isInOptimizationMode, lockedOptimizationUrl } = useDashboardStore();
-  const { user } = useAuth();
-  
+
   // KI-Fix immer verfügbar — Lock-Status nur als Hinweis, nicht als Blockade
   const canOptimize = true;
   const isOtherSiteLocked = isInOptimizationMode && 
@@ -150,6 +163,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   const [showAIPreview, setShowAIPreview] = useState(false);
   const [altTextValue, setAltTextValue] = useState(issue.suggested_alt || '');
   const [altTextSaved, setAltTextSaved] = useState(false);
+  const [showLegalWizard, setShowLegalWizard] = useState<WizardDocType | null>(null);
   
   const domain = websiteUrl ? extractDomain(websiteUrl) : undefined;
 
@@ -209,61 +223,17 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
     
     setShowConfirmModal(false);
     
-    // Interner Rechtstexte-Generator
-    const isLegalText = issue.title.toLowerCase().includes('impressum') || 
-                       issue.title.toLowerCase().includes('datenschutz');
-    
-    if (isLegalText) {
-      setIsFixing(true);
-      try {
-        const textType: LegalDocumentType = issue.title.toLowerCase().includes('impressum') ? 'imprint' : 'privacy';
+    // Interner Rechtstexte-Generator — alle 5 Dokumenttypen über den
+    // geführten Assistenten. KEINE Direktgenerierung aus Firmenname+E-Mail:
+    // Ohne Adresse, Rechtsform und Vertretungsberechtigten entsteht ein
+    // Dokument voller [Platzhalter] (das Backend lehnt so etwas mit 422 ab).
+    const legalWizardType = getLegalWizardType(issue);
 
-        if (!user?.company && !user?.full_name) {
-          showToast('Bitte hinterlegen Sie zuerst Ihre Firmendaten im Profil.', 'error');
-          return;
-        }
-
-        const data = await generateLegalText(textType, {
-          user_data: {
-            company_name: user.company || user.full_name,
-            email: user.email,
-          },
-          language: 'de',
-        });
-
-        if (!data?.html_content) {
-          throw new Error('Generierung fehlgeschlagen');
-        }
-
-        // Auto-Download
-        // ✅ SSR-Check
-        if (typeof document !== 'undefined') {
-          const filename = textType === 'imprint' ? 'impressum.html' : 'datenschutzerklaerung.html';
-          const blob = new Blob([data.html_content], { type: 'text/html;charset=utf-8' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        }
-
-        showToast('✅ Rechtstext wurde generiert und heruntergeladen!', 'success', 5000);
-        
-        if (onStartFix) {
-          onStartFix(issue.id);
-        }
-      } catch (err) {
-        console.error('Fehler bei Rechtstext-Generierung:', err);
-        showToast('Generierung fehlgeschlagen. Bitte versuchen Sie es erneut.', 'error');
-      } finally {
-        setIsFixing(false);
-      }
+    if (legalWizardType) {
+      setShowLegalWizard(legalWizardType);
       return;
     }
-    
+
     // ✅ PERSISTENCE: Wenn scanId vorhanden, Job erstellen
     if (scanId) {
       try {
@@ -960,6 +930,50 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         fixesUsed={fixLimitInfo?.fixes_used}
         fixesLimit={fixLimitInfo?.fixes_limit}
       />
+
+      {/* Geführter Rechtstexte-Generator (statt Direktgenerierung mit Platzhaltern) */}
+      {showLegalWizard && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => setShowLegalWizard(null)}
+          />
+
+          {/* Modal Content */}
+          <div className="relative min-h-screen flex items-start justify-center p-4 pt-10 pb-20">
+            <div className="relative w-full max-w-4xl dark:bg-zinc-950 bg-white rounded-2xl shadow-2xl border dark:border-zinc-800 border-gray-200">
+              <button
+                onClick={() => setShowLegalWizard(null)}
+                className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors z-10"
+                aria-label="Schließen"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="p-6">
+                <LegalDocumentGenerator
+                  documentType={showLegalWizard}
+                  onComplete={() => {
+                    setShowLegalWizard(null);
+                    // Bewusst kein "Ersetzen Sie den alten Text": das Dokument
+                    // ist ungeprüft und muss erst vom Nutzer kontrolliert werden.
+                    showToast(
+                      'Rechtstext erstellt. Bitte prüfen Sie das Dokument, bevor Sie es veröffentlichen.',
+                      'success',
+                      6000
+                    );
+                    if (onStartFix) {
+                      onStartFix(issue.id);
+                    }
+                  }}
+                  onBack={() => setShowLegalWizard(null)}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

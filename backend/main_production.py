@@ -130,6 +130,7 @@ from legal_document_routes import legal_document_router, init_routes as init_leg
 # Legal News Notification System - NEW
 from legal_notification_service import init_legal_notification_service
 from legal_notification_routes import router as legal_notification_router
+from notification_routes import router as user_notification_router  # Leseweg user_legal_notifications
 from eulex_service import init_eulex_service
 from legal_text_routes import router as legal_text_router
 from risk_radar_routes import router as risk_radar_router
@@ -707,6 +708,7 @@ async def startup_event():
     app.include_router(pflichten_report_router)  # Pflichten-Report (Phase 7.2 Pflichtenradar)
     app.include_router(ai_legal_router)  # AI Legal System - NEW
     app.include_router(legal_notification_router)  # Legal News Notifications - NEW
+    app.include_router(user_notification_router)  # Nutzer-Benachrichtigungen (user_legal_notifications, Leseweg)
     app.include_router(accessibility_fix_router)  # BFSG Accessibility Fix Pipeline - NEW
     app.include_router(git_router)  # Git-Integration: PRs statt Direktschreiben
     app.include_router(alt_text_router)  # Alt-Text AI Generation - NEW

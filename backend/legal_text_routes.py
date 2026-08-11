@@ -16,7 +16,12 @@ from typing import Optional, List, Dict
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
-from legal_text_generator import LegalTextGenerator, DocumentType, get_legal_text_generator
+from legal_text_generator import (
+    LegalTextGenerator,
+    DocumentType,
+    UnvollstaendigeAngabenError,
+    get_legal_text_generator,
+)
 from legal_disclaimer import DISCLAIMER_LONG, DISCLAIMER_SHORT
 from dependencies import get_current_user
 from dependencies import rate_limit
@@ -122,6 +127,9 @@ class LegalTextResponse(BaseModel):
     regeneration_trigger: str
     disclaimer: str
     source: str = "complyo-internal"
+    # False, wenn die DB-Speicherung fehlschlug: Dokument wurde generiert,
+    # aber NICHT persistiert (keine Historie, kein Auto-Update).
+    persisted: bool = True
 
 
 def _parse_type(doc_type: str) -> DocumentType:
@@ -278,6 +286,13 @@ async def generate_legal_text(
             result = await generator.generate_withdrawal(user_id, user_data, body.language)
         else:
             raise HTTPException(status_code=400, detail="Unbekannter Dokumenttyp")
+    except HTTPException:
+        raise
+    except UnvollstaendigeAngabenError as e:
+        # Platzhalter im generierten Dokument = fehlende Nutzerangaben, kein
+        # Serverfehler. Klartext ans Frontend, welche Angaben fehlen.
+        logger.warning(f"Generierung mit Platzhaltern abgebrochen ({doc_type}, user={user_id}): {e}")
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error(f"Generierung fehlgeschlagen ({doc_type}, user={user_id}): {e}")
         raise HTTPException(status_code=500, detail="Generierung fehlgeschlagen")
@@ -293,6 +308,7 @@ async def generate_legal_text(
         regeneration_trigger=result.regeneration_trigger,
         disclaimer=result.disclaimer,
         source="complyo-internal",
+        persisted=result.persisted,
     )
 
 
@@ -324,10 +340,14 @@ async def preview_legal_text(
     language: str = Query("de"),
     email: Optional[str] = Query(None),
     address: Optional[str] = Query(None),
+    user_id: int = Depends(get_current_user_id),
 ):
     """
     Generiert eine Preview ohne Speichern in der DB.
-    Ideal für den Onboarding-Wizard.
+    Ideal für den Onboarding-Wizard (der User ist dort bereits eingeloggt).
+
+    Auth-Pflicht: Jede Preview kostet einen LLM-Aufruf — ohne Login wäre die
+    Route ein öffentlicher Kosten-Vektor (Rate-Limit allein greift nur pro IP).
     """
     dt = _parse_type(doc_type)
     from dependencies import get_db_pool

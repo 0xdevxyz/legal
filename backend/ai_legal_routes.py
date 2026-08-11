@@ -848,21 +848,46 @@ async def _classify_update_background(
 ):
     """
     Background Task: Klassifiziert ein Update mit KI
+
+    Wichtig: Jeder Teilschritt hat einen eigenen except-Block. Vorher lag alles
+    in EINEM try/except — der SELECT auf die nie existente Tabelle
+    monitored_websites warf bei jedem Lauf mit user_id, der Pauschal-except
+    schluckte den Fehler, und die komplette Klassifizierung (inkl. INSERT in
+    ai_classifications) fiel still aus. Ohne classification_id konnte das
+    Dashboard kein Feedback senden — der Lernkreislauf stand.
     """
+    # Schritt 1: Classifier laden — ohne ihn geht nichts
     try:
         from ai_legal_classifier import get_ai_classifier
-        
+
         classifier = get_ai_classifier()
         if not classifier:
-            logger.error("❌ Classifier nicht verfügbar")
+            logger.error(f"❌ Klassifizierung Update {update_id}: Classifier nicht verfügbar")
             return
-        
-        # Hole User-Context (optional)
-        user_context = None
-        if user_id:
-            async with db_pool.acquire() as conn:
+    except Exception as e:
+        logger.error(f"❌ Klassifizierung Update {update_id}: Classifier-Import fehlgeschlagen: {e}")
+        return
+
+    pool = db_pool or get_db_pool()
+    if not pool:
+        logger.error(f"❌ Klassifizierung Update {update_id}: Kein DB-Pool verfügbar")
+        return
+
+    # Schritt 2: User-Context (optional) — Fehler hier dürfen die
+    # Klassifizierung NICHT abbrechen, das Update wird dann generisch bewertet
+    user_context = None
+    if user_id:
+        try:
+            async with pool.acquire() as conn:
+                # tracked_websites ist die reale Tabelle (wie oben in
+                # get_latest_updates) — monitored_websites gab es nie
                 site_row = await conn.fetchrow(
-                    "SELECT * FROM monitored_websites WHERE user_id = $1 LIMIT 1",
+                    """
+                    SELECT url FROM tracked_websites
+                    WHERE user_id = $1
+                    ORDER BY last_scan_date DESC NULLS LAST
+                    LIMIT 1
+                    """,
                     user_id
                 )
                 if site_row:
@@ -873,12 +898,22 @@ async def _classify_update_background(
                         "services": [],  # TODO
                         "subscription_plan": "free"  # TODO
                     }
-        
-        # Klassifiziere
+        except Exception as e:
+            logger.warning(
+                f"⚠️ Klassifizierung Update {update_id}: User-Context für User {user_id} "
+                f"nicht ermittelbar ({e}) — klassifiziere ohne Kontext"
+            )
+
+    # Schritt 3: KI-Klassifizierung
+    try:
         result = await classifier.classify_legal_update(update_data, user_context)
-        
-        # Speichere in DB
-        async with db_pool.acquire() as conn:
+    except Exception as e:
+        logger.error(f"❌ Klassifizierung Update {update_id}: KI-Aufruf fehlgeschlagen: {e}")
+        return
+
+    # Schritt 4: Ergebnis speichern (ai_classifications + legal_updates)
+    try:
+        async with pool.acquire() as conn:
             classification_id = await conn.fetchval(
                 """
                 INSERT INTO ai_classifications (
@@ -929,11 +964,14 @@ async def _classify_update_background(
                 classification_id,
                 update_id
             )
-        
+
         logger.info(f"✅ Update {update_id} klassifiziert: {result.primary_action.action_type.value}")
-        
+
     except Exception as e:
-        logger.error(f"❌ Background-Klassifizierung fehlgeschlagen: {e}")
+        logger.error(
+            f"❌ Klassifizierung Update {update_id}: Speichern in ai_classifications "
+            f"fehlgeschlagen: {e}"
+        )
 
 
 # Export router

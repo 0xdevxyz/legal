@@ -1,33 +1,32 @@
 """
 GDPR API Endpoints for Data Rights Management
-Implements GDPR Articles 17 (Right to Erasure) and 20 (Data Portability)
+Implements GDPR Articles 15/17/20 (Access, Erasure, Portability)
+
+Seit 2026-08-11 erfassen Export und Löschung das KUNDENKONTO (users-Tabelle
+samt zugehöriger Tabellen) — vorher liefen beide Rechte ins Leere, weil nur
+die leere leads-Tabelle abgefragt wurde. Löschung ist zweistufig
+(Antrag → Bestätigungslauf), siehe gdpr_retention_service.
 """
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel
 from typing import Optional
 import logging
-import os
 from gdpr_retention_service import gdpr_service
 from email_service import email_service
-from dependencies import get_current_user
+from dependencies import get_current_user, require_admin
 
 logger = logging.getLogger(__name__)
 
 gdpr_router = APIRouter(prefix="/api/gdpr", tags=["gdpr"])
 
-_ADMIN_API_KEY = os.getenv("ADMIN_API_KEY")
-
-def _verify_admin(admin_api_key: str) -> None:
-    """Raise 401 if admin_api_key does not match ADMIN_API_KEY env var."""
-    if not _ADMIN_API_KEY:
-        raise HTTPException(status_code=503, detail="Admin access not configured")
-    if admin_api_key != _ADMIN_API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized admin access")
+# Einheitliche Aufbewahrungsfrist — 24 Monate (= 730 Tage, GDPR_RETENTION_DAYS).
+# Frühere Texte nannten je nach Stelle 24 Monate, 3 Jahre oder 1 Jahr.
+RETENTION_MONATE = 24
 
 
-async def get_verified_email(current_user: dict = Depends(get_current_user)) -> str:
-    """Liefert die E-Mail des Betroffenen AUSSCHLIESSLICH aus dem JWT.
+async def get_verified_user(current_user: dict = Depends(get_current_user)) -> dict:
+    """Liefert den Betroffenen AUSSCHLIESSLICH aus dem JWT.
 
     Verhindert IDOR (Muster: legal_text_routes.get_current_user_id): Bis 2026-07-17
     identifizierten /request-deletion, /export-data und /retention-info den
@@ -37,13 +36,18 @@ async def get_verified_email(current_user: dict = Depends(get_current_user)) -> 
 
     Bewusste Entscheidung gegen einen "Besucher-Pfad": Ein Betroffenenrecht darf
     erst nach Identitätsnachweis (Art. 12 Abs. 6 DSGVO) erfüllt werden. Einen
-    verifizierten Token-Flow für Nicht-Kunden gibt es hier nicht, und die
-    Zieltabelle `leads` existiert im Schema gar nicht mehr
-    (siehe backend/alembic/baseline_schema.sql). Nicht-Kunden nutzen daher den
-    manuellen Weg, den GET /privacy-policy ohnehin ausweist:
+    verifizierten Token-Flow für Nicht-Kunden gibt es hier nicht. Nicht-Kunden
+    nutzen daher den manuellen Weg, den GET /privacy-policy ohnehin ausweist:
     datenschutz@complyo.de. Die Landing-Seite landing-react/src/app/gdpr/page.tsx
-    muss entsprechend auf Login bzw. den E-Mail-Weg umgestellt werden.
+    verweist entsprechend auf Login bzw. den E-Mail-Weg.
     """
+    if not current_user.get("email"):
+        raise HTTPException(status_code=401, detail="Nicht authentifiziert")
+    return current_user
+
+
+async def get_verified_email(current_user: dict = Depends(get_current_user)) -> str:
+    """E-Mail des Betroffenen aus dem JWT (siehe get_verified_user)."""
     email = current_user.get("email")
     if not email:
         raise HTTPException(status_code=401, detail="Nicht authentifiziert")
@@ -58,23 +62,27 @@ class DataDeletionRequest(BaseModel):
     confirmation: bool = True
 
 class DataExportRequest(BaseModel):
-    # Absichtlich leer — die E-Mail kommt aus dem JWT (siehe get_verified_email).
+    # Absichtlich leer — die E-Mail kommt aus dem JWT (siehe get_verified_user).
     pass
 
 class RetentionUpdateRequest(BaseModel):
     lead_id: str
     retention_days: int
 
+class DeletionConfirmRequest(BaseModel):
+    user_id: int
+
 @gdpr_router.post("/request-deletion")
 async def request_data_deletion(
     request: DataDeletionRequest,
-    background_tasks: BackgroundTasks,
-    email: str = Depends(get_verified_email),
+    current_user: dict = Depends(get_verified_user),
 ):
     """
     Handle user request for data deletion (GDPR Article 17 - Right to Erasure)
 
-    Betroffener = Token-Inhaber. Siehe get_verified_email.
+    Betroffener = Token-Inhaber. ZWEISTUFIG: hier wird der Antrag registriert
+    (gdpr_deletion_requests, status 'pending'), gelöscht wird erst nach
+    Bestätigung. Keine sofortige Hard-Delete-Kaskade mehr.
     """
     try:
         if not request.confirmation:
@@ -83,29 +91,23 @@ async def request_data_deletion(
                 detail="Data deletion requires explicit confirmation"
             )
 
-        logger.info(f"Processing data deletion request for {email}")
+        email = str(current_user["email"])
+        user_id = int(current_user["id"])
+        logger.info(f"Registriere Kontolöschantrag für User {user_id}")
 
-        # Process the deletion request
-        result = await gdpr_service.request_data_deletion(
-            email,
-            request.reason
+        result = await gdpr_service.request_user_deletion(
+            user_id, email, request.reason
         )
 
         if result["success"]:
-            # Send confirmation email in background
-            background_tasks.add_task(
-                email_service.send_deletion_confirmation_email,
-                email,
-                result.get("reference_id", "unknown")
-            )
-
             return {
                 "success": True,
-                "message": "Your data deletion request has been processed successfully",
+                "message": result["message"],
                 "details": {
                     "email": email,
-                    "deletion_date": result.get("deletion_date"),
+                    "requested_at": result.get("requested_at"),
                     "reference_id": result.get("reference_id"),
+                    "status": result.get("status", "pending"),
                     "gdpr_article": "Article 17 - Right to erasure ('right to be forgotten')"
                 }
             }
@@ -122,33 +124,90 @@ async def request_data_deletion(
     except Exception as e:
         logger.error(f"Error processing deletion request: {e}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail="Failed to process data deletion request"
         )
+
+@gdpr_router.delete("/request-deletion")
+async def cancel_data_deletion(
+    current_user: dict = Depends(get_verified_user),
+):
+    """Offenen Löschantrag zurückziehen (solange noch nicht ausgeführt)."""
+    try:
+        zurueckgezogen = await gdpr_service.cancel_user_deletion(int(current_user["id"]))
+        if zurueckgezogen:
+            return {"success": True, "message": "Ihr Löschantrag wurde zurückgezogen."}
+        return {"success": False, "message": "Kein offener Löschantrag gefunden."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error cancelling deletion request: {e}")
+        raise HTTPException(status_code=500, detail="Failed to cancel deletion request")
+
+@gdpr_router.get("/deletion-status")
+async def get_deletion_status(
+    current_user: dict = Depends(get_verified_user),
+):
+    """Status des (letzten) Löschantrags des Token-Inhabers."""
+    try:
+        status = await gdpr_service.get_user_deletion_status(int(current_user["id"]))
+        return {"success": True, "deletion_request": status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reading deletion status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to read deletion status")
+
+@gdpr_router.get("/export-data")
+async def download_personal_data(
+    current_user: dict = Depends(get_verified_user),
+):
+    """
+    Direkter JSON-Download aller personenbezogenen Daten des Token-Inhabers
+    (GDPR Art. 15/20). Wird vom Dashboard (Einstellungen → Datenschutz) genutzt.
+    """
+    try:
+        export_data = await gdpr_service.export_user_data(
+            int(current_user["id"]), str(current_user["email"])
+        )
+        if export_data is None:
+            raise HTTPException(status_code=404, detail="No data found for this account")
+
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            content=export_data,
+            headers={"Content-Disposition": 'attachment; filename="complyo-daten-export.json"'},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating data export download: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate data export")
 
 @gdpr_router.post("/export-data")
 async def export_personal_data(
     request: DataExportRequest,
     background_tasks: BackgroundTasks,
-    email: str = Depends(get_verified_email),
+    current_user: dict = Depends(get_verified_user),
 ):
     """
     Export all personal data for a user (GDPR Article 20 - Data Portability)
 
-    Betroffener = Token-Inhaber. Siehe get_verified_email.
+    Betroffener = Token-Inhaber. Aggregiert users + zugehörige Tabellen
+    (plus Alt-Lead-Daten derselben E-Mail) und versendet per E-Mail.
     """
     try:
-        logger.info(f"Processing data export request for {email}")
+        email = str(current_user["email"])
+        logger.info(f"Processing data export request for user {current_user['id']}")
 
-        # Get all data for the user
-        export_data = await gdpr_service.get_data_for_export(email)
+        export_data = await gdpr_service.export_user_data(int(current_user["id"]), email)
 
         if export_data is None:
             raise HTTPException(
                 status_code=404,
-                detail="No data found for the provided email address"
+                detail="No data found for this account"
             )
-        
+
         # Send export data via email in background
         background_tasks.add_task(
             email_service.send_data_export_email,
@@ -161,12 +220,12 @@ async def export_personal_data(
             "message": "Your data export has been generated and will be sent to your email address",
             "details": {
                 "email": email,
-                "export_generated_at": export_data["gdpr_data"]["export_generated_at"],
+                "export_generated_at": export_data["export_info"]["generated_at"],
                 "data_categories": list(export_data.keys()),
                 "gdpr_article": "Article 20 - Right to data portability"
             }
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -178,7 +237,7 @@ async def export_personal_data(
 
 @gdpr_router.get("/retention-info")
 async def get_retention_information(
-    email: str = Depends(get_verified_email),
+    current_user: dict = Depends(get_verified_user),
 ):
     """
     Get data retention information for the authenticated data subject.
@@ -187,26 +246,19 @@ async def get_retention_information(
     Dritte (Existenz, Anlagedatum, Rechtsgrundlage). Jetzt aus dem Token.
     """
     try:
-        from database_service import db_service
-        
-        lead = await db_service.get_lead_by_email(email)
-        
-        if not lead:
-            raise HTTPException(
-                status_code=404,
-                detail="No data found for the provided email address"
-            )
-        
+        email = str(current_user["email"])
         return {
             "email": email,
             "data_retention_info": {
-                "created_at": lead.get("created_at"),
-                "data_retention_until": lead.get("data_retention_until"),
-                "days_until_deletion": (
-                    # Calculate days until deletion
-                    None  # Would calculate in production
-                ),
-                "legal_basis": lead.get("legal_basis", "consent"),
+                "created_at": (current_user.get("created_at").isoformat()
+                               if current_user.get("created_at") else None),
+                # Kontodaten: solange das Konto besteht (Art. 6 Abs. 1 lit. b),
+                # danach einheitlich 24 Monate Aufbewahrung.
+                "retention_policy": (f"Kontodaten werden für die Vertragsdauer gespeichert; "
+                                     f"nach Kontolöschung bzw. für Lead-Daten gilt eine "
+                                     f"Aufbewahrungsfrist von {RETENTION_MONATE} Monaten."),
+                "retention_period_months": RETENTION_MONATE,
+                "legal_basis": "Art. 6 Abs. 1 lit. a/b DSGVO",
                 "can_request_deletion": True,
                 "can_request_export": True
             },
@@ -217,7 +269,7 @@ async def get_retention_information(
                 "right_to_data_portability": "Article 20 - Right to data portability"
             }
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -227,28 +279,52 @@ async def get_retention_information(
             detail="Failed to retrieve retention information"
         )
 
+@gdpr_router.post("/admin/confirm-deletion")
+async def admin_confirm_deletion(
+    request: DeletionConfirmRequest,
+    admin: dict = Depends(require_admin),
+):
+    """
+    Admin: Bestätigungslauf für einen Kontolöschantrag (Stufe 2, Art. 17).
+    Setzt den Antrag auf 'confirmed' und führt die Löschung aus.
+    """
+    try:
+        result = await gdpr_service.confirm_user_deletion(
+            request.user_id, int(admin["id"])
+        )
+        if not result["success"]:
+            raise HTTPException(status_code=404, detail=result["message"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error confirming deletion: {e}")
+        raise HTTPException(status_code=500, detail="Failed to confirm deletion request")
+
 @gdpr_router.post("/admin/update-retention")
 async def admin_update_retention_period(
     request: RetentionUpdateRequest,
-    admin_api_key: str = Query(..., alias="admin_api_key")
+    admin: dict = Depends(require_admin),
 ):
     """
     Admin endpoint to update data retention period for a specific lead
+
+    Früher hing dieser Endpunkt an einem nie gesetzten ADMIN_API_KEY und
+    antwortete dauerhaft 503 — jetzt reguläre require_admin-Dependency
+    (JWT + users.role), wie im restlichen Adminbereich.
     """
-    _verify_admin(admin_api_key)
-    
     try:
         if request.retention_days < 1 or request.retention_days > 3650:  # Max 10 years
             raise HTTPException(
                 status_code=400,
                 detail="Retention period must be between 1 and 3650 days"
             )
-        
+
         success = await gdpr_service.update_retention_period(
             request.lead_id,
             request.retention_days
         )
-        
+
         if success:
             return {
                 "success": True,
@@ -261,7 +337,7 @@ async def admin_update_retention_period(
                 status_code=404,
                 detail="Lead not found"
             )
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -273,16 +349,14 @@ async def admin_update_retention_period(
 
 @gdpr_router.get("/admin/cleanup-status")
 async def admin_get_cleanup_status(
-    admin_api_key: str = Query(..., alias="admin_api_key")
+    admin: dict = Depends(require_admin),
 ):
     """
     Admin endpoint to get GDPR cleanup and deletion statistics
     """
-    _verify_admin(admin_api_key)
-
     try:
         stats = gdpr_service.get_deletion_statistics()
-        
+
         return {
             "cleanup_status": {
                 "is_running": gdpr_service.is_running,
@@ -297,7 +371,7 @@ async def admin_get_cleanup_status(
             },
             "recent_deletions": stats["recent_deletions"][:10]  # Last 10 deletions
         }
-        
+
     except Exception as e:
         logger.error(f"Error getting cleanup status: {e}")
         raise HTTPException(
@@ -308,26 +382,24 @@ async def admin_get_cleanup_status(
 @gdpr_router.post("/admin/run-cleanup")
 async def admin_run_manual_cleanup(
     background_tasks: BackgroundTasks,
-    admin_api_key: str = Query(..., alias="admin_api_key")
+    admin: dict = Depends(require_admin),
 ):
     """
     Admin endpoint to manually trigger GDPR cleanup process
     """
-    _verify_admin(admin_api_key)
-
     try:
         logger.info("Manual GDPR cleanup triggered by admin")
-        
+
         # Run cleanup in background
         background_tasks.add_task(gdpr_service.perform_retention_cleanup)
-        
+
         return {
             "success": True,
             "message": "Manual GDPR cleanup process started",
             "triggered_at": "now",
             "note": "Cleanup is running in the background. Check cleanup status for results."
         }
-        
+
     except Exception as e:
         logger.error(f"Error triggering manual cleanup: {e}")
         raise HTTPException(
@@ -346,7 +418,7 @@ async def get_privacy_policy_info():
             "contact_email": "datenschutz@complyo.de",
             "data_protection_officer": "dpo@complyo.de",
             "legal_basis": "Article 6(1)(a) GDPR - Consent",
-            "data_retention_period": "24 months from collection",
+            "data_retention_period": f"{RETENTION_MONATE} months from collection",
             "purposes_of_processing": [
                 "Website compliance analysis",
                 "Lead management and communication",

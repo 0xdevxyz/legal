@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, ArrowRight, ArrowLeft, Copy, Download, AlertCircle, Building, Mail, Phone, MapPin, User, Globe } from 'lucide-react';
 import { sanitizeHtml } from '@/lib/sanitize';
-import { apiClient } from '@/lib/api-client';
+import { generateLegalText, type LegalDocumentType } from '@/lib/api';
 
 interface LegalTextWizardProps {
   fixType: 'impressum' | 'datenschutz' | 'agb' | 'widerruf';
@@ -13,6 +13,15 @@ interface LegalTextWizardProps {
   onComplete: (data: any) => void;
   onBack: () => void;
 }
+
+// Mapping Wizard-Typ -> Dokumenttyp des internen Rechtstexte-Generators
+// (/api/legal-texts/{type}/generate)
+const BACKEND_TYPE: Record<LegalTextWizardProps['fixType'], LegalDocumentType> = {
+  impressum: 'imprint',
+  datenschutz: 'privacy',
+  agb: 'tos',
+  widerruf: 'withdrawal',
+};
 
 interface CompanyData {
   company_name: string;
@@ -43,6 +52,7 @@ export const LegalTextWizard: React.FC<LegalTextWizardProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [finalContent, setFinalContent] = useState(generatedContent || '');
   const [copied, setCopied] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
 
   const getTitleForType = () => {
     switch (fixType) {
@@ -70,140 +80,41 @@ export const LegalTextWizard: React.FC<LegalTextWizardProps> = ({
 
   const handleGenerate = async () => {
     setIsGenerating(true);
-    
+    setGenerationError(null);
+
     try {
-      const data = await apiClient.post('/api/v2/legal/generate', {
-        text_type: fixType === 'datenschutz' ? 'datenschutz' : fixType,
-        company_data: companyData,
-        language: 'de'
+      // Interner Rechtstexte-Generator (KI + Vorlagen + Disclaimer).
+      // Die Firmendaten werden auf das user_data-Schema des Backends gemappt.
+      const data = await generateLegalText(BACKEND_TYPE[fixType], {
+        user_data: {
+          company_name: companyData.company_name || '',
+          legal_form: companyData.legal_form,
+          address: companyData.address,
+          zip_city: [companyData.postal_code, companyData.city].filter(Boolean).join(' '),
+          country: companyData.country,
+          phone: companyData.phone,
+          email: companyData.email,
+          website: companyData.website,
+          represented_by: companyData.representative,
+          vat_id: companyData.ust_id,
+          registration_number: companyData.registration_number,
+        },
+        language: 'de',
       });
-      setFinalContent((data as any).html || (data as any).content || '');
+      setFinalContent(data.html_content || data.plain_text || '');
       setStep(3);
     } catch (error) {
+      // Kein stiller Fallback auf ein lokales Platzhalter-Template: ein
+      // Platzhaltertext ohne Disclaimer darf niemals als Ergebnis erscheinen.
       console.error('Fehler bei Rechtstext-Generierung:', error);
-      // Fallback to local generation if API fails
-      const content = generatePersonalizedContent(companyData);
-      setFinalContent(content);
-      setStep(3);
+      setGenerationError(
+        error instanceof Error
+          ? error.message
+          : 'Generierung fehlgeschlagen. Bitte versuchen Sie es erneut.'
+      );
     } finally {
       setIsGenerating(false);
     }
-  };
-
-  const generatePersonalizedContent = (data: Partial<CompanyData>) => {
-    if (fixType === 'impressum') {
-      return `<h1>Impressum</h1>
-
-<h2>Angaben gemäß § 5 TMG</h2>
-
-<p>
-${data.company_name || '[Firmenname]'}<br>
-${data.legal_form || '[Rechtsform]'}<br>
-${data.address || '[Straße und Hausnummer]'}<br>
-${data.postal_code || '[PLZ]'} ${data.city || '[Stadt]'}<br>
-${data.country || 'Deutschland'}
-</p>
-
-<h2>Vertreten durch</h2>
-<p>${data.representative || '[Geschäftsführer/Vertretungsberechtigter]'}</p>
-
-<h2>Kontakt</h2>
-<p>
-E-Mail: ${data.email || '[E-Mail-Adresse]'}<br>
-Telefon: ${data.phone || '[Telefonnummer]'}<br>
-Website: ${data.website || '[Website-URL]'}
-</p>
-
-${data.ust_id ? `<h2>Umsatzsteuer-ID</h2>
-<p>Umsatzsteuer-Identifikationsnummer gemäß §27 a Umsatzsteuergesetz:<br>
-${data.ust_id}</p>` : ''}
-
-${data.registration_number ? `<h2>Registereintrag</h2>
-<p>Handelsregisternummer: ${data.registration_number}</p>` : ''}
-
-<h2>EU-Streitschlichtung</h2>
-<p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: 
-<a href="https://ec.europa.eu/consumers/odr" target="_blank">https://ec.europa.eu/consumers/odr</a><br>
-Unsere E-Mail-Adresse finden Sie oben im Impressum.</p>
-
-<h2>Verbraucherstreitbeilegung/Universalschlichtungsstelle</h2>
-<p>Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer 
-Verbraucherschlichtungsstelle teilzunehmen.</p>
-
-<p><small><em>Erstellt mit Complyo - Ihrer Compliance-Plattform</em></small></p>`;
-    } else if (fixType === 'datenschutz') {
-      return `<h1>Datenschutzerklärung</h1>
-
-<h2>1. Datenschutz auf einen Blick</h2>
-
-<h3>Allgemeine Hinweise</h3>
-<p>Die folgenden Hinweise geben einen einfachen Überblick darüber, was mit Ihren personenbezogenen Daten 
-passiert, wenn Sie diese Website besuchen. Personenbezogene Daten sind alle Daten, mit denen Sie 
-persönlich identifiziert werden können.</p>
-
-<h3>Datenerfassung auf dieser Website</h3>
-<p><strong>Wer ist verantwortlich für die Datenerfassung auf dieser Website?</strong></p>
-<p>Die Datenverarbeitung auf dieser Website erfolgt durch den Websitebetreiber. Dessen Kontaktdaten 
-können Sie dem Abschnitt „Hinweis zur Verantwortlichen Stelle" in dieser Datenschutzerklärung entnehmen.</p>
-
-<h2>2. Hosting</h2>
-<p>Wir hosten die Inhalte unserer Website bei folgendem Anbieter:</p>
-<p>[Hosting-Provider-Details hier einfügen]</p>
-
-<h2>3. Allgemeine Hinweise und Pflichtinformationen</h2>
-
-<h3>Datenschutz</h3>
-<p>Die Betreiber dieser Seiten nehmen den Schutz Ihrer persönlichen Daten sehr ernst. Wir behandeln Ihre 
-personenbezogenen Daten vertraulich und entsprechend den gesetzlichen Datenschutzvorschriften sowie 
-dieser Datenschutzerklärung.</p>
-
-<h3>Hinweis zur verantwortlichen Stelle</h3>
-<p>Die verantwortliche Stelle für die Datenverarbeitung auf dieser Website ist:</p>
-
-<p>
-${data.company_name || '[Firmenname]'}<br>
-${data.address || '[Straße und Hausnummer]'}<br>
-${data.postal_code || '[PLZ]'} ${data.city || '[Stadt]'}
-</p>
-
-<p>
-Telefon: ${data.phone || '[Telefonnummer]'}<br>
-E-Mail: ${data.email || '[E-Mail-Adresse]'}
-</p>
-
-<h2>4. Datenerfassung auf dieser Website</h2>
-
-<h3>Cookies</h3>
-<p>Unsere Internetseiten verwenden so genannte „Cookies". Cookies sind kleine Textdateien und richten auf 
-Ihrem Endgerät keinen Schaden an. Sie werden entweder vorübergehend für die Dauer einer Sitzung 
-(Session-Cookies) oder dauerhaft (permanente Cookies) auf Ihrem Endgerät gespeichert.</p>
-
-<h3>Server-Log-Dateien</h3>
-<p>Der Provider der Seiten erhebt und speichert automatisch Informationen in so genannten Server-Log-Dateien, 
-die Ihr Browser automatisch an uns übermittelt.</p>
-
-<h2>5. Analyse-Tools und Werbung</h2>
-<p>[Details zu genutzten Analyse-Tools hier einfügen, z.B. Google Analytics]</p>
-
-<h2>6. Plugins und Tools</h2>
-<p>[Details zu genutzten Plugins hier einfügen]</p>
-
-<h2>7. Ihre Rechte</h2>
-<p>Sie haben jederzeit das Recht:</p>
-<ul>
-<li>gemäß Art. 15 DSGVO Auskunft über Ihre von uns verarbeiteten personenbezogenen Daten zu verlangen</li>
-<li>gemäß Art. 16 DSGVO unverzüglich die Berichtigung unrichtiger oder Vervollständigung Ihrer bei uns gespeicherten personenbezogenen Daten zu verlangen</li>
-<li>gemäß Art. 17 DSGVO die Löschung Ihrer bei uns gespeicherten personenbezogenen Daten zu verlangen</li>
-<li>gemäß Art. 18 DSGVO die Einschränkung der Verarbeitung Ihrer personenbezogenen Daten zu verlangen</li>
-<li>gemäß Art. 20 DSGVO Ihre personenbezogenen Daten, die Sie uns bereitgestellt haben, in einem strukturierten, gängigen und maschinenlesebaren Format zu erhalten</li>
-<li>gemäß Art. 7 Abs. 3 DSGVO Ihre einmal erteilte Einwilligung jederzeit gegenüber uns zu widerrufen</li>
-<li>gemäß Art. 77 DSGVO sich bei einer Aufsichtsbehörde zu beschweren</li>
-</ul>
-
-<p><small><em>Stand: ${new Date().toLocaleDateString('de-DE')}<br>
-Erstellt mit Complyo - Ihrer Compliance-Plattform</em></small></p>`;
-    }
-    return generatedContent || '<p>Rechtstext wird generiert...</p>';
   };
 
   const handleCopy = () => {
@@ -437,6 +348,20 @@ Erstellt mit Complyo - Ihrer Compliance-Plattform</em></small></p>`;
                 />
               </div>
             </div>
+
+            {/* Sichtbarer Fehlerzustand — es gibt bewusst KEINEN lokalen Fallback-Text */}
+            {generationError && (
+              <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-red-800">Generierung fehlgeschlagen</p>
+                  <p className="text-sm text-red-700 mt-1">{generationError}</p>
+                  <p className="text-xs text-red-600 mt-2">
+                    Es wurde kein Dokument erstellt. Bitte prüfen Sie Ihre Angaben und versuchen Sie es erneut.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-between pt-4">
               <Button

@@ -129,6 +129,25 @@ class DatabaseService:
             logger.error(f"Error getting lead by email {email}: {e}")
             raise
     
+    async def get_lead_by_id(self, lead_id: str) -> Optional[Dict[str, Any]]:
+        """Lead per ID laden (u. a. für DSGVO-Löschläufe — vorher gab es dafür
+        nur einen {"email": "unknown"}-Platzhalter, der Bestätigungsmails
+        ins Leere schickte)."""
+        try:
+            async with self.get_connection() as conn:
+                row = await conn.fetchrow("SELECT * FROM leads WHERE id = $1", lead_id)
+
+                if row:
+                    lead = dict(row)
+                    if lead['analysis_data']:
+                        lead['analysis_data'] = json.loads(lead['analysis_data'])
+                    return lead
+                return None
+
+        except Exception as e:
+            logger.error(f"Error getting lead by id {lead_id}: {e}")
+            raise
+
     async def get_lead_by_verification_token(self, token: str) -> Optional[Dict[str, Any]]:
         """Get lead by verification token"""
         try:

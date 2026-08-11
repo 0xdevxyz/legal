@@ -24,13 +24,23 @@ class AIComplianceNotificationService:
         self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.de')
         self.sender_name = os.getenv('SENDER_NAME', 'Complyo AI Compliance')
         self.frontend_url = os.getenv('FRONTEND_URL', 'https://app.complyo.de')
+        self.environment = os.getenv('ENVIRONMENT', 'development')
         self.demo_mode = not all([self.smtp_username, self.smtp_password])
-        
+
         if self.demo_mode:
             logger.info("AI Notification Service running in DEMO MODE")
-    
+
     def _send_email(self, to_email: str, subject: str, html_body: str, text_body: str) -> bool:
         if self.demo_mode:
+            # Demo-Modus in Produktion ist ein Konfigurationsfehler — ehrlich
+            # False zurückgeben statt "verschickt" vorzutäuschen.
+            if self.environment.lower() in ('production', 'prod'):
+                logger.error(
+                    "MAIL NICHT VERSANDT (Demo-Modus in Produktion): an %s, "
+                    "Betreff '%s' — SMTP_USERNAME/SMTP_PASSWORD fehlen",
+                    to_email, subject,
+                )
+                return False
             logger.info(f"[DEMO] Email to {to_email}: {subject}")
             logger.info(f"[DEMO] Body: {text_body[:200]}...")
             return True

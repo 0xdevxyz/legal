@@ -52,6 +52,7 @@ services:
   backend:
     build: ./backend
     container_name: complyo-backend
+    init: true   # tini als PID 1 -> reapt verwaiste Kindprozesse (uvicorn reapt als PID 1 nicht)
     mem_limit: 1g
     memswap_limit: 1.5g
     ports:
@@ -71,6 +72,10 @@ services:
       # ungueltig, auch die in Barrierefreiheitserklaerungen.
       - COMPLYO_NACHWEIS_SECRET=${COMPLYO_NACHWEIS_SECRET}
       - COMPLYO_PUBLIC_URL=${COMPLYO_PUBLIC_URL:-https://complyo.de}
+      # Lizenzdurchsetzung fuer eingebettete Widgets: off | warn | block.
+      # Bleibt auf warn, bis die [Lizenz]-Logs keine legitimen Kunden mehr
+      # zeigen — erst dann darf block gesetzt werden (license_check.py).
+      - COMPLYO_LICENSE_ENFORCEMENT=${COMPLYO_LICENSE_ENFORCEMENT:-warn}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - STRIPE_WEBHOOK_SECRET_ADDONS=${STRIPE_WEBHOOK_SECRET_ADDONS:-${STRIPE_WEBHOOK_SECRET}}
@@ -83,6 +88,9 @@ services:
       - STRIPE_PRICE_SINGLE_MODULE=${STRIPE_PRICE_SINGLE_MODULE}
       - STRIPE_PRICE_EXPERT=${STRIPE_PRICE_EXPERT}
       - STRIPE_PRICE_UPDATE_MONTHLY=${STRIPE_PRICE_UPDATE_MONTHLY:-${STRIPE_PRICE_UPDATE}}
+      # Monitor-Abo (19€/Mon bzw. 190€/Jahr) — stripe_routes liest beide Namen
+      - STRIPE_PRICE_MONITOR_MONTHLY=${STRIPE_PRICE_MONITOR_MONTHLY:-}
+      - STRIPE_PRICE_MONITOR_YEARLY=${STRIPE_PRICE_MONITOR_YEARLY:-}
       # Add-ons (in Stripe anzulegen; ohne Wert schlaegt der Kauf mit klarer Meldung fehl)
       - STRIPE_PRICE_COMPLOAI_GUARD=${STRIPE_PRICE_COMPLOAI_GUARD:-}
       - STRIPE_PRICE_PRIORITY_SUPPORT=${STRIPE_PRICE_PRIORITY_SUPPORT:-}

@@ -172,6 +172,37 @@ async def get_user_profile(current_user: dict = Depends(get_current_user)):
             detail="Fehler beim Laden des Profils"
         )
 
+@router.get("/export-data")
+async def export_user_data(current_user: dict = Depends(get_current_user)):
+    """
+    DSGVO-Datenexport (Art. 15/20) als JSON-Download.
+
+    Das Dashboard (Einstellungen → Datenschutz) rief diesen Pfad schon immer
+    auf — es gab ihn nur nicht. Delegiert an den GDPR-Service, der users +
+    zugehörige Tabellen aggregiert (nicht mehr nur die leere leads-Tabelle).
+    """
+    try:
+        user_id = current_user.get('id')
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        from gdpr_retention_service import gdpr_service
+        export = await gdpr_service.export_user_data(int(user_id), str(current_user.get('email')))
+        if export is None:
+            raise HTTPException(status_code=404, detail="Keine Daten zu diesem Konto gefunden")
+
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            content=export,
+            headers={"Content-Disposition": 'attachment; filename="complyo-daten-export.json"'},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting user data: {e}")
+        raise HTTPException(status_code=500, detail="Fehler beim Daten-Export")
+
+
 @router.get("/health")
 async def user_health():
     """Health check for user service"""
@@ -279,15 +310,18 @@ async def change_password(request: ChangePasswordRequest, current_user: dict = D
             raise HTTPException(status_code=400, detail="Passwort muss mindestens 8 Zeichen lang sein")
 
         async with db_pool.acquire() as conn:
-            user = await conn.fetchrow("SELECT hashed_password FROM users WHERE id = $1", user_id)
+            # Die Spalte heißt password_hash (siehe auth_service) — der alte
+            # Name hashed_password existiert im Schema nicht und machte aus
+            # jedem Passwortwechsel eine 500.
+            user = await conn.fetchrow("SELECT password_hash FROM users WHERE id = $1", user_id)
             if not user:
                 raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
 
-            if not _pwd_context.verify(request.current_password, user['hashed_password']):
+            if not _pwd_context.verify(request.current_password, user['password_hash']):
                 raise HTTPException(status_code=400, detail="Aktuelles Passwort ist falsch")
 
             new_hash = _pwd_context.hash(request.new_password)
-            await conn.execute("UPDATE users SET hashed_password = $1, updated_at = NOW() WHERE id = $2", new_hash, user_id)
+            await conn.execute("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", new_hash, user_id)
 
             return {"success": True, "message": "Passwort erfolgreich geaendert"}
     except HTTPException:

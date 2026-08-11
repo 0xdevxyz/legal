@@ -29,6 +29,7 @@ class LegalNewsNotificationService:
         self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.de')
         self.sender_name = os.getenv('SENDER_NAME', 'Complyo Legal Updates')
         self.frontend_url = os.getenv('FRONTEND_URL', 'https://app.complyo.de')
+        self.environment = os.getenv('ENVIRONMENT', 'development')
         self.demo_mode = not all([self.smtp_username, self.smtp_password])
         
     async def process_new_legal_changes(self) -> Dict[str, Any]:
@@ -404,6 +405,15 @@ Complyo GmbH | datenschutz@complyo.de
     ) -> bool:
         """Sendet E-Mail"""
         if self.demo_mode:
+            # Demo-Modus in Produktion ist ein Konfigurationsfehler — ehrlich
+            # False zurückgeben statt "verschickt" vorzutäuschen.
+            if self.environment.lower() in ('production', 'prod'):
+                logger.error(
+                    "MAIL NICHT VERSANDT (Demo-Modus in Produktion): an %s, "
+                    "Betreff '%s' — SMTP_USERNAME/SMTP_PASSWORD fehlen",
+                    to_email, subject,
+                )
+                return False
             logger.info(f"[DEMO] Would send email to {to_email}: {subject}")
             return True
             

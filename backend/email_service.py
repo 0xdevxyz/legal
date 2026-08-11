@@ -34,12 +34,15 @@ class EmailService:
         self.smtp_password = os.getenv('SMTP_PASSWORD', '')
         self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.de')
         self.sender_name = os.getenv('SENDER_NAME', 'Complyo Compliance')
-        self.frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+        # Default war http://localhost:3000 — damit zeigten Kunden-Mails in
+        # Produktion auf localhost-Links.
+        self.frontend_url = os.getenv('FRONTEND_URL', 'https://complyo.de')
         self.admin_notify_email = os.getenv('ADMIN_NOTIFY_EMAIL', '')
+        self.environment = os.getenv('ENVIRONMENT', 'development')
 
         # For demo/testing purposes, we'll use console output if no SMTP is configured
         self.demo_mode = not all([self.smtp_username, self.smtp_password])
-        
+
         if self.demo_mode:
             logger.info("Email service running in DEMO MODE - emails will be logged to console")
 
@@ -131,6 +134,16 @@ class EmailService:
         Core email sending function
         """
         if self.demo_mode:
+            # In Produktion ist der Demo-Modus ein Konfigurationsfehler, kein
+            # Erfolg: Vorher wanderten DSGVO-Bestätigungen hier in die Konsole
+            # und der Aufrufer loggte "verschickt". Jetzt ehrlich False.
+            if self.environment.lower() in ('production', 'prod'):
+                logger.error(
+                    "MAIL NICHT VERSANDT (Demo-Modus in Produktion): an %s, "
+                    "Betreff '%s' — SMTP_USERNAME/SMTP_PASSWORD fehlen",
+                    to_email, subject,
+                )
+                return False
             # Demo mode - log email to console
             print(f"\n" + "="*60)
             print(f"📧 DEMO EMAIL (would be sent to: {to_email})")
@@ -331,13 +344,13 @@ datenschutz@complyo.de • https://complyo.de/datenschutz
         <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;">
             <h4 style="margin-top: 0; color: #856404;">⚡ Nächste Schritte</h4>
             <p style="margin-bottom: 0; font-size: 14px;">
-                Für eine detaillierte Lösungsstrategie und automatische Umsetzung 
-                empfehlen wir Ihnen unseren KI-Automatisierung Service (39€/Monat).
+                Für eine detaillierte Lösungsstrategie und automatische Umsetzung
+                empfehlen wir Ihnen unsere Tarife Single (19€/Monat) oder Pro (49€/Monat).
             </p>
         </div>
-        
+
         <div style="text-align: center; margin: 30px 0;">
-            <a href="http://localhost:3000/#pricing" 
+            <a href="{{ frontend_url }}/#pricing"
                style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                       color: white; 
                       text-decoration: none; 
@@ -359,8 +372,8 @@ datenschutz@complyo.de • https://complyo.de/datenschutz
         
         <p style="font-size: 12px; color: #888; text-align: center;">
             Complyo GmbH • Compliance Made Simple<br>
-            <a href="mailto:support@complyo.de" style="color: #667eea;">support@complyo.de</a> • 
-            <a href="http://localhost:3000" style="color: #667eea;">complyo.de</a>
+            <a href="mailto:support@complyo.de" style="color: #667eea;">support@complyo.de</a> •
+            <a href="{{ frontend_url }}" style="color: #667eea;">complyo.de</a>
         </p>
     </div>
 </body>
@@ -371,7 +384,8 @@ datenschutz@complyo.de • https://complyo.de/datenschutz
             name=name,
             compliance_score=compliance_score,
             risk_level=risk_level,
-            findings_count=findings_count
+            findings_count=findings_count,
+            frontend_url=self.frontend_url
         )
 
     def _get_report_email_text(self, name: str, analysis_data: Dict[str, Any]) -> str:
@@ -393,18 +407,18 @@ Ihre Website-Analyse ist abgeschlossen! Hier sind die wichtigsten Ergebnisse:
 • Gefundene Probleme: {findings_count} Bereiche
 
 ⚡ NÄCHSTE SCHRITTE:
-Für eine detaillierte Lösungsstrategie und automatische Umsetzung 
-empfehlen wir Ihnen unseren KI-Automatisierung Service (39€/Monat).
+Für eine detaillierte Lösungsstrategie und automatische Umsetzung
+empfehlen wir Ihnen unsere Tarife Single (19€/Monat) oder Pro (49€/Monat).
 
-🚀 Jetzt optimieren: http://localhost:3000/#pricing
+🚀 Jetzt optimieren: {self.frontend_url}/#pricing
 
-🔒 DATENSCHUTZ: 
-Ihre Daten werden DSGVO-konform verarbeitet. 
+🔒 DATENSCHUTZ:
+Ihre Daten werden DSGVO-konform verarbeitet.
 Widerruf jederzeit unter datenschutz@complyo.de möglich.
 
 ---
 Complyo GmbH • Compliance Made Simple
-support@complyo.de • http://localhost:3000
+support@complyo.de • {self.frontend_url}
         """
 
     def send_deletion_confirmation_email(self, email: str, reference_id: str) -> bool:
@@ -497,14 +511,20 @@ support@complyo.de • http://localhost:3000
         """
         try:
             subject = "Ihre Datenexport - Complyo DSGVO"
-            
-            # Convert export data to readable format
-            export_summary = {
-                "Persönliche Daten": len(export_data.get("personal_data", {})),
-                "Einwilligungsdaten": len(export_data.get("consent_data", {})),
-                "Analysedaten": "Ja" if export_data.get("analysis_data") else "Nein",
-                "Technische Daten": len(export_data.get("technical_data", {}))
-            }
+
+            # Zusammenfassung generisch aufbauen — der Export ist seit 2026-08-11
+            # das aggregierte Konto-JSON (users + zugehörige Tabellen), nicht
+            # mehr das feste Lead-Schema.
+            export_summary = {}
+            for kategorie, inhalt in export_data.items():
+                if kategorie == "export_info":
+                    continue
+                if isinstance(inhalt, list):
+                    export_summary[kategorie] = f"{len(inhalt)} Einträge"
+                elif isinstance(inhalt, dict):
+                    export_summary[kategorie] = "Ja"
+                else:
+                    export_summary[kategorie] = "Ja" if inhalt else "Nein"
             
             html_content = f"""
             <!DOCTYPE html>

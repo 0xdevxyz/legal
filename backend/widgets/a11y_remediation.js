@@ -58,10 +58,15 @@
   // Theme-Update aus, das eine Klasse umbenennt — und genau das faellt sonst
   // erst beim naechsten Scan auf, Wochen spaeter.
   //
-  // `dokument_fixes` hat gefehlt: Skip-Link und landmark-main liefen ganz
-  // ausserhalb der Bilanz. Findet `resolveMainTarget()` kein Ziel, unterbleibt
-  // der Skip-Link stillschweigend — genau der Fall, den diese Ueberwachung
-  // melden soll, und ausgerechnet der war unsichtbar.
+  // Die Zaehlung ist idempotent ueber Laeufe. apply() laeuft mehrfach (initial,
+  // 1000ms, 3000ms, MutationObserver); die erste Fassung addierte `verfehlt`
+  // bei jedem Lauf auf, waehrend `angewendet` guarded nur einmal zaehlte —
+  // gemessen: verfehlt=63 bei erwartet=2, eine Zahl, der niemand glaubt.
+  // Deshalb Mengen eindeutiger Fix-Kennungen statt nackter Zaehler:
+  // `verfehlt`/`unnoetig` werden je Lauf FRISCH aufgebaut (beginneLauf),
+  // `angewendet` bleibt ueber Laeufe bestehen — einmal angekommen bleibt
+  // angekommen, auch wenn ein SPA-Rerender das Ziel wieder entfernt hat.
+  // melde() friert den Stand des letzten Laufs ein.
   //
   // Drei Zustaende statt zwei. "unnoetig" ist kein Fehlschlag: dass eine Seite
   // laengst ein <main> hat und `landmark-main` deshalb nichts tut, ist der
@@ -76,6 +81,53 @@
     dokument_fixes: { angewendet: 0, verfehlt: 0, unnoetig: 0 }
   };
 
+  var BILANZ_ARTEN = ['alt_texte', 'link_labels', 'struktur', 'css_regeln', 'dokument_fixes'];
+
+  function leereMenge() { return Object.create(null); }
+
+  function _merkeNeu(menge, id) {
+    if (menge[id]) return false;
+    menge[id] = 1;
+    return true;
+  }
+
+  var angewendetIds = {};
+  var verfehltIds = {};
+  var unnoetigIds = {};
+  (function () {
+    for (var i = 0; i < BILANZ_ARTEN.length; i++) {
+      angewendetIds[BILANZ_ARTEN[i]] = leereMenge();
+      verfehltIds[BILANZ_ARTEN[i]] = leereMenge();
+      unnoetigIds[BILANZ_ARTEN[i]] = leereMenge();
+    }
+  })();
+
+  // Je Lauf frisch: `verfehlt`/`unnoetig` beschreiben den AKTUELLEN Zustand
+  // der Seite, nicht die Summe aller bisherigen Laeufe.
+  function beginneLauf() {
+    for (var i = 0; i < BILANZ_ARTEN.length; i++) {
+      var art = BILANZ_ARTEN[i];
+      verfehltIds[art] = leereMenge();
+      unnoetigIds[art] = leereMenge();
+      bilanz[art].verfehlt = 0;
+      if ('unnoetig' in bilanz[art]) bilanz[art].unnoetig = 0;
+    }
+  }
+
+  // true genau beim ERSTEN Mal — der Aufrufer zaehlt dann den Zaehler hoch.
+  // "angewendet" gewinnt dauerhaft: was einmal angekommen ist, faellt spaeter
+  // weder auf "verfehlt" noch auf "unnoetig" zurueck.
+  function zaehltAngewendet(art, id) { return _merkeNeu(angewendetIds[art], id); }
+  function zaehltVerfehlt(art, id) {
+    if (angewendetIds[art][id]) return false;
+    return _merkeNeu(verfehltIds[art], id);
+  }
+  function zaehltUnnoetig(art, id) {
+    if (angewendetIds[art][id]) return false;
+    return _merkeNeu(unnoetigIds[art], id);
+  }
+  // ---- Ende Wirkungsbilanz ---------------------------------------------------
+
   // Basis-Dateiname (klein) inkl. Entfernung der WP-Größensuffixe (-300x200).
   function norm(p) {
     if (!p) return '';
@@ -86,12 +138,6 @@
     return p;
   }
 
-  function altFor(img) {
-    var src = img.getAttribute('src') || img.getAttribute('data-src') || img.currentSrc || '';
-    var key = norm(src);
-    return key && map[key] ? map[key] : null;
-  }
-
   // ---- Alt-Texte (laufen bei jedem Re-Render) ------------------------------
   function applyAltTexts() {
     var imgs = document.images || document.getElementsByTagName('img');
@@ -99,8 +145,13 @@
       var img = imgs[i];
       var cur = img.getAttribute('alt');
       if (cur && cur.trim() !== '') continue; // vorhandenes alt nie überschreiben
-      var alt = altFor(img);
-      if (alt) { img.setAttribute('alt', alt); bilanz.alt_texte.angewendet++; }
+      var key = norm(img.getAttribute('src') || img.getAttribute('data-src') || img.currentSrc || '');
+      var alt = key && map[key] ? map[key] : null;
+      if (alt) {
+        img.setAttribute('alt', alt);
+        // je Bild-Datei einmal — nicht je <img> und nicht je Lauf
+        if (zaehltAngewendet('alt_texte', key)) bilanz.alt_texte.angewendet++;
+      }
     }
     // Verfehlt: ein freigegebener Alt-Text, dessen Bild auf dieser Seite nicht
     // (mehr) vorkommt. Auf Unterseiten ist das normal — deshalb wird es
@@ -113,7 +164,7 @@
     }
     for (var schluessel in map) {
       if (Object.prototype.hasOwnProperty.call(map, schluessel) && !gesehen[schluessel]) {
-        bilanz.alt_texte.verfehlt++;
+        if (zaehltVerfehlt('alt_texte', schluessel)) bilanz.alt_texte.verfehlt++;
       }
     }
   }
@@ -131,7 +182,13 @@
     if (!p || !p.value) return;
     var html = document.documentElement;
     var cur = (html.getAttribute('lang') || '').trim();
-    if (cur === '') html.setAttribute('lang', p.value); // nur setzen, wenn leer
+    if (cur === '') {
+      html.setAttribute('lang', p.value); // nur setzen, wenn leer
+      if (zaehltAngewendet('dokument_fixes', 'html-lang')) bilanz.dokument_fixes.angewendet++;
+    } else if (zaehltUnnoetig('dokument_fixes', 'html-lang')) {
+      // Seite bringt ihr lang selbst mit — Normalfall, kein Fehlschlag.
+      bilanz.dokument_fixes.unnoetig++;
+    }
   }
 
   function resolveMainTarget(preferred) {
@@ -156,7 +213,9 @@
     var p = fixPayload('skip-link');
     if (!p) return;
     if (document.querySelector('a[data-complyo-skip-link]')) {
-      bilanz.dokument_fixes.unnoetig++;   // schon injiziert
+      // Schon injiziert: aus einem frueheren Lauf (dann bleibt es beim
+      // "angewendet" von damals) oder von einem zweiten Einbau daneben.
+      if (zaehltUnnoetig('dokument_fixes', 'skip-link')) bilanz.dokument_fixes.unnoetig++;
       return;
     }
 
@@ -166,7 +225,7 @@
       // ein "Zum Inhalt springen", das nirgends landet, ist fuer Tastatur-
       // nutzer schlechter als gar keins. Aber melden: das ist ein
       // ausgelieferter Fix, der nicht ankommt.
-      bilanz.dokument_fixes.verfehlt++;
+      if (zaehltVerfehlt('dokument_fixes', 'skip-link')) bilanz.dokument_fixes.verfehlt++;
       return;
     }
     if (!target.id) target.id = 'complyo-main';
@@ -179,12 +238,12 @@
     a.textContent = p.label || 'Zum Inhalt springen';
     if (document.body && document.body.firstChild) {
       document.body.insertBefore(a, document.body.firstChild);
-      bilanz.dokument_fixes.angewendet++;
+      if (zaehltAngewendet('dokument_fixes', 'skip-link')) bilanz.dokument_fixes.angewendet++;
     } else if (document.body) {
       document.body.appendChild(a);
-      bilanz.dokument_fixes.angewendet++;
+      if (zaehltAngewendet('dokument_fixes', 'skip-link')) bilanz.dokument_fixes.angewendet++;
     } else {
-      bilanz.dokument_fixes.verfehlt++;
+      if (zaehltVerfehlt('dokument_fixes', 'skip-link')) bilanz.dokument_fixes.verfehlt++;
     }
   }
 
@@ -193,16 +252,18 @@
     if (document.querySelector('main, [role="main"]')) {
       // Die Seite bringt ihren Hauptbereich selbst mit. Kein Fehlschlag,
       // sondern der Normalfall — deshalb "unnoetig" und nicht "verfehlt".
-      bilanz.dokument_fixes.unnoetig++;
+      // (Haben WIR das role="main" in einem frueheren Lauf gesetzt, greift
+      // der angewendet-Vorrang und hier wird nichts umgezaehlt.)
+      if (zaehltUnnoetig('dokument_fixes', 'landmark-main')) bilanz.dokument_fixes.unnoetig++;
       return;
     }
     var el = resolveMainTarget(null);
     if (el && !el.getAttribute('role')) {
       el.setAttribute('role', 'main');
-      bilanz.dokument_fixes.angewendet++;
+      if (zaehltAngewendet('dokument_fixes', 'landmark-main')) bilanz.dokument_fixes.angewendet++;
     } else {
       // Kein Container gefunden, dem sich der Hauptbereich zuordnen liesse.
-      bilanz.dokument_fixes.verfehlt++;
+      if (zaehltVerfehlt('dokument_fixes', 'landmark-main')) bilanz.dokument_fixes.verfehlt++;
     }
   }
 
@@ -220,21 +281,30 @@
     for (var i = 0; i < strukturFixes.length; i++) {
       var f = strukturFixes[i];
       if (!f || !f.selector || !f.attribut) continue;
+      var kennung = 'struktur:' + i;   // eindeutige Fix-Kennung: je Fix, nicht je Element
       var ziele;
       try { ziele = document.querySelectorAll(f.selector); }
-      catch (e) { bilanz.struktur.verfehlt++; continue; }  // ungueltiger Selektor
+      catch (e) {  // ungueltiger Selektor
+        if (zaehltVerfehlt('struktur', kennung)) bilanz.struktur.verfehlt++;
+        continue;
+      }
       // Kein Treffer heisst: das Ziel gibt es auf dieser Seite nicht mehr. Das
       // ist die Regressionsmeldung, auf die es ankommt — genau so sieht ein
       // Theme-Update aus, das eine Klasse umbenannt hat.
-      if (!ziele.length) { bilanz.struktur.verfehlt++; continue; }
+      if (!ziele.length) {
+        if (zaehltVerfehlt('struktur', kennung)) bilanz.struktur.verfehlt++;
+        continue;
+      }
       for (var j = 0; j < ziele.length; j++) {
         var el = ziele[j];
         // Das viewport-Meta ist der einzige Fall, in dem ueberschrieben wird:
         // dort steht die Zoom-Sperre, die weg soll. Alles andere guarded.
         if (f.attribut === 'content' && el.tagName === 'META') {
-          el.setAttribute('content', f.wert); gesetzt++; bilanz.struktur.angewendet++;
+          el.setAttribute('content', f.wert); gesetzt++;
+          if (zaehltAngewendet('struktur', kennung)) bilanz.struktur.angewendet++;
         } else if (!el.getAttribute(f.attribut)) {
-          el.setAttribute(f.attribut, f.wert); gesetzt++; bilanz.struktur.angewendet++;
+          el.setAttribute(f.attribut, f.wert); gesetzt++;
+          if (zaehltAngewendet('struktur', kennung)) bilanz.struktur.angewendet++;
         }
       }
     }
@@ -252,18 +322,34 @@
       var r = cssRules[i];
       if (!r || !r.selector || !r.declarations) continue;
       css += r.selector + '{' + r.declarations + '}';
-      // Trifft die Regel auf dieser Seite ueberhaupt etwas? Eine Kontrastregel
-      // ohne Ziel ist entweder eine Unterseite ohne dieses Element — oder ein
-      // Selektor, den ein Theme-Update zerlegt hat.
-      var trifft = 0;
-      try { trifft = document.querySelectorAll(r.selector).length; } catch (e) { trifft = -1; }
-      if (trifft > 0) bilanz.css_regeln.angewendet++;
-      else if (trifft < 0) bilanz.css_regeln.verfehlt++;
     }
     var style = document.createElement('style');
     style.id = 'complyo-a11y-style';
     style.appendChild(document.createTextNode(css));
     (document.head || document.documentElement).appendChild(style);
+  }
+
+  // Trifft jede CSS-Regel auf dieser Seite ueberhaupt etwas? Laeuft je
+  // apply()-Lauf mit (nicht nur beim Injizieren des Styles), denn SPA-Inhalte
+  // erscheinen oft erst nach der Hydration.
+  function pruefeCssRegeln() {
+    for (var i = 0; i < cssRules.length; i++) {
+      var r = cssRules[i];
+      if (!r || !r.selector || !r.declarations) continue;
+      var kennung = 'css:' + i;
+      var trifft = 0;
+      try { trifft = document.querySelectorAll(r.selector).length; } catch (e) { trifft = -1; }
+      if (trifft > 0) {
+        if (zaehltAngewendet('css_regeln', kennung)) bilanz.css_regeln.angewendet++;
+      } else {
+        // trifft==0 ist KEIN Niemandsland: eine Kontrastregel ohne Ziel ist
+        // entweder eine Unterseite ohne dieses Element — oder ein Selektor,
+        // den ein Theme-Update zerlegt hat. Beides gehoert in `verfehlt`;
+        // erst die Auswertung ueber viele Aufrufe trennt die Faelle. Frueher
+        // zaehlte trifft==0 GAR NICHT — die Regression war unsichtbar.
+        if (zaehltVerfehlt('css_regeln', kennung)) bilanz.css_regeln.verfehlt++;
+      }
+    }
   }
 
   // ---- Link-Zweck (WCAG 2.4.4): aria-label auf nichtssagende Links -----------
@@ -276,15 +362,15 @@
     return a.indexOf(b) !== -1 || b.indexOf(a) !== -1;
   }
 
-  function labelForLink(txt, href) {
+  function linkFixIndex(txt, href) {
     var nt = normText(txt);
     for (var i = 0; i < linkFixes.length; i++) {
       var f = linkFixes[i];
       if (normText(f.link_text) === nt && hrefMatch(href, f.link_href)) {
-        return f.suggested_label || null;
+        return f.suggested_label ? i : -1;
       }
     }
-    return null;
+    return -1;
   }
 
   function applyLinkLabels() {
@@ -297,13 +383,20 @@
       if ((a.getAttribute('title') || '').trim() !== '') continue;
       var txt = (a.textContent || '').trim();
       if (!txt) continue;
-      var label = labelForLink(txt, a.getAttribute('href') || '');
-      if (label) { a.setAttribute('aria-label', label); bilanz.link_labels.angewendet++; }
+      var idx = linkFixIndex(txt, a.getAttribute('href') || '');
+      if (idx >= 0) {
+        a.setAttribute('aria-label', linkFixes[idx].suggested_label);
+        // je Fix einmal — sechs gleichlautende Icon-Links sind EIN Fix
+        if (zaehltAngewendet('link_labels', 'link:' + idx)) bilanz.link_labels.angewendet++;
+      }
     }
   }
 
   function apply() {
     if (!ready) return;
+    // Bilanz je Lauf NEU berechnen — sonst zaehlt derselbe fehlende Selektor
+    // bei jedem Timer- und Observer-Lauf erneut als verfehlt.
+    beginneLauf();
     applyAltTexts();
     applyHtmlLang();
     // Struktur VOR dem Sprunglink: sie setzt das gemessene role="main" (und
@@ -314,6 +407,7 @@
     applySkipLink();
     applyLandmarkMain();
     applyLinkLabels();
+    pruefeCssRegeln();
   }
 
   var scheduled = false;
@@ -385,6 +479,20 @@
   //
   // Einmal je Seite und Sitzung. Ein Besucher, der zehnmal blaettert, erzeugt
   // zehn Pfade, aber keine zehn Meldungen derselben Seite.
+  //
+  // Soll fuer dokument_fixes: nur die Arten, die dieses Widget selbst unter
+  // `dokument_fixes` anwendet. Ein 'struktur'-Eintrag steckt zwar in docFixes,
+  // wird aber ueber struktur_fixes bilanziert — er hier mitzuzaehlen wuerde
+  // das Soll erneut verzerren.
+  var DOKUMENT_FIX_ARTEN = { 'html-lang': 1, 'skip-link': 1, 'landmark-main': 1 };
+  function dokumentFixSoll() {
+    var n = 0;
+    for (var i = 0; i < docFixes.length; i++) {
+      if (docFixes[i] && DOKUMENT_FIX_ARTEN[docFixes[i].fix_type] === 1) n++;
+    }
+    return n;
+  }
+
   function melde() {
     var pfad;
     try {
@@ -406,7 +514,12 @@
         alt_texte: Object.keys(map).length,
         link_labels: linkFixes.length,
         struktur: strukturFixes.length,
-        css_regeln: cssRules.length
+        css_regeln: cssRules.length,
+        // dokument_fixes fehlte hier: Skip-Link & Co. standen in der Bilanz,
+        // aber nicht im Soll — jede Quote angewendet/erwartet war damit
+        // strukturell falsch. Widget und wirkung_routes decken jetzt
+        // dieselben fuenf Arten ab.
+        dokument_fixes: dokumentFixSoll()
       }
     };
 
