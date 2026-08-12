@@ -92,3 +92,26 @@ class TestHostSignale:
         monkeypatch.delenv("WAECHTER_CONTAINER_STATUS", raising=False)
         monkeypatch.delenv("WAECHTER_FEHLER_1H", raising=False)
         assert waechter.pruefe_host_signale() == []
+
+
+class TestTelegram:
+    def test_ohne_konfiguration_kein_versand(self, waechter, monkeypatch):
+        monkeypatch.setattr(waechter, "TELEGRAM_TOKEN", "")
+        monkeypatch.setattr(waechter, "TELEGRAM_CHAT", "")
+        assert waechter.sende_telegram([("k", "Text")]) is False
+
+    def test_text_traegt_anzahl_und_befunde(self, waechter):
+        text = waechter.baue_telegram_text([("a", "Erster"), ("b", "Zweiter")])
+        assert "2 Befund(e)" in text
+        assert "• Erster" in text and "• Zweiter" in text
+
+    def test_alarm_gilt_als_zugestellt_wenn_ein_kanal_traegt(self, waechter, monkeypatch):
+        # Telegram scheitert, Mail trägt → insgesamt zugestellt (und umgekehrt).
+        monkeypatch.setattr(waechter, "sende_telegram", lambda b: False)
+        monkeypatch.setattr(waechter, "sende_mail", lambda b: True)
+        assert waechter.sende_alarm([("k", "Text")]) is True
+        monkeypatch.setattr(waechter, "sende_telegram", lambda b: True)
+        monkeypatch.setattr(waechter, "sende_mail", lambda b: False)
+        assert waechter.sende_alarm([("k", "Text")]) is True
+        monkeypatch.setattr(waechter, "sende_telegram", lambda b: False)
+        assert waechter.sende_alarm([("k", "Text")]) is False

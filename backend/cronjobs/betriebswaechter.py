@@ -44,6 +44,10 @@ logger = logging.getLogger("betriebswaechter")
 
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 EMPFAENGER = os.getenv("COMPLYO_WAECHTER_MAIL", "mail@panoart360.de")
+# Telegram ist der Wunsch-Kanal des Betreibers (12.08.); Mail bleibt als
+# zweiter Kanal bestehen. Beide fail-open: ein Kanal genügt.
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT = os.getenv("TELEGRAM_CHAT_ID", "")
 STATE_PFAD = Path(os.getenv("WAECHTER_STATE_PFAD", "/data/waechter/state.json"))
 ERNEUT_NACH_STUNDEN = 24
 
@@ -197,7 +201,40 @@ def pruefe_host_signale() -> list:
     return befunde
 
 
-def sende_alarm(befunde: list) -> bool:
+def baue_telegram_text(befunde: list) -> str:
+    zeilen = [f"• {text}" for _, text in befunde]
+    return (f"⚠️ complyo-Wächter: {len(befunde)} Befund(e)\n\n"
+            + "\n\n".join(zeilen)
+            + "\n\nJeder Befund wird höchstens einmal je 24 h gemeldet.")
+
+
+def sende_telegram(befunde: list) -> bool:
+    """Bot-API direkt über stdlib — keine neue Abhängigkeit, 10s-Timeout."""
+    if not (TELEGRAM_TOKEN and TELEGRAM_CHAT):
+        return False
+    import urllib.request
+
+    daten = json.dumps({
+        "chat_id": TELEGRAM_CHAT,
+        "text": baue_telegram_text(befunde)[:4000],  # Telegram-Limit 4096
+        "disable_web_page_preview": True,
+    }).encode()
+    anfrage = urllib.request.Request(
+        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+        data=daten, headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(anfrage, timeout=10) as antwort:
+            ok = json.loads(antwort.read()).get("ok", False)
+        if not ok:
+            logger.error("Telegram-API antwortete mit ok=false")
+        return bool(ok)
+    except Exception as e:
+        logger.error(f"Telegram-Versand fehlgeschlagen: {e}")
+        return False
+
+
+def sende_mail(befunde: list) -> bool:
     from email_service import email_service
 
     zeilen = [f"• {text}" for _, text in befunde]
@@ -213,6 +250,15 @@ def sende_alarm(befunde: list) -> bool:
         html_body=html,
         text_body=text,
     )
+
+
+def sende_alarm(befunde: list) -> bool:
+    """Telegram zuerst (Wunsch-Kanal), Mail zusätzlich; ein Kanal genügt."""
+    telegram_ok = sende_telegram(befunde)
+    mail_ok = sende_mail(befunde)
+    if telegram_ok:
+        logger.info("Alarm per Telegram zugestellt.")
+    return telegram_ok or mail_ok
 
 
 async def main() -> int:
