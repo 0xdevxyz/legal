@@ -7,10 +7,10 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de';
 
 const LINKS = [
   { label: 'Preise', href: '/#preise' },
-  { label: 'BFSG-Check', href: '/bfsg-check' },
-  { label: 'DSGVO-Check', href: '/dsgvo-website-check' },
-  { label: 'Barrierefreiheit', href: '/barrierefreiheit-website-testen' },
-  { label: 'Ratgeber', href: '/ratgeber' },
+  { label: 'BFSG-Check', href: '/bfsg-check/' },
+  { label: 'DSGVO-Check', href: '/dsgvo-website-check/' },
+  { label: 'Barrierefreiheit', href: '/barrierefreiheit-website-testen/' },
+  { label: 'Ratgeber', href: '/ratgeber/' },
 ];
 
 export default function NavBar() {

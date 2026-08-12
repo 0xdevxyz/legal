@@ -29,10 +29,10 @@ export default function FooterSection() {
             <ul className="space-y-2.5 text-sm">
               {[
                 { label: 'Preise', href: '/#preise' },
-                { label: 'BFSG-Check', href: '/bfsg-check' },
-                { label: 'DSGVO-Check', href: '/dsgvo-website-check' },
-                { label: 'Barrierefreiheit testen', href: '/barrierefreiheit-website-testen' },
-                { label: 'Ratgeber', href: '/ratgeber' },
+                { label: 'BFSG-Check', href: '/bfsg-check/' },
+                { label: 'DSGVO-Check', href: '/dsgvo-website-check/' },
+                { label: 'Barrierefreiheit testen', href: '/barrierefreiheit-website-testen/' },
+                { label: 'Ratgeber', href: '/ratgeber/' },
                 { label: 'Anmelden', href: `${APP_URL}/login` },
               ].map((l, i) => (
                 <li key={i}><a href={l.href} className="hover:text-white transition-colors">{l.label}</a></li>
@@ -44,10 +44,10 @@ export default function FooterSection() {
             <h4 className="text-white font-semibold text-sm mb-4">Rechtliches</h4>
             <ul className="space-y-2.5 text-sm">
               {[
-                { label: 'Impressum', href: '/impressum' },
-                { label: 'Datenschutz', href: '/datenschutz' },
-                { label: 'Cookie-Richtlinie', href: '/cookie-richtlinie' },
-                { label: 'AGB', href: '/agb' },
+                { label: 'Impressum', href: '/impressum/' },
+                { label: 'Datenschutz', href: '/datenschutz/' },
+                { label: 'Cookie-Richtlinie', href: '/cookie-richtlinie/' },
+                { label: 'AGB', href: '/agb/' },
               ].map((l, i) => (
                 <li key={i}><a href={l.href} className="hover:text-white transition-colors">{l.label}</a></li>
               ))}

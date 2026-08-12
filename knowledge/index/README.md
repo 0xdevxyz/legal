@@ -33,11 +33,3 @@ WHERE impact = "high"
 SORT date DESC
 LIMIT 5
 ```
-
-## Alle Gesetze
-
-```dataview
-TABLE law_areas, affected_checks
-FROM "laws"
-SORT title ASC
-```

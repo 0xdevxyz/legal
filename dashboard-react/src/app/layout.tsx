@@ -15,6 +15,9 @@ export const metadata: Metadata = {
   description: 'Automatische DSGVO, TTDSG & Barrierefreiheits-Compliance mit KI',
   keywords: ['DSGVO', 'TTDSG', 'Compliance', 'Website', 'KI', 'Automation'],
   authors: [{ name: 'Complyo Team' }],
+  // Das Dashboard ist eine eingeloggte Anwendung und gehoert nicht in den Index.
+  // Ohne das wurde app.complyo.de/register?plan=pro von Google indexiert.
+  robots: { index: false, follow: false },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
