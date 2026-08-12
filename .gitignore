@@ -146,3 +146,7 @@ graphify-out/
 
 # TypeScript-Build-Artefakte (werden bei jedem tsc neu geschrieben)
 *.tsbuildinfo
+
+# RAG-Vektorcache — wird bei jedem knowledge_updater-Lauf neu geschrieben.
+# Als versionierte 600-KB-Datei ueberdeckt sie im Verlauf jede echte Aenderung.
+knowledge/_meta/embeddings.json

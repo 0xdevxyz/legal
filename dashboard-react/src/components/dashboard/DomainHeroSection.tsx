@@ -18,7 +18,7 @@ interface DomainHeroSectionProps {
 export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
   onAnalyze
 }) => {
-  const { currentWebsite, updateMetrics, setCurrentWebsite, isInOptimizationMode, lockedOptimizationUrl, pendingRescanContext, setPendingRescanContext } = useDashboardStore();
+  const { currentWebsite, updateMetrics, setCurrentWebsite, isInOptimizationMode, lockedOptimizationUrl, pendingRescanContext, setPendingRescanContext, analysisData } = useDashboardStore();
   const { showToast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -214,6 +214,55 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
     }
   };
 
+  /**
+   * Überschrift und Standzeile.
+   *
+   * Die Aufgabe bleibt konstant ("Lücken schließen"), damit der Einstieg bei
+   * jedem Besuch derselbe ist. Nur die zweite Zeile bewegt sich — sie nennt
+   * die Zahl, um die es geht. Sind keine Lücken mehr offen, kippt auch die
+   * Überschrift: eine Aufforderung zu etwas bereits Erledigtem wäre falsch.
+   */
+  const opener = (() => {
+    if (!currentWebsite) {
+      return {
+        titel: 'Schließen Sie Ihre Compliance-Lücken',
+        stand: 'Fangen Sie mit einer Prüfung an',
+      };
+    }
+
+    const domain = currentWebsite.name || currentWebsite.url;
+
+    // Solange die Analyse noch nicht da ist, wäre die Issue-Liste leer — daraus
+    // "nichts offen" zu machen, wäre eine Falschaussage in der größten Schrift
+    // der Seite. Ohne Daten also nur die Domain nennen.
+    if (!Array.isArray(analysisData?.issues)) {
+      return {
+        titel: 'Schließen Sie Ihre Compliance-Lücken',
+        stand: `${domain} — Ergebnis wird geladen`,
+      };
+    }
+
+    const issues = analysisData!.issues as any[];
+    const kritisch = issues.filter((i) => i?.severity === 'critical').length;
+    const offen = issues.length;
+
+    if (offen === 0) {
+      return {
+        titel: 'Ihre Compliance-Lücken sind geschlossen',
+        stand: `${domain} — nichts offen`,
+      };
+    }
+    if (kritisch > 0) {
+      return {
+        titel: 'Schließen Sie Ihre Compliance-Lücken',
+        stand: `${kritisch} ${kritisch === 1 ? 'kritische Lücke' : 'kritische Lücken'} auf ${domain}`,
+      };
+    }
+    return {
+      titel: 'Schließen Sie Ihre Compliance-Lücken',
+      stand: `${offen} ${offen === 1 ? 'offener Punkt' : 'offene Punkte'} auf ${domain}`,
+    };
+  })();
 
   return (
     <div className="h-full">
@@ -232,28 +281,17 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
             >
               <Bot className="w-3.5 h-3.5" /> KI-geprüft
             </div>
-            {/* Der Opener sagt, wo der Nutzer steht — nicht, was wir versprechen.
+            {/* Der Opener nennt die Aufgabe, die zweite Zeile den Stand.
                 "auf 100% optimieren" stand hier fest verdrahtet: ein Versprechen,
                 das das Produkt bewusst nicht gibt (Teile der WCAG brauchen
-                menschliches Urteil) und das bei einem Score von 17 zynisch wirkt. */}
+                menschliches Urteil) und das bei einem Score von 17 zynisch wirkt.
+                "Lücken schließen" ist dagegen einlösbar — und wenn keine mehr
+                offen ist, sagt die Überschrift genau das. */}
             <h1 className="text-4xl lg:text-5xl font-black text-gray-900 dark:text-white mb-5 leading-[1.05] tracking-tight">
-              {currentWebsite ? (
-                <>
-                  {currentWebsite.name || currentWebsite.url}
-                  <span className="block mt-2 text-3xl lg:text-4xl" style={{ color: 'var(--lime)' }}>
-                    {typeof currentWebsite.complianceScore === 'number'
-                      ? `${currentWebsite.complianceScore} von 100 Punkten`
-                      : 'Ergebnis wird geladen'}
-                  </span>
-                </>
-              ) : (
-                <>
-                  Was erfüllt Ihre Website
-                  <span className="block mt-2" style={{ color: 'var(--lime)' }}>
-                    — und was nicht?
-                  </span>
-                </>
-              )}
+              {opener.titel}
+              <span className="block mt-2 text-3xl lg:text-4xl" style={{ color: 'var(--lime)' }}>
+                {opener.stand}
+              </span>
             </h1>
             <p className="text-lg text-gray-600 dark:text-zinc-300 leading-relaxed">
               {currentWebsite
