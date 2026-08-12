@@ -114,7 +114,7 @@ export const PullRequestCard: React.FC<{
       {repos.length === 0 ? (
         <button
           onClick={verbinden}
-          className="mt-4 inline-flex items-center gap-2 rounded-xl dark:bg-white bg-gray-900 dark:text-gray-900 text-white px-4 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity"
+          className="mt-4 inline-flex items-center gap-2 rounded-xl dark:bg-white bg-white dark:bg-gray-900 dark:text-gray-900 text-gray-900 dark:text-white px-4 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity"
         >
           <Github className="w-4 h-4" />
           GitHub-Repository verbinden

@@ -113,7 +113,7 @@ export const PatchDownloadCard: React.FC<PatchDownloadCardProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-blue-500 rounded-lg">
-              <FileArchive className="w-6 h-6 text-white" />
+              <FileArchive className="w-6 h-6 text-gray-900 dark:text-white" />
             </div>
             <div>
               <CardTitle className="text-xl">🚀 SEO-Boost: HTML-Patches</CardTitle>

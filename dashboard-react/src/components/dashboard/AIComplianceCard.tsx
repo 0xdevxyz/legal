@@ -29,7 +29,7 @@ export const AIComplianceCard: React.FC = () => {
               <Brain className="w-5 h-5" style={{ color: 'var(--lime)' }} />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">AI Compliance</h3>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white">AI Compliance</h3>
               <p className="text-xs text-zinc-500">EU AI Act</p>
             </div>
           </div>
@@ -40,16 +40,16 @@ export const AIComplianceCard: React.FC = () => {
 
         <div className="space-y-3">
           <div className="glass-card p-3 rounded-xl">
-            <div className="text-2xl font-bold text-white">
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">
               {aiStats ? aiStats.total_systems : '—'}
             </div>
-            <div className="text-xs text-zinc-400">AI-Systeme</div>
+            <div className="text-xs text-gray-600 dark:text-zinc-400">AI-Systeme</div>
           </div>
           <div className="glass-card p-3 rounded-xl">
             <div className="text-2xl font-bold text-[#25bac8]">
               {aiStats ? `${aiStats.average_compliance_score}%` : '—'}
             </div>
-            <div className="text-xs text-zinc-400">Compliance</div>
+            <div className="text-xs text-gray-600 dark:text-zinc-400">Compliance</div>
           </div>
         </div>
 
@@ -82,7 +82,7 @@ export const AIComplianceCard: React.FC = () => {
           <Brain className="w-5 h-5" style={{ color: 'var(--lime)' }} />
         </div>
         <div>
-          <h3 className="text-sm font-bold text-white flex items-center gap-1">
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1">
             AI Compliance
             <Badge variant="info" className="text-xs">Add-on</Badge>
           </h3>
@@ -94,7 +94,7 @@ export const AIComplianceCard: React.FC = () => {
         <div className="flex items-start gap-2">
           <Shield className="w-4 h-4 text-[#25bac8] flex-shrink-0 mt-0.5" />
           <div>
-            <div className="text-xs font-medium text-white">Risiko-Klassifizierung</div>
+            <div className="text-xs font-medium text-gray-900 dark:text-white">Risiko-Klassifizierung</div>
             <div className="text-xs text-zinc-500">High, Limited, Minimal</div>
           </div>
         </div>
@@ -102,7 +102,7 @@ export const AIComplianceCard: React.FC = () => {
         <div className="flex items-start gap-2">
           <FileText className="w-4 h-4 text-[#25bac8] flex-shrink-0 mt-0.5" />
           <div>
-            <div className="text-xs font-medium text-white">Auto-Dokumentation</div>
+            <div className="text-xs font-medium text-gray-900 dark:text-white">Auto-Dokumentation</div>
             <div className="text-xs text-zinc-500">Reports & Analysen</div>
           </div>
         </div>
@@ -110,14 +110,14 @@ export const AIComplianceCard: React.FC = () => {
         <div className="flex items-start gap-2">
           <TrendingUp className="w-4 h-4 text-[#25bac8] flex-shrink-0 mt-0.5" />
           <div>
-            <div className="text-xs font-medium text-white">Monitoring</div>
+            <div className="text-xs font-medium text-gray-900 dark:text-white">Monitoring</div>
             <div className="text-xs text-zinc-500">Scans & Alerts</div>
           </div>
         </div>
       </div>
 
       <div className="flex items-baseline gap-1.5 mb-4">
-        <div className="text-2xl font-bold text-white">99€</div>
+        <div className="text-2xl font-bold text-gray-900 dark:text-white">99€</div>
         <div className="text-zinc-500 text-sm">/Monat</div>
       </div>
 

@@ -73,7 +73,7 @@ const NAV_GROUPS: NavGroup[] = [
       // Der Pflichten-Report klaert zuerst, WELCHE Regeln ueberhaupt gelten —
       // er gehoert vor die Detailscans, nicht dahinter.
       { label: 'Pflichten-Report', icon: Radar, href: '/pflichten-report' },
-      { label: 'Deep Scan', icon: ScanLine, href: '/deep-cookie-scanner' },
+      { label: 'Cookie-Inventar', icon: ScanLine, href: '/deep-cookie-scanner' },
     ],
   },
   {
@@ -320,7 +320,7 @@ export const Sidebar: React.FC = () => {
                             onClick={() => { router.push(item.href); setShowAccount(false); }}
                             className="w-full px-4 py-2.5 text-left text-sm dark:text-zinc-300 text-gray-700 dark:hover:bg-white/5 hover:bg-gray-50 flex items-center gap-3 transition-colors"
                           >
-                            <Icon className="w-4 h-4 dark:text-zinc-500 text-gray-400" />
+                            <Icon className="w-4 h-4 dark:text-zinc-500 text-gray-600 dark:text-gray-400" />
                             {item.label}
                           </button>
                         );

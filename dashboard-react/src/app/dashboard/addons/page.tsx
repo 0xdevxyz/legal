@@ -52,7 +52,7 @@ function AddonCard({ addon, onCancel }: { addon: Addon; onCancel: (key: string) 
       </div>
 
       {addon.limits && Object.keys(addon.limits).length > 0 && (
-        <div className="text-xs text-gray-500 bg-gray-900/50 rounded-lg px-3 py-2">
+        <div className="text-xs text-gray-500 bg-white/50 dark:bg-gray-900/50 rounded-lg px-3 py-2">
           {Object.entries(addon.limits).map(([k, v]) => (
             <span key={k}>{k}: {v === -1 ? 'Unbegrenzt' : v}</span>
           ))}

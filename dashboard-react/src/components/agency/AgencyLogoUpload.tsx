@@ -73,8 +73,8 @@ export function AgencyLogoUpload({ onUploaded }: AgencyLogoUploadProps) {
           <ImageIcon className="w-5 h-5 text-purple-400" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-white font-semibold mb-1">Agentur-Logo</h3>
-          <p className="text-zinc-400 text-sm mb-3">
+          <h3 className="text-gray-900 dark:text-white font-semibold mb-1">Agentur-Logo</h3>
+          <p className="text-gray-600 dark:text-zinc-400 text-sm mb-3">
             Wird in den generierten Client-PDFs eingebettet. PNG, max 2 MB.
           </p>
 

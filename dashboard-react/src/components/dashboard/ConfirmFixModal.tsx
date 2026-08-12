@@ -113,7 +113,7 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
           </div>
           <button
             onClick={onCancel}
-            className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+            className="text-gray-600 dark:text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
           >
             <X className="w-6 h-6" />
           </button>

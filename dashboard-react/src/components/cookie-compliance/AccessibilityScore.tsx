@@ -158,9 +158,9 @@ export default function AccessibilityScore({ config }: AccessibilityScoreProps) 
   ];
 
   return (
-    <Card className="bg-gray-800/50 border-gray-700">
+    <Card className="bg-gray-100/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700">
       <CardHeader>
-        <CardTitle className="text-white flex items-center gap-2">
+        <CardTitle className="text-gray-900 dark:text-white flex items-center gap-2">
           <Eye className="w-5 h-5 text-blue-400" />
           Barrierefreiheit-Score
           <Badge className="ml-2 bg-blue-500/20 text-blue-400">WCAG 2.2 AA</Badge>
@@ -171,12 +171,12 @@ export default function AccessibilityScore({ config }: AccessibilityScoreProps) 
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Score Display */}
-        <div className="flex items-center gap-6 p-4 bg-gray-900/50 rounded-lg">
+        <div className="flex items-center gap-6 p-4 bg-white/50 dark:bg-gray-900/50 rounded-lg">
           <div className="text-center">
             <div className={`text-5xl font-bold ${getScoreColor()}`}>
               {score}
             </div>
-            <div className="text-sm text-gray-400">von 100</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">von 100</div>
           </div>
           <div className="flex-1">
             <div className="flex items-center justify-between mb-2">
@@ -200,7 +200,7 @@ export default function AccessibilityScore({ config }: AccessibilityScoreProps) 
             
             return (
               <div key={category.id} className="space-y-2">
-                <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
                   <Icon className="w-4 h-4" />
                   {category.name}
                   {allPassed && <CheckCircle className="w-4 h-4 text-green-400" />}
@@ -225,7 +225,7 @@ export default function AccessibilityScore({ config }: AccessibilityScoreProps) 
                         ) : (
                           <AlertTriangle className="w-4 h-4 text-yellow-400" />
                         )}
-                        <span className="text-gray-300">{check.name}</span>
+                        <span className="text-gray-700 dark:text-gray-300">{check.name}</span>
                       </div>
                       <span className="text-xs text-gray-500">{check.description}</span>
                     </div>
@@ -242,7 +242,7 @@ export default function AccessibilityScore({ config }: AccessibilityScoreProps) 
             <CheckCircle className="w-4 h-4" />
             European Accessibility Act
           </h4>
-          <p className="text-xs text-gray-300 mt-1">
+          <p className="text-xs text-gray-700 dark:text-gray-300 mt-1">
             Das Cookie-Banner erfüllt die Anforderungen des European Accessibility Act (EAA),
             der ab Juni 2025 für die meisten Websites verpflichtend ist.
           </p>

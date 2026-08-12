@@ -76,6 +76,9 @@ interface UserNotification {
   title?: string | null;
   severity?: string | null;
   url?: string | null;
+  /** Anzahl betroffener Websites — der Server fasst je Rechts-Update zusammen. */
+  website_count?: number;
+  websites?: string[];
 }
 
 interface NotificationsResponse {
@@ -489,16 +492,25 @@ export const LegalNews: React.FC = () => {
                     <p className="text-sm dark:text-zinc-200 text-gray-800 truncate">
                       {n.title || NOTIFICATION_TYPE_LABEL[n.notification_type] || 'Benachrichtigung'}
                     </p>
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-gray-500 dark:text-zinc-500">
                       {NOTIFICATION_TYPE_LABEL[n.notification_type] || n.notification_type}
                       {' · '}
                       {new Date(n.created_at).toLocaleDateString('de-DE')}
+                      {/* Ein Rechts-Update betrifft oft mehrere Seiten. Vorher stand
+                          derselbe Titel einmal je Seite in der Liste; jetzt steht
+                          hier, WELCHE Seiten gemeint sind. */}
+                      {(n.website_count ?? 0) > 1 && ` · ${n.website_count} Websites betroffen`}
                     </p>
+                    {(n.website_count ?? 0) > 1 && n.websites && (
+                      <p className="text-xs text-gray-600 dark:text-gray-400 dark:text-zinc-600 truncate mt-0.5">
+                        {n.websites.map((u) => u.replace(/^https?:\/\//, '')).join(', ')}
+                      </p>
+                    )}
                   </div>
                   <button
                     onClick={() => markNotificationRead(n.id)}
                     title="Als gelesen markieren"
-                    className="shrink-0 p-1.5 rounded-lg text-zinc-400 hover:text-[#25bac8] hover:bg-[#25bac8]/10 transition-colors"
+                    className="shrink-0 p-1.5 rounded-lg text-gray-600 dark:text-zinc-400 hover:text-[#25bac8] hover:bg-[#25bac8]/10 transition-colors"
                   >
                     <Check className="w-4 h-4" />
                   </button>
@@ -561,7 +573,7 @@ export const LegalNews: React.FC = () => {
                             </span>
                           )}
                         </div>
-                        <h4 className="text-white font-bold text-sm leading-tight mb-1">
+                        <h4 className="text-gray-900 dark:text-white font-bold text-sm leading-tight mb-1">
                           {update.title}
                         </h4>
                         <span className="text-xs text-gray-500">
@@ -571,7 +583,7 @@ export const LegalNews: React.FC = () => {
                     </div>
 
                     {/* Description */}
-                    <p className="text-gray-400 text-xs leading-relaxed mb-3">
+                    <p className="text-gray-600 dark:text-gray-400 text-xs leading-relaxed mb-3">
                       {update.description.substring(0, 150)}{update.description.length > 150 ? '...' : ''}
                     </p>
                     
@@ -589,7 +601,7 @@ export const LegalNews: React.FC = () => {
                             style={{ width: `${(classification.impact_score / 10) * 100}%` }}
                           />
                         </div>
-                        <span className="text-xs text-gray-400 font-semibold">
+                        <span className="text-xs text-gray-600 dark:text-gray-400 font-semibold">
                           {classification.impact_score.toFixed(1)}/10
                         </span>
                       </div>
@@ -640,7 +652,7 @@ export const LegalNews: React.FC = () => {
                             e.stopPropagation();
                             setSelectedUpdate(update);
                           }}
-                          className="flex-1 text-xs text-gray-400 hover:text-white transition py-1.5 px-2 rounded hover:bg-gray-700"
+                          className="flex-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition py-1.5 px-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
                         >
                           <Eye className="w-3 h-3 inline mr-1" />
                           Details
@@ -697,7 +709,7 @@ export const LegalNews: React.FC = () => {
               </p>
               <button
                 onClick={fetchLegalUpdates}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors"
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg text-sm transition-colors"
               >
                 Erneut versuchen
               </button>
@@ -705,7 +717,7 @@ export const LegalNews: React.FC = () => {
           ) : (
             <div className="text-center py-8">
               <Bell className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-400 text-sm">
+              <p className="text-gray-600 dark:text-gray-400 text-sm">
                 Keine aktuellen Gesetzesänderungen
               </p>
               <p className="text-gray-500 text-xs mt-1">
@@ -724,7 +736,7 @@ export const LegalNews: React.FC = () => {
               <div
                 key={item.id}
                 onClick={() => handleArticleClick(item)}
-                className="bg-gray-800 hover:bg-gray-700 p-4 rounded-lg border border-gray-700 transition-all cursor-pointer group"
+                className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700 transition-all cursor-pointer group"
               >
                 <div className="flex items-start gap-3">
                   <div className={`p-2 rounded-lg ${badge.color}`}>
@@ -732,12 +744,12 @@ export const LegalNews: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between mb-1">
-                      <h4 className="text-white font-semibold text-sm leading-tight group-hover:text-blue-400 transition-colors">
+                      <h4 className="text-gray-900 dark:text-white font-semibold text-sm leading-tight group-hover:text-blue-400 transition-colors">
                         {item.title}
                       </h4>
                       <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-blue-400 transition-colors flex-shrink-0 ml-2" />
                     </div>
-                    <p className="text-gray-400 text-xs leading-relaxed mb-2">
+                    <p className="text-gray-600 dark:text-gray-400 text-xs leading-relaxed mb-2">
                       {item.summary}
                     </p>
                     <div className="flex items-center justify-between text-xs text-gray-500">
@@ -760,11 +772,11 @@ export const LegalNews: React.FC = () => {
           onClick={() => setSelectedUpdate(null)}
         >
           <div 
-            className="bg-gray-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl border border-gray-700"
+            className="bg-gray-100 dark:bg-gray-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-700"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-start justify-between p-6 border-b border-gray-700 bg-[#25bac8]/[0.06]">
+            <div className="flex items-start justify-between p-6 border-b border-gray-200 dark:border-gray-700 bg-[#25bac8]/[0.06]">
               <div className="flex-1 pr-4">
                 <div className="flex items-center gap-2 mb-3">
                   {selectedUpdate.classification?.confidence && (
@@ -783,10 +795,10 @@ export const LegalNews: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <h2 className="text-2xl font-bold text-white mb-2">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                   {selectedUpdate.title}
                 </h2>
-                <div className="flex items-center gap-4 text-sm text-gray-400">
+                <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                   <span className="flex items-center gap-1">
                     <Scale className="w-4 h-4" />
                     {selectedUpdate.update_type.replace('_', ' ')}
@@ -799,9 +811,9 @@ export const LegalNews: React.FC = () => {
               </div>
               <button
                 onClick={() => setSelectedUpdate(null)}
-                className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
-                <X className="w-6 h-6 text-gray-400" />
+                <X className="w-6 h-6 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
 
@@ -809,8 +821,8 @@ export const LegalNews: React.FC = () => {
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-250px)] space-y-4">
               {/* Beschreibung */}
               <div>
-                <h3 className="text-lg font-semibold text-white mb-2">Beschreibung</h3>
-                <p className="text-gray-300 leading-relaxed">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Beschreibung</h3>
+                <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
                   {selectedUpdate.description}
                 </p>
               </div>
@@ -818,11 +830,11 @@ export const LegalNews: React.FC = () => {
               {/* KI-Analyse: User-Impact */}
               {selectedUpdate.classification?.user_impact && (
                 <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                  <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+                  <h3 className="text-gray-900 dark:text-white font-semibold mb-2 flex items-center gap-2">
                     <AlertCircle className="w-5 h-5 text-blue-400" />
                     Was bedeutet das für Sie?
                   </h3>
-                  <p className="text-gray-300 text-sm leading-relaxed">
+                  <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
                     {selectedUpdate.classification.user_impact}
                   </p>
                 </div>
@@ -831,11 +843,11 @@ export const LegalNews: React.FC = () => {
               {/* KI-Analyse: Reasoning */}
               {selectedUpdate.classification?.reasoning && (
                 <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-                  <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+                  <h3 className="text-gray-900 dark:text-white font-semibold mb-2 flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-purple-400" />
                     KI-Analyse
                   </h3>
-                  <p className="text-gray-300 text-sm leading-relaxed">
+                  <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
                     {selectedUpdate.classification.reasoning}
                   </p>
                 </div>
@@ -844,11 +856,11 @@ export const LegalNews: React.FC = () => {
               {/* Konsequenzen */}
               {selectedUpdate.classification?.consequences_if_ignored && (
                 <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                  <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+                  <h3 className="text-gray-900 dark:text-white font-semibold mb-2 flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5 text-red-400" />
                     Bei Nicht-Umsetzung
                   </h3>
-                  <p className="text-gray-300 text-sm leading-relaxed">
+                  <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
                     {selectedUpdate.classification.consequences_if_ignored}
                   </p>
                 </div>
@@ -857,7 +869,7 @@ export const LegalNews: React.FC = () => {
               {/* Empfohlene Aktionen */}
               {selectedUpdate.classification?.recommended_actions && selectedUpdate.classification.recommended_actions.length > 0 && (
                 <div>
-                  <h3 className="text-lg font-semibold text-white mb-3">Empfohlene Aktionen</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Empfohlene Aktionen</h3>
                   <div className="space-y-2">
                     {selectedUpdate.classification.recommended_actions.map((action, idx) => {
                       const Icon = getActionIcon(action.icon);
@@ -873,8 +885,8 @@ export const LegalNews: React.FC = () => {
                               <Icon className="w-5 h-5" />
                             </div>
                             <div className="flex-1">
-                              <h4 className="text-white font-semibold text-sm mb-1">{action.title}</h4>
-                              <p className="text-gray-400 text-xs mb-2">{action.description}</p>
+                              <h4 className="text-gray-900 dark:text-white font-semibold text-sm mb-1">{action.title}</h4>
+                              <p className="text-gray-600 dark:text-gray-400 text-xs mb-2">{action.description}</p>
                               <button 
                                 className={`text-xs px-3 py-1 rounded ${
                                   action.button_color === 'red' ? 'bg-red-600 hover:bg-red-700' :
@@ -896,9 +908,9 @@ export const LegalNews: React.FC = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between p-6 border-t border-gray-700 bg-gray-800/50">
+            <div className="flex items-center justify-between p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50">
               <div className="flex items-center gap-4">
-                <span className="text-sm text-gray-400">War diese KI-Analyse hilfreich?</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">War diese KI-Analyse hilfreich?</span>
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
@@ -924,7 +936,7 @@ export const LegalNews: React.FC = () => {
               </div>
               <button
                 onClick={() => setSelectedUpdate(null)}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
               >
                 Schließen
               </button>
@@ -940,24 +952,24 @@ export const LegalNews: React.FC = () => {
           onClick={closeArticleModal}
         >
           <div 
-            className="bg-gray-800 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-hidden shadow-2xl border border-gray-700"
+            className="bg-gray-100 dark:bg-gray-800 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-700"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-start justify-between p-6 border-b border-gray-700">
+            <div className="flex items-start justify-between p-6 border-b border-gray-200 dark:border-gray-700">
               <div className="flex-1 pr-4">
                 <div className="flex items-center gap-2 mb-2">
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getSeverityBadge(selectedArticle.severity).color}`}>
                     {selectedArticle.severity.toUpperCase()}
                   </span>
-                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-700 text-gray-300 border border-gray-600">
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-600">
                     {selectedArticle.type.toUpperCase()}
                   </span>
                 </div>
-                <h2 className="text-2xl font-bold text-white mb-2">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                   {selectedArticle.title}
                 </h2>
-                <div className="flex items-center gap-4 text-sm text-gray-400">
+                <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                   <span className="flex items-center gap-1">
                     <Newspaper className="w-4 h-4" />
                     {selectedArticle.source}
@@ -970,33 +982,33 @@ export const LegalNews: React.FC = () => {
               </div>
               <button
                 onClick={closeArticleModal}
-                className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
-                <X className="w-6 h-6 text-gray-400" />
+                <X className="w-6 h-6 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
 
             {/* Modal Content */}
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
               <div className="prose prose-invert max-w-none">
-                <p className="text-gray-300 text-base leading-relaxed mb-4">
+                <p className="text-gray-700 dark:text-gray-300 text-base leading-relaxed mb-4">
                   {selectedArticle.summary}
                 </p>
                 
                 {/* Optional: Full content if available */}
                 {(selectedArticle as any).content && (
-                  <div className="text-gray-400 text-sm leading-relaxed mt-4">
+                  <div className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed mt-4">
                     {(selectedArticle as any).content}
                   </div>
                 )}
 
                 {/* Compliance-Relevanz Box */}
                 <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                  <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+                  <h3 className="text-gray-900 dark:text-white font-semibold mb-2 flex items-center gap-2">
                     <Scale className="w-5 h-5 text-blue-400" />
                     Relevanz für Ihre Compliance
                   </h3>
-                  <p className="text-gray-400 text-sm">
+                  <p className="text-gray-600 dark:text-gray-400 text-sm">
                     Diese Nachricht kann Auswirkungen auf Ihre Website-Compliance haben. 
                     Prüfen Sie, ob Ihre Seite die genannten Anforderungen erfüllt.
                   </p>
@@ -1005,10 +1017,10 @@ export const LegalNews: React.FC = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between p-6 border-t border-gray-700 bg-gray-800/50">
+            <div className="flex items-center justify-between p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50">
               <button
                 onClick={closeArticleModal}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
               >
                 Schließen
               </button>

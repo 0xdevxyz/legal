@@ -34,6 +34,12 @@ def _row_to_dict(row) -> Dict[str, Any]:
             d[k] = d[k].isoformat()
     if d.get("website_id") is not None:
         d["website_id"] = str(d["website_id"])
+    if d.get("websites") is not None:
+        d["websites"] = [str(u) for u in d["websites"]]
+    if d.get("ids") is not None:
+        d["ids"] = [int(i) for i in d["ids"]]
+    if d.get("website_count") is not None:
+        d["website_count"] = int(d["website_count"])
     return d
 
 
@@ -55,26 +61,47 @@ async def list_notifications(
     pool = _require_pool()
     user_id = int(current_user["id"])
 
+    # Der Monitor legt eine Zeile je (Rechts-Update x Website) an. Flach
+    # ausgeliefert stand derselbe Titel bei sechs getrackten Seiten sechsmal
+    # untereinander — bei 925 Zeilen eine unlesbare Liste. Gruppiert wird
+    # deshalb je Rechts-Update; die betroffenen Websites haengen als Liste dran.
     query = """
-        SELECT n.id, n.legal_update_id, n.website_id, n.notification_type,
-               n.is_read, n.action_taken, n.created_at, n.read_at,
-               lu.title, lu.severity, lu.update_type, lu.url
+        SELECT
+            MAX(n.id)                              AS id,
+            n.legal_update_id,
+            ARRAY_AGG(n.id ORDER BY n.id)          AS ids,
+            MIN(n.notification_type)               AS notification_type,
+            BOOL_AND(n.is_read)                    AS is_read,
+            BOOL_OR(n.action_taken)                AS action_taken,
+            MAX(n.created_at)                      AS created_at,
+            MAX(n.read_at)                         AS read_at,
+            COUNT(*)                               AS website_count,
+            ARRAY_REMOVE(ARRAY_AGG(tw.url ORDER BY tw.url), NULL) AS websites,
+            MIN(lu.title)       AS title,
+            MIN(lu.severity)    AS severity,
+            MIN(lu.update_type) AS update_type,
+            MIN(lu.url)         AS url
         FROM user_legal_notifications n
         LEFT JOIN legal_updates lu ON lu.id = n.legal_update_id
+        LEFT JOIN tracked_websites tw ON tw.id = n.website_id
         WHERE n.user_id = $1
     """
     if unread_only:
         query += " AND n.is_read = FALSE"
     query += """
-        ORDER BY n.is_read ASC, n.created_at DESC, n.id DESC
+        GROUP BY n.legal_update_id
+        ORDER BY BOOL_AND(n.is_read) ASC, MAX(n.created_at) DESC, n.legal_update_id DESC
         LIMIT $2 OFFSET $3
     """
 
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, user_id, limit, offset)
+        # Ungelesen zaehlt Vorgaenge, nicht Zeilen: "6 offene Updates" ist die
+        # Zahl, die der Nutzer abarbeiten kann — 925 war nur Tabellenrauschen.
         unread_count = await conn.fetchval(
             """
-            SELECT COUNT(*) FROM user_legal_notifications
+            SELECT COUNT(DISTINCT legal_update_id)
+            FROM user_legal_notifications
             WHERE user_id = $1 AND is_read = FALSE
             """,
             user_id,
@@ -98,12 +125,22 @@ async def mark_notification_read(
     user_id = int(current_user["id"])
 
     async with pool.acquire() as conn:
+        # Mitmarkieren, was zum selben Rechts-Update gehoert: die Liste zeigt
+        # einen Eintrag je Update, also muessen auch alle Zeilen dieses Updates
+        # quittiert werden — sonst kaeme der Eintrag als "ungelesen" zurueck.
         row = await conn.fetchrow(
             """
             UPDATE user_legal_notifications
             SET is_read = TRUE,
                 read_at = COALESCE(read_at, NOW())
-            WHERE id = $1 AND user_id = $2
+            WHERE user_id = $2
+              AND (
+                    id = $1
+                    OR legal_update_id = (
+                        SELECT legal_update_id FROM user_legal_notifications
+                        WHERE id = $1 AND user_id = $2 AND legal_update_id IS NOT NULL
+                    )
+                  )
             RETURNING id, read_at
             """,
             notification_id,

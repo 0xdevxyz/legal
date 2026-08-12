@@ -260,7 +260,7 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
         <Loader2 className="w-12 h-12 text-orange-500 animate-spin" />
-        <p className="text-gray-400">Lade Services...</p>
+        <p className="text-gray-600 dark:text-gray-400">Lade Services...</p>
       </div>
     );
   }
@@ -269,8 +269,8 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h3 className="text-lg font-semibold text-white mb-2">Service-Auswahl</h3>
-        <p className="text-sm text-gray-400">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Service-Auswahl</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
           Wählen Sie die Services aus, die Sie auf Ihrer Website verwenden.{' '}
           <Badge variant="secondary" className="bg-orange-500/20 text-orange-300 border-orange-500/30">
             {selectedServices.length} ausgewählt
@@ -284,7 +284,7 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <Radio className="w-5 h-5 text-orange-400" />
-              <h4 className="font-semibold text-white">Website-Scanner</h4>
+              <h4 className="font-semibold text-gray-900 dark:text-white">Website-Scanner</h4>
               <Badge variant="secondary" className="bg-orange-500 text-white text-xs">
                 <Sparkles className="w-3 h-3 mr-1" />
                 AI
@@ -298,7 +298,7 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
                   <Lock className="w-4 h-4 text-blue-400 flex-shrink-0" />
                   <div className="flex-1">
                     <p className="text-xs text-blue-300 font-medium">Ihre konfigurierte Website</p>
-                    <p className="text-sm text-white font-semibold">{userWebsiteUrl}</p>
+                    <p className="text-sm text-gray-900 dark:text-white font-semibold">{userWebsiteUrl}</p>
                   </div>
                   <Button
                     onClick={() => scanWebsiteAutomatically(userWebsiteUrl)}
@@ -318,7 +318,7 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
                     )}
                   </Button>
                 </div>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-gray-600 dark:text-gray-400">
                   Diese Website ist fest mit Ihrem Account verknüpft und kann nicht geändert werden.
                 </p>
               </div>
@@ -330,7 +330,7 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
                     placeholder="https://ihre-website.de"
                     value={userWebsiteUrl}
                     onChange={(e) => setUserWebsiteUrl(e.target.value)}
-                    className="flex-1 bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                    className="flex-1 bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500"
                   />
                   <Button
                     onClick={() => userWebsiteUrl && scanWebsiteAutomatically(userWebsiteUrl)}
@@ -351,7 +351,7 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
                   </Button>
                 </div>
                 
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-gray-600 dark:text-gray-400">
                   Geben Sie Ihre Website-URL ein, um automatisch alle verwendeten Cookies und Services zu erkennen.
                 </p>
               </>
@@ -362,7 +362,7 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
                 <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-orange-500 via-orange-400 to-orange-500 animate-[shimmer_1.5s_infinite] rounded-full" style={{width: '100%'}}></div>
                 </div>
-                <p className="text-xs text-gray-400">Analysiere {userWebsiteUrl}...</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Analysiere {userWebsiteUrl}...</p>
               </div>
             )}
             
@@ -397,12 +397,12 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
                         <p className="font-bold text-lg mb-2 text-green-400">
                           ✅ Kein Cookie-Banner erforderlich!
                         </p>
-                        <div className="text-sm text-gray-300 space-y-2">
+                        <div className="text-sm text-gray-700 dark:text-gray-300 space-y-2">
                           <p>
                             Unser Scan hat <strong className="text-green-400">keine Tracking-Cookies</strong> auf Ihrer Website gefunden.
                           </p>
-                          <div className="bg-gray-800/60 p-3 rounded-lg text-xs space-y-1 text-gray-400">
-                            <p className="font-semibold text-gray-300">Was bedeutet das?</p>
+                          <div className="bg-gray-100/60 dark:bg-gray-800/60 p-3 rounded-lg text-xs space-y-1 text-gray-600 dark:text-gray-400">
+                            <p className="font-semibold text-gray-700 dark:text-gray-300">Was bedeutet das?</p>
                             <ul className="list-disc list-inside">
                               <li>Ihre Website verwendet nur essenzielle Cookies</li>
                               <li>Sie müssen keinen Cookie-Banner einbinden</li>
@@ -425,12 +425,12 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
 
       {/* Eigene Dienste (Custom Services) */}
       {siteId && (
-        <Card className="border-gray-700 bg-gray-800/40 backdrop-blur-sm">
+        <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/40 dark:bg-gray-800/40 backdrop-blur-sm">
           <CardContent className="pt-6 space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="font-semibold text-white">Eigene Dienste</h4>
-                <p className="text-xs text-gray-400 mt-1">
+                <h4 className="font-semibold text-gray-900 dark:text-white">Eigene Dienste</h4>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                   Definieren Sie Tools, die nicht im Katalog sind. Domains werden automatisch vor Einwilligung blockiert.
                 </p>
               </div>
@@ -449,10 +449,10 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
             {customServices.length > 0 && (
               <div className="space-y-2">
                 {customServices.map((svc) => (
-                  <div key={svc.service_key} className="flex items-center justify-between p-3 bg-gray-900/60 border border-gray-700 rounded-lg">
+                  <div key={svc.service_key} className="flex items-center justify-between p-3 bg-white/60 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-lg">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-white truncate">{svc.name}</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{svc.name}</span>
                         <Badge variant="secondary" className="bg-gray-700 text-gray-200 text-[10px] capitalize">{svc.category}</Badge>
                       </div>
                       <p className="text-xs text-gray-500 truncate">
@@ -460,10 +460,10 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
                       </p>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => startEditCustom(svc)} title="Bearbeiten" className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded">
+                      <button onClick={() => startEditCustom(svc)} title="Bearbeiten" className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700 rounded">
                         <Pencil className="w-4 h-4" />
                       </button>
-                      <button onClick={() => deleteCustomService(svc.service_key)} title="Löschen" className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded">
+                      <button onClick={() => deleteCustomService(svc.service_key)} title="Löschen" className="p-2 text-gray-600 dark:text-gray-400 hover:text-red-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -474,21 +474,21 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
 
             {/* Formular */}
             {showCustomForm && (
-              <div className="p-4 bg-gray-900/60 border border-gray-700 rounded-lg space-y-3">
+              <div className="p-4 bg-white/60 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-lg space-y-3">
                 <div className="flex items-center justify-between">
-                  <h5 className="text-sm font-semibold text-white">{editingKey ? 'Dienst bearbeiten' : 'Neuer Dienst'}</h5>
-                  <button onClick={resetCustomForm} className="p-1 text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
+                  <h5 className="text-sm font-semibold text-gray-900 dark:text-white">{editingKey ? 'Dienst bearbeiten' : 'Neuer Dienst'}</h5>
+                  <button onClick={resetCustomForm} className="p-1 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"><X className="w-4 h-4" /></button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs text-gray-400">Name *</label>
+                    <label className="text-xs text-gray-600 dark:text-gray-400">Name *</label>
                     <Input value={customForm.name} onChange={(e) => setCustomForm({ ...customForm, name: e.target.value })}
-                      placeholder="z. B. Mein Analyse-Tool" className="bg-gray-800 border-gray-700 text-white" />
+                      placeholder="z. B. Mein Analyse-Tool" className="bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white" />
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400">Kategorie</label>
+                    <label className="text-xs text-gray-600 dark:text-gray-400">Kategorie</label>
                     <select value={customForm.category} onChange={(e) => setCustomForm({ ...customForm, category: e.target.value })}
-                      className="w-full h-10 px-3 rounded-md bg-gray-800 border border-gray-700 text-white text-sm">
+                      className="w-full h-10 px-3 rounded-md bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-sm">
                       <option value="necessary">Notwendig</option>
                       <option value="functional">Funktional</option>
                       <option value="analytics">Statistik</option>
@@ -496,29 +496,29 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400">Anbieter</label>
+                    <label className="text-xs text-gray-600 dark:text-gray-400">Anbieter</label>
                     <Input value={customForm.provider} onChange={(e) => setCustomForm({ ...customForm, provider: e.target.value })}
-                      placeholder="z. B. Beispiel GmbH" className="bg-gray-800 border-gray-700 text-white" />
+                      placeholder="z. B. Beispiel GmbH" className="bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white" />
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400">Datenschutz-URL</label>
+                    <label className="text-xs text-gray-600 dark:text-gray-400">Datenschutz-URL</label>
                     <Input value={customForm.privacy_url} onChange={(e) => setCustomForm({ ...customForm, privacy_url: e.target.value })}
-                      placeholder="https://…/datenschutz" className="bg-gray-800 border-gray-700 text-white" />
+                      placeholder="https://…/datenschutz" className="bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white" />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="text-xs text-gray-400">Domains (kommagetrennt) — werden vor Einwilligung blockiert</label>
+                    <label className="text-xs text-gray-600 dark:text-gray-400">Domains (kommagetrennt) — werden vor Einwilligung blockiert</label>
                     <Input value={customForm.domains} onChange={(e) => setCustomForm({ ...customForm, domains: e.target.value })}
-                      placeholder="example.com, cdn.example.com" className="bg-gray-800 border-gray-700 text-white" />
+                      placeholder="example.com, cdn.example.com" className="bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white" />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="text-xs text-gray-400">Cookie-Namen (kommagetrennt)</label>
+                    <label className="text-xs text-gray-600 dark:text-gray-400">Cookie-Namen (kommagetrennt)</label>
                     <Input value={customForm.cookies} onChange={(e) => setCustomForm({ ...customForm, cookies: e.target.value })}
-                      placeholder="_myid, _mysession" className="bg-gray-800 border-gray-700 text-white" />
+                      placeholder="_myid, _mysession" className="bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white" />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="text-xs text-gray-400">Beschreibung</label>
+                    <label className="text-xs text-gray-600 dark:text-gray-400">Beschreibung</label>
                     <Input value={customForm.description} onChange={(e) => setCustomForm({ ...customForm, description: e.target.value })}
-                      placeholder="Wofür wird der Dienst genutzt?" className="bg-gray-800 border-gray-700 text-white" />
+                      placeholder="Wofür wird der Dienst genutzt?" className="bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white" />
                   </div>
                 </div>
                 {customError && <p className="text-sm text-red-400">{customError}</p>}
@@ -526,7 +526,7 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
                   <Button onClick={saveCustomService} disabled={savingCustom} className="bg-orange-500 hover:bg-orange-600 text-white">
                     {savingCustom ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Speichern…</> : (editingKey ? 'Änderungen speichern' : 'Dienst anlegen')}
                   </Button>
-                  <Button variant="outline" onClick={resetCustomForm} className="border-gray-700 text-gray-300 hover:bg-gray-700">
+                  <Button variant="outline" onClick={resetCustomForm} className="border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700">
                     Abbrechen
                   </Button>
                 </div>
@@ -539,12 +539,12 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
       {/* Search & Filter */}
       <div className="space-y-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 dark:text-gray-400" />
           <Input
             placeholder="Services durchsuchen..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+            className="pl-10 bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500"
           />
         </div>
         
@@ -568,11 +568,11 @@ const ServiceManager: React.FC<ServiceManagerProps> = ({
       
       {/* Services Grid */}
       {filteredServices.length === 0 ? (
-        <Card className="border-gray-700 bg-gray-800/30 border-dashed">
+        <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/30 dark:bg-gray-800/30 border-dashed">
           <CardContent className="py-12">
             <div className="text-center space-y-3">
               <AlertCircle className="w-12 h-12 text-gray-600 mx-auto" />
-              <h3 className="text-lg font-semibold text-gray-400">Keine Services gefunden</h3>
+              <h3 className="text-lg font-semibold text-gray-600 dark:text-gray-400">Keine Services gefunden</h3>
               <p className="text-sm text-gray-500">
                 {searchTerm || categoryFilter !== 'all' 
                   ? 'Versuchen Sie andere Suchbegriffe oder Filter.'
@@ -662,14 +662,14 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
                   ? `${colors.check} border-transparent`
                   : 'border-gray-600 bg-gray-700/50'
               }`}>
-                {isSelected && <Check className="w-3 h-3 text-white" />}
+                {isSelected && <Check className="w-3 h-3 text-gray-900 dark:text-white" />}
               </div>
               
               {/* Service Info */}
               <div className="flex-1 min-w-0">
-                <h4 className="font-semibold text-white truncate">{service.name}</h4>
+                <h4 className="font-semibold text-gray-900 dark:text-white truncate">{service.name}</h4>
                 {service.provider && (
-                  <p className="text-xs text-gray-400 mt-0.5">{service.provider}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{service.provider}</p>
                 )}
               </div>
             </div>
@@ -694,7 +694,7 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
           
           {/* Description */}
           {(service.template?.description_de || service.description) && (
-            <p className="text-sm text-gray-400 line-clamp-2">
+            <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
               {service.template?.description_de || service.description}
             </p>
           )}
@@ -704,7 +704,7 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
             variant="ghost"
             size="sm"
             onClick={() => setIsExpanded(!isExpanded)}
-            className="w-full text-gray-400 hover:text-white hover:bg-gray-700/50"
+            className="w-full text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/50 dark:hover:bg-gray-700/50"
           >
             {isExpanded ? (
               <>
@@ -719,16 +719,16 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
           
           {/* Expandable Details */}
           {isExpanded && (
-            <div className="space-y-3 pt-3 border-t border-gray-700">
+            <div className="space-y-3 pt-3 border-t border-gray-200 dark:border-gray-700">
               {/* Cookies */}
               {((service.template?.cookies?.length ?? 0) > 0 || (service.cookies?.length ?? 0) > 0) && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-300 mb-1.5">Cookies:</p>
+                  <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Cookies:</p>
                   <div className="flex flex-wrap gap-1">
                     {(service.template?.cookies || service.cookies || []).map((c: any, i: number) => (
                       <span
                         key={i}
-                        className="px-2 py-0.5 text-xs bg-gray-700/70 text-gray-300 rounded border border-gray-600"
+                        className="px-2 py-0.5 text-xs bg-gray-700/70 text-gray-700 dark:text-gray-300 rounded border border-gray-600"
                       >
                         {typeof c === 'string' ? c : c.name}
                         {typeof c !== 'string' && c.duration && (
@@ -744,8 +744,8 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
                   Fallback auf alte template-Liste (reine String-Namen) */}
               {(service.data_processing_countries?.length ?? 0) > 0 ? (
                 <div>
-                  <p className="text-xs font-semibold text-gray-300 mb-1">Datenverarbeitung in:</p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Datenverarbeitung in:</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
                     {service.data_processing_countries!.map(c => c.name).join(', ')}
                   </p>
                   {(service.unsafe_third_country_names?.length ?? 0) > 0 && (
@@ -756,8 +756,8 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
                 </div>
               ) : (service.template?.data_processing_countries?.length ?? 0) > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-300 mb-1">Datenverarbeitung in:</p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Datenverarbeitung in:</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
                     {service.template!.data_processing_countries!.join(', ')}
                   </p>
                 </div>

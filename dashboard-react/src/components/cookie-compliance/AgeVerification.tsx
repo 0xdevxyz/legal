@@ -92,7 +92,7 @@ export default function AgeVerification({ siteId, config, onSave }: AgeVerificat
             <Shield className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
             <div>
               <h4 className="font-semibold text-purple-300">Jugendschutz nach DSGVO Art. 8</h4>
-              <p className="text-sm text-gray-300 mt-1">
+              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
                 Minderjährige können nur mit Zustimmung eines Erziehungsberechtigten einwilligen.
                 Die Altersgrenzen variieren je nach EU-Mitgliedstaat zwischen 13 und 16 Jahren.
               </p>
@@ -102,9 +102,9 @@ export default function AgeVerification({ siteId, config, onSave }: AgeVerificat
       </Card>
 
       {/* Main Settings */}
-      <Card className="bg-gray-800/50 border-gray-700">
+      <Card className="bg-gray-100/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
+          <CardTitle className="text-gray-900 dark:text-white flex items-center gap-2">
             <Users className="w-5 h-5 text-purple-400" />
             Altersverifikation
           </CardTitle>
@@ -114,10 +114,10 @@ export default function AgeVerification({ siteId, config, onSave }: AgeVerificat
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Enable/Disable */}
-          <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg border border-gray-700">
+          <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
             <div>
-              <Label className="text-white font-medium">Altersabfrage aktivieren</Label>
-              <p className="text-sm text-gray-400 mt-1">
+              <Label className="text-gray-900 dark:text-white font-medium">Altersabfrage aktivieren</Label>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 Zeigt eine Altersabfrage vor dem Cookie-Banner
               </p>
             </div>
@@ -131,14 +131,14 @@ export default function AgeVerification({ siteId, config, onSave }: AgeVerificat
             <>
               {/* Age Selection */}
               <div className="space-y-3">
-                <Label className="text-sm text-gray-300">Standard-Mindestalter</Label>
+                <Label className="text-sm text-gray-700 dark:text-gray-300">Standard-Mindestalter</Label>
                 <Select value={String(minAge)} onValueChange={(v) => setMinAge(Number(v))}>
-                  <SelectTrigger className="bg-gray-900 border-gray-600 text-white">
+                  <SelectTrigger className="bg-white dark:bg-gray-900 border-gray-600 text-gray-900 dark:text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
+                  <SelectContent className="bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
                     {[13, 14, 15, 16].map(age => (
-                      <SelectItem key={age} value={String(age)} className="text-white">
+                      <SelectItem key={age} value={String(age)} className="text-gray-900 dark:text-white">
                         {age} Jahre
                       </SelectItem>
                     ))}
@@ -151,14 +151,14 @@ export default function AgeVerification({ siteId, config, onSave }: AgeVerificat
 
               {/* Country Age Limits */}
               <div className="space-y-3">
-                <h4 className="text-sm font-medium text-gray-300">Länderspezifische Altersgrenzen</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-64 overflow-y-auto p-2 bg-gray-900/30 rounded-lg border border-gray-700">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Länderspezifische Altersgrenzen</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-64 overflow-y-auto p-2 bg-white/30 dark:bg-gray-900/30 rounded-lg border border-gray-200 dark:border-gray-700">
                   {Object.entries(COUNTRY_AGE_LIMITS).map(([code, { name, age }]) => (
                     <div 
                       key={code} 
-                      className="flex items-center justify-between p-2 bg-gray-800/50 rounded text-sm"
+                      className="flex items-center justify-between p-2 bg-gray-100/50 dark:bg-gray-800/50 rounded text-sm"
                     >
-                      <span className="text-gray-300">{code}</span>
+                      <span className="text-gray-700 dark:text-gray-300">{code}</span>
                       <Badge variant="outline" className={`text-xs ${age === minAge ? 'border-purple-500 text-purple-400' : ''}`}>
                         {age} J.
                       </Badge>
@@ -171,8 +171,8 @@ export default function AgeVerification({ siteId, config, onSave }: AgeVerificat
               </div>
 
               {/* Preview */}
-              <div className="p-4 bg-gray-900/50 rounded-lg border border-gray-700">
-                <h4 className="text-sm font-medium text-gray-300 mb-3">Vorschau der Altersabfrage</h4>
+              <div className="p-4 bg-white/50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Vorschau der Altersabfrage</h4>
                 <div className="p-4 bg-white rounded-lg text-gray-800 text-center">
                   <p className="font-medium mb-2">🔒 Altersverifikation erforderlich</p>
                   <p className="text-sm text-gray-600 mb-4">

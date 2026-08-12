@@ -13,9 +13,9 @@ export default function PrivacyPage() {
             <div className="p-3 bg-blue-500/20 rounded-xl">
               <Shield className="w-8 h-8 text-blue-400" />
             </div>
-            <h1 className="text-4xl font-bold text-white">Datenschutzerklärung</h1>
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Datenschutzerklärung</h1>
           </div>
-          <p className="text-zinc-400 text-lg">
+          <p className="text-gray-600 dark:text-zinc-400 text-lg">
             Wir nehmen den Schutz Ihrer persönlichen Daten sehr ernst. Hier erfahren Sie, welche Daten wir erheben, wie wir sie verwenden und welche Rechte Sie haben.
           </p>
           <p className="text-zinc-500 text-sm mt-2">
@@ -29,10 +29,10 @@ export default function PrivacyPage() {
           <section className="glass-card rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <FileText className="w-6 h-6 text-purple-400" />
-              <h2 className="text-2xl font-bold text-white">1. Verantwortlicher</h2>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">1. Verantwortlicher</h2>
             </div>
-            <div className="text-zinc-300 space-y-2">
-              <p><strong className="text-white">Complyo.tech</strong></p>
+            <div className="text-gray-700 dark:text-zinc-300 space-y-2">
+              <p><strong className="text-gray-900 dark:text-white">Complyo.tech</strong></p>
               <p>[Adresse wird ergänzt]</p>
               <p>E-Mail: <a href="mailto:contact@complyo.de" className="text-blue-400 hover:text-blue-300">contact@complyo.de</a></p>
               <p className="text-sm text-zinc-500 mt-4">
@@ -45,16 +45,16 @@ export default function PrivacyPage() {
           <section className="glass-card rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <Database className="w-6 h-6 text-green-400" />
-              <h2 className="text-2xl font-bold text-white">2. Welche Daten werden gespeichert?</h2>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">2. Welche Daten werden gespeichert?</h2>
             </div>
             
             <div className="space-y-6">
               {/* Account-Daten */}
               <div>
-                <h3 className="text-lg font-semibold text-white mb-3">Account-Daten</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Account-Daten</h3>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-zinc-300">
-                    <thead className="dark:bg-zinc-800/50 bg-gray-50 text-white">
+                  <table className="w-full text-sm text-gray-700 dark:text-zinc-300">
+                    <thead className="dark:bg-zinc-800/50 bg-gray-50 text-gray-900 dark:text-white">
                       <tr>
                         <th className="text-left p-3">Datentyp</th>
                         <th className="text-left p-3">Zweck</th>
@@ -89,10 +89,10 @@ export default function PrivacyPage() {
 
               {/* Scan-Daten */}
               <div>
-                <h3 className="text-lg font-semibold text-white mb-3">Website-Scan-Daten</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Website-Scan-Daten</h3>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-zinc-300">
-                    <thead className="dark:bg-zinc-800/50 bg-gray-50 text-white">
+                  <table className="w-full text-sm text-gray-700 dark:text-zinc-300">
+                    <thead className="dark:bg-zinc-800/50 bg-gray-50 text-gray-900 dark:text-white">
                       <tr>
                         <th className="text-left p-3">Datentyp</th>
                         <th className="text-left p-3">Zweck</th>
@@ -126,14 +126,14 @@ export default function PrivacyPage() {
           <section className="glass-card rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <Cookie className="w-6 h-6 text-teal-400" />
-              <h2 className="text-2xl font-bold text-white">3. Cookies & Lokale Speicherung</h2>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">3. Cookies & Lokale Speicherung</h2>
             </div>
             
             <div className="space-y-6">
               {/* Notwendige Cookies */}
               <div>
-                <h3 className="text-lg font-semibold text-white mb-2">Notwendige Cookies</h3>
-                <p className="text-zinc-400 text-sm mb-3">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Notwendige Cookies</h3>
+                <p className="text-gray-600 dark:text-zinc-400 text-sm mb-3">
                   Diese Cookies sind für die Funktionsfähigkeit der Plattform erforderlich.
                 </p>
                 <div className="space-y-3">
@@ -142,7 +142,7 @@ export default function PrivacyPage() {
                       <span className="font-mono text-blue-400">access_token</span>
                       <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">Notwendig</span>
                     </div>
-                    <p className="text-sm text-zinc-400">
+                    <p className="text-sm text-gray-600 dark:text-zinc-400">
                       <strong>Zweck:</strong> Authentifizierung<br />
                       <strong>Speicherdauer:</strong> 24 Stunden<br />
                       <strong>Typ:</strong> HTTP-Only Cookie
@@ -153,7 +153,7 @@ export default function PrivacyPage() {
                       <span className="font-mono text-blue-400">refresh_token</span>
                       <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">Notwendig</span>
                     </div>
-                    <p className="text-sm text-zinc-400">
+                    <p className="text-sm text-gray-600 dark:text-zinc-400">
                       <strong>Zweck:</strong> Token-Erneuerung<br />
                       <strong>Speicherdauer:</strong> 7 Tage<br />
                       <strong>Typ:</strong> HTTP-Only Cookie
@@ -164,8 +164,8 @@ export default function PrivacyPage() {
 
               {/* Funktionale Cookies */}
               <div>
-                <h3 className="text-lg font-semibold text-white mb-2">Funktionale Cookies (localStorage)</h3>
-                <p className="text-zinc-400 text-sm mb-3">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Funktionale Cookies (localStorage)</h3>
+                <p className="text-gray-600 dark:text-zinc-400 text-sm mb-3">
                   Diese Cookies speichern Ihre Präferenzen und sind nicht essentiell.
                 </p>
                 <div className="space-y-3">
@@ -174,7 +174,7 @@ export default function PrivacyPage() {
                       <span className="font-mono text-purple-400">user_preferences</span>
                       <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">Funktional</span>
                     </div>
-                    <p className="text-sm text-zinc-400">
+                    <p className="text-sm text-gray-600 dark:text-zinc-400">
                       <strong>Zweck:</strong> UI-Einstellungen (Theme, Sprache)<br />
                       <strong>Speicherdauer:</strong> Unbegrenzt<br />
                       <strong>Typ:</strong> localStorage
@@ -185,7 +185,7 @@ export default function PrivacyPage() {
                       <span className="font-mono text-purple-400">cookie_consent</span>
                       <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">Funktional</span>
                     </div>
-                    <p className="text-sm text-zinc-400">
+                    <p className="text-sm text-gray-600 dark:text-zinc-400">
                       <strong>Zweck:</strong> Speichert Ihre Cookie-Einwilligung<br />
                       <strong>Speicherdauer:</strong> 1 Jahr<br />
                       <strong>Typ:</strong> localStorage
@@ -200,45 +200,45 @@ export default function PrivacyPage() {
           <section className="glass-card rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <Globe className="w-6 h-6 text-cyan-400" />
-              <h2 className="text-2xl font-bold text-white">4. Weitergabe an Dritte</h2>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">4. Weitergabe an Dritte</h2>
             </div>
             
             <div className="space-y-4">
               <div className="border-l-4 border-blue-500 bg-blue-500/10 rounded-r-lg p-4">
-                <h3 className="text-lg font-semibold text-white mb-2">Interner Rechtstexte-Generator</h3>
-                <p className="text-zinc-400 text-sm mb-2">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Interner Rechtstexte-Generator</h3>
+                <p className="text-gray-600 dark:text-zinc-400 text-sm mb-2">
                   <strong>Zweck:</strong> Generierung und Aktualisierung rechtlicher Texte (Impressum, Datenschutzerklärung)
                 </p>
-                <p className="text-zinc-400 text-sm">
+                <p className="text-gray-600 dark:text-zinc-400 text-sm">
                   <strong>Verarbeitete Daten:</strong> Domain/URL, Firmendaten (nur wenn Sie diese eingeben)
                 </p>
               </div>
 
               <div className="border-l-4 border-purple-500 bg-purple-500/10 rounded-r-lg p-4">
-                <h3 className="text-lg font-semibold text-white mb-2">Stripe Payment API</h3>
-                <p className="text-zinc-400 text-sm mb-2">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Stripe Payment API</h3>
+                <p className="text-gray-600 dark:text-zinc-400 text-sm mb-2">
                   <strong>Zweck:</strong> Zahlungsabwicklung und Abo-Management
                 </p>
-                <p className="text-zinc-400 text-sm mb-2">
+                <p className="text-gray-600 dark:text-zinc-400 text-sm mb-2">
                   <strong>Übermittelte Daten:</strong> E-Mail, Name, Zahlungsinformationen (direkt an Stripe)
                 </p>
-                <p className="text-zinc-400 text-sm">
+                <p className="text-gray-600 dark:text-zinc-400 text-sm">
                   <strong>Datenschutz:</strong> <a href="https://stripe.com/de/privacy" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300">https://stripe.com/de/privacy</a>
                 </p>
               </div>
 
               <div className="border-l-4 border-green-500 bg-green-500/10 rounded-r-lg p-4">
-                <h3 className="text-lg font-semibold text-white mb-2">OpenAI API (GPT-4)</h3>
-                <p className="text-zinc-400 text-sm mb-2">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">OpenAI API (GPT-4)</h3>
+                <p className="text-gray-600 dark:text-zinc-400 text-sm mb-2">
                   <strong>Zweck:</strong> AI-Fix-Generierung, Compliance-Analyse
                 </p>
-                <p className="text-zinc-400 text-sm mb-2">
+                <p className="text-gray-600 dark:text-zinc-400 text-sm mb-2">
                   <strong>Übermittelte Daten:</strong> Website-Inhalte (HTML, CSS), Issue-Beschreibungen
                 </p>
-                <p className="text-zinc-400 text-sm mb-2">
+                <p className="text-gray-600 dark:text-zinc-400 text-sm mb-2">
                   <strong>Wichtig:</strong> KEINE persönlichen Nutzerdaten werden an OpenAI übermittelt
                 </p>
-                <p className="text-zinc-400 text-sm">
+                <p className="text-gray-600 dark:text-zinc-400 text-sm">
                   <strong>Datenschutz:</strong> <a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300">https://openai.com/policies/privacy-policy</a>
                 </p>
               </div>
@@ -249,41 +249,41 @@ export default function PrivacyPage() {
           <section className="glass-card rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <Lock className="w-6 h-6 text-yellow-400" />
-              <h2 className="text-2xl font-bold text-white">5. Ihre Rechte</h2>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">5. Ihre Rechte</h2>
             </div>
             
-            <p className="text-zinc-400 mb-4">
+            <p className="text-gray-600 dark:text-zinc-400 mb-4">
               Sie haben jederzeit folgende Rechte bezüglich Ihrer personenbezogenen Daten:
             </p>
             
             <div className="space-y-3">
               <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 15 DSGVO</span>
-                <span className="text-zinc-300">Auskunft über gespeicherte Daten</span>
+                <span className="text-gray-700 dark:text-zinc-300">Auskunft über gespeicherte Daten</span>
               </div>
               <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 16 DSGVO</span>
-                <span className="text-zinc-300">Berichtigung unrichtiger Daten</span>
+                <span className="text-gray-700 dark:text-zinc-300">Berichtigung unrichtiger Daten</span>
               </div>
               <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 17 DSGVO</span>
-                <span className="text-zinc-300">Löschung gespeicherter Daten ("Recht auf Vergessenwerden")</span>
+                <span className="text-gray-700 dark:text-zinc-300">Löschung gespeicherter Daten ("Recht auf Vergessenwerden")</span>
               </div>
               <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 18 DSGVO</span>
-                <span className="text-zinc-300">Einschränkung der Verarbeitung</span>
+                <span className="text-gray-700 dark:text-zinc-300">Einschränkung der Verarbeitung</span>
               </div>
               <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 20 DSGVO</span>
-                <span className="text-zinc-300">Datenportabilität (Export als JSON/CSV)</span>
+                <span className="text-gray-700 dark:text-zinc-300">Datenportabilität (Export als JSON/CSV)</span>
               </div>
               <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 21 DSGVO</span>
-                <span className="text-zinc-300">Widerspruch gegen Datenverarbeitung</span>
+                <span className="text-gray-700 dark:text-zinc-300">Widerspruch gegen Datenverarbeitung</span>
               </div>
               <div className="flex items-start gap-3 p-3 dark:bg-zinc-800/30 bg-gray-50 rounded-lg">
                 <span className="text-blue-400 font-bold">Art. 77 DSGVO</span>
-                <span className="text-zinc-300">Beschwerde bei Aufsichtsbehörde</span>
+                <span className="text-gray-700 dark:text-zinc-300">Beschwerde bei Aufsichtsbehörde</span>
               </div>
             </div>
           </section>
@@ -292,33 +292,33 @@ export default function PrivacyPage() {
           <section className="glass-card rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <Shield className="w-6 h-6 text-red-400" />
-              <h2 className="text-2xl font-bold text-white">6. Datensicherheit</h2>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">6. Datensicherheit</h2>
             </div>
             
             <div className="grid md:grid-cols-2 gap-4">
               <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
-                <h3 className="text-white font-semibold mb-2">🔒 Verschlüsselung</h3>
-                <p className="text-zinc-400 text-sm">TLS 1.3 für alle Verbindungen</p>
+                <h3 className="text-gray-900 dark:text-white font-semibold mb-2">🔒 Verschlüsselung</h3>
+                <p className="text-gray-600 dark:text-zinc-400 text-sm">TLS 1.3 für alle Verbindungen</p>
               </div>
               <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
-                <h3 className="text-white font-semibold mb-2">🔑 Passwort-Schutz</h3>
-                <p className="text-zinc-400 text-sm">bcrypt Hashing mit Salt</p>
+                <h3 className="text-gray-900 dark:text-white font-semibold mb-2">🔑 Passwort-Schutz</h3>
+                <p className="text-gray-600 dark:text-zinc-400 text-sm">bcrypt Hashing mit Salt</p>
               </div>
               <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
-                <h3 className="text-white font-semibold mb-2">🗄️ Datenbank</h3>
-                <p className="text-zinc-400 text-sm">PostgreSQL mit Row-Level Security</p>
+                <h3 className="text-gray-900 dark:text-white font-semibold mb-2">🗄️ Datenbank</h3>
+                <p className="text-gray-600 dark:text-zinc-400 text-sm">PostgreSQL mit Row-Level Security</p>
               </div>
               <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
-                <h3 className="text-white font-semibold mb-2">💾 Backups</h3>
-                <p className="text-zinc-400 text-sm">Tägliche verschlüsselte Backups</p>
+                <h3 className="text-gray-900 dark:text-white font-semibold mb-2">💾 Backups</h3>
+                <p className="text-gray-600 dark:text-zinc-400 text-sm">Tägliche verschlüsselte Backups</p>
               </div>
               <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
-                <h3 className="text-white font-semibold mb-2">🌍 Server-Standort</h3>
-                <p className="text-zinc-400 text-sm">EU-Rechenzentren (Deutschland)</p>
+                <h3 className="text-gray-900 dark:text-white font-semibold mb-2">🌍 Server-Standort</h3>
+                <p className="text-gray-600 dark:text-zinc-400 text-sm">EU-Rechenzentren (Deutschland)</p>
               </div>
               <div className="dark:bg-zinc-800/30 bg-gray-50 rounded-lg p-4">
-                <h3 className="text-white font-semibold mb-2">🔐 Zugriffskontrolle</h3>
-                <p className="text-zinc-400 text-sm">2FA für Admin-Zugriffe</p>
+                <h3 className="text-gray-900 dark:text-white font-semibold mb-2">🔐 Zugriffskontrolle</h3>
+                <p className="text-gray-600 dark:text-zinc-400 text-sm">2FA für Admin-Zugriffe</p>
               </div>
             </div>
           </section>
@@ -327,16 +327,16 @@ export default function PrivacyPage() {
           <section className="glass-card rounded-2xl p-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20">
             <div className="flex items-center gap-3 mb-4">
               <Mail className="w-6 h-6 text-blue-400" />
-              <h2 className="text-2xl font-bold text-white">Kontakt</h2>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Kontakt</h2>
             </div>
             
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-2 text-gray-700 dark:text-zinc-300">
               <p>
-                <strong className="text-white">Allgemeine Anfragen:</strong>{' '}
+                <strong className="text-gray-900 dark:text-white">Allgemeine Anfragen:</strong>{' '}
                 <a href="mailto:contact@complyo.de" className="text-blue-400 hover:text-blue-300">contact@complyo.de</a>
               </p>
               <p>
-                <strong className="text-white">Datenschutz-Anfragen:</strong>{' '}
+                <strong className="text-gray-900 dark:text-white">Datenschutz-Anfragen:</strong>{' '}
                 <a href="mailto:privacy@complyo.de" className="text-blue-400 hover:text-blue-300">privacy@complyo.de</a>
               </p>
             </div>

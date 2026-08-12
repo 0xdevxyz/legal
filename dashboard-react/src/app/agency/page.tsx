@@ -299,7 +299,7 @@ function ProjectsCard() {
               <button
                 onClick={() => startCheckout('agency_extra')}
                 disabled={checkoutPlan !== null}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg dark:bg-zinc-800 bg-gray-100 hover:bg-zinc-700 dark:text-white text-gray-900 font-semibold text-sm transition-colors disabled:opacity-60"
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg dark:bg-zinc-800 bg-gray-100 hover:bg-gray-200 dark:hover:bg-zinc-700 dark:text-white text-gray-900 font-semibold text-sm transition-colors disabled:opacity-60"
               >
                 {checkoutPlan === 'agency_extra' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 +1 Website
@@ -347,7 +347,7 @@ function ProjectsCard() {
             const score = site.last_score ?? site.compliance_score ?? null;
             const isActive = activeSite?.id === site.id;
             return (
-              <li key={site.id} className="px-6 py-4 flex items-center gap-3 hover:bg-zinc-800/30 transition-colors duration-150">
+              <li key={site.id} className="px-6 py-4 flex items-center gap-3 hover:bg-gray-100/30 dark:hover:bg-zinc-800/30 transition-colors duration-150">
                 <div className="flex-shrink-0 w-8 h-8 dark:bg-zinc-800 bg-gray-100 rounded-md flex items-center justify-center">
                   <Globe className="w-4 h-4 dark:text-zinc-400 text-gray-600" />
                 </div>
@@ -378,7 +378,7 @@ function ProjectsCard() {
                   onClick={() => handleDelete(site.id)}
                   disabled={deletingId === site.id}
                   aria-label={`${label} entfernen`}
-                  className="p-2 rounded-lg dark:text-zinc-500 text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0 disabled:opacity-50"
+                  className="p-2 rounded-lg dark:text-zinc-500 text-gray-600 dark:text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0 disabled:opacity-50"
                 >
                   {deletingId === site.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                 </button>
@@ -552,7 +552,7 @@ export default function AgencyPage() {
         <p className="dark:text-zinc-400 text-gray-600 text-sm mb-6">{error}</p>
         <button
           onClick={fetchStats}
-          className="inline-flex items-center gap-2 px-5 py-2.5 dark:bg-zinc-800 bg-gray-100 hover:bg-zinc-700 dark:text-white text-gray-900 font-medium rounded-lg transition-colors duration-200"
+          className="inline-flex items-center gap-2 px-5 py-2.5 dark:bg-zinc-800 bg-gray-100 hover:bg-gray-200 dark:hover:bg-zinc-700 dark:text-white text-gray-900 font-medium rounded-lg transition-colors duration-200"
         >
           <RefreshCw className="w-4 h-4" />
           Erneut versuchen
@@ -716,7 +716,7 @@ export default function AgencyPage() {
               <h2 className="dark:text-white text-gray-900 font-semibold">Client-Websites im Überblick</h2>
               <button
                 onClick={fetchStats}
-                className="inline-flex items-center gap-1.5 text-xs dark:text-zinc-400 text-gray-600 hover:text-white transition-colors duration-200"
+                className="inline-flex items-center gap-1.5 text-xs dark:text-zinc-400 text-gray-600 hover:text-gray-900 dark:hover:text-white transition-colors duration-200"
                 aria-label="Statistiken aktualisieren"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
@@ -751,7 +751,7 @@ export default function AgencyPage() {
                       return (
                         <tr
                           key={site.site_id}
-                          className="border-t dark:border-zinc-800 border-gray-200 hover:bg-zinc-800/50 transition-colors duration-150"
+                          className="border-t dark:border-zinc-800 border-gray-200 hover:bg-gray-100/50 dark:hover:bg-zinc-800/50 transition-colors duration-150"
                         >
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">

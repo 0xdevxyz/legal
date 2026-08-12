@@ -32,7 +32,7 @@ export const AIFixPreview: React.FC<AIFixPreviewProps> = ({ issue, onGenerateFul
       {/* Header */}
       <div className="flex items-start gap-3 mb-3">
         <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${urgencyColor[explanation.urgency]} flex items-center justify-center flex-shrink-0`}>
-          <Sparkles className="w-5 h-5 text-white" />
+          <Sparkles className="w-5 h-5 text-gray-900 dark:text-white" />
         </div>
         <div className="flex-1">
           <h4 className="font-semibold text-gray-900 mb-1">KI-Vorschlag</h4>

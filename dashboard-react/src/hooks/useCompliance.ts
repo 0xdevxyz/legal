@@ -2,7 +2,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { analyzeWebsite, startAIFix, bookExpertConsultation, getLegalNews, apiClient } from '@/lib/api';
 import type { ComplianceAnalysis } from '@/types/api';
 
-export const useComplianceAnalysis = (url: string | null) => {
+/**
+ * @param scanTokenRef Fortschritts-Token des laufenden Scans. Der Scanner meldet
+ *   darunter, welche Pruefung gerade laeuft (`/api/v2/analyze-progress/{token}`).
+ *   Ohne Token gibt es keinen Fortschritt — genau deshalb zeigte der Rescan im
+ *   Backoffice nur einen Spinner, waehrend der Scan auf der Startseite eine
+ *   Live-Liste hatte. Als Ref, damit der Query-Key stabil bleibt und die
+ *   bestehenden invalidateQueries-Aufrufe weiter greifen.
+ */
+export const useComplianceAnalysis = (
+  url: string | null,
+  scanTokenRef?: { current: string | null },
+) => {
   return useQuery<ComplianceAnalysis>({
     queryKey: ['compliance-analysis', url],
     queryFn: async () => {
@@ -16,7 +27,7 @@ export const useComplianceAnalysis = (url: string | null) => {
       const trimmedUrl = url.trim();
 
       try {
-        const result = await analyzeWebsite(trimmedUrl);
+        const result = await analyzeWebsite(trimmedUrl, undefined, scanTokenRef?.current ?? undefined);
 
         return result;
       } catch (error) {

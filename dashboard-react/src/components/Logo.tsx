@@ -1,10 +1,18 @@
+'use client';
+
 import React from 'react';
 import Image from 'next/image';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   showText?: boolean;
-  variant?: 'default' | 'light' | 'dark';
+  /**
+   * 'auto' (Standard) folgt dem aktiven Theme. 'light'/'dark' beschreiben den
+   * HINTERGRUND, auf dem das Logo sitzt — nur setzen, wenn der Hintergrund
+   * unabhaengig vom Theme fest ist (z. B. Login-Panel).
+   */
+  variant?: 'auto' | 'default' | 'light' | 'dark';
   className?: string;
   onClick?: () => void;
 }
@@ -28,21 +36,24 @@ const sizeConfig = {
   }
 };
 
-export const Logo: React.FC<LogoProps> = ({ 
-  size = 'md', 
-  showText = true, 
-  variant = 'default',
+export const Logo: React.FC<LogoProps> = ({
+  size = 'md',
+  showText = true,
+  variant = 'auto',
   className = '',
-  onClick 
+  onClick
 }) => {
   const config = sizeConfig[size];
-  
-  // Wähle das richtige Logo basierend auf Variante
-  // light = heller Hintergrund -> logo-dark.png (dunkler Text)
-  // dark/default = dunkler Hintergrund -> logo-light.png (heller Text)
-  const logoSrc = variant === 'light' 
+  const { theme } = useTheme();
+
+  // Das Logo folgt standardmaessig dem Theme. Vorher stand hier fest die
+  // helle Variante — im hellen Design war das weisse Logo damit unsichtbar.
+  // light/dark beschreiben den Hintergrund: heller Hintergrund braucht das
+  // dunkle Logo und umgekehrt.
+  const hintergrundHell = variant === 'auto' ? theme === 'light' : variant === 'light';
+  const logoSrc = hintergrundHell
     ? '/logo-dark-trim.png'   // Dunkles Logo für hellen Hintergrund
-    : '/logo-light-trim.png'; // Helles Logo für dunklen Hintergrund (default)
+    : '/logo-light-trim.png'; // Helles Logo für dunklen Hintergrund
 
   return (
     <div 

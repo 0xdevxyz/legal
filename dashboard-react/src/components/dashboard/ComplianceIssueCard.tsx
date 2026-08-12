@@ -590,9 +590,14 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         </div>
       )}
 
-      {/* Lösung - IMMER SICHTBAR, mit spezifischen Handlungsanweisungen */}
-      {issue.solution && (
-        <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
+      {/* Lösung mit Weg zum passenden Werkzeug.
+          Frueher haing dieser gesamte Block an `issue.solution` — ein Feld, das
+          der Scanner nie befuellt (nachgezaehlt: 0 von 207 Befunden). Damit war
+          jeder Weiterleitungs-Button hier toter Code: der Nutzer sah den Fehler
+          und die Empfehlung, aber nie einen Weg zur Behebung. Die Bloecke
+          darunter decken jede Kategorie ab und enden in einem Fallback, also
+          bekommt jetzt jeder Befund einen Weg. */}
+      <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
           <h4 className="font-semibold text-gray-800 mb-3">📝 Konkrete Handlungsschritte:</h4>
           
           {/* ✅ Datenschutz/Impressum: Spezifische Anleitung */}
@@ -736,12 +741,11 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                     <li>Aktualisieren Sie Ihre Datenschutzerklärung entsprechend der gefundenen Datenverarbeitungen</li>
                     <li>Nutzen Sie unseren Generator für eine rechtssichere und vollständige Datenschutzerklärung</li>
                   </ol>
+                  {/* Direkt den Generator oeffnen. Vorher wurde ein Event
+                      `complyo:open-legal-generator` gefeuert, das nirgends
+                      empfangen wurde — der Knopf tat schlicht nichts. */}
                   <button
-                    onClick={() => {
-                      if (typeof window !== 'undefined') {
-                        window.dispatchEvent(new CustomEvent('complyo:open-legal-generator', { detail: { type: 'datenschutz' } }));
-                      }
-                    }}
+                    onClick={() => setShowLegalWizard('datenschutz')}
                     className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all text-sm"
                   >
                     <Shield className="w-4 h-4" />
@@ -816,18 +820,42 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
            !issue.title?.toLowerCase().includes('datenschutz') &&
            !issue.title?.toLowerCase().includes('impressum') && (
             <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-4 mb-4">
-              <p className="text-sm dark:text-zinc-700 text-gray-700 font-medium mb-2">So beheben Sie dieses Problem:</p>
-              <ol className="list-decimal list-inside text-sm dark:text-zinc-600 text-gray-600 space-y-2">
-                <li>Lesen Sie die Beschreibung des Problems oben sorgfältig durch</li>
-                <li>Klicken Sie auf <strong>"KI-Fix starten"</strong> für eine automatisch generierte Lösung</li>
-                <li>Kopieren Sie den generierten Code oder Text und fügen Sie ihn in Ihre Website ein</li>
-                <li>Starten Sie anschließend einen neuen Scan, um die Behebung zu bestätigen</li>
-              </ol>
+              <p className="text-sm text-gray-700 font-medium mb-2">So beheben Sie dieses Problem:</p>
+              {/* Nur den Weg nennen, den es fuer DIESEN Befund wirklich gibt.
+                  Der Text verwies bisher pauschal auf "KI-Fix starten" — bei
+                  88 % der Befunde existiert dieser Knopf gar nicht. */}
+              {issue.auto_fixable ? (
+                <ol className="list-decimal list-inside text-sm text-gray-600 space-y-2">
+                  <li>Lesen Sie die Beschreibung und die empfohlene Maßnahme oben</li>
+                  <li>Klicken Sie unten auf <strong>„KI-Fix starten"</strong> für einen Lösungsvorschlag</li>
+                  <li>Übernehmen Sie den Vorschlag auf Ihrer Website</li>
+                  <li>Starten Sie einen neuen Scan, um die Behebung zu bestätigen</li>
+                </ol>
+              ) : (
+                <>
+                  <ol className="list-decimal list-inside text-sm text-gray-600 space-y-2 mb-3">
+                    <li>Dieser Punkt lässt sich nicht automatisch beheben — die empfohlene Maßnahme oben ist die Anleitung dazu</li>
+                    <li>Setzen Sie sie auf Ihrer Website um{(issue.metadata?.seiten_betroffen ?? 0) > 1 ? ' (betroffene Seiten stehen oben)' : ''}</li>
+                    <li>Starten Sie einen neuen Scan, um die Behebung zu bestätigen</li>
+                  </ol>
+                  <button
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('complyo:open-wizard'));
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-[#25bac8] text-zinc-950 font-bold rounded-lg hover:bg-[#45d6e2] transition-all text-sm"
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                    Im Schritt-für-Schritt-Assistenten öffnen
+                  </button>
+                </>
+              )}
             </div>
           )}
 
           {/* Steps für andere Issue-Typen */}
-          {issue.solution.steps && issue.solution.steps.length > 0 && 
+          {issue.solution?.steps && issue.solution.steps.length > 0 && 
            !issue.category?.includes('datenschutz') && 
            !issue.category?.includes('impressum') &&
            !issue.title?.toLowerCase().includes('datenschutz') &&
@@ -845,12 +873,12 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
           )}
 
           {/* Code Snippet mit Copy Button */}
-          {issue.solution.code_snippet && (
+          {issue.solution?.code_snippet && (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-semibold text-gray-700">💻 Code zum Kopieren:</span>
                 <button
-                  onClick={() => handleCopyCode(issue.solution.code_snippet)}
+                  onClick={() => handleCopyCode(issue.solution!.code_snippet)}
                   className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
                 >
                   {copiedCode ? (
@@ -866,13 +894,12 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                   )}
                 </button>
               </div>
-              <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">
-                <code>{issue.solution.code_snippet}</code>
+              <pre className="bg-white dark:bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">
+                <code>{issue.solution!.code_snippet}</code>
               </pre>
             </div>
           )}
-        </div>
-      )}
+      </div>
 
       {/* AI-Fix Section — nur für Issues OHNE dedizierte Complyo-Lösung.
           Cookies/Barrierefreiheit/DSGVO/Impressum haben oben eigene Anleitungs-
@@ -990,7 +1017,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
             <div className="relative w-full max-w-4xl dark:bg-zinc-950 bg-white rounded-2xl shadow-2xl border dark:border-zinc-800 border-gray-200">
               <button
                 onClick={() => setShowLegalWizard(null)}
-                className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors z-10"
+                className="absolute top-4 right-4 p-2 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors z-10"
                 aria-label="Schließen"
               >
                 <X className="w-5 h-5" />

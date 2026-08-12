@@ -160,8 +160,13 @@ export const ComplianceGauge: React.FC<ComplianceGaugeProps> = ({ userName, scor
           Willkommen zurück{userName ? `, ${userName.split(' ')[0]}` : ''}
         </p>
         <h2 className="text-xl font-bold mt-0.5" style={{ color: textPrimary }}>
-          Ihr Compliance-Score
+          Compliance-Score
         </h2>
+        {/* Der Umfang gehoert an die Zahl: dieses Tachometer zeigt EINE Seite,
+            die Kacheln darunter das gesamte Portfolio. */}
+        <p className="text-xs mt-1 truncate" style={{ color: textSecondary }}>
+          {currentWebsite?.url ? `für ${currentWebsite.url}` : 'noch keine Website analysiert'}
+        </p>
       </div>
 
       {/* Tabs */}

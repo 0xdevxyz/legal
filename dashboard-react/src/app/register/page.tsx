@@ -219,7 +219,7 @@ function RegisterForm() {
             <div className="relative w-full max-w-lg mx-4 z-10">
                 <div className="mb-8 text-center">
                     <div className="flex justify-center mb-4">
-                        <Logo size="lg" />
+                        <Logo size="lg" variant="dark" />
                     </div>
                     <p className="text-sm" style={{ color: 'rgba(148,163,184,0.7)' }}>
                         Legal Compliance Platform

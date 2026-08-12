@@ -78,7 +78,7 @@ const ScanMonitor: React.FC<ScanMonitorProps> = ({
                       : 'bg-green-500/20'
               }`}>
                 {!result
-                  ? <Shield className="w-6 h-6 text-gray-400" />
+                  ? <Shield className="w-6 h-6 text-gray-600 dark:text-gray-400" />
                   : !result.success
                     ? <AlertTriangle className="w-6 h-6 text-red-400" />
                     : hasChanges
@@ -88,7 +88,7 @@ const ScanMonitor: React.FC<ScanMonitorProps> = ({
               </div>
 
               <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-white text-lg">
+                <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
                   {!result
                     ? 'Überwachung bereit'
                     : !result.success
@@ -97,7 +97,7 @@ const ScanMonitor: React.FC<ScanMonitorProps> = ({
                         ? 'Änderungen erkannt!'
                         : 'Keine Änderungen'}
                 </h3>
-                <p className="text-sm text-gray-400 mt-1">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                   {!result
                     ? 'Klicken Sie auf „Jetzt prüfen", um Ihre Website mit der gespeicherten Baseline zu vergleichen.'
                     : !result.success
@@ -167,8 +167,8 @@ const ScanMonitor: React.FC<ScanMonitorProps> = ({
                   >
                     <AlertTriangle className="w-3 h-3 text-yellow-400 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-white truncate">{s.name}</p>
-                      <p className="text-xs text-gray-400 capitalize">{s.category}</p>
+                      <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{s.name}</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 capitalize">{s.category}</p>
                     </div>
                   </div>
                 ))}
@@ -180,9 +180,9 @@ const ScanMonitor: React.FC<ScanMonitorProps> = ({
           )}
 
           {removedServices.length > 0 && (
-            <Card className="border-gray-600/40 bg-gray-800/20">
+            <Card className="border-gray-600/40 bg-gray-100/20 dark:bg-gray-800/20">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2 text-gray-400">
+                <CardTitle className="text-sm flex items-center gap-2 text-gray-600 dark:text-gray-400">
                   <Minus className="w-4 h-4" />
                   Nicht mehr gefunden ({removedServices.length})
                 </CardTitle>
@@ -194,7 +194,7 @@ const ScanMonitor: React.FC<ScanMonitorProps> = ({
                     className="flex items-center gap-2 p-2 bg-gray-700/30 rounded-lg border border-gray-600/30"
                   >
                     <Minus className="w-3 h-3 text-gray-500 flex-shrink-0" />
-                    <p className="text-xs text-gray-400">{key}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{key}</p>
                   </div>
                 ))}
                 <p className="text-xs text-gray-500 pt-1">
@@ -207,12 +207,12 @@ const ScanMonitor: React.FC<ScanMonitorProps> = ({
       )}
 
       {/* Current Baseline */}
-      <Card className="border-gray-700 bg-gray-800/20">
+      <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/20 dark:bg-gray-800/20">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2 text-gray-300">
+          <CardTitle className="text-sm flex items-center gap-2 text-gray-700 dark:text-gray-300">
             <Eye className="w-4 h-4" />
             Gespeicherte Baseline
-            <Badge variant="secondary" className="bg-gray-700 text-gray-400 border-gray-600 ml-1">
+            <Badge variant="secondary" className="bg-gray-700 text-gray-600 dark:text-gray-400 border-gray-600 ml-1">
               {storedServices.length} Services
             </Badge>
           </CardTitle>
@@ -224,7 +224,7 @@ const ScanMonitor: React.FC<ScanMonitorProps> = ({
                 <Badge
                   key={key}
                   variant="secondary"
-                  className="bg-gray-700/70 text-gray-300 border-gray-600 text-xs"
+                  className="bg-gray-700/70 text-gray-700 dark:text-gray-300 border-gray-600 text-xs"
                 >
                   {key}
                 </Badge>

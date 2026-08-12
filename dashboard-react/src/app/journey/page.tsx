@@ -147,7 +147,7 @@ function StageTimeline({
               >
                 {isDone ? <CheckCircle2 className="h-5 w-5" /> : <Icon className="h-4 w-4" />}
               </span>
-              <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-gray-600 dark:text-zinc-400">
                 {idx + 1}/5
               </span>
             </div>
@@ -165,7 +165,7 @@ function StageTimeline({
                 {stage.label}
               </p>
               {sp && (
-                <p className="mt-0.5 text-[11px] text-zinc-400">
+                <p className="mt-0.5 text-[11px] text-gray-600 dark:text-zinc-400">
                   {sp.completed}/{sp.total} Schritte
                 </p>
               )}
@@ -348,7 +348,7 @@ export default function JourneyPage() {
 
           {/* Skill level chooser */}
           <div className="w-full max-w-lg">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-400">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-zinc-400">
               Wie vertraut sind Sie mit Web-Technik?
             </p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -365,7 +365,7 @@ export default function JourneyPage() {
                   ].join(' ')}
                 >
                   <p className="text-sm font-semibold">{lvl.label}</p>
-                  <p className="mt-0.5 text-[11px] text-zinc-400">{lvl.hint}</p>
+                  <p className="mt-0.5 text-[11px] text-gray-600 dark:text-zinc-400">{lvl.hint}</p>
                 </button>
               ))}
             </div>
@@ -396,7 +396,7 @@ export default function JourneyPage() {
                 </p>
                 <p className="text-2xl font-bold">
                   {overallPct}
-                  <span className="text-base font-medium text-zinc-400"> %</span>
+                  <span className="text-base font-medium text-gray-600 dark:text-zinc-400"> %</span>
                 </p>
               </div>
               <div className="text-right text-sm text-zinc-500 dark:text-zinc-400">
@@ -432,7 +432,7 @@ export default function JourneyPage() {
                     const sp = progress?.stage_progress?.[currentStep.stage];
                     if (!sp) return null;
                     return (
-                      <span className="text-xs text-zinc-400">
+                      <span className="text-xs text-gray-600 dark:text-zinc-400">
                         Schritt {Math.min(sp.completed + 1, sp.total)} von {sp.total}
                       </span>
                     );
@@ -449,7 +449,7 @@ export default function JourneyPage() {
 
               <div className="space-y-5 p-6">
                 <div>
-                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-400">
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-600 dark:text-zinc-400">
                     Anleitung
                   </h3>
                   <ol className="space-y-3">
@@ -466,7 +466,7 @@ export default function JourneyPage() {
 
                 {!!currentStep.success_criteria?.length && (
                   <div className="rounded-xl border border-zinc-200/70 bg-zinc-50/50 p-4 dark:border-zinc-800/70 dark:bg-zinc-900/40">
-                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-zinc-400">
                       Erfolgskriterien
                     </h3>
                     <ul className="space-y-1.5">
@@ -481,7 +481,7 @@ export default function JourneyPage() {
                 )}
 
                 <div className="flex flex-col-reverse items-stretch justify-between gap-3 sm:flex-row sm:items-center">
-                  <span className="flex items-center gap-1.5 text-sm text-zinc-400">
+                  <span className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-zinc-400">
                     <Clock className="h-4 w-4" />
                     Geschätzte Zeit: {currentStep.estimated_time_minutes} Min
                   </span>

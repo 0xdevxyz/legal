@@ -251,7 +251,7 @@ export default function PflichtenReportPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">{ev.rule_title}</span>
                       {ev.published_at && (
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-gray-600 dark:text-gray-400">
                           {new Date(ev.published_at).toLocaleDateString('de-DE')}
                         </span>
                       )}
@@ -287,7 +287,7 @@ export default function PflichtenReportPage() {
             </div>
           )}
 
-          <p className="text-xs text-gray-400">{report.disclaimer}</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400">{report.disclaimer}</p>
         </div>
       ) : (
         <div className="text-center text-gray-500 py-12">

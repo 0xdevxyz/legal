@@ -110,7 +110,7 @@ export default function KnowledgePage() {
       {/* Search */}
       <form onSubmit={onSearch} className="mb-8">
         <div className="relative max-w-xl">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -133,7 +133,7 @@ export default function KnowledgePage() {
             Suchergebnisse für „{submitted}"
           </h2>
           {searchQuery.isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-gray-400">
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
               <Loader2 className="w-4 h-4 animate-spin" /> Suche läuft…
             </div>
           ) : searchQuery.isError ? (
@@ -141,7 +141,7 @@ export default function KnowledgePage() {
               <AlertTriangle className="w-4 h-4" /> Volltextsuche derzeit nicht verfügbar.
             </div>
           ) : (searchQuery.data?.length ?? 0) === 0 ? (
-            <p className="text-sm text-gray-400">Keine Treffer.</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Keine Treffer.</p>
           ) : (
             <div className="space-y-2">
               {searchQuery.data!.map((r, i) => (
@@ -173,7 +173,7 @@ export default function KnowledgePage() {
           </h2>
         </div>
         {updatesQuery.isLoading ? (
-          <div className="flex items-center gap-2 text-sm text-gray-400">
+          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
             <Loader2 className="w-4 h-4 animate-spin" /> Lädt…
           </div>
         ) : updatesQuery.isError ? (
@@ -235,7 +235,7 @@ export default function KnowledgePage() {
           </h2>
         </div>
         {lawsQuery.isLoading ? (
-          <div className="flex items-center gap-2 text-sm text-gray-400">
+          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
             <Loader2 className="w-4 h-4 animate-spin" /> Lädt…
           </div>
         ) : lawsQuery.isError ? (

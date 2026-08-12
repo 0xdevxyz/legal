@@ -123,7 +123,7 @@ export default function GeoRestriction({ siteId, config, onSave }: GeoRestrictio
             <Globe className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
             <div>
               <h4 className="font-semibold text-green-300">Geo-Restriction</h4>
-              <p className="text-sm text-gray-300 mt-1">
+              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
                 Zeigen Sie das Cookie-Banner nur in Ländern an, in denen es rechtlich erforderlich ist.
                 Dies verbessert die Conversion-Rate für Besucher aus Nicht-EU-Ländern.
               </p>
@@ -133,9 +133,9 @@ export default function GeoRestriction({ siteId, config, onSave }: GeoRestrictio
       </Card>
 
       {/* Main Settings */}
-      <Card className="bg-gray-800/50 border-gray-700">
+      <Card className="bg-gray-100/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
+          <CardTitle className="text-gray-900 dark:text-white flex items-center gap-2">
             <MapPin className="w-5 h-5 text-green-400" />
             Ländereinschränkung
           </CardTitle>
@@ -145,10 +145,10 @@ export default function GeoRestriction({ siteId, config, onSave }: GeoRestrictio
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Enable/Disable */}
-          <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg border border-gray-700">
+          <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
             <div>
-              <Label className="text-white font-medium">Geo-Restriction aktivieren</Label>
-              <p className="text-sm text-gray-400 mt-1">
+              <Label className="text-gray-900 dark:text-white font-medium">Geo-Restriction aktivieren</Label>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 Banner wird nur in ausgewählten Ländern angezeigt
               </p>
             </div>
@@ -165,7 +165,7 @@ export default function GeoRestriction({ siteId, config, onSave }: GeoRestrictio
                 <Button variant="outline" size="sm" onClick={selectAllEU} className="text-green-400 border-green-500/50 hover:bg-green-500/10">
                   Alle EU-Länder
                 </Button>
-                <Button variant="outline" size="sm" onClick={clearAll} className="text-gray-400">
+                <Button variant="outline" size="sm" onClick={clearAll} className="text-gray-600 dark:text-gray-400">
                   Alle abwählen
                 </Button>
                 <Badge className="ml-auto bg-green-500/20 text-green-400">
@@ -175,10 +175,10 @@ export default function GeoRestriction({ siteId, config, onSave }: GeoRestrictio
 
               {/* EU Countries */}
               <div className="space-y-3">
-                <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
                   <span className="text-lg">🇪🇺</span> EU/EWR-Länder (Cookie-Consent erforderlich)
                 </h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 p-3 bg-gray-900/30 rounded-lg border border-gray-700">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 p-3 bg-white/30 dark:bg-gray-900/30 rounded-lg border border-gray-200 dark:border-gray-700">
                   {EU_COUNTRIES.map(country => (
                     <label 
                       key={country.code}
@@ -192,7 +192,7 @@ export default function GeoRestriction({ siteId, config, onSave }: GeoRestrictio
                         checked={selectedCountries.includes(country.code)}
                         onCheckedChange={() => toggleCountry(country.code)}
                       />
-                      <span className="text-sm text-gray-300">{country.code}</span>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">{country.code}</span>
                       <span className="text-xs text-gray-500 truncate">{country.name}</span>
                     </label>
                   ))}
@@ -201,10 +201,10 @@ export default function GeoRestriction({ siteId, config, onSave }: GeoRestrictio
 
               {/* Other Countries */}
               <div className="space-y-3">
-                <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
                   🌍 Andere Länder (optional)
                 </h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 p-3 bg-gray-900/30 rounded-lg border border-gray-700">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 p-3 bg-white/30 dark:bg-gray-900/30 rounded-lg border border-gray-200 dark:border-gray-700">
                   {OTHER_COUNTRIES.map(country => (
                     <label 
                       key={country.code}
@@ -218,7 +218,7 @@ export default function GeoRestriction({ siteId, config, onSave }: GeoRestrictio
                         checked={selectedCountries.includes(country.code)}
                         onCheckedChange={() => toggleCountry(country.code)}
                       />
-                      <span className="text-sm text-gray-300">{country.code}</span>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">{country.code}</span>
                       <span className="text-xs text-gray-500 truncate">{country.name}</span>
                     </label>
                   ))}
@@ -229,7 +229,7 @@ export default function GeoRestriction({ siteId, config, onSave }: GeoRestrictio
               <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                 <div className="flex items-start gap-2">
                   <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-gray-300">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
                     <strong className="text-blue-300">Hinweis:</strong> Die Ländererkennung basiert auf der IP-Adresse 
                     des Besuchers. Bei Nutzung von VPNs kann das erkannte Land abweichen.
                   </p>

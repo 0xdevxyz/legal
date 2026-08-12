@@ -95,34 +95,34 @@ export const LegalArchiveModal: React.FC<Props> = ({ isOpen, onClose }) => {
       onClick={onClose}
     >
       <div 
-        className="bg-gray-900 rounded-xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-2xl border-2 border-purple-500/30"
+        className="bg-white dark:bg-gray-900 rounded-xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-2xl border-2 border-purple-500/30"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700 bg-gradient-to-r from-purple-900/40 to-blue-900/40">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-purple-900/40 to-blue-900/40">
           <div>
-            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
               <Archive className="w-7 h-7 text-purple-400" />
               Gesetzesänderungen-Archiv
             </h2>
-            <p className="text-gray-400 text-sm mt-1">
+            <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
               Ältere Änderungen und bereits umgesetzte Updates
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
           >
-            <X className="w-6 h-6 text-gray-400" />
+            <X className="w-6 h-6 text-gray-600 dark:text-gray-400" />
           </button>
         </div>
         
         {/* Filter & Search */}
-        <div className="p-4 border-b border-gray-700 bg-gray-800/50">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50">
           <div className="flex flex-col md:flex-row gap-3">
             {/* Search */}
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 dark:text-gray-400" />
               <label htmlFor="legal-archive-search" className="sr-only">Rechtsänderungen durchsuchen</label>
               <input
                 type="text"
@@ -131,7 +131,7 @@ export const LegalArchiveModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 aria-label="Rechtsänderungen nach Titel oder Beschreibung durchsuchen"
-                className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500 text-sm"
+                className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-purple-500 text-sm"
               />
             </div>
             
@@ -192,7 +192,7 @@ export const LegalArchiveModal: React.FC<Props> = ({ isOpen, onClose }) => {
               {filteredUpdates.map((update) => (
                 <div
                   key={update.id}
-                  className="p-4 bg-gray-800 border border-gray-700 rounded-lg hover:border-gray-600 hover:shadow-lg transition-all"
+                  className="p-4 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-gray-600 hover:shadow-lg transition-all"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
@@ -212,11 +212,11 @@ export const LegalArchiveModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         )}
                       </div>
                       
-                      <h3 className="text-white font-bold text-base mb-2">
+                      <h3 className="text-gray-900 dark:text-white font-bold text-base mb-2">
                         {update.title}
                       </h3>
                       
-                      <p className="text-gray-400 text-sm mb-3 leading-relaxed">
+                      <p className="text-gray-600 dark:text-gray-400 text-sm mb-3 leading-relaxed">
                         {update.description.substring(0, 200)}
                         {update.description.length > 200 && '...'}
                       </p>
@@ -248,7 +248,7 @@ export const LegalArchiveModal: React.FC<Props> = ({ isOpen, onClose }) => {
           ) : (
             <div className="text-center py-12">
               <Archive className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400">
+              <p className="text-gray-600 dark:text-gray-400">
                 {searchTerm ? 'Keine Ergebnisse gefunden' : 'Keine archivierten Updates vorhanden'}
               </p>
             </div>
@@ -257,24 +257,24 @@ export const LegalArchiveModal: React.FC<Props> = ({ isOpen, onClose }) => {
         
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between p-4 border-t border-gray-700 bg-gray-800/50">
+          <div className="flex items-center justify-between p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50">
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               <ChevronLeft className="w-4 h-4" />
               Zurück
             </button>
             
-            <span className="text-gray-400 text-sm">
+            <span className="text-gray-600 dark:text-gray-400 text-sm">
               Seite {page} von {totalPages}
             </span>
             
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               Weiter
               <ChevronRight className="w-4 h-4" />

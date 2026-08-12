@@ -8,6 +8,7 @@ import { analyzeWebsite, getTrackedWebsites, apiClient } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 import ScanProgressPanel from './ScanProgressPanel';
 
 interface DomainHeroSectionProps {
@@ -20,6 +21,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
   const { currentWebsite, updateMetrics, setCurrentWebsite, isInOptimizationMode, lockedOptimizationUrl, pendingRescanContext, setPendingRescanContext } = useDashboardStore();
   const { showToast } = useToast();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   // Agentur/Expert: kein Single-Domain-Lock-Hinweis (jede Seite frei optimierbar).
   const isAgency = user?.plan_type === 'agency' || user?.plan_type === 'expert';
   const [url, setUrl] = useState('');
@@ -88,10 +90,11 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
             complianceScore: latestWebsite.last_score ?? latestWebsite.compliance_score ?? 0,
             status: 'completed' as const
           });
-          updateMetrics({
-            totalScore: latestWebsite.last_score ?? latestWebsite.compliance_score ?? 0,
-            websites: websites.length
-          });
+          // Kein totalScore hier: das ist der Score DIESER einen Seite und
+          // gehoert an currentWebsite (oben gesetzt), nicht in die
+          // Portfolio-Kachel. Die Anzahl kommt aus der Liste, die wir
+          // gerade geladen haben — die deckt sich mit dem Server.
+          updateMetrics({ websites: websites.length });
         }
       } catch (error) {
         console.error('Failed to load saved website:', error);
@@ -169,23 +172,12 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
         setScanNotice(null);
       }
 
-      // Update metrics
-      const criticalCount = Array.isArray(result.issues)
-        ? result.issues.filter((issue: any) => {
-            if (typeof issue === 'string') {
-              return issue.toLowerCase().includes('fehlt') || 
-                     issue.toLowerCase().includes('nicht gefunden') ||
-                     issue.toLowerCase().includes('kritisch');
-            }
-            return issue.severity === 'critical';
-          }).length
-        : 0;
-
-      updateMetrics({
-        totalScore: result.compliance_score || 0,
-        criticalIssues: criticalCount,
-        websites: 1
-      });
+      // Die Kennzahlen-Kacheln zeigen das GESAMTE Portfolio (alle getrackten
+      // Websites). Ein einzelner Scan darf sie deshalb nicht ueberschreiben —
+      // genau das setzte hier frueher `websites: 1` und liess die Anzeige bei
+      // 1/25 stehen, obwohl sechs Seiten getrackt sind. Stattdessen den
+      // Server erneut fragen: der neue Scan steckt bereits in der Historie.
+      queryClient.invalidateQueries({ queryKey: ['dashboard-metrics'] });
 
       // Call optional callback
       if (onAnalyze) {
@@ -240,14 +232,33 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
             >
               <Bot className="w-3.5 h-3.5" /> KI-geprüft
             </div>
+            {/* Der Opener sagt, wo der Nutzer steht — nicht, was wir versprechen.
+                "auf 100% optimieren" stand hier fest verdrahtet: ein Versprechen,
+                das das Produkt bewusst nicht gibt (Teile der WCAG brauchen
+                menschliches Urteil) und das bei einem Score von 17 zynisch wirkt. */}
             <h1 className="text-4xl lg:text-5xl font-black text-gray-900 dark:text-white mb-5 leading-[1.05] tracking-tight">
-              Website-Compliance
-              <span className="block mt-2" style={{ color: 'var(--lime)' }}>
-                auf 100% optimieren
-              </span>
+              {currentWebsite ? (
+                <>
+                  {currentWebsite.name || currentWebsite.url}
+                  <span className="block mt-2 text-3xl lg:text-4xl" style={{ color: 'var(--lime)' }}>
+                    {typeof currentWebsite.complianceScore === 'number'
+                      ? `${currentWebsite.complianceScore} von 100 Punkten`
+                      : 'Ergebnis wird geladen'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  Was erfüllt Ihre Website
+                  <span className="block mt-2" style={{ color: 'var(--lime)' }}>
+                    — und was nicht?
+                  </span>
+                </>
+              )}
             </h1>
             <p className="text-lg text-gray-600 dark:text-zinc-300 leading-relaxed">
-              KI-gestützte Analyse & automatische Optimierung für DSGVO, BFSG & TTDSG
+              {currentWebsite
+                ? 'Jeder Punkt unten ist im Browser nachgemessen, mit Fundstelle und Rechtsgrundlage. Was sich nicht automatisch prüfen lässt, steht als Anleitung dabei.'
+                : 'Wir prüfen DSGVO, Cookies, Rechtstexte und Barrierefreiheit im echten Browser — und zeigen jede Fundstelle, statt nur eine Zahl.'}
             </p>
 
             {/* Domain Input */}
@@ -261,7 +272,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                       <span className="text-sm font-semibold text-emerald-300">Ihre registrierte Website:</span>
                       <Badge variant="success" className="text-xs">Dauerhaft verknüpft</Badge>
                     </div>
-                    <p className="text-xs text-zinc-400">
+                    <p className="text-xs text-gray-600 dark:text-zinc-400">
                       <strong className="text-emerald-400">{lockedOptimizationUrl}</strong> — 
                       <span className="text-zinc-500 ml-1">Alle KI-Fixes und Optimierungen sind für diese Seite personalisiert.</span>
                     </p>
@@ -288,7 +299,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                     <p className="text-sm text-sky-300 flex-1 leading-snug">{autoTriggerInfo}</p>
                     <button
                       onClick={() => setAutoTriggerInfo(null)}
-                      className="flex-shrink-0 ml-1 p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50 transition-colors"
+                      className="flex-shrink-0 ml-1 p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-gray-200/50 dark:hover:bg-zinc-700/50 transition-colors"
                       aria-label="Hinweis schließen"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -297,7 +308,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                 )}
                 <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 w-full">
                 <div className="flex-1 min-w-[16rem] relative group">
-                  <Globe className="absolute left-5 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-400 group-focus-within:text-[#25bac8] transition-colors" />
+                  <Globe className="absolute left-5 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-600 dark:text-zinc-400 group-focus-within:text-[#25bac8] transition-colors" />
                   <label htmlFor="website-url-input" className="sr-only">Website-URL eingeben</label>
                   <input
                     type="text"
@@ -411,7 +422,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
 
               {/* Current Website Info */}
               {currentWebsite && !isAnalyzing && (
-                <div className="glass-card rounded-2xl p-4 border border-zinc-700/50 animate-fade-in">
+                <div className="glass-card rounded-2xl p-4 border border-gray-200/50 dark:border-zinc-700/50 animate-fade-in">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--lime-dim)' }}>
@@ -427,7 +438,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                       size="sm"
                       onClick={() => handleAnalyze(currentWebsite?.url)}
                       disabled={isAnalyzing || !currentWebsite?.url}
-                      className="text-zinc-300 hover:text-white hover:bg-white/5 rounded-xl disabled:opacity-50"
+                      className="text-gray-700 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-white/5 rounded-xl disabled:opacity-50"
                     >
                       <RefreshCw className={`w-4 h-4 mr-2 ${isAnalyzing ? 'animate-spin' : ''}`} />
                       {isAnalyzing ? 'Scanne...' : 'Erneut scannen'}
@@ -478,8 +489,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
               <Globe className="w-6 h-6 text-[#25bac8]" />
             </div>
             <div>
-              <h4 className="text-gray-900 dark:text-white font-semibold text-sm">20+ Prüfpunkte</h4>
-              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">DSGVO, BFSG, TTDSG</p>
+              <h4 className="text-gray-900 dark:text-white font-semibold text-sm">Vier Säulen geprüft</h4>
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">DSGVO, Cookies, Rechtstexte, BFSG</p>
             </div>
           </div>
           <div className="flex items-center gap-4 p-4 rounded-2xl glass-card hover:glass-strong transition-all group">
@@ -488,7 +499,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
             </div>
             <div>
               <h4 className="text-gray-900 dark:text-white font-semibold text-sm">Risiko-Radar</h4>
-              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">Bei 100% Compliance</p>
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">Meldet neue Pflichten</p>
             </div>
           </div>
         </div>
@@ -530,7 +541,7 @@ const HeroVorschau: React.FC<{ url?: string | null }> = ({ url }) => {
   if (!bild) {
     return (
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="p-7 rounded-[2rem] bg-zinc-900/50 backdrop-blur-md border border-white/[0.06] shadow-2xl">
+        <div className="p-7 rounded-[2rem] bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md border border-white/[0.06] shadow-2xl">
           <ShieldCheck className="w-16 h-16 lg:w-20 lg:h-20" style={{ color: 'var(--lime)' }} strokeWidth={1.5} />
         </div>
       </div>

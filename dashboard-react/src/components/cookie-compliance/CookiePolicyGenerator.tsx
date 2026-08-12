@@ -132,9 +132,9 @@ export default function CookiePolicyGenerator({ siteId, config }: CookiePolicyGe
   return (
     <div className="space-y-6">
       {/* Header */}
-      <Card className="bg-gray-800/50 border-gray-700">
+      <Card className="bg-gray-100/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
+          <CardTitle className="text-gray-900 dark:text-white flex items-center gap-2">
             <FileText className="w-5 h-5 text-orange-400" />
             Cookie-Richtlinie Generator
           </CardTitle>
@@ -146,11 +146,11 @@ export default function CookiePolicyGenerator({ siteId, config }: CookiePolicyGe
           {/* Language & Actions */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-400">Sprache:</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400">Sprache:</span>
               <select 
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm text-white"
+                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-2 py-1 text-sm text-gray-900 dark:text-white"
               >
                 <option value="de">Deutsch</option>
                 <option value="en">English</option>
@@ -192,7 +192,7 @@ export default function CookiePolicyGenerator({ siteId, config }: CookiePolicyGe
           {/* Preview Tabs */}
           {policy && (
             <Tabs defaultValue="preview" className="mt-6">
-              <TabsList className="bg-gray-900/50">
+              <TabsList className="bg-white/50 dark:bg-gray-900/50">
                 <TabsTrigger value="preview" className="gap-2 data-[state=active]:bg-orange-500">
                   <Eye className="w-4 h-4" />
                   Vorschau
@@ -239,7 +239,7 @@ export default function CookiePolicyGenerator({ siteId, config }: CookiePolicyGe
               </TabsContent>
               
               <TabsContent value="json" className="mt-4">
-                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto max-h-[500px] text-xs">
+                <pre className="bg-white dark:bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto max-h-[500px] text-xs">
                   {JSON.stringify(policy, null, 2)}
                 </pre>
               </TabsContent>
@@ -247,7 +247,7 @@ export default function CookiePolicyGenerator({ siteId, config }: CookiePolicyGe
           )}
 
           {!policy && !loading && (
-            <div className="text-center py-8 text-gray-400">
+            <div className="text-center py-8 text-gray-600 dark:text-gray-400">
               <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>Keine Services konfiguriert.</p>
               <p className="text-sm">Fügen Sie Services hinzu, um eine Cookie-Richtlinie zu generieren.</p>

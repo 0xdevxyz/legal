@@ -57,7 +57,7 @@ export const FixModal: React.FC<FixModalProps> = ({ isOpen, onClose, fix, issueT
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 text-gray-400 hover:text-gray-600 transition-colors bg-white rounded-full p-2 shadow-lg"
+          className="absolute top-4 right-4 z-10 text-gray-600 dark:text-gray-400 hover:text-gray-600 transition-colors bg-white rounded-full p-2 shadow-lg"
           aria-label="Schließen"
         >
           <X className="w-6 h-6" />
@@ -79,7 +79,7 @@ export const FixModal: React.FC<FixModalProps> = ({ isOpen, onClose, fix, issueT
         <div className="mt-4 flex justify-center">
           <button
             onClick={onClose}
-            className="bg-gray-900 hover:bg-gray-800 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
+            className="bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-900 dark:text-white px-8 py-3 rounded-lg font-semibold transition-colors"
           >
             Schließen
           </button>

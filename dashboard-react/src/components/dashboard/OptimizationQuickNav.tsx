@@ -79,10 +79,10 @@ export const OptimizationQuickNav: React.FC = () => {
           status: 'completed' as const
         });
         
-        updateMetrics({
-          totalScore: lockedWebsite.last_score || 0,
-          websites: websites.length
-        });
+        // Kein totalScore: das ist der Score dieser einen Seite (steht oben in
+        // currentWebsite). In die Portfolio-Kachel geschrieben, zeigte sie den
+        // Einzelwert statt des Durchschnitts ueber alle Websites.
+        updateMetrics({ websites: websites.length });
         
         // Navigiere zur Hauptseite (ohne URL-Parameter = keine neue Analyse)
         router.push('/');
@@ -119,7 +119,7 @@ export const OptimizationQuickNav: React.FC = () => {
               <Lock className="w-4 h-4 flex-shrink-0" />
               <span className="text-sm font-medium hidden sm:inline">Ihre Seite:</span>
             </div>
-            <span className="text-sm font-bold text-white truncate max-w-[200px]">
+            <span className="text-sm font-bold text-gray-900 dark:text-white truncate max-w-[200px]">
               {getShortDomain(lockedOptimizationUrl)}
             </span>
           </div>

@@ -134,7 +134,7 @@ export const ScanProgressPanel: React.FC<{ url: string; token: string | null }> 
                       <CheckCircle2 className="w-3.5 h-3.5 text-teal-500 flex-shrink-0" aria-hidden />
                     ) : (
                       <Loader2
-                        className="w-3.5 h-3.5 animate-spin dark:text-zinc-500 text-gray-400 flex-shrink-0"
+                        className="w-3.5 h-3.5 animate-spin dark:text-zinc-500 text-gray-600 dark:text-gray-400 flex-shrink-0"
                         aria-hidden
                       />
                     )}

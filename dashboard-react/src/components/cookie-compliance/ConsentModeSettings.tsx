@@ -53,7 +53,7 @@ export default function ConsentModeSettings({ siteId, config, onSave }: ConsentM
             <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
             <div>
               <h4 className="font-semibold text-blue-300">Google Consent Mode v2</h4>
-              <p className="text-sm text-gray-300 mt-1">
+              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
                 Seit März 2024 ist der Google Consent Mode v2 Pflicht für alle Websites, 
                 die Google Services wie Analytics, Ads oder Tag Manager verwenden.
               </p>
@@ -71,9 +71,9 @@ export default function ConsentModeSettings({ siteId, config, onSave }: ConsentM
       </Card>
 
       {/* Main Settings */}
-      <Card className="bg-gray-800/50 border-gray-700">
+      <Card className="bg-gray-100/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
+          <CardTitle className="text-gray-900 dark:text-white flex items-center gap-2">
             <img src="https://www.gstatic.com/images/branding/product/1x/googleg_48dp.png" alt="Google" className="w-5 h-5" />
             Consent Mode Einstellungen
           </CardTitle>
@@ -83,10 +83,10 @@ export default function ConsentModeSettings({ siteId, config, onSave }: ConsentM
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Enable/Disable */}
-          <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg border border-gray-700">
+          <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
             <div>
-              <Label className="text-white font-medium">Consent Mode aktivieren</Label>
-              <p className="text-sm text-gray-400 mt-1">
+              <Label className="text-gray-900 dark:text-white font-medium">Consent Mode aktivieren</Label>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 Sendet Einwilligungssignale an Google Services
               </p>
             </div>
@@ -98,7 +98,7 @@ export default function ConsentModeSettings({ siteId, config, onSave }: ConsentM
 
           {/* Consent Types */}
           <div className="space-y-3">
-            <h4 className="text-sm font-medium text-gray-300">Consent-Typen (automatisch konfiguriert)</h4>
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Consent-Typen (automatisch konfiguriert)</h4>
             <div className="grid grid-cols-2 gap-3">
               {[
                 { key: 'ad_storage', label: 'Werbe-Cookies', category: 'Marketing' },
@@ -106,9 +106,9 @@ export default function ConsentModeSettings({ siteId, config, onSave }: ConsentM
                 { key: 'ad_user_data', label: 'Daten an Google Ads', category: 'Marketing' },
                 { key: 'ad_personalization', label: 'Personalisierte Werbung', category: 'Marketing' }
               ].map(type => (
-                <div key={type.key} className="p-3 bg-gray-900/30 rounded-lg border border-gray-700">
+                <div key={type.key} className="p-3 bg-white/30 dark:bg-gray-900/30 rounded-lg border border-gray-200 dark:border-gray-700">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-white">{type.label}</span>
+                    <span className="text-sm text-gray-900 dark:text-white">{type.label}</span>
                     <Badge variant="outline" className="text-xs">
                       {type.category}
                     </Badge>
@@ -120,11 +120,11 @@ export default function ConsentModeSettings({ siteId, config, onSave }: ConsentM
           </div>
 
           {/* GTM Integration */}
-          <div className="space-y-4 p-4 bg-gray-900/50 rounded-lg border border-gray-700">
+          <div className="space-y-4 p-4 bg-white/50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
               <div>
-                <Label className="text-white font-medium">Google Tag Manager Integration</Label>
-                <p className="text-sm text-gray-400 mt-1">
+                <Label className="text-gray-900 dark:text-white font-medium">Google Tag Manager Integration</Label>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                   Sende Consent-Events an den Google Tag Manager
                 </p>
               </div>
@@ -136,12 +136,12 @@ export default function ConsentModeSettings({ siteId, config, onSave }: ConsentM
             
             {gtmEnabled && (
               <div className="space-y-2">
-                <Label className="text-sm text-gray-300">GTM Container ID</Label>
+                <Label className="text-sm text-gray-700 dark:text-gray-300">GTM Container ID</Label>
                 <Input
                   placeholder="GTM-XXXXXXX"
                   value={gtmContainerId}
                   onChange={(e) => setGtmContainerId(e.target.value)}
-                  className="bg-gray-800 border-gray-600 text-white"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-600 text-gray-900 dark:text-white"
                 />
                 <p className="text-xs text-gray-500">
                   Optional: Wenn Sie GTM bereits eingebunden haben, lassen Sie dieses Feld leer.
@@ -156,13 +156,13 @@ export default function ConsentModeSettings({ siteId, config, onSave }: ConsentM
               <CheckCircle className="w-4 h-4" />
               Automatische DataLayer Events
             </h4>
-            <p className="text-xs text-gray-300 mt-2">
+            <p className="text-xs text-gray-700 dark:text-gray-300 mt-2">
               Folgende Events werden automatisch an den dataLayer gesendet:
             </p>
             <div className="flex flex-wrap gap-2 mt-2">
-              <code className="text-xs bg-gray-800 px-2 py-1 rounded">complyo_consent_update</code>
-              <code className="text-xs bg-gray-800 px-2 py-1 rounded">complyo_analytics_granted</code>
-              <code className="text-xs bg-gray-800 px-2 py-1 rounded">complyo_marketing_granted</code>
+              <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">complyo_consent_update</code>
+              <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">complyo_analytics_granted</code>
+              <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">complyo_marketing_granted</code>
             </div>
           </div>
 

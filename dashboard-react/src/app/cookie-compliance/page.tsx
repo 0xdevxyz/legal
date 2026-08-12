@@ -593,7 +593,7 @@ export default function CookieCompliancePage() {
                   <SelectTrigger className="w-full dark:bg-zinc-900/50 bg-white/70 dark:border-zinc-700 border-gray-200 dark:text-white text-gray-900">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-900 dark:border-zinc-700 border-gray-200">
+                  <SelectContent className="bg-white dark:bg-gray-900 dark:border-zinc-700 border-gray-200">
                     <SelectItem value="design" className="dark:text-white text-gray-900">Design</SelectItem>
                     <SelectItem value="services" className="dark:text-white text-gray-900">Services</SelectItem>
                     <SelectItem value="advanced" className="dark:text-white text-gray-900">Erweitert</SelectItem>

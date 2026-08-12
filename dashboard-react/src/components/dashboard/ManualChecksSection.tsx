@@ -36,11 +36,11 @@ export const ManualChecksSection: React.FC<Props> = ({ checks, accessibilityNote
   if (!checks || checks.length === 0) return null;
 
   return (
-    <div className="mt-6 rounded-xl border border-zinc-800/70 bg-zinc-900/40 overflow-hidden">
+    <div className="mt-6 rounded-xl border border-gray-200/70 dark:border-zinc-800/70 bg-white/40 dark:bg-zinc-900/40 overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-4 hover:bg-zinc-800/30 transition-colors"
+        className="w-full flex items-center justify-between p-4 hover:bg-gray-100/30 dark:hover:bg-zinc-800/30 transition-colors"
       >
         <div className="flex items-center gap-3 text-left">
           <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
@@ -48,7 +48,7 @@ export const ManualChecksSection: React.FC<Props> = ({ checks, accessibilityNote
           </div>
           <div>
             <p className="text-zinc-100 font-medium">Manuell prüfen ({checks.length})</p>
-            <p className="text-zinc-400 text-sm">
+            <p className="text-gray-600 dark:text-zinc-400 text-sm">
               Diese Punkte kann keine automatische Prüfung zuverlässig bewerten —
               mit den Anleitungen prüfen Sie sie selbst in wenigen Minuten.
             </p>
@@ -62,7 +62,7 @@ export const ManualChecksSection: React.FC<Props> = ({ checks, accessibilityNote
       {open && (
         <div className="border-t dark:border-zinc-800/50 border-gray-200 p-4 space-y-3 bg-black/20">
           {accessibilityNote && (
-            <div className="flex gap-2 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20 text-sm text-zinc-300">
+            <div className="flex gap-2 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20 text-sm text-gray-700 dark:text-zinc-300">
               <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
               <span>{accessibilityNote}</span>
             </div>
@@ -77,12 +77,12 @@ export const ManualChecksSection: React.FC<Props> = ({ checks, accessibilityNote
             return (
               <div
                 key={check.id}
-                className="rounded-lg border border-zinc-800/60 bg-zinc-900/40 overflow-hidden"
+                className="rounded-lg border border-gray-200/60 dark:border-zinc-800/60 bg-white/40 dark:bg-zinc-900/40 overflow-hidden"
               >
                 <button
                   type="button"
                   onClick={() => setExpandedId(isExpanded ? null : check.id)}
-                  className="w-full flex items-center justify-between gap-3 p-3 hover:bg-zinc-800/30 transition-colors text-left"
+                  className="w-full flex items-center justify-between gap-3 p-3 hover:bg-gray-100/30 dark:hover:bg-zinc-800/30 transition-colors text-left"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <span
@@ -97,7 +97,7 @@ export const ManualChecksSection: React.FC<Props> = ({ checks, accessibilityNote
                   />
                 </button>
                 {isExpanded && (
-                  <div className="px-3 pb-3 text-sm text-zinc-400 whitespace-pre-line border-t border-zinc-800/40 pt-3">
+                  <div className="px-3 pb-3 text-sm text-gray-600 dark:text-zinc-400 whitespace-pre-line border-t border-gray-200/40 dark:border-zinc-800/40 pt-3">
                     {check.anleitung}
                   </div>
                 )}

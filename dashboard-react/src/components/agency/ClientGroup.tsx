@@ -44,7 +44,7 @@ export function ClientGroup({ client }: ClientGroupProps) {
             <Building2 className="w-5 h-5 text-blue-400" />
           </div>
           <div className="min-w-0">
-            <h3 className="text-white font-semibold truncate">{client.client_name}</h3>
+            <h3 className="text-gray-900 dark:text-white font-semibold truncate">{client.client_name}</h3>
             {client.client_email && (
               <p className="text-zinc-500 text-xs flex items-center gap-1 mt-0.5">
                 <Mail className="w-3 h-3" /> {client.client_email}
@@ -52,13 +52,13 @@ export function ClientGroup({ client }: ClientGroupProps) {
             )}
           </div>
           {expanded
-            ? <ChevronUp className="w-4 h-4 text-zinc-400" />
-            : <ChevronDown className="w-4 h-4 text-zinc-400" />}
+            ? <ChevronUp className="w-4 h-4 text-gray-600 dark:text-zinc-400" />
+            : <ChevronDown className="w-4 h-4 text-gray-600 dark:text-zinc-400" />}
         </button>
         <div className="flex items-center gap-4 flex-shrink-0">
           <div className="text-right hidden sm:block">
             <p className="text-xs text-zinc-500">Sites</p>
-            <p className="text-white font-semibold">{client.site_count}</p>
+            <p className="text-gray-900 dark:text-white font-semibold">{client.site_count}</p>
           </div>
           <div className="text-right hidden sm:block">
             <p className="text-xs text-zinc-500">Acceptance</p>
@@ -84,15 +84,15 @@ export function ClientGroup({ client }: ClientGroupProps) {
         <div className="px-6 pb-4 border-t dark:border-zinc-800 border-gray-200 pt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div>
             <p className="text-xs text-zinc-500">Sites</p>
-            <p className="text-white font-semibold">{client.site_count}</p>
+            <p className="text-gray-900 dark:text-white font-semibold">{client.site_count}</p>
           </div>
           <div>
             <p className="text-xs text-zinc-500">Impressionen (30d)</p>
-            <p className="text-white font-semibold">{client.total_impressions.toLocaleString('de-DE')}</p>
+            <p className="text-gray-900 dark:text-white font-semibold">{client.total_impressions.toLocaleString('de-DE')}</p>
           </div>
           <div>
             <p className="text-xs text-zinc-500">Akzeptiert</p>
-            <p className="text-white font-semibold">{client.total_accepted.toLocaleString('de-DE')}</p>
+            <p className="text-gray-900 dark:text-white font-semibold">{client.total_accepted.toLocaleString('de-DE')}</p>
           </div>
           <div>
             <p className="text-xs text-zinc-500">Acceptance Rate</p>

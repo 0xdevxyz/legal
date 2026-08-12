@@ -175,10 +175,10 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
   };
 
   const layouts = [
-    { key: 'banner_bottom', label: 'Unten',     preview: <div className="w-14 h-11 border-2 border-orange-400 rounded relative overflow-hidden bg-gray-900/50"><div className="absolute bottom-0 left-0 right-0 h-3 bg-orange-500"></div></div> },
-    { key: 'banner_top',    label: 'Oben',      preview: <div className="w-14 h-11 border-2 border-orange-400 rounded relative overflow-hidden bg-gray-900/50"><div className="absolute top-0 left-0 right-0 h-3 bg-orange-500"></div></div> },
-    { key: 'box_modal',     label: 'Zentriert', preview: <div className="w-14 h-11 border-2 border-orange-400 rounded relative overflow-hidden bg-gray-900/50 flex items-center justify-center"><div className="w-9 h-6 bg-orange-500 rounded-sm"></div></div> },
-    { key: 'floating_widget', label: 'Floating', preview: <div className="w-14 h-11 border-2 border-orange-400 rounded relative overflow-hidden bg-gray-900/50"><div className="absolute bottom-1 right-1 w-5 h-5 bg-orange-500 rounded-full"></div></div> },
+    { key: 'banner_bottom', label: 'Unten',     preview: <div className="w-14 h-11 border-2 border-orange-400 rounded relative overflow-hidden bg-white/50 dark:bg-gray-900/50"><div className="absolute bottom-0 left-0 right-0 h-3 bg-orange-500"></div></div> },
+    { key: 'banner_top',    label: 'Oben',      preview: <div className="w-14 h-11 border-2 border-orange-400 rounded relative overflow-hidden bg-white/50 dark:bg-gray-900/50"><div className="absolute top-0 left-0 right-0 h-3 bg-orange-500"></div></div> },
+    { key: 'box_modal',     label: 'Zentriert', preview: <div className="w-14 h-11 border-2 border-orange-400 rounded relative overflow-hidden bg-white/50 dark:bg-gray-900/50 flex items-center justify-center"><div className="w-9 h-6 bg-orange-500 rounded-sm"></div></div> },
+    { key: 'floating_widget', label: 'Floating', preview: <div className="w-14 h-11 border-2 border-orange-400 rounded relative overflow-hidden bg-white/50 dark:bg-gray-900/50"><div className="absolute bottom-1 right-1 w-5 h-5 bg-orange-500 rounded-full"></div></div> },
   ];
 
   return (
@@ -187,9 +187,9 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
       <div className="space-y-6">
 
         {/* Layout Settings */}
-        <Card className="border-gray-700 bg-gray-800/50 backdrop-blur-sm hover:bg-gray-800/70 transition-all duration-200">
+        <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm hover:bg-gray-100/70 dark:hover:bg-gray-800/70 transition-all duration-200">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
+            <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
               <Settings2 className="w-5 h-5 text-orange-400" />
               Layout wählen
             </CardTitle>
@@ -231,9 +231,9 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
         </Card>
 
         {/* Color Presets */}
-        <Card className="border-gray-700 bg-gray-800/50 backdrop-blur-sm hover:bg-gray-800/70 transition-all duration-200">
+        <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm hover:bg-gray-100/70 dark:hover:bg-gray-800/70 transition-all duration-200">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
+            <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
               <Palette className="w-5 h-5 text-orange-400" />
               Farbauswahl
             </CardTitle>
@@ -287,7 +287,7 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
             </div>
 
             {/* Custom Colors */}
-            <div className="pt-4 border-t border-gray-700 space-y-3">
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
               <Label className="text-sm font-medium text-gray-200 block">Individuelle Farben</Label>
               {[
                 { label: 'Primärfarbe', key: 'primary_color' },
@@ -295,7 +295,7 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                 { label: 'Textfarbe',   key: 'text_color' },
               ].map(({ label, key }) => (
                 <div key={key} className="flex items-center gap-3">
-                  <Label className="text-xs text-gray-400 w-24">{label}</Label>
+                  <Label className="text-xs text-gray-600 dark:text-gray-400 w-24">{label}</Label>
                   <input
                     type="color"
                     value={config[key] || '#000000'}
@@ -305,7 +305,7 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                   <Input
                     value={config[key] || ''}
                     onChange={(e) => { updateConfig(key, e.target.value); setColorPreset('custom'); }}
-                    className="flex-1 bg-gray-700 border-gray-600 text-white text-sm h-8"
+                    className="flex-1 bg-gray-700 border-gray-600 text-gray-900 dark:text-white text-sm h-8"
                   />
                 </div>
               ))}
@@ -314,9 +314,9 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
         </Card>
 
         {/* Text Settings */}
-        <Card className="border-gray-700 bg-gray-800/50 backdrop-blur-sm hover:bg-gray-800/70 transition-all duration-200">
+        <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm hover:bg-gray-100/70 dark:hover:bg-gray-800/70 transition-all duration-200">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
+            <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
               <Type className="w-5 h-5 text-orange-400" />
               Texte anpassen
             </CardTitle>
@@ -342,7 +342,7 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
               <Input
                 value={config.texts?.[textLang]?.title || ''}
                 onChange={(e) => updateTexts(textLang, 'title', e.target.value)}
-                className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
+                className="bg-gray-700 border-gray-600 text-gray-900 dark:text-white placeholder:text-gray-400"
               />
             </div>
 
@@ -352,35 +352,35 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                 value={config.texts?.[textLang]?.description || ''}
                 onChange={(e) => updateTexts(textLang, 'description', e.target.value)}
                 rows={4}
-                className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
+                className="bg-gray-700 border-gray-600 text-gray-900 dark:text-white placeholder:text-gray-400"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs text-gray-300">Alle akzeptieren</Label>
-                <Input value={config.texts?.[textLang]?.accept_all || ''} onChange={(e) => updateTexts(textLang, 'accept_all', e.target.value)} className="bg-gray-700 border-gray-600 text-white text-sm" />
+                <Label className="text-xs text-gray-700 dark:text-gray-300">Alle akzeptieren</Label>
+                <Input value={config.texts?.[textLang]?.accept_all || ''} onChange={(e) => updateTexts(textLang, 'accept_all', e.target.value)} className="bg-gray-700 border-gray-600 text-gray-900 dark:text-white text-sm" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-gray-300">Nur essenziell</Label>
-                <Input value={config.texts?.[textLang]?.reject_all || ''} onChange={(e) => updateTexts(textLang, 'reject_all', e.target.value)} className="bg-gray-700 border-gray-600 text-white text-sm" />
+                <Label className="text-xs text-gray-700 dark:text-gray-300">Nur essenziell</Label>
+                <Input value={config.texts?.[textLang]?.reject_all || ''} onChange={(e) => updateTexts(textLang, 'reject_all', e.target.value)} className="bg-gray-700 border-gray-600 text-gray-900 dark:text-white text-sm" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-gray-300">Auswahl speichern</Label>
-                <Input value={config.texts?.[textLang]?.accept_selected || ''} onChange={(e) => updateTexts(textLang, 'accept_selected', e.target.value)} className="bg-gray-700 border-gray-600 text-white text-sm" />
+                <Label className="text-xs text-gray-700 dark:text-gray-300">Auswahl speichern</Label>
+                <Input value={config.texts?.[textLang]?.accept_selected || ''} onChange={(e) => updateTexts(textLang, 'accept_selected', e.target.value)} className="bg-gray-700 border-gray-600 text-gray-900 dark:text-white text-sm" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-gray-300">Einstellungen-Link</Label>
-                <Input value={config.texts?.[textLang]?.settings || ''} onChange={(e) => updateTexts(textLang, 'settings', e.target.value)} className="bg-gray-700 border-gray-600 text-white text-sm" />
+                <Label className="text-xs text-gray-700 dark:text-gray-300">Einstellungen-Link</Label>
+                <Input value={config.texts?.[textLang]?.settings || ''} onChange={(e) => updateTexts(textLang, 'settings', e.target.value)} className="bg-gray-700 border-gray-600 text-gray-900 dark:text-white text-sm" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Legal Links */}
-        <Card className="border-gray-700 bg-gray-800/50 backdrop-blur-sm hover:bg-gray-800/70 transition-all duration-200">
+        <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm hover:bg-gray-100/70 dark:hover:bg-gray-800/70 transition-all duration-200">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
+            <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
               <Link className="w-5 h-5 text-orange-400" />
               Rechtliche Links
             </CardTitle>
@@ -392,23 +392,23 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
               { label: 'Impressum-URL',     key: 'imprint_url',        placeholder: '/impressum' },
             ].map(({ label, key, placeholder, hint }) => (
               <div key={key} className="space-y-1">
-                <Label className="text-xs text-gray-300">{label}</Label>
+                <Label className="text-xs text-gray-700 dark:text-gray-300">{label}</Label>
                 <Input
                   value={config[key] || ''}
                   onChange={(e) => updateConfig(key, e.target.value)}
                   placeholder={placeholder}
-                  className="bg-gray-700 border-gray-600 text-white text-sm placeholder:text-gray-500"
+                  className="bg-gray-700 border-gray-600 text-gray-900 dark:text-white text-sm placeholder:text-gray-500"
                 />
-                {hint && <p className="text-[11px] text-gray-400 leading-snug">{hint}</p>}
+                {hint && <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">{hint}</p>}
               </div>
             ))}
           </CardContent>
         </Card>
 
         {/* Advanced Settings */}
-        <Card className="border-gray-700 bg-gray-800/50 backdrop-blur-sm hover:bg-gray-800/70 transition-all duration-200">
+        <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm hover:bg-gray-100/70 dark:hover:bg-gray-800/70 transition-all duration-200">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
+            <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
               <Sparkles className="w-5 h-5 text-orange-400" />
               Erweiterte Einstellungen
             </CardTitle>
@@ -426,19 +426,19 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                 max={730}
                 value={config.cookie_lifetime_days || 365}
                 onChange={(e) => updateConfig('cookie_lifetime_days', parseInt(e.target.value) || 365)}
-                className="bg-gray-700 border-gray-600 text-white w-32"
+                className="bg-gray-700 border-gray-600 text-gray-900 dark:text-white w-32"
               />
               <p className="text-xs text-gray-500">Empfehlung: 365 Tage (1 Jahr)</p>
             </div>
 
             {/* Google Consent Mode */}
-            <div className="flex items-center justify-between py-2 border-t border-gray-700">
+            <div className="flex items-center justify-between py-2 border-t border-gray-200 dark:border-gray-700">
               <div className="space-y-0.5">
                 <Label className="text-sm text-gray-200 flex items-center gap-2">
                   <Globe className="w-4 h-4 text-orange-400" />
                   Google Consent Mode v2
                 </Label>
-                <p className="text-xs text-gray-400">Pflicht seit März 2024 für Google-Dienste</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Pflicht seit März 2024 für Google-Dienste</p>
               </div>
               <Switch
                 checked={config.consent_mode_enabled !== false}
@@ -448,20 +448,20 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
 
             {/* GTM Container ID */}
             <div className="space-y-1">
-              <Label className="text-xs text-gray-300">GTM Container ID (optional)</Label>
+              <Label className="text-xs text-gray-700 dark:text-gray-300">GTM Container ID (optional)</Label>
               <Input
                 value={config.gtm_container_id || ''}
                 onChange={(e) => updateConfig('gtm_container_id', e.target.value)}
                 placeholder="GTM-XXXXXXX"
-                className="bg-gray-700 border-gray-600 text-white text-sm placeholder:text-gray-500"
+                className="bg-gray-700 border-gray-600 text-gray-900 dark:text-white text-sm placeholder:text-gray-500"
               />
             </div>
 
             {/* Branding */}
-            <div className="flex items-center justify-between py-2 border-t border-gray-700">
+            <div className="flex items-center justify-between py-2 border-t border-gray-200 dark:border-gray-700">
               <div className="space-y-0.5">
                 <Label className="text-sm text-gray-200">Complyo Branding anzeigen</Label>
-                <p className="text-xs text-gray-400">White-Label ist im Expert Plan verfügbar</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">White-Label ist im Expert Plan verfügbar</p>
               </div>
               <Switch
                 checked={config.show_branding !== false}
@@ -493,10 +493,10 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
 
       {/* Right Column - Live Preview */}
       <div className="lg:sticky lg:top-6 h-fit">
-        <Card className="border-gray-700 bg-gray-800/50 backdrop-blur-sm">
+        <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-white">
+              <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
                 <Eye className="w-5 h-5 text-orange-400" />
                 Live-Vorschau
               </CardTitle>
@@ -504,7 +504,7 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowPreview(!showPreview)}
-                className="text-gray-300 hover:text-white"
+                className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
               >
                 {showPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </Button>
@@ -534,7 +534,7 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                         <h3 className="font-bold text-sm">{config.texts?.de?.title || 'Privatsphäre-Einstellungen'}</h3>
                         <p className="text-xs opacity-75 line-clamp-3">{config.texts?.de?.description || 'Beschreibung...'}</p>
                         <div className="flex flex-col gap-2">
-                          <button className="px-3 py-2 text-xs font-semibold text-white rounded-md" style={{ backgroundColor: config.primary_color }}>
+                          <button className="px-3 py-2 text-xs font-semibold text-gray-900 dark:text-white rounded-md" style={{ backgroundColor: config.primary_color }}>
                             {config.texts?.de?.accept_all || 'Alle akzeptieren'}
                           </button>
                           <button className="px-3 py-2 text-xs font-medium rounded-md border-2" style={{ borderColor: config.primary_color, color: config.primary_color }}>
@@ -549,7 +549,7 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                   </>
                 ) : config.layout === 'floating_widget' ? (
                   <div
-                    className="absolute bottom-4 right-4 w-12 h-12 rounded-full shadow-xl flex items-center justify-center text-white font-bold text-lg cursor-pointer"
+                    className="absolute bottom-4 right-4 w-12 h-12 rounded-full shadow-xl flex items-center justify-center text-gray-900 dark:text-white font-bold text-lg cursor-pointer"
                     style={{ backgroundColor: config.primary_color }}
                     title="Cookie-Einstellungen"
                   >
@@ -564,7 +564,7 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                       <h3 className="font-bold text-xs">{config.texts?.de?.title || 'Privatsphäre-Einstellungen'}</h3>
                       <p className="text-[10px] opacity-70 line-clamp-2">{config.texts?.de?.description || ''}</p>
                       <div className="flex gap-2">
-                        <button className="flex-1 px-2 py-1.5 text-[10px] font-semibold text-white rounded" style={{ backgroundColor: config.primary_color }}>
+                        <button className="flex-1 px-2 py-1.5 text-[10px] font-semibold text-gray-900 dark:text-white rounded" style={{ backgroundColor: config.primary_color }}>
                           {config.texts?.de?.accept_all || 'Alle akzeptieren'}
                         </button>
                         <button className="flex-1 px-2 py-1.5 text-[10px] rounded border" style={{ borderColor: config.primary_color, color: config.primary_color }}>
@@ -576,7 +576,7 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                 )}
               </div>
             ) : (
-              <div className="flex items-center justify-center h-64 text-gray-400">
+              <div className="flex items-center justify-center h-64 text-gray-600 dark:text-gray-400">
                 <div className="text-center">
                   <EyeOff className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>Vorschau ausgeblendet</p>

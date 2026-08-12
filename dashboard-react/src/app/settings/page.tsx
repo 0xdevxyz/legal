@@ -256,7 +256,7 @@ export default function SettingsPage() {
                       <Input
                         value={profile.email}
                         disabled
-                        className="dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-zinc-500 bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
+                        className="dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-zinc-500 bg-gray-100 border-gray-200 text-gray-600 dark:text-gray-400 cursor-not-allowed"
                       />
                     </div>
                   </div>

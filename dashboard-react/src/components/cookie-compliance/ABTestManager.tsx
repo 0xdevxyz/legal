@@ -301,7 +301,7 @@ export default function ABTestManager({ siteId, config }: Props) {
       ) : tests.length === 0 ? (
         <Card className="dark:bg-zinc-900/50 bg-white/70">
           <CardContent className="p-8 text-center">
-            <BarChart3 className="w-10 h-10 mx-auto mb-3 dark:text-zinc-600 text-gray-400" />
+            <BarChart3 className="w-10 h-10 mx-auto mb-3 dark:text-zinc-600 text-gray-600 dark:text-gray-400" />
             <p className="dark:text-zinc-300 text-gray-700 font-medium">Noch kein Test angelegt</p>
             <p className="text-sm dark:text-zinc-500 text-gray-500 mt-1">
               Ein Test läuft immer nur für eine Seite gleichzeitig.

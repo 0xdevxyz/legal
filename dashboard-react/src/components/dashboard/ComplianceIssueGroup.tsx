@@ -196,7 +196,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-xl font-bold text-white">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
                     {group.title}
                   </h3>
                   
@@ -214,7 +214,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                   )}
                 </div>
                 
-                <p className="text-sm text-zinc-400 mt-1">
+                <p className="text-sm text-gray-600 dark:text-zinc-400 mt-1">
                   {group.description}
                 </p>
               </div>
@@ -243,7 +243,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
             {/* Expand Button */}
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="flex items-center gap-2 px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-zinc-700 text-white rounded-lg transition-colors text-sm font-medium"
+              className="flex items-center gap-2 px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-900 dark:text-white rounded-lg transition-colors text-sm font-medium"
             >
               {isExpanded ? (
                 <>
@@ -264,8 +264,8 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
         {group.completed_count > 0 && (
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-zinc-400">Fortschritt</span>
-              <span className="text-sm font-semibold text-white">
+              <span className="text-sm text-gray-600 dark:text-zinc-400">Fortschritt</span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">
                 {group.completed_count} / {group.total_count} behoben
               </span>
             </div>
@@ -286,10 +286,10 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
               <div className="flex items-start gap-3">
                 <FileText className="w-5 h-5 text-blue-400 mt-0.5" />
                 <div>
-                  <p className="text-sm text-white font-medium mb-1">
+                  <p className="text-sm text-gray-900 dark:text-white font-medium mb-1">
                     {legalDocumentType && DOC_LABELS[legalDocumentType].title}
                   </p>
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-xs text-gray-600 dark:text-zinc-400">
                     Unser Assistent führt Sie durch alle notwendigen Angaben und erstellt{' '}
                     {legalDocumentType && DOC_LABELS[legalDocumentType].basis} basierend auf Ihrer Website.
                   </p>
@@ -376,7 +376,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                 {hasMore && !showAllIssues && (
                   <button
                     onClick={() => setShowAllIssues(true)}
-                    className="mt-4 w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    className="mt-4 w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-900 dark:text-white rounded-lg text-sm font-medium transition-colors"
                   >
                     Zeige {(group.sub_issues ?? []).length - 3} weitere Problem{(group.sub_issues ?? []).length - 3 > 1 ? 'e' : ''}
                   </button>
@@ -385,7 +385,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                 {showAllIssues && hasMore && (
                   <button
                     onClick={() => setShowAllIssues(false)}
-                    className="mt-4 w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    className="mt-4 w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-900 dark:text-white rounded-lg text-sm font-medium transition-colors"
                   >
                     Weniger anzeigen
                   </button>
@@ -411,7 +411,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
               {/* Close Button */}
               <button
                 onClick={() => setShowLegalWizard(null)}
-                className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors z-10"
+                className="absolute top-4 right-4 p-2 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors z-10"
               >
                 <X className="w-5 h-5" />
               </button>

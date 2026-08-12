@@ -384,10 +384,10 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-white mb-2">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
           {DOC_CONFIG[documentType].emoji} {DOC_CONFIG[documentType].label} Generator
         </h1>
-        <p className="text-zinc-400">
+        <p className="text-gray-600 dark:text-zinc-400">
           Erstellen Sie rechtssichere {DOC_CONFIG[documentType].label} {DOC_CONFIG[documentType].legalBasis} für Ihre Website
         </p>
       </div>
@@ -413,11 +413,11 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
       {step === 1 && (
         <Card className="dark:bg-zinc-900 bg-white dark:border-zinc-800 border-gray-200">
           <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-white">
+            <CardTitle className="flex items-center gap-3 text-gray-900 dark:text-white">
               <Globe className="w-6 h-6 text-blue-400" />
               Schritt 1: Website-Eigenschaften
             </CardTitle>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-gray-600 dark:text-zinc-400">
               Wir haben Ihre Website analysiert. Bitte bestätigen oder ergänzen Sie die erkannten Funktionen.
             </p>
           </CardHeader>
@@ -429,7 +429,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
                   <Info className="w-4 h-4" />
                   <span className="font-medium">Erkanntes System</span>
                 </div>
-                <p className="text-white font-semibold">
+                <p className="text-gray-900 dark:text-white font-semibold">
                   {CMS_TYPES[features.cms_type as keyof typeof CMS_TYPES]?.icon} {CMS_TYPES[features.cms_type as keyof typeof CMS_TYPES]?.name || features.cms_type}
                 </p>
               </div>
@@ -437,7 +437,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
 
             {/* Feature Checkboxes */}
             <div className="space-y-4">
-              <p className="text-sm font-medium text-zinc-300">Welche Funktionen hat Ihre Website?</p>
+              <p className="text-sm font-medium text-gray-700 dark:text-zinc-300">Welche Funktionen hat Ihre Website?</p>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {[
@@ -466,8 +466,8 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
                     />
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <Icon className="w-4 h-4 text-zinc-400" />
-                        <span className="font-medium text-white">{label}</span>
+                        <Icon className="w-4 h-4 text-gray-600 dark:text-zinc-400" />
+                        <span className="font-medium text-gray-900 dark:text-white">{label}</span>
                       </div>
                       <p className="text-xs text-zinc-500 mt-1">{desc}</p>
                     </div>
@@ -477,7 +477,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
             </div>
 
             <div className="flex justify-between pt-4">
-              <Button onClick={onBack} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-zinc-300 hover:bg-zinc-800">
+              <Button onClick={onBack} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800">
                 <ArrowLeft className="w-4 h-4" /> Zurück
               </Button>
               <Button onClick={() => setStep(2)} className="gap-2 bg-blue-600 hover:bg-blue-700">
@@ -492,14 +492,14 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
       {step === 2 && (
         <Card className="dark:bg-zinc-900 bg-white dark:border-zinc-800 border-gray-200">
           <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-white">
+            <CardTitle className="flex items-center gap-3 text-gray-900 dark:text-white">
               <Building className="w-6 h-6 text-blue-400" />
               Schritt 2: Unternehmensdaten
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">
                 Firmenname <span className="text-red-400">*</span>
               </label>
               <input
@@ -507,18 +507,18 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
                 value={companyData.company_name || ''}
                 onChange={(e) => handleInputChange('company_name', e.target.value)}
                 placeholder="z.B. Musterfirma GmbH"
-                className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">
                 Rechtsform <span className="text-red-400">*</span>
               </label>
               <select
                 value={companyData.legal_form || 'GmbH'}
                 onChange={(e) => handleInputChange('legal_form', e.target.value)}
-                className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
               >
                 {LEGAL_FORMS.map(form => (
                   <option key={form.value} value={form.value}>{form.label}</option>
@@ -527,7 +527,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">
                 Geschäftsführer / Vertretungsberechtigter <span className="text-red-400">*</span>
               </label>
               <input
@@ -535,12 +535,12 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
                 value={companyData.representative || ''}
                 onChange={(e) => handleInputChange('representative', e.target.value)}
                 placeholder="z.B. Max Mustermann"
-                className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500 focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500 focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
             <div className="flex justify-between pt-4">
-              <Button onClick={() => setStep(1)} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-zinc-300 hover:bg-zinc-800">
+              <Button onClick={() => setStep(1)} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800">
                 <ArrowLeft className="w-4 h-4" /> Zurück
               </Button>
               <Button onClick={() => setStep(3)} disabled={!isStepValid()} className="gap-2 bg-blue-600 hover:bg-blue-700">
@@ -555,7 +555,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
       {step === 3 && (
         <Card className="dark:bg-zinc-900 bg-white dark:border-zinc-800 border-gray-200">
           <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-white">
+            <CardTitle className="flex items-center gap-3 text-gray-900 dark:text-white">
               <MapPin className="w-6 h-6 text-blue-400" />
               Schritt 3: Adresse & Kontakt
             </CardTitle>
@@ -563,58 +563,58 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Straße und Hausnummer <span className="text-red-400">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Straße und Hausnummer <span className="text-red-400">*</span></label>
                 <input type="text" value={companyData.address || ''} onChange={(e) => handleInputChange('address', e.target.value)}
-                  placeholder="z.B. Musterstraße 123" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                  placeholder="z.B. Musterstraße 123" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">PLZ <span className="text-red-400">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">PLZ <span className="text-red-400">*</span></label>
                 <input type="text" value={companyData.postal_code || ''} onChange={(e) => handleInputChange('postal_code', e.target.value)}
-                  placeholder="z.B. 12345" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                  placeholder="z.B. 12345" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Stadt <span className="text-red-400">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Stadt <span className="text-red-400">*</span></label>
                 <input type="text" value={companyData.city || ''} onChange={(e) => handleInputChange('city', e.target.value)}
-                  placeholder="z.B. Berlin" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                  placeholder="z.B. Berlin" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-zinc-300 mb-2">E-Mail-Adresse <span className="text-red-400">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">E-Mail-Adresse <span className="text-red-400">*</span></label>
                 <input type="email" value={companyData.email || ''} onChange={(e) => handleInputChange('email', e.target.value)}
-                  placeholder="z.B. info@musterfirma.de" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                  placeholder="z.B. info@musterfirma.de" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Telefon (optional)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Telefon (optional)</label>
                 <input type="tel" value={companyData.phone || ''} onChange={(e) => handleInputChange('phone', e.target.value)}
-                  placeholder="z.B. +49 30 12345678" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                  placeholder="z.B. +49 30 12345678" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">USt-IdNr. (optional)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">USt-IdNr. (optional)</label>
                 <input type="text" value={companyData.ust_id || ''} onChange={(e) => handleInputChange('ust_id', e.target.value)}
-                  placeholder="z.B. DE123456789" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                  placeholder="z.B. DE123456789" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Handelsregister-Nr. (optional)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Handelsregister-Nr. (optional)</label>
                 <input type="text" value={companyData.registration_number || ''} onChange={(e) => handleInputChange('registration_number', e.target.value)}
-                  placeholder="z.B. HRB 12345, Amtsgericht Berlin" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                  placeholder="z.B. HRB 12345, Amtsgericht Berlin" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
               </div>
 
               {/* Impressum-spezifische Zusatzangaben */}
               {documentType === 'impressum' && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Berufsbezeichnung (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Berufsbezeichnung (optional)</label>
                     <input type="text" value={companyData.profession || ''} onChange={(e) => handleInputChange('profession', e.target.value)}
-                      placeholder="z.B. Rechtsanwalt, Steuerberater" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="z.B. Rechtsanwalt, Steuerberater" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Zuständige Aufsichtsbehörde (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Zuständige Aufsichtsbehörde (optional)</label>
                     <input type="text" value={companyData.regulatory_authority || ''} onChange={(e) => handleInputChange('regulatory_authority', e.target.value)}
-                      placeholder="z.B. Rechtsanwaltskammer Berlin" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="z.B. Rechtsanwaltskammer Berlin" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Inhaltlich Verantwortlicher § 18 Abs. 2 MStV (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Inhaltlich Verantwortlicher § 18 Abs. 2 MStV (optional)</label>
                     <input type="text" value={companyData.content_responsible || ''} onChange={(e) => handleInputChange('content_responsible', e.target.value)}
-                      placeholder="Name, falls abweichend vom Vertreter" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="Name, falls abweichend vom Vertreter" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                 </>
               )}
@@ -623,14 +623,14 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
               {documentType === 'datenschutz' && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Hosting-Anbieter (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Hosting-Anbieter (optional)</label>
                     <input type="text" value={companyData.hosting_provider || ''} onChange={(e) => handleInputChange('hosting_provider', e.target.value)}
-                      placeholder="z.B. Hetzner Online GmbH" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="z.B. Hetzner Online GmbH" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Server-Standort (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Server-Standort (optional)</label>
                     <input type="text" value={companyData.server_location || ''} onChange={(e) => handleInputChange('server_location', e.target.value)}
-                      placeholder="z.B. Deutschland (Nürnberg)" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="z.B. Deutschland (Nürnberg)" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                 </>
               )}
@@ -639,14 +639,14 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
               {documentType === 'agb' && (
                 <>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Leistungsbeschreibung</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Leistungsbeschreibung</label>
                     <textarea value={companyData.service_description || ''} onChange={(e) => handleInputChange('service_description', e.target.value)}
-                      placeholder="Was bieten Sie an? z.B. SaaS-Abo für Compliance-Scans" rows={2} className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="Was bieten Sie an? z.B. SaaS-Abo für Compliance-Scans" rows={2} className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Zielgruppe (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Zielgruppe (optional)</label>
                     <select value={companyData.target_audience || ''} onChange={(e) => handleInputChange('target_audience', e.target.value)}
-                      className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white">
+                      className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white">
                       <option value="">Bitte wählen…</option>
                       <option value="Verbraucher (B2C)">Verbraucher (B2C)</option>
                       <option value="Unternehmen (B2B)">Unternehmen (B2B)</option>
@@ -654,34 +654,34 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Preismodell (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Preismodell (optional)</label>
                     <input type="text" value={companyData.pricing_model || ''} onChange={(e) => handleInputChange('pricing_model', e.target.value)}
-                      placeholder="z.B. monatliches Abo, Festpreis" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="z.B. monatliches Abo, Festpreis" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Zahlungsarten (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Zahlungsarten (optional)</label>
                     <input type="text" value={companyData.payment_methods || ''} onChange={(e) => handleInputChange('payment_methods', e.target.value)}
-                      placeholder="z.B. Kreditkarte, SEPA, PayPal" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="z.B. Kreditkarte, SEPA, PayPal" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Mindestlaufzeit (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Mindestlaufzeit (optional)</label>
                     <input type="text" value={companyData.min_contract_duration || ''} onChange={(e) => handleInputChange('min_contract_duration', e.target.value)}
-                      placeholder="z.B. 1 Monat, 12 Monate" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="z.B. 1 Monat, 12 Monate" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Kündigungsfrist (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Kündigungsfrist (optional)</label>
                     <input type="text" value={companyData.cancellation_period || ''} onChange={(e) => handleInputChange('cancellation_period', e.target.value)}
-                      placeholder="z.B. 14 Tage zum Monatsende" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="z.B. 14 Tage zum Monatsende" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Automatische Verlängerung (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Automatische Verlängerung (optional)</label>
                     <input type="text" value={companyData.auto_renewal || ''} onChange={(e) => handleInputChange('auto_renewal', e.target.value)}
-                      placeholder="z.B. um jeweils 1 Monat" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="z.B. um jeweils 1 Monat" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Gerichtsstand B2B (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Gerichtsstand B2B (optional)</label>
                     <input type="text" value={companyData.jurisdiction || ''} onChange={(e) => handleInputChange('jurisdiction', e.target.value)}
-                      placeholder="z.B. Berlin" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="z.B. Berlin" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                 </>
               )}
@@ -690,19 +690,19 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
               {documentType === 'cookie' && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Consent-Tool (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Consent-Tool (optional)</label>
                     <input type="text" value={companyData.consent_tool || ''} onChange={(e) => handleInputChange('consent_tool', e.target.value)}
-                      placeholder="z.B. Usercentrics, Cookiebot, eigenes Banner" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="z.B. Usercentrics, Cookiebot, eigenes Banner" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Link zur Datenschutzerklärung (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Link zur Datenschutzerklärung (optional)</label>
                     <input type="text" value={companyData.privacy_url || ''} onChange={(e) => handleInputChange('privacy_url', e.target.value)}
-                      placeholder="z.B. /datenschutz" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="z.B. /datenschutz" className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">Eingesetzte Drittanbieter-Dienste (optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Eingesetzte Drittanbieter-Dienste (optional)</label>
                     <textarea value={companyData.third_party_services || ''} onChange={(e) => handleInputChange('third_party_services', e.target.value)}
-                      placeholder="z.B. Google Analytics, Meta Pixel, YouTube" rows={2} className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                      placeholder="z.B. Google Analytics, Meta Pixel, YouTube" rows={2} className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                   </div>
                 </>
               )}
@@ -710,15 +710,15 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
               {/* Widerruf-spezifische Angaben */}
               {documentType === 'widerruf' && (
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-zinc-300 mb-2">Hinweis zu Ausschluss/Erlöschen des Widerrufsrechts (optional)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Hinweis zu Ausschluss/Erlöschen des Widerrufsrechts (optional)</label>
                   <textarea value={companyData.withdrawal_exceptions || ''} onChange={(e) => handleInputChange('withdrawal_exceptions', e.target.value)}
-                    placeholder="z.B. bei sofort beginnenden Dienstleistungen mit ausdrücklicher Zustimmung; bei digitalen Inhalten" rows={3} className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-white placeholder-zinc-500" />
+                    placeholder="z.B. bei sofort beginnenden Dienstleistungen mit ausdrücklicher Zustimmung; bei digitalen Inhalten" rows={3} className="w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 border dark:border-zinc-700 border-gray-200 rounded-lg text-gray-900 dark:text-white placeholder-zinc-500" />
                 </div>
               )}
             </div>
 
             <div className="flex justify-between pt-4">
-              <Button onClick={() => setStep(2)} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-zinc-300 hover:bg-zinc-800">
+              <Button onClick={() => setStep(2)} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800">
                 <ArrowLeft className="w-4 h-4" /> Zurück
               </Button>
               <Button onClick={() => setStep(4)} disabled={!isStepValid()} className="gap-2 bg-blue-600 hover:bg-blue-700">
@@ -733,27 +733,27 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
       {step === 4 && (
         <Card className="dark:bg-zinc-900 bg-white dark:border-zinc-800 border-gray-200">
           <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-white">
+            <CardTitle className="flex items-center gap-3 text-gray-900 dark:text-white">
               <Shield className="w-6 h-6 text-blue-400" />
               Schritt 4: Zusammenfassung
             </CardTitle>
-            <p className="text-sm text-zinc-400">Bitte prüfen Sie Ihre Angaben vor der Generierung.</p>
+            <p className="text-sm text-gray-600 dark:text-zinc-400">Bitte prüfen Sie Ihre Angaben vor der Generierung.</p>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Summary */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-3">
-                <h4 className="font-semibold text-white">Unternehmen</h4>
-                <div className="text-sm text-zinc-400 space-y-1">
-                  <p><strong className="text-zinc-300">Firma:</strong> {companyData.company_name} {companyData.legal_form}</p>
-                  <p><strong className="text-zinc-300">Vertreter:</strong> {companyData.representative}</p>
-                  <p><strong className="text-zinc-300">Adresse:</strong> {companyData.address}, {companyData.postal_code} {companyData.city}</p>
-                  <p><strong className="text-zinc-300">E-Mail:</strong> {companyData.email}</p>
+                <h4 className="font-semibold text-gray-900 dark:text-white">Unternehmen</h4>
+                <div className="text-sm text-gray-600 dark:text-zinc-400 space-y-1">
+                  <p><strong className="text-gray-700 dark:text-zinc-300">Firma:</strong> {companyData.company_name} {companyData.legal_form}</p>
+                  <p><strong className="text-gray-700 dark:text-zinc-300">Vertreter:</strong> {companyData.representative}</p>
+                  <p><strong className="text-gray-700 dark:text-zinc-300">Adresse:</strong> {companyData.address}, {companyData.postal_code} {companyData.city}</p>
+                  <p><strong className="text-gray-700 dark:text-zinc-300">E-Mail:</strong> {companyData.email}</p>
                 </div>
               </div>
               
               <div className="space-y-3">
-                <h4 className="font-semibold text-white">Website-Funktionen</h4>
+                <h4 className="font-semibold text-gray-900 dark:text-white">Website-Funktionen</h4>
                 <div className="flex flex-wrap gap-2">
                   {features.has_shop && <DetectedFeaturesBadge detected={true} label="Online-Shop" />}
                   {features.has_contact_form && <DetectedFeaturesBadge detected={true} label="Kontaktformular" />}
@@ -791,7 +791,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
             )}
 
             <div className="flex justify-between pt-4">
-              <Button onClick={() => setStep(3)} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-zinc-300 hover:bg-zinc-800">
+              <Button onClick={() => setStep(3)} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800">
                 <ArrowLeft className="w-4 h-4" /> Zurück
               </Button>
               <Button onClick={handleGenerate} disabled={isGenerating} className="gap-2 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700">
@@ -810,7 +810,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
       {step === 5 && finalContent && (
         <Card className="dark:bg-zinc-900 bg-white dark:border-zinc-800 border-gray-200">
           <CardHeader className="bg-gradient-to-r from-emerald-500/10 to-green-500/10 border-b border-emerald-500/30">
-            <CardTitle className="flex items-center gap-3 text-white">
+            <CardTitle className="flex items-center gap-3 text-gray-900 dark:text-white">
               <CheckCircle className="w-6 h-6 text-emerald-400" />
               ✅ {DOC_CONFIG[documentType].label} erfolgreich erstellt!
             </CardTitle>
@@ -823,10 +823,10 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
 
             {/* Action Buttons */}
             <div className="flex gap-3">
-              <Button onClick={handleCopy} variant="outline" className="flex-1 gap-2 dark:border-zinc-700 border-gray-200 text-zinc-300 hover:bg-zinc-800">
+              <Button onClick={handleCopy} variant="outline" className="flex-1 gap-2 dark:border-zinc-700 border-gray-200 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800">
                 <Copy className="w-4 h-4" /> {copied ? '✅ Kopiert!' : 'HTML kopieren'}
               </Button>
-              <Button onClick={handleDownload} variant="outline" className="flex-1 gap-2 dark:border-zinc-700 border-gray-200 text-zinc-300 hover:bg-zinc-800">
+              <Button onClick={handleDownload} variant="outline" className="flex-1 gap-2 dark:border-zinc-700 border-gray-200 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800">
                 <Download className="w-4 h-4" /> Als HTML downloaden
               </Button>
             </div>
@@ -845,7 +845,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
             </div>
 
             <div className="flex justify-between pt-4 border-t dark:border-zinc-800 border-gray-200">
-              <Button onClick={() => setStep(4)} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-zinc-300 hover:bg-zinc-800">
+              <Button onClick={() => setStep(4)} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800">
                 <ArrowLeft className="w-4 h-4" /> Daten bearbeiten
               </Button>
               <Button onClick={() => onComplete({ companyData, features, content: finalContent })} className="gap-2 bg-gradient-to-r from-blue-500 to-purple-600">

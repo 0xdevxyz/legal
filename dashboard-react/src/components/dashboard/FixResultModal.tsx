@@ -190,7 +190,7 @@ export const FixResultModal: React.FC<FixResultModalProps> = ({ isOpen, onClose,
 
             {/* Content based on type */}
             {(fixResult.type === 'code' || fixResult.type === 'widget') && fixResult.content && (
-              <div className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto">
+              <div className="bg-white dark:bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto">
                 <pre className="text-sm font-mono whitespace-pre-wrap">
                   <code>{fixResult.content}</code>
                 </pre>

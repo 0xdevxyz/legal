@@ -169,30 +169,30 @@ export const ComplianceWizard: React.FC<ComplianceWizardProps> = ({
         <div className="p-6 border-b dark:border-zinc-800 border-gray-200">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <Sparkles className="w-6 h-6 text-purple-400" />
                 Compliance-Wizard
               </h2>
-              <p className="text-sm text-zinc-400 mt-1">
+              <p className="text-sm text-gray-600 dark:text-zinc-400 mt-1">
                 Schritt-für-Schritt durch alle Compliance-Probleme
               </p>
             </div>
             
             <button
               onClick={onClose}
-              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
             >
-              <X className="w-6 h-6 text-zinc-400" />
+              <X className="w-6 h-6 text-gray-600 dark:text-zinc-400" />
             </button>
           </div>
 
           {/* Progress Bar */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-zinc-400">
+              <span className="text-gray-600 dark:text-zinc-400">
                 Schritt {currentStepIndex + 1} von {steps.length}
               </span>
-              <span className="text-white font-semibold">
+              <span className="text-gray-900 dark:text-white font-semibold">
                 {completedCount} behoben, {skippedCount} übersprungen
               </span>
             </div>
@@ -242,10 +242,10 @@ export const ComplianceWizard: React.FC<ComplianceWizardProps> = ({
                 <div className="flex items-start gap-4 p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
                   <div className="text-3xl">{currentStep.issue._group.icon}</div>
                   <div className="flex-1">
-                    <h3 className="text-xl font-bold text-white mb-2">
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
                       {currentStep.issue._group.title}
                     </h3>
-                    <p className="text-sm text-zinc-300 mb-3">
+                    <p className="text-sm text-gray-700 dark:text-zinc-300 mb-3">
                       {currentStep.issue._group.description}
                     </p>
                     <div className="flex gap-2 flex-wrap">
@@ -317,7 +317,7 @@ export const ComplianceWizard: React.FC<ComplianceWizardProps> = ({
                   <div className="flex gap-2">
                     <button
                       onClick={() => setShowSkipWarning(false)}
-                      className="px-3 py-1.5 dark:bg-zinc-700 bg-gray-100 hover:bg-zinc-600 text-white rounded text-sm font-medium transition-colors"
+                      className="px-3 py-1.5 dark:bg-zinc-700 bg-gray-100 hover:bg-zinc-600 text-gray-900 dark:text-white rounded text-sm font-medium transition-colors"
                     >
                       Abbrechen
                     </button>
@@ -340,7 +340,7 @@ export const ComplianceWizard: React.FC<ComplianceWizardProps> = ({
             <button
               onClick={handlePrevious}
               disabled={currentStepIndex === 0}
-              className="px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              className="px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-gray-200 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white rounded-lg font-medium transition-colors flex items-center gap-2"
             >
               <ChevronLeft className="w-5 h-5" />
               Zurück
@@ -349,7 +349,7 @@ export const ComplianceWizard: React.FC<ComplianceWizardProps> = ({
             <div className="flex gap-2">
               <button
                 onClick={handleSkip}
-                className="px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-zinc-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                className="px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-900 dark:text-white rounded-lg font-medium transition-colors flex items-center gap-2"
               >
                 <SkipForward className="w-5 h-5" />
                 Überspringen

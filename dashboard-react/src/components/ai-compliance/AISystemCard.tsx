@@ -16,17 +16,17 @@ export default function AISystemCard({ system, onScan, onDelete }: AISystemCardP
   const isNew = !system.last_assessment_date;
   
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 hover:border-purple-500/50 transition-all">
+    <div className="bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 hover:border-purple-500/50 transition-all">
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
           <Link
             href={`/ai-compliance/systems/${system.id}`}
-            className="text-lg font-semibold text-white hover:text-purple-400 transition-colors"
+            className="text-lg font-semibold text-gray-900 dark:text-white hover:text-purple-400 transition-colors"
           >
             {system.name}
           </Link>
-          <p className="text-sm text-gray-400 mt-1 line-clamp-2">
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
             {system.description}
           </p>
         </div>
@@ -39,28 +39,28 @@ export default function AISystemCard({ system, onScan, onDelete }: AISystemCardP
       {/* Metadata */}
       <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
         {system.vendor && (
-          <div className="flex items-center gap-2 text-gray-400">
+          <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
             <Building2 className="w-4 h-4" />
             <span>{system.vendor}</span>
           </div>
         )}
         
         {system.domain && (
-          <div className="flex items-center gap-2 text-gray-400">
+          <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
             <FileText className="w-4 h-4" />
             <span className="capitalize">{system.domain}</span>
           </div>
         )}
         
         {system.deployment_date && (
-          <div className="flex items-center gap-2 text-gray-400">
+          <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
             <Calendar className="w-4 h-4" />
             <span>{new Date(system.deployment_date).toLocaleDateString('de-DE')}</span>
           </div>
         )}
         
         {system.last_assessment_date && (
-          <div className="flex items-center gap-2 text-gray-400">
+          <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
             <Scan className="w-4 h-4" />
             <span>Gescannt: {new Date(system.last_assessment_date).toLocaleDateString('de-DE')}</span>
           </div>
@@ -68,7 +68,7 @@ export default function AISystemCard({ system, onScan, onDelete }: AISystemCardP
       </div>
       
       {/* Compliance Score */}
-      <div className="flex items-center justify-between pt-4 border-t border-gray-700">
+      <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-3">
           <ComplianceProgress
             score={system.compliance_score}
@@ -76,10 +76,10 @@ export default function AISystemCard({ system, onScan, onDelete }: AISystemCardP
             showLabel={false}
           />
           <div>
-            <div className="text-sm font-medium text-white">
+            <div className="text-sm font-medium text-gray-900 dark:text-white">
               Compliance Score
             </div>
-            <div className="text-xs text-gray-400">
+            <div className="text-xs text-gray-600 dark:text-gray-400">
               {system.compliance_score}% erfüllt
             </div>
           </div>

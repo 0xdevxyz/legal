@@ -526,12 +526,12 @@ export function FixWizard({
       {selectedFixType === 'widget' ? (
         <div className="space-y-6">
           {/* Widget-Integration */}
-          <div className="bg-gray-900 rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-gray-800">
-              <span className="text-sm text-gray-400">HTML - Vor &lt;/body&gt; einfügen</span>
+          <div className="bg-white dark:bg-gray-900 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 bg-gray-100 dark:bg-gray-800">
+              <span className="text-sm text-gray-600 dark:text-gray-400">HTML - Vor &lt;/body&gt; einfügen</span>
               <button
                 onClick={() => handleCopyCode(widget_fixes[0]?.integration_code || '')}
-                className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition"
+                className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white text-sm rounded-lg transition"
               >
                 {copiedCode ? (
                   <>
@@ -670,7 +670,7 @@ export function FixWizard({
           >
             <BookOpen className="w-5 h-5 text-blue-600" />
             <span className="text-gray-900">BFSG-Leitfaden</span>
-            <ExternalLink className="w-4 h-4 text-gray-400 ml-auto" />
+            <ExternalLink className="w-4 h-4 text-gray-600 dark:text-gray-400 ml-auto" />
           </a>
           <a
             href="https://complyo.de/support"
@@ -680,7 +680,7 @@ export function FixWizard({
           >
             <Shield className="w-5 h-5 text-blue-600" />
             <span className="text-gray-900">Support kontaktieren</span>
-            <ExternalLink className="w-4 h-4 text-gray-400 ml-auto" />
+            <ExternalLink className="w-4 h-4 text-gray-600 dark:text-gray-400 ml-auto" />
           </a>
         </div>
       </div>
@@ -723,7 +723,7 @@ export function FixWizard({
                 <span className="hidden md:inline">{step.title}</span>
               </button>
               {index < WIZARD_STEPS.length - 1 && (
-                <ChevronRight className="w-4 h-4 text-gray-300" />
+                <ChevronRight className="w-4 h-4 text-gray-700 dark:text-gray-300" />
               )}
             </React.Fragment>
           ))}

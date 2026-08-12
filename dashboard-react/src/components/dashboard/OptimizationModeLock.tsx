@@ -104,10 +104,10 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
           complianceScore: lockedWebsite.last_score || 0,
           status: 'completed' as const
         });
-        updateMetrics({
-          totalScore: lockedWebsite.last_score || 0,
-          websites: websites.length
-        });
+        // Kein totalScore: das ist der Score dieser einen Seite (steht oben in
+        // currentWebsite). In die Portfolio-Kachel geschrieben, zeigte sie den
+        // Einzelwert statt des Durchschnitts ueber alle Websites.
+        updateMetrics({ websites: websites.length });
       }
       router.push('/');
     } catch {
@@ -125,13 +125,13 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
           <Info className="w-4 h-4 text-amber-400 flex-shrink-0" />
           <span className="text-xs text-amber-300 truncate">
             Analyse-Modus — Fixes sind gesperrt für{' '}
-            <strong className="text-white">{getShortDomain(lockedOptimizationUrl)}</strong>
+            <strong className="text-gray-900 dark:text-white">{getShortDomain(lockedOptimizationUrl)}</strong>
           </span>
         </div>
         <button
           onClick={handleBackToOptimization}
           disabled={isLoadingBack}
-          className="flex items-center gap-1.5 text-xs text-amber-300 hover:text-white whitespace-nowrap disabled:opacity-60"
+          className="flex items-center gap-1.5 text-xs text-amber-300 hover:text-gray-900 dark:hover:text-white whitespace-nowrap disabled:opacity-60"
         >
           {isLoadingBack ? (
             <Loader2 className="w-3 h-3 animate-spin" />
@@ -156,13 +156,13 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-lg font-bold text-white">Website dauerhaft verknüpft</h3>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Website dauerhaft verknüpft</h3>
                   <Badge variant="success" className="text-xs">
                     <CheckCircle className="w-3 h-3 mr-1" />
                     Aktiv
                   </Badge>
                 </div>
-                <p className="text-sm text-zinc-400">
+                <p className="text-sm text-gray-600 dark:text-zinc-400">
                   Alle Optimierungen für: <strong className="text-emerald-400">{lockedOptimizationUrl}</strong>
                 </p>
                 <p className="text-xs text-zinc-500 mt-1">
@@ -201,13 +201,13 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-lg font-bold text-white">Bereit zur Optimierung?</h3>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Bereit zur Optimierung?</h3>
                   <Badge variant="info" className="text-xs">
                     Analyse abgeschlossen
                   </Badge>
                 </div>
-                <p className="text-sm text-zinc-400">
-                  Sie haben <strong className="text-white">{currentWebsite.url}</strong> analysiert.
+                <p className="text-sm text-gray-600 dark:text-zinc-400">
+                  Sie haben <strong className="text-gray-900 dark:text-white">{currentWebsite.url}</strong> analysiert.
                 </p>
                 <p className="text-xs text-zinc-500 mt-1">
                   Sperren Sie diese Seite, um personalisierte KI-Fixes und Optimierungen zu erhalten.
@@ -229,11 +229,11 @@ export const OptimizationModeLock: React.FC<OptimizationModeLockProps> = ({
                 <AlertTriangle className="w-5 h-5 text-red-400" />
               </div>
               <div>
-                <h3 className="font-bold text-white mb-1">Seite dauerhaft verknüpfen?</h3>
-                <p className="text-sm text-zinc-300 mb-3">
+                <h3 className="font-bold text-gray-900 dark:text-white mb-1">Seite dauerhaft verknüpfen?</h3>
+                <p className="text-sm text-gray-700 dark:text-zinc-300 mb-3">
                   Wenn Sie <strong className="text-blue-400">{currentWebsite.url}</strong> als Ihre Website registrieren:
                 </p>
-                <ul className="text-sm text-zinc-400 space-y-2 mb-4">
+                <ul className="text-sm text-gray-600 dark:text-zinc-400 space-y-2 mb-4">
                   <li className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
                     Alle KI-Fixes werden für diese Seite personalisiert

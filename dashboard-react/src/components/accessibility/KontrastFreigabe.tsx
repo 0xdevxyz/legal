@@ -177,7 +177,7 @@ const KontrastFreigabe: React.FC<{
                   const reicht = gezeigt !== null && gezeigt >= e.ziel_ratio;
                   return (
                     <>
-                      <span className="self-center dark:text-zinc-600 text-gray-400">→</span>
+                      <span className="self-center dark:text-zinc-600 text-gray-600 dark:text-gray-400">→</span>
                       <Probe
                         vorn={farbe}
                         hinten={e.hintergrund}

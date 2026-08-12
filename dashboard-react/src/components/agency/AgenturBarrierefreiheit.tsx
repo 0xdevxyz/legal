@@ -261,7 +261,7 @@ export default function AgenturBarrierefreiheit() {
                               style={{ backgroundColor: k.vordergrund }} />
                         {k.loesbar && k.vorschlag && (
                           <>
-                            <span className="dark:text-zinc-600 text-gray-400">→</span>
+                            <span className="dark:text-zinc-600 text-gray-600 dark:text-gray-400">→</span>
                             <span className="inline-block w-4 h-4 rounded border dark:border-zinc-600 border-gray-300"
                                   style={{ backgroundColor: k.vorschlag }} />
                           </>
@@ -315,7 +315,7 @@ export default function AgenturBarrierefreiheit() {
                     {site.url.replace(/^https?:\/\//, '')}
                     <a href={site.url} target="_blank" rel="noopener noreferrer"
                        aria-label={`${site.url} in neuem Fenster öffnen`}
-                       className="dark:text-zinc-500 text-gray-400 hover:opacity-70">
+                       className="dark:text-zinc-500 text-gray-600 dark:text-gray-400 hover:opacity-70">
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   </div>

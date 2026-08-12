@@ -98,7 +98,7 @@ export const CookieComplianceWidget: React.FC = () => {
                   Neu
                 </Badge>
               </span>
-              <p className="text-sm text-zinc-400 mt-1 font-normal">
+              <p className="text-sm text-gray-600 dark:text-zinc-400 mt-1 font-normal">
                 DSGVO-konformes Cookie-Banner mit Consent-Management
               </p>
             </div>
@@ -119,7 +119,7 @@ export const CookieComplianceWidget: React.FC = () => {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Quick Stats */}
           <div className="lg:col-span-1 space-y-4">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
               <BarChart3 className="w-4 h-4" />
               Letzte 7 Tage
             </h3>
@@ -127,7 +127,7 @@ export const CookieComplianceWidget: React.FC = () => {
             <div className="space-y-3">
               <div className="glass-card p-4 rounded-xl">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs text-zinc-400 font-medium">Opt-In-Rate</span>
+                  <span className="text-xs text-gray-600 dark:text-zinc-400 font-medium">Opt-In-Rate</span>
                   <span className="text-lg font-bold text-green-400">
                     {stats?.summary?.acceptance_rate?.toFixed(1) || '--'}%
                   </span>
@@ -141,15 +141,15 @@ export const CookieComplianceWidget: React.FC = () => {
               </div>
 
               <div className="glass-card p-4 rounded-xl">
-                <div className="text-xs text-zinc-400 font-medium mb-1">Consents</div>
-                <div className="text-2xl font-bold text-white">
+                <div className="text-xs text-gray-600 dark:text-zinc-400 font-medium mb-1">Consents</div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-white">
                   {stats?.summary?.total_impressions?.toLocaleString() || '0'}
                 </div>
               </div>
 
               <div className="glass-card p-4 rounded-xl">
-                <div className="text-xs text-zinc-400 font-medium mb-1">Services</div>
-                <div className="text-2xl font-bold text-white">
+                <div className="text-xs text-gray-600 dark:text-zinc-400 font-medium mb-1">Services</div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-white">
                   20
                 </div>
                 <div className="text-xs text-zinc-500 mt-1">verfügbar</div>
@@ -159,7 +159,7 @@ export const CookieComplianceWidget: React.FC = () => {
 
           {/* Features */}
           <div className="lg:col-span-1 space-y-4">
-            <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
               <Shield className="w-4 h-4" />
               Features
             </h3>
@@ -168,48 +168,48 @@ export const CookieComplianceWidget: React.FC = () => {
               <div className="flex items-start gap-3 text-sm">
                 <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <div className="text-white font-medium">DSGVO & TTDSG konform</div>
-                  <div className="text-xs text-gray-400">Rechtssichere Einwilligungen</div>
+                  <div className="text-gray-900 dark:text-white font-medium">DSGVO & TTDSG konform</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Rechtssichere Einwilligungen</div>
                 </div>
               </div>
 
               <div className="flex items-start gap-3 text-sm">
                 <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <div className="text-white font-medium">Content Blocker</div>
-                  <div className="text-xs text-gray-400">YouTube, Google Maps, Analytics</div>
+                  <div className="text-gray-900 dark:text-white font-medium">Content Blocker</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">YouTube, Google Maps, Analytics</div>
                 </div>
               </div>
 
               <div className="flex items-start gap-3 text-sm">
                 <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <div className="text-white font-medium">20+ Service-Vorlagen</div>
-                  <div className="text-xs text-gray-400">Google, Facebook, TikTok, etc.</div>
+                  <div className="text-gray-900 dark:text-white font-medium">20+ Service-Vorlagen</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Google, Facebook, TikTok, etc.</div>
                 </div>
               </div>
 
               <div className="flex items-start gap-3 text-sm">
                 <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <div className="text-white font-medium">Vollständig anpassbar</div>
-                  <div className="text-xs text-gray-400">Farben, Texte, Layout</div>
+                  <div className="text-gray-900 dark:text-white font-medium">Vollständig anpassbar</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Farben, Texte, Layout</div>
                 </div>
               </div>
 
               <div className="flex items-start gap-3 text-sm">
                 <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <div className="text-white font-medium">Consent-Statistiken</div>
-                  <div className="text-xs text-gray-400">Opt-In-Rate Analytics</div>
+                  <div className="text-gray-900 dark:text-white font-medium">Consent-Statistiken</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Opt-In-Rate Analytics</div>
                 </div>
               </div>
 
               <div className="flex items-start gap-3 text-sm">
                 <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <div className="text-white font-medium">WCAG 2.2 Level AA</div>
-                  <div className="text-xs text-gray-400">Barrierefrei</div>
+                  <div className="text-gray-900 dark:text-white font-medium">WCAG 2.2 Level AA</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Barrierefrei</div>
                 </div>
               </div>
             </div>
@@ -217,14 +217,14 @@ export const CookieComplianceWidget: React.FC = () => {
 
           {/* Integration Code */}
           <div className="lg:col-span-1 space-y-4">
-            <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
               <Code className="w-4 h-4" />
               Integration
             </h3>
 
             <div className="space-y-3">
               <div className="relative">
-                <pre className="bg-gray-950 text-green-400 p-4 rounded-lg text-xs overflow-x-auto border border-gray-800">
+                <pre className="bg-gray-950 text-green-400 p-4 rounded-lg text-xs overflow-x-auto border border-gray-200 dark:border-gray-800">
                   <code>{integrationCode}</code>
                 </pre>
                 <Button
@@ -274,17 +274,17 @@ export const CookieComplianceWidget: React.FC = () => {
         </div>
 
         {/* Bottom CTA */}
-        <div className="mt-6 pt-6 border-t border-gray-800">
+        <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-green-500/20 rounded-lg">
                 <CheckCircle className="w-5 h-5 text-green-400" />
               </div>
               <div>
-                <div className="text-sm font-semibold text-white">
+                <div className="text-sm font-semibold text-gray-900 dark:text-white">
                   Cookie-Compliance ist eine deiner Compliance-Säulen
                 </div>
-                <div className="text-xs text-gray-400">
+                <div className="text-xs text-gray-600 dark:text-gray-400">
                   Im Pro-Paket & Agentur-Plan enthalten – oder als einzelne Säule buchbar
                 </div>
               </div>

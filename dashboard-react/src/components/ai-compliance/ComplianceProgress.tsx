@@ -80,7 +80,7 @@ export default function ComplianceProgress({
           {percentage}%
         </span>
         {showLabel && (
-          <span className="text-xs text-gray-400 mt-1">
+          <span className="text-xs text-gray-600 dark:text-gray-400 mt-1">
             {label}
           </span>
         )}
