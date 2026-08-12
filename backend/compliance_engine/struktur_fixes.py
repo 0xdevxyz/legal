@@ -196,6 +196,49 @@ HAUPTINHALT_JS = r"""
 }
 """
 
+# Seitenstabile Alternativ-Selektoren fuer den bereits bestimmten Container.
+# Hintergrund (Audit 11.08.): der exakte Selektor traegt bei Elementor die
+# Post-ID der gemessenen Seite (z.B. `div.elementor.elementor-12735`) und
+# trifft auf jeder Unterseite nichts — angewendet=0 bei konstantem verfehlt.
+# Die Alternativen werden HIER, auf der gemessenen Seite, auf Eindeutigkeit
+# verifiziert; das Widget prueft sie zur Laufzeit erneut (genau ein Treffer,
+# kein Randbereich, keine vorhandene main-Landmark). Gemessen, nicht geraten.
+ALTERNATIVEN_JS = r"""
+(exakt) => {
+  let ziel = null;
+  try { ziel = document.querySelector(exakt); } catch (e) { return []; }
+  if (!ziel) return [];
+
+  const alternativen = [];
+  const eindeutig = (sel) => {
+    try { const t = document.querySelectorAll(sel); return t.length === 1 && t[0] === ziel; }
+    catch (e) { return false; }
+  };
+
+  // 1) Elementor markiert den Seiten-Wrapper mit data-elementor-type
+  //    (wp-page/single/...). Der Attributwert ist ueber Unterseiten
+  //    desselben Typs stabil, die Post-ID-Klasse nicht.
+  const eltyp = ziel.getAttribute('data-elementor-type');
+  if (eltyp) {
+    const sel = 'div[data-elementor-type="' + CSS.escape(eltyp) + '"]';
+    if (eindeutig(sel)) alternativen.push(sel);
+  }
+
+  // 2) Klassenkette ohne volatile ID-Klassen (elementor-123, post-456,
+  //    page-id-789 ...). Bleibt etwas uebrig und ist es eindeutig, ist es
+  //    ein stabiler Kandidat.
+  const VOLATIL = /^(elementor|postid|post|page-id|page)-\d+$/;
+  const klassen = (ziel.className || '').toString().trim().split(/\s+/)
+    .filter(Boolean).filter((k) => !VOLATIL.test(k));
+  if (klassen.length) {
+    const sel = ziel.tagName.toLowerCase() + '.' + klassen.map(CSS.escape).join('.');
+    if (sel !== exakt && eindeutig(sel)) alternativen.push(sel);
+  }
+
+  return alternativen.filter((s) => s !== exakt);
+}
+"""
+
 STRUKTUR_ANWENDEN_JS = r"""
 (fixes) => {
   // Guarded wie ueberall: nur setzen, wo nichts steht.
@@ -227,22 +270,28 @@ STRUKTUR_ANWENDEN_JS = r"""
 
 
 def baue_struktur_fixes(befunde: Dict[str, List[Dict[str, Any]]],
-                        haupt_selektor: Optional[str]) -> List[Dict[str, Any]]:
+                        haupt_selektor: Optional[str],
+                        haupt_alternativen: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """
     Aus axe-Fundstellen werden Attribut-Setzungen.
 
     Args:
         befunde: {regel_id: [node, ...]} der betroffenen Regeln.
         haupt_selektor: gemessener Container fuer role="main", oder None.
+        haupt_alternativen: seitenstabile, auf der gemessenen Seite auf
+            Eindeutigkeit verifizierte Alternativ-Selektoren desselben
+            Containers (ALTERNATIVEN_JS). Der exakte Selektor traegt oft die
+            Elementor-Post-ID der gemessenen Seite und trifft auf Unterseiten
+            nichts — die Alternativen geben dem Widget dort ein Ziel.
 
     Returns:
-        Liste von {selector, attribut, wert, regel, begruendung} — genau das
-        Format, das der Laufzeit-Kanal guarded anwenden kann.
+        Liste von {selector, attribut, wert, regel, begruendung[, alternativen]}
+        — genau das Format, das der Laufzeit-Kanal guarded anwenden kann.
     """
     fixes: List[Dict[str, Any]] = []
 
     if haupt_selektor:
-        fixes.append({
+        haupt_fix: Dict[str, Any] = {
             "selector": haupt_selektor,
             "attribut": "role",
             "wert": "main",
@@ -251,7 +300,10 @@ def baue_struktur_fixes(befunde: Dict[str, List[Dict[str, Any]]],
                 "Inhalt ausserhalb jeder Landmark — der Container wurde aus den "
                 "bemaengelten Knoten bestimmt, nicht geraten."
             ),
-        })
+        }
+        if haupt_alternativen:
+            haupt_fix["alternativen"] = haupt_alternativen
+        fixes.append(haupt_fix)
 
     for node in befunde.get("meta-viewport", []):
         html = node.get("html") or ""

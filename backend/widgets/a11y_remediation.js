@@ -76,7 +76,7 @@
   var bilanz = {
     alt_texte: { angewendet: 0, verfehlt: 0 },
     link_labels: { angewendet: 0, verfehlt: 0 },
-    struktur: { angewendet: 0, verfehlt: 0 },
+    struktur: { angewendet: 0, verfehlt: 0, unnoetig: 0 },
     css_regeln: { angewendet: 0, verfehlt: 0 },
     dokument_fixes: { angewendet: 0, verfehlt: 0, unnoetig: 0 }
   };
@@ -191,17 +191,62 @@
     }
   }
 
+  // Volatile ID-Klassen (Elementor-Post-ID u.ä.): seitenspezifisch — der
+  // exakte Mess-Selektor der Startseite trifft damit auf Unterseiten nichts.
+  var RANDBEREICH_RE = /(^|[-_ ])(header|footer|nav|navigation|topbar|menu|sidebar|widget|cookie|banner)([-_ ]|$)/i;
+
+  function istRandbereich(el) {
+    if (el.closest && el.closest('header,nav,footer,aside')) return true;
+    return RANDBEREICH_RE.test(el.id || '') ||
+           RANDBEREICH_RE.test((el.className || '').toString());
+  }
+
+  // Löst das Ziel eines Struktur-Fixes auf: exakter Selektor → bei der
+  // Messung verifizierte Alternativen (Manifest-Feld `alternativen`) →
+  // Ableitung aus dem exakten Selektor (volatile ID-Klassen gestrichen).
+  // Alles außer dem exakten Treffer gilt nur bei GENAU einem Treffer
+  // außerhalb der Randbereiche — lieber verfehlt melden als role="main"
+  // auf den falschen Container setzen (Audit 11.08.: Unterseiten 0/63).
+  // Rückgabe: NodeList/Array der Ziele, [] = verfehlt, 'unnoetig' = Seite
+  // hat schon eine main-Landmark, null = ungültiger Selektor.
+  function findeStrukturZiele(f) {
+    var ziele;
+    try { ziele = document.querySelectorAll(f.selector); } catch (e) { return null; }
+    if (ziele.length) return ziele;
+
+    var kandidaten = [];
+    if (f.alternativen && f.alternativen.length) kandidaten = kandidaten.concat(f.alternativen);
+    var abgeleitet = String(f.selector)
+      .replace(/\.(elementor|postid|post|page-id|page)-\d+(?![\w-])/g, '');
+    if (abgeleitet !== f.selector && abgeleitet.replace(/[\s>+~]/g, '')) {
+      kandidaten.push(abgeleitet);
+    }
+
+    var sucheMain = f.attribut === 'role' && f.wert === 'main';
+    for (var i = 0; i < kandidaten.length; i++) {
+      var t;
+      try { t = document.querySelectorAll(kandidaten[i]); } catch (e) { continue; }
+      if (t.length !== 1 || istRandbereich(t[0])) continue;
+      // Nie eine zweite main-Landmark erzeugen — das wäre ein neuer Fehler.
+      if (sucheMain && document.querySelector('main, [role="main"]')) return 'unnoetig';
+      return t;
+    }
+    if (sucheMain && document.querySelector('main, [role="main"]')) return 'unnoetig';
+    return ziele;
+  }
+
   function resolveMainTarget(preferred) {
     // bevorzugtes Ziel (z.B. "#main") sonst gängige Hauptinhalts-Container.
     var el = null;
     if (preferred) { try { el = document.querySelector(preferred); } catch (e) {} }
-    // Gemessenes Ziel aus der Struktur-Reparatur schlaegt jede Rateliste.
+    // Gemessenes Ziel aus der Struktur-Reparatur schlaegt jede Rateliste —
+    // inklusive der stabilen Alternativen für Unterseiten.
     if (!el) {
       for (var i = 0; i < strukturFixes.length; i++) {
         if (strukturFixes[i] && strukturFixes[i].attribut === 'role' &&
             strukturFixes[i].wert === 'main') {
-          try { el = document.querySelector(strukturFixes[i].selector); } catch (e) {}
-          if (el) break;
+          var ziele = findeStrukturZiele(strukturFixes[i]);
+          if (ziele && ziele !== 'unnoetig' && ziele.length) { el = ziele[0]; break; }
         }
       }
     }
@@ -282,15 +327,21 @@
       var f = strukturFixes[i];
       if (!f || !f.selector || !f.attribut) continue;
       var kennung = 'struktur:' + i;   // eindeutige Fix-Kennung: je Fix, nicht je Element
-      var ziele;
-      try { ziele = document.querySelectorAll(f.selector); }
-      catch (e) {  // ungueltiger Selektor
+      var ziele = findeStrukturZiele(f);
+      if (ziele === null) {  // ungueltiger Selektor
         if (zaehltVerfehlt('struktur', kennung)) bilanz.struktur.verfehlt++;
         continue;
       }
-      // Kein Treffer heisst: das Ziel gibt es auf dieser Seite nicht mehr. Das
-      // ist die Regressionsmeldung, auf die es ankommt — genau so sieht ein
-      // Theme-Update aus, das eine Klasse umbenannt hat.
+      if (ziele === 'unnoetig') {
+        // Seite hat bereits eine main-Landmark — hier gibt es nichts zu
+        // reparieren; das ist kein Fehlschlag (vgl. Selbstdiagnose-Prinzip).
+        if (zaehltUnnoetig('struktur', kennung)) bilanz.struktur.unnoetig++;
+        continue;
+      }
+      // Kein Treffer (auch nicht über die stabilen Alternativen) heisst: das
+      // Ziel gibt es auf dieser Seite nicht. Das ist die Regressionsmeldung,
+      // auf die es ankommt — genau so sieht ein Theme-Update aus, das eine
+      // Klasse umbenannt hat.
       if (!ziele.length) {
         if (zaehltVerfehlt('struktur', kennung)) bilanz.struktur.verfehlt++;
         continue;

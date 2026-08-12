@@ -17,7 +17,7 @@ from compliance_engine.formular_fixes import (
     FORMULARFELDER_JS, beschriftung_fuer_feld, titel_aus_seite,
 )
 from compliance_engine.struktur_fixes import (
-    HAUPTINHALT_JS, STRUKTUR_ANWENDEN_JS, baue_struktur_css, baue_struktur_fixes,
+    ALTERNATIVEN_JS, HAUPTINHALT_JS, STRUKTUR_ANWENDEN_JS, baue_struktur_css, baue_struktur_fixes,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,6 +68,7 @@ async def verifizierte_struktur_fixes(page) -> Dict[str, Any]:
     ]
     region_selektoren = [s for s in region_selektoren if s]
     haupt_selektor = None
+    haupt_alternativen: list = []
     if region_selektoren:
         await page.evaluate(
             "(sel) => { window.__complyoRegionKnoten = sel; }", region_selektoren
@@ -76,8 +77,16 @@ async def verifizierte_struktur_fixes(page) -> Dict[str, Any]:
             haupt_selektor = await page.evaluate(HAUPTINHALT_JS)
         except Exception as e:
             logger.warning(f"Hauptinhalt nicht bestimmbar: {e}")
+        if haupt_selektor:
+            # Seitenstabile Alternativen desselben Containers mitmessen —
+            # der exakte Selektor traegt sonst die Post-ID der Startseite
+            # und trifft auf Unterseiten nichts (Audit 11.08.).
+            try:
+                haupt_alternativen = await page.evaluate(ALTERNATIVEN_JS, haupt_selektor) or []
+            except Exception as e:
+                logger.warning(f"Selektor-Alternativen nicht bestimmbar: {e}")
 
-    fixes = baue_struktur_fixes(vorher, haupt_selektor)
+    fixes = baue_struktur_fixes(vorher, haupt_selektor, haupt_alternativen)
     css_rules = baue_struktur_css(vorher)
     fixes.extend(await _formular_fixes(page, vorher))
     fixes.extend(await _titel_fix(page, vorher))
