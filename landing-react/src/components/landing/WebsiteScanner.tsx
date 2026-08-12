@@ -215,7 +215,10 @@ export default function WebsiteScanner() {
       const hasData = apiData.success === true || categories.length > 0 || apiData.score != null;
 
       if (!hasData) {
-        setError('Keine Analysedaten verfügbar. Die Website konnte nicht gescannt werden. Bitte versuchen Sie es später erneut oder kontaktieren Sie den Support.');
+        // Das Backend sagt bei success:false konkret, woran der Scan scheiterte
+        // (z. B. "Website nicht erreichbar"). Diese Auskunft zu verwerfen und
+        // "Keine Analysedaten verfügbar" zu zeigen, half niemandem weiter.
+        setError(apiData.message || 'Die Website konnte nicht gescannt werden. Bitte prüfen Sie die URL oder versuchen Sie es später erneut.');
         setIsScanning(false);
         return;
       }
@@ -298,15 +301,29 @@ export default function WebsiteScanner() {
         return;
       }
       
-      // API-Fehler
-      if (err.message?.includes('404') || err.message?.includes('not found')) {
-        errorMessage = 'Die Website wurde nicht gefunden oder ist nicht erreichbar. Bitte überprüfen Sie die URL.';
-      } else if (err.message?.includes('timeout') || err.message?.includes('network')) {
-        errorMessage = 'Die Website antwortet nicht oder ist nicht erreichbar. Bitte versuchen Sie es später erneut.';
-      } else if (err.message?.includes('403') || err.message?.includes('forbidden')) {
+      // API-Fehler.
+      //
+      // Der Status kommt aus err.response, NICHT aus err.message: axios schreibt
+      // dort "Request failed with status code 429" — die alte Textsuche traf das
+      // nie und schob jeden Serverfehler dem Besucher als "Ihre Website ist nicht
+      // erreichbar" unter. Wer wissen will, ob seine Seite sauber ist, liest dann
+      // eine Falschaussage über die eigene Seite. Also: unsere Fehler als unsere
+      // benennen, fremde als fremde.
+      const status = err.response?.status;
+
+      if (status === 429) {
+        errorMessage = 'Zu viele Scans in kurzer Zeit. Bitte warten Sie eine Minute und versuchen Sie es erneut.';
+      } else if (status === 404) {
+        errorMessage = 'Die Website wurde nicht gefunden. Bitte überprüfen Sie die URL.';
+      } else if (status === 403) {
         errorMessage = 'Der Zugriff auf die Website wurde verweigert. Die Website blockiert möglicherweise automatische Scans.';
-      } else if (err.message?.includes('500')) {
-        errorMessage = 'Die Website hat einen internen Serverfehler. Bitte versuchen Sie es später erneut.';
+      } else if (status >= 500) {
+        errorMessage = 'Der Scan-Dienst hat gerade ein Problem. Bitte versuchen Sie es in ein paar Minuten erneut.';
+      } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        // Unser Timeout, nicht die Seite des Besuchers — das muss so dastehen.
+        errorMessage = 'Der Scan hat zu lange gedauert und wurde abgebrochen. Bitte versuchen Sie es erneut.';
+      } else if (err.message?.includes('Network Error')) {
+        errorMessage = 'Der Scan-Dienst ist gerade nicht erreichbar. Bitte versuchen Sie es später erneut.';
       } else {
         errorMessage = 'Die Website konnte nicht analysiert werden. Bitte versuchen Sie es später erneut oder kontaktieren Sie den Support.';
       }

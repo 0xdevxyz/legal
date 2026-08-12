@@ -66,6 +66,9 @@ services:
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}
       - AUTO_ACTIVATE_GENERATED_CHECKS=${AUTO_ACTIVATE_GENERATED_CHECKS:-false}
       - ENVIRONMENT=production
+      # IP des Proxy-Hops vor dem Backend. Fehlt sie, sieht das Backend
+      # nur die Proxy-IP und alle Besucher teilen sich ein Rate-Limit.
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
       # Oeffentlicher Pruefnachweis. Ohne Geheimnis liefert /api/nachweis
       # nichts aus — bewusst, denn ein ratbarer Schluessel waere schlimmer
       # als kein Nachweis. Aendern macht alle verschickten Nachweis-Links

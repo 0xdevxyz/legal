@@ -90,7 +90,12 @@ export const complianceApi = {
     // Normalisiere URL vor dem API-Call
     const normalizedUrl = normalizeUrl(url);
     // ✅ FIX: Verwende /api/analyze-preview für Landing-Seite (keine Auth erforderlich)
-    const response = await api.post<ComplianceAnalysis>('/api/analyze-preview', { url: normalizedUrl });
+    // Ein echter Scan braucht 20-27s (gemessen 12.08.2026), der Default von
+    // 30s lag also mitten in der Streuung: Kundenseiten brachen sporadisch ab
+    // und der Besucher las, SEINE Seite sei nicht erreichbar. 65s deckt den
+    // Scan ab und bleibt über dem proxy_read_timeout von nginx (60s), damit
+    // ein Überschreiten als Serverfehler ankommt und nicht als Client-Timeout.
+    const response = await api.post<ComplianceAnalysis>('/api/analyze-preview', { url: normalizedUrl }, { timeout: 65000 });
     return response.data;
   },
 

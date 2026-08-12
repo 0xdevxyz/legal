@@ -413,7 +413,30 @@ def get_client_ip(request: Request) -> str:
     if forwarded and direct_ip and direct_ip in trusted_proxies:
         return forwarded.split(",")[0].strip()
     
+    # Steht hier ein X-Forwarded-For, stammt die Anfrage aus einem Proxy, den
+    # wir nicht kennen. Dann faellt jeder Besucher auf die IP dieses Proxys
+    # zusammen — alle teilen sich einen Rate-Limit-Eimer. Genau so war der
+    # Landing-Scanner ab dem 4. Scan pro Minute fuer ALLE tot (12.08.2026),
+    # weil TRUSTED_PROXIES fehlte und nichts es gemeldet hat. Darum laut.
+    if forwarded and direct_ip and direct_ip not in trusted_proxies:
+        _warn_untrusted_proxy(direct_ip)
+    
     return direct_ip or "unknown"
+
+
+_gemeldete_proxies: set = set()
+
+
+def _warn_untrusted_proxy(direct_ip: str) -> None:
+    """Meldet jede unbekannte Proxy-IP genau einmal pro Prozess."""
+    if direct_ip in _gemeldete_proxies:
+        return
+    _gemeldete_proxies.add(direct_ip)
+    logger.warning(
+        f"TRUSTED_PROXIES: Anfragen mit X-Forwarded-For kommen von {direct_ip}, "
+        f"diese IP ist nicht als Proxy hinterlegt. Alle Besucher werden als eine "
+        f"IP gezaehlt (gemeinsames Rate-Limit). Fix: TRUSTED_PROXIES={direct_ip} setzen."
+    )
 
 # ==========================================
 # Lifecycle Management
