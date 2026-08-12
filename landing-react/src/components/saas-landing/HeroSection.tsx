@@ -1,8 +1,25 @@
 'use client';
-import React from 'react';
-import { ArrowRight, CheckCircle2, ShieldCheck, Zap } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { ArrowRight, CheckCircle2, ShieldCheck, Zap, Volume2, VolumeX } from 'lucide-react';
 
 export default function HeroSection() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [muted, setMuted] = useState(true);
+
+  const toggleSound = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (muted) {
+      v.currentTime = 0;
+      v.muted = false;
+      setMuted(false);
+      v.play();
+    } else {
+      v.muted = true;
+      setMuted(true);
+    }
+  };
+
   return (
     <section className="relative bg-white pt-24 pb-16 overflow-hidden">
       <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-bl from-blue-50 via-indigo-50 to-transparent rounded-full blur-3xl opacity-70 pointer-events-none" />
@@ -78,53 +95,32 @@ export default function HeroSection() {
                   <div className="w-3 h-3 rounded-full bg-red-400" />
                   <div className="w-3 h-3 rounded-full bg-yellow-400" />
                   <div className="w-3 h-3 rounded-full bg-green-400" />
-                  <span className="ml-3 text-xs text-gray-400">app.complyo.de – Dashboard</span>
+                  <span className="ml-3 text-xs text-gray-400">Complyo – in 60 Sekunden erklärt</span>
                 </div>
 
-                <div className="p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">Compliance Score</p>
-                      <p className="text-3xl font-extrabold text-gray-900">94 <span className="text-xl text-gray-400">/100</span></p>
-                    </div>
-                    <div className="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-semibold px-3 py-1.5 rounded-full">
-                      <Zap className="w-3.5 h-3.5" />
-                      +47% verbessert
-                    </div>
-                  </div>
-
-                  <div className="space-y-2.5">
-                    {[
-                      {label:'DSGVO', val:98, color:'bg-blue-500'},
-                      {label:'Cookie Consent', val:91, color:'bg-indigo-500'},
-                      {label:'WCAG 2.1 AA', val:88, color:'bg-purple-500'},
-                      {label:'Impressum', val:100, color:'bg-green-500'},
-                    ].map((item) => (
-                      <div key={item.label}>
-                        <div className="flex justify-between text-xs text-gray-500 mb-1">
-                          <span>{item.label}</span>
-                          <span className="font-semibold text-gray-700">{item.val}%</span>
-                        </div>
-                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div className={`h-full ${item.color} rounded-full`} style={{width:`${item.val}%`}} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 pt-2">
-                    {[
-                      {label:'Kritische Fehler', val:'0', color:'text-green-600', bg:'bg-green-50'},
-                      {label:'Quick Wins', val:'3', color:'text-blue-600', bg:'bg-blue-50'},
-                      {label:'Lösungsvorschläge', val:'12', color:'text-purple-600', bg:'bg-purple-50'},
-                      {label:'Websites', val:'1', color:'text-orange-600', bg:'bg-orange-50'},
-                    ].map((item) => (
-                      <div key={item.label} className={`${item.bg} rounded-xl p-3`}>
-                        <p className={`text-2xl font-extrabold ${item.color}`}>{item.val}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{item.label}</p>
-                      </div>
-                    ))}
-                  </div>
+                <div className="relative">
+                  <video
+                    ref={videoRef}
+                    className="block w-full h-auto"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    poster="/videos/complyo-erklaervideo-poster.jpg"
+                    aria-label="Erklärvideo: Wie Complyo die vier Compliance-Säulen Barrierefreiheit, Datenschutz, Cookie-Einwilligung und Rechtstexte löst. Untertitel sind im Video eingeblendet."
+                  >
+                    <source src="/videos/complyo-erklaervideo.mp4" type="video/mp4" />
+                  </video>
+                  <button
+                    type="button"
+                    onClick={toggleSound}
+                    aria-label={muted ? 'Ton einschalten und Video von vorn abspielen' : 'Ton ausschalten'}
+                    className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 bg-white/90 hover:bg-white text-gray-700 text-xs font-semibold px-3 py-2 rounded-full shadow-md border border-gray-200 transition-colors"
+                  >
+                    {muted ? <Volume2 className="w-4 h-4" aria-hidden="true" /> : <VolumeX className="w-4 h-4" aria-hidden="true" />}
+                    {muted ? 'Mit Ton abspielen' : 'Stumm'}
+                  </button>
                 </div>
               </div>
 
