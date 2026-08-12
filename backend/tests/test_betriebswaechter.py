@@ -105,13 +105,24 @@ class TestTelegram:
         assert "2 Befund(e)" in text
         assert "• Erster" in text and "• Zweiter" in text
 
-    def test_alarm_gilt_als_zugestellt_wenn_ein_kanal_traegt(self, waechter, monkeypatch):
-        # Telegram scheitert, Mail trägt → insgesamt zugestellt (und umgekehrt).
-        monkeypatch.setattr(waechter, "sende_telegram", lambda b: False)
-        monkeypatch.setattr(waechter, "sende_mail", lambda b: True)
-        assert waechter.sende_alarm([("k", "Text")]) is True
+    def test_alarm_meldet_nur_kanaele_die_wirklich_trugen(self, waechter, monkeypatch):
+        """
+        Der Wächter darf nie „verschickt" behaupten, wenn der Kanal scheiterte
+        — im ersten Livetest stand genau das im Log (Telegram trug, Mail
+        scheiterte an SMTP, gemeldet wurde trotzdem „Alarm-Mail verschickt").
+        """
         monkeypatch.setattr(waechter, "sende_telegram", lambda b: True)
         monkeypatch.setattr(waechter, "sende_mail", lambda b: False)
-        assert waechter.sende_alarm([("k", "Text")]) is True
+        assert waechter.sende_alarm([("k", "Text")]) == ["Telegram"]
+
         monkeypatch.setattr(waechter, "sende_telegram", lambda b: False)
-        assert waechter.sende_alarm([("k", "Text")]) is False
+        monkeypatch.setattr(waechter, "sende_mail", lambda b: True)
+        assert waechter.sende_alarm([("k", "Text")]) == ["Mail"]
+
+        monkeypatch.setattr(waechter, "sende_telegram", lambda b: True)
+        assert waechter.sende_alarm([("k", "Text")]) == ["Telegram", "Mail"]
+
+    def test_kein_kanal_traegt_ist_kein_erfolg(self, waechter, monkeypatch):
+        monkeypatch.setattr(waechter, "sende_telegram", lambda b: False)
+        monkeypatch.setattr(waechter, "sende_mail", lambda b: False)
+        assert waechter.sende_alarm([("k", "Text")]) == []

@@ -252,13 +252,19 @@ def sende_mail(befunde: list) -> bool:
     )
 
 
-def sende_alarm(befunde: list) -> bool:
-    """Telegram zuerst (Wunsch-Kanal), Mail zusätzlich; ein Kanal genügt."""
-    telegram_ok = sende_telegram(befunde)
-    mail_ok = sende_mail(befunde)
-    if telegram_ok:
-        logger.info("Alarm per Telegram zugestellt.")
-    return telegram_ok or mail_ok
+def sende_alarm(befunde: list) -> list:
+    """Telegram zuerst (Wunsch-Kanal), Mail zusätzlich; ein Kanal genügt.
+
+    Liefert die Kanäle, die WIRKLICH zugestellt haben — nicht die, die es
+    versucht haben. Ein „verschickt" über einem gescheiterten Versand ist
+    dieselbe Lüge, die den Mail-Demo-Modus wochenlang unsichtbar hielt.
+    """
+    getragen = []
+    if sende_telegram(befunde):
+        getragen.append("Telegram")
+    if sende_mail(befunde):
+        getragen.append("Mail")
+    return getragen
 
 
 async def main() -> int:
@@ -284,10 +290,14 @@ async def main() -> int:
 
     for schluessel, text in frisch:
         logger.warning(f"BEFUND {schluessel}: {text}")
-    if sende_alarm(frisch):
-        logger.info(f"Alarm-Mail mit {len(frisch)} Befund(en) an {EMPFAENGER} verschickt.")
+
+    getragen = sende_alarm(frisch)
+    if getragen:
+        logger.info(f"Alarm mit {len(frisch)} Befund(en) zugestellt über: "
+                    + ", ".join(getragen))
         return 0
-    logger.error("Alarm-Mail konnte nicht verschickt werden — Befunde stehen oben im Log.")
+    logger.error("KEIN Kanal hat zugestellt (Telegram und Mail gescheitert) — "
+                 "Befunde stehen oben im Log.")
     return 1
 
 
