@@ -20,6 +20,21 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
 EMBEDDING_MODEL = "text-embedding-3-small"
 
+# Welche Dateien den durchsuchbaren Vault bilden.
+# laws/<gesetz>.md        Stammwissen von Hand
+# laws/<sprache>/<G>.md   Uebersicht je Rechtsakt und Sprache (EUR-Lex-Crawler)
+# laws/<sprache>/<G>/*.md Volltext je Artikel (EUR-Lex-Crawler)
+# Die beiden letzten Muster fehlten: der gesamte per Crawler geholte
+# EU-Rechtsbestand lag ausserhalb der Suche, der AI Act war damit trotz
+# taeglicher Aktualisierung in keiner Antwort auffindbar (Audit 2026-08).
+DOC_PATTERNS = [
+    "updates/*.md",
+    "laws/*.md",
+    "laws/*/*.md",
+    "laws/*/*/*.md",
+    "patterns/*.md",
+]
+
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b))
@@ -61,6 +76,10 @@ class KnowledgeRetriever:
         self.vault_root = vault_root or VAULT_ROOT
         self._embeddings_cache: Dict[str, Dict[str, Any]] = {}
         self._documents: List[Dict[str, Any]] = []
+        # Geparste Dokumente, Schluessel Pfad -> (mtime, doc). Der Vault haelt
+        # seit der Artikel-Ablage einige tausend Dateien; ohne Cache laese jede
+        # einzelne Suche sie alle neu von der Platte.
+        self._doc_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
         self._openai_client = None
         META_DIR.mkdir(parents=True, exist_ok=True)
         self._load_cache()
@@ -91,10 +110,19 @@ class KnowledgeRetriever:
 
     def _load_documents(self) -> List[Dict[str, Any]]:
         docs = []
-        for pattern in ["updates/*.md", "laws/*.md", "patterns/*.md"]:
+        for pattern in DOC_PATTERNS:
             for filepath in sorted(self.vault_root.glob(pattern)):
+                try:
+                    mtime = filepath.stat().st_mtime
+                except OSError:
+                    continue
+                cached = self._doc_cache.get(str(filepath))
+                if cached and cached[0] == mtime:
+                    docs.append(cached[1])
+                    continue
                 doc = _parse_md_file(filepath)
                 if doc:
+                    self._doc_cache[str(filepath)] = (mtime, doc)
                     docs.append(doc)
         logger.debug(f"Loaded {len(docs)} documents from vault")
         return docs

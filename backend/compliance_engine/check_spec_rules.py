@@ -45,6 +45,14 @@ VIOLATION_INDICATOR_PATTERNS = (
 # hart gekappt (declarative_check_runner._issue_dict).
 AUTO_CHECK_RISK_CAP = 25000
 
+# Mindestlaenge fuer Gate-Keywords (applies_when.keywords_any/_all).
+# Hintergrund (Audit 2026-08): Check #278 trug "ki" und "ai" als Gate-Keywords.
+# Der Runner matcht am Wortanfang, damit deutsche Komposita treffen — "ki" traf
+# damit "Kindermobiliar", "Kino", "Kiefer". Eine Ferienpark-Seite ohne jede KI
+# bekam so einen AI-Act-Befund ueber 15.000 EUR. Zwei Zeichen tragen keine
+# Aussage; wer KI-Bezug meint, schreibt "ki-assistent" oder "chatbot".
+MIN_GATE_KEYWORD_LEN = 3
+
 
 def _keywords(detection: Dict[str, Any]) -> "list[str]":
     kws = list(detection.get("link_href_keywords") or [])
@@ -85,4 +93,23 @@ def detection_is_inverted(detection: Dict[str, Any]) -> Optional[str]:
         for indicator in VIOLATION_INDICATOR_PATTERNS:
             if indicator in low:
                 return indicator
+    return None
+
+
+def gate_keyword_too_short(applies_when: Dict[str, Any]) -> Optional[str]:
+    """
+    Gibt das erste zu kurze Gate-Keyword zurueck, sonst None.
+
+    Gate-Keywords unter MIN_GATE_KEYWORD_LEN Zeichen sind keine Bedingung,
+    sondern ein Zufallsgenerator: sie treffen ueber die Wortanfang-Regel des
+    Runners beliebige Woerter und erzeugen Befunde auf Seiten, die mit dem
+    Thema nichts zu tun haben.
+    """
+    if not isinstance(applies_when, dict):
+        return None
+    for field in ("keywords_any", "keywords_all"):
+        for kw in applies_when.get(field) or []:
+            k = str(kw).strip().lower()
+            if 0 < len(k) < MIN_GATE_KEYWORD_LEN:
+                return k
     return None
