@@ -873,7 +873,10 @@ async def reset_master_password(request: Request, admin_key: str = Query(..., al
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Admin key not configured"
         )
-    if admin_key != expected_key:
+    # Zeitkonstanter Vergleich: ein == verraet ueber die Laufzeit, wie viele
+    # Zeichen stimmen. Das Rate-Limit von 3/Stunde macht den Angriff unpraktisch,
+    # aber der richtige Vergleich kostet nichts.
+    if not secrets.compare_digest(admin_key, expected_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized"

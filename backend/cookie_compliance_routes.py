@@ -2156,66 +2156,10 @@ async def scan_website_deep(
         }
         
         # Deep scan disabled - use light scan via /scan endpoint
-        scan_result = {"error": "Deep scan not available"}
-        
-        if scan_result.get('error'):
-            return {
-                "success": False,
-                "error": scan_result['error'],
-                "url": url
-            }
-        
-        # Match detected services with database
-        matched_services = []
-        if scan_result.get('detected_services'):
-            service_keys = list(scan_result['detected_services'])
-            
-            query = """
-                SELECT service_key, name, category, provider, template
-                FROM cookie_services
-                WHERE service_key = ANY($1::text[]) AND is_active = true
-            """
-            
-            rows = await db_pool.fetch(query, service_keys)
-            
-            for row in rows:
-                matched_services.append({
-                    'service_key': row['service_key'],
-                    'name': row['name'],
-                    'category': row['category'],
-                    'provider': row['provider'],
-                    'confidence': scan_result.get('confidence', {}).get(row['service_key'], 0.5),
-                    'evidence': scan_result.get('service_details', {}).get(row['service_key'], {}).get('evidence', [])
-                })
-        
-        return {
-            "success": True,
-            "url": url,
-            "scan_method": "headless_browser",
-            "scan_timestamp": scan_result.get('scan_timestamp'),
-            
-            # Detected services
-            "detected_services": matched_services,
-            "total_services": len(matched_services),
-            
-            # Cookie data
-            "cookies": scan_result.get('cookies', {}),
-            
-            # Storage data
-            "local_storage": scan_result.get('local_storage', {}),
-            "session_storage": scan_result.get('session_storage', {}),
-            
-            # Network data
-            "third_party_requests": scan_result.get('third_party_requests', {}),
-            
-            # Content
-            "scripts": scan_result.get('scripts', []),
-            "iframes": scan_result.get('iframes', []),
-            
-            # Summary
-            "summary": scan_result.get('summary', {}),
-        }
-        
+        # Ab hier lag toter Code: der Aufruf kehrt oben zurueck, weil
+        # Playwright im Image fehlt. Die 59 Zeilen dahinter waren seit
+        # jeher unerreichbar und sind am 2026-08-31 entfernt worden. Wer
+        # den Tiefenscan reaktiviert, holt sie aus der Historie.
     except HTTPException:
         raise
     except Exception as e:
