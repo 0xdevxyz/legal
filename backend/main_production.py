@@ -96,7 +96,6 @@ from widget_routes import router as widget_router
 # Stillgelegt 2026-07-29 vor dem Launch: Router ohne Frontend, dessen Tabellen
 # nie angelegt wurden. Code bleibt im Repo — zum Reaktivieren Schema nachziehen
 # (siehe tests/test_schema_completeness.py) und diese Zeilen wieder aktivieren.
-# from expert_service_routes import router as expert_service_router
 
 # Cookie Compliance Module
 from cookie_compliance_routes import router as cookie_compliance_router
@@ -702,7 +701,6 @@ async def startup_event():
     app.include_router(ai_compliance_router)  # AI Compliance (ComploAI Guard)
     app.include_router(addon_payment_router)  # Add-on Payments (ComploAI Guard & Priority Support)
     app.include_router(widget_router)  # Complyo Widgets (Cookie Consent & Accessibility)
-    # app.include_router(expert_service_router)  # stillgelegt 2026-07-29
     app.include_router(cookie_compliance_router)  # Cookie Compliance Management
     app.include_router(ab_test_router)  # A/B Testing for Cookie Banner
     

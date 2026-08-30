@@ -19,11 +19,12 @@ BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Tabellen, die (noch) bewusst NICHT im Schema stehen — dazu steht eine
 # Produktentscheidung aus (Feature behalten oder Router entfernen). Siehe
 # data/features/00_FEATURES_INDEX.md, Abschnitt "Registrierte Router ohne Doku".
-BEKANNTE_AUSNAHMEN = {
-    # Expert-Service: Router am 2026-07-29 stillgelegt (kein Frontend).
-    # Vor einer Reaktivierung muss das Schema nachgezogen werden.
-    "expert_service_requests",
-}
+# Leer: die einzige Ausnahme war "expert_service_requests" aus dem am
+# 2026-07-29 stillgelegten Expert-Router. Der Router ist am 2026-08-31
+# geloescht worden, damit ist die offene Produktentscheidung entschieden und
+# die Ausnahme gegenstandslos. Wer den Expert-Service reaktiviert, holt Router
+# UND Tabelle aus der Historie.
+BEKANNTE_AUSNAHMEN = set()
 
 # Nicht-Tabellen bzw. CTEs/Aliasse, die dem Regex sonst ins Netz gehen.
 IGNORIEREN = {"jsonb_to_recordset", "unnest", "json_array_elements"}
