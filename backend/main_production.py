@@ -1,3 +1,20 @@
+"""
+Zusammenbau der FastAPI-Anwendung. Der Prozess, den `complyo-backend` startet.
+
+Hier steht die Verdrahtung, nicht die Fachlichkeit: Umgebung laden, Sentry,
+CORS und CSRF, Rate-Limiter, im startup-Ereignis der Datenbank-Pool, die
+Dienste (Auth, Scanner, Legal-Monitor, deklarative Pruefungen) und 37 Router.
+
+Wer eine Fachfrage klaeren will, ist hier falsch. Die Pruefungen liegen in
+compliance_engine/, die Endpunkte in den *_routes.py-Modulen.
+
+Die rund 30 eigenen Endpunkte dieser Datei sind historisch gewachsen und nach
+Abschnittsmarken sortiert (Enhanced Scan, Workflow, Scan-Persistenz, Fix-Jobs,
+Reporting, Audit-Log, Payment). Neue Endpunkte gehoeren in einen eigenen
+Router, nicht hierher.
+"""
+
+
 from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
@@ -1000,7 +1017,7 @@ async def metrics_endpoint(request: Request):
     return _Resp(content=_prom_generate(), media_type=_PROM_CT)
 
 
-# ==================== NEU: ENHANCED SCAN API ====================
+# ==================== Enhanced-Scan-Endpunkte ====================
 
 @app.post("/api/v2/analyze/complete", dependencies=[Depends(rate_limit("analyze_complete", 3, 60))])
 @limiter.limit("30/minute")

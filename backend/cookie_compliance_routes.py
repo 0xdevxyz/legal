@@ -1,6 +1,15 @@
 """
-Cookie Compliance Routes
-API endpoints for Cookie-Consent-Management
+Cookie-Consent-Verwaltung, mit 49 Endpunkten das groesste Router-Modul.
+
+Deckt den ganzen Weg ab: Banner-Konfiguration samt Fassungen, Dienste- und
+Cookie-Katalog eines Kunden, eigene Dienste, Einwilligungsprotokolle,
+A/B-Tests der Bannergestaltung und die Auswertung.
+
+Die Abschnitte sind mit Trennlinien markiert; wer etwas sucht, geht danach.
+
+Die Einwilligungsprotokolle sind der Nachweis gegenueber der Aufsicht. Sie
+werden geschrieben, nicht geaendert: eine nachtraeglich korrigierte Einwilligung
+ist als Nachweis wertlos.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Request, UploadFile, File

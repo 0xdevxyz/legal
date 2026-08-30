@@ -1,3 +1,27 @@
+"""
+Anmeldung, Sitzungen und Kontoverwaltung (Prefix /api/auth).
+
+Registrierung, Login, Token-Erneuerung, Logout einzeln und geraetuebergreifend,
+Onboarding-Abschluss, /me. Dazu Endpunkte fuer NextAuth (verify-credentials,
+session-info) und die Firebase-Pruefung.
+
+Die harten Grenzen stehen als Dekorator direkt an der Route: Registrierung
+3/Stunde, Login und Credential-Pruefung 5/Minute, Token-Erneuerung 10/Minute,
+Passwort-Reset des Master-Kontos 3/Stunde.
+
+ACHTUNG, die OAuth-Endpunkte /google, /google/callback, /apple und
+/apple/callback sind tot. Das Modul-Attribut `oauth_service` wird nirgends
+gesetzt, die Routen antworten mit 500 (live nachgemessen 2026-08-31), und
+oauth_service.py ist am selben Tag als unbenutzt geloescht worden. Der lebende
+Weg fuer Google-Anmeldung ist Firebase: die Oberflaeche holt dort ein
+ID-Token und laesst es hier ueber /firebase-verify pruefen. Die vier Routen
+stehen noch, weil ihr Abbau eine Produktentscheidung ist.
+
+Die Dienste (`auth_service`, `db_pool`, `firebase_verify_token`) setzt
+main_production beim Start von aussen in dieses Modul.
+"""
+
+
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import RedirectResponse, JSONResponse
