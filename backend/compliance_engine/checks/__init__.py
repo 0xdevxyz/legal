@@ -14,6 +14,7 @@ from .agb_check import check_agb_compliance
 from .shop_check import check_shop_compliance, detect_shop
 from .uwg_check import check_uwg_compliance
 from .ai_act_transparency_check import check_ai_act_transparency
+from .ki_bild_nachweis_check import check_ki_bild_nachweis
 
 __all__ = [
     'check_impressum_compliance',
@@ -28,5 +29,6 @@ __all__ = [
     'detect_shop',
     'check_uwg_compliance',
     'check_ai_act_transparency',
+    'check_ki_bild_nachweis',
 ]
 
