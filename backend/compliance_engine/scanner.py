@@ -28,6 +28,7 @@ from compliance_engine.checks import (
     check_uwg_compliance,
     check_ai_act_transparency,
 )
+from compliance_engine.checks.ki_bild_nachweis_check import check_ki_bild_nachweis
 from compliance_engine.checks.shop_check import detect_shop
 from compliance_engine.browser_renderer import smart_fetch_html, detect_client_rendering
 from compliance_engine.checks.cookie_check import consent_render_needed
@@ -253,6 +254,10 @@ class ComplianceScanner:
     SEITENSPEZIFISCHE_KATEGORIEN = {
         "barrierefreiheit", "media_accessibility", "tastaturbedienung",
         "kontraste", "shop", "uwg", "datenschutz",
+        # KI-Bilder stehen auf Unterseiten haeufiger als auf der Startseite
+        # (Leistungsseiten, Blog). Ohne diesen Eintrag faellt jeder Fund
+        # ausserhalb der Startseite stumm heraus.
+        "ai_act_transparency",
     }
 
     async def _pruefe_unterseite(self, seite_url: str, klasse: str) -> "List[ComplianceIssue]":
@@ -264,6 +269,7 @@ class ComplianceScanner:
         und der Nutzer muesste jede Seite selbst suchen.
         """
         from .checks.barrierefreiheit_check import check_barrierefreiheit_compliance_smart
+        from .checks.ki_bild_nachweis_check import check_ki_bild_nachweis
         from .checks.shop_check import check_shop_compliance
         from .declarative_check_runner import run_declarative_checks
 
@@ -285,6 +291,10 @@ class ComplianceScanner:
         if klasse in ("interaktion", "angebot"):
             aufgaben.append(check_shop_compliance(seite_url, soup, self.session))
         aufgaben.append(run_declarative_checks(seite_url, soup, self.session))
+        aufgaben.append(check_ki_bild_nachweis(
+            seite_url, soup, self.session,
+            bereits_geprueft=getattr(self, "_ki_bilder_gesehen", None),
+        ))
 
         ergebnisse = await asyncio.gather(*aufgaben, return_exceptions=True)
 
@@ -595,6 +605,12 @@ class ComplianceScanner:
             contact_task = self._check_contact_data(url, soup)
             social_task = self._check_social_media_plugins(url, soup)
             ai_act_task = check_ai_act_transparency(url, soup, request_urls=render_request_urls)
+            # Ueber alle Seiten mitgefuehrt: dasselbe Bild auf zehn Unterseiten
+            # ist ein Befund, nicht zehn.
+            self._ki_bilder_gesehen = set()
+            ki_bild_task = check_ki_bild_nachweis(
+                url, soup, self.session, bereits_geprueft=self._ki_bilder_gesehen
+            )
 
             if progress_token:
                 _fortschritt.setze_phase(progress_token, "Prüfungen laufen")
@@ -615,17 +631,19 @@ class ComplianceScanner:
                 contact_task = _n(contact_task, progress_token, _TECH, "Kontaktformular (Art. 13)")
                 social_task = _n(social_task, progress_token, _TECH, "Social-Media-Plugins")
                 ai_act_task = _n(ai_act_task, progress_token, _TECH, "KI-Systeme & AI-Act-Transparenz")
+                ki_bild_task = _n(ki_bild_task, progress_token, _TECH, "Bilder auf KI-Nachweis (Art. 50)")
 
             results = await asyncio.gather(
                 barriere_task, impressum_task, datenschutz_task, cookie_task,
                 agb_task, shop_task, declarative_task, uwg_task,
-                ssl_task, contact_task, social_task, ai_act_task,
+                ssl_task, contact_task, social_task, ai_act_task, ki_bild_task,
                 return_exceptions=True
             )
 
             barriere_issues, impressum_issues, datenschutz_issues, cookie_issues, \
                 agb_issues, shop_issues, declarative_issues, uwg_issues, \
-                ssl_issues, contact_issues, social_issues, ai_act_issues = results
+                ssl_issues, contact_issues, social_issues, ai_act_issues, \
+                ki_bild_issues = results
 
             # ✅ v4.0 evidenz-basiert: Wenn der PRIMÄR-Check einer Säule abstürzt
             # (Exception, Seite nicht auswertbar), liegt KEINE Evidenz vor → die
@@ -646,7 +664,8 @@ class ComplianceScanner:
 
             for check_issues in [barriere_issues, impressum_issues, datenschutz_issues,
                                   cookie_issues, agb_issues, shop_issues, declarative_issues, uwg_issues,
-                                  ssl_issues, contact_issues, social_issues, ai_act_issues]:
+                                  ssl_issues, contact_issues, social_issues, ai_act_issues,
+                                  ki_bild_issues]:
                 if isinstance(check_issues, Exception):
                     logger.warning(f"Check failed (non-critical): {check_issues}")
                     continue
