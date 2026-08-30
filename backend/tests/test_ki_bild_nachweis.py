@@ -298,3 +298,53 @@ async def test_gleiches_bild_auf_mehreren_seiten_ist_ein_befund(netz):
     )
     assert len(erste) == 1
     assert zweite == []
+
+
+# ---------------- SSRF: der Scanner darf kein Proxy sein ----------------
+# Die Bild-URLs stammen aus dem HTML der GEPRUEFTEN Seite. Wer complyo auf
+# seine eigene Domain loslaesst, bestimmt damit, welche Adressen der Server
+# aus dem internen Docker-Netz heraus abruft.
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ziel", [
+    "http://169.254.169.254/latest/meta-data/",   # Cloud-Metadaten
+    "http://127.0.0.1:8000/admin",                # Loopback
+    "http://10.0.0.5/bild.png",                   # privates Netz
+    "http://localhost/bild.png",
+])
+async def test_interne_ziele_werden_nicht_abgerufen(ziel, monkeypatch):
+    gerufen = []
+
+    class Sitzung:
+        def get(self, url, **kwargs):
+            gerufen.append(url)
+            raise AssertionError(f"Es haette keine Anfrage geben duerfen: {url}")
+
+    assert await modul.lade_kopf(ziel, Sitzung()) is None
+    assert gerufen == []
+
+
+@pytest.mark.asyncio
+async def test_umleitung_ins_interne_netz_wird_gestoppt(monkeypatch):
+    """
+    Der Fall, den allow_redirects=True offen gelassen haette: der fremde Server
+    antwortet mit 302 auf die Cloud-Metadaten.
+    """
+    class Antwort:
+        status = 302
+        headers = {"Location": "http://169.254.169.254/latest/meta-data/"}
+        content_type = "image/png"
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+
+    gerufen = []
+
+    class Sitzung:
+        def get(self, url, **kwargs):
+            gerufen.append(url)
+            return Antwort()
+
+    ergebnis = await modul.lade_kopf("https://example.com/bild.png", Sitzung())
+    assert ergebnis is None
+    # Die erste Anfrage darf stattfinden, die Umleitung ins interne Netz nicht.
+    assert gerufen == ["https://example.com/bild.png"]
