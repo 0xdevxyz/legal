@@ -18,17 +18,15 @@ Pflicht-Seiten, ...).
 """
 
 import re
-import ssl
 import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse, urljoin
 
-import aiohttp
-import certifi
 from bs4 import BeautifulSoup
 
 from compliance_engine.checks.shop_check import detect_shop
+from compliance_engine.sicherer_abruf import hole
 
 logger = logging.getLogger(__name__)
 
@@ -171,35 +169,15 @@ def _gate_passes(applies_when: Dict[str, Any], soup: BeautifulSoup, html_lower: 
 # Detektion eines Pflicht-Elements
 # ---------------------------------------------------------------------------
 async def _url_exists(url: str, session=None) -> bool:
-    ssl_ctx = ssl.create_default_context(cafile=certifi.where())
-    try:
-        if session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as r:
-                return r.status == 200
-        connector = aiohttp.TCPConnector(ssl=ssl_ctx)
-        async with aiohttp.ClientSession(connector=connector) as tmp:
-            async with tmp.get(url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as r:
-                return r.status == 200
-    except Exception:
-        return False
+    """Antwortet die Kandidatenseite mit 200? Abruf über die SSRF-Schranke."""
+    abruf = await hole(session, url, timeout=8)
+    return abruf is not None and abruf.status == 200
 
 
 async def _fetch_text(url: str, session=None) -> Optional[str]:
-    ssl_ctx = ssl.create_default_context(cafile=certifi.where())
-    try:
-        if session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10), allow_redirects=True) as r:
-                if r.status == 200:
-                    return await r.text()
-        else:
-            connector = aiohttp.TCPConnector(ssl=ssl_ctx)
-            async with aiohttp.ClientSession(connector=connector) as tmp:
-                async with tmp.get(url, timeout=aiohttp.ClientTimeout(total=10), allow_redirects=True) as r:
-                    if r.status == 200:
-                        return await r.text()
-    except Exception:
-        pass
-    return None
+    """Inhalt der Kandidatenseite, oder None. Abruf über die SSRF-Schranke."""
+    abruf = await hole(session, url, timeout=10)
+    return abruf.text() if abruf is not None and abruf.status == 200 else None
 
 
 async def _detect_required_element(

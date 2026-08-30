@@ -31,6 +31,7 @@ from compliance_engine.checks import (
 from compliance_engine.checks.ki_bild_nachweis_check import check_ki_bild_nachweis
 from compliance_engine.checks.shop_check import detect_shop
 from compliance_engine.browser_renderer import smart_fetch_html, detect_client_rendering
+from compliance_engine.sicherer_abruf import hole
 from compliance_engine.checks.cookie_check import consent_render_needed
 
 # Import declarative (data-driven) checks — automatisch befüllbar durch den Legal-Change-Monitor
@@ -905,21 +906,19 @@ class ComplianceScanner:
         Fetch webpage content. Gibt Status UND Inhalt zurück (auch bei 4xx/5xx,
         damit der Aufrufer 'nicht scanbar'-Fälle erkennen und das Grundsystem
         analysieren kann). None nur bei echtem Verbindungsfehler.
+
+        Läuft über sicherer_abruf: die Startseite darf per Umleitung nicht ins
+        interne Netz zeigen (Sicherheitsreview 2026-08-31).
         """
-        try:
-            async with self.session.get(url) as response:
-                try:
-                    content = await response.text()
-                except Exception:
-                    content = ""
-                return {
-                    'url': url,
-                    'status_code': response.status,
-                    'content': content,
-                    'headers': dict(response.headers),
-                }
-        except Exception:
+        abruf = await hole(self.session, url)
+        if abruf is None:
             return None
+        return {
+            'url': abruf.url,
+            'status_code': abruf.status,
+            'content': abruf.text(),
+            'headers': abruf.headers,
+        }
     
     async def _check_ssl_security(self, url: str, response_headers: dict = None) -> List[ComplianceIssue]:
         """SSL/TLS-Sicherheitsprüfung — HTTPS, Redirect und Zertifikats-Grundprüfung"""

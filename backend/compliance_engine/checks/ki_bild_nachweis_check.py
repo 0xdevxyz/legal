@@ -34,11 +34,9 @@ from urllib.parse import parse_qs, unquote, urljoin, urlparse
 import aiohttp
 from bs4 import BeautifulSoup
 
-# Vorhandene Projektschranke gegen SSRF, dieselbe wie in website_crawler.py.
-# Ohne sie waere dieser Check ein Werkzeug, um aus dem internen Docker-Netz
-# heraus beliebige Adressen abzurufen: die Bild-URLs stammen aus dem HTML der
-# GEPRUEFTEN Seite, also von jemandem, der sie frei setzen kann.
-from ssrf_protection import validate_url, SSRFError
+# Gemeinsamer Abrufweg mit SSRF-Schranke. Die Bild-URLs stammen aus dem HTML
+# der GEPRUEFTEN Seite, also von jemandem, der sie frei setzen kann.
+from compliance_engine.sicherer_abruf import hole
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +51,6 @@ PARALLEL = 8
 # langsames CDN den kompletten Scan ins Timeout ziehen und der Kunde verloere
 # auch Impressum, Cookies und Barrierefreiheit.
 SEITEN_ZEITBUDGET = 20
-# Umleitungen werden einzeln nachverfolgt, damit jede Station geprueft wird.
-MAX_UMLEITUNGEN = 3
 
 # Kein Positivfilter auf Endungen: was in einem <img> steht, IST ein Bild, und
 # moderne Ausspielwege tragen keine Endung mehr (Next.js liefert
@@ -189,48 +185,22 @@ async def lade_kopf(url: str, session: Optional[aiohttp.ClientSession]) -> Optio
     """
     Laedt den Dateianfang, moeglichst per Range-Anfrage.
 
-    Umleitungen werden bewusst selbst verfolgt statt von aiohttp: nur so laeuft
-    JEDE Station durch validate_url. Mit allow_redirects=True koennte ein
-    Angreifer auf seiner eigenen Seite ein Bild einbinden, dessen Server per 302
-    auf 169.254.169.254 zeigt, und die Eingangspruefung liefe ins Leere.
+    Die eigene Umleitungsverfolgung ist entfallen: sicherer_abruf macht das
+    inzwischen fuer alle Abrufstellen gleich.
     """
-    kopf = {"Range": f"bytes=0-{MAX_BYTES - 1}"}
-    eigene = session is None
-    if eigene:
-        session = aiohttp.ClientSession()
-    try:
-        for _ in range(MAX_UMLEITUNGEN + 1):
-            try:
-                validate_url(url)
-            except SSRFError as e:
-                logger.info(f"Bildabruf geblockt ({e}): {url}")
-                return None
-
-            async with session.get(
-                url, headers=kopf, timeout=aiohttp.ClientTimeout(total=BILD_TIMEOUT),
-                allow_redirects=False,
-            ) as antwort:
-                ziel = antwort.headers.get("Location")
-                if antwort.status in (301, 302, 303, 307, 308) and ziel:
-                    url = urljoin(url, ziel)
-                    continue
-                if antwort.status >= 400:
-                    return None
-                # Endgueltiger Abgleich: nur echte Bilder lesen. Ohne diese
-                # Pruefung laedt der Check bei endungslosen URLs auch
-                # HTML-Fehlerseiten.
-                if not (antwort.content_type or "").lower().startswith("image/"):
-                    return None
-                # Server ohne Range-Unterstuetzung liefern die ganze Datei; wir
-                # brechen nach MAX_BYTES ab, statt sie vollstaendig zu lesen.
-                return await antwort.content.read(MAX_BYTES)
+    abruf = await hole(
+        session, url,
+        timeout=BILD_TIMEOUT,
+        max_bytes=MAX_BYTES,
+        headers={"Range": f"bytes=0-{MAX_BYTES - 1}"},
+    )
+    if abruf is None or abruf.status >= 400:
         return None
-    except Exception as e:
-        logger.debug(f"Bild nicht ladbar {url}: {e}")
+    # Nur echte Bilder lesen. Ohne diese Pruefung landen bei endungslosen URLs
+    # auch HTML-Fehlerseiten im Metadaten-Abgleich.
+    if not abruf.content_type.startswith("image/"):
         return None
-    finally:
-        if eigene:
-            await session.close()
+    return abruf.body
 
 
 def pruefe_bytes(rohdaten: bytes) -> Optional[Dict[str, Any]]:
