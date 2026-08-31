@@ -27,6 +27,65 @@ class ImpressumIssue:
     is_missing: bool = False  # True wenn komplettes Element fehlt (nicht nur Unterpunkt)
 
 
+# Wortteile, die eine Marketing- oder Produktseite verraten. Ein Link auf
+# "/dsgvo-website-check/" traegt dieselben Stichwoerter wie die echte
+# Erklaerung, meint aber etwas anderes.
+_WERBEPFADE = (
+    'check', 'test', 'scan', 'tool', 'rechner', 'generator', 'service',
+    'leistung', 'produkt', 'preis', 'blog', 'ratgeber', 'wissen', 'lexikon',
+    'beratung', 'schulung', 'software', 'loesung', 'losung', 'angebot',
+)
+
+# Linktexte, die genau die gesuchte Seite benennen.
+_GENAUE_TEXTE = {
+    'datenschutz', 'datenschutzerklärung', 'datenschutzerklaerung',
+    'datenschutzhinweise', 'datenschutzrichtlinie', 'privacy', 'privacy policy',
+    'privacy notice', 'impressum', 'imprint', 'legal notice',
+    'anbieterkennzeichnung', 'pflichtangaben',
+}
+
+# Pfade, die genau die gesuchte Seite adressieren.
+_GENAUE_PFADE = (
+    '/datenschutz', '/datenschutzerklaerung', '/datenschutzerklärung',
+    '/privacy', '/privacy-policy', '/privacy-notice', '/datenschutzhinweise',
+    '/impressum', '/imprint', '/legal-notice', '/anbieterkennzeichnung',
+)
+
+
+def _linkguete(a_tag) -> int:
+    """
+    Bewertet, wie wahrscheinlich ein Link auf die gesuchte Rechtsseite zeigt.
+    Hoeher ist besser; die Aufrufer sortieren absteigend.
+    """
+    from urllib.parse import urlparse
+
+    href = (a_tag.get('href') or '').lower()
+    text = a_tag.get_text(strip=True).lower()
+    pfad = urlparse(href).path.rstrip('/') or href.rstrip('/')
+
+    guete = 0
+    if text in _GENAUE_TEXTE:
+        guete += 10
+    if pfad.endswith(_GENAUE_PFADE):
+        guete += 8
+    # Ein Werbebegriff im Pfad wiegt schwerer als jedes Stichwort davor.
+    if any(w in pfad for w in _WERBEPFADE):
+        guete -= 15
+    # Footer-Links sind die uebliche Stelle fuer Pflichtseiten.
+    for eltern in a_tag.parents:
+        if getattr(eltern, 'name', None) == 'footer':
+            guete += 3
+            break
+    if len(text) > 40:
+        guete -= 3
+    return guete
+
+
+def _nach_guete(links):
+    """Sortiert Kandidaten absteigend nach Guete, Reihenfolge bleibt sonst erhalten."""
+    return sorted(links, key=_linkguete, reverse=True)
+
+
 def _find_impressum_links(soup: BeautifulSoup) -> List:
     """
     Verbesserte Suche nach Impressum-Links
@@ -60,7 +119,9 @@ def _find_impressum_links(soup: BeautifulSoup) -> List:
         elif any(kw in title for kw in text_keywords):
             all_links.append(a_tag)
     
-    return all_links
+    # Beste Kandidaten zuerst — sonst entscheidet die Reihenfolge im
+    # Quelltext darueber, welche Seite als Impressum geprueft wird.
+    return _nach_guete(all_links)
 
 
 async def check_impressum_compliance_smart(url: str, html: str = None, session=None) -> List[Dict[str, Any]]:
