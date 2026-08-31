@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 from compliance_engine.check_spec_rules import (
     detection_is_weak,
+    gate_keyword_too_short,
+    MIN_GATE_KEYWORD_LEN,
     AUTO_CHECK_RISK_CAP as _RISK_CAP,
 )
 
@@ -125,18 +127,33 @@ def _sichtbarer_text(soup: BeautifulSoup, html_lower: str) -> str:
     return " ".join(text.split()).lower()
 
 
+# Bis zu dieser Laenge matcht ein Keyword nur als GANZES Wort. Grund (Audit
+# 2026-08): die Wortanfang-Regel machte aus dem Gate-Keyword "ki" einen Treffer
+# auf "Kindermobiliar", "Kino", "Kiefer" — eine Ferienpark-Seite ohne jede KI
+# bekam einen AI-Act-Befund ueber 15.000 EUR, eine Zahnarztseite 20.000 EUR.
+KURZ_KEYWORD_MAX_LEN = 3
+
+
 def _keyword_trifft(keyword: str, text: str) -> bool:
     """
     Trifft das Keyword als eigenes Wort — oder als Anfang eines Kompositums?
 
-    Wortanfang statt beidseitiger Wortgrenze, weil deutsche Komposita sonst
-    durchrutschen: "Abomodell" und "Grünstrom" SOLLEN treffen. Am Wortende
-    wird nicht geschnitten, dafuer aber am Anfang — so trifft "abo" nicht mehr
-    "Laborbericht" und "grün" nicht mehr "Hintergrund".
+    Ab 4 Zeichen gilt der Wortanfang, weil deutsche Komposita sonst
+    durchrutschen: "Grünstrom" und "Kündigungsbutton" SOLLEN treffen. Am
+    Wortende wird nicht geschnitten, dafuer aber am Anfang — so trifft "grün"
+    nicht mehr "Hintergrund".
+
+    Bis KURZ_KEYWORD_MAX_LEN Zeichen wird beidseitig geschnitten: ein Fragment
+    aus zwei bis drei Buchstaben trifft als Wortanfang zu viel ("ki" ->
+    Kindermobiliar, "bot" -> Botschaft). Der Preis ist, dass ein kurzes
+    Keyword sein Kompositum nicht mehr findet ("abo" trifft "Abo", nicht
+    "Abomodell") — ein verpasster Fund ist hier billiger als ein erfundener.
     """
     k = (keyword or "").strip().lower()
     if not k:
         return False
+    if len(k) <= KURZ_KEYWORD_MAX_LEN:
+        return re.search(r"(?<![\w])" + re.escape(k) + r"(?![\w])", text) is not None
     return re.search(r"(?<![\w])" + re.escape(k), text) is not None
 
 
@@ -334,6 +351,17 @@ async def run_declarative_checks(url: str, soup: BeautifulSoup, session=None) ->
 
     for check in checks:
         try:
+            # Defense in Depth (analog weak detection): ein Gate-Keyword unter
+            # MIN_GATE_KEYWORD_LEN Zeichen trifft beliebige Woerter. Solche
+            # Specs lehnt der Generator ab; liegt noch eine im Altbestand,
+            # wird sie hier uebersprungen statt Befunde zu erfinden.
+            kurz = gate_keyword_too_short(check.get("applies_when") or {})
+            if kurz:
+                logger.warning(
+                    f"Declarative check '{check.get('slug')}': Gate-Keyword "
+                    f"'{kurz}' unter {MIN_GATE_KEYWORD_LEN} Zeichen — skipped"
+                )
+                continue
             if not _gate_passes(check.get("applies_when", {}), soup, html_lower):
                 continue
             issues.extend(await _run_single_check(check, url, soup, html_lower, session))
