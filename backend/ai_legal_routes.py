@@ -646,8 +646,12 @@ async def get_archive(
                     LIMIT 1 OFFSET 5
                 )
             """
-            params = [user_id]
-            param_count = 2
+            # Die Abfrage bindet keine user_id — das Archiv ist kontoweit
+            # gleich. Sie stand trotzdem als $1 in params, ohne je im SQL
+            # vorzukommen: asyncpg konnte den Typ von $1 nicht bestimmen und
+            # der Endpunkt warf bei jedem Aufruf 500 (31.08.2026).
+            params = []
+            param_count = 1
 
             # Die Zaehlabfrage muss dieselbe Menge treffen wie die Seitenabfrage.
             #

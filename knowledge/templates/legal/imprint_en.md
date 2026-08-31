@@ -1,6 +1,6 @@
 # Imprint Template (English)
 # Variable slots are replaced with user_data during generation.
-# Legal basis: §5 TMG (German Telemedia Act), §55 para. 2 RStV
+# Legal basis: §5 DDG (German Digital Services Act), §18 para. 2 MStV
 
 ## Mandatory Information
 
@@ -30,7 +30,7 @@ Registration number: {{registration_number}}
 
 VAT ID pursuant to §27a UStG: {{vat_id}}
 
-## Responsible for content pursuant to §55 para. 2 RStV
+## Responsible for content pursuant to §18 para. 2 MStV
 
 {{content_responsible}}
 {{content_responsible_address}}

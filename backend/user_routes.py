@@ -109,7 +109,7 @@ async def get_user_profile(current_user: dict = Depends(get_current_user)):
                     fixes_limit,
                     websites_max,
                     exports_max,
-                    exports_used
+                    exports_this_month AS exports_used
                 FROM user_limits
                 WHERE user_id = $1
                 """,

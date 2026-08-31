@@ -892,7 +892,10 @@ const normalizeIssue = (issue: any): ComplianceIssue | null => {
         hint: 'Überprüfen Sie diesen Bereich'
       },
       solution: issue.solution || {
-        code_snippet: '',
+        // Der Scanner liefert kein solution-Objekt, wohl aber je Befund ein
+        // fix_code (z. B. das fertige img-Tag mit Alt-Text). Das stand hier
+        // fest auf leer und erreichte den Nutzer nie (31.08.2026).
+        code_snippet: issue.fix_code || '',
         steps: issue.recommendation ? [issue.recommendation] : []
       },
       auto_fixable: Boolean(issue.auto_fixable)

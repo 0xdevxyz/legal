@@ -1,5 +1,5 @@
 # Privacy Policy Template (English)
-# Legal basis: GDPR Art. 13-14, ePrivacy Directive / TTDSG §25
+# Legal basis: GDPR Art. 13-14, ePrivacy Directive / TDDDG §25
 # Variable slots are replaced with user_data during generation.
 
 ## Controller information

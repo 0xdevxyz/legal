@@ -1,5 +1,5 @@
 # Cookie Policy Template (English)
-# Legal basis: TTDSG §25, GDPR Art. 6, Art. 7 / ePrivacy Directive
+# Legal basis: TDDDG §25, GDPR Art. 6, Art. 7 / ePrivacy Directive
 # Variable slots are replaced during generation.
 
 ## Controller
@@ -14,7 +14,7 @@
 
 ## Cookie categories used
 
-1. **Strictly necessary cookies** — no consent required (TTDSG §25 para. 2)
+1. **Strictly necessary cookies** — no consent required (TDDDG §25 para. 2)
 2. **Functional cookies** — consent required
 3. **Analytics / statistics cookies** — consent required
 4. **Marketing / tracking cookies** — consent required

@@ -1,5 +1,5 @@
 # Datenschutzerklärung-Template (Deutsch)
-# Rechtsgrundlagen: DSGVO Art. 13-14, TTDSG §25
+# Rechtsgrundlagen: DSGVO Art. 13-14, TDDDG §25
 # Variablen-Slots werden beim Generieren ersetzt.
 
 ## Unternehmensdaten (Verantwortlicher)

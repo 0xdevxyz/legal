@@ -193,6 +193,8 @@ class ComplianceReportGenerator:
         story.append(PageBreak())
         story.extend(self._create_detailed_findings(analysis_data))
         story.extend(self._create_recommendations(analysis_data))
+        story.append(PageBreak())
+        story.extend(self._create_manual_checks_section(analysis_data))
         story.extend(self._create_footer())
         
         doc.build(story)
@@ -553,6 +555,59 @@ class ComplianceReportGenerator:
         content.append(Spacer(1, 1*cm))
         return content
     
+    def _create_manual_checks_section(self, analysis_data: Dict[str, Any]) -> List:
+        """
+        Manuell zu pruefende Kriterien mit Schritt-fuer-Schritt-Anleitung.
+
+        Der Abschnitt existierte nur im Generator fuer die E-Mail-Anlage
+        (pdf_report_generator.py). Der herunterladbare Report laeuft ueber
+        diesen Generator hier und trug ihn nicht — das Versprechen
+        "erkennen ODER anleiten" fehlte also genau in dem Dokument, das der
+        Kunde weiterreicht (31.08.2026).
+        """
+        content = []
+        checks = analysis_data.get('manual_checks')
+        if not checks:
+            try:
+                from compliance_engine.score_calculator import MANUAL_CHECKS
+                checks = MANUAL_CHECKS
+            except Exception:
+                return content
+
+        pillar_labels = {
+            'accessibility': 'Barrierefreiheit',
+            'gdpr': 'Datenschutz',
+            'legal': 'Rechtstexte',
+            'cookies': 'Cookies',
+        }
+
+        content.append(Paragraph('Manuell zu prüfende Punkte', self.styles['SectionHeading']))
+        content.append(Paragraph(
+            'Kein automatisches Prüfverfahren kann alle rechtlichen Anforderungen '
+            'bewerten — einige Kriterien erfordern eine kurze manuelle Kontrolle. '
+            'Damit nichts offen bleibt, finden Sie hier für jeden dieser Punkte '
+            'eine konkrete Anleitung.',
+            self.styles['BodyText'],
+        ))
+        content.append(Spacer(1, 0.5*cm))
+
+        note = (analysis_data.get('pillar_notes') or {}).get('accessibility')
+        if note:
+            content.append(Paragraph('<i>' + self._sicher(note) + '</i>', self.styles['BodyText']))
+            content.append(Spacer(1, 0.4*cm))
+
+        for check in checks:
+            label = pillar_labels.get(check.get('pillar', ''), check.get('pillar', ''))
+            content.append(Paragraph(
+                '[' + self._sicher(label) + '] ' + self._sicher(check.get('title', '')),
+                self.styles['SubHeading']
+            ))
+            content.append(Paragraph(self._sicher(check.get('anleitung', '')), self.styles['BodyText']))
+            content.append(Spacer(1, 0.3*cm))
+
+        content.append(Spacer(1, 0.5*cm))
+        return content
+
     def _create_footer(self) -> List:
         content = []
         
@@ -565,7 +620,7 @@ class ComplianceReportGenerator:
         ))
         
         content.append(Paragraph(
-            f"Generiert von Complyo.tech am {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')}",
+            f"Generiert von complyo.de am {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')}",
             self.styles['Footer']
         ))
         content.append(Paragraph(
@@ -573,7 +628,7 @@ class ComplianceReportGenerator:
             self.styles['Footer']
         ))
         content.append(Paragraph(
-            "© 2025 Complyo - KI-gestützte Website-Compliance | www.complyo.de",
+            f"© {datetime.now().year} Complyo - KI-gestützte Website-Compliance | www.complyo.de",
             self.styles['Footer']
         ))
         

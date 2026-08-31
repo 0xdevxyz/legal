@@ -28,7 +28,7 @@ class AIDocumentGenerator:
         company_data: Dict[str, str]
     ) -> Dict[str, Any]:
         """
-        Generiert vollständiges Impressum gemäß §5 TMG
+        Generiert vollständiges Impressum gemäß §5 DDG
         
         Args:
             user_id: User ID für Audit-Trail
@@ -49,7 +49,7 @@ class AIDocumentGenerator:
                 'generated_at': datetime.now().isoformat(),
                 'user_id': user_id,
                 'document_type': 'impressum',
-                'legal_basis': '§5 TMG',
+                'legal_basis': '§5 DDG',
                 'ai_model': self.model,
                 'version': '1.0',
                 'company_data_hash': self._hash_company_data(company_data)
@@ -70,7 +70,7 @@ class AIDocumentGenerator:
                 'document_id': doc_id,
                 'audit_trail': audit_trail,
                 'download_url': f'/api/v2/documents/{doc_id}/download',
-                'legal_note': 'Dieses Impressum wurde KI-gestützt generiert und basiert auf §5 TMG. Bitte prüfen Sie alle Angaben auf Richtigkeit.'
+                'legal_note': 'Dieses Impressum wurde KI-gestützt generiert und basiert auf §5 DDG. Bitte prüfen Sie alle Angaben auf Richtigkeit.'
             }
             
         except Exception as e:
@@ -175,7 +175,7 @@ class AIDocumentGenerator:
     def _build_impressum_prompt(self, company_data: Dict[str, str]) -> str:
         """Erstellt Prompt für Impressum-Generierung"""
         return f"""
-Generiere ein vollständiges, rechtssicheres Impressum gemäß §5 TMG für folgende Firma:
+Generiere ein vollständiges, rechtssicheres Impressum gemäß §5 DDG für folgende Firma:
 
 Firmendaten:
 - Name: {company_data.get('company_name', '[FIRMENNAME]')}
@@ -189,14 +189,14 @@ Firmendaten:
 
 Anforderungen:
 1. Vollständiges HTML-Dokument mit semantischen Tags
-2. Alle Pflichtangaben nach §5 TMG müssen enthalten sein
+2. Alle Pflichtangaben nach §5 DDG müssen enthalten sein
 3. Professionelles, sauberes Layout
 4. Barrierefreie Struktur (h1, h2, p Tags)
 5. Keine Platzhalter - nutze die angegebenen Daten
 
 Formatierung:
 - Nutze <h1> für "Impressum"
-- Nutze <h2> für Abschnitte (z.B. "Angaben gemäß § 5 TMG")
+- Nutze <h2> für Abschnitte (z.B. "Angaben gemäß § 5 DDG")
 - Nutze <p> für Absätze
 - Keine CSS-Styles inline
 
@@ -279,7 +279,7 @@ Beginne direkt mit dem HTML-Code.
         html = f"""
 <h1>Impressum</h1>
 
-<h2>Angaben gemäß § 5 TMG</h2>
+<h2>Angaben gemäß § 5 DDG</h2>
 <p>
   {company_data.get('company_name', '[Ihr Firmenname]')}<br>
   {company_data.get('street', '[Straße und Hausnummer]')}<br>

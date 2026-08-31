@@ -413,7 +413,7 @@ class ComplianceReportGenerator:
             ['Analyse-URL', analysis_data.get('url', 'N/A')],
             ['Analyse-Datum', datetime.now().strftime('%d.%m.%Y %H:%M')],
             ['Report-Version', '2.0'],
-            ['Analysierte Bereiche', 'DSGVO, TMG, TTDSG, Accessibility'],
+            ['Analysierte Bereiche', 'DSGVO, DDG, TDDDG, Barrierefreiheit'],
             ['Compliance-Engine', 'Complyo AI v2.2.0']
         ]
         

@@ -197,7 +197,7 @@ class PromptBuilder:
         ]
         
         self.legal_keywords_tmg = [
-            "Impressum", "§ 5 TMG", "Angaben gemäß", "Verantwortlich",
+            "Impressum", "§ 5 DDG", "Angaben gemäß", "Verantwortlich",
             "Registergericht", "Umsatzsteuer-ID", "Vertretungsberechtigt"
         ]
         

@@ -1,6 +1,6 @@
 # Impressum-Template (Deutsch)
 # Variablen-Slots werden beim Generieren durch user_data ersetzt.
-# Rechtsgrundlage: §5 TMG, §55 Abs. 2 RStV
+# Rechtsgrundlage: §5 DDG, §18 Abs. 2 MStV
 
 ## Pflichtangaben
 
@@ -34,7 +34,7 @@ Umsatzsteuer-Identifikationsnummer gemäß §27a UStG: {{vat_id}}
 Berufsbezeichnung: {{profession}}
 Zuständige Aufsichtsbehörde: {{regulatory_authority}}
 
-## Verantwortlich für den Inhalt gemäß §55 Abs. 2 RStV
+## Verantwortlich für den Inhalt gemäß §18 Abs. 2 MStV
 
 {{content_responsible}}
 {{content_responsible_address}}
