@@ -1,6 +1,18 @@
 """
-Public API Routes for Unauthenticated Access
-Provides website analysis without requiring authentication
+Die fuenf Endpunkte, die ohne Anmeldung erreichbar sind.
+
+/analyze und /analyze-preview fuehren den Scan fuer Interessenten aus,
+/v2/analyze-progress liefert den Fortschritt zum Token, /v2/site-screenshot das
+Vorschaubild, /health den Zustand.
+
+Das ist die Aussenhaut: alles hier ist von jedem im Netz aufrufbar. Zwei Dinge
+folgen daraus und stehen nicht zur Disposition. Erstens muss jede
+hereingereichte Adresse durch ssrf_protection.validate_url, bevor irgendetwas
+sie abruft. Zweitens haengt an den Scan-Endpunkten ein Rate-Limit, sonst
+bezahlt complyo fremde Lastspitzen.
+
+Der Seitenumfang eines Scans richtet sich nach dem Tarif (_seitenbudget); ohne
+Anmeldung gilt der kleinste.
 """
 
 from fastapi import APIRouter, HTTPException, Request, Depends

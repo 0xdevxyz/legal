@@ -1,3 +1,19 @@
+"""
+Bezahlvorgang ueber Stripe (Prefix /api/payment).
+
+Vier Endpunkte: Checkout anlegen, Stripe-Webhook entgegennehmen,
+Abonnementstatus lesen, Health.
+
+Zur Abgrenzung, weil es zwei Bezahl-Router gibt und das schon einmal Zeit
+gekostet hat: dieses Modul haengt unter /api/payment, stripe_routes.py unter
+/api/stripe, addon_payment_routes.py bedient die Zusatzmodule. Alle drei sind
+in main_production eingebunden und alle drei antworten (2026-08-31 nachgemessen).
+Die Oberflaeche des Dashboards ruft /api/stripe/create-checkout auf.
+
+Die Fachlogik liegt nicht hier, sondern in payment/stripe_service.py.
+"""
+
+
 import os
 import stripe
 import json

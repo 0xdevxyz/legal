@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
-from dependencies import require_admin
+from dependencies import rate_limit, require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ def _get_retriever():
     return KnowledgeRetriever()
 
 
-@router.get("/updates")
+@router.get("/updates", dependencies=[Depends(rate_limit("knowledge_list", 60, 60))])
 async def get_recent_updates(
     limit: int = Query(20, ge=1, le=100),
     impact: Optional[str] = Query(None, regex="^(high|medium|low)$"),
@@ -96,7 +96,7 @@ async def get_update_detail(update_id: str):
     }
 
 
-@router.get("/laws")
+@router.get("/laws", dependencies=[Depends(rate_limit("knowledge_list", 60, 60))])
 async def get_law_pages():
     """Alle Law-Stammseiten."""
     laws_dir = VAULT_ROOT / "laws"
@@ -124,7 +124,11 @@ async def get_law_pages():
     return {"laws": laws}
 
 
-@router.get("/search")
+# Die Suche bewertet bei jeder Anfrage den gesamten Wissensspeicher und
+# holt eine Einbettung fuer die Anfrage. Ohne Anmeldung und ohne Drossel
+# war das eine offene Tuer fuer Lastspitzen: nach dem Einzug der
+# EUR-Lex-Artikel sind das rund 1.900 Dokumente je Aufruf.
+@router.get("/search", dependencies=[Depends(rate_limit("knowledge_search", 20, 60))])
 async def search_knowledge(q: str = Query(..., min_length=2), top_k: int = Query(10, ge=1, le=30)):
     """Semantic Search über den gesamten Knowledge Vault."""
     if not q.strip():

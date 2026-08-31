@@ -125,7 +125,16 @@ def _validate_spec(spec: Dict[str, Any]) -> Optional[str]:
     # Qualitaets-Gate (Regel-SSOT check_spec_rules, siehe Audit 2026-07):
     from compliance_engine.check_spec_rules import (
         detection_is_weak, detection_is_inverted, AUTO_CHECK_RISK_CAP,
+        gate_keyword_too_short, MIN_GATE_KEYWORD_LEN,
     )
+    kurz = gate_keyword_too_short(spec["applies_when"])
+    if kurz:
+        return (
+            f"gate keyword '{kurz}' zu kurz (< {MIN_GATE_KEYWORD_LEN} Zeichen): "
+            f"trifft ueber die Wortanfang-Regel beliebige Woerter und erzeugt "
+            f"Befunde auf themenfremden Seiten — spezifischeres Keyword waehlen "
+            f"(z.B. 'ki-assistent' statt 'ki')"
+        )
     inverted = detection_is_inverted(spec["detection"])
     if inverted:
         return (

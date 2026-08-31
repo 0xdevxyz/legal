@@ -158,3 +158,64 @@ async def test_runner_strong_check_still_fires():
     issues = await _run_single_check(check, "https://example.com", soup,
                                      "<html><body><p>nichts</p></body></html>", None)
     assert len(issues) == 1 and issues[0]["is_missing"] is True
+
+
+# ---------------- Kurze Gate-Keywords (Audit 2026-08) ----------------
+# Realer Prod-Fall: Check #278 trug "ki"/"ai" als Gate-Keywords. Die
+# Wortanfang-Regel des Runners machte daraus Treffer auf "Kindermobiliar" und
+# "Kieferorthopaedie" — eine Ferienpark-Seite ohne jede KI bekam einen
+# AI-Act-Befund ueber 15.000 EUR, eine Zahnarztseite 20.000 EUR.
+
+from compliance_engine.check_spec_rules import (
+    gate_keyword_too_short,
+    MIN_GATE_KEYWORD_LEN,
+)
+from compliance_engine.declarative_check_runner import _keyword_trifft, _gate_passes
+
+AI_ACT_278_GATE = {
+    "keywords_any": ["ki", "ai", "chatbot", "assistent", "assistant", "bot",
+                     "generiert", "generated", "deepfake", "synthetisch"]
+}
+
+
+def test_kurzes_gate_keyword_abgelehnt():
+    err = _validate_spec(_base_spec(applies_when=AI_ACT_278_GATE))
+    assert err is not None and "zu kurz" in err
+
+
+def test_regel_findet_kurzes_keyword():
+    assert gate_keyword_too_short(AI_ACT_278_GATE) == "ki"
+    assert gate_keyword_too_short({"keywords_all": ["ai"]}) == "ai"
+    assert gate_keyword_too_short({"keywords_any": ["chatbot", "ki-assistent"]}) is None
+    assert gate_keyword_too_short({"always": True}) is None
+    assert gate_keyword_too_short(None) is None
+
+
+def test_langes_gate_keyword_bleibt_erlaubt():
+    assert _validate_spec(_base_spec(applies_when={"keywords_any": ["chatbot"]})) is None
+    # Drei Zeichen sind die Untergrenze, nicht darunter (ga4, gtag bleiben nutzbar)
+    assert gate_keyword_too_short({"keywords_any": ["ga4"]}) is None
+    assert MIN_GATE_KEYWORD_LEN == 3
+
+
+@pytest.mark.parametrize("keyword,text,erwartet", [
+    ("ki", "kinderbetreuung mit kindermobiliar", False),
+    ("ki", "kieferorthopaedie und kiefergelenk", False),
+    ("ki", "wir setzen ki fuer empfehlungen ein", True),
+    ("ki", "unser ki-assistent hilft", True),
+    ("bot", "die botschaft der stadt", False),
+    ("bot", "unser bot antwortet", True),
+    # Ab vier Zeichen bleibt der Wortanfang, damit Komposita treffen
+    ("kuendigung", "kuendigungsbutton fehlt", True),
+    ("shop", "shopsystem mit warenkorb", True),
+    ("gruen", "gruenstrom tarif", True),
+    ("gruen", "im hintergrund", False),
+])
+def test_keyword_trifft_wortgrenzen(keyword, text, erwartet):
+    assert _keyword_trifft(keyword, text) is erwartet
+
+
+def test_ferienpark_gate_faellt_nicht_mehr_auf_kinder():
+    html = "<html><body><p>Zusaetzliche Ausstattung: Kindermobiliar, Babybett.</p></body></html>"
+    soup = BeautifulSoup(html, "html.parser")
+    assert _gate_passes(AI_ACT_278_GATE, soup, html.lower()) is False

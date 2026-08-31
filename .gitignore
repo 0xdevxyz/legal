@@ -150,3 +150,9 @@ graphify-out/
 # RAG-Vektorcache — wird bei jedem knowledge_updater-Lauf neu geschrieben.
 # Als versionierte 600-KB-Datei ueberdeckt sie im Verlauf jede echte Aenderung.
 knowledge/_meta/embeddings.json
+
+# EUR-Lex-Volltexte, vom Crawler je Rechtsakt und Sprache geholt (rund 1.900
+# Dateien, ~10 MB). Reproduzierbar aus dem Cellar und ohne eigene Aussage im
+# Verlauf. Das kuratierte Stammwissen daneben (knowledge/laws/<sprache>/<AKT>.md)
+# bleibt versioniert.
+knowledge/laws/*/*/

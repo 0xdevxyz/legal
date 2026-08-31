@@ -1,3 +1,20 @@
+"""
+Zusammenbau der FastAPI-Anwendung. Der Prozess, den `complyo-backend` startet.
+
+Hier steht die Verdrahtung, nicht die Fachlichkeit: Umgebung laden, Sentry,
+CORS und CSRF, Rate-Limiter, im startup-Ereignis der Datenbank-Pool, die
+Dienste (Auth, Scanner, Legal-Monitor, deklarative Pruefungen) und 37 Router.
+
+Wer eine Fachfrage klaeren will, ist hier falsch. Die Pruefungen liegen in
+compliance_engine/, die Endpunkte in den *_routes.py-Modulen.
+
+Die rund 30 eigenen Endpunkte dieser Datei sind historisch gewachsen und nach
+Abschnittsmarken sortiert (Enhanced Scan, Workflow, Scan-Persistenz, Fix-Jobs,
+Reporting, Audit-Log, Payment). Neue Endpunkte gehoeren in einen eigenen
+Router, nicht hierher.
+"""
+
+
 from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
@@ -96,7 +113,6 @@ from widget_routes import router as widget_router
 # Stillgelegt 2026-07-29 vor dem Launch: Router ohne Frontend, dessen Tabellen
 # nie angelegt wurden. Code bleibt im Repo — zum Reaktivieren Schema nachziehen
 # (siehe tests/test_schema_completeness.py) und diese Zeilen wieder aktivieren.
-# from expert_service_routes import router as expert_service_router
 
 # Cookie Compliance Module
 from cookie_compliance_routes import router as cookie_compliance_router
@@ -702,7 +718,6 @@ async def startup_event():
     app.include_router(ai_compliance_router)  # AI Compliance (ComploAI Guard)
     app.include_router(addon_payment_router)  # Add-on Payments (ComploAI Guard & Priority Support)
     app.include_router(widget_router)  # Complyo Widgets (Cookie Consent & Accessibility)
-    # app.include_router(expert_service_router)  # stillgelegt 2026-07-29
     app.include_router(cookie_compliance_router)  # Cookie Compliance Management
     app.include_router(ab_test_router)  # A/B Testing for Cookie Banner
     
@@ -1002,7 +1017,7 @@ async def metrics_endpoint(request: Request):
     return _Resp(content=_prom_generate(), media_type=_PROM_CT)
 
 
-# ==================== NEU: ENHANCED SCAN API ====================
+# ==================== Enhanced-Scan-Endpunkte ====================
 
 @app.post("/api/v2/analyze/complete", dependencies=[Depends(rate_limit("analyze_complete", 3, 60))])
 @limiter.limit("30/minute")

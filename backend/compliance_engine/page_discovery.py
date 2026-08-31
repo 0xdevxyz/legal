@@ -24,6 +24,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 from urllib.parse import urljoin, urlparse, urldefrag
+
+from compliance_engine.sicherer_abruf import hole
 from xml.etree import ElementTree as ET
 
 import aiohttp
@@ -187,16 +189,19 @@ def klassifiziere(url: str) -> Optional[str]:
 
 
 async def _hole(session: aiohttp.ClientSession, url: str, timeout: int = 10) -> Optional[str]:
-    try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout), allow_redirects=True) as r:
-            if r.status != 200:
-                return None
-            ctype = (r.headers.get("content-type") or "").lower()
-            if "html" not in ctype and "xml" not in ctype:
-                return None
-            return await r.text()
-    except Exception:
+    """
+    Holt eine Seite als Text, oder None.
+
+    Über sicherer_abruf, weil hier fremdbestimmte Adressen landen: die
+    `Sitemap:`-Zeile der robots.txt schreibt der Betreiber der geprüften Seite,
+    und sie zeigte bis zum Sicherheitsreview 2026-08-31 ungeprüft überallhin.
+    """
+    abruf = await hole(session, url, timeout=timeout)
+    if abruf is None or abruf.status != 200:
         return None
+    if "html" not in abruf.content_type and "xml" not in abruf.content_type:
+        return None
+    return abruf.text()
 
 
 async def _aus_sitemap(session: aiohttp.ClientSession, basis: str) -> "List[str]":

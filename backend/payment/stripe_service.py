@@ -1,3 +1,22 @@
+"""
+Alles, was mit Stripe spricht. Die Bezahl-Router rufen nur hier hinein.
+
+Zwei Richtungen:
+- von uns zu Stripe: Kunde anlegen oder finden, Checkout-Sitzung fuer Tarif
+  oder Zusatzmodul, Portal-Sitzung fuer die Selbstverwaltung, Tarifliste
+- von Stripe zu uns: die handle_*-Methoden verarbeiten die Webhook-Ereignisse
+  (Checkout abgeschlossen, Abo geaendert, Rechnung bezahlt) und schreiben den
+  Stand in die Datenbank
+
+`get_or_create_customer` ist der Einstieg fuer alles Weitere: ohne
+Stripe-Kundennummer laesst sich weder Checkout noch Portal oeffnen.
+
+Der Webhook ist die einzige Wahrheit ueber den Bezahlstand. Was die Oberflaeche
+nach der Rueckkehr aus dem Checkout anzeigt, ist eine Vermutung, bis das
+Ereignis eingetroffen ist.
+"""
+
+
 import os
 import stripe
 from typing import Dict, Any, List

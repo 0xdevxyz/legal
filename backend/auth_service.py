@@ -1,3 +1,25 @@
+"""
+Der Kern der Anmeldung: Passwoerter, Token, Sitzungen.
+
+AuthService bekommt den Datenbank-Pool und optional Redis. Ohne Redis
+funktioniert alles, nur die Sperrliste faellt weg, siehe unten.
+
+Zwei Tokenarten mit verschiedener Lebensdauer:
+- Access-Token, kurzlebig, signiert (HS256) und mit audience und issuer
+  geprueft. Traegt eine `jti`, damit ein einzelnes Token widerrufbar bleibt.
+- Refresh-Token, langlebig, liegt in `user_sessions` mit Geraet und IP, damit
+  der Nutzer einzelne Sitzungen beenden kann.
+
+Die `jti`-Sperrliste liegt in Redis (`_blacklist_jti`, `_is_jti_blacklisted`).
+Fehlt Redis, laesst sich ein bereits ausgegebener Access-Token bis zu seinem
+Ablauf nicht mehr zurueckziehen; `revoke_all_sessions` wirkt dann erst mit der
+naechsten Erneuerung.
+
+`cleanup_expired_sessions` raeumt abgelaufene Refresh-Token weg und will
+regelmaessig aufgerufen werden.
+"""
+
+
 import os
 import bcrypt as _bcrypt
 import jwt
