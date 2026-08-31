@@ -204,3 +204,42 @@ def test_kuratiertes_stammwissen_wird_nicht_ueberschrieben(tmp_path, monkeypatch
     schreibe_artikel("AI_ACT", "DE", "32024R1689", parse_artikel(_dokument(anzahl=12)))
 
     assert stammwissen.read_text(encoding="utf-8") == "# Von Hand gepflegt\n"
+
+
+# ---------------- Dateien ohne Frontmatter (Regression 2026-08-31) ----------------
+# Nach der Erweiterung der Suchmuster auf laws/<sprache>/ kamen erstmals Dateien
+# ohne YAML-Kopf in den Suchraum: die fuenf README.md der Sprachordner.
+# _parse_md_file lieferte fuer sie ein Dict OHNE content_hash, retrieve() griff
+# mit [] darauf zu, und /api/knowledge/search antwortete in Produktion mit 500.
+
+def test_datei_ohne_frontmatter_hat_trotzdem_content_hash(tmp_path, monkeypatch):
+    from knowledge import knowledge_retriever as kr
+
+    (tmp_path / "laws" / "de").mkdir(parents=True)
+    (tmp_path / "laws" / "de" / "README.md").write_text(
+        "# Gesetze auf Deutsch\n\nKein Frontmatter, nur Text.\n", encoding="utf-8"
+    )
+    doc = kr._parse_md_file(tmp_path / "laws" / "de" / "README.md")
+    assert doc is not None
+    assert doc["content_hash"]
+    assert doc["filename"] == "README.md"
+    assert doc["frontmatter"] == {}
+
+
+@pytest.mark.asyncio
+async def test_retrieve_ueberlebt_datei_ohne_frontmatter(tmp_path, monkeypatch):
+    from knowledge import knowledge_retriever as kr
+
+    (tmp_path / "laws" / "de").mkdir(parents=True)
+    (tmp_path / "laws" / "de" / "README.md").write_text("# Ohne Kopf\n", encoding="utf-8")
+    (tmp_path / "laws" / "de" / "AI_ACT").mkdir()
+    (tmp_path / "laws" / "de" / "AI_ACT" / "art-050.md").write_text(
+        "---\nlaw_id: AI_ACT\nlanguage: de\n---\n\n# Artikel 50\n\nTransparenzpflichten fuer KI-Systeme.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(kr, "META_DIR", tmp_path / "_meta")
+    monkeypatch.setattr(kr, "EMBEDDINGS_CACHE_FILE", tmp_path / "_meta" / "embeddings.json")
+
+    retriever = kr.KnowledgeRetriever(vault_root=tmp_path)
+    treffer = await retriever.retrieve("Transparenzpflichten", top_k=5)
+    assert isinstance(treffer, list)

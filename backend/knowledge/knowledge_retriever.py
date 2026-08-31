@@ -48,8 +48,20 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
 def _parse_md_file(filepath: Path) -> Optional[Dict[str, Any]]:
     try:
         text = filepath.read_text(encoding="utf-8")
+        content_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
         if not text.startswith("---"):
-            return {"path": str(filepath), "frontmatter": {}, "body": text, "full_text": text}
+            # Gleiche Form wie unten, auch ohne Frontmatter. Vorher fehlten hier
+            # filename und content_hash; retrieve() greift auf content_hash mit
+            # [] zu und warf einen KeyError, sobald eine Datei ohne Frontmatter
+            # in den Suchraum kam (die laws/<sprache>/README.md, 2026-08-31).
+            return {
+                "path": str(filepath),
+                "filename": filepath.name,
+                "frontmatter": {},
+                "body": text,
+                "full_text": text,
+                "content_hash": content_hash,
+            }
 
         parts = text.split("---", 2)
         if len(parts) < 3:
@@ -64,7 +76,7 @@ def _parse_md_file(filepath: Path) -> Optional[Dict[str, Any]]:
             "frontmatter": fm,
             "body": body,
             "full_text": f"{fm.get('title', '')} {body}",
-            "content_hash": hashlib.sha256(text.encode()).hexdigest()[:16],
+            "content_hash": content_hash,
         }
     except Exception as e:
         logger.warning(f"Could not parse {filepath}: {e}")
@@ -159,7 +171,7 @@ class KnowledgeRetriever:
         scored: List[Tuple[float, Dict[str, Any]]] = []
 
         for doc in documents:
-            cache_key = doc["content_hash"]
+            cache_key = doc.get("content_hash", "")
             doc_embedding = self._embeddings_cache.get(cache_key, {}).get("vector")
 
             if query_embedding and doc_embedding:
