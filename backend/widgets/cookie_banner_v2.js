@@ -2809,6 +2809,7 @@
                         <div class="cps-item-checkbox">
                             <input type="checkbox"
                                    id="cps-third-country"
+                                   aria-label="Datenverarbeitung in unsicheren Drittländern zulassen"
                                    data-category="thirdCountry"
                                    ${this.categorySelections.thirdCountry ? 'checked' : ''}>
                         </div>
@@ -2830,6 +2831,7 @@
                             <div class="cps-item-checkbox">
                                 <input type="checkbox" 
                                        id="cat-${sanitizeText(cat.key)}" 
+                                       aria-label="${sanitizeText(cat.name)} zulassen"
                                        data-category="${sanitizeText(cat.key)}"
                                        ${isChecked ? 'checked' : ''} 
                                        ${cat.required ? 'checked disabled' : ''}>
@@ -2875,7 +2877,7 @@
             
             let html = `
                 <div class="cps-search-bar">
-                    <input type="text" class="cps-search-input" id="cps-service-search" placeholder="Services suchen...">
+                    <input type="text" class="cps-search-input" id="cps-service-search" aria-label="Dienste durchsuchen" placeholder="Services suchen...">
                     <span class="cps-search-count">${allServices.length} Services</span>
                 </div>
                 <div id="cps-services-list">
@@ -2900,6 +2902,7 @@
                                     </button>
                                     <label class="cps-toggle">
                                         <input type="checkbox" 
+                                               aria-label="${sanitizeText(service.name || service.service_key)} zulassen"
                                                data-service-toggle="${sanitizeText(service.service_key || service.name)}"
                                                data-category="${sanitizeText(service.category)}"
                                                ${isEnabled || isEssential ? 'checked' : ''} 
@@ -2967,7 +2970,7 @@
             
             let html = `
                 <div class="cps-search-bar">
-                    <input type="text" class="cps-search-input" id="cps-provider-search" placeholder="Provider suchen...">
+                    <input type="text" class="cps-search-input" id="cps-provider-search" aria-label="Anbieter durchsuchen" placeholder="Provider suchen...">
                     <span class="cps-search-count">${providerList.length} Provider</span>
                 </div>
                 <div id="cps-providers-list">
@@ -3564,7 +3567,7 @@
                 </p>
                 
                 <div style="margin-bottom: 24px;">
-                    <label style="display: block; font-size: 14px; font-weight: 500; color: ${textColor || '#374151'}; margin-bottom: 8px;">
+                    <label for="complyo-birth-year" style="display: block; font-size: 14px; font-weight: 500; color: ${textColor || '#374151'}; margin-bottom: 8px;">
                         Geburtsjahr eingeben:
                     </label>
                     <input 

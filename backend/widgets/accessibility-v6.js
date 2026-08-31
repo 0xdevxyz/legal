@@ -766,11 +766,11 @@
           <div class="complyo-modal-content">
             <!-- Font Size Slider -->
             <div class="complyo-slider-group">
-              <label>
+              <label for="fontSize-slider">
                 <span data-i18n="fontSize">Font Size</span>
                 <span class="complyo-slider-value" id="fontSize-value">100%</span>
               </label>
-              <input type="range" class="complyo-slider" id="fontSize-slider" 
+              <input type="range" class="complyo-slider" id="fontSize-slider" aria-label="Schriftgröße in Prozent" 
                      min="80" max="200" step="10" value="100" data-feature="fontSize">
               <div class="complyo-slider-labels">
                 <span>80%</span>
@@ -780,11 +780,11 @@
             
             <!-- Line Height Slider -->
             <div class="complyo-slider-group">
-              <label>
+              <label for="lineHeight-slider">
                 <span data-i18n="lineHeight">Line Height</span>
                 <span class="complyo-slider-value" id="lineHeight-value">150%</span>
               </label>
-              <input type="range" class="complyo-slider" id="lineHeight-slider" 
+              <input type="range" class="complyo-slider" id="lineHeight-slider" aria-label="Zeilenhöhe in Prozent" 
                      min="100" max="250" step="10" value="150" data-feature="lineHeight">
               <div class="complyo-slider-labels">
                 <span>100%</span>
@@ -794,11 +794,11 @@
             
             <!-- Letter Spacing Slider -->
             <div class="complyo-slider-group">
-              <label>
+              <label for="letterSpacing-slider">
                 <span data-i18n="letterSpacing">Letter Spacing</span>
                 <span class="complyo-slider-value" id="letterSpacing-value">0px</span>
               </label>
-              <input type="range" class="complyo-slider" id="letterSpacing-slider" 
+              <input type="range" class="complyo-slider" id="letterSpacing-slider" aria-label="Buchstabenabstand in Pixel" 
                      min="0" max="10" step="1" value="0" data-feature="letterSpacing">
               <div class="complyo-slider-labels">
                 <span>0px</span>
@@ -808,11 +808,11 @@
             
             <!-- Word Spacing Slider -->
             <div class="complyo-slider-group">
-              <label>
+              <label for="wordSpacing-slider">
                 <span data-i18n="wordSpacing">Word Spacing</span>
                 <span class="complyo-slider-value" id="wordSpacing-value">0px</span>
               </label>
-              <input type="range" class="complyo-slider" id="wordSpacing-slider" 
+              <input type="range" class="complyo-slider" id="wordSpacing-slider" aria-label="Wortabstand in Pixel" 
                      min="0" max="10" step="1" value="0" data-feature="wordSpacing">
               <div class="complyo-slider-labels">
                 <span>0px</span>
