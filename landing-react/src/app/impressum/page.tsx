@@ -35,7 +35,7 @@ const ANBIETER = {
   // Zweiter Kommunikationsweg neben der E-Mail. Optional, aber üblich.
   telefon: '',
   // Pflichtangabe, sobald vorhanden (§ 5 Abs. 1 Nr. 6 DDG).
-  ustIdNr: '',
+  ustIdNr: 'DE405368946',
 };
 
 const PFLICHTFELDER_FEHLEN = !ANBIETER.name || !ANBIETER.ustIdNr;
