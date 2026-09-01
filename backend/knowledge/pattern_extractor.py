@@ -187,32 +187,104 @@ class PatternExtractor:
         return paths
 
     async def extract_from_scan_data(self) -> List[str]:
+        """
+        Zieht die haeufigsten echten Befunde aus den eigenen Scans und legt sie
+        als Muster-Datei im Vault ab.
+
+        Zwei Fehler steckten hier bis zum 01.09.2026 uebereinander: die Abfrage
+        las die Tabelle `scan_issues`, die es in dieser Datenbank nie gab, und
+        selbst im Erfolgsfall wurde `rows` weggeworfen und nur der statische
+        Katalog zurueckgegeben. Der Lernweg "aus eigenen Scans" war damit reine
+        Zierde. Die Befunde liegen tatsaechlich in
+        `scan_history.scan_data->'issues'`, je Eintrag mit `category` und
+        `title` — genau darauf setzt die Abfrage jetzt auf.
+        """
+        pfade = self.generate_static_patterns()
+
         if not self.db_pool:
-            logger.info("No DB pool, using static patterns only")
-            return self.generate_static_patterns()
+            logger.info("Kein DB-Pool, nur statische Muster")
+            return pfade
 
         try:
             async with self.db_pool.acquire() as conn:
-                rows = await conn.fetch(
+                zeilen = await conn.fetch(
                     """
                     SELECT
-                        check_type,
-                        issue_title,
-                        COUNT(*) as frequency,
-                        MAX(created_at) as last_seen
-                    FROM scan_issues
-                    WHERE created_at >= NOW() - INTERVAL '30 days'
-                    GROUP BY check_type, issue_title
-                    HAVING COUNT(*) >= 5
-                    ORDER BY frequency DESC
+                        befund->>'category' AS kategorie,
+                        befund->>'title'    AS titel,
+                        COUNT(*)            AS haeufigkeit,
+                        MAX(sh.created_at)  AS zuletzt
+                    FROM scan_history sh
+                    CROSS JOIN LATERAL jsonb_array_elements(
+                        COALESCE(sh.scan_data->'issues', '[]'::jsonb)
+                    ) AS befund
+                    WHERE sh.created_at >= NOW() - INTERVAL '90 days'
+                      AND befund->>'title' IS NOT NULL
+                    GROUP BY 1, 2
+                    HAVING COUNT(*) >= 3
+                    ORDER BY haeufigkeit DESC
                     LIMIT 50
                     """
                 )
-                logger.info(f"Found {len(rows)} frequent patterns in DB scan data")
         except Exception as e:
-            logger.warning(f"Could not fetch scan data from DB: {e}")
+            logger.warning(f"Eigene Scans nicht auswertbar: {e}")
+            return pfade
 
-        return self.generate_static_patterns()
+        if not zeilen:
+            logger.info("Noch zu wenig eigene Scandaten fuer ein Haeufigkeitsmuster")
+            return pfade
+
+        pfad = self._schreibe_haeufigkeitsmuster(zeilen)
+        if pfad:
+            pfade.append(pfad)
+        logger.info(
+            f"{len(zeilen)} wiederkehrende Befunde aus eigenen Scans gesichert"
+        )
+        return pfade
+
+    def _schreibe_haeufigkeitsmuster(self, zeilen) -> str:
+        """Schreibt die Haeufigkeitsliste als eine Vault-Datei."""
+        fm = {
+            "title": "Muster: haeufigste Befunde aus eigenen Scans",
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "category": "pattern",
+            "law_areas": ["DSGVO", "DDG", "BFSG", "TDDDG"],
+            "relevance_score": 0.95,
+            "impact": "high",
+            "source_url": "",
+            "source_type": "internal",
+            "affected_checks": [],
+            "tags": ["pattern", "haeufigkeit", "eigene-scans"],
+            "obsidian_links": [],
+            "status": "active",
+            "embedding_hash": "",
+            "last_embedded": "",
+        }
+        kopf = "---\n" + yaml.dump(fm, allow_unicode=True, default_flow_style=False) + "---\n"
+
+        rumpf = [
+            "\n# Haeufigste Befunde aus eigenen Scans\n",
+            "Gezaehlt ueber die letzten 90 Tage, nur Befunde, die mindestens "
+            "dreimal aufgetreten sind. Diese Liste kommt aus echten Scans, "
+            "nicht aus dem statischen Katalog.\n",
+            "| Haeufigkeit | Kategorie | Befund | Zuletzt |",
+            "| ---: | --- | --- | --- |",
+        ]
+        for z in zeilen:
+            titel = (z["titel"] or "").replace("|", "/")
+            zuletzt = z["zuletzt"].strftime("%Y-%m-%d") if z["zuletzt"] else ""
+            rumpf.append(
+                f"| {z['haeufigkeit']} | {z['kategorie'] or 'unbekannt'} | {titel} | {zuletzt} |"
+            )
+        rumpf.append("")
+
+        try:
+            pfad = PATTERNS_DIR / "haeufigste-befunde-patterns.md"
+            pfad.write_text(kopf + "\n".join(rumpf), encoding="utf-8")
+            return str(pfad)
+        except Exception as e:
+            logger.warning(f"Haeufigkeitsmuster nicht schreibbar: {e}")
+            return ""
 
     async def run(self) -> List[str]:
         return await self.extract_from_scan_data()

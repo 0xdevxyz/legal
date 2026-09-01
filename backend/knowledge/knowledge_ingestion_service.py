@@ -151,13 +151,20 @@ class KnowledgeIngestionService:
             return []
         try:
             async with self.db_pool.acquire() as conn:
+                # Die Abfrage nannte drei Spalten, die legal_news nie hatte:
+                # source_type, published_at und processed_for_knowledge. Der
+                # UndefinedColumnError landete im except darunter und wurde nur
+                # geloggt — diese Zuleitung war seit jeher tot, waehrend die
+                # Tabelle taeglich befuellt wurde (423 Zeilen am 01.09.2026).
+                # Richtig heissen sie source, published_date und is_active.
                 rows = await conn.fetch(
                     """
-                    SELECT title, content, source_url, source_type, published_at
+                    SELECT title, content, source_url, source AS source_type,
+                           published_date AS published_at
                     FROM legal_news
-                    WHERE published_at >= NOW() - INTERVAL '3 days'
-                      AND processed_for_knowledge IS NOT TRUE
-                    ORDER BY published_at DESC
+                    WHERE published_date >= NOW() - INTERVAL '3 days'
+                      AND is_active IS NOT FALSE
+                    ORDER BY published_date DESC
                     LIMIT 50
                     """
                 )

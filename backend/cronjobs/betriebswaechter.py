@@ -17,6 +17,11 @@ prüft dieser Wächter:
      (scripts/betriebswaechter.sh) — docker logs/docker ps sind im
      Container nicht erreichbar.
   5. DSGVO-Hygiene: Löschanträge, die > 7 Tage unbestätigt liegen.
+  6. Kernrouten: antworten die Endpunkte, die jeder Kunde anfasst?
+     Ergänzt am 01.09.2026, weil /api/user/profile und
+     /api/legal-ai/archive tagelang 500 warfen und der Wächter
+     trotzdem stündlich "alles ruhig" meldete: die Seiten werden zu
+     selten aufgerufen, um den Fehlerdruck-Schwellwert zu reißen.
 
 Alarm nur bei Befund; jeder Befund höchstens einmal je 24 h (State-Datei),
 damit ein Dauerzustand nicht stündlich mailt. Läuft als Host-Cron über
@@ -56,6 +61,27 @@ CONSENT_MIN_TAGESSCHNITT = 3.0   # erst ab ~3 Consents/Tag ist Stille ein Signal
 WIRKUNG_MIN_AKTIVE_SITES = 2     # erst ab 2 meldenden Sites ist Stille ein Signal
 FEHLERDRUCK_JE_STUNDE = 20       # ERROR-Zeilen/h im Backend-Log
 MONITOR_MAX_ALTER_STUNDEN = 26   # Tageslauf 05:00 + Puffer
+
+# Kernrouten, stellvertretend für die vier Säulen plus Konto und Bezahlung.
+# Bewusst kurz: der Wächter soll Ausfälle melden, nicht die API testen.
+ROUTEN_BASIS = os.getenv("WAECHTER_API_BASIS", "http://complyo-backend:8002")
+ROUTEN_OEFFENTLICH = [
+    "/api/health",
+    "/api/stripe/plans",
+    "/api/knowledge/search?q=impressum",
+    "/api/widgets/accessibility.js",
+    "/api/widgets/cookie-compliance.js",
+]
+ROUTEN_ANGEMELDET = [
+    "/api/user/profile",
+    "/api/v2/dashboard/metrics",
+    "/api/legal-ai/archive",
+    "/api/cookie-compliance/my-config",
+    "/api/accessibility/agency/worklist",
+]
+# Konto, in dessen Namen die angemeldeten Routen geprüft werden.
+WAECHTER_KONTO_ID = int(os.getenv("WAECHTER_KONTO_ID", "5"))
+ROUTEN_ZEITLIMIT = 25
 
 
 def bewerte_herzschlag(vergleich_pro_tag: float, aktuell_24h: int,
@@ -173,6 +199,55 @@ async def pruefe_datenbank() -> list:
     return befunde
 
 
+async def pruefe_kernrouten() -> list:
+    """
+    Ruft die Kernrouten auf und meldet alles, was nicht 2xx antwortet.
+
+    Ein 500 auf einer selten benutzten Seite erzeugt keinen Fehlerdruck und
+    blieb deshalb unsichtbar. Diese Prüfung findet ihn beim ersten Lauf.
+    Sie ist fail-open: ist der Aufruf selbst nicht möglich (kein aiohttp,
+    Netz weg), gibt es genau einen Befund statt einer Fehlerflut.
+    """
+    befunde = []
+    try:
+        import aiohttp
+    except Exception as e:
+        return [("routen-pruefung-unmoeglich",
+                 f"Kernrouten nicht prüfbar: {e}")]
+
+    kopf = {}
+    try:
+        from auth_service import AuthService
+        kopf = {"Authorization": "Bearer "
+                + AuthService(None).create_access_token(WAECHTER_KONTO_ID)}
+    except Exception as e:
+        befunde.append(("routen-token",
+                        f"Kein Prüf-Token für Konto {WAECHTER_KONTO_ID}: {e} — "
+                        "die angemeldeten Routen bleiben ungeprüft."))
+
+    zeitlimit = aiohttp.ClientTimeout(total=ROUTEN_ZEITLIMIT)
+    kaputt = []
+    async with aiohttp.ClientSession(timeout=zeitlimit) as sitzung:
+        aufgaben = [(pfad, {}) for pfad in ROUTEN_OEFFENTLICH]
+        if kopf:
+            aufgaben += [(pfad, kopf) for pfad in ROUTEN_ANGEMELDET]
+        for pfad, kopfzeilen in aufgaben:
+            try:
+                async with sitzung.get(ROUTEN_BASIS + pfad,
+                                       headers=kopfzeilen) as antwort:
+                    if antwort.status >= 300:
+                        kaputt.append(f"{pfad} → {antwort.status}")
+            except Exception as e:
+                kaputt.append(f"{pfad} → nicht erreichbar ({type(e).__name__})")
+
+    if kaputt:
+        befunde.append((
+            "kernrouten-" + ";".join(sorted(k.split(" ")[0] for k in kaputt)),
+            "Kernrouten antworten nicht: " + "; ".join(kaputt),
+        ))
+    return befunde
+
+
 def pruefe_host_signale() -> list:
     """Vom Host-Wrapper mitgegebene Signale (docker ps / docker logs)."""
     befunde = []
@@ -274,6 +349,11 @@ async def main() -> int:
     except Exception as e:
         befunde.append(("datenbank-unerreichbar",
                         f"Datenbank-Checks fehlgeschlagen: {e}"))
+    try:
+        befunde.extend(await pruefe_kernrouten())
+    except Exception as e:
+        befunde.append(("routen-pruefung-abgestuerzt",
+                        f"Kernrouten-Prüfung fehlgeschlagen: {e}"))
     befunde.extend(pruefe_host_signale())
 
     if not befunde:
