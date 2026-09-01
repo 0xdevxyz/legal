@@ -74,7 +74,7 @@ export default function ArticlePage({
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -187,17 +187,24 @@ export default function ArticlePage({
               </section>
             )}
 
-            <aside className="flex gap-3 rounded-xl border border-gray-200 bg-gray-50 p-5 text-sm text-gray-600">
+            {/* Der Rechtshinweis gehoert zum Artikel, er ist kein eigenstaendiger
+                Nebeninhalt. Als <aside> innerhalb von <main> waere er ein
+                zweites Landmark im Hauptbereich — role="note" sagt genau,
+                was er ist. */}
+            <div
+              role="note"
+              className="flex gap-3 rounded-xl border border-gray-200 bg-gray-50 p-5 text-sm text-gray-600"
+            >
               <Info className="w-5 h-5 flex-shrink-0 text-gray-400 mt-0.5" />
               <p>
                 Dieser Beitrag gibt einen allgemeinen Überblick und ersetzt keine Rechtsberatung. Ob
                 und wie die beschriebenen Pflichten in Ihrem konkreten Fall gelten, kann nur eine
                 Anwältin oder ein Anwalt verbindlich beurteilen.
               </p>
-            </aside>
+            </div>
           </div>
         </article>
       </div>
-    </div>
+    </main>
   );
 }

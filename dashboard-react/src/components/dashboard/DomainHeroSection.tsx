@@ -287,12 +287,21 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                 menschliches Urteil) und das bei einem Score von 17 zynisch wirkt.
                 "Lücken schließen" ist dagegen einlösbar — und wenn keine mehr
                 offen ist, sagt die Überschrift genau das. */}
-            <h1 className="text-4xl lg:text-5xl font-black text-gray-900 dark:text-white mb-5 leading-[1.05] tracking-tight">
+            <h1
+              className="text-3xl lg:text-4xl font-black text-gray-900 dark:text-white mb-4 leading-[1.12] tracking-tight"
+              style={{ textWrap: 'balance' } as React.CSSProperties}
+            >
               {opener.titel}
-              <span className="block mt-2 text-3xl lg:text-4xl" style={{ color: 'var(--lime)' }}>
-                {opener.stand}
-              </span>
             </h1>
+            {/* Die Standzeile ist Beiwerk, keine zweite Ueberschrift. Frueher
+                stand sie fast so gross wie die Ueberschrift und schob den
+                eigentlichen Inhalt aus der Karte. */}
+            <p
+              className="text-lg lg:text-xl font-semibold mb-5 leading-snug"
+              style={{ color: 'var(--lime)', textWrap: 'balance' } as React.CSSProperties}
+            >
+              {opener.stand}
+            </p>
             <p className="text-lg text-gray-600 dark:text-zinc-300 leading-relaxed">
               {currentWebsite
                 ? 'Jeder Punkt unten ist im Browser nachgemessen, mit Fundstelle und Rechtsgrundlage. Was sich nicht automatisch prüfen lässt, steht als Anleitung dabei.'

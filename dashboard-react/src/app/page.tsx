@@ -17,6 +17,7 @@ import { ComplianceGauge } from '@/components/dashboard/ComplianceGauge'
 import { ComplianceFlowWidget } from '@/components/dashboard/ComplianceFlowWidget'
 import { MetricsCards } from '@/components/dashboard/MetricsCards'
 import { DomainHeroSection } from '@/components/dashboard/DomainHeroSection'
+import { AgenturPortfolioKarte } from '@/components/dashboard/AgenturPortfolioKarte'
 import { AIComplianceCard } from '@/components/dashboard/AIComplianceCard'
 import { Orientierungsband } from '@/components/dashboard/Orientierungsband'
 import { useDashboardMetrics } from '@/hooks/useMetrics'
@@ -83,6 +84,9 @@ export default function Page() {
                   userName={user?.full_name || user?.email}
                   scoreTrend={scoreTrend}
                 />
+              </ErrorBoundary>
+              <ErrorBoundary componentName="AgenturPortfolioKarte">
+                <AgenturPortfolioKarte />
               </ErrorBoundary>
               <ErrorBoundary componentName="AIComplianceCard">
                 <AIComplianceCard />

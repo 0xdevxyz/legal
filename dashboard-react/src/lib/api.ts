@@ -1,6 +1,6 @@
 import axios, { AxiosResponse } from 'axios';
 import type { ComplianceAnalysis, FixResult, UserLimits, FixHistory } from '@/types/api';
-import { getApiClient } from '@/lib/api-client';
+import { getApiClient, LANGLAEUFER_TIMEOUT_MS } from '@/lib/api-client';
 
 const apiClient = getApiClient();
 
@@ -87,7 +87,15 @@ export const analyzeWebsite = async (url: string, legalUpdateId?: number, scanTo
      payload.scan_token = scanToken;
    }
 
-  const response: AxiosResponse<{ success: boolean; data: ComplianceAnalysis }> = await apiClient.post('/api/v2/analyze', payload);
+  // Eigenes Zeitlimit: der Scan laeuft serverseitig bis zu 300 s, der
+  // Vorgabewert des Clients liegt bei 60 s. Ohne das hier brach jeder Scan
+  // ab, der laenger als eine Minute brauchte — bei Agentur-Konten mit 40
+  // Unterseiten also praktisch jeder.
+  const response: AxiosResponse<{ success: boolean; data: ComplianceAnalysis }> = await apiClient.post(
+    '/api/v2/analyze',
+    payload,
+    { timeout: LANGLAEUFER_TIMEOUT_MS },
+  );
 
    if (!response.data || !response.data.success) {
      throw new Error('Analysis API did not return a successful response');
@@ -165,7 +173,9 @@ export const startAIFix = async (scanId: string, categories?: string[]): Promise
      fix_categories: categories,
    };
 
-   const response = await apiClient.post('/api/v2/ai-fix', payload);
+   const response = await apiClient.post('/api/v2/ai-fix', payload, {
+     timeout: LANGLAEUFER_TIMEOUT_MS,
+   });
 
    return response.data;
  } catch (error) {
