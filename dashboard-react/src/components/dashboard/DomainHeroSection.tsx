@@ -265,14 +265,23 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
   })();
 
   return (
-    <div className="h-full">
+    // min-h-full statt h-full, damit die Karte darunter mitwachsen darf,
+    // wenn der Inhalt mehr Platz braucht als die Nachbarspalte hergibt.
+    <div className="min-h-full">
       {/* Hero Section */}
-      <div className="relative h-full glass-strong rounded-3xl p-8 lg:p-12 overflow-hidden">
-        {/* Animated Background Gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[#25bac8]/10 via-transparent to-[#25bac8]/5 opacity-70"></div>
-        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-[#25bac8]/[0.04] to-transparent"></div>
+      {/* min-h-full statt h-full: die Karte fuellt die Zeile, darf aber ueber
+          sie hinauswachsen. Mit h-full und overflow-hidden verschwand der
+          Inhalt, sobald links mehr stand als rechts Platz war — bei einer
+          Fehlermeldung fiel die Ueberschrift oben aus dem Bild. */}
+      <div className="relative min-h-full glass-strong rounded-3xl p-8 lg:p-12">
+        {/* Die Farbverlaeufe brauchen den Beschnitt, damit sie an den runden
+            Ecken enden — der Inhalt darueber nicht. */}
+        <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#25bac8]/10 via-transparent to-[#25bac8]/5 opacity-70"></div>
+          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-[#25bac8]/[0.04] to-transparent"></div>
+        </div>
 
-        <div className="relative grid lg:grid-cols-2 gap-10 items-center">
+        <div className="relative grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-8 lg:gap-10 items-start">
           {/* Left: Domain Input & Info */}
           <div className="space-y-6">
             <div
@@ -498,8 +507,10 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
 
           {/* Right: compliance visual — score lives in the ComplianceGauge cluster.
               [3D-VISUAL-SLOT] replaced by a generated lime-glass render in phase 4. */}
-          <div className="flex items-center justify-center">
-            <div className="relative w-64 h-64 lg:w-80 lg:h-80" aria-hidden="true">
+          {/* Oben ausgerichtet: mittig zentriert hing die Vorschau neben dem
+              Eingabefeld, waehrend die Ueberschrift darueber ins Leere lief. */}
+          <div className="flex items-start justify-center lg:pt-2">
+            <div className="relative w-56 h-56 lg:w-72 lg:h-72" aria-hidden="true">
               {/* lime glow */}
               <div className="absolute inset-0 rounded-full blur-3xl" style={{ background: 'rgba(37,186,200,0.14)' }} />
               {/* core gradient orb */}
