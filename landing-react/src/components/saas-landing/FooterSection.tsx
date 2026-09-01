@@ -14,7 +14,7 @@ export default function FooterSection() {
               <Logo size="sm" />
             </div>
             <p className="text-sm leading-relaxed mb-5">
-              Die KI-Compliance-Plattform für Websites. DSGVO, Cookie-Recht und Barrierefreiheit – automatisch und rechtssicher.
+              Die KI-Compliance-Plattform für Websites. DSGVO, Cookie-Recht und Barrierefreiheit: automatisch geprüft, repariert und dokumentiert.
             </p>
             <a
               href={`${APP_URL}/register?plan=free`}

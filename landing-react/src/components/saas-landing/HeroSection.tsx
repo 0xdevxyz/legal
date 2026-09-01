@@ -59,8 +59,8 @@ export default function HeroSection() {
 
             <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 leading-[1.1] mb-6">
               Websites{' '}
-              <span className="text-blue-600">rechtssicher</span>{' '}
-              machen mit{' '}
+              <span className="text-blue-600">prüfen und reparieren</span>{' '}
+              mit{' '}
               <span className="whitespace-nowrap">
                 <span className="relative inline-block">
                   <span className="text-orange-600">KI</span>

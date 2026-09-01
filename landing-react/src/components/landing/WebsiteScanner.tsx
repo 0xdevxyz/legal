@@ -47,7 +47,7 @@ export default function WebsiteScanner() {
     },
     {
       id: 'legal',
-      name: 'Rechtssichere Texte',
+      name: 'Pflichttexte',
       icon: FileText,
       color: 'purple',
       description: 'Impressum, AGB, Widerrufsrecht'

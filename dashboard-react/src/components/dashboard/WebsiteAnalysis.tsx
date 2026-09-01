@@ -292,7 +292,7 @@ export const WebsiteAnalysis: React.FC = () => {
     },
     {
       id: 'legal',
-      name: 'Rechtssichere Texte',
+      name: 'Pflichttexte',
       icon: FileText,
       color: 'purple',
       description: 'Impressum, AGB, Widerruf, Preisangaben, Shop',

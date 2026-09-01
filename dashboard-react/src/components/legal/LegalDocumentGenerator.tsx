@@ -388,7 +388,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
           {DOC_CONFIG[documentType].emoji} {DOC_CONFIG[documentType].label} Generator
         </h1>
         <p className="text-gray-600 dark:text-zinc-400">
-          Erstellen Sie rechtssichere {DOC_CONFIG[documentType].label} {DOC_CONFIG[documentType].legalBasis} für Ihre Website
+          Vorlage: {DOC_CONFIG[documentType].label} {DOC_CONFIG[documentType].legalBasis}, erzeugt aus Ihren Angaben. Bitte vor der Veröffentlichung prüfen.
         </p>
       </div>
 

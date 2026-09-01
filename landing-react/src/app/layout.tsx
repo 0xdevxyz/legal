@@ -17,15 +17,15 @@ const instrumentSans = Instrument_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'Complyo - Website Compliance & Rechtssicherheit',
-  description: 'Von nicht-konform zu rechtssicher in 24 Stunden. DSGVO, TTDSG, Barrierefreiheit - KI-gestuetzte Compliance-Loesung.',
-  keywords: 'DSGVO, TTDSG, Website Compliance, Rechtssicherheit, Barrierefreiheit, Cookie Banner',
+  title: 'Complyo - Website-Compliance: pruefen, reparieren, nachweisen',
+  description: 'Scan, KI-Reparatur und Pruefnachweis fuer DSGVO, TDDDG und Barrierefreiheit. Andere melden nur Befunde, complyo behebt sie.',
+  keywords: 'DSGVO, TDDDG, Website Compliance, BFSG, Barrierefreiheit, Cookie Banner',
   authors: [{ name: 'Complyo Team' }],
   robots: 'index, follow',
   metadataBase: new URL('https://complyo.de'),
   openGraph: {
-    title: 'Complyo - Website Compliance & Rechtssicherheit',
-    description: 'Von nicht-konform zu rechtssicher in 24 Stunden. DSGVO, TTDSG, Barrierefreiheit - KI-gestuetzte Compliance-Loesung fuer Ihr Unternehmen.',
+    title: 'Complyo - Website-Compliance: pruefen, reparieren, nachweisen',
+    description: 'Scan, KI-Reparatur und Pruefnachweis fuer DSGVO, TDDDG und Barrierefreiheit. Andere melden nur Befunde, complyo behebt sie.',
     url: 'https://complyo.de',
     siteName: 'Complyo',
     locale: 'de_DE',
@@ -34,8 +34,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary',
-    title: 'Complyo - Website Compliance & Rechtssicherheit',
-    description: 'DSGVO, TTDSG & Barrierefreiheit - KI-gestuetzte Compliance-Loesung.',
+    title: 'Complyo - Website-Compliance: pruefen, reparieren, nachweisen',
+    description: 'DSGVO, TDDDG und Barrierefreiheit - scannen, reparieren, nachweisen.',
     images: ['/logo-dark.png'],
   },
   alternates: {

@@ -309,8 +309,8 @@ export default function JourneyPage() {
           </h1>
         </div>
         <p className="mt-2 max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">
-          Ein geführter Weg in fünf Phasen – von der Analyse bis zur dauerhaften
-          Rechtssicherheit Ihrer Website.
+          Ein geführter Weg in fünf Phasen, von der Analyse bis zur laufenden
+          Überwachung Ihrer Website.
         </p>
       </div>
 

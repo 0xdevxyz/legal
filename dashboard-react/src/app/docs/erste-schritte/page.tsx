@@ -98,7 +98,7 @@ const SCHRITTE: Array<{
         die Rechtslage ändert. Benachrichtigt werden Sie nur, wenn etwas
         schlechter wird — Score-Sturz oder neue kritische Befunde. Die{' '}
         <Link href="/journey" className="text-teal-500 hover:underline">Journey</Link>{' '}
-        führt Sie durch die fünf Phasen bis zur dauerhaften Rechtssicherheit.
+        führt Sie durch die fünf Phasen bis zur laufenden Überwachung.
       </>
     ),
   },
@@ -143,7 +143,7 @@ const GLOSSAR: Array<{ begriff: string; erklaerung: string }> = [
   {
     begriff: 'Expert-Service',
     erklaerung:
-      'Wir setzen die Befunde auf Ihrer Website selbst um und übergeben rechtssicher — als Dienstleistung mit Festpreis. Für KMU kann eine BAFA-Förderung in Frage kommen.',
+      'Wir setzen die Befunde auf Ihrer Website selbst um und dokumentieren das Ergebnis, als Dienstleistung mit Festpreis. Für KMU kann eine BAFA-Förderung in Frage kommen.',
   },
 ];
 
@@ -154,7 +154,7 @@ export default function ErsteSchrittePage() {
         <div className="mb-12">
           <h1 className="text-4xl font-bold dark:text-white text-gray-900 mb-4">Erste Schritte</h1>
           <p className="dark:text-zinc-400 text-gray-600 text-lg">
-            Von der ersten Analyse bis zur dauerhaften Rechtssicherheit — die
+            Von der ersten Analyse bis zur laufenden Überwachung, die
             sechs Schritte, in genau der Reihenfolge, in der sie sinnvoll sind.
           </p>
         </div>

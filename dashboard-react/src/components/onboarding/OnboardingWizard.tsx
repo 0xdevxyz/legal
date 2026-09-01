@@ -386,7 +386,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
               Willkommen bei Complyo! 👋
             </h1>
             <p className="text-gray-500 text-center mb-8">
-              In 3 Schritten zu einer rechtssicheren Website
+              In 3 Schritten zu einer geprüften Website
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">

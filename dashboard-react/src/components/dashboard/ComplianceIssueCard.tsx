@@ -364,6 +364,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         'DSGVO': 'dsgvo',
         'legal': 'legal_texts',
         'Rechtssichere Texte': 'legal_texts',
+        'Pflichttexte': 'legal_texts',
         'cookies': 'cookie_compliance',
         'Cookie Compliance': 'cookie_compliance'
       };
@@ -612,7 +613,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                 <li>Führen Sie einen neuen Scan durch, um die Behebung zu bestätigen</li>
               </ol>
               <p className="text-xs text-blue-600 mt-2">
-                💡 Der generierte Text ist rechtssicher und DSGVO-konform!
+                💡 Die Vorlage deckt die Pflichtangaben nach Art. 13 und 14 DSGVO ab. Bitte vor der Veröffentlichung prüfen, sie ersetzt keine Rechtsberatung.
               </p>
             </div>
           )}
@@ -740,7 +741,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                     <li>Prüfen Sie welche personenbezogenen Daten Sie erheben (Formulare, Analytics, Tracking)</li>
                     <li>Dokumentieren Sie die Rechtsgrundlage für jede Datenverarbeitung (Art. 6 DSGVO)</li>
                     <li>Aktualisieren Sie Ihre Datenschutzerklärung entsprechend der gefundenen Datenverarbeitungen</li>
-                    <li>Nutzen Sie unseren Generator für eine rechtssichere und vollständige Datenschutzerklärung</li>
+                    <li>Nutzen Sie unseren Generator für eine Datenschutzerklärung, die die erkannten Datenverarbeitungen abdeckt</li>
                   </ol>
                   {/* Direkt den Generator oeffnen. Vorher wurde ein Event
                       `complyo:open-legal-generator` gefeuert, das nirgends
@@ -779,10 +780,10 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                   <FileText className="w-5 h-5 text-purple-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm text-purple-800 font-medium mb-2">Rechtssicherer Text fehlt:</p>
+                  <p className="text-sm text-purple-800 font-medium mb-2">Pflichttext fehlt:</p>
                   <ol className="list-decimal list-inside text-sm text-purple-700 space-y-2 mb-4">
                     <li>Prüfen Sie ob Sie AGB oder eine Widerrufserklärung benötigen (erforderlich bei Onlineshops & Dienstleistungen)</li>
-                    <li>Nutzen Sie unseren KI-Generator für rechtssichere, anwaltlich geprüfte Texte</li>
+                    <li>Nutzen Sie unseren KI-Generator für eine Textvorlage auf Basis Ihrer Angaben</li>
                     <li>Passen Sie den generierten Text auf Ihr Unternehmen an und veröffentlichen Sie ihn</li>
                   </ol>
                   <button

@@ -65,10 +65,10 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
 
   // Label-Map für UI-Texte
   const DOC_LABELS: Record<WizardDocType, { title: string; basis: string; cta: string }> = {
-    impressum:   { title: 'Impressum erstellen',            basis: 'ein rechtssicheres Impressum nach § 5 DDG',                 cta: 'Impressum Generator starten' },
-    datenschutz: { title: 'Datenschutzerklärung erstellen', basis: 'eine DSGVO-konforme Datenschutzerklärung',                  cta: 'Datenschutz Generator starten' },
-    agb:         { title: 'AGB erstellen',                  basis: 'rechtssichere Allgemeine Geschäftsbedingungen',             cta: 'AGB Generator starten' },
-    cookie:      { title: 'Cookie-Richtlinie erstellen',    basis: 'eine TDDDG-konforme Cookie-Richtlinie',                     cta: 'Cookie-Richtlinie Generator starten' },
+    impressum:   { title: 'Impressum erstellen',            basis: 'ein Impressum mit den Pflichtangaben nach § 5 DDG',                 cta: 'Impressum Generator starten' },
+    datenschutz: { title: 'Datenschutzerklärung erstellen', basis: 'eine Datenschutzerklärung mit den Pflichtangaben nach DSGVO',                  cta: 'Datenschutz Generator starten' },
+    agb:         { title: 'AGB erstellen',                  basis: 'Allgemeine Geschäftsbedingungen auf Basis Ihrer Angaben',             cta: 'AGB Generator starten' },
+    cookie:      { title: 'Cookie-Richtlinie erstellen',    basis: 'eine Cookie-Richtlinie mit den Pflichtangaben nach TDDDG',                     cta: 'Cookie-Richtlinie Generator starten' },
     widerruf:    { title: 'Widerrufsbelehrung erstellen',   basis: 'eine Widerrufsbelehrung inkl. Muster-Widerrufsformular',    cta: 'Widerruf Generator starten' },
   };
 

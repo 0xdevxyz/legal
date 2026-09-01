@@ -168,8 +168,8 @@ export const CookieComplianceWidget: React.FC = () => {
               <div className="flex items-start gap-3 text-sm">
                 <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <div className="text-gray-900 dark:text-white font-medium">DSGVO & TTDSG konform</div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">Rechtssichere Einwilligungen</div>
+                  <div className="text-gray-900 dark:text-white font-medium">Einwilligung nach DSGVO und TDDDG</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Dokumentierte Einwilligungen</div>
                 </div>
               </div>
 
