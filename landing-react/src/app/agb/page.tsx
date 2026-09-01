@@ -51,7 +51,7 @@ export default function AGBPage() {
               <h2 className="text-2xl font-bold text-gray-900 mb-4">1. Geltungsbereich</h2>
               <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
                 <p>
-                  (1) Diese Allgemeinen Geschäftsbedingungen (nachfolgend "AGB") gelten für alle Verträge zwischen {ANBIETER_VERTRAGSPARTEI} (nachfolgend "Anbieter" oder "wir") und ihren Kunden (nachfolgend "Kunde" oder "Sie") über die Nutzung der von uns angebotenen Software-as-a-Service (SaaS) Leistungen zur Website-Compliance, Barrierefreiheit und Datenschutz.
+                  (1) Diese Allgemeinen Geschäftsbedingungen (nachfolgend "AGB") gelten für alle Verträge zwischen {ANBIETER_VERTRAGSPARTEI} (nachfolgend "Anbieter" oder "wir") und unseren Kunden (nachfolgend "Kunde" oder "Sie") über die Nutzung der von uns angebotenen Software-as-a-Service (SaaS) Leistungen zur Website-Compliance, Barrierefreiheit und Datenschutz.
                 </p>
                 <p>
                   (2) Abweichende, entgegenstehende oder ergänzende Allgemeine Geschäftsbedingungen des Kunden werden nicht Vertragsbestandteil, es sei denn, ihrer Geltung wird ausdrücklich schriftlich zugestimmt.
