@@ -25,7 +25,7 @@ export default function FooterSection() {
           </div>
 
           <div>
-            <h4 className="text-white font-semibold text-sm mb-4">Produkt</h4>
+            <h2 className="text-white font-semibold text-sm mb-4">Produkt</h2>
             <ul className="space-y-2.5 text-sm">
               {[
                 { label: 'Preise', href: '/#preise' },
@@ -41,7 +41,7 @@ export default function FooterSection() {
           </div>
 
           <div>
-            <h4 className="text-white font-semibold text-sm mb-4">Rechtliches</h4>
+            <h2 className="text-white font-semibold text-sm mb-4">Rechtliches</h2>
             <ul className="space-y-2.5 text-sm">
               {[
                 { label: 'Impressum', href: '/impressum/' },
@@ -55,7 +55,7 @@ export default function FooterSection() {
           </div>
 
           <div>
-            <h4 className="text-white font-semibold text-sm mb-4">Kontakt</h4>
+            <h2 className="text-white font-semibold text-sm mb-4">Kontakt</h2>
             <ul className="space-y-2.5 text-sm">
               <li><a href="mailto:support@complyo.de" className="hover:text-white transition-colors">support@complyo.de</a></li>
             </ul>

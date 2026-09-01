@@ -7,7 +7,7 @@ import { ArrowLeft, Mail, MapPin, Phone, Globe } from 'lucide-react';
 
 export default function ImpressumPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -119,7 +119,7 @@ export default function ImpressumPage() {
                   href="https://ec.europa.eu/consumers/odr/" 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline ml-1"
+                  className="text-blue-600 underline ml-1"
                 >
                   https://ec.europa.eu/consumers/odr/
                 </a>
@@ -151,6 +151,6 @@ export default function ImpressumPage() {
           </div>
         </motion.div>
       </div>
-    </div>
+    </main>
   );
 }

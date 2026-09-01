@@ -43,7 +43,7 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
@@ -58,7 +58,7 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
           Zurück zur Startseite
         </Link>
 
-        <header className="mb-10">
+        <div className="mb-10">
           <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">{h1}</h1>
           <p className="text-lg text-gray-700 leading-relaxed">{lead}</p>
 
@@ -82,7 +82,7 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
               <ShieldCheck className="w-4 h-4 text-blue-600" /> Kostenlos
             </span>
           </div>
-        </header>
+        </div>
 
         <section aria-label="Website prüfen" className="mb-14">
           <WebsiteScanner />
@@ -128,6 +128,6 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }

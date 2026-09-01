@@ -60,13 +60,18 @@ export default function NavBar() {
             onClick={() => setOpen(!open)}
             aria-label={open ? 'Menü schließen' : 'Menü öffnen'}
             aria-expanded={open}
+            aria-controls="mobile-menue"
           >
             {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
 
-        {open && (
-          <div className="lg:hidden border-t border-gray-100 py-4 space-y-1">
+        {(
+          <div
+            id="mobile-menue"
+            hidden={!open}
+            className="lg:hidden border-t border-gray-100 py-4 space-y-1"
+          >
             {LINKS.map((link) => (
               <a
                 key={link.href}

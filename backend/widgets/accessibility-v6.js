@@ -434,7 +434,7 @@
       container.className = `complyo-widget-${this.config.position}`;
       
       container.innerHTML = `
-        <button class="complyo-toggle-btn" aria-label="Barrierefreiheit öffnen" aria-expanded="false" title="Barrierefreiheit (CTRL+U)">
+        <button class="complyo-toggle-btn" aria-label="Barrierefreiheit öffnen" aria-expanded="false" title="Barrierefreiheit (CTRL+U)" aria-controls="complyo-panel">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <!-- Universal Accessibility Symbol -->
             <circle cx="12" cy="12" r="10"/>
@@ -446,7 +446,7 @@
           </svg>
         </button>
         
-        <div class="complyo-panel" hidden>
+        <div class="complyo-panel" id="complyo-panel" hidden>
           <div class="complyo-panel-header">
             <h3 data-i18n="title">Accessibility Menu (CTRL+U)</h3>
             <button class="complyo-close-btn" aria-label="Schließen" title="Schließen">✕</button>

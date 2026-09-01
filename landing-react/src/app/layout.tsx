@@ -2,6 +2,7 @@ import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Instrument_Sans } from 'next/font/google'
 import Script from 'next/script'
+import Seitengeruest from '@/components/Seitengeruest'
 
 const dmSans = DM_Sans({
   subsets: ['latin'],
@@ -62,6 +63,15 @@ export default function RootLayout({
         <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
       </head>
       <body className={`${dmSans.className} antialiased`}>
+        {/* Erster fokussierbarer Punkt der Seite: ohne ihn muss sich jeder
+            Tastaturnutzer auf jeder Seite durch die gesamte Navigation
+            arbeiten (WCAG 2.4.1). Sichtbar nur bei Fokus. */}
+        <a
+          href="#inhalt"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-blue-700 focus:shadow-lg focus:outline focus:outline-2 focus:outline-blue-600"
+        >
+          Zum Inhalt springen
+        </a>
         {/* Cookie-Banner Script - lädt Content Blocker + Banner in einem Bundle */}
         <Script
           src="https://api.complyo.de/api/widgets/cookie-compliance.js"
@@ -70,7 +80,7 @@ export default function RootLayout({
           strategy="afterInteractive"
         />
         
-        {children}
+        <Seitengeruest>{children}</Seitengeruest>
         {/* data-site-id MUSS die stabile Site-ID sein (derive_site_id), nicht
             eine Scan-Kennung. Hier stand "scan-91778ad450e1": das Manifest
             antwortete darauf mit "200, nichts zu tun", das Widget wendete brav

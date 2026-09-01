@@ -40,7 +40,7 @@ export default function HeroSection() {
               machen mit{' '}
               <span className="whitespace-nowrap">
                 <span className="relative inline-block">
-                  <span className="text-orange-500">KI</span>
+                  <span className="text-orange-600">KI</span>
                   <span className="absolute -bottom-1 left-0 right-0 h-1 bg-orange-200 rounded-full" />
                 </span>
                 &#8209;Compliance
@@ -95,7 +95,7 @@ export default function HeroSection() {
                   <div className="w-3 h-3 rounded-full bg-red-400" />
                   <div className="w-3 h-3 rounded-full bg-yellow-400" />
                   <div className="w-3 h-3 rounded-full bg-green-400" />
-                  <span className="ml-3 text-xs text-gray-400">Complyo – in 60 Sekunden erklärt</span>
+                  <span className="ml-3 text-xs text-gray-500">Complyo – in 60 Sekunden erklärt</span>
                 </div>
 
                 <div className="relative">
@@ -130,7 +130,7 @@ export default function HeroSection() {
                 </div>
                 <div>
                   <p className="text-xs font-bold text-gray-900">DSGVO-konform</p>
-                  <p className="text-xs text-gray-400">Automatisch geprüft</p>
+                  <p className="text-xs text-gray-500">Automatisch geprüft</p>
                 </div>
               </div>
             </div>

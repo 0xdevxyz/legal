@@ -32,7 +32,7 @@ const ARTICLES = [
 
 export default function Page() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <div className="container mx-auto px-4 py-12 max-w-3xl">
         <Link
           href="/"
@@ -67,6 +67,6 @@ export default function Page() {
           ))}
         </div>
       </div>
-    </div>
+    </main>
   );
 }

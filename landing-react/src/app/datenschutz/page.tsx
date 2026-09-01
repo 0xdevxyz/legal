@@ -7,7 +7,7 @@ import { ArrowLeft, Shield, Mail } from 'lucide-react';
 
 export default function DatenschutzPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -60,10 +60,10 @@ export default function DatenschutzPage() {
                   <p>10115 Berlin</p>
                   <p>Deutschland</p>
                   <p className="mt-3">
-                    Telefon: <a href="tel:+49301234567" className="text-blue-600 hover:underline">+49 (0) 30 1234567</a>
+                    Telefon: <a href="tel:+49301234567" className="text-blue-600 underline">+49 (0) 30 1234567</a>
                   </p>
                   <p>
-                    E-Mail: <a href="mailto:datenschutz@complyo.de" className="text-blue-600 hover:underline">datenschutz@complyo.de</a>
+                    E-Mail: <a href="mailto:datenschutz@complyo.de" className="text-blue-600 underline">datenschutz@complyo.de</a>
                   </p>
                 </div>
               </div>
@@ -103,7 +103,7 @@ export default function DatenschutzPage() {
                 <div className="bg-blue-50 p-4 rounded-lg mt-4">
                   <p>
                     <strong>E-Mail:</strong>{' '}
-                    <a href="mailto:datenschutz@complyo.de" className="text-blue-600 hover:underline">
+                    <a href="mailto:datenschutz@complyo.de" className="text-blue-600 underline">
                       datenschutz@complyo.de
                     </a>
                   </p>
@@ -140,6 +140,6 @@ export default function DatenschutzPage() {
           </div>
         </motion.div>
       </div>
-    </div>
+    </main>
   );
 }

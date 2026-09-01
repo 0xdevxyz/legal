@@ -7,7 +7,7 @@ import { ArrowLeft, FileText } from 'lucide-react';
 
 export default function AGBPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -127,7 +127,7 @@ export default function AGBPage() {
             <h3 className="font-semibold text-gray-900 mb-3">Fragen zu den AGB?</h3>
             <p className="text-gray-700 text-sm">
               <strong>E-Mail:</strong>{' '}
-              <a href="mailto:info@complyo.de" className="text-blue-600 hover:underline">
+              <a href="mailto:info@complyo.de" className="text-blue-600 underline">
                 info@complyo.de
               </a>
             </p>
@@ -145,6 +145,6 @@ export default function AGBPage() {
           </div>
         </motion.div>
       </div>
-    </div>
+    </main>
   );
 }

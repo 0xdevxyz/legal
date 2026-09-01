@@ -138,7 +138,7 @@ export default function PricingSection() {
                 <span className="text-4xl font-extrabold text-gray-900">{plan.price}</span>
                 <span className="text-sm text-gray-500">{plan.period}</span>
               </div>
-              <p className="text-xs text-gray-400 mb-6 min-h-[16px]">{plan.note ?? ''}</p>
+              <p className="text-xs text-gray-500 mb-6 min-h-[16px]">{plan.note ?? ''}</p>
 
               <ul className="space-y-3 mb-8 flex-1">
                 {plan.features.map((feature, i) => (
@@ -194,7 +194,7 @@ export default function PricingSection() {
           </a>
         </div>
 
-        <p className="text-center text-xs text-gray-400 mt-6">
+        <p className="text-center text-xs text-gray-500 mt-6">
           Alle Preise zzgl. MwSt. · Abos monatlich kündbar · Zahlung per Karte oder SEPA-Lastschrift
         </p>
       </div>

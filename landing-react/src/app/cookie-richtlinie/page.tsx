@@ -7,7 +7,7 @@ import { ArrowLeft, Cookie, Mail, Settings } from 'lucide-react';
 
 export default function CookieRichtliniePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -96,12 +96,15 @@ export default function CookieRichtliniePage() {
               <h3 className="font-semibold text-gray-900 mb-2">Technisch notwendig</h3>
               <div className="overflow-x-auto mb-6">
                 <table className="w-full text-xs text-left text-gray-700 border border-gray-200 rounded-lg">
+                  <caption className="sr-only">
+                    Technisch notwendige Cookies dieser Website mit Name, Typ, Speicherdauer und Zweck
+                  </caption>
                   <thead className="bg-gray-50 text-gray-900">
                     <tr>
-                      <th className="px-3 py-2 font-semibold">Name</th>
-                      <th className="px-3 py-2 font-semibold">Typ</th>
-                      <th className="px-3 py-2 font-semibold">Speicherdauer</th>
-                      <th className="px-3 py-2 font-semibold">Zweck</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Name</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Typ</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Speicherdauer</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Zweck</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -124,11 +127,14 @@ export default function CookieRichtliniePage() {
               <h3 className="font-semibold text-gray-900 mb-2">Analyse / Statistik (nur mit Einwilligung)</h3>
               <div className="overflow-x-auto mb-6">
                 <table className="w-full text-xs text-left text-gray-700 border border-gray-200 rounded-lg">
+                  <caption className="sr-only">
+                    Analyse-Cookies, die erst nach Einwilligung gesetzt werden, mit Anbieter, Zweck und Speicherdauer
+                  </caption>
                   <thead className="bg-gray-50 text-gray-900">
                     <tr>
-                      <th className="px-3 py-2 font-semibold">Anbieter</th>
-                      <th className="px-3 py-2 font-semibold">Zweck</th>
-                      <th className="px-3 py-2 font-semibold">Rechtsgrundlage</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Anbieter</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Zweck</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Rechtsgrundlage</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -144,11 +150,14 @@ export default function CookieRichtliniePage() {
               <h3 className="font-semibold text-gray-900 mb-2">Marketing (nur mit Einwilligung)</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs text-left text-gray-700 border border-gray-200 rounded-lg">
+                  <caption className="sr-only">
+                    Marketing-Cookies, die erst nach Einwilligung gesetzt werden, mit Anbieter, Zweck und Speicherdauer
+                  </caption>
                   <thead className="bg-gray-50 text-gray-900">
                     <tr>
-                      <th className="px-3 py-2 font-semibold">Anbieter</th>
-                      <th className="px-3 py-2 font-semibold">Zweck</th>
-                      <th className="px-3 py-2 font-semibold">Rechtsgrundlage</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Anbieter</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Zweck</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Rechtsgrundlage</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -189,13 +198,13 @@ export default function CookieRichtliniePage() {
                   (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18), Datenübertragbarkeit
                   (Art. 20) sowie das Widerspruchsrecht (Art. 21) und der Widerruf einer erteilten Einwilligung
                   (Art. 7 Abs. 3). Weitere Informationen finden Sie in unserer{' '}
-                  <Link href="/datenschutz" className="text-blue-600 hover:underline">Datenschutzerklärung</Link>.
+                  <Link href="/datenschutz" className="text-blue-600 underline">Datenschutzerklärung</Link>.
                 </p>
                 <div className="bg-blue-50 p-4 rounded-lg flex items-center gap-3">
                   <Mail className="w-5 h-5 text-blue-600 flex-shrink-0" />
                   <p>
                     <strong>Kontakt:</strong>{' '}
-                    <a href="mailto:datenschutz@complyo.de" className="text-blue-600 hover:underline">
+                    <a href="mailto:datenschutz@complyo.de" className="text-blue-600 underline">
                       datenschutz@complyo.de
                     </a>
                   </p>
@@ -219,6 +228,6 @@ export default function CookieRichtliniePage() {
           </div>
         </motion.div>
       </div>
-    </div>
+    </main>
   );
 }

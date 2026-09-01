@@ -27,7 +27,7 @@ export default function GDPRDataManagement() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <div className="container mx-auto px-4 py-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -57,9 +57,9 @@ export default function GDPRDataManagement() {
                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">🔐</span>
                 </div>
-                <h3 className="text-2xl font-semibold text-gray-900 mb-2">
+                <h2 className="text-2xl font-semibold text-gray-900 mb-2">
                   Sie haben ein Complyo-Konto?
-                </h3>
+                </h2>
                 <p className="text-gray-600">
                   Export und Löschantrag direkt im Dashboard
                 </p>
@@ -67,7 +67,7 @@ export default function GDPRDataManagement() {
 
               <div className="space-y-4 mb-6">
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <h4 className="font-semibold text-gray-900 mb-2">So geht&apos;s:</h4>
+                  <h3 className="font-semibold text-gray-900 mb-2">So geht&apos;s:</h3>
                   <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
                     <li>Im Dashboard anmelden</li>
                     <li>Einstellungen → Datenschutz öffnen</li>
@@ -134,7 +134,7 @@ export default function GDPRDataManagement() {
 
               <a
                 href={`mailto:datenschutz@complyo.de?subject=${mailtoBetreff}&body=${mailtoBody}`}
-                className="block w-full text-center bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+                className="block w-full text-center bg-green-700 hover:bg-green-800 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
               >
                 ✉️ E-Mail an datenschutz@complyo.de
               </a>
@@ -198,6 +198,6 @@ export default function GDPRDataManagement() {
           </motion.div>
         </motion.div>
       </div>
-    </div>
+    </main>
   );
 }
