@@ -2,6 +2,29 @@
 import React, { useRef, useState } from 'react';
 import { ArrowRight, CheckCircle2, ShieldCheck, Zap, Volume2, VolumeX } from 'lucide-react';
 
+// Wortlaut der Erzaehlung, abgelesen aus den eingebrannten Untertiteln der
+// Videodatei. Aenderungen am Video muessen hier und in der VTT-Spur nachgezogen
+// werden — sonst steht neben dem Video ein Text, der nicht dazu gehoert.
+const TRANSKRIPT = [
+  'Datenschutz, Cookie-Banner, Barrierefreiheit – wer blickt da noch durch? ' +
+    'Jede Woche neue Pflichten, und auf der eigenen Website sammeln sich still ' +
+    'die Warnzeichen, während der Laden laufen soll.',
+  'Hinter dem Chaos stecken genau vier Säulen: Barrierefreiheit für alle ' +
+    'Besucher, Datenschutz, saubere Cookie-Einwilligung und rechtssichere Texte ' +
+    'vom Impressum bis zum Widerruf.',
+  'Wer eine Säule ignoriert, riskiert Abmahnung oder Bußgeld, und seit dem ' +
+    'Barrierefreiheitsstärkungsgesetz trifft das auch kleine Shops. Die Pflichten ' +
+    'wachsen schneller als der Umsatz.',
+  'Genau hier setzt complyo an: Ein Scan prüft die Website in unter sechzig ' +
+    'Sekunden gegen alle vier Säulen und zeigt jede Baustelle auf einem Bildschirm.',
+  'Im Dashboard repariert die künstliche Intelligenz direkt mit: Alt-Texte, ' +
+    'Kontraste, Cookie-Banner und Rechtstexte bekommen nacheinander ihren Haken, ' +
+    'und jede Reparatur wird im Browser nachgemessen.',
+  'Aus vier Baustellen wird eine Übersicht voller Haken, der Prüfnachweis liegt ' +
+    'dabei. Also: Durchblicken statt Ärgern – testen Sie Ihre Website heute, eine ' +
+    'Minute genügt.',
+];
+
 export default function HeroSection() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(true);
@@ -108,9 +131,18 @@ export default function HeroSection() {
                     playsInline
                     preload="metadata"
                     poster="/videos/complyo-erklaervideo-poster.jpg"
-                    aria-label="Erklärvideo: Wie Complyo die vier Compliance-Säulen Barrierefreiheit, Datenschutz, Cookie-Einwilligung und Rechtstexte löst. Untertitel sind im Video eingeblendet."
+                    aria-label="Erklärvideo: Wie Complyo die vier Compliance-Säulen Barrierefreiheit, Datenschutz, Cookie-Einwilligung und Rechtstexte löst. Das vollständige Transkript steht unter dem Video."
                   >
                     <source src="/videos/complyo-erklaervideo.mp4" type="video/mp4" />
+                    {/* Die im Bild eingebrannten Untertitel sind weder
+                        abschaltbar noch maschinell lesbar. Diese Spur ist es. */}
+                    <track
+                      kind="captions"
+                      srcLang="de"
+                      label="Deutsch"
+                      src="/videos/complyo-erklaervideo.de.vtt"
+                      default
+                    />
                   </video>
                   <button
                     type="button"
@@ -122,6 +154,20 @@ export default function HeroSection() {
                     {muted ? 'Mit Ton abspielen' : 'Stumm'}
                   </button>
                 </div>
+
+                {/* Textalternative fuer alle, die das Video nicht ansehen oder
+                    hoeren koennen oder wollen (WCAG 1.2.3). Zugeklappt, damit
+                    sie den Hero nicht auseinanderzieht. */}
+                <details className="border-t border-gray-100 px-5 py-3 text-left">
+                  <summary className="cursor-pointer text-xs font-semibold text-gray-700 hover:text-blue-700">
+                    Transkript des Videos anzeigen
+                  </summary>
+                  <div className="mt-3 space-y-2 text-xs leading-relaxed text-gray-600">
+                    {TRANSKRIPT.map((absatz, i) => (
+                      <p key={i}>{absatz}</p>
+                    ))}
+                  </div>
+                </details>
               </div>
 
               <div className="absolute -bottom-3 -left-3 bg-white rounded-xl shadow-lg border border-gray-100 px-4 py-2.5 flex items-center gap-2.5">

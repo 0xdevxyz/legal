@@ -180,27 +180,52 @@ class MediaAccessibilityChecker:
                     risk_euro=2000
                 ))
             
-            # Prüfe Audiodeskription (WCAG 1.2.5)
+            # Textalternative einmal ermitteln — sie beantwortet beide folgenden
+            # Fragen, und zweimal denselben Baum zu durchsuchen waere Unfug.
+            hat_textalternative = media.has_transcript or self._has_nearby_transcript(video, soup)
+
+            # Prueft Audiodeskription (WCAG 1.2.3 / 1.2.5)
             if not media.has_audio_description:
-                issues.append(MediaAccessibilityIssue(
-                    title="Video ohne Audiodeskription",
-                    description="Das Video hat keine Audiodeskription für blinde Nutzer. "
-                               "Visuelle Informationen, die nicht durch den Ton vermittelt werden, "
-                               "sind nicht zugänglich.",
-                    severity="warning",
-                    wcag_criteria=["1.2.3", "1.2.5"],
-                    legal_basis="WCAG 2.1 Level AA (1.2.5), BFSG §12",
-                    recommendation="Fügen Sie eine Audiodeskription hinzu oder stellen Sie eine Textalternative bereit.",
-                    media_type="video",
-                    media_src=media.src,
-                    element_html=str(video)[:300],
-                    page_url=url,
-                    risk_euro=1500
-                ))
-            
-            # Prüfe Transkript-Verlinkung
+                if hat_textalternative:
+                    # Ein Volltext-Transkript erfuellt 1.2.3 (Level A). Offen
+                    # bleibt 1.2.5 (Level AA) — und ob die Alternative auch die
+                    # BILDinformationen wiedergibt, kann nur ein Mensch beurteilen.
+                    issues.append(MediaAccessibilityIssue(
+                        title="Video ohne Audiodeskription (Textalternative vorhanden)",
+                        description="Für das Video liegt eine Textalternative vor; damit ist WCAG 1.2.3 "
+                                   "(Level A) erfüllt. Für 1.2.5 (Level AA) wäre zusätzlich eine "
+                                   "Audiodeskription nötig. Prüfen Sie, ob die Textalternative auch die "
+                                   "rein bildlichen Informationen wiedergibt.",
+                        severity="info",
+                        wcag_criteria=["1.2.5"],
+                        legal_basis="WCAG 2.1 Level AA (1.2.5)",
+                        recommendation="Ergänzen Sie eine Audiodeskription, wenn das Video Informationen "
+                                      "ausschließlich im Bild vermittelt.",
+                        media_type="video",
+                        media_src=media.src,
+                        element_html=str(video)[:300],
+                        page_url=url,
+                        risk_euro=0
+                    ))
+                else:
+                    issues.append(MediaAccessibilityIssue(
+                        title="Video ohne Audiodeskription",
+                        description="Das Video hat keine Audiodeskription für blinde Nutzer. "
+                                   "Visuelle Informationen, die nicht durch den Ton vermittelt werden, "
+                                   "sind nicht zugänglich.",
+                        severity="warning",
+                        wcag_criteria=["1.2.3", "1.2.5"],
+                        legal_basis="WCAG 2.1 Level AA (1.2.5), BFSG §12",
+                        recommendation="Fügen Sie eine Audiodeskription hinzu oder stellen Sie eine Textalternative bereit.",
+                        media_type="video",
+                        media_src=media.src,
+                        element_html=str(video)[:300],
+                        page_url=url,
+                        risk_euro=1500
+                    ))
+
+            # Prueft Transkript-Verlinkung
             if not media.has_transcript:
-                # Suche nach Transkript-Links in der Nähe
                 has_nearby_transcript = self._has_nearby_transcript(video, soup)
                 if not has_nearby_transcript:
                     issues.append(MediaAccessibilityIssue(
@@ -435,30 +460,58 @@ class MediaAccessibilityChecker:
         
         return None
     
+    # Ein Transkript ist erst eines, wenn wirklich Text dasteht. Diese Grenze
+    # trennt einen ausgeklappten Volltext von einer blossen Ueberschrift.
+    _TRANSKRIPT_MINDESTZEICHEN = 200
+
+    _TRANSKRIPT_WOERTER = ('transkript', 'transcript', 'niederschrift', 'skript', 'mitschrift')
+
     def _has_nearby_transcript(self, element: Tag, soup: BeautifulSoup) -> bool:
         """
-        Sucht nach Transkript-Links in der Nähe des Elements
+        Prueft, ob zu dem Medium ein Transkript erreichbar ist — als Link ODER
+        als Volltext auf der Seite selbst.
+
+        Der Volltext auf der Seite ist die bessere Loesung: niemand muss die
+        Seite verlassen. Frueher zaehlte nur der Link, und wer es richtig machte,
+        bekam trotzdem den Befund.
         """
-        # Suche im Parent
+        # 1. Link in der Naehe
         parent = element.parent
         if parent:
-            # Suche nach Links mit Transkript-Keywords
             links = parent.find_all('a', href=True)
             for link in links:
                 text = link.get_text(strip=True).lower()
                 href = link.get('href', '').lower()
-                
-                if any(kw in text or kw in href for kw in 
+                if any(kw in text or kw in href for kw in
                        ['transkript', 'transcript', 'text', 'skript', 'niederschrift']):
                     return True
-        
-        # Suche nach aria-describedby
+
+        # 2. aria-describedby auf einen Textblock
         described_by = element.get('aria-describedby')
         if described_by:
             desc_element = soup.find(id=described_by)
             if desc_element and len(desc_element.get_text(strip=True)) > 50:
                 return True
-        
+
+        # 3. Volltext auf der Seite: ein Abschnitt, der sich als Transkript
+        #    ausweist und genug Text enthaelt. Gesucht wird nur in den naechsten
+        #    Vorfahren des Mediums, damit das Transkript eines anderen Videos
+        #    weiter unten nicht mitzaehlt.
+        knoten = element
+        for _ in range(4):
+            knoten = knoten.parent if knoten is not None else None
+            if knoten is None or not hasattr(knoten, 'find_all'):
+                break
+            for block in knoten.find_all(['details', 'section', 'div', 'aside']):
+                ueberschrift = ' '.join(
+                    t.get_text(strip=True).lower()
+                    for t in block.find_all(['summary', 'h2', 'h3', 'h4', 'h5', 'strong'], limit=3)
+                )
+                if not any(w in ueberschrift for w in self._TRANSKRIPT_WOERTER):
+                    continue
+                if len(block.get_text(strip=True)) >= self._TRANSKRIPT_MINDESTZEICHEN:
+                    return True
+
         return False
 
 
