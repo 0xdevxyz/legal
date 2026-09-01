@@ -20,4 +20,4 @@ SORT title ASC
 - [[TTDSG]] – Telekommunikations-Telemedien-Datenschutz-Gesetz
 - [[UWG]] – Gesetz gegen unlauteren Wettbewerb
 - [[AGB-Recht]] – §§ 305 ff. BGB
-- [[Impressumspflicht]] – § 5 TMG / § 18 MStV
+- [[Impressumspflicht]] – § 5 DDG / § 18 MStV
