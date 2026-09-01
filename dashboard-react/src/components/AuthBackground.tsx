@@ -144,7 +144,11 @@ export function AuthVertrauen() {
             <div className="w-px h-3" style={{ background: 'rgba(100,116,139,0.2)' }} />
             <span className="text-xs" style={{ color: 'rgba(100,116,139,0.4)' }}>DSGVO-konform</span>
             <div className="w-px h-3" style={{ background: 'rgba(100,116,139,0.2)' }} />
-            <span className="text-xs" style={{ color: 'rgba(100,116,139,0.4)' }}>ISO 27001</span>
+            {/* Hier stand "ISO 27001". Eine Zertifizierung, die complyo nicht
+                haelt, und ohne Beleglink — genau der Befund, den der eigene
+                Scanner als Irrefuehrung nach §5 UWG meldet. Ersetzt durch eine
+                Aussage, die belegbar ist (01.09.2026). */}
+            <span className="text-xs" style={{ color: 'rgba(100,116,139,0.4)' }}>Server in Deutschland</span>
         </div>
     );
 }

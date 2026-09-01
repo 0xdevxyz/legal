@@ -26,18 +26,30 @@ const TARIFE = [
     { id: 'single', name: 'Einzelsäule', price: '19 €/Monat', hint: 'je Säule' },
     { id: 'pro', name: 'Pro', price: '49 €/Monat', hint: '1 Domain', popular: true },
     { id: 'agency', name: 'Agentur', price: '299 €/Monat', hint: '25 Projekte' },
+    { id: 'monitor', name: 'Monitoring', price: '19 €/Monat', hint: 'bis 10 Websites' },
 ];
+
+// Nur diese Kennungen darf ?plan= setzen. Vorher wurde der Parameter roh
+// uebernommen: ?plan=monitor war hier unbekannt, fiel in den Single-Zweig
+// und waehlte alle vier Saeulen vor. Der Landing-Knopf "Monitoring buchen,
+// 19 EUR" landete so bei 76 EUR/Monat unter "Einzelne Saeulen" (01.09.2026).
+const BEKANNTE_TARIFE = new Set(TARIFE.map(t => t.id));
 
 function RegisterForm() {
     const { register } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const initialPlan = searchParams?.get('plan') || 'pro';
+    const planParam = searchParams?.get('plan') || 'pro';
+    const initialPlan = BEKANNTE_TARIFE.has(planParam) ? planParam : 'pro';
     const initialModule = searchParams?.get('module') || '';
 
     const [plan, setPlan] = useState(initialPlan);
     const [selectedModules, setSelectedModules] = useState<string[]>(
-        initialModule ? [initialModule] : (initialPlan === 'single' ? [] : ['cookie', 'accessibility', 'legal_texts', 'monitoring'])
+        initialModule
+            ? [initialModule]
+            : (initialPlan === 'pro' || initialPlan === 'agency'
+                ? ['cookie', 'accessibility', 'legal_texts', 'monitoring']
+                : [])
     );
 
     const [formData, setFormData] = useState({
@@ -72,6 +84,7 @@ function RegisterForm() {
         if (plan === 'free') return { monthly: 0, yearly: 0, setup: 0 };
         if (plan === 'agency') return { monthly: 299, yearly: 2990, setup: 0 };
         if (plan === 'pro') return { monthly: 49, yearly: 490, setup: 0 };
+        if (plan === 'monitor') return { monthly: 19, yearly: 190, setup: 0 };
         return { monthly: selectedModules.length * 19, yearly: 0, setup: 0 };
     };
 
@@ -121,6 +134,7 @@ function RegisterForm() {
         if (plan === 'free') return 'Free';
         if (plan === 'agency') return 'Agentur';
         if (plan === 'pro') return 'Pro-Paket';
+        if (plan === 'monitor') return 'Monitoring';
         return `Einzelne Säule${selectedModules.length > 1 ? 'n' : ''}`;
     };
 

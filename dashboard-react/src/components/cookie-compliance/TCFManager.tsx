@@ -170,10 +170,16 @@ export default function TCFManager({ siteId, config, onSave }: TCFManagerProps) 
             <div className="flex items-start gap-3">
               <CheckCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-sm font-medium text-blue-300">Google Zertifizierte CMP</h4>
+                {/* Stand hier als Tatsache: "Google Zertifizierte CMP". Complyo
+                    ist bei IAB Europe nicht als CMP registriert und traegt keine
+                    CMP-ID, die Zertifizierung gibt es also nicht. Formuliert jetzt,
+                    was zutrifft: das Signal ist TCF-formatiert (01.09.2026). */}
+                <h4 className="text-sm font-medium text-blue-300">TCF-Signal nach IAB-Format</h4>
                 <p className="text-xs text-gray-700 dark:text-gray-300 mt-1">
-                  Nach TCF-Aktivierung wird Complyo als Google-zertifizierte CMP konfiguriert,
-                  kompatibel mit AdSense und Google Ad Manager.
+                  Nach der Aktivierung gibt Complyo das Einwilligungssignal im TCF-v2-Format
+                  aus, das AdSense und Google Ad Manager auswerten. Fuer den Eintrag in die
+                  Liste zertifizierter CMPs ist zusaetzlich eine Registrierung bei
+                  IAB Europe noetig; die besteht derzeit nicht.
                 </p>
               </div>
             </div>
