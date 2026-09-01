@@ -197,6 +197,13 @@ export default function PricingSection() {
         <p className="text-center text-xs text-gray-500 mt-6">
           Alle Preise zzgl. MwSt. · Abos monatlich kündbar · Zahlung per Karte oder SEPA-Lastschrift
         </p>
+        {/* Die Klarstellung gehoert dorthin, wo bestellt wird — nicht nur in die
+            AGB. Nur so ist vor Vertragsschluss erkennbar, dass sich das Angebot
+            an Unternehmer richtet. */}
+        <p className="text-center text-xs text-gray-500 mt-2">
+          Unser Angebot richtet sich ausschließlich an Unternehmer im Sinne des § 14 BGB. Ein Verkauf an
+          Verbraucher findet nicht statt.
+        </p>
       </div>
     </section>
   );

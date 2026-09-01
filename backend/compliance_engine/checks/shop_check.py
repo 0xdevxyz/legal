@@ -67,6 +67,38 @@ def detect_subscription(soup: BeautifulSoup) -> bool:
     return matches >= SUBSCRIPTION_THRESHOLD
 
 
+# Ausdrueckliche Beschraenkung auf Unternehmer. Bewusst eng gefasst: erkannt
+# wird die Klarstellung selbst, nicht ihre Begleitumstaende. Nettopreise oder
+# das Wort "Business" sagen nichts darueber, wer bestellen darf.
+B2B_MUSTER = [
+    r'ausschlie(?:ß|ss)lich\s+an\s+unternehmer',
+    r'nur\s+an\s+unternehmer',
+    r'richtet\s+sich\s+(?:ausschlie(?:ß|ss)lich\s+)?an\s+(?:gewerbliche\s+kunden|unternehmer|gewerbetreibende)',
+    r'unternehmer\s+im\s+sinne\s+(?:des|von)\s+§\s*14\s*bgb',
+    r'kein[e]?\s+(?:vertragsschluss|verkauf|angebot)\s+(?:mit|an)\s+verbraucher',
+    r'nicht\s+an\s+verbraucher',
+    r'vertragsschluss\s+mit\s+verbrauchern?[^.]{0,40}?\s+ist\s+ausgeschlossen',
+    r'ausschlie(?:ß|ss)lich\s+(?:f(?:ü|ue)r|an)\s+gewerbliche',
+]
+
+
+def erkenne_reines_b2b(soup: BeautifulSoup) -> bool:
+    """
+    Sagt, ob die Seite Verbraucher ausdruecklich ausschliesst.
+
+    Nur dann entfallen Widerrufsbelehrung (§§ 312g, 355 BGB) und
+    Kuendigungsknopf (§ 312k BGB) — beide setzen einen Verbrauchervertrag
+    voraus. Fehlt die Klarstellung, wird im Zweifel von Verbrauchergeschaeft
+    ausgegangen; das ist die sichere Richtung.
+    """
+    text = soup.get_text(separator=' ', strip=True).lower()
+    for muster in B2B_MUSTER:
+        if re.search(muster, text):
+            logger.info(f"Reines B2B-Angebot erkannt (Muster: {muster})")
+            return True
+    return False
+
+
 @dataclass
 class ShopIssue:
     category: str
@@ -367,10 +399,32 @@ async def check_shop_compliance(url: str, soup: BeautifulSoup, session=None) -> 
     if is_shop:
         issues.extend(await _check_agb(url, soup, session))
         issues.extend(await _check_pangv(soup))
-    # Widerruf (§355 BGB) + Kündigungsbutton (§312k BGB) gelten auch fuer
-    # reine Abo-/SaaS-Dienste ohne Warenkorb.
-    issues.extend(await _check_widerruf(url, soup, session))
-    issues.extend(await _check_kuendigungsbutton(soup))
+    # Widerruf (§§312g, 355 BGB) + Kündigungsknopf (§312k BGB) gelten auch fuer
+    # reine Abo-/SaaS-Dienste ohne Warenkorb — aber nur gegenueber
+    # Verbrauchern. Wer Verbraucher ausdruecklich ausschliesst, schuldet
+    # beides nicht.
+    if erkenne_reines_b2b(soup):
+        issues.append(ShopIssue(
+            category='shop',
+            severity='info',
+            title='Als reines B2B-Angebot eingestuft',
+            description=(
+                'Die Seite schliesst Verbraucher ausdruecklich aus. Widerrufsbelehrung '
+                '(§§ 312g, 355 BGB) und Kuendigungsknopf (§ 312k BGB) setzen einen '
+                'Verbrauchervertrag voraus und werden deshalb nicht verlangt.'
+            ),
+            risk_euro=0,
+            recommendation=(
+                'Pruefen Sie, dass die Klarstellung auch dort steht, wo bestellt wird, '
+                'und nicht nur in den AGB. Sobald Verbraucher bestellen koennen, werden '
+                'Widerrufsbelehrung und Kuendigungsknopf Pflicht.'
+            ),
+            legal_basis='§ 13, § 14 BGB (Verbraucher / Unternehmer)',
+            auto_fixable=False,
+        ))
+    else:
+        issues.extend(await _check_widerruf(url, soup, session))
+        issues.extend(await _check_kuendigungsbutton(soup))
 
     logger.info(f"Shop-Checks: {len(issues)} Issues gefunden")
     return [asdict(i) for i in issues]

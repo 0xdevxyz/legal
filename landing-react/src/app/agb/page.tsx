@@ -40,6 +40,18 @@ export default function AGBPage() {
                 <p>
                   (2) Abweichende, entgegenstehende oder ergänzende Allgemeine Geschäftsbedingungen des Kunden werden nicht Vertragsbestandteil, es sei denn, ihrer Geltung wird ausdrücklich schriftlich zugestimmt.
                 </p>
+                <p>
+                  (3) Unsere Angebote richten sich ausschließlich an Unternehmer im Sinne des § 14 BGB, an
+                  juristische Personen des öffentlichen Rechts und an öffentlich-rechtliche Sondervermögen. Ein
+                  Vertragsschluss mit Verbrauchern im Sinne des § 13 BGB ist ausgeschlossen. Mit der Bestellung
+                  bestätigt der Kunde, in Ausübung seiner gewerblichen oder selbständigen beruflichen Tätigkeit zu
+                  handeln.
+                </p>
+                <p>
+                  (4) Da ausschließlich Verträge mit Unternehmern geschlossen werden, bestehen kein
+                  Verbraucherwiderrufsrecht nach §§ 312g, 355 BGB und keine Pflicht zur Bereitstellung eines
+                  Kündigungsbuttons nach § 312k BGB. Die Kündigung richtet sich nach Ziffer 7 dieser AGB.
+                </p>
               </div>
             </section>
 
