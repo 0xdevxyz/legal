@@ -156,8 +156,8 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
                 <p className="text-xs text-gray-600">
                   Complyo wendet Code-Änderungen ausschließlich nach ausdrücklicher Bestätigung durch den Nutzer an. 
                   Wir übernehmen keine Haftung für fehlerhafte Patches. 
-                  <a href="/terms-liability" target="_blank" className="text-blue-600 hover:underline ml-1">
-                    Vollständige AGB lesen →
+                  <a href="https://complyo.de/agb#haftung" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                    Haftungsregelung in den AGB lesen →
                   </a>
                 </p>
               </div>
@@ -172,7 +172,7 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
                 <div className="flex-1">
                   <h3 className="font-semibold text-yellow-900 mb-2">⚠️ Wichtiger Hinweis</h3>
                   <p className="text-yellow-800 text-sm mb-3">
-                    Mit dem Start der Fix-Generierung verfällt Ihr 14-tägiges Rückgaberecht.
+                    Der Fix wird erst nach Ihrer Bestätigung angewendet. Ihre Bestätigung wird protokolliert.
                     Dies gilt nur für den ersten generierten Fix.
                   </p>
                   <label className="flex items-start gap-2 cursor-pointer group">

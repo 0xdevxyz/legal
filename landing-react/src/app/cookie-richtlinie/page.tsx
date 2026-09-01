@@ -28,7 +28,7 @@ export default function CookieRichtliniePage() {
               <h1 className="text-4xl font-bold text-gray-900">Cookie-Richtlinie</h1>
             </div>
             <p className="text-gray-600">
-              Stand: {new Date().toLocaleDateString('de-DE', { year: 'numeric', month: 'long', day: 'numeric' })}
+              Stand: 1. September 2026
             </p>
           </div>
 

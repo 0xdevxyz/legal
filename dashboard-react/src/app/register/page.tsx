@@ -1,6 +1,10 @@
 'use client';
 
 import { useState, Suspense, useEffect } from 'react';
+
+// Fassung der AGB, die bei der Registrierung angezeigt wird. Muss mit dem
+// Stand-Datum auf https://complyo.de/agb uebereinstimmen.
+const AGB_VERSION = '2026-09-01';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -64,6 +68,9 @@ function RegisterForm() {
     const [showPassword, setShowPassword] = useState(false);
     // Fokuszustaende je Feld — dieselbe Rueckmeldung wie auf der Anmeldeseite.
     const [fokus, setFokus] = useState<string | null>(null);
+    // Die AGB schliessen Verbrauchervertraege aus. Das muss aktiv bestaetigt
+    // werden, sonst ist die Beschraenkung im Streitfall nicht zu belegen.
+    const [istUnternehmer, setIstUnternehmer] = useState(false);
 
     useEffect(() => {
         if (plan === 'pro' || plan === 'agency') {
@@ -99,10 +106,21 @@ function RegisterForm() {
             return;
         }
 
+        if (!istUnternehmer) {
+            setError('Bitte bestätigen Sie, dass Sie als Unternehmer handeln. complyo schließt keine Verträge mit Verbrauchern.');
+            return;
+        }
+
         setIsSubmitting(true);
 
         try {
-            await register({ ...formData, plan, modules: selectedModules });
+            await register({
+                ...formData,
+                plan,
+                modules: selectedModules,
+                unternehmer_bestaetigt: istUnternehmer,
+                agb_version: AGB_VERSION,
+            });
 
             // Free-Tarif: kein Checkout, direkt ins Dashboard.
             if (plan === 'free') {
@@ -407,9 +425,29 @@ function RegisterForm() {
                         {feld({ id: "full_name", label: "Vollständiger Name", typ: "text", symbol: User, platzhalter: "Max Mustermann", autoComplete: "name", pflicht: true })}
                         {feld({ id: "company", label: "Firma", typ: "text", symbol: Building2, platzhalter: "Ihr Unternehmen", autoComplete: "organization", hinweis: "(optional)" })}
 
+                        <label
+                            htmlFor="unternehmer"
+                            className="flex items-start gap-3 mt-2 cursor-pointer text-xs leading-relaxed"
+                            style={{ color: 'rgba(148,163,184,0.85)' }}
+                        >
+                            <input
+                                id="unternehmer"
+                                type="checkbox"
+                                required
+                                checked={istUnternehmer}
+                                onChange={(e) => setIstUnternehmer(e.target.checked)}
+                                className="mt-0.5 h-4 w-4 flex-shrink-0 rounded cursor-pointer"
+                                style={{ accentColor: '#2563eb' }}
+                            />
+                            <span>
+                                Ich handle bei diesem Vertrag als Unternehmer im Sinne des § 14 BGB und
+                                nicht als Verbraucher. complyo schließt keine Verträge mit Verbrauchern.
+                            </span>
+                        </label>
+
                         <button
                             type="submit"
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !istUnternehmer}
                             className="w-full py-3 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2.5 transition-all duration-300 mt-2 group relative overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed"
                             style={{
                                 background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',

@@ -29,6 +29,9 @@ interface RegisterData {
   company?: string;
   plan: string;
   modules?: string[];
+  // Nachweis nach Ziffer 1 der AGB (Vertragsschluss nur mit Unternehmern).
+  unternehmer_bestaetigt?: boolean;
+  agb_version?: string;
 }
 
 interface AuthContextType {

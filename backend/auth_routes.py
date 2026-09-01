@@ -69,6 +69,12 @@ class RegisterRequest(BaseModel):
     # 1 Fix, Cookies nutzbar, Rest Scan + Vorschau.
     plan: str = "free"
 
+    # Die AGB schliessen Vertraege mit Verbrauchern aus (Ziffer 1 Absatz 3).
+    # Erhoben wurde das nie. Eine Beschraenkung, die man nicht belegen kann,
+    # haelt im Streitfall nicht.
+    unternehmer_bestaetigt: bool = False
+    agb_version: Optional[str] = None
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -117,6 +123,38 @@ async def init_user_limits(user_id: int, plan_type: str):
             )
             logger.info(f"User limits initialized for user {user_id} with plan {plan_type}")
 
+
+async def protokolliere_vertragsannahme(user_id: int, email: str, request: Request,
+                                        unternehmer_bestaetigt: bool,
+                                        agb_version: Optional[str]) -> None:
+    """Haelt fest, wer wann welche AGB-Fassung als Unternehmer angenommen hat.
+
+    Best effort mit Absicht: schlaegt der Schreibvorgang fehl, etwa weil
+    Migration 0016 noch nicht gelaufen ist, darf das die Registrierung NICHT
+    abbrechen. Ein fehlender Nachweis ist ein Mangel, ein blockierter Kaufweg
+    ist ein Ausfall.
+    """
+    try:
+        # Hinter dem Proxy steht die echte Adresse im ersten Eintrag von
+        # X-Forwarded-For, request.client.host waere sonst immer der Gateway.
+        weitergereicht = request.headers.get("x-forwarded-for", "")
+        ip = weitergereicht.split(",")[0].strip() if weitergereicht else (
+            request.client.host if request.client else None)
+
+        async with db_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO vertragsannahmen
+                    (user_id, email, agb_version, unternehmer_bestaetigt, ip_adresse, user_agent)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                """,
+                user_id, email, agb_version, unternehmer_bestaetigt,
+                ip, request.headers.get("user-agent"),
+            )
+    except Exception as exc:
+        logger.warning("Vertragsannahme fuer %s nicht protokolliert: %s", email, exc)
+
+
 @router.post("/register", response_model=RegisterResponse)
 @limiter.limit("3/hour")
 async def register(request: Request, body: RegisterRequest):
@@ -154,6 +192,12 @@ async def register(request: Request, body: RegisterRequest):
         
         # Initialize user_limits
         await init_user_limits(user['id'], body.plan)
+
+        # Nachweis der Unternehmereigenschaft und der akzeptierten AGB-Fassung.
+        await protokolliere_vertragsannahme(
+            user['id'], user['email'], request,
+            body.unternehmer_bestaetigt, body.agb_version,
+        )
         
         # Create tokens
         access_token = auth_service.create_access_token(user['id'])

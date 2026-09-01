@@ -100,7 +100,7 @@ export default function DatenschutzPage() {
             </div>
             <p className="text-gray-600">
               Stand:{' '}
-              {new Date().toLocaleDateString('de-DE', { year: 'numeric', month: 'long', day: 'numeric' })}
+              1. September 2026
             </p>
           </div>
 
