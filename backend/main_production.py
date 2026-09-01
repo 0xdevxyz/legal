@@ -1349,14 +1349,22 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
             _fortschritt.starte(scan_token)
         else:
             scan_token = None
+        # Zwei Fristen, absichtlich gestaffelt (01.09.2026): Der Scanner bricht
+        # bei 265 s selbst ab und liefert, was er bis dahin hat — Startseite plus
+        # die fertigen Unterseiten. Das wait_for darunter ist nur noch die
+        # Notbremse fuer den Fall, dass der Scanner selbst haengt. Vorher war es
+        # die EINZIGE Frist: zua-zwickau.de brauchte 389 s, und der Kunde bekam
+        # statt eines Teilergebnisses einen 504 ohne jeden Befund.
+        SCANNER_FRIST = 265.0
         async with ComplianceScanner() as scanner:
             scan_result = await asyncio.wait_for(
                 scanner.scan_website_multipage(
                     request.url,
                     max_seiten=_seitenbudget(current_user),
                     progress_token=scan_token,
+                    zeitbudget=SCANNER_FRIST,
                 ),
-                timeout=300.0
+                timeout=SCANNER_FRIST + 35.0
             )
 
         if scan_result.get("error"):

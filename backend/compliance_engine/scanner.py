@@ -225,9 +225,31 @@ def dedupe_issues(issues: "List[ComplianceIssue]") -> "List[ComplianceIssue]":
     return ergebnis
 
 
+def _zeitnot_hinweis(nicht_geschafft: "List[str]") -> Dict[str, Any]:
+    """
+    Beschreibt offen gebliebene Unterseiten fuer den Report.
+
+    Ein Teilergebnis darf nicht so aussehen wie ein vollstaendiges: sonst liest
+    der Kunde "3 Seiten geprueft, alles sauber", wo in Wahrheit 17 Seiten nie
+    angefasst wurden.
+    """
+    if not nicht_geschafft:
+        return {}
+    return {
+        "unvollstaendig": True,
+        "nicht_geprueft": nicht_geschafft,
+        "zeitnot_hinweis": (
+            f"{len(nicht_geschafft)} Unterseite(n) konnten im Zeitrahmen dieses "
+            f"Scans nicht geprueft werden. Die Bewertung stuetzt sich auf die "
+            f"tatsaechlich geprueften Seiten."
+        ),
+    }
+
+
 class ComplianceScanner:
     def __init__(self):
         self.session = None
+        self._startseiten_html = None
         
     async def __aenter__(self):
         # Create SSL context
@@ -261,6 +283,22 @@ class ComplianceScanner:
         "ai_act_transparency",
     }
 
+    # Zeitbudgets (eingefuehrt 01.09.2026 nach dem Totalausfall an
+    # zua-zwickau.de: 389 s Scan gegen 300 s Endpunkt-Abbruch = kein Ergebnis).
+    #
+    # Der Grundsatz: ein langsamer Einzelcheck kostet seinen eigenen Befund,
+    # nicht den ganzen Scan. Ein Teilergebnis ist immer besser als ein Fehler.
+    CHECK_ZEITBUDGET = 60.0        # je Einzelcheck auf einer Unterseite
+    SEITE_ZEITBUDGET = 90.0        # je Unterseite insgesamt
+    SEITENSUCHE_ZEITBUDGET = 45.0  # fuer das Finden der Unterseiten
+    # Gesamtbudget eines Mehrseiten-Scans. Muss unter dem Abbruch des Aufrufers
+    # liegen (/api/v2/analyze bricht bei 300 s ab): laeuft ZUERST unsere Frist
+    # ab, liefern wir ein Teilergebnis; laeuft zuerst seine ab, faellt alles weg.
+    GESAMT_ZEITBUDGET = 265.0
+    # Was der Unterseiten-Phase mindestens bleibt, auch wenn Startseite und
+    # Seitensuche schon viel verbraucht haben — sonst waere sie wertlos.
+    MEHRSEITEN_MINDESTZEIT = 30.0
+
     async def _pruefe_unterseite(self, seite_url: str, klasse: str) -> "List[ComplianceIssue]":
         """
         Schlanke Pruefung einer Unterseite.
@@ -286,16 +324,34 @@ class ComplianceScanner:
             logger.warning(f"Unterseite {seite_url} nicht abrufbar: {e}")
             return []
 
-        aufgaben = [check_barrierefreiheit_compliance_smart(seite_url, html, self.session)]
+        # Jeder Check bekommt sein eigenes Budget. Reisst einer es, faellt SEIN
+        # Befund weg und die uebrigen Checks liefern weiter — vorher zog ein
+        # haengender Check die ganze Seite und damit den ganzen Scan mit.
+        async def _mit_budget(name: str, koroutine):
+            try:
+                return await asyncio.wait_for(koroutine, timeout=self.CHECK_ZEITBUDGET)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"⏱️ Check '{name}' auf {seite_url} nach {self.CHECK_ZEITBUDGET:.0f}s "
+                    f"abgebrochen — die uebrigen Checks laufen weiter."
+                )
+                return []
+
+        aufgaben = [_mit_budget(
+            "barrierefreiheit",
+            check_barrierefreiheit_compliance_smart(seite_url, html, self.session),
+        )]
         # Shop-Pflichten nur dort, wo verkauft wird — auf einer Impressumsseite
         # nach dem Bestellbutton zu suchen, ergibt keinen Sinn.
         if klasse in ("interaktion", "angebot"):
-            aufgaben.append(check_shop_compliance(seite_url, soup, self.session))
-        aufgaben.append(run_declarative_checks(seite_url, soup, self.session))
-        aufgaben.append(check_ki_bild_nachweis(
+            aufgaben.append(_mit_budget(
+                "shop", check_shop_compliance(seite_url, soup, self.session)))
+        aufgaben.append(_mit_budget(
+            "declarative", run_declarative_checks(seite_url, soup, self.session)))
+        aufgaben.append(_mit_budget("ki_bild", check_ki_bild_nachweis(
             seite_url, soup, self.session,
             bereits_geprueft=getattr(self, "_ki_bilder_gesehen", None),
-        ))
+        )))
 
         ergebnisse = await asyncio.gather(*aufgaben, return_exceptions=True)
 
@@ -321,7 +377,8 @@ class ComplianceScanner:
         return issues
 
     async def scan_website_multipage(
-        self, url: str, max_seiten: int = 10, progress_token: "Optional[str]" = None
+        self, url: str, max_seiten: int = 10, progress_token: "Optional[str]" = None,
+        zeitbudget: "Optional[float]" = None,
     ) -> Dict[str, Any]:
         """
         Prueft Startseite plus die rechtlich relevantesten Unterseiten.
@@ -329,6 +386,12 @@ class ComplianceScanner:
         Args:
             url:        Startseite
             max_seiten: Budget fuer Unterseiten (0 = wie scan_website)
+            zeitbudget: Sekunden fuer den GESAMTEN Scan (Startseite + Seitensuche
+                        + Unterseiten). Was die Startseite verbraucht hat, geht
+                        von der Unterseiten-Phase ab; laeuft die Frist ab, werden
+                        die offenen Seiten abgebrochen und das Ergebnis der
+                        fertigen Seiten ausgeliefert (Teilergebnis statt
+                        Totalausfall). None = GESAMT_ZEITBUDGET.
 
         Returns:
             Das Ergebnis von scan_website, ergaenzt um die Unterseiten-Befunde
@@ -337,12 +400,31 @@ class ComplianceScanner:
         """
         from .page_discovery import entdecke_seiten
 
+        beginn = datetime.now()
+        gesamtbudget = self.GESAMT_ZEITBUDGET if zeitbudget is None else zeitbudget
+        def _restzeit() -> float:
+            return gesamtbudget - (datetime.now() - beginn).total_seconds()
+
         ergebnis = await self.scan_website(url, progress_token=progress_token)
         if max_seiten <= 0 or ergebnis.get("scan_status") == "error" or ergebnis.get("error"):
             return ergebnis
 
         try:
-            entdeckung = await entdecke_seiten(url, session=self.session, max_seiten=max_seiten)
+            entdeckung = await asyncio.wait_for(
+                entdecke_seiten(
+                    url,
+                    html=getattr(self, "_startseiten_html", None),
+                    session=self.session,
+                    max_seiten=max_seiten,
+                ),
+                timeout=max(5.0, min(self.SEITENSUCHE_ZEITBUDGET, _restzeit())),
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"⏱️ Seitensuche fuer {url} abgebrochen (Restzeit aufgebraucht) — "
+                f"Ergebnis der Startseite wird ausgeliefert."
+            )
+            return ergebnis
         except Exception as e:
             logger.warning(f"Seitensuche fehlgeschlagen, bleibe bei der Startseite: {e}")
             return ergebnis
@@ -375,25 +457,59 @@ class ComplianceScanner:
         async def eine(seite):
             async with semaphor:
                 try:
-                    return await self._pruefe_unterseite(seite.url, seite.klasse)
+                    return await asyncio.wait_for(
+                        self._pruefe_unterseite(seite.url, seite.klasse),
+                        timeout=self.SEITE_ZEITBUDGET,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        f"⏱️ Unterseite {seite.url} nach {self.SEITE_ZEITBUDGET:.0f}s "
+                        f"abgebrochen — der Scan laeuft mit den uebrigen Seiten weiter."
+                    )
+                    return []
                 finally:
                     _fortschritt.melde(progress_token, "Mehrseiten-Prüfung", _seitenlabel(seite.url))
 
-        listen = await asyncio.gather(
-            *[eine(s) for s in entdeckung.seiten], return_exceptions=True
-        )
+        # Frist fuer die gesamte Unterseiten-Phase. Was bis dahin fertig ist,
+        # kommt ins Ergebnis; der Rest wird abgebrochen. Ein Kunde mit 40
+        # Unterseiten im Tarif bekommt so einen ehrlichen Teilbefund statt
+        # eines HTTP 504, hinter dem gar nichts steht.
+        frist = max(self.MEHRSEITEN_MINDESTZEIT, _restzeit())
+        # Reihenfolge bleibt die der Seitensuche (nach rechtlicher Relevanz) —
+        # asyncio.wait gibt Mengen zurueck, der Report soll aber nicht bei jedem
+        # Lauf eine andere Seitenliste zeigen.
+        laeufe = [(seite, asyncio.ensure_future(eine(seite))) for seite in entdeckung.seiten]
+        fertig, offen = await asyncio.wait([t for _, t in laeufe], timeout=frist)
+        for task in offen:
+            task.cancel()
+        if offen:
+            await asyncio.gather(*offen, return_exceptions=True)
+            logger.warning(
+                f"⏱️ Mehrseiten-Frist ({frist:.0f}s) erreicht: {len(offen)} von "
+                f"{len(entdeckung.seiten)} Unterseiten nicht geprueft — "
+                f"Teilergebnis wird ausgeliefert."
+            )
 
         neue: "List[ComplianceIssue]" = []
         geprueft = [url]
-        for seite, liste in zip(entdeckung.seiten, listen):
-            if isinstance(liste, Exception):
-                logger.warning(f"Unterseite {seite.url} fehlgeschlagen: {liste}")
+        nicht_geschafft = []
+        for seite, task in laeufe:
+            if task not in fertig:
+                nicht_geschafft.append(seite.url)
+                continue
+            try:
+                liste = task.result()
+            except Exception as e:
+                logger.warning(f"Unterseite {seite.url} fehlgeschlagen: {e}")
                 continue
             geprueft.append(seite.url)
             neue.extend(liste)
 
         if not neue:
-            ergebnis["pages_scanned"] = {"total": len(geprueft), "urls": geprueft}
+            ergebnis["pages_scanned"] = {
+                "total": len(geprueft), "urls": geprueft,
+                **_zeitnot_hinweis(nicht_geschafft),
+            }
             return ergebnis
 
         # Bestehende Startseiten-Issues zurueckholen und zusammenfuehren.
@@ -455,6 +571,7 @@ class ComplianceScanner:
             "merged_duplicates": vor_dedup - len(alle),
             "sitemap_used": entdeckung.sitemap_gefunden,
             "note": entdeckung.hinweis or None,
+            **_zeitnot_hinweis(nicht_geschafft),
         }
         logger.info(
             f"Mehrseiten-Scan {url}: {len(geprueft)} Seiten, {len(neue)} Unterseiten-Befunde, "
@@ -469,6 +586,9 @@ class ComplianceScanner:
         """
         start_time = datetime.now()
         issues = []
+        # Nie das HTML des vorigen Scans weiterreichen — dieselbe Scanner-Instanz
+        # kann mehrere Websites nacheinander pruefen.
+        self._startseiten_html = None
         from . import scan_progress as _fortschritt
         _fortschritt.setze_phase(progress_token, "Seite wird geladen")
         
@@ -569,6 +689,11 @@ class ComplianceScanner:
                         render_request_urls = render_meta.get('request_urls')
                 except Exception as e:
                     logger.warning(f"⚠️ Browser render failed ({e}); fallback auf statisches HTML")
+
+            # Fuer die Seitensuche im Mehrseiten-Scan aufheben: sie braucht genau
+            # dieses HTML, um die internen Links zu lesen, und holte die
+            # Startseite sonst ein zweites Mal (3-5 s, an schlechten Tagen mehr).
+            self._startseiten_html = rendered_html
 
             # 🔎 Grundsystem (CMS) + Produktiv-Status erkennen
             detected_cms = self._detect_cms(soup, main_page_headers)

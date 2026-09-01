@@ -91,7 +91,7 @@ def _multipage_lauf(monkeypatch, pillar_status_erst):
     async def fake_scan(url, progress_token=None):
         return dict(erst)
 
-    async def fake_entdecke(url, session=None, max_seiten=10):
+    async def fake_entdecke(url, html=None, session=None, max_seiten=10):
         return _Entdeckung([_Seite("https://x.de/agb")])
 
     async def fake_unterseite(url, klasse):

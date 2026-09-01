@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict, field, is_dataclass
 import re
 import asyncio
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urldefrag, urljoin, urlparse
 import logging
 import aiohttp
 from xml.etree import ElementTree as ET
@@ -18,7 +18,9 @@ from xml.etree import ElementTree as ET
 logger = logging.getLogger(__name__)
 
 
-async def check_barrierefreiheit_compliance_smart(url: str, html: str = None, session=None) -> List[Dict[str, Any]]:
+async def check_barrierefreiheit_compliance_smart(
+    url: str, html: str = None, session=None, *, seitenweit: bool = False
+) -> List[Dict[str, Any]]:
     """
     🚀 SMART Barrierefreiheits-Check mit automatischer Browser-Erkennung
     
@@ -69,7 +71,7 @@ async def check_barrierefreiheit_compliance_smart(url: str, html: str = None, se
         
         # 3. Führe normalen Check mit (potenziell gerenderten) HTML durch
         soup = BeautifulSoup(html, 'html.parser')
-        issues = await check_barrierefreiheit_compliance(url, soup, session)
+        issues = await check_barrierefreiheit_compliance(url, soup, session, seitenweit=seitenweit)
         
         # 4. Füge Metadaten hinzu
         for issue_dict in issues:
@@ -85,7 +87,7 @@ async def check_barrierefreiheit_compliance_smart(url: str, html: str = None, se
         # Fallback zu normalem Check
         logger.info("📋 Falling back to simple check")
         soup = BeautifulSoup(html if html else "", 'html.parser')
-        return await check_barrierefreiheit_compliance(url, soup, session)
+        return await check_barrierefreiheit_compliance(url, soup, session, seitenweit=seitenweit)
 
 
 @dataclass
@@ -278,7 +280,9 @@ def _merge_axe_into_heuristic(heuristic_issues: list, axe_issues: List[Dict[str,
             merged.append(ax)                 # neues Kriterium → echte Mehr-Abdeckung
     return merged
 
-async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, session=None) -> List[Dict[str, Any]]:
+async def check_barrierefreiheit_compliance(
+    url: str, soup: BeautifulSoup, session=None, *, seitenweit: bool = False
+) -> List[Dict[str, Any]]:
     """
     Umfassender Barrierefreiheits-Check mit Multi-Page Scanning
     
@@ -305,9 +309,21 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
     if widget_issue:
         issues.append(widget_issue)
 
-    # WCAG 1.1.1: Alt-Texte — Prueftiefe unabhaengig vom Widget:
-    # Multi-Page, wenn eine Session verfuegbar ist, sonst Single-Page (Enhanced).
-    if session:
+    # WCAG 1.1.1: Alt-Texte.
+    #
+    # ACHTUNG (gemessen 01.09.2026 an zua-zwickau.de): Die Prueftiefe hing bis
+    # hierher daran, OB eine Session mitgegeben wurde. Der Mehrseiten-Scan gibt
+    # seine Session weiter — und damit startete jede einzelne Unterseite einen
+    # eigenen, vollstaendigen Crawl derselben Website: 88 Abrufe je Seite,
+    # ~311 s, dreimal parallel. Der Scan brauchte 389 s und lief in den
+    # 300-s-Abbruch des Endpunkts, der Kunde bekam ueberhaupt kein Ergebnis.
+    #
+    # Welche Seiten geprueft werden, entscheidet EINE Stelle: page_discovery im
+    # Scanner. Dieser Check sieht nur die Seite, die er bekommen hat. Der
+    # seitenweite Crawl bleibt als ausdrueckliche Option erhalten (seitenweit=True),
+    # wird aber von keinem Scanpfad gesetzt — eine Session allein ist kein Auftrag,
+    # die halbe Website nachzuladen.
+    if seitenweit and session:
         logger.info(f"🔍 Starting multi-page accessibility scan for {url}")
         all_pages = await _discover_pages(url, session)
         logger.info(f"📄 Discovered {len(all_pages)} pages to scan")
@@ -1215,6 +1231,13 @@ async def _crawl_links_recursive(
     Returns:
         Liste von gefundenen URLs
     """
+    # Ohne Normalisierung ist /impressum, /impressum/, /impressum#consent-change
+    # und /impressum/#consent-history viermal dieselbe Seite und viermal ein
+    # Abruf. An zua-zwickau.de waren so 44 "Seiten" in Wahrheit 9.
+    def _schluessel(u: str) -> str:
+        ohne_anker, _ = urldefrag(u)
+        return ohne_anker.rstrip("/") or ohne_anker
+
     visited = set()
     to_visit = [(base_url, 0)]  # (url, depth)
     found_urls = []
@@ -1223,11 +1246,12 @@ async def _crawl_links_recursive(
     
     while to_visit and len(found_urls) < max_pages:
         current_url, depth = to_visit.pop(0)
+        schluessel = _schluessel(current_url)
         
-        if current_url in visited or depth > max_depth:
+        if schluessel in visited or depth > max_depth:
             continue
         
-        visited.add(current_url)
+        visited.add(schluessel)
         found_urls.append(current_url)
         
         # Hole Links von dieser Seite
@@ -1244,7 +1268,7 @@ async def _crawl_links_recursive(
                     if urlparse(absolute_url).netloc == base_domain:
                         # Filter: Nur HTML-Seiten (keine PDFs, Bilder, etc.)
                         if not any(absolute_url.endswith(ext) for ext in ['.pdf', '.jpg', '.png', '.gif', '.zip', '.doc']):
-                            if absolute_url not in visited:
+                            if _schluessel(absolute_url) not in visited:
                                 to_visit.append((absolute_url, depth + 1))
         except Exception as e:
             logger.debug(f"Failed to crawl {current_url}: {e}")
@@ -1264,10 +1288,14 @@ async def _fetch_page(url: str, session: aiohttp.ClientSession) -> Optional[str]
     Returns:
         HTML-Inhalt oder None bei Fehler
     """
+    # Ueber sicherer_abruf: die Adresse stammt aus einem <a href> der geprueften
+    # Seite, ist also fremdgesetzt. Der Sicherheitsreview vom 31.08.2026 hat vier
+    # solche Stellen gebuendelt und diese hier uebersehen.
+    from ..sicherer_abruf import hole
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
-            if response.status == 200:
-                return await response.text()
+        abruf = await hole(session, url, timeout=15)
+        if abruf is not None and abruf.status == 200:
+            return abruf.text()
     except Exception as e:
         logger.debug(f"Failed to fetch {url}: {e}")
     

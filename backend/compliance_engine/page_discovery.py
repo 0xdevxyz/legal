@@ -209,10 +209,25 @@ async def _aus_sitemap(session: aiohttp.ClientSession, basis: str) -> "List[str]
     Liest sitemap.xml (auch Sitemap-Index). Autoritativste Quelle: hier steht,
     was der Betreiber selbst fuer seine Seiten haelt.
     """
-    kandidaten = [urljoin(basis, p) for p in ("/sitemap.xml", "/sitemap_index.xml", "/sitemap-index.xml")]
+    standard = [urljoin(basis, p) for p in ("/sitemap.xml", "/sitemap_index.xml", "/sitemap-index.xml")]
 
-    # robots.txt kann auf eine abweichende Sitemap zeigen
-    robots = await _hole(session, urljoin(basis, "/robots.txt"), timeout=6)
+    # robots.txt und die drei Standardadressen gleichzeitig holen. Nacheinander
+    # kostete das an einem langsamen Server ueber 12 s, bevor die eigentliche
+    # Pruefung ueberhaupt begann — und drei von vier Abrufen sind ohnehin
+    # Fehlversuche. Die Reihenfolge der Auswertung bleibt unveraendert, es
+    # gewinnt weiter die erste Adresse, die etwas liefert.
+    robots, *vorab = await asyncio.gather(
+        _hole(session, urljoin(basis, "/robots.txt"), timeout=6),
+        *[_hole(session, u, timeout=12) for u in standard],
+        return_exceptions=True,
+    )
+    if isinstance(robots, Exception):
+        robots = None
+    bereits_geholt = {
+        u: (t if isinstance(t, str) else None) for u, t in zip(standard, vorab)
+    }
+
+    kandidaten = list(standard)
     if robots:
         for zeile in robots.splitlines():
             if zeile.lower().startswith("sitemap:"):
@@ -225,7 +240,10 @@ async def _aus_sitemap(session: aiohttp.ClientSession, basis: str) -> "List[str]
         if tiefe > 1 or sm_url in gesehen_sitemaps or len(urls) > 2000:
             return
         gesehen_sitemaps.add(sm_url)
-        text = await _hole(session, sm_url, timeout=12)
+        if sm_url in bereits_geholt:
+            text = bereits_geholt.pop(sm_url)
+        else:
+            text = await _hole(session, sm_url, timeout=12)
         if not text:
             return
         try:
