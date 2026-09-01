@@ -3,43 +3,18 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { ArrowLeft, Mail, MapPin, Phone, AlertTriangle, Receipt, User } from 'lucide-react';
+import { ArrowLeft, Mail, MapPin, Phone, Receipt, User } from 'lucide-react';
+import { ANBIETER } from '@/lib/anbieter';
+import AnbieterUnvollstaendig from '@/components/legal/AnbieterUnvollstaendig';
 
 /**
  * Angaben nach § 5 DDG.
  *
- * Hier standen bis zum 01.09.2026 Platzhalter: "Complyo GmbH", "Musterstraße 123",
- * "Max Mustermann", eine erfundene Handelsregisternummer und eine erfundene
- * USt-IdNr. Das war nicht nur ein Verstoß gegen § 5 DDG auf der Verkaufsseite
- * eines Compliance-Anbieters. Schwerer wog die Firmierung als GmbH: wer unter
- * einer nicht existierenden Kapitalgesellschaft auftritt, haftet nach den
- * Grundsätzen der Rechtsscheinhaftung persönlich, also genau umgekehrt zur
- * Absicht einer Haftungsbeschränkung.
- *
- * complyo wird als Einzelunternehmen betrieben. Damit ist der Vor- und Nachname
- * der natürlichen Person Pflichtangabe (§ 5 Abs. 1 Nr. 1 DDG); die
- * Geschäftsbezeichnung "Complyo" allein genügt nicht.
- *
- * NICHT VERÖFFENTLICHEN, solange unten Felder leer sind. Die Seite weist
- * absichtlich sichtbar darauf hin, statt still etwas Falsches zu behaupten.
+ * Die Anbieterdaten stehen seit dem 01.09.2026 in @/lib/anbieter und werden von
+ * Impressum, AGB und Datenschutzerklaerung gemeinsam benutzt. Vorher trug jede
+ * der drei Seiten ihren eigenen Satz Platzhalter, und nur diese hier wurde
+ * gepflegt.
  */
-const ANBIETER = {
-  // Vor- und Nachname der natürlichen Person. Pflichtangabe.
-  name: '',
-  geschaeftsbezeichnung: 'Complyo',
-  strasse: 'Pappelallee 64',
-  plz: '10437',
-  ort: 'Berlin',
-  land: 'Deutschland',
-  email: 'info@complyo.de',
-  // Zweiter Kommunikationsweg neben der E-Mail. Optional, aber üblich.
-  telefon: '',
-  // Pflichtangabe, sobald vorhanden (§ 5 Abs. 1 Nr. 6 DDG).
-  ustIdNr: 'DE405368946',
-};
-
-const PFLICHTFELDER_FEHLEN = !ANBIETER.name || !ANBIETER.ustIdNr;
-
 export default function ImpressumPage() {
   const anschrift = ANBIETER.plz + ' ' + ANBIETER.ort;
 
@@ -59,22 +34,7 @@ export default function ImpressumPage() {
             Zurück zur Startseite
           </Link>
 
-          {PFLICHTFELDER_FEHLEN && (
-            <div className="bg-red-50 border-2 border-red-400 rounded-xl p-6 mb-8">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h2 className="text-lg font-bold text-red-900 mb-1">Diese Seite ist unvollständig</h2>
-                  <p className="text-sm text-red-800">
-                    Es fehlen Pflichtangaben nach § 5 DDG. Die Seite darf in diesem Zustand nicht
-                    öffentlich erreichbar sein. Die fehlenden Werte stehen als leere Felder in
-                    <code className="mx-1 px-1.5 py-0.5 bg-red-100 rounded text-xs">ANBIETER</code>
-                    am Anfang dieser Datei.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+          <AnbieterUnvollstaendig seite="Das Impressum" />
 
           <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">Impressum</h1>

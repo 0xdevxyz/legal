@@ -4,6 +4,15 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { ArrowLeft, Shield } from 'lucide-react';
+import { ANBIETER, ANBIETER_ANSCHRIFT } from '@/lib/anbieter';
+import AnbieterUnvollstaendig from '@/components/legal/AnbieterUnvollstaendig';
+
+// Der Verantwortliche in Abschnitt 2 war bis zum 01.09.2026 frei erfunden:
+// "Complyo GmbH, Musterstrasse 123, 10115 Berlin" samt einer Telefonnummer
+// +49 (0) 30 1234567, die niemandem gehoert. Art. 13 Abs. 1 lit. a DSGVO
+// verlangt Namen und Kontaktdaten des Verantwortlichen; ohne sie kann niemand
+// seine Rechte nach Art. 15 ff. ausueben, und die Erklaerung schuetzt nichts.
+// Die Angaben kommen jetzt aus @/lib/anbieter, gemeinsam mit Impressum und AGB.
 
 // Jede Verarbeitung nennt Zweck, Rechtsgrundlage und Speicherdauer — das
 // verlangt Art. 13 DSGVO, und genau das fehlte hier. Die Angaben beschreiben
@@ -93,6 +102,8 @@ export default function DatenschutzPage() {
             Zurück zur Startseite
           </Link>
 
+          <AnbieterUnvollstaendig seite="Der Verantwortliche in dieser Erklärung" />
+
           <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
             <div className="flex items-center gap-3 mb-4">
               <Shield className="w-8 h-8 text-blue-600" />
@@ -128,20 +139,26 @@ export default function DatenschutzPage() {
                   Verantwortlicher im Sinne der Datenschutz-Grundverordnung ist:
                 </p>
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="font-semibold">Complyo GmbH</p>
-                  <p>Musterstraße 123</p>
-                  <p>10115 Berlin</p>
-                  <p>Deutschland</p>
-                  <p className="mt-3">
-                    Telefon:{' '}
-                    <a href="tel:+49301234567" className="text-blue-600 underline">
-                      +49 (0) 30 1234567
-                    </a>
-                  </p>
-                  <p>
+                  <p className="font-semibold">{ANBIETER.name || 'Name fehlt'}</p>
+                  <p>{ANBIETER.geschaeftsbezeichnung}</p>
+                  <p className="mt-2">{ANBIETER.strasse}</p>
+                  <p>{ANBIETER_ANSCHRIFT}</p>
+                  <p>{ANBIETER.land}</p>
+                  {ANBIETER.telefon && (
+                    <p className="mt-3">
+                      Telefon:{' '}
+                      <a
+                        href={'tel:' + ANBIETER.telefon.replace(/[^+0-9]/g, '')}
+                        className="text-blue-600 underline"
+                      >
+                        {ANBIETER.telefon}
+                      </a>
+                    </p>
+                  )}
+                  <p className={ANBIETER.telefon ? '' : 'mt-3'}>
                     E-Mail:{' '}
-                    <a href="mailto:datenschutz@complyo.de" className="text-blue-600 underline">
-                      datenschutz@complyo.de
+                    <a href={'mailto:' + ANBIETER.datenschutzEmail} className="text-blue-600 underline">
+                      {ANBIETER.datenschutzEmail}
                     </a>
                   </p>
                 </div>
@@ -220,8 +237,8 @@ export default function DatenschutzPage() {
                 </ul>
                 <p>
                   Zur Ausübung genügt eine formlose Nachricht an{' '}
-                  <a href="mailto:datenschutz@complyo.de" className="text-blue-600 underline">
-                    datenschutz@complyo.de
+                  <a href={'mailto:' + ANBIETER.datenschutzEmail} className="text-blue-600 underline">
+                    {ANBIETER.datenschutzEmail}
                   </a>
                   . Auskunft, Export und Löschung Ihrer Kontodaten können Sie außerdem selbst über die{' '}
                   <Link href="/gdpr" className="text-blue-600 underline">
