@@ -36,7 +36,7 @@ except OSError as _axe_err:  # pragma: no cover - Deploy-Fehlkonfiguration
 # Zeit, die einer Seite hoechstens fuer ihre Einblendungen zugestanden wird.
 # Laenger zu warten hiesse, auf Endlos-Animationen (Spinner, Karussells) zu
 # warten, die nie fertig werden.
-ANIMATIONS_WARTEZEIT_MS = 2000
+ANIMATIONS_WARTEZEIT_MS = 1200
 
 
 async def loese_scroll_einblendungen_aus(page) -> None:
@@ -51,11 +51,14 @@ async def loese_scroll_einblendungen_aus(page) -> None:
         await page.evaluate(
             """async () => {
                 const hoehe = document.body.scrollHeight;
-                const schritt = Math.max(window.innerHeight * 0.8, 400);
-                for (let y = 0; y < hoehe; y += schritt) {
+                const HOECHSTENS = 20;   // Deckel gegen sehr lange Seiten
+                const schritt = Math.max(window.innerHeight * 0.8, hoehe / HOECHSTENS, 400);
+                for (let y = 0, n = 0; y < hoehe && n < HOECHSTENS; y += schritt, n++) {
                     window.scrollTo(0, y);
-                    await new Promise(r => setTimeout(r, 60));
+                    await new Promise(r => setTimeout(r, 50));
                 }
+                window.scrollTo(0, hoehe);
+                await new Promise(r => setTimeout(r, 50));
                 window.scrollTo(0, 0);
                 await new Promise(r => setTimeout(r, 80));
             }"""
