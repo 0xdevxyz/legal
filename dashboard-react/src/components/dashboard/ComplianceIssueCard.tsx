@@ -5,7 +5,7 @@ import { ComplianceIssue, FixResult } from '@/types/api';
 import { generateFix } from '@/lib/api';
 import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie, Lock, Image as ImageIcon, Pencil, Eye, ArrowRight, Globe, ChevronDown, X, Loader2 } from 'lucide-react';
 import { StripePaywallModal } from './StripePaywallModal';
-import { ConfirmFixModal } from './ConfirmFixModal';
+import { ConfirmFixModal, HINWEIS_VERSION } from './ConfirmFixModal';
 import { FixModal } from './FixModal';
 import { useToast } from '@/components/ui/Toast';
 import { AIFixPreview, AIFixPreviewMini } from '@/components/ai/AIFixPreview';
@@ -297,7 +297,9 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         const jobData = await createFixJob.mutateAsync({
           scan_id: scanId,
           issue_id: issue.id,
-          issue_data: issue
+          issue_data: issue,
+          fix_typ: getFixTypeForIssue(issue),
+          hinweis_version: HINWEIS_VERSION,
         });
         
         

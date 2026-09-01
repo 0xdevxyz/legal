@@ -7,6 +7,11 @@ import { ClientOnlyPortal } from '../ClientOnlyPortal';
 // KI-Fix Typen für bessere UX
 type FixType = 'code' | 'text' | 'guide';
 
+// Fassung des rechtlichen Hinweises, der in diesem Dialog gezeigt wird. Wird
+// bei der Freigabe mitprotokolliert. Bei JEDER Aenderung am Hinweistext unten
+// hochzaehlen, sonst belegt das Protokoll nur, dass irgendetwas bestaetigt wurde.
+export const HINWEIS_VERSION = '2026-09-01';
+
 interface ConfirmFixModalProps {
   isOpen: boolean;
   onConfirm: () => void;

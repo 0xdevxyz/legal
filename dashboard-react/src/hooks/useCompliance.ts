@@ -167,6 +167,9 @@ export const useCreateFixJob = () => {
       scan_id: string; 
       issue_id: string; 
       issue_data: any;
+      // Beleg der Freigabe, siehe Ziffer 8 der AGB.
+      fix_typ?: string;
+      hinweis_version?: string;
     }) => {
       
       try {

@@ -1700,9 +1700,49 @@ class CreateFixJobRequest(BaseModel):
     issue_id: str
     issue_data: Dict[str, Any]
 
+    # Beleg der Freigabe. Ziffer 8 der AGB legt dem Kunden die Pruefung vor der
+    # Veroeffentlichung auf; ein Mitverschulden nach Paragraf 254 BGB laesst
+    # sich nur einwenden, wenn die Bestaetigung belegbar ist.
+    fix_typ: Optional[str] = None
+    hinweis_version: Optional[str] = None
+
+
+async def protokolliere_fix_freigabe(user_id, job_id, request_body: "CreateFixJobRequest",
+                                     http_request: Request) -> None:
+    """Haelt fest, dass der Kunde den Hinweis gesehen und den Fix freigegeben hat.
+
+    Best effort mit Absicht: schlaegt der Schreibvorgang fehl, etwa weil
+    Migration 0017 noch nicht gelaufen ist, darf das den Fix NICHT abbrechen.
+    Ein fehlender Nachweis ist ein Mangel, ein blockierter Fix ist ein Ausfall.
+    """
+    try:
+        weitergereicht = http_request.headers.get("x-forwarded-for", "")
+        ip = weitergereicht.split(",")[0].strip() if weitergereicht else (
+            http_request.client.host if http_request.client else None)
+
+        async with db_pool.acquire() as connection:
+            await connection.execute(
+                """
+                INSERT INTO fix_freigaben
+                    (user_id, job_id, issue_id, fix_typ, hinweis_version, ip_adresse, user_agent)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                """,
+                user_id,
+                str(job_id) if job_id else None,
+                request_body.issue_id,
+                request_body.fix_typ,
+                request_body.hinweis_version,
+                ip,
+                http_request.headers.get("user-agent"),
+            )
+    except Exception as exc:
+        print(f"Fix-Freigabe nicht protokolliert (job {job_id}): {exc}")
+
+
 @app.post("/api/fix-jobs")
 async def create_fix_job(
     request: CreateFixJobRequest,
+    http_request: Request,
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -1757,7 +1797,11 @@ async def create_fix_job(
                 issue_id,
                 json.dumps(issue_data)
             )
-            
+
+            await protokolliere_fix_freigabe(
+                user_id_int, job['job_id'], request, http_request,
+            )
+
             return {
                 "success": True,
                 "data": {
