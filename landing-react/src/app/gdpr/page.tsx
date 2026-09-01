@@ -86,7 +86,7 @@ export default function GDPRDataManagement() {
 
               <a
                 href="https://app.complyo.de/settings"
-                className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+                className="block w-full text-center bg-blue-700 hover:bg-blue-800 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
               >
                 🔐 Zu den Dashboard-Einstellungen
               </a>
@@ -134,7 +134,7 @@ export default function GDPRDataManagement() {
 
               <a
                 href={`mailto:datenschutz@complyo.de?subject=${mailtoBetreff}&body=${mailtoBody}`}
-                className="block w-full text-center bg-green-700 hover:bg-green-800 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+                className="block w-full text-center bg-green-800 hover:bg-green-900 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
               >
                 ✉️ E-Mail an datenschutz@complyo.de
               </a>
@@ -190,7 +190,7 @@ export default function GDPRDataManagement() {
               <p className="text-gray-600">
                 Aufbewahrungsfrist: 24 Monate ab Erhebung. Bei Fragen zu Ihren
                 Datenschutzrechten wenden Sie sich an:
-                <a href="mailto:datenschutz@complyo.de" className="text-blue-600 hover:underline ml-1">
+                <a href="mailto:datenschutz@complyo.de" className="text-blue-600 underline ml-1">
                   datenschutz@complyo.de
                 </a>
               </p>

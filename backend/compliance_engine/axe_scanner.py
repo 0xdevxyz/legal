@@ -33,6 +33,72 @@ except OSError as _axe_err:  # pragma: no cover - Deploy-Fehlkonfiguration
     logger.error(f"axe-core Bundle nicht gefunden unter {_AXE_CORE_PATH}: {_axe_err}")
 
 
+# Zeit, die einer Seite hoechstens fuer ihre Einblendungen zugestanden wird.
+# Laenger zu warten hiesse, auf Endlos-Animationen (Spinner, Karussells) zu
+# warten, die nie fertig werden.
+ANIMATIONS_WARTEZEIT_MS = 2000
+
+
+async def loese_scroll_einblendungen_aus(page) -> None:
+    """
+    Scrollt einmal durch die Seite und wieder nach oben.
+
+    Einblendungen, die auf Sichtkontakt warten, laufen sonst nie an: das
+    Element bleibt bei der Deckkraft seines Ausgangszustands stehen und misst
+    sich wie ein Kontrastfehler. Gemessen werden soll, was ein Besucher sieht.
+    """
+    try:
+        await page.evaluate(
+            """async () => {
+                const hoehe = document.body.scrollHeight;
+                const schritt = Math.max(window.innerHeight * 0.8, 400);
+                for (let y = 0; y < hoehe; y += schritt) {
+                    window.scrollTo(0, y);
+                    await new Promise(r => setTimeout(r, 60));
+                }
+                window.scrollTo(0, 0);
+                await new Promise(r => setTimeout(r, 80));
+            }"""
+        )
+    except Exception:
+        # Seiten koennen das Scrollen unterbinden; dann wird gemessen wie bisher.
+        pass
+
+
+async def warte_auf_ruhige_darstellung(page, hoechstens_ms: int = ANIMATIONS_WARTEZEIT_MS) -> None:
+    """
+    Bringt die Seite in den Zustand, den ein Besucher sieht, und wartet dann,
+    bis keine Einblendung mehr laeuft.
+
+    Netzwerkruhe allein reicht nicht: Einblende-Bibliotheken starten erst
+    danach oder erst bei Sichtkontakt, und ein Text mit halber Deckkraft misst
+    sich wie ein Kontrastfehler. Beruecksichtigt CSS-Animationen, Transitions
+    und die Web Animations API. Endlos laufende Animationen (Spinner,
+    Karussells) werden ausgenommen, sonst wartet man vergeblich.
+    """
+    await loese_scroll_einblendungen_aus(page)
+    try:
+        await page.wait_for_function(
+            """() => {
+                if (!document.getAnimations) return true;
+                return document.getAnimations().filter(a => {
+                    if (a.playState !== 'running') return false;
+                    const t = a.effect && a.effect.getTiming ? a.effect.getTiming() : null;
+                    return !t || t.iterations !== Infinity;
+                }).length === 0;
+            }""",
+            timeout=hoechstens_ms,
+        )
+    except Exception:
+        pass
+    # Kurze Setzzeit fuer Einblendungen, die ueber requestAnimationFrame statt
+    # ueber die Animations-API laufen und in getAnimations() nicht auftauchen.
+    try:
+        await page.wait_for_timeout(400)
+    except Exception:
+        pass
+
+
 # =============================================================================
 # Data Classes
 # =============================================================================
@@ -435,6 +501,10 @@ class AxeScanner:
                     # Kein Fehler: die Seite laedt dauerhaft nach — axe laeuft
                     # auf dem Stand von jetzt.
                     logger.info(f"axe-core: {url} erreicht keine Netzwerkruhe — scanne den aktuellen Stand")
+
+                # Einblendungen zu Ende laufen lassen: ein Text bei 81 %
+                # Deckkraft misst sich wie ein Kontrastfehler, ist aber keiner.
+                await warte_auf_ruhige_darstellung(page)
                 
                 # Injiziere axe-core (lokal gebundelt)
                 await page.add_script_tag(content=AXE_CORE_JS)

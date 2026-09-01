@@ -153,7 +153,7 @@ export default function PricingSection() {
                 href={plan.href}
                 className={`inline-flex items-center justify-center gap-2 w-full font-semibold px-5 py-3 rounded-xl transition-colors ${
                   plan.highlighted
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-100'
+                    ? 'bg-blue-700 hover:bg-blue-800 text-white shadow-md shadow-blue-100'
                     : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200'
                 }`}
               >

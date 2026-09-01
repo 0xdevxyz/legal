@@ -179,6 +179,8 @@ async def kontrast_fixes_fuer_url(url: str, timeout: int = 45000) -> Optional[Di
             await page.goto(url, timeout=timeout, wait_until="domcontentloaded")
             try:
                 await page.wait_for_load_state("networkidle", timeout=6000)
+                from .axe_scanner import warte_auf_ruhige_darstellung
+                await warte_auf_ruhige_darstellung(page)
             except Exception:
                 pass
             return await verifizierte_kontrast_fixes(page)

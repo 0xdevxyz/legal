@@ -61,7 +61,7 @@ export default function HeroSection() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
-              <a href="#scanner" className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3.5 rounded-xl transition-colors shadow-md shadow-blue-100">
+              <a href="#scanner" className="inline-flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold px-6 py-3.5 rounded-xl transition-colors shadow-md shadow-blue-100">
                 Website kostenlos scannen
                 <ArrowRight className="w-4 h-4" />
               </a>

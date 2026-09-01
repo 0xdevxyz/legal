@@ -269,7 +269,7 @@ export default function AdminDashboard() {
         <div className="mt-8 bg-gray-800 rounded-xl p-6 border border-gray-700">
           <h3 className="text-xl font-bold mb-4">Test URLs</h3>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <a href="/" className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg text-center font-semibold transition-colors">
+            <a href="/" className="bg-blue-700 hover:bg-blue-800 text-white p-4 rounded-lg text-center font-semibold transition-colors">
               🎲 Random (gewichtet)
             </a>
             <a href="/?variant=professional" className="bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-lg text-center font-semibold transition-colors">

@@ -263,7 +263,7 @@ export default function JoinEarlySection() {
                   />
                   <span className="text-sm leading-relaxed">
                     Ich willige ein, dass meine Daten zur Kontaktaufnahme und Information über Complyo verarbeitet werden. Mehr dazu in der{' '}
-                    <a href="/datenschutz" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">
+                    <a href="/datenschutz" className="text-blue-600 underline" target="_blank" rel="noopener noreferrer">
                       Datenschutzerklärung
                     </a>. <span className="text-red-500">*</span>
                   </span>

@@ -18,7 +18,7 @@ export default function FooterSection() {
             </p>
             <a
               href={`${APP_URL}/register?plan=free`}
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
             >
               Kostenlos starten
             </a>
