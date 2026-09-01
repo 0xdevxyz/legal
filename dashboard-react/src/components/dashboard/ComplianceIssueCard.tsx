@@ -16,7 +16,8 @@ import { useRouter } from 'next/navigation';
 import { useDashboardStore } from '@/stores/dashboard';
 import { apiClient } from '@/lib/api-client';
 import { generateSiteId } from '@/lib/siteIdUtils';
-import { LegalDocumentGenerator, type WizardDocType } from '@/components/legal/LegalDocumentGenerator';
+import { type WizardDocType } from '@/components/legal/LegalDocumentGenerator';
+import { LegalWizardModal } from '@/components/legal/LegalWizardModal';
 
 // Hilfsfunktion: Ist es ein Cookie-Problem?
 const isCookieIssue = (issue: ComplianceIssue): boolean => {
@@ -1005,46 +1006,23 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
 
       {/* Geführter Rechtstexte-Generator (statt Direktgenerierung mit Platzhaltern) */}
       {showLegalWizard && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
-            onClick={() => setShowLegalWizard(null)}
-          />
-
-          {/* Modal Content */}
-          <div className="relative min-h-screen flex items-start justify-center p-4 pt-10 pb-20">
-            <div className="relative w-full max-w-4xl dark:bg-zinc-950 bg-white rounded-2xl shadow-2xl border dark:border-zinc-800 border-gray-200">
-              <button
-                onClick={() => setShowLegalWizard(null)}
-                className="absolute top-4 right-4 p-2 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors z-10"
-                aria-label="Schließen"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <div className="p-6">
-                <LegalDocumentGenerator
-                  documentType={showLegalWizard}
-                  onComplete={() => {
-                    setShowLegalWizard(null);
-                    // Bewusst kein "Ersetzen Sie den alten Text": das Dokument
-                    // ist ungeprüft und muss erst vom Nutzer kontrolliert werden.
-                    showToast(
-                      'Rechtstext erstellt. Bitte prüfen Sie das Dokument, bevor Sie es veröffentlichen.',
-                      'success',
-                      6000
-                    );
-                    if (onStartFix) {
-                      onStartFix(issue.id);
-                    }
-                  }}
-                  onBack={() => setShowLegalWizard(null)}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+        <LegalWizardModal
+          documentType={showLegalWizard}
+          onClose={() => setShowLegalWizard(null)}
+          onComplete={() => {
+            setShowLegalWizard(null);
+            // Bewusst kein "Ersetzen Sie den alten Text": das Dokument
+            // ist ungeprüft und muss erst vom Nutzer kontrolliert werden.
+            showToast(
+              'Rechtstext erstellt. Bitte prüfen Sie das Dokument, bevor Sie es veröffentlichen.',
+              'success',
+              6000
+            );
+            if (onStartFix) {
+              onStartFix(issue.id);
+            }
+          }}
+        />
       )}
     </div>
   );

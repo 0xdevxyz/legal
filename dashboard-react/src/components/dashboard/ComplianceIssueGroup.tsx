@@ -5,7 +5,8 @@ import { ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Info, Sparkles, Down
 import { ComplianceIssueCard } from './ComplianceIssueCard';
 import { UnifiedFixButton } from './UnifiedFixButton';
 import { useToast } from '@/components/ui/Toast';
-import { LegalDocumentGenerator, type WizardDocType } from '@/components/legal/LegalDocumentGenerator';
+import { type WizardDocType } from '@/components/legal/LegalDocumentGenerator';
+import { LegalWizardModal } from '@/components/legal/LegalWizardModal';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api-client';
 
@@ -398,44 +399,21 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
 
       {/* ✅ Legal Document Generator Modal/Overlay */}
       {showLegalWizard && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
-            onClick={() => setShowLegalWizard(null)}
-          />
-          
-          {/* Modal Content */}
-          <div className="relative min-h-screen flex items-start justify-center p-4 pt-10 pb-20">
-            <div className="relative w-full max-w-4xl dark:bg-zinc-950 bg-white rounded-2xl shadow-2xl border dark:border-zinc-800 border-gray-200">
-              {/* Close Button */}
-              <button
-                onClick={() => setShowLegalWizard(null)}
-                className="absolute top-4 right-4 p-2 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors z-10"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              
-              {/* Wizard Content */}
-              <div className="p-6">
-                <LegalDocumentGenerator
-                  documentType={showLegalWizard}
-                  onComplete={(data) => {
-                    setShowLegalWizard(null);
-                    // Bewusst kein "Ersetzen Sie den alten Text": das Dokument
-                    // ist ungeprüft und muss erst vom Nutzer kontrolliert werden.
-                    showToast(
-                      `${DOC_LABELS[showLegalWizard].title.replace(' erstellen', '')} erstellt. Bitte prüfen Sie das Dokument, bevor Sie es veröffentlichen.`,
-                      'success',
-                      6000
-                    );
-                  }}
-                  onBack={() => setShowLegalWizard(null)}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+        <LegalWizardModal
+          documentType={showLegalWizard}
+          onClose={() => setShowLegalWizard(null)}
+          onComplete={() => {
+            const label = DOC_LABELS[showLegalWizard].title.replace(' erstellen', '');
+            setShowLegalWizard(null);
+            // Bewusst kein "Ersetzen Sie den alten Text": das Dokument
+            // ist ungeprüft und muss erst vom Nutzer kontrolliert werden.
+            showToast(
+              `${label} erstellt. Bitte prüfen Sie das Dokument, bevor Sie es veröffentlichen.`,
+              'success',
+              6000
+            );
+          }}
+        />
       )}
     </div>
   );

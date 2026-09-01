@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { X, Check, Zap, CreditCard, Lock } from 'lucide-react';
 import { createStripeCheckout } from '@/lib/api';
+import { ClientOnlyPortal } from '@/components/ClientOnlyPortal';
 
 interface PaywallModalProps {
   isOpen: boolean;
@@ -48,8 +49,12 @@ export const StripePaywallModal: React.FC<PaywallModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Per Portal an <body>: die Issue-Karten stecken in einem Container mit
+  // backdrop-filter, der sonst zum Bezugsrahmen für `position: fixed` wird und
+  // das Overlay auf Kartengröße einsperrt.
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <ClientOnlyPortal>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4 overflow-y-auto">
       <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full border-2 border-yellow-500/50 shadow-2xl relative">
         {/* Close Button */}
         <button
@@ -170,6 +175,7 @@ export const StripePaywallModal: React.FC<PaywallModalProps> = ({
         </div>
       </div>
     </div>
+    </ClientOnlyPortal>
   );
 };
 
