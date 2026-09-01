@@ -1210,72 +1210,15 @@ async def validate_fix_live(validate_request: ValidateFixRequest, request: Reque
 #             detail="Login failed"
 #         )
 
-@app.get("/api/dashboard/overview")
-async def dashboard_overview(current_user: dict = Depends(get_current_user)):
-    try:
-        async with db_pool.acquire() as connection:
-            # Get user projects
-            projects = await connection.fetch(
-                "SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at DESC",
-                current_user["id"]
-            )
-            
-            # Calculate stats
-            total_projects = len(projects)
-            avg_score = sum(p["compliance_score"] for p in projects) // total_projects if total_projects > 0 else 0
-            completed_projects = len([p for p in projects if p["status"] == "completed"])
-            in_progress_projects = len([p for p in projects if p["status"] == "in_progress"])
-            
-            return {
-                "success": True,
-                "data": {
-                    "stats": {
-                        "total_projects": total_projects,
-                        "average_compliance_score": avg_score,
-                        "completed_projects": completed_projects,
-                        "in_progress_projects": in_progress_projects,
-                        "estimated_risk_saved": "€12.500"
-                    },
-                    "recent_projects": [dict(p) for p in projects[:3]],
-                    "recent_activities": [
-                        {
-                            "type": "success",
-                            "message": "Cookie-Banner erfolgreich implementiert",
-                            "project": "example.com",
-                            "timestamp": "2025-08-08T18:00:00Z"
-                        }
-                    ]
-                }
-            }
-            
-    except Exception as e:
-        print(f"Dashboard error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Dashboard data could not be loaded"
-        )
-
-@app.get("/api/projects")
-async def get_projects(current_user: dict = Depends(get_current_user)):
-    try:
-        async with db_pool.acquire() as connection:
-            projects = await connection.fetch(
-                "SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at DESC",
-                current_user["id"]
-            )
-            
-            return {
-                "success": True,
-                "data": [dict(p) for p in projects],
-                "total": len(projects)
-            }
-            
-    except Exception as e:
-        print(f"Projects error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Projects could not be loaded"
-        )
+# Hier standen /api/dashboard/overview und /api/projects. Beide lasen die
+# Tabelle `projects`, die in dieser Datenbank nie angelegt wurde, und warfen
+# deshalb bei jedem Aufruf 500. Aufgerufen hat sie niemand: der einzige
+# Frontend-Aufruf (getDashboardOverview) ist in useCompliance.ts seit
+# laengerem auskommentiert, /api/projects hatte gar keinen. Der Rumpf war
+# Demo-Geruest mit fest verdrahteten Zahlen ("estimated_risk_saved":
+# "12.500 EUR", eine erfundene Aktivitaet auf example.com von 2025).
+# Gelebter Weg ist /api/v2/dashboard/metrics und /api/v2/dashboard/stats.
+# Entfernt am 01.09.2026.
 
 @app.post("/api/v2/analyze/quick", dependencies=[Depends(rate_limit("analyze_quick", 3, 60))])
 async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = Depends(get_current_user)):
