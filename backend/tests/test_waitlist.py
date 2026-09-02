@@ -188,9 +188,12 @@ class TestWaitlistConfirm:
     def test_valid_token_redirects_confirmed_1(self, mock_db, client):
         future = datetime.now(timezone.utc) + timedelta(days=6)
         verbindung(mock_db, fetchrow=[{
-            "id": "lead-id-1", "confirm_token_expires_at": future,
-            "confirmed_at": None, "angebot": None, "landing_path": None,
-            "platz_nr": None,
+            "id": "lead-id-1", "email": "test@example.de", "name": None,
+            "phone": None, "source": "landing",
+            "confirm_token_expires_at": future, "confirmed_at": None,
+            "angebot": None, "landing_path": None, "platz_nr": None,
+            "campaign": None, "utm_source": None, "utm_medium": None,
+            "utm_campaign": None, "utm_content": None,
         }])
 
         response = client.get(f"/api/leads/waitlist/confirm?token={CONFIRM_TOKEN}", follow_redirects=False)
@@ -202,12 +205,12 @@ class TestWaitlistConfirm:
     def test_expired_token_redirects_confirmed_0(self, mock_db, client):
         past = datetime.now(timezone.utc) - timedelta(days=1)
         verbindung(mock_db, fetchrow=[{
-            "id": "lead-id-2",
-            "confirm_token_expires_at": past,
-            "confirmed_at": None,
-            "angebot": None,
-            "landing_path": None,
-            "platz_nr": None,
+            "id": "lead-id-2", "email": "test@example.de", "name": None,
+            "phone": None, "source": "landing",
+            "confirm_token_expires_at": past, "confirmed_at": None,
+            "angebot": None, "landing_path": None, "platz_nr": None,
+            "campaign": None, "utm_source": None, "utm_medium": None,
+            "utm_campaign": None, "utm_content": None,
         }])
 
         response = client.get(f"/api/leads/waitlist/confirm?token={CONFIRM_TOKEN}", follow_redirects=False)
@@ -494,3 +497,45 @@ class TestCookieConsentIpNichtFaelschbar:
                 "in cookie_compliance_routes steht wieder ein ungeprueftes "
                 "X-Forwarded-For; der Header ist frei faelschbar"
             )
+
+
+class TestMeldungBeiBestaetigung:
+    """Jeder Eintrag soll gemeldet werden — auch der bestaetigte.
+
+    Die Anmeldung loeste schon immer eine Meldung aus, die Bestaetigung nicht.
+    Damit sah man nur, wer das Formular abgeschickt hat, nie wer den Link
+    geklickt hat — und genau das ist die Zahl, an der sich Interesse ablesen
+    laesst, denn erst der Klick vergibt einen der 100 Plaetze.
+    """
+
+    @patch("lead_routes.email_service")
+    @patch("lead_routes.db_service")
+    def test_bestaetigung_meldet_mit_platznummer(self, mock_db, mock_email, client):
+        from datetime import datetime as _dt
+        future = _dt.now(timezone.utc) + timedelta(days=6)
+        conn = verbindung(
+            mock_db,
+            fetchrow=[{
+                "id": "lead-id-3", "email": "wer@example.de", "name": "Wer",
+                "phone": None, "source": "landing",
+                "confirm_token_expires_at": future, "confirmed_at": None,
+                "angebot": "ea100-35eur-12m", "landing_path": "/early-access",
+                "platz_nr": None, "campaign": "ea100-bfsg",
+                "utm_source": "google", "utm_medium": "cpc",
+                "utm_campaign": None, "utm_content": "anzeige-a",
+            }],
+            fetchval=[7],
+        )
+
+        response = client.get(
+            f"/api/leads/waitlist/confirm?token={CONFIRM_TOKEN}", follow_redirects=False
+        )
+
+        assert response.status_code == 302
+        mock_email.send_waitlist_admin_notification.assert_called()
+        args = mock_email.send_waitlist_admin_notification.call_args.args
+        assert "wer@example.de" in args
+        assert True in args, "Meldung ist nicht als Bestaetigung gekennzeichnet"
+        assert 7 in args, "Platznummer fehlt in der Meldung"
+        assert any("ea100-bfsg" in str(a) for a in args), "Herkunft fehlt in der Meldung"
+        conn.execute.assert_awaited()

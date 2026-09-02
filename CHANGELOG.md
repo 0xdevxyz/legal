@@ -15,6 +15,15 @@
 - Formular wartet vor dem Absenden bis zur 4-Sekunden-Marke der serverseitigen Zeitfalle, statt den Eintrag zu verlieren — Browser-Autofill unterschreitet sie mühelos
 - `PlatzZaehler` liest den Stand über `/api/leads/waitlist/plaetze` aus der Datenbank; fällt der Zähler aus, wird keine Zahl gezeigt statt einer geratenen
 
+### Frontend — Erklärvideo auf der Startseite
+- Erklärvideo aus `HeroSection` in die eigene Komponente `components/Erklaervideo.tsx` herausgelöst und auf der Early-Access-Startseite eingebunden. Eine Quelle statt zwei Kopien: Videodatei, VTT-Spur und Transkript müssen zusammenpassen, zwei Kopien hätten bedeutet, dass ein neues Video an einer Stelle nachgezogen wird und anderswo ein Transkript stehen bleibt, das nicht mehr zum Ton passt
+- Hero der Kampagnenseite ab `lg` zweispaltig: Text und Formular links, Video rechts. Im DOM steht der Textblock zuerst, damit die Seite auf dem Handy zu Text → Formular → Video zusammenfällt und der Eintrag nicht hinter ein 60-Sekunden-Video rutscht
+
+### Backend — Meldung bei jedem Eintrag
+- **`ADMIN_NOTIFY_EMAIL` zeigte auf `admin@complyo.tech` — die Domain hat keine MX-Records.** Sämtliche Benachrichtigungen über Wartelisten-Anmeldungen waren unzustellbar, während der Versand „Email sent successfully" meldete (der eigene SMTP-Server nimmt an, die Zustellung scheitert danach). Auf `mail@panoart360.de` umgestellt; `info@complyo.de` wurde vom Mailserver mit `550 5.1.1 User unknown in virtual mailbox table` abgelehnt, das Postfach existiert nicht
+- `send_waitlist_admin_notification` unterscheidet jetzt Anmeldung und Bestätigung: die Bestätigung löst eine zweite Meldung mit Platznummer aus. Erst der Klick im Opt-In-Link macht aus einer Formulareingabe einen Interessenten, den man anschreiben darf, und erst er belegt einen der 100 Plätze — vorher sah man nur Anmeldungen und nie, welche davon bestätigt wurden
+- `confirm_waitlist` nimmt `BackgroundTasks` und liest die Herkunftsfelder mit, damit die Meldung ohne Datenbankblick sagt, aus welcher Anzeige der bestätigte Eintrag stammt
+
 ### Frontend — Startseite auf Early Access umgestellt
 - `/` zeigt die Early-Access-Seite statt der Produktseite mit Preistabelle. Anlass: Stripe läuft auf Testschlüsseln (`sk_test_`/`pk_test_`, alle Preis-IDs Test-IDs) — jeder Klick auf „Pro buchen" landete in einem Checkout, in dem echte Karten abgelehnt werden
 - Die bisherige Startseite ist **nicht gelöscht**: unverändert als `EarlyAccessLanding` erreichbar unter `/produkt/`, dort auf `noindex`, damit sie weder mit `/` um dieselben Begriffe konkurriert noch weiter Kaufversuche einsammelt. Rückweg in `src/app/page.tsx` dokumentiert

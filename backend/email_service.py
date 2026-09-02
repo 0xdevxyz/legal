@@ -709,6 +709,7 @@ Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
     def send_waitlist_admin_notification(
         self, email: str, name: str, phone: str, source: str,
         herkunft: str = "", angebot: str = "",
+        bestaetigt: bool = False, platz_nr=None,
     ) -> bool:
         """
         Interne Benachrichtigung an den Admin bei jeder neuen Waitlist-Anmeldung
@@ -729,13 +730,34 @@ Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
         try:
             display_name = name or "(kein Name)"
             display_phone = phone or "(keine Telefonnummer)"
-            subject = f"[complyo] Neue Waitlist-Anmeldung: {display_name} <{email}>"
+
+            # Zwei Meldungen je Interessent, und der Unterschied gehoert in die
+            # Betreffzeile: die erste sagt nur, dass jemand das Formular
+            # abgeschickt hat, die zweite, dass er den Link in der Mail geklickt
+            # hat. Erst die zweite ist ein Lead, den man anschreiben darf, und
+            # erst sie belegt einen der 100 Plaetze.
+            if bestaetigt:
+                platz_text = f"Platz {platz_nr}" if platz_nr else "kein Platz mehr frei"
+                subject = f"[complyo] Bestätigt: {display_name} <{email}> — {platz_text}"
+                kopfzeile = "complyo – Wartelisten-Eintrag bestätigt"
+                fusszeile = (
+                    f"Double-Opt-In abgeschlossen – {platz_text}."
+                    if platz_nr else
+                    "Double-Opt-In abgeschlossen – das Kontingent war bereits vergeben, "
+                    "der Eintrag steht ohne Preiszusage auf der Liste."
+                )
+            else:
+                subject = f"[complyo] Neue Waitlist-Anmeldung: {display_name} <{email}>"
+                kopfzeile = "complyo – Neue Waitlist-Anmeldung"
+                fusszeile = (
+                    "Double-Opt-In ausstehend – Bestätigungsmail wurde an den Nutzer gesendet."
+                )
             html_body = f"""<!DOCTYPE html>
 <html lang="de">
 <head><meta charset="utf-8"><title>Neue Waitlist-Anmeldung</title></head>
 <body style="font-family:Arial,sans-serif;color:#333;max-width:500px;margin:0 auto;padding:20px;">
   <div style="background:#2563eb;color:white;padding:16px 20px;border-radius:10px 10px 0 0;">
-    <strong>complyo – Neue Waitlist-Anmeldung</strong>
+    <strong>{kopfzeile}</strong>
   </div>
   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;padding:20px;border-radius:0 0 10px 10px;">
     <table style="width:100%;border-collapse:collapse;font-size:14px;">
@@ -747,12 +769,12 @@ Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
       <tr><td style="padding:6px 0;color:#64748b;">Angebot</td><td style="padding:6px 0;">{angebot or "(keines)"}</td></tr>
     </table>
     <p style="font-size:12px;color:#94a3b8;margin-top:16px;">
-      Double-Opt-In ausstehend – Bestätigungsmail wurde an den Nutzer gesendet.
+      {fusszeile}
     </p>
   </div>
 </body>
 </html>"""
-            text_body = f"""Neue Waitlist-Anmeldung
+            text_body = f"""{kopfzeile}
 
 E-Mail:   {email}
 Name:     {display_name}
@@ -761,7 +783,8 @@ Quelle:   {source}
 Herkunft: {herkunft or "(direkt)"}
 Angebot:  {angebot or "(keines)"}
 
-Double-Opt-In ausstehend.
+{fusszeile}
+
 """
             return self._send_email(
                 to_email=self.admin_notify_email,

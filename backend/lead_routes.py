@@ -423,7 +423,7 @@ async def waitlist_plaetze():
 
 
 @lead_router.get("/waitlist/confirm")
-async def confirm_waitlist(token: str):
+async def confirm_waitlist(token: str, background_tasks: BackgroundTasks):
     """
     Double-Opt-In Bestätigung via E-Mail-Link
     """
@@ -432,8 +432,9 @@ async def confirm_waitlist(token: str):
         async with db_service.get_connection() as conn:
             lead = await conn.fetchrow(
                 """
-                SELECT id, confirm_token_expires_at, confirmed_at, angebot,
-                       landing_path, platz_nr
+                SELECT id, email, name, phone, source, confirm_token_expires_at,
+                       confirmed_at, angebot, landing_path, platz_nr,
+                       campaign, utm_source, utm_medium, utm_campaign, utm_content
                 FROM waitlist_leads
                 WHERE confirm_token = $1
                 """,
@@ -482,6 +483,29 @@ async def confirm_waitlist(token: str):
                 lead["id"],
                 platz_nr,
             )
+
+        # Zweite Meldung an uns: erst der Klick im Bestaetigungslink macht aus
+        # einer Formulareingabe einen Interessenten, den man anschreiben darf.
+        # Ohne diese Mail saehe man nur Anmeldungen und wuesste nie, welche davon
+        # bestaetigt wurden — genau die Zahl, an der sich das Interesse ablesen
+        # laesst.
+        herkunft = " / ".join(
+            t for t in (
+                lead["campaign"], lead["utm_source"], lead["utm_medium"],
+                lead["utm_campaign"], lead["utm_content"],
+            ) if t
+        )
+        background_tasks.add_task(
+            email_service.send_waitlist_admin_notification,
+            lead["email"],
+            lead["name"] or "",
+            lead["phone"] or "",
+            lead["source"] or "",
+            herkunft,
+            lead["angebot"] or "",
+            True,
+            platz_nr,
+        )
 
         logger.info(f"Waitlist confirmed for lead {lead['id']} (Platz {platz_nr})")
         ziel_url = f"{frontend_url}{ziel}?confirmed=1"

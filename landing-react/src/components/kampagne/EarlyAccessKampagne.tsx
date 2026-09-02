@@ -4,6 +4,7 @@ import {
   ShieldCheck, Eye, Cookie, FileText, Gauge, CheckCircle2, ArrowDown,
 } from 'lucide-react';
 import WartelistenFormular from './WartelistenFormular';
+import Erklaervideo from '@/components/Erklaervideo';
 import PlatzZaehler from './PlatzZaehler';
 
 // Die Kennung kommt von aussen, weil dieselbe Seite an zwei Stellen steht:
@@ -85,7 +86,7 @@ export default function EarlyAccessKampagne({
       {/* ---------------------------------------------------------------- */}
       <section className="relative pt-16 pb-14 overflow-hidden">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-bl from-blue-50 via-indigo-50 to-transparent rounded-full blur-3xl opacity-70 pointer-events-none" />
-        <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
           {bestaetigt === true && (
             <div className="mb-8 bg-green-50 border border-green-200 rounded-2xl p-5 flex items-start gap-3" role="status">
@@ -111,6 +112,13 @@ export default function EarlyAccessKampagne({
             </div>
           )}
 
+          {/* Zwei Spalten ab lg. Im DOM steht der Textblock samt Formular
+              zuerst, das Video danach: auf dem Handy faellt die Seite damit auf
+              Text, Formular, Video zusammen — der Eintrag bleibt oben, statt
+              hinter ein 60-Sekunden-Video zu rutschen, das bei bezahltem
+              Traffic die Haelfte der Besucher gar nicht erst zu Ende sieht. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+            <div>
           <div className="mb-6">
             <PlatzZaehler gesamt={PLAETZE} />
           </div>
@@ -132,6 +140,12 @@ export default function EarlyAccessKampagne({
 
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
             <WartelistenFormular kampagne={kampagne} id="anmeldung" />
+          </div>
+            </div>
+
+            <div className="w-full max-w-[520px] mx-auto lg:mx-0 lg:justify-self-end">
+              <Erklaervideo />
+            </div>
           </div>
         </div>
       </section>
