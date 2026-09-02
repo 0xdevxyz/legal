@@ -372,6 +372,11 @@ class TestEinwilligungsIpImAuditTrail:
     genauso wertlos, weil der Client den Header selbst setzt. get_client_ip
     glaubt ihm nur, wenn die Anfrage von einem Proxy aus TRUSTED_PROXIES kommt.
     Der TestClient meldet sich als "testclient", das ist hier die Proxy-IP.
+
+    Die Header sind so geformt, wie nginx sie tatsaechlich liefert:
+    `proxy_add_x_forwarded_for` HAENGT die gesehene Adresse an, statt zu
+    ersetzen. Ein Besucher, der selbst `X-Forwarded-For: 9.9.9.9` schickt,
+    erzeugt damit `9.9.9.9, <echte IP>`. Die echte Adresse steht rechts.
     """
 
     @patch("lead_routes.email_service")
@@ -384,13 +389,34 @@ class TestEinwilligungsIpImAuditTrail:
             response = client.post(
                 "/api/leads/collect",
                 json=LEAD_PAYLOAD,
-                headers={"X-Forwarded-For": "203.0.113.7, 172.22.0.1"},
+                headers={"X-Forwarded-For": "203.0.113.7"},
             )
 
         assert response.status_code == 200, response.text
         gespeichert = mock_db.create_lead.await_args.args[0]
         assert gespeichert["consent_ip_address"] == "203.0.113.7", (
             "collect_lead schreibt die Gateway-IP statt der Besucher-IP in den "
+            "Einwilligungsnachweis"
+        )
+
+    @patch("lead_routes.email_service")
+    @patch("lead_routes.db_service")
+    def test_selbst_gesetzter_header_wird_verworfen(self, mock_db, mock_email, client):
+        """Der Besucher haengt links etwas an, nginx setzt rechts die Wahrheit."""
+        mock_db.get_lead_by_email = AsyncMock(return_value=None)
+        mock_db.create_lead = AsyncMock(return_value=("lead-1", "token-1"))
+
+        with patch.dict(os.environ, {"TRUSTED_PROXIES": "testclient"}):
+            response = client.post(
+                "/api/leads/collect",
+                json=LEAD_PAYLOAD,
+                headers={"X-Forwarded-For": "9.9.9.9, 203.0.113.7"},
+            )
+
+        assert response.status_code == 200, response.text
+        gespeichert = mock_db.create_lead.await_args.args[0]
+        assert gespeichert["consent_ip_address"] == "203.0.113.7", (
+            "der vom Besucher selbst gesetzte Teil der Kette landet im "
             "Einwilligungsnachweis"
         )
 
@@ -432,7 +458,7 @@ class TestEinwilligungsIpImAuditTrail:
         with patch.dict(os.environ, {"TRUSTED_PROXIES": "testclient"}):
             response = client.get(
                 "/api/leads/verify/token-1",
-                headers={"X-Forwarded-For": "203.0.113.7, 172.22.0.1"},
+                headers={"X-Forwarded-For": "9.9.9.9, 203.0.113.7"},
             )
 
         assert response.status_code == 200, response.text

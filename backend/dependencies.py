@@ -403,6 +403,23 @@ def get_client_ip(request: Request) -> str:
     
     Only trusts X-Forwarded-For from known trusted proxies (TRUSTED_PROXIES env var,
     comma-separated). Falls back to direct client IP if the source is not trusted.
+
+    Ausgewertet wird von RECHTS. Der Grund steht in der nginx-Konfiguration:
+
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    `$proxy_add_x_forwarded_for` HAENGT die gesehene Adresse an einen bereits
+    vorhandenen Header AN, statt ihn zu ersetzen. Schickt ein Besucher selbst
+    `X-Forwarded-For: 9.9.9.9`, kommt hier `9.9.9.9, 203.0.113.7` an. Der linke
+    Eintrag ist frei erfunden, der rechte stammt von unserem Proxy. Wer den
+    ersten nimmt, uebernimmt genau den Wert, den der Besucher bestimmt hat: der
+    Einwilligungsnachweis waere faelschbar und das Rate-Limit mit einem
+    beliebigen Header zu umgehen.
+
+    Von rechts nach links wird deshalb der erste Eintrag genommen, der nicht
+    selbst ein bekannter Proxy ist. Bei mehreren Proxies in Reihe (jeder in
+    TRUSTED_PROXIES) bleibt das richtig; alles links davon kann der Besucher
+    geschrieben haben und wird verworfen.
     """
     _trusted_raw = os.getenv("TRUSTED_PROXIES", "")
     trusted_proxies: List[str] = [p.strip() for p in _trusted_raw.split(",") if p.strip()]
@@ -411,7 +428,13 @@ def get_client_ip(request: Request) -> str:
     
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded and direct_ip and direct_ip in trusted_proxies:
-        return forwarded.split(",")[0].strip()
+        kette = [teil.strip() for teil in forwarded.split(",") if teil.strip()]
+        for eintrag in reversed(kette):
+            if eintrag not in trusted_proxies:
+                return eintrag
+        # Nur bekannte Proxies in der Kette: dann ist der direkte Peer das
+        # Genaueste, was wir haben. Keinen erfundenen Wert zurueckgeben.
+        return direct_ip
     
     # Steht hier ein X-Forwarded-For, stammt die Anfrage aus einem Proxy, den
     # wir nicht kennen. Dann faellt jeder Besucher auf die IP dieses Proxys

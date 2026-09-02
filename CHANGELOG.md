@@ -35,6 +35,7 @@
   Alle vier laufen jetzt über `dependencies.get_client_ip`
 - **`log_consent` nahm die IP aus dem Request-Body**: `consent.ip_address or get_client_ip(request)` gab einem Feld Vorrang, das der Einwilligende selbst mitschickt. Damit bestimmte der Betroffene, was im Nachweis über ihn steht. Das Feld ist aus `ConsentLog` **entfernt**, nicht stillschweigend ignoriert, damit niemand annimmt, es habe weiter Wirkung. Das ausgelieferte Banner-Skript (`widgets/cookie_banner_v2.js`) hat es nie geschickt, der Bruch trifft nur eigene Integrationen
 - `log_consent` protokolliert den User-Agent aus dem `User-Agent`-Header statt aus dem Request-Body; `consent.user_agent` ist nur noch Rückfall. Protokolliert gehört, was der Server gesehen hat
+- **`get_client_ip` selbst wertete die Kette falsch aus und war damit weiterhin fälschbar.** Beim Nachmessen an der Produktions-nginx gefunden: dort steht `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for`, und das **hängt an**, statt zu ersetzen. Schickt ein Besucher selbst `X-Forwarded-For: 9.9.9.9`, kommt im Backend `9.9.9.9, <echte IP>` an. `get_client_ip` nahm `split(",")[0]`, also genau den vom Besucher erfundenen Eintrag. Die Proxy-Prüfung über `TRUSTED_PROXIES` griff dabei korrekt und half trotzdem nichts. Folgen: jeder Einwilligungsnachweis blieb fälschbar, und das Rate-Limit der Waitlist ließ sich mit einem beliebigen Header umgehen. Die Kette wird jetzt **von rechts** ausgewertet, genommen wird der erste Eintrag, der nicht selbst ein bekannter Proxy ist; enthält sie nur Proxys, bleibt es beim direkten Peer statt bei einem erfundenen Wert
 
 ### Tests
 - `tests/test_waitlist.py`: Mocks bildeten mit `mock_db.execute_query` eine Methode nach, die es nie gab — MagicMock erfindet jedes Attribut, deshalb war die Suite grün, während die Strecke in Produktion tot war. Auf das echte Verbindungsmuster umgestellt
@@ -45,12 +46,14 @@
 - Neu `TestCookieConsentIpNichtFaelschbar`: schlägt an, sobald in `cookie_compliance_routes.py` wieder ein ungeprüftes `X-Forwarded-For` steht
 - Neu `tests/test_besucher_ip_quelle.py`. `TestKeineEigeneIpErmittlung` durchsucht **alle** Backend-Module (außer `dependencies.py`, dort steht die geprüfte Auswertung) nach `request.client.host` und nach selbst gelesenem `X-Forwarded-For`, Kommentare und Docstrings ausgenommen. Damit ist die Fehlerklasse abgedeckt und nicht nur die heute gefundenen Stellen; gegen eine eingeschmuggelte Probe-Datei fällt der Test wie vorgesehen
 - `TestConsentIpKommtVomServer` prüft verhaltensbasiert, dass eine im Body mitgeschickte `ip_address` nicht im Protokoll landet, dass das Feld aus dem Modell weg ist und dass der User-Agent aus dem Header kommt, mit Gegenprobe gegen einen nicht hinterlegten Proxy
+- Die Testdaten bilden die Kette jetzt so ab, wie nginx sie wirklich liefert (`9.9.9.9, 203.0.113.7` statt umgekehrt). Vier Tests decken den Ketten-Bypass ab und fallen gegen den alten `get_client_ip`
 
 ### Infrastruktur
 - `docker-compose.yml`: `ADMIN_NOTIFY_EMAIL` wird an das Backend durchgereicht — stand in der `.env`, kam nie im Container an, und die Benachrichtigung stieg deshalb still aus. Dazu `EARLY_ACCESS_PLAETZE` und `EARLY_ACCESS_ANGEBOT`
 - backend und landing neu gebaut und deployt; Migration `0018` gegen Produktion gelaufen; Testsuite im Backend-Image: 1579 passed, 66 skipped
 - Anmeldung und Double-Opt-In über die öffentliche Domain durchgespielt (Herkunft in der Datenbank, Rückleitung auf `/early-access/`, Platz 1 vergeben), Testdaten anschließend entfernt und Sequence zurückgesetzt
-- Testsuite im Backend-Image nach den IP-Korrekturen: 1626 passed, 29 skipped
+- Produktions-nginx nachgemessen statt angenommen: Quell-IP am Backend ist `172.22.0.1` (uvicorn-Access-Log), `TRUSTED_PROXIES=172.22.0.1,127.0.0.1` stimmt also. Dabei fiel `$proxy_add_x_forwarded_for` auf
+- Testsuite im Backend-Image nach den IP-Korrekturen: 1629 passed, 29 skipped
 
 ### Tech Debt
 - `landing-react/src/components/saas-landing/JoinEarlySection.tsx` und die Sicherungskopie `JoinEarlySection.tsx.bak.20260729` gelöscht. Die Sektion war seit `e630896` ("Preise, Navigation und Kaufweg statt Warteliste") aus `EarlyAccessLanding` genommen und danach nirgends mehr eingebunden: kein Import, kein `#waitlist`-Anker, keine Route. Sie trug beide Fehler, die heute in `WartelistenFormular` behoben wurden (`204` als Erfolg gewertet, keine Wartezeit bis zur Zeitfalle), und hätte sie beim nächsten Wiedereinbau zurück in die Seite gebracht. Zwei Formulare gegen denselben Endpunkt zu pflegen war die Ursache der Abweichung, deshalb löschen statt nachziehen: `WartelistenFormular` ist der eine verbleibende Weg auf die Warteliste

@@ -128,7 +128,7 @@ class TestConsentIpKommtVomServer:
             antwort = self._client().post(
                 "/api/cookie-compliance/consent",
                 json={**self.NUTZLAST, "ip_address": "9.9.9.9"},
-                headers={"X-Forwarded-For": "203.0.113.7, 172.22.0.1"},
+                headers={"X-Forwarded-For": "203.0.113.7"},
             )
 
         assert antwort.status_code == 200, antwort.text
@@ -139,6 +139,48 @@ class TestConsentIpKommtVomServer:
         assert gespeicherter_hash != hashlib.sha256(b"9.9.9.9").hexdigest(), (
             "die im Request-Body mitgeschickte IP landet im Nachweis; damit "
             "bestimmt der Einwilligende, was ueber ihn protokolliert wird"
+        )
+
+    def test_selbst_gesetzter_header_wird_verworfen(self, monkeypatch):
+        """nginx haengt an, statt zu ersetzen.
+
+        `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for` schreibt
+        die gesehene Adresse RECHTS an einen bereits vorhandenen Header. Wer
+        `split(",")[0]` nimmt, uebernimmt damit genau das, was der Besucher
+        selbst hineingeschrieben hat: der Nachweis waere trotz Proxy-Pruefung
+        faelschbar und das Rate-Limit mit einem Header zu umgehen.
+        """
+        pool = self._mock_pool(monkeypatch)
+
+        with patch.dict(os.environ, {"TRUSTED_PROXIES": "testclient"}):
+            antwort = self._client().post(
+                "/api/cookie-compliance/consent",
+                json=self.NUTZLAST,
+                headers={"X-Forwarded-For": "9.9.9.9, 203.0.113.7"},
+            )
+
+        assert antwort.status_code == 200, antwort.text
+        gespeicherter_hash = pool.fetchrow.await_args_list[1].args[5]
+        assert gespeicherter_hash == hashlib.sha256(b"203.0.113.7").hexdigest(), (
+            "der vom Besucher selbst gesetzte Teil der Kette landet im Nachweis"
+        )
+
+    def test_nur_bekannte_proxys_in_der_kette(self, monkeypatch):
+        """Kein erfundener Wert, wenn die Kette nur Proxys enthaelt."""
+        pool = self._mock_pool(monkeypatch)
+
+        with patch.dict(os.environ, {"TRUSTED_PROXIES": "testclient,172.22.0.1"}):
+            antwort = self._client().post(
+                "/api/cookie-compliance/consent",
+                json=self.NUTZLAST,
+                headers={"X-Forwarded-For": "172.22.0.1"},
+            )
+
+        assert antwort.status_code == 200, antwort.text
+        gespeicherter_hash = pool.fetchrow.await_args_list[1].args[5]
+        assert gespeicherter_hash == hashlib.sha256(b"testclient").hexdigest(), (
+            "enthaelt die Kette nur bekannte Proxys, muss der direkte Peer "
+            "gespeichert werden statt eines Eintrags aus der Kette"
         )
 
     def test_unbekanntem_proxy_wird_nicht_geglaubt(self, monkeypatch):
