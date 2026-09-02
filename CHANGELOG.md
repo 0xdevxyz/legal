@@ -15,6 +15,13 @@
 - Formular wartet vor dem Absenden bis zur 4-Sekunden-Marke der serverseitigen Zeitfalle, statt den Eintrag zu verlieren — Browser-Autofill unterschreitet sie mühelos
 - `PlatzZaehler` liest den Stand über `/api/leads/waitlist/plaetze` aus der Datenbank; fällt der Zähler aus, wird keine Zahl gezeigt statt einer geratenen
 
+### Frontend — Startseite auf Early Access umgestellt
+- `/` zeigt die Early-Access-Seite statt der Produktseite mit Preistabelle. Anlass: Stripe läuft auf Testschlüsseln (`sk_test_`/`pk_test_`, alle Preis-IDs Test-IDs) — jeder Klick auf „Pro buchen" landete in einem Checkout, in dem echte Karten abgelehnt werden
+- Die bisherige Startseite ist **nicht gelöscht**: unverändert als `EarlyAccessLanding` erreichbar unter `/produkt/`, dort auf `noindex`, damit sie weder mit `/` um dieselben Begriffe konkurriert noch weiter Kaufversuche einsammelt. Rückweg in `src/app/page.tsx` dokumentiert
+- Startseite ist indexierbar mit `canonical: /`. Die Kampagnenseite trägt `noindex` und `canonical: /early-access/` — hätte man sie unverändert auf `/` gelegt, wäre complyo.de aus dem Index gefallen und der Canonical hätte auf eine nicht indexierte Seite gezeigt
+- Kampagnenkennung ist jetzt ein Prop statt einer Konstante: `/` schreibt `startseite`, `/early-access` schreibt `ea100-bfsg`. Ohne die Trennung liesse sich nicht mehr sagen, was die bezahlten Anzeigen gebracht haben und was ohnehin gekommen wäre
+- NavBar und Footer: „Preise" entfernt (der Anker `/#preise` zeigte auf die Preistabelle der alten Startseite und ginge ins Leere), „Kostenlos starten" führt als „Platz sichern" auf `/#anmeldung` statt auf `register?plan=free`. Auf der Startseite steht damit kein Kauf- oder Registrierungsweg mehr, nur noch `login` für bestehende Nutzer
+
 ### Backend
 - **Waitlist-Strecke war vollständig tot**: `lead_routes.py` rief durchgehend `db_service.execute_query(...)` auf, eine Methode, die `DatabaseService` nicht hat. Jede Anmeldung wäre in einen `AttributeError` und damit in einen 500er gelaufen. Auf das echte Muster `async with db_service.get_connection()` mit asyncpg umgestellt
 - **Rate-Limit galt global statt pro Besucher**: `join_waitlist` las `request.client.host`, hinter nginx immer die Gateway-IP — nach drei Anmeldungen in zehn Minuten hätte das Formular jedem weiteren Besucher `429` geantwortet. Jetzt über `get_client_ip` (respektiert `TRUSTED_PROXIES`), derselbe Fehler wie beim Landing-Scanner am 12.08.2026

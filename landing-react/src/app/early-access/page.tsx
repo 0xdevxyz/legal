@@ -21,5 +21,7 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <EarlyAccessKampagne />;
+  // Eigene Kennung gegenueber der Startseite: nur so laesst sich hinterher
+  // sagen, was die bezahlten Anzeigen gebracht haben.
+  return <EarlyAccessKampagne kampagne="ea100-bfsg" />;
 }

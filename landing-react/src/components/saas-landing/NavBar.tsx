@@ -5,8 +5,12 @@ import { Logo } from '@/components/Logo';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de';
 
+// "Preise" ist vorerst raus. Der Anker /#preise zeigte auf die Preistabelle
+// der alten Startseite; seit dort die Early-Access-Seite steht, ginge er ins
+// Leere. Auf /produkt umzubiegen waere schlimmer: dort stehen die Buchen-
+// Knoepfe, und die fuehren mit Stripe im Testmodus in einen Checkout, der
+// echte Karten ablehnt. Zurueck, sobald der Verkauf offen ist.
 const LINKS = [
-  { label: 'Preise', href: '/#preise' },
   { label: 'BFSG-Check', href: '/bfsg-check/' },
   { label: 'DSGVO-Check', href: '/dsgvo-website-check/' },
   { label: 'Barrierefreiheit', href: '/barrierefreiheit-website-testen/' },
@@ -48,10 +52,10 @@ export default function NavBar() {
               Anmelden
             </a>
             <a
-              href={`${APP_URL}/register?plan=free`}
+              href="/#anmeldung"
               className="text-sm bg-blue-700 hover:bg-blue-800 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
             >
-              Kostenlos starten
+              Platz sichern
             </a>
           </div>
 
@@ -91,11 +95,11 @@ export default function NavBar() {
                 Anmelden
               </a>
               <a
-                href={`${APP_URL}/register?plan=free`}
+                href="/#anmeldung"
                 onClick={() => setOpen(false)}
                 className="block text-sm text-center bg-blue-600 text-white font-semibold rounded-lg px-4 py-2.5"
               >
-                Kostenlos starten
+                Platz sichern
               </a>
             </div>
           </div>

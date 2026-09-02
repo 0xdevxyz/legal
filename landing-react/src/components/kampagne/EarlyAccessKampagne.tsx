@@ -6,10 +6,10 @@ import {
 import WartelistenFormular from './WartelistenFormular';
 import PlatzZaehler from './PlatzZaehler';
 
-// Kennung dieser Kampagne. Landet je Anmeldung in waitlist_leads.campaign und
-// ist der Schluessel, an dem sich spaeter ablesen laesst, was die Anzeigen
-// gebracht haben. Eine zweite Seite bekommt eine eigene Kennung, nie diese.
-const KAMPAGNE = 'ea100-bfsg';
+// Die Kennung kommt von aussen, weil dieselbe Seite an zwei Stellen steht:
+// unter "/" als Startseite und unter "/early-access" als Anzeigenziel. Wuerde
+// beides dieselbe Kennung schreiben, liesse sich hinterher nicht mehr trennen,
+// was die bezahlten Anzeigen gebracht haben und was ohnehin gekommen waere.
 const PLAETZE = 100;
 const PREIS_EARLY = '35 €';
 const PREIS_REGULAER = '49 €';
@@ -60,7 +60,11 @@ const FAQ = [
   },
 ];
 
-export default function EarlyAccessKampagne() {
+export default function EarlyAccessKampagne({
+  kampagne = 'ea100-bfsg',
+}: {
+  kampagne?: string;
+}) {
   const [bestaetigt, setBestaetigt] = useState<boolean | null>(null);
   const [platz, setPlatz] = useState<string | null>(null);
 
@@ -127,7 +131,7 @@ export default function EarlyAccessKampagne() {
           </p>
 
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <WartelistenFormular kampagne={KAMPAGNE} id="anmeldung" />
+            <WartelistenFormular kampagne={kampagne} id="anmeldung" />
           </div>
         </div>
       </section>
@@ -214,7 +218,7 @@ export default function EarlyAccessKampagne() {
             Eine E-Mail-Adresse, ein Bestätigungsklick. Keine Zahlungsdaten, keine Bestellung.
           </p>
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 text-left">
-            <WartelistenFormular kampagne={KAMPAGNE} id="anmeldung-unten" />
+            <WartelistenFormular kampagne={kampagne} id="anmeldung-unten" />
           </div>
           <p className="text-xs text-gray-500 mt-6">
             Alle Preise netto zzgl. gesetzlicher Umsatzsteuer.

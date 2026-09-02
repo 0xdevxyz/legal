@@ -17,10 +17,10 @@ export default function FooterSection() {
               Die KI-Compliance-Plattform für Websites. DSGVO, Cookie-Recht und Barrierefreiheit: automatisch geprüft, repariert und dokumentiert.
             </p>
             <a
-              href={`${APP_URL}/register?plan=free`}
+              href="/#anmeldung"
               className="inline-flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
             >
-              Kostenlos starten
+              Platz sichern
             </a>
           </div>
 
@@ -28,7 +28,6 @@ export default function FooterSection() {
             <h2 className="text-white font-semibold text-sm mb-4">Produkt</h2>
             <ul className="space-y-2.5 text-sm">
               {[
-                { label: 'Preise', href: '/#preise' },
                 { label: 'BFSG-Check', href: '/bfsg-check/' },
                 { label: 'DSGVO-Check', href: '/dsgvo-website-check/' },
                 { label: 'Barrierefreiheit testen', href: '/barrierefreiheit-website-testen/' },
