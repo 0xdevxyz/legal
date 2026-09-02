@@ -20,6 +20,28 @@ def build_app():
     return app
 
 
+def form_token(vor_sekunden: int = 10) -> str:
+    """Baut ein gueltiges Formular-Token mit zurueckdatiertem Zeitstempel.
+
+    Die Produktionsfunktion stellt immer auf "jetzt" aus; ein solches Token
+    waere null Sekunden alt und liefe in die Untergrenze von vier Sekunden.
+    Der Test baut es deshalb mit denselben Bausteinen selbst nach — bewusst
+    ohne Testschalter im Produktionscode, denn eine Hintertuer, die den
+    Zeitpunkt von aussen setzbar macht, waere genau das Loch, das das Token
+    stopfen soll.
+    """
+    import hashlib
+    import hmac as _hmac
+    import lead_routes
+
+    ausgestellt = int(datetime.now(timezone.utc).timestamp()) - vor_sekunden
+    rumpf = f"{lead_routes._TOKEN_VERSION}.{ausgestellt}.testzufall"
+    signatur = _hmac.new(
+        os.environ["JWT_SECRET"].encode(), rumpf.encode(), hashlib.sha256
+    ).hexdigest()[:32]
+    return f"{rumpf}.{signatur}"
+
+
 def _form_ts(vor_sekunden: float = 10) -> int:
     """form_ts wie das Formular es setzt: Renderzeitpunkt in Millisekunden.
 
@@ -37,9 +59,10 @@ VALID_PAYLOAD = {
     "consent": True,
     "website": "",
     "source": "early-access",
-    # Ohne form_ts greift die Zeitfalle und der Endpunkt antwortet still mit 204,
-    # bevor Rate-Limit oder Speicherung überhaupt erreicht werden.
+    # form_ts ist die Altlast: der Endpunkt wertet es nicht mehr aus, weil der
+    # Client es beliebig setzen konnte. Massgeblich ist form_token.
     "form_ts": _form_ts(),
+    "form_token": form_token(),
 }
 
 CONFIRM_TOKEN = "valid_token_abc123"
@@ -114,24 +137,59 @@ class TestWaitlistJoin:
         assert response.status_code == 204
 
     @patch("lead_routes.db_service")
-    def test_ohne_form_ts_greift_die_zeitfalle(self, mock_db, client):
-        """Wer direkt auf den Endpunkt POSTet, hat kein Formular gerendert."""
-        payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "form_ts"}
+    def test_ohne_form_token_kein_eintrag(self, mock_db, client):
+        """Wer direkt auf den Endpunkt POSTet, hat sich kein Token abgeholt."""
+        payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "form_token"}
         response = client.post("/api/leads/waitlist", json=payload)
         assert response.status_code == 204
         mock_db.get_connection.assert_not_called()
 
     @patch("lead_routes.db_service")
+    def test_gefaelschte_signatur_wird_verworfen(self, mock_db, client):
+        """Der Kern der Umstellung: der Zeitpunkt ist nicht mehr frei waehlbar.
+
+        Vorher stand die Zeit in `form_ts` und kam aus dem Request — ein Bot
+        schrieb dort "vor zehn Sekunden" hinein und war durch. Hier wird genau
+        das versucht: ein Token mit passendem Alter, aber ohne gueltige
+        Signatur.
+        """
+        gefaelscht = f"v1.{int(datetime.now(timezone.utc).timestamp()) - 10}.xx.{'a' * 32}"
+        response = client.post(
+            "/api/leads/waitlist", json={**VALID_PAYLOAD, "form_token": gefaelscht}
+        )
+        assert response.status_code == 204
+        mock_db.get_connection.assert_not_called()
+
+    @patch("lead_routes.db_service")
     def test_zu_schnell_ausgefuellt_wird_verworfen(self, mock_db, client):
-        payload = {**VALID_PAYLOAD, "form_ts": _form_ts(vor_sekunden=1)}
-        response = client.post("/api/leads/waitlist", json=payload)
+        """Frisch ausgestelltes Token: kein Mensch tippt in unter vier Sekunden."""
+        response = client.post(
+            "/api/leads/waitlist",
+            json={**VALID_PAYLOAD, "form_token": form_token(vor_sekunden=1)},
+        )
         assert response.status_code == 204
         mock_db.get_connection.assert_not_called()
 
     @patch("lead_routes.db_service")
     def test_abgestandenes_formular_wird_verworfen(self, mock_db, client):
         """Älter als 6 Stunden — vermutlich ein wiederverwendetes Formular."""
-        payload = {**VALID_PAYLOAD, "form_ts": _form_ts(vor_sekunden=7 * 3600)}
+        response = client.post(
+            "/api/leads/waitlist",
+            json={**VALID_PAYLOAD, "form_token": form_token(vor_sekunden=7 * 3600)},
+        )
+        assert response.status_code == 204
+        mock_db.get_connection.assert_not_called()
+
+    @patch("lead_routes.db_service")
+    def test_form_ts_allein_genuegt_nicht_mehr(self, mock_db, client):
+        """Die alte Zeitfalle darf keine Hintertuer offen lassen.
+
+        Waere form_ts weiterhin als Ersatz zugelassen, koennte ein Bot das
+        Token einfach weglassen und stattdessen den selbstgesetzten Zeitstempel
+        schicken — die Umstellung waere wirkungslos.
+        """
+        payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "form_token"}
+        payload["form_ts"] = _form_ts(vor_sekunden=30)
         response = client.post("/api/leads/waitlist", json=payload)
         assert response.status_code == 204
         mock_db.get_connection.assert_not_called()
@@ -164,10 +222,16 @@ class TestWaitlistJoin:
         mock_email.send_waitlist_confirmation = MagicMock(return_value=True)
 
         for _ in range(3):
-            r = client.post("/api/leads/waitlist", json=VALID_PAYLOAD)
+            r = client.post(
+                "/api/leads/waitlist",
+                json={**VALID_PAYLOAD, "form_token": form_token()},
+            )
             assert r.status_code in (200, 204)
 
-        fourth = client.post("/api/leads/waitlist", json=VALID_PAYLOAD)
+        fourth = client.post(
+            "/api/leads/waitlist",
+            json={**VALID_PAYLOAD, "form_token": form_token()},
+        )
         assert fourth.status_code == 429
 
     @patch("lead_routes.db_service")
@@ -539,3 +603,79 @@ class TestMeldungBeiBestaetigung:
         assert 7 in args, "Platznummer fehlt in der Meldung"
         assert any("ea100-bfsg" in str(a) for a in args), "Herkunft fehlt in der Meldung"
         conn.execute.assert_awaited()
+
+
+class TestFormularToken:
+    def test_endpunkt_gibt_verwendbares_token(self, client):
+        antwort = client.get("/api/leads/waitlist/token")
+        assert antwort.status_code == 200
+        token = antwort.json()["token"]
+        assert token.count(".") == 3
+
+        import lead_routes
+        # Frisch ausgestellt ist es noch zu jung — das ist gewollt und belegt,
+        # dass die Untergrenze am ausgestellten Zeitpunkt haengt.
+        assert lead_routes._token_pruefen(token) is False
+
+    def test_fremdes_secret_wird_nicht_akzeptiert(self, monkeypatch):
+        """Ein Token, das mit einem anderen Schluessel signiert wurde, faellt durch."""
+        import lead_routes
+
+        gueltig = form_token(vor_sekunden=10)
+        assert lead_routes._token_pruefen(gueltig) is True
+
+        monkeypatch.setenv("JWT_SECRET", "ein-ganz-anderes-secret")
+        assert lead_routes._token_pruefen(gueltig) is False
+
+
+class TestZustellbarkeit:
+    """Jede Anmeldung loest eine Mail von unserem Server aus.
+
+    Traegt jemand massenhaft erfundene Domains ein, verschickt complyo Post an
+    Adressen, die es nicht gibt — das kostet Zustellreputation. Geprueft wird
+    deshalb vor dem Speichern, und bewusst fail-open: nur ein eindeutiges
+    "diese Domain existiert nicht" fuehrt zur Ablehnung.
+    """
+
+    def test_domain_ohne_mx_wird_abgelehnt(self):
+        import lead_routes
+        assert lead_routes.domain_nimmt_mail_an(
+            "wer@diese-domain-existiert-ganz-sicher-nicht-4711.de"
+        ) is False
+
+    def test_echte_domain_wird_akzeptiert(self):
+        import lead_routes
+        assert lead_routes.domain_nimmt_mail_an("wer@gmail.com") is True
+
+    def test_dns_ausfall_laesst_durch(self, monkeypatch):
+        """Ein DNS-Timeout darf keine echte Anmeldung kosten."""
+        import lead_routes
+
+        lead_routes._mx_cache.clear()
+
+        class KaputterResolver:
+            timeout = 0
+            lifetime = 0
+
+            def resolve(self, *a, **k):
+                raise OSError("DNS weg")
+
+        import dns.resolver
+        monkeypatch.setattr(dns.resolver, "Resolver", lambda: KaputterResolver())
+        assert lead_routes.domain_nimmt_mail_an("wer@irgendwo-sonst.de") is True
+        lead_routes._mx_cache.clear()
+
+    @patch("lead_routes.db_service")
+    def test_unerreichbare_domain_wird_nicht_gespeichert(self, mock_db, client):
+        response = client.post(
+            "/api/leads/waitlist",
+            json={
+                **VALID_PAYLOAD,
+                "email": "wer@diese-domain-existiert-ganz-sicher-nicht-4711.de",
+                "form_token": form_token(),
+            },
+        )
+        assert response.status_code == 400
+        # Der Besucher soll den Tippfehler selbst beheben koennen.
+        assert "Schreibweise" in response.json()["detail"]
+        mock_db.get_connection.assert_not_called()

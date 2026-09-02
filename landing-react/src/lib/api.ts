@@ -126,6 +126,14 @@ export const leadsApi = {
     return response.data;
   },
 
+  // Signiertes Formular-Token. Wer es nicht vorlegt, wird beim Absenden still
+  // verworfen — deshalb holt das Formular es direkt beim Anzeigen und nicht
+  // erst beim Klick, damit die Wartezeit nicht auf den Absendevorgang faellt.
+  waitlistToken: async (): Promise<string> => {
+    const response = await api.get<{ token: string }>('/api/leads/waitlist/token', { timeout: 8000 });
+    return response.data.token;
+  },
+
   // Kurzer Timeout: der Zaehler ist Beiwerk. Antwortet er nicht, soll die Seite
   // das Angebot ohne Zahl zeigen und nicht auf einen Ladebalken warten.
   waitlistPlaetze: async (): Promise<WaitlistPlaetze> => {

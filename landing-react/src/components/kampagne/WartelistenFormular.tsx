@@ -8,11 +8,10 @@ type FormState = 'idle' | 'loading' | 'success' | 'already_registered' | 'error'
 
 const TURNSTILE_SITEKEY = process.env.NEXT_PUBLIC_TURNSTILE_SITEKEY || '';
 
-// Der Server verwirft alles, was schneller als vier Sekunden ausgefuellt wurde
-// (lead_routes._MIN_FILL_SECONDS). Autofill unterschreitet das muehelos, und
-// der Eintrag waere weg, ohne dass es jemand merkt. Statt die Serverabwehr zu
-// lockern, wartet das Formular die Differenz ab. Echte Bots posten ohne
-// form_ts direkt auf den Endpunkt und fallen weiterhin heraus.
+// Der Server verwirft alles, was schneller als vier Sekunden nach Ausstellung
+// des Formular-Tokens ankommt. Autofill unterschreitet das muehelos, und der
+// Eintrag waere weg, ohne dass es jemand merkt. Statt die Serverabwehr zu
+// lockern, wartet das Formular die Differenz ab.
 const MIN_ABSENDEZEIT_MS = 4600;
 
 declare global {
@@ -55,6 +54,8 @@ export default function WartelistenFormular({
   const [consentError, setConsentError] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileError, setTurnstileError] = useState(false);
+  const [formToken, setFormToken] = useState('');
+  const [fehlerText, setFehlerText] = useState('');
 
   const openedAt = useRef<number>(0);
   const turnstileBox = useRef<HTMLDivElement | null>(null);
@@ -62,6 +63,15 @@ export default function WartelistenFormular({
 
   useEffect(() => {
     openedAt.current = Date.now();
+    // Beim Anzeigen holen, nicht beim Absenden: das Token traegt seinen
+    // Ausstellungszeitpunkt, und der muss beim Abschicken schon ein paar
+    // Sekunden zurueckliegen.
+    let abgebrochen = false;
+    leadsApi
+      .waitlistToken()
+      .then((t) => { if (!abgebrochen) setFormToken(t); })
+      .catch(() => { /* beim Absenden wird es erneut versucht */ });
+    return () => { abgebrochen = true; };
   }, []);
 
   useEffect(() => {
@@ -111,6 +121,7 @@ export default function WartelistenFormular({
     }
 
     setFormState('loading');
+    setFehlerText('');
 
     const offen = Date.now() - (openedAt.current || Date.now());
     if (offen < MIN_ABSENDEZEIT_MS) {
@@ -118,12 +129,21 @@ export default function WartelistenFormular({
     }
 
     try {
+      // Konnte das Token beim Anzeigen nicht geholt werden, hier nachholen:
+      // ohne Token wird die Anmeldung stillschweigend verworfen.
+      let token = formToken;
+      if (!token) {
+        token = await leadsApi.waitlistToken();
+        setFormToken(token);
+      }
+
       const result = await leadsApi.joinWaitlist({
         email,
         consent,
         website: honeypot || undefined,
         source: 'landing',
         form_ts: openedAt.current || undefined,
+        form_token: token,
         turnstile_token: turnstileToken || undefined,
         ...herkunftAuslesen(kampagne),
       });
@@ -139,7 +159,17 @@ export default function WartelistenFormular({
       }
 
       setFormState(result.status === 'already_registered' ? 'already_registered' : 'success');
-    } catch {
+    } catch (err: unknown) {
+      // Die Zustellbarkeitspruefung antwortet mit 400 und einer Begruendung,
+      // die der Besucher lesen soll — ein Tippfehler in der Adresse ist der
+      // haeufigste Fall und der einzige, den er selbst beheben kann. Ein
+      // abgelaufenes Token wird verworfen, damit der zweite Versuch ein
+      // frisches holt.
+      const antwort = (err as { response?: { status?: number; data?: { detail?: string } } })?.response;
+      if (antwort?.status === 400 && antwort?.data?.detail) {
+        setFehlerText(antwort.data.detail);
+      }
+      setFormToken('');
       setFormState('error');
     }
   };
@@ -249,7 +279,7 @@ export default function WartelistenFormular({
       {formState === 'error' && (
         <p className="text-sm text-red-600 flex items-center gap-1.5" role="alert">
           <AlertCircle className="w-4 h-4" aria-hidden="true" />
-          Das hat nicht geklappt – deine Adresse wurde nicht gespeichert. Bitte versuch es noch einmal.
+          {fehlerText || 'Das hat nicht geklappt – deine Adresse wurde nicht gespeichert. Bitte versuch es noch einmal.'}
         </p>
       )}
 

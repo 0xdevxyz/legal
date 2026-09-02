@@ -52,7 +52,8 @@ export interface WaitlistJoinRequest {
   consent: boolean;
   website?: string;        // Honeypot – bleibt bei Menschen leer
   source?: string;
-  form_ts?: number;        // Zeitfalle: ms seit Epoch, gesetzt beim Rendern
+  form_ts?: number;        // Alt-Feld, vom Server nicht mehr ausgewertet
+  form_token?: string;     // vom Server ausgestellt und signiert
   turnstile_token?: string;
 
   // Herkunft. Ohne diese Felder laesst sich nicht sagen, welche Anzeige einen

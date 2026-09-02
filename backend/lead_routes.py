@@ -15,7 +15,7 @@ import hmac
 import os
 import re
 import httpx
-from dependencies import require_admin, get_client_ip
+from dependencies import require_admin, get_client_ip, get_redis
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from database_service import db_service
@@ -58,7 +58,8 @@ class WaitlistJoinRequest(BaseModel):
     consent: bool
     website: Optional[str] = None          # Honeypot – bleibt bei Menschen leer
     source: Optional[str] = "early-access"
-    form_ts: Optional[int] = None          # Zeitfalle, ms seit Epoch (clientseitig gesetzt)
+    form_ts: Optional[int] = None          # Alt-Feld, nur noch Beiwerk (siehe form_token)
+    form_token: Optional[str] = None       # vom Server ausgestellt, signiert
     turnstile_token: Optional[str] = None  # cf-turnstile-response
 
     # Herkunft. Ohne diese Felder landet jede Anmeldung im selben Topf und eine
@@ -157,6 +158,155 @@ def _sauberer_kurztext(v, max_len: int):
     return v or None
 
 
+# ---------------------------------------------------------------------------
+# Formular-Token
+#
+# Ersetzt die bisherige Zeitfalle als eigentliche Huerde. Die alte Pruefung
+# verliess sich auf `form_ts` aus dem Request — einen Zeitstempel, den der
+# Client selbst setzt. Ein Bot schreibt dort einfach "vor zehn Sekunden" hinein
+# und ist durch; die Falle fing nur Skripte, die gar kein form_ts schickten.
+#
+# Jetzt gibt der Server den Zeitpunkt aus und signiert ihn. Wer anmelden will,
+# muss die Seite geladen und sich ein Token abgeholt haben, und der darin
+# festgehaltene Zeitpunkt laesst sich nicht verschieben. Zusaetzlich wird jedes
+# Token nach der Verwendung in Redis gesperrt, damit eines nicht fuer viele
+# Anmeldungen reicht.
+# ---------------------------------------------------------------------------
+
+_TOKEN_VERSION = "v1"
+
+
+def _token_secret() -> str:
+    secret = os.getenv("JWT_SECRET") or ""
+    if not secret:
+        raise RuntimeError("JWT_SECRET fehlt — Formular-Token nicht signierbar")
+    return secret
+
+
+def formular_token_erzeugen() -> str:
+    """Signierter Zeitstempel plus Zufall, damit zwei Tokens nie gleich sind."""
+    ausgestellt = int(datetime.now(timezone.utc).timestamp())
+    zufall = secrets.token_urlsafe(9)
+    rumpf = f"{_TOKEN_VERSION}.{ausgestellt}.{zufall}"
+    signatur = hmac.new(
+        _token_secret().encode(), rumpf.encode(), hashlib.sha256
+    ).hexdigest()[:32]
+    return f"{rumpf}.{signatur}"
+
+
+def _token_pruefen(token: Optional[str]) -> bool:
+    """Signatur und Alter. Jeder Zweifel bedeutet ungueltig."""
+    if not token or token.count(".") != 3:
+        return False
+    version, ausgestellt_roh, zufall, signatur = token.split(".")
+    if version != _TOKEN_VERSION:
+        return False
+
+    rumpf = f"{version}.{ausgestellt_roh}.{zufall}"
+    try:
+        erwartet = hmac.new(
+            _token_secret().encode(), rumpf.encode(), hashlib.sha256
+        ).hexdigest()[:32]
+    except RuntimeError as e:
+        logger.error(f"Formular-Token nicht pruefbar: {e}")
+        return False
+    if not hmac.compare_digest(erwartet, signatur):
+        return False
+
+    try:
+        ausgestellt = int(ausgestellt_roh)
+    except ValueError:
+        return False
+
+    alter = datetime.now(timezone.utc).timestamp() - ausgestellt
+    # Dieselben Grenzen wie zuvor die Zeitfalle, nur jetzt mit einem
+    # Zeitpunkt, den der Absender nicht selbst bestimmt hat.
+    return _MIN_FILL_SECONDS <= alter <= _MAX_FORM_AGE_SECONDS
+
+
+async def _token_entwerten(token: str) -> bool:
+    """Sperrt ein Token nach Gebrauch. True heisst: war noch frisch.
+
+    Faellt Redis aus, wird durchgelassen statt blockiert — eine kaputte
+    Sperrliste darf keine echten Anmeldungen verschlucken. Signatur und
+    Altersgrenze gelten dann weiterhin.
+    """
+    try:
+        redis = await get_redis()
+        if not redis:
+            return True
+        schluessel = "waitlist:token:" + hashlib.sha256(token.encode()).hexdigest()
+        # SET NX: schlaegt fehl, wenn der Schluessel schon existiert.
+        gesetzt = await redis.set(
+            schluessel, "1", ex=_MAX_FORM_AGE_SECONDS, nx=True
+        )
+        return bool(gesetzt)
+    except Exception as e:
+        logger.warning(f"Token-Sperrliste nicht erreichbar, Token akzeptiert: {e}")
+        return True
+
+
+# ---------------------------------------------------------------------------
+# Zustellbarkeit der Adresse
+# ---------------------------------------------------------------------------
+
+_mx_cache: Dict[str, tuple] = {}
+_MX_CACHE_SEKUNDEN = 3600
+
+
+def domain_nimmt_mail_an(email: str) -> bool:
+    """Prueft, ob die Domain der Adresse ueberhaupt Mail empfangen kann.
+
+    Grund ist nicht Datenhygiene, sondern der eigene Mailserver: jede
+    Anmeldung loest eine Bestaetigungsmail an die eingetragene Adresse aus.
+    Traegt jemand massenhaft erfundene Adressen ein, verschickt complyo
+    Mails an Domains, die niemandem gehoeren — das kostet Zustellreputation
+    und im schlimmsten Fall einen Platz auf einer Blacklist. Nebenbei faengt
+    die Pruefung Tippfehler wie "gmial.com" ab, bevor jemand vergeblich auf
+    eine Mail wartet.
+
+    Bewusst fail-open: nur ein eindeutiges "diese Domain gibt es nicht" fuehrt
+    zur Ablehnung. Ein DNS-Timeout darf keine echte Anmeldung kosten — genau
+    wie bei der Turnstile-Pruefung weiter unten.
+    """
+    try:
+        domain = email.rsplit("@", 1)[1].lower()
+    except IndexError:
+        return False
+
+    jetzt = datetime.now(timezone.utc).timestamp()
+    zwischenstand = _mx_cache.get(domain)
+    if zwischenstand and zwischenstand[1] > jetzt:
+        return zwischenstand[0]
+
+    ergebnis = True
+    try:
+        import dns.resolver
+
+        aufloeser = dns.resolver.Resolver()
+        aufloeser.timeout = 3.0
+        aufloeser.lifetime = 5.0
+        try:
+            antwort = aufloeser.resolve(domain, "MX")
+            ergebnis = len(antwort) > 0
+        except dns.resolver.NoAnswer:
+            # Kein MX, aber die Domain gibt es. Nach RFC 5321 darf dann der
+            # A-Record als Mailziel dienen — viele kleine Domains machen das.
+            try:
+                aufloeser.resolve(domain, "A")
+                ergebnis = True
+            except Exception:
+                ergebnis = False
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoNameservers):
+            ergebnis = False
+    except Exception as e:
+        logger.warning(f"MX-Pruefung fuer {domain} nicht moeglich, akzeptiert: {e}")
+        ergebnis = True
+
+    _mx_cache[domain] = (ergebnis, jetzt + _MX_CACHE_SEKUNDEN)
+    return ergebnis
+
+
 def _hash_ip(ip: str) -> str:
     salt = os.getenv("SECRET_SALT", "complyo-salt-2026")
     return hashlib.sha256(f"{ip}{salt}".encode()).hexdigest()
@@ -192,18 +342,6 @@ def _verify_unsubscribe_token(email: str, token: Optional[str]) -> bool:
         logger.error(f"Unsubscribe-Token nicht prüfbar: {e}")
         return False
     return hmac.compare_digest(erwartet, token)
-
-
-def _fill_time_plausible(form_ts: Optional[int]) -> bool:
-    """Prüft, wie lange das Formular offen war.
-
-    Ein Bot, der direkt auf den Endpoint POSTet, schickt gar kein form_ts —
-    das allein ist schon ein Ausschlusskriterium.
-    """
-    if not form_ts:
-        return False
-    elapsed = datetime.now(timezone.utc).timestamp() - (form_ts / 1000)
-    return _MIN_FILL_SECONDS <= elapsed <= _MAX_FORM_AGE_SECONDS
 
 
 async def _verify_turnstile(token: Optional[str], remote_ip: str) -> bool:
@@ -246,6 +384,22 @@ def _check_rate_limit(ip_hash: str) -> bool:
 # Waitlist endpoints
 # ---------------------------------------------------------------------------
 
+@lead_router.get("/waitlist/token")
+async def waitlist_token():
+    """Stellt das Formular-Token aus, das die Anmeldung spaeter vorlegen muss.
+
+    Offen wie das Formular selbst: der Endpunkt gibt nur einen signierten
+    Zeitstempel heraus und verraet nichts. Seine Wirkung liegt darin, dass ein
+    Absender ihn ueberhaupt aufgerufen haben muss — wer direkt auf
+    POST /waitlist schiesst, hat kein gueltiges Token.
+    """
+    try:
+        return {"token": formular_token_erzeugen()}
+    except RuntimeError as e:
+        logger.error(f"Formular-Token nicht ausstellbar: {e}")
+        raise HTTPException(status_code=503, detail="Formular derzeit nicht verfuegbar")
+
+
 @lead_router.post("/waitlist", response_model=WaitlistJoinResponse)
 async def join_waitlist(
     payload: WaitlistJoinRequest,
@@ -270,9 +424,14 @@ async def join_waitlist(
     ip_hash = _hash_ip(client_ip)
     user_agent = http_request.headers.get("user-agent", "")[:500]
 
-    # Zeitfalle – ebenfalls stillschweigend
-    if not _fill_time_plausible(payload.form_ts):
-        logger.info("Waitlist: Zeitfalle ausgelöst")
+    # Formular-Token. Ersetzt die alte Zeitfalle: deren Zeitstempel kam aus dem
+    # Request und liess sich beliebig setzen, dieser ist signiert.
+    if not _token_pruefen(payload.form_token):
+        logger.info("Waitlist: Formular-Token fehlt oder ist ungueltig")
+        return Response(status_code=204)
+
+    if not await _token_entwerten(payload.form_token):
+        logger.info("Waitlist: Formular-Token bereits verwendet")
         return Response(status_code=204)
 
     # Turnstile
@@ -284,6 +443,15 @@ async def join_waitlist(
         raise HTTPException(
             status_code=429,
             detail="Zu viele Anfragen. Bitte versuchen Sie es später erneut.",
+        )
+
+    # Zustellbarkeit vor dem Speichern: was hier durchgeht, bekommt gleich eine
+    # Mail von unserem Server geschickt.
+    if not domain_nimmt_mail_an(payload.email):
+        logger.info(f"Waitlist: Domain nimmt keine Mail an ({payload.email})")
+        raise HTTPException(
+            status_code=400,
+            detail="Diese E-Mail-Adresse konnten wir nicht erreichen. Bitte prüfe die Schreibweise.",
         )
 
     confirm_token = secrets.token_urlsafe(32)

@@ -15,6 +15,17 @@
 - Formular wartet vor dem Absenden bis zur 4-Sekunden-Marke der serverseitigen Zeitfalle, statt den Eintrag zu verlieren — Browser-Autofill unterschreitet sie mühelos
 - `PlatzZaehler` liest den Stand über `/api/leads/waitlist/plaetze` aus der Datenbank; fällt der Zähler aus, wird keine Zahl gezeigt statt einer geratenen
 
+### Backend — Bot-Abwehr ohne Drittanbieter
+- **Die bisherige Zeitfalle war wirkungslos gegen jeden Bot, der sie kennt**: sie prüfte `form_ts`, einen Zeitstempel, den der Client selbst setzt. Ein Skript schreibt dort „vor zehn Sekunden" hinein und ist durch — gefangen wurden nur Bots, die gar kein `form_ts` schickten
+- Neu `GET /api/leads/waitlist/token`: der Server stellt einen signierten Zeitstempel aus (HMAC über `JWT_SECRET`), den die Anmeldung vorlegen muss. Der Zeitpunkt ist damit nicht mehr frei wählbar, und wer direkt auf den Endpunkt schießt, hat kein gültiges Token. Jedes Token wird nach Gebrauch in Redis gesperrt (`SET NX`), damit eines nicht für viele Anmeldungen reicht; fällt Redis aus, wird durchgelassen statt blockiert — eine kaputte Sperrliste darf keine echten Anmeldungen verschlucken
+- `_fill_time_plausible` und die Auswertung von `form_ts` entfernt. Das Feld bleibt im Modell, wird aber nicht mehr geprüft: würde es weiterhin als Ersatz gelten, könnte ein Bot einfach das Token weglassen und die Umstellung wäre wirkungslos (`test_form_ts_allein_genuegt_nicht_mehr`)
+- Zustellbarkeitsprüfung vor dem Speichern (`domain_nimmt_mail_an`): MX-Abfrage der Empfängerdomain, mit A-Record-Rückfall nach RFC 5321 und Stundencache. Grund ist der eigene Mailserver — jede Anmeldung löst eine Mail an die eingetragene Adresse aus, und massenhaft erfundene Adressen kosten Zustellreputation. Bewusst fail-open: nur ein eindeutiges NXDOMAIN führt zur Ablehnung, ein DNS-Timeout nicht. Fängt nebenbei Tippfehler wie „gmial.com" ab, bevor jemand vergeblich auf eine Mail wartet
+- Bewusst kein Cloudflare Turnstile: der Schutz kommt ohne Drittanbieter aus, es verlassen keine Besucherdaten den Server und die Datenschutzerklärung braucht keinen zusätzlichen Absatz
+
+### Frontend
+- `WartelistenFormular` holt das Token beim Anzeigen (nicht beim Klick, weil es beim Absenden schon einige Sekunden alt sein muss) und holt es beim Fehlschlag nach. Nach einem Fehler wird das Token verworfen, damit der zweite Versuch ein frisches zieht
+- Die Ablehnung wegen unerreichbarer Domain wird als Klartext angezeigt statt als allgemeiner Fehler — ein Tippfehler in der Adresse ist der häufigste Fall und der einzige, den der Besucher selbst beheben kann
+
 ### Frontend — Erklärvideo auf der Startseite
 - Erklärvideo aus `HeroSection` in die eigene Komponente `components/Erklaervideo.tsx` herausgelöst und auf der Early-Access-Startseite eingebunden. Eine Quelle statt zwei Kopien: Videodatei, VTT-Spur und Transkript müssen zusammenpassen, zwei Kopien hätten bedeutet, dass ein neues Video an einer Stelle nachgezogen wird und anderswo ein Transkript stehen bleibt, das nicht mehr zum Ton passt
 - Hero der Kampagnenseite ab `lg` zweispaltig: Text und Formular links, Video rechts. Im DOM steht der Textblock zuerst, damit die Seite auf dem Handy zu Text → Formular → Video zusammenfällt und der Eintrag nicht hinter ein 60-Sekunden-Video rutscht

@@ -50,6 +50,10 @@ LEADS_OEFFENTLICH_GEWOLLT = {
     # wird ausschliesslich die Zahl vergebener Plätze — die Gesamtzahl der
     # Leads bleibt in /stats und damit hinter require_admin.
     "/waitlist/plaetze",
+    # Stellt das signierte Formular-Token aus, das die Anmeldung vorlegen muss.
+    # Muss offen sein — das Formular holt es vor dem Login-losen Absenden. Gibt
+    # nur einen signierten Zeitstempel heraus, keine Daten.
+    "/waitlist/token",
     # Landing-Formular: Lead + Analysedaten, Double-Opt-In folgt per Mail.
     "/collect",
     # Verifizierungslink aus der Mail. Der Token IST die Auth.
@@ -217,7 +221,8 @@ class TestLeadRoutes:
         """Selbstschutz: der Wächter ist wertlos, wenn er Routen übersieht."""
         gefunden = {pfad for _, pfad, _, _, _ in _routen(_LEAD_FILE)}
         erwartet = {
-            "/waitlist", "/waitlist/confirm", "/waitlist/plaetze", "/collect",
+            "/waitlist", "/waitlist/confirm", "/waitlist/plaetze",
+            "/waitlist/token", "/collect",
             "/verify/{token}", "/stats", "/unsubscribe",
         }
         assert erwartet <= gefunden, f"Parser übersieht Routen: {sorted(erwartet - gefunden)}"
