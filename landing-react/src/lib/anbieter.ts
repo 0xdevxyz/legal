@@ -40,7 +40,7 @@ type Anbieterangaben = {
 };
 
 export const ANBIETER: Anbieterangaben = {
-  name: '',
+  name: 'Yvonne Weishar',
   geschaeftsbezeichnung: 'Complyo',
   strasse: 'Pappelallee 64',
   plz: '10437',
@@ -48,7 +48,7 @@ export const ANBIETER: Anbieterangaben = {
   land: 'Deutschland',
   email: 'info@complyo.de',
   datenschutzEmail: 'datenschutz@complyo.de',
-  telefon: '',
+  telefon: '+49 173 8448941',
   ustIdNr: 'DE405368946',
 };
 

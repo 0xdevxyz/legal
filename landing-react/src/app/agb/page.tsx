@@ -106,7 +106,7 @@ export default function AGBPage() {
                   (1) Die Preise für die Nutzung der Plattform richten sich nach der jeweils gültigen Preisliste auf unserer Website zum Zeitpunkt des Vertragsschlusses.
                 </p>
                 <p>
-                  (2) Alle Preise verstehen sich in Euro und enthalten die gesetzliche Mehrwertsteuer.
+                  (2) Alle Preise verstehen sich in Euro und sind Nettopreise. Sie verstehen sich zuzüglich der jeweils geltenden gesetzlichen Umsatzsteuer, die in der Rechnung gesondert ausgewiesen wird. Unsere Angebote richten sich nach Ziffer 1 Abs. 3 ausschließlich an Unternehmer.
                 </p>
                 <p>
                   (3) Die Zahlung erfolgt im Voraus für den jeweils gebuchten Abrechnungszeitraum (monatlich oder jährlich).

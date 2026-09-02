@@ -19,10 +19,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${baseUrl}/ratgeber/cookie-banner-pflicht/`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.8 },
     { url: `${baseUrl}/ratgeber/wordpress-cookie-banner/`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.8 },
 
-    // Rechtstexte
-    { url: `${baseUrl}/impressum/`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${baseUrl}/datenschutz/`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${baseUrl}/agb/`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
+    // Rechtstexte: Impressum, Datenschutz und AGB stehen bewusst NICHT hier.
+    // Sie tragen die Anbieterdaten einer natuerlichen Person und laufen seit
+    // dem 02.09.2026 auf noindex (siehe das jeweilige layout.tsx). Eine Seite,
+    // die nicht in den Index soll, gehoert nicht in die Sitemap. Erreichbar
+    // bleiben sie ueber die Fusszeile, das verlangt Paragraf 5 DDG.
     { url: `${baseUrl}/gdpr/`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.4 },
   ];
 }
