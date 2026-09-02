@@ -22,7 +22,7 @@ from typing import Dict, Any, Optional
 import json
 import logging
 import asyncpg
-from dependencies import get_current_user, rate_limit
+from dependencies import get_current_user, rate_limit, get_client_ip
 
 from compliance_engine.secure_deployment import (
     DeployFile,
@@ -162,7 +162,10 @@ async def apply_fix(
         success=True,
         backup_id=ergebnis.backup_id,
         backup_location="db://fix_backups.file_contents",
-        ip_address=request.client.host if request.client else None,
+        # Hinter nginx ist request.client.host immer die Gateway-IP. Ein
+        # Audit-Eintrag, der bei jeder Auslieferung dieselbe interne Adresse
+        # traegt, sagt nicht, wer den Fix ausgeloest hat.
+        ip_address=get_client_ip(request),
         user_agent=request.headers.get("user-agent"),
         user_confirmed=True,
         metadata={"target_path": apply_request.target_path},
@@ -241,7 +244,7 @@ async def rollback_fix(
         deployment_method=backup["deployment_method"],
         success=True,
         rollback_result={"files_restored": pfade},
-        ip_address=request.client.host if request.client else None,
+        ip_address=get_client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
 

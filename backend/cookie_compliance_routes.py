@@ -265,8 +265,14 @@ class ConsentLog(BaseModel):
     language: str = Field(default="de", max_length=10)
     banner_shown: bool = True
     user_agent: Optional[str] = None
-    ip_address: Optional[str] = None  # Will be hashed
     device_fingerprint: Optional[str] = None  # Privacy-friendly alternative to IP
+
+    # ip_address war hier ein Feld, das der Client mitschicken konnte, und
+    # log_consent hat es der selbst ermittelten Adresse vorgezogen. Damit
+    # bestimmte der Einwilligende, was im Nachweis ueber ihn steht. Das Feld ist
+    # entfernt statt stillschweigend ignoriert: wer es weiter schickt, soll
+    # nicht glauben, es habe Wirkung. Das ausgelieferte Banner-Skript
+    # (widgets/cookie_banner_v2.js) hat es nie geschickt.
 
     @validator('site_id', 'visitor_id')
     def validate_ids(cls, v):
@@ -545,12 +551,17 @@ async def log_consent(
         if not await check_rate_limit(consent.site_id):
             raise HTTPException(status_code=429, detail="Rate limit exceeded: max 100 consents per minute per site")
 
-        # Get IP and hash it
-        ip_address = consent.ip_address or get_client_ip(request)
+        # Die IP bestimmt der Server, nicht der Einwilligende. Vorher stand hier
+        # `consent.ip_address or ...`: ein Feld aus dem Request-Body, das Vorrang
+        # hatte. Ein Nachweis, in den der Betroffene selbst hineinschreibt, ist
+        # gegenueber der Aufsicht wertlos.
+        ip_address = get_client_ip(request)
         ip_hash = hash_ip_address(ip_address) if ip_address else None
         
-        # Get user agent (AUDIT-03: DSGVO-compliant truncation)
-        raw_ua = consent.user_agent or request.headers.get("User-Agent", "")
+        # Ebenso der User-Agent: der Header ist das, was der Server tatsaechlich
+        # gesehen hat. consent.user_agent bleibt nur der Rueckfall, wenn kein
+        # Header ankommt, statt wie bisher die bevorzugte Quelle zu sein.
+        raw_ua = request.headers.get("User-Agent") or consent.user_agent or ""
         user_agent = truncate_user_agent(raw_ua)  # AUDIT-03: DSGVO-compliant truncation
         
         # Get banner config ID (instead of revision)

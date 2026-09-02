@@ -95,7 +95,7 @@ import website_routes  # Website management routes
 import stripe_routes  # NEW: Freemium Stripe integration
 import user_routes  # User profile & domain locks
 from database_service import db_service
-from dependencies import get_current_user, rate_limit
+from dependencies import get_current_user, rate_limit, get_client_ip
 from email_service import email_service
 from news_service import NewsService
 from risk_calculator import RiskCalculator
@@ -1716,9 +1716,11 @@ async def protokolliere_fix_freigabe(user_id, job_id, request_body: "CreateFixJo
     Ein fehlender Nachweis ist ein Mangel, ein blockierter Fix ist ein Ausfall.
     """
     try:
-        weitergereicht = http_request.headers.get("x-forwarded-for", "")
-        ip = weitergereicht.split(",")[0].strip() if weitergereicht else (
-            http_request.client.host if http_request.client else None)
+        # Kein ungeprueftes X-Forwarded-For: der Header ist frei setzbar, und
+        # dieser Eintrag ist der Beleg dafuer, dass der Kunde den Hinweis nach
+        # Ziffer 8 AGB gesehen hat. Ein faelschbarer Beleg stuetzt kein
+        # Mitverschulden nach Paragraf 254 BGB. get_client_ip prueft den Proxy.
+        ip = get_client_ip(http_request)
 
         async with db_pool.acquire() as connection:
             await connection.execute(

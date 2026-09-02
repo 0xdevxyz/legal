@@ -124,6 +124,9 @@ async def init_user_limits(user_id: int, plan_type: str):
             logger.info(f"User limits initialized for user {user_id} with plan {plan_type}")
 
 
+from dependencies import get_client_ip as _besucher_ip
+
+
 async def protokolliere_vertragsannahme(user_id: int, email: str, request: Request,
                                         unternehmer_bestaetigt: bool,
                                         agb_version: Optional[str]) -> None:
@@ -135,11 +138,12 @@ async def protokolliere_vertragsannahme(user_id: int, email: str, request: Reque
     ist ein Ausfall.
     """
     try:
-        # Hinter dem Proxy steht die echte Adresse im ersten Eintrag von
-        # X-Forwarded-For, request.client.host waere sonst immer der Gateway.
-        weitergereicht = request.headers.get("x-forwarded-for", "")
-        ip = weitergereicht.split(",")[0].strip() if weitergereicht else (
-            request.client.host if request.client else None)
+        # X-Forwarded-For darf nicht ungeprueft uebernommen werden: den Header
+        # setzt der Client selbst. Wer ihn faelscht, schreibt sich eine beliebige
+        # Adresse in den Nachweis der AGB-Annahme, und ein Nachweis, den der
+        # Nachweispflichtige nicht kontrolliert, traegt vor Gericht nichts.
+        # get_client_ip glaubt ihm nur hinter einem Proxy aus TRUSTED_PROXIES.
+        ip = _besucher_ip(request)
 
         async with db_pool.acquire() as conn:
             await conn.execute(
