@@ -15,7 +15,7 @@ import hmac
 import os
 import re
 import httpx
-from dependencies import require_admin
+from dependencies import require_admin, get_client_ip
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from database_service import db_service
@@ -35,6 +35,14 @@ _MAX_FORM_AGE_SECONDS = 6 * 3600
 TURNSTILE_SECRET = os.getenv("TURNSTILE_SECRET", "")
 TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
+# Early-Access-Kontingent. "Nur 100 Plaetze" ist eine Werbeaussage und muss
+# gedeckt sein: der Zaehler unten liest echte Zeilen, keine Schaetzung.
+EARLY_ACCESS_PLAETZE = int(os.getenv("EARLY_ACCESS_PLAETZE", "100"))
+
+# Fassung des Angebots, das auf der Kampagnenseite steht. Wird je Anmeldung
+# mitgeschrieben, damit spaeter belegbar ist, was wem zugesagt wurde.
+EARLY_ACCESS_ANGEBOT = os.getenv("EARLY_ACCESS_ANGEBOT", "ea100-35eur-12m")
+
 logger = logging.getLogger(__name__)
 
 lead_router = APIRouter(prefix="/api/leads", tags=["leads"])
@@ -52,6 +60,16 @@ class WaitlistJoinRequest(BaseModel):
     source: Optional[str] = "early-access"
     form_ts: Optional[int] = None          # Zeitfalle, ms seit Epoch (clientseitig gesetzt)
     turnstile_token: Optional[str] = None  # cf-turnstile-response
+
+    # Herkunft. Ohne diese Felder landet jede Anmeldung im selben Topf und eine
+    # bezahlte Kampagne laesst sich nicht auswerten.
+    campaign: Optional[str] = None
+    utm_source: Optional[str] = None
+    utm_medium: Optional[str] = None
+    utm_campaign: Optional[str] = None
+    utm_content: Optional[str] = None
+    utm_term: Optional[str] = None
+    landing_path: Optional[str] = None
 
     @validator("name")
     def validate_name(cls, v):
@@ -76,10 +94,39 @@ class WaitlistJoinRequest(BaseModel):
 
     @validator("source")
     def validate_source(cls, v):
-        # "complyo.de" stand hier doppelt — Set-Duplikat ohne Wirkung, bereinigt.
-        allowed = {"early-access", "complyo.de", "landing"}
-        if v not in allowed:
-            return "early-access"
+        """Saeubert die Quelle, statt sie zu verwerfen.
+
+        Vorher stand hier eine Allowlist aus drei Werten und alles andere fiel
+        still auf "early-access" zurueck. Fuer eine Anzeigenkampagne ist das
+        genau das falsche Verhalten: die Information, welche Seite den Lead
+        gebracht hat, ging dabei verloren. Statt einer Allowlist begrenzt jetzt
+        ein Zeichensatz, was in die Spalte darf - das haelt Fremdeingaben
+        genauso zuverlaessig heraus, ohne echte Quellen wegzuwerfen.
+        """
+        return _sauberer_kurztext(v, 40) or "early-access"
+
+    @validator("campaign", "utm_source", "utm_medium", "utm_campaign",
+               "utm_content", "utm_term")
+    def validate_herkunft(cls, v):
+        return _sauberer_kurztext(v, 120)
+
+    @validator("landing_path")
+    def validate_landing_path(cls, v):
+        """Nur ein Pfad auf der eigenen Seite.
+
+        Der Wert steuert nach der Bestaetigung ein Redirect. Ohne diese Pruefung
+        waere das eine offene Weiterleitung: ein praeparierter Link koennte den
+        Bestaetigungsklick auf eine fremde Domain schicken. Deshalb muss der
+        Wert mit genau einem Schraegstrich beginnen - "https://boese.example"
+        faellt damit raus, und der Lookahead sperrt zusaetzlich "//boese":
+        zwei Schraegstriche waeren eine protokollrelative URL, die der Browser
+        als fremde Domain aufloest, obwohl der Wert wie ein Pfad aussieht.
+        """
+        if not v:
+            return None
+        v = v.strip()[:200]
+        if not re.match(r'^/(?!/)[A-Za-z0-9/_\-]*$', v):
+            return None
         return v
 
 
@@ -91,6 +138,24 @@ class WaitlistJoinResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _sauberer_kurztext(v, max_len: int):
+    """Laesst durch, was in eine Herkunftsspalte gehoert, und wirft den Rest weg.
+
+    Google Ads und Meta haengen ihre Parameter ungefiltert an die Ziel-URL, und
+    die landen von dort in der Datenbank. Erlaubt sind deshalb nur Zeichen, die
+    in einer Kampagnenkennung vorkommen; alles andere - Anfuehrungszeichen,
+    spitze Klammern, Zeilenumbrueche - faellt heraus, bevor es gespeichert und
+    spaeter im Admin-Bereich wieder angezeigt wird.
+
+    Rueckgabe None statt Leerstring: die Spalten sind nullable, und "nicht
+    angegeben" soll sich in der Auswertung von "leer uebermittelt" unterscheiden.
+    """
+    if v is None:
+        return None
+    v = re.sub(r'[^A-Za-z0-9._\-]', '', str(v).strip())[:max_len]
+    return v or None
+
 
 def _hash_ip(ip: str) -> str:
     salt = os.getenv("SECRET_SALT", "complyo-salt-2026")
@@ -194,7 +259,14 @@ async def join_waitlist(
     if payload.website:
         return Response(status_code=204)
 
-    client_ip = http_request.client.host if http_request.client else "0.0.0.0"
+    # get_client_ip statt request.client.host: hinter nginx ist letzteres immer
+    # die Gateway-IP. Rate-Limit und ip_hash haetten dann fuer ALLE Besucher
+    # denselben Wert — nach drei Anmeldungen in zehn Minuten waere das Formular
+    # fuer jeden weiteren Besucher mit 429 dicht. Bei bezahltem Traffic faellt
+    # das erst auf, wenn die Anzeigen schon laufen. Genau dieser Fehler hat am
+    # 12.08.2026 den Landing-Scanner lahmgelegt; der Helfer kennt seither
+    # TRUSTED_PROXIES und meldet eine unbekannte Proxy-IP von sich aus.
+    client_ip = get_client_ip(http_request)
     ip_hash = _hash_ip(client_ip)
     user_agent = http_request.headers.get("user-agent", "")[:500]
 
@@ -219,11 +291,11 @@ async def join_waitlist(
     now = datetime.now(timezone.utc)
 
     try:
-        existing = await db_service.execute_query(
-            "SELECT id, confirmed_at FROM waitlist_leads WHERE email = $1",
-            payload.email.lower(),
-            fetch_one=True,
-        )
+        async with db_service.get_connection() as conn:
+            existing = await conn.fetchrow(
+                "SELECT id, confirmed_at FROM waitlist_leads WHERE email = $1",
+                payload.email.lower(),
+            )
 
         if existing:
             logger.info(f"Waitlist duplicate for {payload.email}")
@@ -232,25 +304,41 @@ async def join_waitlist(
                 message="Diese E-Mail steht bereits auf der Warteliste.",
             )
 
-        await db_service.execute_query(
-            """
-            INSERT INTO waitlist_leads
-                (email, name, phone, consent_given_at, confirm_token,
-                 confirm_token_expires_at, source, ip_hash, user_agent, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            """,
-            payload.email.lower(),
-            payload.name,
-            payload.phone,
-            now,
-            confirm_token,
-            token_expires,
-            payload.source or "early-access",
-            ip_hash,
-            user_agent,
-            now,
-            fetch_one=False,
-        )
+        # angebot kommt bewusst NICHT aus dem Request: der Preis, der zugesagt
+        # wird, ist eine Servereigenschaft. Kaeme er vom Client, koennte sich
+        # jeder ein eigenes Angebot in die Datenbank schreiben.
+        angebot = EARLY_ACCESS_ANGEBOT if payload.campaign else None
+
+        async with db_service.get_connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO waitlist_leads
+                    (email, name, phone, consent_given_at, confirm_token,
+                     confirm_token_expires_at, source, ip_hash, user_agent,
+                     created_at, campaign, utm_source, utm_medium, utm_campaign,
+                     utm_content, utm_term, landing_path, angebot)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                        $11, $12, $13, $14, $15, $16, $17, $18)
+                """,
+                payload.email.lower(),
+                payload.name,
+                payload.phone,
+                now,
+                confirm_token,
+                token_expires,
+                payload.source or "early-access",
+                ip_hash,
+                user_agent,
+                now,
+                payload.campaign,
+                payload.utm_source,
+                payload.utm_medium,
+                payload.utm_campaign,
+                payload.utm_content,
+                payload.utm_term,
+                payload.landing_path,
+                angebot,
+            )
 
         frontend_url = os.getenv("FRONTEND_URL", "https://complyo.de")
         confirm_url = f"{frontend_url}/api/leads/waitlist/confirm?token={confirm_token}"
@@ -262,12 +350,26 @@ async def join_waitlist(
             confirm_url,
         )
 
+        # Herkunft in einer Zeile, damit die Meldung ohne Datenbankblick sagt,
+        # welche Anzeige den Eintrag gebracht hat.
+        herkunft = " / ".join(
+            t for t in (
+                payload.campaign,
+                payload.utm_source,
+                payload.utm_medium,
+                payload.utm_campaign,
+                payload.utm_content,
+            ) if t
+        )
+
         background_tasks.add_task(
             email_service.send_waitlist_admin_notification,
             payload.email.lower(),
             payload.name or "",
             payload.phone or "",
             payload.source or "early-access",
+            herkunft,
+            angebot or "",
         )
 
         logger.info(f"Waitlist registration pending confirmation: {payload.email}")
@@ -286,6 +388,40 @@ async def join_waitlist(
         )
 
 
+@lead_router.get("/waitlist/plaetze")
+async def waitlist_plaetze():
+    """Wie viele Early-Access-Plaetze noch frei sind.
+
+    Bewusst ohne Auth, im Unterschied zu /api/leads/stats: dort standen
+    Geschaeftszahlen offen im Netz, hier geht genau eine Zahl heraus, die
+    ohnehin gross auf der Werbeseite steht. Sie muss oeffentlich sein, weil die
+    Seite sie ungeloggt anzeigen soll - und sie muss aus der Datenbank kommen,
+    weil "nur noch X Plaetze" sonst eine unbelegte Werbeaussage waere.
+
+    Gezaehlt werden vergebene Plaetze, nicht Anmeldungen: die Gesamtzahl der
+    Leads ist eine Geschaeftszahl und bleibt drin.
+    """
+    try:
+        async with db_service.get_connection() as conn:
+            vergeben = int(
+                await conn.fetchval(
+                    "SELECT COUNT(*) FROM waitlist_leads WHERE platz_nr IS NOT NULL"
+                )
+                or 0
+            )
+    except Exception as e:
+        # Der Zaehler darf die Seite nicht mitreissen. Faellt er aus, zeigt das
+        # Frontend das Angebot ohne Zahl an, statt gar nichts anzuzeigen.
+        logger.error(f"Waitlist-Plaetze nicht lesbar: {e}", exc_info=True)
+        raise HTTPException(status_code=503, detail="Zaehler nicht verfuegbar")
+
+    return {
+        "gesamt": EARLY_ACCESS_PLAETZE,
+        "vergeben": vergeben,
+        "frei": max(0, EARLY_ACCESS_PLAETZE - vergeben),
+    }
+
+
 @lead_router.get("/waitlist/confirm")
 async def confirm_waitlist(token: str):
     """
@@ -293,38 +429,65 @@ async def confirm_waitlist(token: str):
     """
     frontend_url = os.getenv("FRONTEND_URL", "https://complyo.de")
     try:
-        lead = await db_service.execute_query(
-            """
-            SELECT id, confirm_token_expires_at, confirmed_at
-            FROM waitlist_leads
-            WHERE confirm_token = $1
-            """,
-            token,
-            fetch_one=True,
-        )
+        async with db_service.get_connection() as conn:
+            lead = await conn.fetchrow(
+                """
+                SELECT id, confirm_token_expires_at, confirmed_at, angebot,
+                       landing_path, platz_nr
+                FROM waitlist_leads
+                WHERE confirm_token = $1
+                """,
+                token,
+            )
 
         if not lead:
             logger.warning(f"Waitlist confirm: unknown token {token[:8]}…")
             return RedirectResponse(url=f"{frontend_url}/?confirmed=0", status_code=302)
 
-        expires_at = lead.get("confirm_token_expires_at")
+        # Zurueck auf die Seite, von der die Anmeldung kam. Vorher landete jeder
+        # auf der Startseite - wer ueber eine Anzeige kam, sah nach dem Klick
+        # etwas anderes als das, wofuer er sich angemeldet hatte. Der Pfad ist
+        # beim Speichern gegen offene Weiterleitungen geprueft worden.
+        ziel = lead["landing_path"] or "/"
+
+        expires_at = lead["confirm_token_expires_at"]
         if expires_at and datetime.now(timezone.utc) > expires_at:
             logger.warning(f"Waitlist confirm: expired token {token[:8]}…")
-            return RedirectResponse(url=f"{frontend_url}/?confirmed=0", status_code=302)
+            return RedirectResponse(url=f"{frontend_url}{ziel}?confirmed=0", status_code=302)
 
-        await db_service.execute_query(
-            """
-            UPDATE waitlist_leads
-            SET confirmed_at = $1, confirm_token = NULL, confirm_token_expires_at = NULL
-            WHERE id = $2
-            """,
-            datetime.now(timezone.utc),
-            lead["id"],
-            fetch_one=False,
-        )
+        # Platznummer erst hier, nicht schon bei der Anmeldung: ein Eintrag, der
+        # nie bestaetigt wird, darf keinen der 100 Plaetze blockieren.
+        # nextval ist race-frei, zwei gleichzeitige Bestaetigungen koennen also
+        # nicht dieselbe Nummer ziehen. Wer ueber dem Kontingent liegt, bleibt
+        # auf der Warteliste, bekommt aber keinen Platz - und damit auch nicht
+        # den zugesagten Preis.
+        platz_nr = None
+        async with db_service.get_connection() as conn:
+            if lead["angebot"]:
+                gezogen = int(
+                    await conn.fetchval("SELECT nextval('waitlist_platz_seq')") or 0
+                )
+                if 0 < gezogen <= EARLY_ACCESS_PLAETZE:
+                    platz_nr = gezogen
 
-        logger.info(f"Waitlist confirmed for lead {lead['id']}")
-        return RedirectResponse(url=f"{frontend_url}/?confirmed=1", status_code=302)
+            await conn.execute(
+                """
+                UPDATE waitlist_leads
+                SET confirmed_at = $1, confirm_token = NULL,
+                    confirm_token_expires_at = NULL,
+                    platz_nr = COALESCE(platz_nr, $3)
+                WHERE id = $2
+                """,
+                datetime.now(timezone.utc),
+                lead["id"],
+                platz_nr,
+            )
+
+        logger.info(f"Waitlist confirmed for lead {lead['id']} (Platz {platz_nr})")
+        ziel_url = f"{frontend_url}{ziel}?confirmed=1"
+        if platz_nr:
+            ziel_url += f"&platz={platz_nr}"
+        return RedirectResponse(url=ziel_url, status_code=302)
 
     except HTTPException:
         raise

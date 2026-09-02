@@ -7,6 +7,38 @@
 
 ---
 
+## [2026-09-02]
+
+### Frontend
+- Kampagnen-Landingpage `/early-access` (`landing-react/src/app/early-access/`, `src/components/kampagne/`): Early-Access-Warteliste mit Anlass BFSG, Angebot 35 € statt 49 € für die ersten 100 bestätigten Anmeldungen. Bewusst auf `noindex` — ein befristetes Sonderangebot soll nicht dauerhaft in der Suche stehen und den regulären Preis untergraben
+- `WartelistenFormular` wertet eine `204`-Antwort nicht länger als Erfolg: bei ausgelöster Bot-Abwehr antwortet der Endpunkt still mit leerem Rumpf, das alte `JoinEarlySection` zeigte darauf eine Bestätigung an und der Besucher wartete auf eine Mail, die nie kam
+- Formular wartet vor dem Absenden bis zur 4-Sekunden-Marke der serverseitigen Zeitfalle, statt den Eintrag zu verlieren — Browser-Autofill unterschreitet sie mühelos
+- `PlatzZaehler` liest den Stand über `/api/leads/waitlist/plaetze` aus der Datenbank; fällt der Zähler aus, wird keine Zahl gezeigt statt einer geratenen
+
+### Backend
+- **Waitlist-Strecke war vollständig tot**: `lead_routes.py` rief durchgehend `db_service.execute_query(...)` auf, eine Methode, die `DatabaseService` nicht hat. Jede Anmeldung wäre in einen `AttributeError` und damit in einen 500er gelaufen. Auf das echte Muster `async with db_service.get_connection()` mit asyncpg umgestellt
+- **Rate-Limit galt global statt pro Besucher**: `join_waitlist` las `request.client.host`, hinter nginx immer die Gateway-IP — nach drei Anmeldungen in zehn Minuten hätte das Formular jedem weiteren Besucher `429` geantwortet. Jetzt über `get_client_ip` (respektiert `TRUSTED_PROXIES`), derselbe Fehler wie beim Landing-Scanner am 12.08.2026
+- `source` wird gesäubert statt gegen eine Allowlist aus drei Werten verworfen; alles andere fiel vorher still auf `early-access` zurück und machte bezahlten Traffic nicht auswertbar
+- Herkunft je Anmeldung: `campaign`, `utm_*` und `landing_path` werden aufgenommen; `landing_path` gegen offene Weiterleitung geprüft (auch das protokollrelative `//fremde.domain`), weil er das Redirect nach dem Opt-In-Klick steuert
+- Double-Opt-In leitet auf die Ursprungsseite zurück statt immer auf `/` — wer über eine Anzeige kam, landete nach dem Klick auf etwas Fremdem
+- Neuer offener Endpunkt `GET /api/leads/waitlist/plaetze` (Kontingent, vergeben, frei); bewusst in `LEADS_OEFFENTLICH_GEWOLLT`, gibt nur die Zahl vergebener Plätze heraus, nicht die Lead-Gesamtzahl
+- Platznummern aus `waitlist_platz_seq`, vergeben erst bei der Bestätigung: ein unbestätigter Eintrag darf keinen der 100 Plätze blockieren. `angebot` ist eine Servereigenschaft und wird nicht aus dem Request übernommen
+- `send_waitlist_admin_notification` trägt Herkunft und zugesagtes Angebot und meldet eine fehlende `ADMIN_NOTIFY_EMAIL` im Log, statt still mit `return False` auszusteigen
+- Migration `0018_waitlist_kampagne`: Herkunfts- und Angebotsspalten auf `waitlist_leads`, Sequence `waitlist_platz_seq`
+
+### Tests
+- `tests/test_waitlist.py`: Mocks bildeten mit `mock_db.execute_query` eine Methode nach, die es nie gab — MagicMock erfindet jedes Attribut, deshalb war die Suite grün, während die Strecke in Produktion tot war. Auf das echte Verbindungsmuster umgestellt
+- Neu `TestDbServiceVertrag`: vergleicht die in `lead_routes` aufgerufenen `db_service`-Methoden gegen die echte Klasse — genau dieser Test hätte den Ausfall gefangen
+- Neu `TestEchteBesucherIp`, `TestHerkunft` sowie Prüfungen auf offene Weiterleitung im `landing_path`
+- `test_source_allowlist_ohne_duplikat` durch `test_herkunft_wird_gesaeubert_statt_verworfen` ersetzt (die Allowlist ist bewusst entfallen)
+
+### Infrastruktur
+- `docker-compose.yml`: `ADMIN_NOTIFY_EMAIL` wird an das Backend durchgereicht — stand in der `.env`, kam nie im Container an, und die Benachrichtigung stieg deshalb still aus. Dazu `EARLY_ACCESS_PLAETZE` und `EARLY_ACCESS_ANGEBOT`
+- backend und landing neu gebaut und deployt; Migration `0018` gegen Produktion gelaufen; Testsuite im Backend-Image: 1579 passed, 66 skipped
+- Anmeldung und Double-Opt-In über die öffentliche Domain durchgespielt (Herkunft in der Datenbank, Rückleitung auf `/early-access/`, Platz 1 vergeben), Testdaten anschließend entfernt und Sequence zurückgesetzt
+
+---
+
 ## [2026-08-11]
 
 ### Backend

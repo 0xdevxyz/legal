@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ComplianceAnalysis, ApiResponse, WaitlistJoinRequest, WaitlistJoinResponse } from '@/types/api';
+import { ComplianceAnalysis, ApiResponse, WaitlistJoinRequest, WaitlistJoinResponse, WaitlistPlaetze } from '@/types/api';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de',
@@ -123,6 +123,13 @@ export const complianceApi = {
 export const leadsApi = {
   joinWaitlist: async (payload: WaitlistJoinRequest): Promise<WaitlistJoinResponse> => {
     const response = await api.post<WaitlistJoinResponse>('/api/leads/waitlist', payload);
+    return response.data;
+  },
+
+  // Kurzer Timeout: der Zaehler ist Beiwerk. Antwortet er nicht, soll die Seite
+  // das Angebot ohne Zahl zeigen und nicht auf einen Ladebalken warten.
+  waitlistPlaetze: async (): Promise<WaitlistPlaetze> => {
+    const response = await api.get<WaitlistPlaetze>('/api/leads/waitlist/plaetze', { timeout: 5000 });
     return response.data;
   },
 };

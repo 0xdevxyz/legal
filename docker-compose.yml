@@ -116,6 +116,18 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SENDER_EMAIL=${SENDER_EMAIL:-noreply@complyo.de}
       - SENDER_NAME=${SENDER_NAME:-Complyo Compliance}
+      # Empfaenger der internen Benachrichtigung bei jeder Wartelisten-
+      # Anmeldung. Stand in der .env, wurde aber nie durchgereicht — und
+      # send_waitlist_admin_notification steigt ohne Adresse still mit
+      # `return False` aus. Die Mails an die Interessenten gingen also raus,
+      # die Meldung an uns nie, ohne eine Zeile im Log.
+      - ADMIN_NOTIFY_EMAIL=${ADMIN_NOTIFY_EMAIL:-}
+      # Early-Access-Kampagne (/early-access). PLAETZE ist das Kontingent, das
+      # die Seite oeffentlich zusagt; ANGEBOT ist die Fassung des zugesagten
+      # Preises und wird je Anmeldung mitgeschrieben. Beides aendern heisst,
+      # eine oeffentliche Zusage zu aendern — nicht beilaeufig anfassen.
+      - EARLY_ACCESS_PLAETZE=${EARLY_ACCESS_PLAETZE:-100}
+      - EARLY_ACCESS_ANGEBOT=${EARLY_ACCESS_ANGEBOT:-ea100-35eur-12m}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - METRICS_TOKEN=${METRICS_TOKEN:-}
       - VIRTUAL_HOST=api.complyo.de

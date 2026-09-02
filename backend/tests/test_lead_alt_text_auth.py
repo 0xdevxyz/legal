@@ -44,6 +44,12 @@ LEADS_OEFFENTLICH_GEWOLLT = {
     "/waitlist",
     # Bestätigungslink aus der Opt-In-Mail. Der Token IST die Auth.
     "/waitlist/confirm",
+    # Zähler der freien Early-Access-Plätze. Die Kampagnenseite zeigt ihn
+    # ungeloggt an, und er MUSS aus der Datenbank kommen: "nur noch X von 100
+    # Plätzen" ist sonst eine unbelegte Werbeaussage (§ 5 UWG). Herausgegeben
+    # wird ausschliesslich die Zahl vergebener Plätze — die Gesamtzahl der
+    # Leads bleibt in /stats und damit hinter require_admin.
+    "/waitlist/plaetze",
     # Landing-Formular: Lead + Analysedaten, Double-Opt-In folgt per Mail.
     "/collect",
     # Verifizierungslink aus der Mail. Der Token IST die Auth.
@@ -211,7 +217,7 @@ class TestLeadRoutes:
         """Selbstschutz: der Wächter ist wertlos, wenn er Routen übersieht."""
         gefunden = {pfad for _, pfad, _, _, _ in _routen(_LEAD_FILE)}
         erwartet = {
-            "/waitlist", "/waitlist/confirm", "/collect",
+            "/waitlist", "/waitlist/confirm", "/waitlist/plaetze", "/collect",
             "/verify/{token}", "/stats", "/unsubscribe",
         }
         assert erwartet <= gefunden, f"Parser übersieht Routen: {sorted(erwartet - gefunden)}"
@@ -246,14 +252,39 @@ class TestLeadRoutes:
         )
         assert "_verify_unsubscribe_token" in quelltext, "Token-Prüfung im Unsubscribe fehlt"
 
-    def test_source_allowlist_ohne_duplikat(self):
-        """Bugfix: 'complyo.de' stand doppelt in der allowed-Menge."""
+    def test_herkunft_wird_gesaeubert_statt_verworfen(self):
+        """Die frühere Allowlist aus drei Werten ist einem Sanitizer gewichen.
+
+        Grund für den Wechsel: jede Quelle ausserhalb der Liste fiel still auf
+        "early-access" zurück. Für eine bezahlte Kampagne war das der teuerste
+        denkbare Standardwert — man sah, DASS jemand kam, nie aus welcher
+        Anzeige. Der Test hält fest, dass die Liste nicht zurückkehrt und die
+        Säuberung an ihrer Stelle steht.
+        """
         with open(_LEAD_FILE, encoding="utf-8") as fh:
             src = fh.read()
-        m = re.search(r'allowed = \{([^}]+)\}', src)
-        assert m, "allowed-Menge in validate_source nicht gefunden"
-        eintraege = [e.strip() for e in m.group(1).split(",") if e.strip()]
-        assert len(eintraege) == len(set(eintraege)), f"Duplikat in allowed: {eintraege}"
+        assert "allowed = {" not in src, (
+            "validate_source hat wieder eine Allowlist — echte Kampagnenquellen "
+            "gehen damit still verloren"
+        )
+        assert "_sauberer_kurztext" in src, "Säuberung der Herkunftsfelder fehlt"
+
+    def test_landing_path_ist_gegen_offene_weiterleitung_geprueft(self):
+        """Der gespeicherte Pfad steuert ein Redirect nach dem Opt-In-Klick.
+
+        Ohne Prüfung wäre das eine offene Weiterleitung: ein präparierter Link
+        schickt den Bestätigungsklick auf eine fremde Domain. Zwei Fälle müssen
+        fallen — "https://..." und das unauffälligere "//fremde.domain", das
+        der Browser als protokollrelative URL auflöst.
+        """
+        with open(_LEAD_FILE, encoding="utf-8") as fh:
+            src = fh.read()
+        muster = re.search(r"re\.match\(r'(\^/\(\?!/\)[^']+)'", src)
+        assert muster, "Pfadprüfung in validate_landing_path nicht gefunden"
+        pruef = re.compile(muster.group(1))
+        assert pruef.match("/early-access"), "eigener Pfad wird fälschlich abgelehnt"
+        assert not pruef.match("//fremde.domain"), "protokollrelative URL kommt durch"
+        assert not pruef.match("https://fremde.domain"), "absolute URL kommt durch"
 
 
 class TestAltTextRoutes:

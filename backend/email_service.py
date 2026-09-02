@@ -706,11 +706,25 @@ Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
             logger.error(f"Failed to send waitlist confirmation to {email}: {e}")
             return False
 
-    def send_waitlist_admin_notification(self, email: str, name: str, phone: str, source: str) -> bool:
+    def send_waitlist_admin_notification(
+        self, email: str, name: str, phone: str, source: str,
+        herkunft: str = "", angebot: str = "",
+    ) -> bool:
         """
         Interne Benachrichtigung an den Admin bei jeder neuen Waitlist-Anmeldung
+
+        `herkunft` traegt Kampagne und UTM-Parameter. Ohne sie steht in der
+        Meldung nur "landing", und bei laufenden Anzeigen ist genau die Frage
+        offen, welche davon den Eintrag gebracht hat.
         """
         if not self.admin_notify_email:
+            # Fehlt die Adresse, gibt es niemanden zu benachrichtigen. Das ist
+            # eine Konfigurationsluecke und kein Normalfall — deshalb sichtbar
+            # im Log statt stillem return False.
+            logger.warning(
+                "ADMIN_NOTIFY_EMAIL ist nicht gesetzt — Waitlist-Anmeldung "
+                f"von {email} wird nicht gemeldet"
+            )
             return False
         try:
             display_name = name or "(kein Name)"
@@ -729,6 +743,8 @@ Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
       <tr><td style="padding:6px 0;color:#64748b;">Name</td><td style="padding:6px 0;">{display_name}</td></tr>
       <tr><td style="padding:6px 0;color:#64748b;">Telefon</td><td style="padding:6px 0;">{display_phone}</td></tr>
       <tr><td style="padding:6px 0;color:#64748b;">Quelle</td><td style="padding:6px 0;">{source}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;">Herkunft</td><td style="padding:6px 0;">{herkunft or "(direkt)"}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;">Angebot</td><td style="padding:6px 0;">{angebot or "(keines)"}</td></tr>
     </table>
     <p style="font-size:12px;color:#94a3b8;margin-top:16px;">
       Double-Opt-In ausstehend – Bestätigungsmail wurde an den Nutzer gesendet.
@@ -742,6 +758,8 @@ E-Mail:   {email}
 Name:     {display_name}
 Telefon:  {display_phone}
 Quelle:   {source}
+Herkunft: {herkunft or "(direkt)"}
+Angebot:  {angebot or "(keines)"}
 
 Double-Opt-In ausstehend.
 """
