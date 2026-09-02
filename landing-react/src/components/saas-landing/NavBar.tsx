@@ -3,8 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { Menu, X } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de';
-
 // "Preise" ist vorerst raus. Der Anker /#preise zeigte auf die Preistabelle
 // der alten Startseite; seit dort die Early-Access-Seite steht, ginge er ins
 // Leere. Auf /produkt umzubiegen waere schlimmer: dort stehen die Buchen-
@@ -47,10 +45,11 @@ export default function NavBar() {
             ))}
           </div>
 
+          {/* Der Zugang zum Backoffice ist raus, solange der Verkauf nicht
+              offen ist: der Weg fuehrte in ein Dashboard, das noch niemand
+              gebucht haben kann. Bestehende Zugaenge erreichen es weiterhin
+              direkt unter app.complyo.de. Zurueck, wenn Stripe live ist. */}
           <div className="hidden lg:flex items-center gap-4">
-            <a href={`${APP_URL}/login`} className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors">
-              Anmelden
-            </a>
             <a
               href="/#anmeldung"
               className="text-sm bg-blue-700 hover:bg-blue-800 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
@@ -87,13 +86,6 @@ export default function NavBar() {
               </a>
             ))}
             <div className="pt-3 mt-2 border-t border-gray-100 space-y-2">
-              <a
-                href={`${APP_URL}/login`}
-                onClick={() => setOpen(false)}
-                className="block px-2 py-2 text-sm font-medium text-gray-600"
-              >
-                Anmelden
-              </a>
               <a
                 href="/#anmeldung"
                 onClick={() => setOpen(false)}

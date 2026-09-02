@@ -15,6 +15,14 @@
 - Formular wartet vor dem Absenden bis zur 4-Sekunden-Marke der serverseitigen Zeitfalle, statt den Eintrag zu verlieren — Browser-Autofill unterschreitet sie mühelos
 - `PlatzZaehler` liest den Stand über `/api/leads/waitlist/plaetze` aus der Datenbank; fällt der Zähler aus, wird keine Zahl gezeigt statt einer geratenen
 
+### Frontend — Backoffice-Zugang von der Website entfernt
+- „Anmelden" aus Navigation und Fußzeile entfernt (Desktop und mobiles Menü). Der Link führte in ein Dashboard, das mit Stripe im Testmodus niemand gebucht haben kann. Damit steht auf der Website kein einziger Weg mehr in Kauf, Registrierung oder Backoffice — nur noch die Warteliste. Bestehende Zugänge erreichen das Dashboard weiterhin direkt unter `app.complyo.de`
+- Die dadurch ungenutzte Konstante `APP_URL` ist in beiden Komponenten entfallen
+
+### Backend — Betreff der Benachrichtigungen
+- Platznummer nach vorn: `Platz 7 bestätigt: max@firma.de` statt `[complyo] Bestätigt: (kein Name) <max@firma.de> — Platz 7`. Auf dem Handy wurde die Zahl vorher abgeschnitten, also genau die Information, um die es geht
+- Präfix `[complyo]` entfällt — der Absender heißt bereits complyo, und die zehn Zeichen fehlten vorne. `(kein Name)` entfällt ebenfalls: das Formular fragt keinen Namen mehr ab, der Platzhalter stand also immer da. Ist ein Name vorhanden, wird er weiterhin gezeigt
+
 ### Backend — Bot-Abwehr ohne Drittanbieter
 - **Die bisherige Zeitfalle war wirkungslos gegen jeden Bot, der sie kennt**: sie prüfte `form_ts`, einen Zeitstempel, den der Client selbst setzt. Ein Skript schreibt dort „vor zehn Sekunden" hinein und ist durch — gefangen wurden nur Bots, die gar kein `form_ts` schickten
 - Neu `GET /api/leads/waitlist/token`: der Server stellt einen signierten Zeitstempel aus (HMAC über `JWT_SECRET`), den die Anmeldung vorlegen muss. Der Zeitpunkt ist damit nicht mehr frei wählbar, und wer direkt auf den Endpunkt schießt, hat kein gültiges Token. Jedes Token wird nach Gebrauch in Redis gesperrt (`SET NX`), damit eines nicht für viele Anmeldungen reicht; fällt Redis aus, wird durchgelassen statt blockiert — eine kaputte Sperrliste darf keine echten Anmeldungen verschlucken

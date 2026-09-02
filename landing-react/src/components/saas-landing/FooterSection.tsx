@@ -2,8 +2,6 @@
 import React from 'react';
 import { Logo } from '@/components/Logo';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de';
-
 export default function FooterSection() {
   return (
     <footer className="bg-gray-900 text-gray-400 pt-16 pb-8">
@@ -32,7 +30,6 @@ export default function FooterSection() {
                 { label: 'DSGVO-Check', href: '/dsgvo-website-check/' },
                 { label: 'Barrierefreiheit testen', href: '/barrierefreiheit-website-testen/' },
                 { label: 'Ratgeber', href: '/ratgeber/' },
-                { label: 'Anmelden', href: `${APP_URL}/login` },
               ].map((l, i) => (
                 <li key={i}><a href={l.href} className="hover:text-white transition-colors">{l.label}</a></li>
               ))}

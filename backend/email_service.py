@@ -736,9 +736,21 @@ Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
             # abgeschickt hat, die zweite, dass er den Link in der Mail geklickt
             # hat. Erst die zweite ist ein Lead, den man anschreiben darf, und
             # erst sie belegt einen der 100 Plaetze.
+            # Betreff: das Wichtigste zuerst. Vorher stand die Platznummer am
+            # Ende und wurde auf dem Handy abgeschnitten — sichtbar war nur
+            # "[complyo] Bestätigt: (kein Name) <probe…". Das Präfix "[complyo]"
+            # ist ebenfalls weg: der Absender heißt bereits complyo, und die
+            # zehn Zeichen fehlten genau dort, wo die Zahl stehen soll.
+            # Der Name kommt nur noch vor, wenn es einen gibt; das Formular
+            # fragt keinen mehr ab, also stand dort immer "(kein Name)".
+            wer = f"{name.strip()} <{email}>" if name and name.strip() else email
+
             if bestaetigt:
                 platz_text = f"Platz {platz_nr}" if platz_nr else "kein Platz mehr frei"
-                subject = f"[complyo] Bestätigt: {display_name} <{email}> — {platz_text}"
+                subject = (
+                    f"Platz {platz_nr} bestätigt: {wer}" if platz_nr
+                    else f"Bestätigt, kein Platz mehr frei: {wer}"
+                )
                 kopfzeile = "complyo – Wartelisten-Eintrag bestätigt"
                 fusszeile = (
                     f"Double-Opt-In abgeschlossen – {platz_text}."
@@ -747,7 +759,7 @@ Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
                     "der Eintrag steht ohne Preiszusage auf der Liste."
                 )
             else:
-                subject = f"[complyo] Neue Waitlist-Anmeldung: {display_name} <{email}>"
+                subject = f"Neue Anmeldung: {wer}"
                 kopfzeile = "complyo – Neue Waitlist-Anmeldung"
                 fusszeile = (
                     "Double-Opt-In ausstehend – Bestätigungsmail wurde an den Nutzer gesendet."
