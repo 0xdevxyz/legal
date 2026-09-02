@@ -25,19 +25,26 @@
 - Platznummern aus `waitlist_platz_seq`, vergeben erst bei der Bestätigung: ein unbestätigter Eintrag darf keinen der 100 Plätze blockieren. `angebot` ist eine Servereigenschaft und wird nicht aus dem Request übernommen
 - `send_waitlist_admin_notification` trägt Herkunft und zugesagtes Angebot und meldet eine fehlende `ADMIN_NOTIFY_EMAIL` im Log, statt still mit `return False` auszusteigen
 - Migration `0018_waitlist_kampagne`: Herkunfts- und Angebotsspalten auf `waitlist_leads`, Sequence `waitlist_platz_seq`
+- **Einwilligungsnachweis belegte nichts**: `collect_lead` (`POST /api/leads/collect`) und die Verify-Route (`GET /api/leads/verify/{token}`) schrieben `request.client.host` in den DSGVO-Audit-Trail (`consent_ip_address` bzw. `db_service.verify_email`). Hinter nginx ist das immer die Gateway-IP `172.22.0.x`, bei jedem einzelnen Lead stand also dieselbe interne Adresse. Ein Nachweis, der für alle Einwilligungen denselben Wert trägt, zeigt gegenüber der Aufsicht nur, dass die Anfrage durch den eigenen Proxy lief. Beide Stellen jetzt über `get_client_ip` wie `join_waitlist` (respektiert `TRUSTED_PROXIES`)
+- `cookie_compliance_routes.py` hatte eine eigene, ungeprüfte `get_client_ip`, die `X-Forwarded-For` blind übernahm und damit die richtige Fassung aus `dependencies` verdeckte. Diesen Header setzt der Client selbst: das Einwilligungsprotokoll des Cookie-Banners war so fälschbar, und ein fälschbarer Nachweis ist keiner. Die lokale Funktion greift jetzt auf `dependencies.get_client_ip` durch; der Rückgabetyp bleibt `Optional[str]`, damit `log_consent` bei fehlender IP wie bisher auf den Device-Fingerprint ausweicht statt den Wortlaut `unknown` zu hashen
+- `GET /api/cookie-compliance/geo-check` las `request.headers.get('X-Forwarded-For', request.client.host)`: derselbe fälschbare Header, dazu ein `AttributeError`, sobald `request.client` fehlt. Ohne ermittelbare IP wird jetzt nur der Geo-Cache übersprungen, die Länderkennung läuft weiter
 
 ### Tests
 - `tests/test_waitlist.py`: Mocks bildeten mit `mock_db.execute_query` eine Methode nach, die es nie gab — MagicMock erfindet jedes Attribut, deshalb war die Suite grün, während die Strecke in Produktion tot war. Auf das echte Verbindungsmuster umgestellt
 - Neu `TestDbServiceVertrag`: vergleicht die in `lead_routes` aufgerufenen `db_service`-Methoden gegen die echte Klasse — genau dieser Test hätte den Ausfall gefangen
 - Neu `TestEchteBesucherIp`, `TestHerkunft` sowie Prüfungen auf offene Weiterleitung im `landing_path`
 - `test_source_allowlist_ohne_duplikat` durch `test_herkunft_wird_gesaeubert_statt_verworfen` ersetzt (die Allowlist ist bewusst entfallen)
+- Neu `TestEinwilligungsIpImAuditTrail`: prüft an `collect_lead` und der Verify-Route, dass die IP des Besuchers im Nachweis landet, und zwar mit Gegenprobe gegen einen nicht hinterlegten Proxy. Beide Tests fallen gegen den alten Stand (`testclient` statt `203.0.113.7`); die Gegenprobe hält fest, dass ein blindes Übernehmen von `X-Forwarded-For` keine Lösung wäre
+- Neu `TestCookieConsentIpNichtFaelschbar`: schlägt an, sobald in `cookie_compliance_routes.py` wieder ein ungeprüftes `X-Forwarded-For` steht
 
 ### Infrastruktur
 - `docker-compose.yml`: `ADMIN_NOTIFY_EMAIL` wird an das Backend durchgereicht — stand in der `.env`, kam nie im Container an, und die Benachrichtigung stieg deshalb still aus. Dazu `EARLY_ACCESS_PLAETZE` und `EARLY_ACCESS_ANGEBOT`
 - backend und landing neu gebaut und deployt; Migration `0018` gegen Produktion gelaufen; Testsuite im Backend-Image: 1579 passed, 66 skipped
 - Anmeldung und Double-Opt-In über die öffentliche Domain durchgespielt (Herkunft in der Datenbank, Rückleitung auf `/early-access/`, Platz 1 vergeben), Testdaten anschließend entfernt und Sequence zurückgesetzt
+- Testsuite im Backend-Image nach den IP-Korrekturen: 1620 passed, 29 skipped. Die Korrekturen an Lead- und Cookie-Consent-Strecke sind committet, aber noch **nicht deployt** — dafür muss das Backend-Image neu gebaut werden
 
 ### Tech Debt
+- `log_consent` (`POST /api/cookie-compliance/consent`) zieht weiterhin ein vom Client mitgeschicktes `ip_address` der selbst ermittelten IP vor. Damit bleibt der Nachweis von außen beeinflussbar, auch wenn der Rückfall jetzt geprüft ist. Bewusst nicht mit umgestellt, weil das den Vertrag des ausgelieferten Banner-Skripts ändert; gehört vor dem nächsten Widget-Release entschieden
 - `landing-react/src/components/saas-landing/JoinEarlySection.tsx` und die Sicherungskopie `JoinEarlySection.tsx.bak.20260729` gelöscht. Die Sektion war seit `e630896` ("Preise, Navigation und Kaufweg statt Warteliste") aus `EarlyAccessLanding` genommen und danach nirgends mehr eingebunden: kein Import, kein `#waitlist`-Anker, keine Route. Sie trug beide Fehler, die heute in `WartelistenFormular` behoben wurden (`204` als Erfolg gewertet, keine Wartezeit bis zur Zeitfalle), und hätte sie beim nächsten Wiedereinbau zurück in die Seite gebracht. Zwei Formulare gegen denselben Endpunkt zu pflegen war die Ursache der Abweichung, deshalb löschen statt nachziehen: `WartelistenFormular` ist der eine verbleibende Weg auf die Warteliste
 
 ---

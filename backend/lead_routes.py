@@ -535,8 +535,13 @@ async def collect_lead(
     4. Returns success status
     """
     try:
-        # Get client information for GDPR audit trail
-        client_ip = http_request.client.host if http_request.client else "unknown"
+        # Einwilligungsnachweis: hier muss die IP des Besuchers stehen, nicht die
+        # des Gateways. Hinter nginx liefert request.client.host immer 172.22.0.x,
+        # und ein Audit-Trail, in dem bei jedem Lead dieselbe interne Proxy-IP
+        # steht, belegt gar nichts. get_client_ip wertet X-Forwarded-For nur aus,
+        # wenn die Anfrage von einem Proxy aus TRUSTED_PROXIES kommt; dem blanken
+        # Header zu glauben waere das andere Extrem, denn der Client setzt ihn selbst.
+        client_ip = get_client_ip(http_request)
         user_agent = http_request.headers.get("user-agent", "unknown")
         
         # Validate required fields
@@ -657,8 +662,9 @@ async def verify_email(
     3. Returns success page
     """
     try:
-        # Get client information for audit trail
-        client_ip = request.client.host if request.client else "unknown"
+        # Audit-Trail der Double-Opt-In-Bestaetigung, dieselbe Begruendung wie in
+        # collect_lead: hinter nginx ist request.client.host die Gateway-IP.
+        client_ip = get_client_ip(request)
         user_agent = request.headers.get("user-agent", "unknown")
         
         logger.info(f"Processing email verification for token: {token[:8]}...")

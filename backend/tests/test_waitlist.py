@@ -346,3 +346,125 @@ class TestEchteBesucherIp:
             "join_waitlist liest wieder direkt request.client.host; hinter nginx "
             "teilen sich damit alle Besucher ein Rate-Limit"
         )
+
+
+LEAD_PAYLOAD = {
+    "name": "Erika Musterfrau",
+    "email": "erika@example.de",
+    "company": "Musterfirma GmbH",
+    "url": "https://example.de",
+    "analysis_data": {"score": 42},
+    "session_id": "sess-1",
+    "language": "de",
+}
+
+
+class TestEinwilligungsIpImAuditTrail:
+    """Der Einwilligungsnachweis braucht die IP des Besuchers, nicht die des Gateways.
+
+    collect_lead und die Verify-Route schrieben `request.client.host` in den
+    DSGVO-Audit-Trail (consent_ip_address bzw. verify_email). Hinter nginx ist
+    das immer 172.22.0.x. Ein Nachweis, in dem bei jedem einzelnen Lead dieselbe
+    interne Proxy-IP steht, belegt gegenueber der Aufsicht nichts: er zeigt nur,
+    dass die Anfrage durch den eigenen Proxy lief.
+
+    Die Gegenprobe gehoert dazu. X-Forwarded-For blind zu uebernehmen waere
+    genauso wertlos, weil der Client den Header selbst setzt. get_client_ip
+    glaubt ihm nur, wenn die Anfrage von einem Proxy aus TRUSTED_PROXIES kommt.
+    Der TestClient meldet sich als "testclient", das ist hier die Proxy-IP.
+    """
+
+    @patch("lead_routes.email_service")
+    @patch("lead_routes.db_service")
+    def test_collect_speichert_die_besucher_ip(self, mock_db, mock_email, client):
+        mock_db.get_lead_by_email = AsyncMock(return_value=None)
+        mock_db.create_lead = AsyncMock(return_value=("lead-1", "token-1"))
+
+        with patch.dict(os.environ, {"TRUSTED_PROXIES": "testclient"}):
+            response = client.post(
+                "/api/leads/collect",
+                json=LEAD_PAYLOAD,
+                headers={"X-Forwarded-For": "203.0.113.7, 172.22.0.1"},
+            )
+
+        assert response.status_code == 200, response.text
+        gespeichert = mock_db.create_lead.await_args.args[0]
+        assert gespeichert["consent_ip_address"] == "203.0.113.7", (
+            "collect_lead schreibt die Gateway-IP statt der Besucher-IP in den "
+            "Einwilligungsnachweis"
+        )
+
+    @patch("lead_routes.email_service")
+    @patch("lead_routes.db_service")
+    def test_collect_glaubt_unbekanntem_proxy_nicht(self, mock_db, mock_email, client):
+        """Gegenprobe: ohne hinterlegten Proxy zaehlt nur die direkte Adresse."""
+        mock_db.get_lead_by_email = AsyncMock(return_value=None)
+        mock_db.create_lead = AsyncMock(return_value=("lead-1", "token-1"))
+
+        with patch.dict(os.environ, {"TRUSTED_PROXIES": "10.9.9.9"}):
+            response = client.post(
+                "/api/leads/collect",
+                json=LEAD_PAYLOAD,
+                headers={"X-Forwarded-For": "1.2.3.4"},
+            )
+
+        assert response.status_code == 200, response.text
+        gespeichert = mock_db.create_lead.await_args.args[0]
+        assert gespeichert["consent_ip_address"] != "1.2.3.4", (
+            "collect_lead uebernimmt X-Forwarded-For ungeprueft; damit kann sich "
+            "jeder eine beliebige IP in den Einwilligungsnachweis schreiben"
+        )
+
+    @patch("lead_routes.email_service")
+    @patch("lead_routes.db_service")
+    def test_verify_speichert_die_besucher_ip(self, mock_db, mock_email, client):
+        mock_db.get_lead_by_verification_token = AsyncMock(
+            return_value={
+                "id": "lead-1",
+                "email": "erika@example.de",
+                "name": "Erika Musterfrau",
+                "email_verified": False,
+                "analysis_data": {},
+            }
+        )
+        mock_db.verify_email = AsyncMock(return_value=True)
+
+        with patch.dict(os.environ, {"TRUSTED_PROXIES": "testclient"}):
+            response = client.get(
+                "/api/leads/verify/token-1",
+                headers={"X-Forwarded-For": "203.0.113.7, 172.22.0.1"},
+            )
+
+        assert response.status_code == 200, response.text
+        assert mock_db.verify_email.await_args.args[1] == "203.0.113.7", (
+            "die Verify-Route schreibt die Gateway-IP in den Bestaetigungsnachweis"
+        )
+
+
+class TestCookieConsentIpNichtFaelschbar:
+    """Das Einwilligungsprotokoll des Cookie-Banners hing an einem blanken Header.
+
+    cookie_compliance_routes hatte eine eigene get_client_ip, die
+    X-Forwarded-For ohne jede Pruefung uebernahm. Der Header kommt vom Client.
+    Ein Protokoll, in das sich jeder eine beliebige IP schreiben kann, ist als
+    Nachweis wertlos, und die Zeile in geo-check lief ausserdem in einen
+    AttributeError, sobald request.client fehlte.
+    """
+
+    def test_modul_nutzt_die_gepruefte_variante(self):
+        with open(
+            os.path.join(os.path.dirname(__file__), "..", "cookie_compliance_routes.py"),
+            encoding="utf-8",
+        ) as fh:
+            quelltext = fh.read()
+
+        assert "_client_ip_geprueft" in quelltext, (
+            "cookie_compliance_routes ermittelt die IP nicht ueber "
+            "dependencies.get_client_ip; TRUSTED_PROXIES wird ignoriert"
+        )
+        for schreibweise in ("request.headers.get('X-Forwarded-For'",
+                             'request.headers.get("X-Forwarded-For"'):
+            assert schreibweise not in quelltext, (
+                "in cookie_compliance_routes steht wieder ein ungeprueftes "
+                "X-Forwarded-For; der Header ist frei faelschbar"
+            )

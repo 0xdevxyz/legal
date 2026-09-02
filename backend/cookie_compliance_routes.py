@@ -31,7 +31,7 @@ from cookie_scanner_service import cookie_scanner
 from file_storage_service import file_storage
 from agency_report_generator import AgencyReportGenerator
 from compliance_engine.data_processing_countries import country_processing_info
-from dependencies import rate_limit, require_admin
+from dependencies import rate_limit, require_admin, get_client_ip as _client_ip_geprueft
 
 
 def _enrich_third_country(service: dict) -> dict:
@@ -443,11 +443,21 @@ def truncate_user_agent(ua_string):
 
 
 def get_client_ip(request: Request) -> Optional[str]:
-    """Get client IP from request headers"""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else None
+    """IP des Besuchers, aber nur aus vertrauenswuerdiger Quelle.
+
+    Hier stand ein blankes X-Forwarded-For. Diesen Header setzt der Client selbst;
+    wer ihn faelscht, schreibt sich eine beliebige IP ins Einwilligungsprotokoll,
+    und ein Nachweis, der sich faelschen laesst, ist gegenueber der Aufsicht
+    keiner. dependencies.get_client_ip glaubt dem Header nur, wenn die Anfrage von
+    einem Proxy aus TRUSTED_PROXIES kommt, und meldet eine unbekannte Proxy-IP von
+    sich aus im Log.
+
+    Der Rueckgabetyp bleibt Optional[str]: "unknown" wird zu None, damit die
+    Aufrufer wie bisher auf den Device-Fingerprint ausweichen statt den Wort-
+    laut "unknown" zu hashen.
+    """
+    ip = _client_ip_geprueft(request)
+    return ip if ip and ip != "unknown" else None
 
 async def get_db_connection():
     """Get database connection from app state"""
@@ -2675,25 +2685,27 @@ async def geo_check(
     Uses IP-based geolocation
     """
     try:
-        # Get client IP
-        client_ip = request.headers.get('X-Forwarded-For', request.client.host)
-        if ',' in client_ip:
-            client_ip = client_ip.split(',')[0].strip()
+        # Kein blankes X-Forwarded-For: der Header ist faelschbar, und ohne
+        # request.client (interne Aufrufe) lief die alte Zeile in einen
+        # AttributeError. Ohne ermittelbare IP wird nur der Cache uebersprungen,
+        # die Erkennung laeuft weiter.
+        client_ip = get_client_ip(request)
         
         # Hash IP for privacy
-        ip_hash = hashlib.sha256(client_ip.encode()).hexdigest()[:16]
+        ip_hash = hashlib.sha256(client_ip.encode()).hexdigest()[:16] if client_ip else None
         
         # Cache-Zugriff darf die Erkennung nicht mitreissen: faellt der Cache aus,
         # wird trotzdem ausgewertet, nur eben ohne Zwischenspeicher.
-        try:
-            cache_query = """
-                SELECT country_code FROM geo_ip_cache 
-                WHERE ip_hash = $1 AND cached_at > NOW() - INTERVAL '24 hours'
-            """
-            cached = await db_pool.fetchrow(cache_query, ip_hash)
-        except Exception as cache_err:
-            logger.warning(f"geo-check: Cache nicht lesbar ({cache_err})")
-            cached = None
+        cached = None
+        if ip_hash:
+            try:
+                cache_query = """
+                    SELECT country_code FROM geo_ip_cache 
+                    WHERE ip_hash = $1 AND cached_at > NOW() - INTERVAL '24 hours'
+                """
+                cached = await db_pool.fetchrow(cache_query, ip_hash)
+            except Exception as cache_err:
+                logger.warning(f"geo-check: Cache nicht lesbar ({cache_err})")
         
         if cached:
             return {
@@ -2710,16 +2722,17 @@ async def geo_check(
         if cf_country:
             country_code = cf_country
         
-        try:
-            cache_insert = """
-                INSERT INTO geo_ip_cache (ip_hash, country_code)
-                VALUES ($1, $2)
-                ON CONFLICT (ip_hash) DO UPDATE SET 
-                    country_code = $2, cached_at = NOW()
-            """
-            await db_pool.execute(cache_insert, ip_hash, country_code)
-        except Exception as cache_err:
-            logger.warning(f"geo-check: Cache nicht schreibbar ({cache_err})")
+        if ip_hash:
+            try:
+                cache_insert = """
+                    INSERT INTO geo_ip_cache (ip_hash, country_code)
+                    VALUES ($1, $2)
+                    ON CONFLICT (ip_hash) DO UPDATE SET 
+                        country_code = $2, cached_at = NOW()
+                """
+                await db_pool.execute(cache_insert, ip_hash, country_code)
+            except Exception as cache_err:
+                logger.warning(f"geo-check: Cache nicht schreibbar ({cache_err})")
         
         return {
             "success": True,
