@@ -37,6 +37,9 @@
 - backend und landing neu gebaut und deployt; Migration `0018` gegen Produktion gelaufen; Testsuite im Backend-Image: 1579 passed, 66 skipped
 - Anmeldung und Double-Opt-In über die öffentliche Domain durchgespielt (Herkunft in der Datenbank, Rückleitung auf `/early-access/`, Platz 1 vergeben), Testdaten anschließend entfernt und Sequence zurückgesetzt
 
+### Tech Debt
+- `landing-react/src/components/saas-landing/JoinEarlySection.tsx` und die Sicherungskopie `JoinEarlySection.tsx.bak.20260729` gelöscht. Die Sektion war seit `e630896` ("Preise, Navigation und Kaufweg statt Warteliste") aus `EarlyAccessLanding` genommen und danach nirgends mehr eingebunden: kein Import, kein `#waitlist`-Anker, keine Route. Sie trug beide Fehler, die heute in `WartelistenFormular` behoben wurden (`204` als Erfolg gewertet, keine Wartezeit bis zur Zeitfalle), und hätte sie beim nächsten Wiedereinbau zurück in die Seite gebracht. Zwei Formulare gegen denselben Endpunkt zu pflegen war die Ursache der Abweichung, deshalb löschen statt nachziehen: `WartelistenFormular` ist der eine verbleibende Weg auf die Warteliste
+
 ---
 
 ## [2026-08-11]
