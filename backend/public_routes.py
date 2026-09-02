@@ -2086,16 +2086,32 @@ async def analyze_website_preview(request: AnalyzeRequest, http_request: Request
                 risk_calculator
             )
             
-            # Berechne Gesamt-Risiko
-            total_risk_min = sum(cat['risk_min'] for cat in risk_categories if cat['detected'])
-            total_risk_max = sum(cat['risk_max'] for cat in risk_categories if cat['detected'])
+            # Gesamt-Risiko: NICHT aufsummieren.
+            #
+            # Bis 03.09.2026 stand hier sum() ueber alle Kategorien. Die leere
+            # Platzhalterseite example.com kam damit auf 91.800 EUR - eine Zahl,
+            # die weder der Abmahn- noch der Bussgeldpraxis entspricht und die
+            # ausgerechnet einen Compliance-Anbieter nach Paragraph 5 UWG
+            # angreifbar macht. Innerhalb einer Kategorie wurde laengst nicht
+            # mehr addiert; der Fehler sass nur noch an der Kategoriegrenze.
+            from risk_calculator import gesamtrisiko_aus_kategorien
+            gesamt = gesamtrisiko_aus_kategorien(risk_categories)
+            total_risk_min = gesamt["risk_min"]
+            total_risk_max = gesamt["risk_max"]
             
             return {
                 "success": True,
                 "url": url,
                 "score": scan_result.get("compliance_score", 50),
                 "risk_categories": risk_categories,
-                "total_risk_range": f"{int(total_risk_min):,}€ - {int(total_risk_max):,}€".replace(',', '.'),
+                "total_risk_range": gesamt["risk_range"],
+                "total_risk_min": total_risk_min,
+                "total_risk_max": total_risk_max,
+                "rahmen_max": gesamt["rahmen_max"],
+                "rahmen_range": gesamt["rahmen_range"],
+                "risk_bereiche_betroffen": gesamt["bereiche_betroffen"],
+                "risk_bereiche_kritisch": gesamt["bereiche_kritisch"],
+                "risk_gedeckelt": gesamt["gedeckelt"],
                 "issues_count": len(scan_result.get("issues", [])),
                 "critical_count": sum(1 for cat in risk_categories if cat['severity'] == 'critical' and cat['detected']),
                 # Phase 7.1 Lead-Magnet: explizite Regulierungs-Reports

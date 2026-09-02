@@ -11,6 +11,10 @@ import { complianceApi } from '@/lib/api';
 export default function WebsiteScanner() {
   const [url, setUrl] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  // Hochzaehlen, sobald sich die Form von scanData aendert - sonst zeigt ein
+  // alter Eintrag aus dem localStorage stillschweigend falsche Werte an.
+  const SCAN_SCHEMA = 2;
+
   const [scanResult, setScanResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,9 +24,17 @@ export default function WebsiteScanner() {
       const stored = localStorage.getItem('last_scan_data');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed?.results) {
+        // Nur Ergebnisse im aktuellen Format wiederherstellen.
+        //
+        // Aeltere Eintraege tragen das Feld fineRisk statt kostenRisikoMax.
+        // Ohne diese Pruefung waere kostenRisikoMax undefined -> 0 -> die
+        // Anzeige meldete einem wiederkehrenden Besucher "Keine Gefahr",
+        // obwohl sein Scan Befunde hatte.
+        if (parsed?.results && parsed.schema === SCAN_SCHEMA) {
           setScanResult(parsed.results);
           setUrl(parsed.url || '');
+        } else {
+          localStorage.removeItem('last_scan_data');
         }
       }
     } catch {
@@ -61,78 +73,11 @@ export default function WebsiteScanner() {
     }
   ];
 
-  /**
-   * Berechnet Scores aus Issues mit verschärfter Formel:
-   * Score = max(0, 100 - (critical * 60 + warning * 15))
-   * CRITICAL Issues = schwere Verstöße, maximal Score 40
-   */
-  const calculateScoresFromIssues = (issues: any[]) => {
-    // Säulen-Mapping gemäß Backend-Logik
-    const categoryMapping = {
-      accessibility: ['barrierefreiheit', 'kontraste', 'tastaturbedienung'],
-      gdpr: ['datenschutz', 'tracking', 'datenverarbeitung'],
-      legal: ['impressum', 'agb', 'widerrufsbelehrung', 'contact'],
-      cookies: ['cookies']
-    };
-
-    // Kategorisiere Issues nach Säulen
-    const issuesBySäule: any = {};
-    for (const [pillar, categories] of Object.entries(categoryMapping)) {
-      issuesBySäule[pillar] = issues.filter(issue => 
-        categories.includes(issue.category?.toLowerCase() || '')
-      );
-    }
-
-    // ✅ VERBESSERT: Säulen-Scores mit drastischen Abzügen für CRITICAL Issues
-    const pillarScores: any = {};
-    for (const [pillar, pillarIssues] of Object.entries(issuesBySäule)) {
-      const issuesArray = pillarIssues as any[];
-      const critical = issuesArray.filter((i: any) => i.severity === 'critical').length;
-      const warning = issuesArray.filter((i: any) => i.severity === 'warning').length;
-      
-      // NEUE FORMEL: CRITICAL-Issues ziehen viel mehr ab!
-      // - Jedes CRITICAL: -60 Punkte (statt -20)
-      // - Jedes WARNING: -15 Punkte (statt -5)
-      // → 1 CRITICAL = Score 40 (statt 80)
-      // → 2 CRITICAL = Score 0 (komplett non-compliant)
-      let score = 100 - (critical * 60 + warning * 15);
-      
-      // ZUSATZ: Wenn Säule CRITICAL Issues hat, maximal Score 40
-      if (critical > 0) {
-        score = Math.min(score, 40);
-      }
-      
-      pillarScores[pillar] = {
-        score: Math.max(0, score),
-        issues: issuesArray.length,
-        critical: critical
-      };
-    }
-
-    // Gewichteter Gesamt-Score
-    const weights = { 
-      gdpr: 0.35,        // 35% - höchste Strafen
-      accessibility: 0.30, // 30% - BFSG 
-      cookies: 0.20,      // 20% - TTDSG
-      legal: 0.15         // 15% - TMG
-    };
-    
-    const overallScore = Math.round(
-      pillarScores.gdpr.score * weights.gdpr +
-      pillarScores.accessibility.score * weights.accessibility +
-      pillarScores.cookies.score * weights.cookies +
-      pillarScores.legal.score * weights.legal
-    );
-
-    // Berechne Abmahnrisiko
-    const fineRisk = 
-      pillarScores.gdpr.issues * 5000 +
-      pillarScores.accessibility.issues * 3000 +
-      pillarScores.cookies.issues * 2000 +
-      pillarScores.legal.issues * 1500;
-
-    return { pillarScores, overallScore, fineRisk };
-  };
+  // Die fruehere Hilfsrechnung calculateScoresFromIssues() stand hier ohne
+  // einen einzigen Aufrufer. Sie multiplizierte Befunde mit Pauschalen
+  // (issues * 5000 fuer DSGVO usw.) — genau die Rechenart, die fuer eine
+  // leere Platzhalterseite 91.800 EUR ergab. Geloescht am 03.09.2026;
+  // Scores und Risiko kommen aus dem Backend.
 
 
   // Robuste URL-Normalisierung - akzeptiert alle Formate
@@ -246,18 +191,20 @@ export default function WebsiteScanner() {
         pillarScores[key] = { score, issues: cnt, critical: crit, detected: true, label: cat.label, id: cat.id };
       });
 
-      // Abmahnrisiko: nur Kategorien mit tatsächlichen Issues, skaliert nach Schwere
-      // Nicht einfach risk_max summieren – das wäre immer maximal
-      const fineRisk = categories.reduce((sum: number, cat: any) => {
-        const cnt = cat.issues_count ?? 0;
-        if (cnt === 0) return sum;
-        const riskMin = cat.risk_min ?? 0;
-        const riskMax = cat.risk_max ?? riskMin;
-        const isCritical = cat.severity === 'critical';
-        // Kritische Issues → risk_max, normale Issues → risk_min + 20% Aufschlag
-        const risk = isCritical ? riskMax : Math.round(riskMin + (riskMax - riskMin) * 0.2);
-        return sum + risk;
-      }, 0);
+      // Risiko rechnet das Backend, nicht die Landing.
+      //
+      // Hier stand bis 03.09.2026 eine zweite, eigene Summenbildung ueber alle
+      // Kategorien. Zwei Rechenwege fuer dieselbe Zahl heisst: irgendwann
+      // stimmen sie nicht mehr ueberein, und keiner merkt es. Das Backend
+      // liefert die Werte jetzt fertig (gesamtrisiko_aus_kategorien) und
+      // trennt dabei zwei Dinge, die vorher vermengt waren:
+      //   kostenRisiko - was eine Abmahnung den Betrieb realistisch kostet
+      //   rahmenMax    - was das Gesetz im Hoechstfall zulaesst (Tatsache)
+      const kostenRisikoMin: number = apiData.total_risk_min ?? 0;
+      const kostenRisikoMax: number = apiData.total_risk_max ?? 0;
+      const kostenRisikoText: string | null = apiData.total_risk_range ?? null;
+      const rahmenMax: number = apiData.rahmen_max ?? apiData.risk_rahmen_max ?? 0;
+      const bereicheBetroffen: number = apiData.risk_bereiche_betroffen ?? 0;
 
       const backendScore = apiData.score ?? apiData.compliance_score ?? Math.round(
         (pillarScores.gdpr.score * 0.45) +
@@ -269,7 +216,11 @@ export default function WebsiteScanner() {
       const transformedResult = {
         url: normalizedUrl,
         overallScore: backendScore,
-        fineRisk,
+        kostenRisikoMin,
+        kostenRisikoMax,
+        kostenRisikoText,
+        rahmenMax,
+        bereicheBetroffen,
         pillars: pillarScores,
         // Phase 7.1 Regulierungs-Radar (Lead-Magnet)
         bfsg: apiData.bfsg_report ?? null,
@@ -277,6 +228,7 @@ export default function WebsiteScanner() {
       };
 
       const scanData = {
+        schema: SCAN_SCHEMA,
         scan_id: apiData.scan_id || `scan_${Date.now()}`,
         url: normalizedUrl,
         timestamp: new Date().toISOString(),
@@ -536,18 +488,26 @@ export default function WebsiteScanner() {
                   </div>
                 </div>
 
-                {/* Fine Risk */}
+                {/* Kostenrisiko und gesetzlicher Rahmen — bewusst zwei Zahlen.
+                    Hier stand eine einzige, aufsummierte Zahl ("Geschätztes
+                    Risikopotenzial"), die für eine leere Platzhalterseite auf
+                    91.800 € kam. Was ein Betrieb tatsächlich zahlt, ist die
+                    Abmahnung; der Bußgeldrahmen ist etwas anderes und wird
+                    jetzt als das gezeigt, was er ist: eine Obergrenze im
+                    Gesetz, keine Prognose. */}
                 {(() => {
-                  const risk = scanResult.fineRisk;
+                  const min = scanResult.kostenRisikoMin ?? 0;
+                  const max = scanResult.kostenRisikoMax ?? 0;
+                  const rahmen = scanResult.rahmenMax ?? 0;
                   const score = scanResult.overallScore;
-                  const isGreen = risk === 0;
+                  const isGreen = max === 0;
                   const isRed = score < 60;
                   const bgClass = isGreen ? 'bg-green-50 border-green-200' : isRed ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200';
                   const textClass = isGreen ? 'text-green-900' : isRed ? 'text-red-900' : 'text-yellow-900';
                   const numClass = isGreen ? 'text-green-600' : isRed ? 'text-red-600' : 'text-yellow-600';
                   const subClass = isGreen ? 'text-green-700' : isRed ? 'text-red-700' : 'text-yellow-700';
                   const label = isGreen ? 'Keine Gefahr' : isRed ? 'Abmahngefahr' : 'Handlungsbedarf';
-                  const sub = isGreen ? 'Vollständig geschützt' : 'Geschätztes Risikopotenzial';
+                  const euro = (n: number) => n.toLocaleString('de-DE');
                   return (
                     <div className={`rounded-xl p-6 border-2 ${bgClass}`}>
                       <div className="flex items-center gap-3 mb-2">
@@ -557,10 +517,28 @@ export default function WebsiteScanner() {
                         }
                         <h4 className={`text-lg font-bold ${textClass}`}>{label}</h4>
                       </div>
-                      <div className={`text-3xl font-bold flex items-center gap-1 ${numClass}`}>
-                        {isGreen ? <span>0€</span> : <><Euro className="w-6 h-6" />{risk.toLocaleString('de-DE')}</>}
-                      </div>
-                      <p className={`text-sm mt-1 ${subClass}`}>{sub}</p>
+                      {isGreen ? (
+                        <>
+                          <div className={`text-3xl font-bold ${numClass}`}>0€</div>
+                          <p className={`text-sm mt-1 ${subClass}`}>Kein Handlungsbedarf gefunden</p>
+                        </>
+                      ) : (
+                        <>
+                          <div className={`text-3xl font-bold flex items-center gap-1 ${numClass}`}>
+                            <Euro className="w-6 h-6" />{euro(min)} – {euro(max)}
+                          </div>
+                          <p className={`text-sm mt-1 ${subClass}`}>
+                            Typische Abmahnkosten (Streitwert + Anwaltskosten)
+                          </p>
+                          {rahmen > 0 && (
+                            <p className="text-xs text-gray-600 mt-3 pt-3 border-t border-black/10">
+                              Gesetzlicher Bußgeldrahmen daneben: bis {euro(rahmen)} €.
+                              Das ist die Obergrenze im Gesetz, keine Prognose für
+                              Ihren Betrieb.
+                            </p>
+                          )}
+                        </>
+                      )}
                     </div>
                   );
                 })()}
