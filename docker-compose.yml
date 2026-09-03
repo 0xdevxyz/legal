@@ -53,8 +53,16 @@ services:
     build: ./backend
     container_name: complyo-backend
     init: true   # tini als PID 1 -> reapt verwaiste Kindprozesse (uvicorn reapt als PID 1 nicht)
-    mem_limit: 1g
-    memswap_limit: 1.5g
+    # Gemessen am 03.09.2026 nach dem Playwright-Leckfix: Grundverbrauch
+    # ~200-290 MiB, je gleichzeitigem Browser rund 70 MiB. Bei 1 GiB lag
+    # die Decke bei zehn gleichzeitigen Scans, und der Kernel raeumte dabei
+    # bereits Chrome-Prozesse ab (die Ergebnisse blieben zwar vollstaendig,
+    # aber am Anschlag zu fahren ist kein Zustand fuer den Betrieb).
+    #
+    # Der Host hat nach dem Beenden des vergessenen gbp-scout-Entwicklungs-
+    # servers wieder 4,4 GB verfuegbar; 2 GiB sind damit gedeckt.
+    mem_limit: 2g
+    memswap_limit: 2.5g
     ports:
       - "127.0.0.1:8002:8002"
     environment:
