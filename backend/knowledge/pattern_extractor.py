@@ -8,6 +8,11 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
+# Ab wann ein Befund als veraltet gilt. Wer laenger nicht auftrat, stammt
+# erfahrungsgemaess aus einer entfernten Pruefung, nicht aus reparierten
+# Kundenseiten - und darf die Rangfolge nicht mehr anfuehren.
+VERALTET_AB_TAGEN = 30
+
 VAULT_ROOT = Path(os.getenv("KNOWLEDGE_VAULT_PATH", "/home/clawd/saas/legal/knowledge"))
 PATTERNS_DIR = VAULT_ROOT / "patterns"
 
@@ -210,10 +215,12 @@ class PatternExtractor:
                 zeilen = await conn.fetch(
                     """
                     SELECT
-                        befund->>'category' AS kategorie,
-                        befund->>'title'    AS titel,
-                        COUNT(*)            AS haeufigkeit,
-                        MAX(sh.created_at)  AS zuletzt
+                        befund->>'category'          AS kategorie,
+                        befund->>'title'             AS titel,
+                        COUNT(*)                     AS haeufigkeit,
+                        COUNT(DISTINCT sh.url)       AS websites,
+                        COUNT(DISTINCT sh.id)        AS scans,
+                        MAX(sh.created_at)           AS zuletzt
                     FROM scan_history sh
                     CROSS JOIN LATERAL jsonb_array_elements(
                         COALESCE(sh.scan_data->'issues', '[]'::jsonb)
@@ -222,7 +229,9 @@ class PatternExtractor:
                       AND befund->>'title' IS NOT NULL
                     GROUP BY 1, 2
                     HAVING COUNT(*) >= 3
-                    ORDER BY haeufigkeit DESC
+                    -- Nach Verbreitung ordnen, nicht nach Fundstellen. Warum,
+                    -- steht bei _schreibe_haeufigkeitsmuster.
+                    ORDER BY websites DESC, haeufigkeit DESC
                     LIMIT 50
                     """
                 )
@@ -262,19 +271,38 @@ class PatternExtractor:
         }
         kopf = "---\n" + yaml.dump(fm, allow_unicode=True, default_flow_style=False) + "---\n"
 
+        heute = datetime.now().date()
         rumpf = [
             "\n# Haeufigste Befunde aus eigenen Scans\n",
             "Gezaehlt ueber die letzten 90 Tage, nur Befunde, die mindestens "
             "dreimal aufgetreten sind. Diese Liste kommt aus echten Scans, "
             "nicht aus dem statischen Katalog.\n",
-            "| Haeufigkeit | Kategorie | Befund | Zuletzt |",
-            "| ---: | --- | --- | --- |",
+            "Geordnet nach **Websites**, nicht nach Fundstellen. Eine einzelne "
+            "icon-lastige Seite erzeugt sonst den Spitzenplatz: gemessen am "
+            "03.09.2026 stand \"SVG ohne <title>\" mit 98 Fundstellen ganz oben "
+            "und stammte aus 4 Scans auf 2 Websites, waehrend die fehlende "
+            "Werbekennzeichnung 5 Websites betraf und tiefer rangierte. Die "
+            "Fundstellen bleiben als zweite Spalte stehen - sie sagen, wie viel "
+            "Arbeit ein Fix erspart, nicht, wie viele Kunden ihn brauchen.\n",
+            "\"Zuletzt\" ist keine Nebensache: ein Befund, der seit Wochen nicht "
+            "mehr auftrat, kommt meist aus einer entfernten Pruefung und nicht "
+            "aus reparierten Kundenseiten. Solche Zeilen sind als veraltet "
+            "markiert.\n",
+            "| Websites | Fundstellen | Scans | Kategorie | Befund | Zuletzt |",
+            "| ---: | ---: | ---: | --- | --- | --- |",
         ]
         for z in zeilen:
             titel = (z["titel"] or "").replace("|", "/")
-            zuletzt = z["zuletzt"].strftime("%Y-%m-%d") if z["zuletzt"] else ""
+            if z["zuletzt"]:
+                tage_her = (heute - z["zuletzt"].date()).days
+                zuletzt = z["zuletzt"].strftime("%Y-%m-%d")
+                if tage_her >= VERALTET_AB_TAGEN:
+                    zuletzt += f" (veraltet, {tage_her} Tage)"
+            else:
+                zuletzt = ""
             rumpf.append(
-                f"| {z['haeufigkeit']} | {z['kategorie'] or 'unbekannt'} | {titel} | {zuletzt} |"
+                f"| {z['websites']} | {z['haeufigkeit']} | {z['scans']} | "
+                f"{z['kategorie'] or 'unbekannt'} | {titel} | {zuletzt} |"
             )
         rumpf.append("")
 
