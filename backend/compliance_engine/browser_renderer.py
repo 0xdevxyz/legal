@@ -12,6 +12,7 @@ Zweck:
 
 import asyncio
 import logging
+import os
 from typing import Optional, Dict, Any, Tuple
 from playwright.async_api import async_playwright, Browser, Page
 import re
@@ -19,7 +20,25 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
-_browser_semaphore = asyncio.Semaphore(3)
+# Wie viele Browser gleichzeitig laufen duerfen.
+#
+# Der Wert stand bis 03.09.2026 fest auf 3 und war damals richtig: das Backend
+# hatte 1 GiB, und ein Playwright-Leck liess den Grundverbrauch mit jedem Scan
+# wachsen. Beides ist behoben (Leck: Commit c9def89, Grenze jetzt 2 GiB), und
+# gemessen wurde danach: 22 gleichzeitige Anfragen laufen bei 2.047 MiB Spitze
+# durch, alle mit vollstaendigem und identischem Ergebnis.
+#
+# Der Semaphor bestimmt vor allem die Wartezeit: bei 3 braucht eine Dreiergruppe
+# rund 11 s, die 22. Anfrage wartete deshalb 100 s. Die harte Wand ist
+# `proxy_read_timeout 120s` auf api.complyo.de.
+#
+# Einstellbar per Umgebungsvariable, weil der naechtliche Monitor als EIGENER
+# Prozess im selben Container laeuft (docker exec). Zwei Prozesse mit je 6
+# Browsern teilen sich dasselbe Speicherlimit, ohne voneinander zu wissen —
+# der Monitorlauf kann deshalb einen niedrigeren Wert setzen.
+BROWSER_PARALLEL = max(1, int(os.getenv("COMPLYO_BROWSER_PARALLEL", "6")))
+
+_browser_semaphore = asyncio.Semaphore(BROWSER_PARALLEL)
 
 
 class BrowserRenderer:
