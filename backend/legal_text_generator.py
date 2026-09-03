@@ -91,11 +91,28 @@ _MANDATORY_MARKERS = {
         ("USt-IdNr", ["ust-id", "umsatzsteuer-identifikationsnummer", "ust.-id"], [r"de\s?\d{9}"]),
         ("Registereintrag", ["handelsregister", "registergericht", "amtsgericht"], [r"hr[ab]\s?\d+"]),
     ],
+    # Die Liste deckte bis 03.09.2026 vier von acht Pflichtangaben aus Art. 13
+    # DSGVO ab. Zwecke, Speicherdauer, Beschwerderecht und Drittlanduebermittlung
+    # fehlten - genau die vier, die am 01.09. in complyos EIGENER Erklaerung
+    # nachgetragen werden mussten. Fuer Kundendokumente galten sie weiter als
+    # vollstaendig.
+    #
+    # Die Suchbegriffe sind bewusst mehrgliedrig gewaehlt. "zweck" allein trifft
+    # jedes "zum Zwecke der", "beschwerde" allein jede Beschwerdestelle - ein
+    # Marker, der immer anschlaegt, prueft nichts.
     DocumentType.PRIVACY: [
         ("Verantwortlicher", ["verantwortlich"], []),
         ("Personenbezogene Daten", ["personenbezogene daten"], []),
         ("Rechtsgrundlage", ["rechtsgrundlage", "art. 6"], []),
         ("Betroffenenrechte", ["betroffenenrechte", "auskunftsrecht", "auskunft"], []),
+        ("Zwecke der Verarbeitung", ["zweck der verarbeitung", "zwecke der verarbeitung", "verarbeitungszweck"], []),
+        ("Speicherdauer", ["speicherdauer", "aufbewahrungsdauer", "dauer der speicherung", "loeschfrist", "löschfrist"], []),
+        ("Beschwerderecht bei der Aufsichtsbehoerde", ["aufsichtsbehörde", "aufsichtsbehoerde"], []),
+        # Art. 13 Abs. 1 lit. f verlangt die Angabe nur, WENN uebermittelt wird.
+        # Die Vorlage laesst den Abschnitt deshalb in beide Richtungen
+        # beantworten ("findet nicht statt" ist eine gueltige Aussage) - damit
+        # ist ein fehlender Abschnitt ein echtes Signal und kein Rauschen.
+        ("Drittlanduebermittlung", ["drittland", "drittstaat", "ewr", "standardvertragsklausel", "angemessenheitsbeschluss"], [r"art\.\s?4[46]"]),
     ],
     DocumentType.TOS: [
         ("Geltungsbereich", ["geltungsbereich", "anwendungsbereich"], []),
