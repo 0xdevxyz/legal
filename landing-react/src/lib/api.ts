@@ -85,17 +85,90 @@ const normalizeUrl = (input: string): string => {
   }
 };
 
+// Wie oft und wie lange nach dem Ergebnis gefragt wird.
+//
+// Ein Scan dauert gemessen 16-18 s allein, unter Last von 40 gleichzeitigen
+// Auftraegen bis 141 s. Die Obergrenze liegt bewusst darueber: lieber ein paar
+// Sekunden zu lange warten als einem Besucher zu sagen, seine Seite sei nicht
+// pruefbar, waehrend das Ergebnis eine Sekunde spaeter eintrifft.
+const ABHOL_ABSTAND_MS = 2000;
+const ABHOL_MAX_MS = 240000;
+
+async function holeErgebnis(
+  kennung: string,
+  aufZustand?: (zustand: string) => void,
+): Promise<ComplianceAnalysis> {
+  const beginn = Date.now();
+  let letzterZustand = '';
+
+  while (Date.now() - beginn < ABHOL_MAX_MS) {
+    const antwort = await api.get<any>(`/api/analyze-auftrag/${kennung}`, { timeout: 15000 });
+    const daten = antwort.data || {};
+
+    if (daten.zustand && daten.zustand !== letzterZustand) {
+      letzterZustand = daten.zustand;
+      aufZustand?.(daten.zustand);
+    }
+
+    if (daten.zustand === 'fertig') {
+      return daten.ergebnis as ComplianceAnalysis;
+    }
+    // `fertig: true` heisst "hoer auf zu fragen", nicht "hat geklappt".
+    if (daten.zustand === 'fehlgeschlagen') {
+      throw new Error(daten.fehler || 'Die Prüfung ist fehlgeschlagen.');
+    }
+
+    await new Promise((r) => setTimeout(r, ABHOL_ABSTAND_MS));
+  }
+
+  throw new Error(
+    'Die Prüfung dauert ungewöhnlich lange. Bitte versuchen Sie es später erneut.',
+  );
+}
+
 export const complianceApi = {
-  analyzeWebsite: async (url: string): Promise<ComplianceAnalysis> => {
-    // Normalisiere URL vor dem API-Call
+  analyzeWebsite: async (
+    url: string,
+    aufZustand?: (zustand: string) => void,
+  ): Promise<ComplianceAnalysis> => {
     const normalizedUrl = normalizeUrl(url);
-    // ✅ FIX: Verwende /api/analyze-preview für Landing-Seite (keine Auth erforderlich)
-    // Ein echter Scan braucht 20-27s (gemessen 12.08.2026), der Default von
-    // 30s lag also mitten in der Streuung: Kundenseiten brachen sporadisch ab
-    // und der Besucher las, SEINE Seite sei nicht erreichbar. 65s deckt den
-    // Scan ab und bleibt über dem proxy_read_timeout von nginx (60s), damit
-    // ein Überschreiten als Serverfehler ankommt und nicht als Client-Timeout.
-    const response = await api.post<ComplianceAnalysis>('/api/analyze-preview', { url: normalizedUrl }, { timeout: 65000 });
+
+    // Entkoppelter Weg zuerst: Auftrag abgeben, Kennung bekommen, Ergebnis
+    // abholen. Die Annahme dauert Millisekunden statt der 16-18 s eines
+    // Scans.
+    //
+    // Warum das mehr ist als Kosmetik (gemessen 03./04.09.2026): solange die
+    // Anfrage offen stand, wuchs der Speicher des Backends mit der Zahl der
+    // WARTENDEN Anfragen. Bei 22 gleichzeitigen Scans lieferten vier davon
+    // 14 statt 13 Befunde — dieselbe Seite, anderes Ergebnis, je nach Last.
+    // Entkoppelt brauchen 40 gleichzeitige Auftraege weniger Speicher als
+    // vorher 22 (1.318 statt 2.047 MiB), keiner wird abgelehnt, alle liefern
+    // dasselbe.
+    //
+    // Der synchrone Weg bleibt als Rueckfall: faellt Redis aus, antwortet die
+    // Annahme mit 503, und es waere absurd, dem Besucher dann gar keinen Scan
+    // anzubieten, obwohl der Scanner laeuft.
+    try {
+      const auftrag = await api.post<{ kennung: string }>(
+        '/api/analyze-auftrag', { url: normalizedUrl }, { timeout: 15000 },
+      );
+      const kennung = auftrag.data?.kennung;
+      if (kennung) {
+        return await holeErgebnis(kennung, aufZustand);
+      }
+    } catch (e: any) {
+      // 503 = entkoppelter Weg gerade nicht verfuegbar. Alles andere (Netz,
+      // 4xx) soll ebenfalls nicht den ganzen Scan verhindern, solange der
+      // synchrone Weg noch existiert.
+      console.warn('Entkoppelter Scan nicht moeglich, nehme den synchronen Weg', e?.message);
+    }
+
+    // Rueckfall: ein echter Scan braucht 16-27 s. 65 s deckt ihn ab und bleibt
+    // ueber dem proxy_read_timeout von nginx, damit ein Ueberschreiten als
+    // Serverfehler ankommt und nicht als Client-Timeout.
+    const response = await api.post<ComplianceAnalysis>(
+      '/api/analyze-preview', { url: normalizedUrl }, { timeout: 65000 },
+    );
     return response.data;
   },
 
