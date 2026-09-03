@@ -2043,8 +2043,64 @@ async def _generate_mock_analysis(url: str, risk_calculator) -> AnalysisResponse
         timestamp=datetime.now().isoformat()
     )
 
+# ---------------------------------------------------------------------------
+# Aufnahmeschranke fuer Scans
+# ---------------------------------------------------------------------------
+#
+# Gemessen am 03.09.2026: bei 22 gleichzeitigen Scans und einem Browser-Semaphor
+# von 6 raeumte der Kernel acht Chrome-Prozesse ab - und vier der 22 Scans
+# lieferten daraufhin ein ANDERES Ergebnis (14 statt 13 Befunde). Der Befund
+# haengt dann von der Serverlast ab. Fuer ein Produkt, dessen Wert der
+# Pruefnachweis ist, ist das schlimmer als ein Ausfall: ein Ausfall faellt auf.
+#
+# Das Rate-Limit schuetzt davor nicht - es zaehlt pro IP, und 22 verschiedene
+# Kunden haben 22 verschiedene IPs.
+#
+# Der Browser-Semaphor allein reicht ebenfalls nicht: der Speicher waechst auch
+# mit den WARTENDEN Anfragen, nicht nur mit den aktiven Browsern. Bei Semaphor 6
+# war der Speicher schon bei 16 gleichzeitigen Anfragen zu 100 % ausgelastet,
+# obwohl nie mehr als sechs Browser liefen.
+#
+# Die Schranke begrenzt deshalb, wie viele Scans gleichzeitig IM HAUS sind.
+# 12 liegt bewusst unter der gemessenen Kante (16 noch identisch, 22 gekippt).
+SCAN_GLEICHZEITIG_MAX = max(1, int(os.getenv("COMPLYO_SCAN_GLEICHZEITIG_MAX", "12")))
+_scan_plaetze = asyncio.Semaphore(SCAN_GLEICHZEITIG_MAX)
+
+
+async def scan_platz():
+    """Belegt einen Scan-Platz fuer die Dauer der Anfrage, oder lehnt ab.
+
+    Bewusst OHNE Warteschlange: wer wartet, haelt seinen Anfragekontext im
+    Speicher und traegt damit zu genau dem Druck bei, den die Schranke
+    verhindern soll. Ein ehrliches "gerade ausgelastet, gleich nochmal" ist
+    besser als eine Antwort, die anders ausfaellt als dieselbe Anfrage eine
+    Minute spaeter.
+
+    Die Pruefung ist nicht streng atomar - zwischen Abfrage und Belegung kann
+    eine weitere Anfrage durchrutschen. Das ist hingenommen: der Wert liegt
+    weit genug unter der Kante, dass ein oder zwei Anfragen daneben nichts
+    aendern. Eine Sperre dafuer einzufuehren waere teurer als der Fehler.
+    """
+    if _scan_plaetze._value <= 0:
+        logger.warning(
+            f"Scan abgelehnt: alle {SCAN_GLEICHZEITIG_MAX} Plaetze belegt"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Es laufen gerade zu viele Prüfungen. Bitte in einer halben "
+                   "Minute erneut versuchen.",
+            headers={"Retry-After": "30"},
+        )
+    await _scan_plaetze.acquire()
+    try:
+        yield
+    finally:
+        _scan_plaetze.release()
+
+
 @public_router.post("/analyze-preview", response_model=Dict[str, Any],
-                    dependencies=[Depends(rate_limit("analyze_preview", 3, 60))])
+                    dependencies=[Depends(rate_limit("analyze_preview", 3, 60)),
+                                  Depends(scan_platz)])
 async def analyze_website_preview(request: AnalyzeRequest, http_request: Request):
     """
     Preview-Analyse für Landing Page (ohne Details)
