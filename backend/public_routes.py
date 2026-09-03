@@ -2224,9 +2224,17 @@ async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict
             escalation = 1.0 + min(0.5, 0.05 * (len(detected_issues) - 1))
             pillar_risk_min = int(max(issue_risks_min) * escalation)
             pillar_risk_max = int(max(issue_risks_max) * escalation)
+            # Der gesetzliche Rahmen OHNE Zuschlag. risk_max traegt den
+            # Fundstellen-Zuschlag und ist damit eine Schaetzung; der Rahmen ist
+            # eine Tatsache aus der Matrix (Art. 83 DSGVO). Beim ersten Live-Scan
+            # nach der Umstellung stand deshalb "gesetzlicher Rahmen bis 75.000
+            # EUR" auf dem Schirm, obwohl in der Matrix 50.000 steht - eine
+            # gerechnete Zahl als Gesetzesangabe ausgegeben.
+            pillar_rahmen_max = int(max(issue_risks_max))
         else:
             pillar_risk_min = 0
             pillar_risk_max = 0
+            pillar_rahmen_max = 0
 
 
         result.append({
@@ -2237,6 +2245,7 @@ async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict
             'severity': max_severity if detected_issues else 'info',
             'risk_min': pillar_risk_min,
             'risk_max': pillar_risk_max,
+            'rahmen_max': pillar_rahmen_max,
             'risk_range': f"{int(pillar_risk_min):,}€ - {int(pillar_risk_max):,}€".replace(',', '.') if detected_issues else None,
             'issues_count': len(detected_issues)
         })
