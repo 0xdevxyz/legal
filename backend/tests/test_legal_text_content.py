@@ -16,12 +16,21 @@ COMPLETE_IMPRINT = """
 <p>Handelsregister: Amtsgericht Leipzig, HRB 12345</p>
 """
 
+# Am 03.09.2026 um vier Abschnitte ergaenzt. Das Beispiel hiess "COMPLETE",
+# enthielt aber nur vier der acht Pflichtangaben aus Art. 13 DSGVO - es fehlten
+# Zwecke, Speicherdauer, Beschwerderecht und Drittlanduebermittlung. Ein
+# Vollstaendigkeitsbeispiel, das unvollstaendig ist, deckt die Luecke zu, die
+# es aufdecken soll.
 COMPLETE_PRIVACY = """
 <h1>Datenschutzerklärung</h1>
 <p>Verantwortlicher im Sinne der DSGVO ...</p>
 <p>Wir verarbeiten personenbezogene Daten.</p>
+<p>Der Zweck der Verarbeitung ist die Vertragserfüllung.</p>
 <p>Rechtsgrundlage ist Art. 6 DSGVO.</p>
+<p>Die Speicherdauer beträgt 24 Monate.</p>
 <p>Ihre Betroffenenrechte: Auskunft, Löschung ...</p>
+<p>Beschwerderecht bei der zuständigen Aufsichtsbehörde.</p>
+<p>Eine Übermittlung in ein Drittland findet nicht statt.</p>
 """
 
 COMPLETE_WITHDRAWAL = """
@@ -58,5 +67,14 @@ def test_complete_withdrawal_has_no_missing_markers():
 
 
 def test_empty_document_flags_all_markers():
+    """Die Zahl wird aus der Markerliste abgeleitet, nicht festgeschrieben.
+
+    Vorher stand hier eine fest verdrahtete 4. Wer die Pflichtangaben
+    erweitert, laesst damit einen Test scheitern, der inhaltlich gar nichts
+    dagegen hat - und wird verleitet, die Zahl statt der Sache anzupassen.
+    """
+    from legal_text_generator import _MANDATORY_MARKERS
+
     missing = validate_document_content(DocumentType.PRIVACY, "")
-    assert len(missing) == 4
+    assert len(missing) == len(_MANDATORY_MARKERS[DocumentType.PRIVACY])
+    assert missing, "ein leeres Dokument muss Luecken melden"
