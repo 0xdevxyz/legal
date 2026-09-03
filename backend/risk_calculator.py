@@ -104,7 +104,17 @@ def gesamtrisiko_aus_kategorien(kategorien: list) -> Dict[str, Any]:
     # Der gesetzliche Rahmen wird NICHT summiert und NICHT gedeckelt - er ist
     # eine Tatsache, kein Schaetzwert. Ausgewiesen wird der hoechste Rahmen
     # unter den betroffenen Bereichen.
-    rahmen_max = max(int(k.get('risk_max') or 0) for k in betroffen)
+    #
+    # Gelesen wird 'rahmen_max', NICHT 'risk_max': letzteres traegt den
+    # Fundstellen-Zuschlag der Kategorie und ist damit selbst geschaetzt. Der
+    # erste Live-Scan nach der Umstellung zeigte deshalb "Rahmen bis 75.000
+    # EUR", waehrend in der Matrix 50.000 steht. Eine gerechnete Zahl als
+    # Gesetzesangabe auszugeben ist genau der Fehler, um den es hier geht.
+    # Rueckfall auf risk_max nur, damit aeltere Aufrufer nicht umfallen.
+    rahmen_max = max(
+        int(k.get('rahmen_max') if k.get('rahmen_max') is not None else (k.get('risk_max') or 0))
+        for k in betroffen
+    )
 
     return {
         'risk_min': risk_min,

@@ -34,6 +34,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -248,6 +249,144 @@ async def pruefe_kernrouten() -> list:
     return befunde
 
 
+# Probescan: die Kernfunktion selbst pruefen, nicht nur ihre Umgebung.
+#
+# Der Lasttest vom 03.09.2026 hat die Luecke gezeigt: nach acht gleichzeitigen
+# Scans lieferte /api/analyze-preview nichts mehr, waehrend /api/health und
+# /api/stripe/plans 60 von 60 Mal mit 200 antworteten. Der Waechter meldete
+# "alles ruhig", das Produkt war tot.
+#
+# Ein Statuscheck allein reicht dafuer NICHT: _preview_scan_fehler() gibt bei
+# jedem Scannerfehler ein gewoehnliches dict zurueck, FastAPI macht daraus
+# HTTP 200 mit success:false. Wer nur den Code prueft, sieht gruen, waehrend
+# jeder Kundenscan scheitert. Deshalb wird der Inhalt bewertet.
+PROBESCAN_ZIEL = os.getenv("WAECHTER_PROBESCAN_ZIEL", "https://complyo.de")
+PROBESCAN_ZEITLIMIT = int(os.getenv("WAECHTER_PROBESCAN_ZEITLIMIT", "120"))
+# Gemessen am 03.09.2026: ein Scan von complyo.de dauert 16-18 s, unter Last
+# von sechs gleichzeitigen Scans 33 s. Oberhalb davon ist etwas im Argen,
+# auch wenn am Ende noch ein Ergebnis kommt.
+PROBESCAN_WARNAB_S = 45
+
+
+async def pruefe_scanpfad() -> list:
+    """Fuehrt einen echten Scan aus und bewertet das Ergebnis inhaltlich."""
+    try:
+        import aiohttp
+    except Exception as e:
+        return [("probescan-unmoeglich", f"Probescan nicht ausführbar: {e}")]
+
+    zeitlimit = aiohttp.ClientTimeout(total=PROBESCAN_ZEITLIMIT)
+    begonnen = time.monotonic()
+    try:
+        async with aiohttp.ClientSession(timeout=zeitlimit) as sitzung:
+            async with sitzung.post(
+                ROUTEN_BASIS + "/api/analyze-preview",
+                json={"url": PROBESCAN_ZIEL},
+            ) as antwort:
+                status = antwort.status
+                try:
+                    daten = await antwort.json()
+                except Exception:
+                    daten = None
+    except asyncio.TimeoutError:
+        return [("probescan-zeitlimit",
+                 f"Probescan von {PROBESCAN_ZIEL} kam in "
+                 f"{PROBESCAN_ZEITLIMIT}s zu keinem Ergebnis. Der Scanpfad "
+                 "steht — Kernrouten können trotzdem grün sein.")]
+    except Exception as e:
+        return [("probescan-fehler",
+                 f"Probescan von {PROBESCAN_ZIEL} nicht möglich: "
+                 f"{type(e).__name__}: {e}")]
+
+    dauer = time.monotonic() - begonnen
+    befunde = []
+
+    if status >= 300:
+        return [("probescan-status",
+                 f"Probescan antwortete mit HTTP {status} "
+                 f"(nach {dauer:.0f}s).")]
+
+    if not isinstance(daten, dict):
+        return [("probescan-antwortform",
+                 f"Probescan lieferte kein auswertbares JSON (HTTP {status}).")]
+
+    # Der eigentliche Punkt: HTTP 200 heisst hier nichts.
+    if daten.get("success") is not True:
+        return [("probescan-erfolglos",
+                 f"Probescan meldet success={daten.get('success')!r} bei "
+                 f"HTTP {status}: {daten.get('message') or daten.get('error')}. "
+                 "Genau dieser Fall bleibt bei einer reinen Statusprüfung "
+                 "unsichtbar.")]
+
+    kategorien = daten.get("risk_categories")
+    if not isinstance(kategorien, list) or not kategorien:
+        befunde.append(("probescan-leer",
+                        "Probescan war erfolgreich, liefert aber keine "
+                        "Risikokategorien — der Scan lief, hat aber nichts "
+                        "gemessen."))
+
+    if daten.get("score") is None:
+        befunde.append(("probescan-ohne-score",
+                        "Probescan liefert keinen Score."))
+
+    if dauer > PROBESCAN_WARNAB_S:
+        befunde.append((
+            "probescan-langsam",
+            f"Probescan brauchte {dauer:.0f}s (üblich 16-18s, unter Last 33s). "
+            "Der Scanpfad ist überlastet, bevor er ausfällt.",
+        ))
+
+    return befunde
+
+
+def pruefe_neustarts() -> list:
+    """Meldet, was der Gesundheitswächter in den letzten 24 h neu gestartet hat.
+
+    Ein automatischer Neustart repariert das Symptom. Bleibt er unerwähnt,
+    verschwindet die Ursache aus dem Blick — dann läuft der Dienst scheinbar
+    störungsfrei, während er stündlich neu gestartet wird.
+    """
+    pfad = "/data/waechter/neustarts.log"
+    if not os.path.exists(pfad):
+        return []
+
+    grenze = int(time.time()) - 86400
+    neustarts, aufgegeben = {}, {}
+    try:
+        with open(pfad, encoding="utf-8", errors="replace") as f:
+            for zeile in f:
+                teile = zeile.split()
+                if len(teile) < 3:
+                    continue
+                try:
+                    wann = int(teile[0])
+                except ValueError:
+                    continue
+                if wann < grenze:
+                    continue
+                ziel = neustarts if teile[2] == "neugestartet" else aufgegeben
+                ziel[teile[1]] = ziel.get(teile[1], 0) + 1
+    except Exception as e:
+        return [("neustart-journal", f"Neustart-Journal nicht lesbar: {e}")]
+
+    befunde = []
+    if aufgegeben:
+        befunde.append((
+            "neustart-aufgegeben-" + ";".join(sorted(aufgegeben)),
+            "Wiederholte Neustarts halfen nicht, der Wächter hat aufgegeben: "
+            + ", ".join(f"{k} ({v}x)" for k, v in sorted(aufgegeben.items()))
+            + ". Das braucht einen Menschen.",
+        ))
+    if neustarts:
+        befunde.append((
+            "neustart-" + ";".join(sorted(neustarts)),
+            "In den letzten 24 h automatisch neu gestartet: "
+            + ", ".join(f"{k} ({v}x)" for k, v in sorted(neustarts.items()))
+            + ". Der Dienst läuft wieder, die Ursache ist damit nicht behoben.",
+        ))
+    return befunde
+
+
 def pruefe_host_signale() -> list:
     """Vom Host-Wrapper mitgegebene Signale (docker ps / docker logs)."""
     befunde = []
@@ -351,6 +490,8 @@ async def main() -> int:
                         f"Datenbank-Checks fehlgeschlagen: {e}"))
     try:
         befunde.extend(await pruefe_kernrouten())
+        befunde.extend(await pruefe_scanpfad())
+        befunde.extend(pruefe_neustarts())
     except Exception as e:
         befunde.append(("routen-pruefung-abgestuerzt",
                         f"Kernrouten-Prüfung fehlgeschlagen: {e}"))
