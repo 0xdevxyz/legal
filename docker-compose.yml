@@ -74,6 +74,24 @@ services:
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}
       - AUTO_ACTIVATE_GENERATED_CHECKS=${AUTO_ACTIVATE_GENERATED_CHECKS:-false}
       - ENVIRONMENT=production
+      # Nebenlaeufigkeit des Scanners. Beide Werte haengen zusammen: mehr
+      # Arbeiter nuetzen nichts, wenn weniger Browser laufen duerfen.
+      #
+      # Gemessen am 04.09.2026 auf dem entkoppelten Weg, 40 Auftraege auf
+      # einmal, alle Ergebnisse jeweils identisch und 0 OOM:
+      #
+      #    6/6  -> 141 s, Spitze 1.318 MiB (64 %)
+      #    8/8  -> 114 s, Spitze 1.762 MiB (86 %)   <- gewaehlt
+      #   10/10 -> 110 s, Spitze 2.047 MiB (100 %)
+      #
+      # 10/10 waere vier Sekunden schneller und liefe dabei ohne jede Reserve.
+      # Genau bei 100 % Auslastung sind am 03.09. vier von 22 Scans mit einem
+      # ANDEREN Ergebnis zurueckgekommen (14 statt 13 Befunde). Vier Sekunden
+      # sind das nicht wert, zumal die Annahme ohnehin in Millisekunden
+      # zurueckkommt und niemand auf der Verbindung wartet.
+      - COMPLYO_ARBEITER_ANZAHL=${COMPLYO_ARBEITER_ANZAHL:-8}
+      - COMPLYO_BROWSER_PARALLEL=${COMPLYO_BROWSER_PARALLEL:-8}
+      - COMPLYO_SCAN_GLEICHZEITIG_MAX=${COMPLYO_SCAN_GLEICHZEITIG_MAX:-12}
       # IP des Proxy-Hops vor dem Backend. Fehlt sie, sieht das Backend
       # nur die Proxy-IP und alle Besucher teilen sich ein Rate-Limit.
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
