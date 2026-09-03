@@ -2098,22 +2098,22 @@ async def scan_platz():
         _scan_plaetze.release()
 
 
-@public_router.post("/analyze-preview", response_model=Dict[str, Any],
-                    dependencies=[Depends(rate_limit("analyze_preview", 3, 60)),
-                                  Depends(scan_platz)])
-async def analyze_website_preview(request: AnalyzeRequest, http_request: Request):
-    """
-    Preview-Analyse für Landing Page (ohne Details)
-    
-    Zeigt nur:
-    - Compliance Score
-    - Risiko-Kategorien (mit/ohne Probleme)
-    - Gesamt-Risiko-Range
-    
-    Keine detaillierten Issue-Beschreibungen → Paywall
+async def fuehre_preview_scan_aus(url: str) -> Dict[str, Any]:
+    """Fuehrt den Preview-Scan aus und gibt die Antwort als dict zurueck.
+
+    Herausgezogen am 04.09.2026 aus analyze_website_preview: der
+    Hintergrundarbeiter (scan_arbeiter.py) und der synchrone Endpunkt muessen
+    exakt denselben Scan fahren. Zwei Kopien derselben Logik laufen frueher
+    oder spaeter auseinander, und dann liefert dieselbe Website je nach Weg
+    ein anderes Ergebnis. Dieselbe Fehlerklasse gab es hier schon zweimal:
+    zwei Rechenwege fuers Risiko (Backend und Landing) und zwei Adressen
+    fuers Widget.
+
+    Wirft nicht. Scannerfehler kommen als dict mit success=False zurueck,
+    damit der Arbeiter sie ablegen kann, ohne HTTP zu kennen.
     """
     try:
-        url = str(request.url)
+        # url kommt jetzt als Parameter herein, nicht aus dem Request.
         
         logger.info(f"Preview analysis request for: {url}")
         
@@ -2181,14 +2181,26 @@ async def analyze_website_preview(request: AnalyzeRequest, http_request: Request
             # Kein Mock mehr — siehe oben.
             return _preview_scan_fehler(url)
         
-    except HTTPException:
-        raise
     except Exception as e:
+        # Bewusst kein HTTPException mehr: diese Funktion laeuft auch im
+        # Hintergrundarbeiter, der kein HTTP kennt. Der Endpunkt macht aus
+        # success=False weiterhin eine saubere Antwort, der Arbeiter legt den
+        # Fehlschlag in der Auftragsablage ab.
         logger.error(f"Error in preview analysis: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="Fehler bei der Preview-Analyse"
-        )
+        return _preview_scan_fehler(url, "Bei der Prüfung ist ein Fehler aufgetreten.")
+
+
+@public_router.post("/analyze-preview", response_model=Dict[str, Any],
+                    dependencies=[Depends(rate_limit("analyze_preview", 3, 60)),
+                                  Depends(scan_platz)])
+async def analyze_website_preview(request: AnalyzeRequest, http_request: Request):
+    """Preview-Analyse für Landing Page (ohne Details).
+
+    Der Scan selbst steht in fuehre_preview_scan_aus() - dieselbe Funktion
+    benutzt der Hintergrundarbeiter.
+    """
+    return await fuehre_preview_scan_aus(str(request.url))
+
 
 async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict[str, Any]]:
     """Aggregiert Issues nach den 4 Hauptsäulen + weitere Kategorien"""
