@@ -24,6 +24,13 @@ EXEMPT_PATHS: Set[str] = {
     "/api/auth/verify-credentials",
     "/api/analyze",
     "/api/analyze-preview",
+    # Entkoppelter Pruefweg (04.09.2026). Er wird von derselben oeffentlichen
+    # Landing aufgerufen wie /api/analyze-preview, ohne Sitzung und ohne Token —
+    # der Double-Submit-Check kann hier nie aufgehen. Beim ersten Live-Versuch
+    # antwortete der Endpunkt deshalb mit "CSRF token missing or invalid",
+    # obwohl alle Tests gruen waren: die pruefen die Funktion, nicht die
+    # Middleware davor.
+    "/api/analyze-auftrag",
     "/api/v2/analyze",
     "/api/v2/analyze/quick",
     "/api/v2/analyze/complete",
