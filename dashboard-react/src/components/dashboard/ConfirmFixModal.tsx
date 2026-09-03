@@ -7,6 +7,11 @@ import { ClientOnlyPortal } from '../ClientOnlyPortal';
 // KI-Fix Typen für bessere UX
 type FixType = 'code' | 'text' | 'guide';
 
+// Fassung des rechtlichen Hinweises, der in diesem Dialog gezeigt wird. Wird
+// bei der Freigabe mitprotokolliert. Bei JEDER Aenderung am Hinweistext unten
+// hochzaehlen, sonst belegt das Protokoll nur, dass irgendetwas bestaetigt wurde.
+export const HINWEIS_VERSION = '2026-09-01';
+
 interface ConfirmFixModalProps {
   isOpen: boolean;
   onConfirm: () => void;
@@ -82,7 +87,6 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
       alert('Bitte bestätigen Sie, dass Sie die Warnung gelesen haben.');
       return;
     }
-    console.log('✅ Modal: Bestätigt, starte Fix...');
     onConfirm();
   };
 
@@ -93,7 +97,6 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
       onClick={(e) => {
         // Close on backdrop click
         if (e.target === e.currentTarget) {
-          console.log('🚪 Modal: Backdrop geklickt, schließe...');
           onCancel();
         }
       }}
@@ -115,7 +118,7 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
           </div>
           <button
             onClick={onCancel}
-            className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+            className="text-gray-600 dark:text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
           >
             <X className="w-6 h-6" />
           </button>
@@ -158,8 +161,8 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
                 <p className="text-xs text-gray-600">
                   Complyo wendet Code-Änderungen ausschließlich nach ausdrücklicher Bestätigung durch den Nutzer an. 
                   Wir übernehmen keine Haftung für fehlerhafte Patches. 
-                  <a href="/terms-liability" target="_blank" className="text-blue-600 hover:underline ml-1">
-                    Vollständige AGB lesen →
+                  <a href="https://complyo.de/agb#haftung" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                    Haftungsregelung in den AGB lesen →
                   </a>
                 </p>
               </div>
@@ -174,7 +177,7 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
                 <div className="flex-1">
                   <h3 className="font-semibold text-yellow-900 mb-2">⚠️ Wichtiger Hinweis</h3>
                   <p className="text-yellow-800 text-sm mb-3">
-                    Mit dem Start der Fix-Generierung verfällt Ihr 14-tägiges Rückgaberecht.
+                    Der Fix wird erst nach Ihrer Bestätigung angewendet. Ihre Bestätigung wird protokolliert.
                     Dies gilt nur für den ersten generierten Fix.
                   </p>
                   <label className="flex items-start gap-2 cursor-pointer group">
@@ -212,7 +215,6 @@ export const ConfirmFixModal: React.FC<ConfirmFixModalProps> = ({
         <div className="flex gap-3 p-6 border-t border-gray-200 bg-gray-50">
           <button
             onClick={() => {
-              console.log('❌ Modal: Abgebrochen');
               onCancel();
             }}
             className="flex-1 px-6 py-3 border-2 border-gray-300 rounded-lg hover:bg-white hover:border-gray-400 font-bold text-gray-700 transition-all"

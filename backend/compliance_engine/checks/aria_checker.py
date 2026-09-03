@@ -3,7 +3,7 @@ Erweiterte ARIA-Checks für vollständige Barrierefreiheit
 WCAG 2.1 Level AA Kriterien 4.1.2 (Name, Role, Value)
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from bs4 import BeautifulSoup, Tag
 import logging
 
@@ -82,11 +82,18 @@ class ARIAChecker:
         
         return issues
     
+    # Formularfelder werden in _check_form_labels geprüft (inkl. <label for>-
+    # Auflösung); hier ausgenommen, um doppelte/falsch-positive Meldungen zu
+    # vermeiden (_has_accessible_name kennt das zugehörige <label> nicht).
+    _LABEL_HANDLED_ELSEWHERE = {'input', 'select', 'textarea'}
+
     def _check_missing_labels(self, soup: BeautifulSoup, url: str) -> List[Dict]:
         """Prüft interaktive Elemente ohne Label"""
         issues = []
-        
+
         for element in self.INTERACTIVE_ELEMENTS:
+            if element in self._LABEL_HANDLED_ELSEWHERE:
+                continue
             for tag in soup.find_all(element):
                 has_label = self._has_accessible_name(tag)
                 

@@ -1,9 +1,18 @@
 /**
  * ============================================================================
+ * ⚠️ TOTER CODE / NICHT AUSGELIEFERT (Stand 2026-07): Diese Datei wird von KEINER
+ * Backend-Route ausgeliefert und von KEINEM Konsumenten geladen. Belegt per grep
+ * über backend/, dashboard-react/src, wordpress-plugin/, joomla-plugin/, channels/:
+ * die einzige Referenz auf "optout-center.js" ist der Integrations-Kommentar in
+ * dieser Datei selbst (Z. 17). Die Opt-out-/Einstellungs-Funktion ist stattdessen
+ * direkt in den ausgelieferten Banner (cookie_banner_v2.js, window.complyo.*)
+ * integriert. Vor Wiederbelebung: eine serve-Route ergänzen und Doppelung mit dem
+ * Banner-eigenen Preferences-Modal prüfen. Bis dahin nicht referenzieren.
+ * ============================================================================
  * Complyo Opt-out Center v1.0
  * ============================================================================
  * Eigenstaendiges Cookie-Einstellungen Widget
- * 
+ *
  * Kann jederzeit ueber window.complyo.openPreferences() geoeffnet werden.
  * 
  * Features:

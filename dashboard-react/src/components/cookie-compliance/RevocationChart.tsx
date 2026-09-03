@@ -76,7 +76,7 @@ const RevocationChart: React.FC<RevocationChartProps> = ({ siteId }) => {
     return (
       <Card>
         <CardContent className="flex items-center justify-center h-48">
-          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+          <Loader2 className="w-6 h-6 animate-spin text-gray-600 dark:text-gray-400" />
         </CardContent>
       </Card>
     );
@@ -203,7 +203,7 @@ const RevocationChart: React.FC<RevocationChartProps> = ({ siteId }) => {
         )}
 
         {chartData.length === 0 && (
-          <div className="text-center py-8 text-sm text-gray-400 dark:text-zinc-500">
+          <div className="text-center py-8 text-sm text-gray-600 dark:text-gray-400 dark:text-zinc-500">
             Noch keine Widerrufs-Daten für diesen Zeitraum.
           </div>
         )}

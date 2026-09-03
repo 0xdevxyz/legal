@@ -1,525 +1,378 @@
+'use client';
+
 /**
- * A/B Test Manager Component
- * Manage and analyze cookie banner A/B tests
+ * A/B-Tests für das Cookie-Banner.
+ *
+ * Zeigt die Tests einer Seite, legt neue an und wertet den laufenden aus.
+ * Variante A ist die aktuelle Banner-Konfiguration (Kontrolle), Variante B die
+ * Abwandlung. Getestet wird bewusst nur, was am Banner sichtbar ist — Layout,
+ * Farbe, Buttonform, Position und die Texte.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  FlaskConical,
-  Play,
-  Pause,
-  StopCircle,
-  Trophy,
-  TrendingUp,
-  TrendingDown,
-  Users,
-  CheckCircle,
-  XCircle,
-  Plus,
-  Trash2,
-  BarChart3,
-  Loader2,
-  AlertCircle,
-  Info,
+  BarChart3, Play, Square, Trash2, Plus, TrendingUp, AlertCircle,
+  CheckCircle2, Loader2, FlaskConical,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Slider } from '@/components/ui/slider';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
+  listSiteTests, getTest, createTest, startTest, stopTest, deleteTest,
+  type ABTestListItem, type ABTestDetail, type ABVariant, type ABVariantConfig,
+} from '@/lib/ab-testing-api';
 
-interface ABTestManagerProps {
+interface Props {
   siteId: string;
-  currentConfig: any;
+  /** Aktuelle Banner-Config — dient als Ausgangswert für Variante A. */
+  config: ABVariantConfig | null;
 }
 
-interface ABTest {
-  id: number;
-  name: string;
-  status: string;
-  traffic_split: number;
-  start_date: string | null;
-  end_date: string | null;
-  winner: string | null;
-  total_impressions: number;
-  created_at: string;
+const STATUS_LABEL: Record<string, string> = {
+  draft: 'Entwurf',
+  running: 'läuft',
+  paused: 'pausiert',
+  completed: 'beendet',
+};
+
+const STATUS_STYLE: Record<string, string> = {
+  draft: 'bg-zinc-500/15 text-zinc-500',
+  running: 'bg-emerald-500/15 text-emerald-500',
+  paused: 'bg-amber-500/15 text-amber-500',
+  completed: 'bg-blue-500/15 text-blue-500',
+};
+
+const LAYOUTS = [
+  { wert: 'banner_bottom', label: 'Banner unten' },
+  { wert: 'banner_top', label: 'Banner oben' },
+  { wert: 'modal_center', label: 'Dialog mittig' },
+  { wert: 'box_bottom_left', label: 'Box unten links' },
+  { wert: 'box_bottom_right', label: 'Box unten rechts' },
+];
+
+const BUTTON_STYLES = [
+  { wert: 'rounded', label: 'abgerundet' },
+  { wert: 'square', label: 'eckig' },
+  { wert: 'pill', label: 'Pille' },
+];
+
+function fehlertext(err: any, fallback: string): string {
+  return err?.response?.data?.detail || err?.message || fallback;
 }
 
-interface ABTestDetail {
-  test: any;
-  results: {
-    variant_a: any;
-    variant_b: any;
-    improvement_percent: number;
-    leading_variant: string | null;
-  };
-  statistics: {
-    z_score: number;
-    p_value: number;
-    is_significant: boolean;
-    sample_reached: boolean;
-    confidence_level: number;
-  };
-}
+export default function ABTestManager({ siteId, config }: Props) {
+  const [tests, setTests] = useState<ABTestListItem[]>([]);
+  const [detail, setDetail] = useState<ABTestDetail | null>(null);
+  const [ladeListe, setLadeListe] = useState(true);
+  const [ladeDetail, setLadeDetail] = useState(false);
+  const [aktion, setAktion] = useState<number | null>(null);
+  const [fehler, setFehler] = useState('');
+  const [formularOffen, setFormularOffen] = useState(false);
 
-const ABTestManager: React.FC<ABTestManagerProps> = ({ siteId, currentConfig }) => {
-  const [tests, setTests] = useState<ABTest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedTest, setSelectedTest] = useState<ABTestDetail | null>(null);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [creating, setCreating] = useState(false);
-  
-  // New test form
-  const [newTest, setNewTest] = useState({
-    name: '',
-    description: '',
-    hypothesis: '',
-    trafficSplit: 50,
-    variantBChanges: 'primary_color', // What to change in B
-    variantBValue: '#10b981',
-  });
+  // Formularfelder
+  const [name, setName] = useState('');
+  const [hypothese, setHypothese] = useState('');
+  const [split, setSplit] = useState(50);
+  const [minSample, setMinSample] = useState(1000);
+  const [variantB, setVariantB] = useState<ABVariantConfig>({});
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
-
-  useEffect(() => {
-    loadTests();
+  const ladeTests = useCallback(async () => {
+    if (!siteId) return;
+    setLadeListe(true);
+    setFehler('');
+    try {
+      setTests(await listSiteTests(siteId));
+    } catch (err: any) {
+      setFehler(fehlertext(err, 'Tests konnten nicht geladen werden.'));
+    } finally {
+      setLadeListe(false);
+    }
   }, [siteId]);
 
-  const loadTests = async () => {
+  useEffect(() => { ladeTests(); }, [ladeTests]);
+
+  // Beim Öffnen des Formulars Variante B mit der aktuellen Config vorbelegen,
+  // damit der Nutzer nur den zu testenden Unterschied ändern muss.
+  useEffect(() => {
+    if (!formularOffen) return;
+    setVariantB({
+      layout: (config?.layout as string) || 'banner_bottom',
+      primary_color: (config?.primary_color as string) || '#6366f1',
+      button_style: (config?.button_style as string) || 'rounded',
+    });
+  }, [formularOffen, config]);
+
+  const oeffneDetail = async (testId: number) => {
+    setLadeDetail(true);
+    setFehler('');
     try {
-      setLoading(true);
-      const response = await fetch(`${API_URL}/api/ab-tests/site/${siteId}`, {
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setTests(data.tests);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading tests:', error);
+      setDetail(await getTest(testId));
+    } catch (err: any) {
+      setFehler(fehlertext(err, 'Auswertung konnte nicht geladen werden.'));
     } finally {
-      setLoading(false);
+      setLadeDetail(false);
     }
   };
 
-  const loadTestDetails = async (testId: number) => {
-    try {
-      const response = await fetch(`${API_URL}/api/ab-tests/${testId}`, {
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setSelectedTest(data);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading test details:', error);
-    }
-  };
+  const varianteAAusConfig = (): ABVariantConfig => ({
+    layout: (config?.layout as string) || 'banner_bottom',
+    primary_color: (config?.primary_color as string) || '#6366f1',
+    button_style: (config?.button_style as string) || 'rounded',
+  });
 
-  const createTest = async () => {
+  const anlegen = async () => {
+    if (!name.trim()) { setFehler('Bitte einen Namen für den Test angeben.'); return; }
+    setAktion(-1);
+    setFehler('');
     try {
-      setCreating(true);
-      
-      // Build variant configs
-      const variantA = { ...currentConfig };
-      const variantB = { ...currentConfig };
-      
-      // Apply change to variant B
-      variantB[newTest.variantBChanges] = newTest.variantBValue;
-      
-      const response = await fetch(`${API_URL}/api/ab-tests`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          site_id: siteId,
-          name: newTest.name,
-          description: newTest.description,
-          hypothesis: newTest.hypothesis,
-          variant_a_config: variantA,
-          variant_b_config: variantB,
-          traffic_split: newTest.trafficSplit,
-        }),
+      await createTest({
+        site_id: siteId,
+        name: name.trim(),
+        hypothesis: hypothese.trim() || undefined,
+        variant_a_config: varianteAAusConfig(),
+        variant_b_config: variantB,
+        traffic_split: split,
+        min_sample_size: minSample,
       });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setShowCreateDialog(false);
-          loadTests();
-          // Reset form
-          setNewTest({
-            name: '',
-            description: '',
-            hypothesis: '',
-            trafficSplit: 50,
-            variantBChanges: 'primary_color',
-            variantBValue: '#10b981',
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error creating test:', error);
+      setFormularOffen(false);
+      setName(''); setHypothese(''); setSplit(50); setMinSample(1000);
+      await ladeTests();
+    } catch (err: any) {
+      setFehler(fehlertext(err, 'Test konnte nicht angelegt werden.'));
     } finally {
-      setCreating(false);
+      setAktion(null);
     }
   };
 
-  const startTest = async (testId: number) => {
+  const fuehreAus = async (testId: number, fn: () => Promise<unknown>) => {
+    setAktion(testId);
+    setFehler('');
     try {
-      const response = await fetch(`${API_URL}/api/ab-tests/${testId}/start`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        loadTests();
-        if (selectedTest?.test.id === testId) {
-          loadTestDetails(testId);
-        }
-      }
-    } catch (error) {
-      console.error('Error starting test:', error);
+      await fn();
+      await ladeTests();
+      if (detail?.test.id === testId) await oeffneDetail(testId);
+    } catch (err: any) {
+      setFehler(fehlertext(err, 'Aktion fehlgeschlagen.'));
+    } finally {
+      setAktion(null);
     }
   };
 
-  const stopTest = async (testId: number, winner?: string) => {
-    try {
-      const response = await fetch(`${API_URL}/api/ab-tests/${testId}/stop?winner=${winner || ''}`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        loadTests();
-        if (selectedTest?.test.id === testId) {
-          loadTestDetails(testId);
-        }
-      }
-    } catch (error) {
-      console.error('Error stopping test:', error);
-    }
-  };
-
-  const deleteTest = async (testId: number) => {
-    if (!confirm('Sind Sie sicher, dass Sie diesen Test loeschen moechten?')) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/ab-tests/${testId}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        loadTests();
-        if (selectedTest?.test.id === testId) {
-          setSelectedTest(null);
-        }
-      }
-    } catch (error) {
-      console.error('Error deleting test:', error);
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      draft: 'bg-gray-500',
-      running: 'bg-green-500',
-      paused: 'bg-yellow-500',
-      completed: 'bg-blue-500',
-      cancelled: 'bg-red-500',
-    };
-    
-    const labels: Record<string, string> = {
-      draft: 'Entwurf',
-      running: 'Aktiv',
-      paused: 'Pausiert',
-      completed: 'Abgeschlossen',
-      cancelled: 'Abgebrochen',
-    };
-    
-    return (
-      <Badge className={`${styles[status] || 'bg-gray-500'} text-white`}>
-        {labels[status] || status}
-      </Badge>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-      </div>
-    );
-  }
+  const laeuftBereits = tests.some((t) => t.status === 'running');
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Kopf */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            <FlaskConical className="w-5 h-5 text-orange-500" />
-            A/B Testing
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Testen Sie verschiedene Banner-Varianten zur Optimierung der Opt-In-Rate
+          <h3 className="text-lg font-semibold dark:text-white text-gray-900 flex items-center gap-2">
+            <FlaskConical className="w-5 h-5 text-teal-500" />
+            A/B-Tests
+          </h3>
+          <p className="text-sm dark:text-zinc-400 text-gray-600 mt-1">
+            Zwei Bannervarianten gegeneinander testen. Variante A ist Ihre aktuelle
+            Konfiguration, Variante B die Abwandlung.
           </p>
         </div>
-        
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogTrigger asChild>
-            <Button className="bg-orange-500 hover:bg-orange-600">
-              <Plus className="w-4 h-4 mr-2" />
-              Neuer Test
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>Neuen A/B Test erstellen</DialogTitle>
-              <DialogDescription>
-                Erstellen Sie einen Test, um verschiedene Banner-Konfigurationen zu vergleichen.
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Test-Name</Label>
-                <Input
-                  id="name"
-                  value={newTest.name}
-                  onChange={(e) => setNewTest({ ...newTest, name: e.target.value })}
-                  placeholder="z.B. Button-Farbe Test"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="hypothesis">Hypothese</Label>
-                <Textarea
-                  id="hypothesis"
-                  value={newTest.hypothesis}
-                  onChange={(e) => setNewTest({ ...newTest, hypothesis: e.target.value })}
-                  placeholder="z.B. Ein gruener Button fuehrt zu hoeherer Akzeptanzrate"
-                  rows={2}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label>Was wird getestet?</Label>
-                <Select
-                  value={newTest.variantBChanges}
-                  onValueChange={(v) => setNewTest({ ...newTest, variantBChanges: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="primary_color">Primaerfarbe</SelectItem>
-                    <SelectItem value="layout">Layout</SelectItem>
-                    <SelectItem value="button_style">Button-Stil</SelectItem>
-                    <SelectItem value="position">Position</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              {newTest.variantBChanges === 'primary_color' && (
-                <div className="space-y-2">
-                  <Label htmlFor="color">Variante B Farbe</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="color"
-                      type="color"
-                      value={newTest.variantBValue}
-                      onChange={(e) => setNewTest({ ...newTest, variantBValue: e.target.value })}
-                      className="w-16 h-10"
-                    />
-                    <Input
-                      value={newTest.variantBValue}
-                      onChange={(e) => setNewTest({ ...newTest, variantBValue: e.target.value })}
-                      className="flex-1"
-                    />
-                  </div>
-                </div>
-              )}
-              
-              <div className="space-y-2">
-                <Label>Traffic-Verteilung: {newTest.trafficSplit}% / {100 - newTest.trafficSplit}%</Label>
-                <Slider
-                  value={[newTest.trafficSplit]}
-                  onValueChange={([v]) => setNewTest({ ...newTest, trafficSplit: v })}
-                  min={10}
-                  max={90}
-                  step={5}
-                />
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>Variante A (Control)</span>
-                  <span>Variante B (Test)</span>
-                </div>
-              </div>
-            </div>
-            
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-                Abbrechen
-              </Button>
-              <Button 
-                onClick={createTest} 
-                disabled={!newTest.name || creating}
-                className="bg-orange-500 hover:bg-orange-600"
-              >
-                {creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Test erstellen
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button
+          onClick={() => setFormularOffen((o) => !o)}
+          disabled={!siteId}
+          className="gap-2 bg-teal-500 hover:bg-teal-600 text-white"
+        >
+          <Plus className="w-4 h-4" />
+          {formularOffen ? 'Abbrechen' : 'Neuer Test'}
+        </Button>
       </div>
 
-      {/* Active Test Alert */}
-      {tests.find(t => t.status === 'running') && (
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="flex items-center gap-4 py-4">
-            <div className="p-2 bg-green-500 rounded-full">
-              <Play className="w-4 h-4 text-white" />
+      {fehler && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-500">
+          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <span>{fehler}</span>
+        </div>
+      )}
+
+      {/* Formular */}
+      {formularOffen && (
+        <Card className="dark:bg-zinc-900/50 bg-white/70">
+          <CardContent className="p-5 space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="ab-name">Name des Tests</Label>
+                <Input
+                  id="ab-name" value={name} onChange={(e) => setName(e.target.value)}
+                  placeholder="z. B. Dialog mittig statt Banner unten"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ab-split">Anteil Variante A (%)</Label>
+                <Input
+                  id="ab-split" type="number" min={0} max={100} value={split}
+                  onChange={(e) => setSplit(Number(e.target.value))}
+                />
+              </div>
             </div>
-            <div className="flex-1">
-              <p className="font-medium text-green-800">
-                Test aktiv: {tests.find(t => t.status === 'running')?.name}
+
+            <div className="space-y-2">
+              <Label htmlFor="ab-hypothese">Hypothese (optional)</Label>
+              <Textarea
+                id="ab-hypothese" value={hypothese} onChange={(e) => setHypothese(e.target.value)}
+                placeholder="Was erwarten Sie — und warum? z. B. „Ein mittiger Dialog erhöht die Zustimmungsquote, weil er schwerer zu übersehen ist.“"
+                rows={2}
+              />
+            </div>
+
+            <div className="rounded-lg border dark:border-zinc-800 border-gray-200 p-4 space-y-4">
+              <p className="text-sm font-medium dark:text-white text-gray-900">
+                Variante B — nur das ändern, was getestet werden soll
               </p>
-              <p className="text-sm text-green-600">
-                {tests.find(t => t.status === 'running')?.total_impressions.toLocaleString()} Impressionen
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Layout</Label>
+                  <Select
+                    value={variantB.layout as string}
+                    onValueChange={(v) => setVariantB((c) => ({ ...c, layout: v }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {LAYOUTS.map((l) => (
+                        <SelectItem key={l.wert} value={l.wert}>{l.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Buttonform</Label>
+                  <Select
+                    value={variantB.button_style as string}
+                    onValueChange={(v) => setVariantB((c) => ({ ...c, button_style: v }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {BUTTON_STYLES.map((b) => (
+                        <SelectItem key={b.wert} value={b.wert}>{b.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ab-farbe">Hauptfarbe</Label>
+                  <Input
+                    id="ab-farbe" type="color"
+                    value={(variantB.primary_color as string) || '#6366f1'}
+                    onChange={(e) => setVariantB((c) => ({ ...c, primary_color: e.target.value }))}
+                    className="h-10 p-1"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 max-w-xs">
+              <Label htmlFor="ab-sample">Mindest-Stichprobe je Variante</Label>
+              <Input
+                id="ab-sample" type="number" min={100} value={minSample}
+                onChange={(e) => setMinSample(Number(e.target.value))}
+              />
+              <p className="text-xs dark:text-zinc-500 text-gray-500">
+                Unter dieser Zahl gilt ein Ergebnis als nicht belastbar.
               </p>
             </div>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => {
-                const test = tests.find(t => t.status === 'running');
-                if (test) loadTestDetails(test.id);
-              }}
+
+            <Button
+              onClick={anlegen} disabled={aktion === -1}
+              className="gap-2 bg-teal-500 hover:bg-teal-600 text-white"
             >
-              Details anzeigen
+              {aktion === -1 ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Test anlegen
             </Button>
           </CardContent>
         </Card>
       )}
 
-      {/* Tests List */}
-      {tests.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <FlaskConical className="w-12 h-12 text-gray-300 mb-4" />
-            <p className="text-gray-500 mb-4">Noch keine A/B Tests erstellt</p>
-            <Button onClick={() => setShowCreateDialog(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Ersten Test erstellen
-            </Button>
+      {/* Liste */}
+      {ladeListe ? (
+        <div className="flex items-center gap-2 text-sm dark:text-zinc-400 text-gray-600">
+          <Loader2 className="w-4 h-4 animate-spin" /> Tests werden geladen …
+        </div>
+      ) : tests.length === 0 ? (
+        <Card className="dark:bg-zinc-900/50 bg-white/70">
+          <CardContent className="p-8 text-center">
+            <BarChart3 className="w-10 h-10 mx-auto mb-3 dark:text-zinc-600 text-gray-600 dark:text-gray-400" />
+            <p className="dark:text-zinc-300 text-gray-700 font-medium">Noch kein Test angelegt</p>
+            <p className="text-sm dark:text-zinc-500 text-gray-500 mt-1">
+              Ein Test läuft immer nur für eine Seite gleichzeitig.
+            </p>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4">
-          {tests.map((test) => (
-            <Card 
-              key={test.id}
-              className={`cursor-pointer transition-all hover:shadow-md ${
-                selectedTest?.test.id === test.id ? 'ring-2 ring-orange-500' : ''
-              }`}
-              onClick={() => loadTestDetails(test.id)}
-            >
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className={`p-2 rounded-full ${
-                      test.status === 'running' ? 'bg-green-100' : 
-                      test.status === 'completed' ? 'bg-blue-100' : 'bg-gray-100'
-                    }`}>
-                      {test.status === 'running' ? (
-                        <Play className="w-4 h-4 text-green-600" />
-                      ) : test.status === 'completed' ? (
-                        <CheckCircle className="w-4 h-4 text-blue-600" />
-                      ) : (
-                        <FlaskConical className="w-4 h-4 text-gray-600" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium">{test.name}</h3>
-                        {getStatusBadge(test.status)}
-                        {test.winner && (
-                          <Badge className="bg-yellow-500 text-white">
-                            <Trophy className="w-3 h-3 mr-1" />
-                            Gewinner: {test.winner}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-500">
-                        {test.total_impressions.toLocaleString()} Impressionen
-                        {test.start_date && ` • Gestartet: ${new Date(test.start_date).toLocaleDateString('de-DE')}`}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                    {test.status === 'draft' && (
-                      <>
-                        <Button 
-                          size="sm" 
-                          onClick={() => startTest(test.id)}
-                          className="bg-green-500 hover:bg-green-600"
-                        >
-                          <Play className="w-4 h-4 mr-1" />
-                          Starten
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => deleteTest(test.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </>
-                    )}
-                    {test.status === 'running' && (
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => stopTest(test.id)}
-                      >
-                        <StopCircle className="w-4 h-4 mr-1" />
-                        Beenden
-                      </Button>
+        <div className="space-y-3">
+          {tests.map((t) => (
+            <Card key={t.id} className="dark:bg-zinc-900/50 bg-white/70">
+              <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium dark:text-white text-gray-900">{t.name}</span>
+                    <span className={`px-2 py-0.5 rounded text-xs ${STATUS_STYLE[t.status] ?? ''}`}>
+                      {STATUS_LABEL[t.status] ?? t.status}
+                    </span>
+                    {t.winner && (
+                      <span className="px-2 py-0.5 rounded text-xs bg-teal-500/15 text-teal-500">
+                        Sieger: {t.winner}
+                      </span>
                     )}
                   </div>
+                  <p className="text-xs dark:text-zinc-500 text-gray-500 mt-1">
+                    {t.total_impressions.toLocaleString('de-DE')} Einblendungen · Split {t.traffic_split}/{100 - t.traffic_split}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => oeffneDetail(t.id)}>
+                    Auswertung
+                  </Button>
+
+                  {(t.status === 'draft' || t.status === 'paused') && (
+                    <Button
+                      size="sm" className="gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                      // Das Backend lässt nur einen laufenden Test je Seite zu —
+                      // hier schon sperren statt den Nutzer in den Fehler laufen zu lassen.
+                      disabled={aktion === t.id || laeuftBereits}
+                      title={laeuftBereits ? 'Es läuft bereits ein Test für diese Seite.' : undefined}
+                      onClick={() => fuehreAus(t.id, () => startTest(t.id))}
+                    >
+                      {aktion === t.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                      Starten
+                    </Button>
+                  )}
+
+                  {t.status === 'running' && (
+                    <Button
+                      size="sm" variant="outline" className="gap-1"
+                      disabled={aktion === t.id}
+                      onClick={() => fuehreAus(t.id, () => stopTest(t.id))}
+                    >
+                      {aktion === t.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Square className="w-3 h-3" />}
+                      Beenden
+                    </Button>
+                  )}
+
+                  {t.status !== 'running' && (
+                    <Button
+                      size="sm" variant="outline"
+                      className="gap-1 text-red-500 hover:text-red-600"
+                      disabled={aktion === t.id}
+                      onClick={() => {
+                        if (!window.confirm(`Test „${t.name}“ endgültig löschen? Die erfassten Ergebnisse gehen mit verloren.`)) return;
+                        fuehreAus(t.id, () => deleteTest(t.id));
+                      }}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -527,224 +380,109 @@ const ABTestManager: React.FC<ABTestManagerProps> = ({ siteId, currentConfig }) 
         </div>
       )}
 
-      {/* Test Details */}
-      {selectedTest && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>{selectedTest.test.name}</span>
-              {getStatusBadge(selectedTest.test.status)}
-            </CardTitle>
-            {selectedTest.test.hypothesis && (
-              <CardDescription>{selectedTest.test.hypothesis}</CardDescription>
+      {/* Auswertung */}
+      {ladeDetail && (
+        <div className="flex items-center gap-2 text-sm dark:text-zinc-400 text-gray-600">
+          <Loader2 className="w-4 h-4 animate-spin" /> Auswertung wird geladen …
+        </div>
+      )}
+
+      {detail && !ladeDetail && (
+        <Card className="dark:bg-zinc-900/50 bg-white/70">
+          <CardContent className="p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h4 className="font-semibold dark:text-white text-gray-900">
+                Auswertung: {detail.test.name}
+              </h4>
+              <Button variant="ghost" size="sm" onClick={() => setDetail(null)}>schließen</Button>
+            </div>
+
+            {detail.test.hypothesis && (
+              <p className="text-sm dark:text-zinc-400 text-gray-600 italic">
+                „{detail.test.hypothesis}“
+              </p>
             )}
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="results">
-              <TabsList>
-                <TabsTrigger value="results">Ergebnisse</TabsTrigger>
-                <TabsTrigger value="statistics">Statistik</TabsTrigger>
-                <TabsTrigger value="config">Konfiguration</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="results" className="space-y-4 mt-4">
-                {/* Results Comparison */}
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Variant A */}
-                  <Card className={selectedTest.results.leading_variant === 'A' ? 'ring-2 ring-green-500' : ''}>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base flex items-center justify-between">
-                        <span>Variante A (Control)</span>
-                        {selectedTest.results.leading_variant === 'A' && (
-                          <TrendingUp className="w-4 h-4 text-green-500" />
-                        )}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Impressionen</span>
-                          <span className="font-medium">
-                            {selectedTest.results.variant_a.impressions.toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Akzeptiert</span>
-                          <span className="font-medium">
-                            {selectedTest.results.variant_a.accepted_all.toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-lg">
-                          <span className="text-gray-500">Rate</span>
-                          <span className="font-bold text-green-600">
-                            {selectedTest.results.variant_a.rate}%
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  {/* Variant B */}
-                  <Card className={selectedTest.results.leading_variant === 'B' ? 'ring-2 ring-green-500' : ''}>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base flex items-center justify-between">
-                        <span>Variante B (Test)</span>
-                        {selectedTest.results.leading_variant === 'B' && (
-                          <TrendingUp className="w-4 h-4 text-green-500" />
-                        )}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Impressionen</span>
-                          <span className="font-medium">
-                            {selectedTest.results.variant_b.impressions.toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Akzeptiert</span>
-                          <span className="font-medium">
-                            {selectedTest.results.variant_b.accepted_all.toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-lg">
-                          <span className="text-gray-500">Rate</span>
-                          <span className="font-bold text-green-600">
-                            {selectedTest.results.variant_b.rate}%
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-                
-                {/* Improvement */}
-                <Card className={selectedTest.results.improvement_percent > 0 ? 'bg-green-50' : 'bg-red-50'}>
-                  <CardContent className="py-4">
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              {(['variant_a', 'variant_b'] as const).map((schluessel) => {
+                const v = detail.results[schluessel];
+                const buchstabe: ABVariant = schluessel === 'variant_a' ? 'A' : 'B';
+                const fuehrt = detail.results.leading_variant === buchstabe;
+                return (
+                  <div
+                    key={schluessel}
+                    className={`rounded-lg border p-4 ${
+                      fuehrt
+                        ? 'border-teal-500/50 bg-teal-500/5'
+                        : 'dark:border-zinc-800 border-gray-200'
+                    }`}
+                  >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {selectedTest.results.improvement_percent > 0 ? (
-                          <TrendingUp className="w-5 h-5 text-green-600" />
-                        ) : (
-                          <TrendingDown className="w-5 h-5 text-red-600" />
+                      <span className="font-medium dark:text-white text-gray-900">
+                        Variante {buchstabe}
+                        {buchstabe === 'A' && (
+                          <span className="ml-2 text-xs dark:text-zinc-500 text-gray-500">(aktuell)</span>
                         )}
-                        <span className="font-medium">Veraenderung (B vs A)</span>
-                      </div>
-                      <span className={`text-xl font-bold ${
-                        selectedTest.results.improvement_percent > 0 ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        {selectedTest.results.improvement_percent > 0 ? '+' : ''}
-                        {selectedTest.results.improvement_percent}%
                       </span>
+                      {fuehrt && <TrendingUp className="w-4 h-4 text-teal-500" />}
                     </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              
-              <TabsContent value="statistics" className="space-y-4 mt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <Card>
-                    <CardContent className="py-4">
-                      <div className="text-center">
-                        <p className="text-gray-500 text-sm">Z-Score</p>
-                        <p className="text-2xl font-bold">{selectedTest.statistics.z_score}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="py-4">
-                      <div className="text-center">
-                        <p className="text-gray-500 text-sm">P-Wert</p>
-                        <p className="text-2xl font-bold">{selectedTest.statistics.p_value}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-                
-                <Card className={selectedTest.statistics.is_significant ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}>
-                  <CardContent className="py-4">
-                    <div className="flex items-center gap-3">
-                      {selectedTest.statistics.is_significant ? (
-                        <CheckCircle className="w-6 h-6 text-green-600" />
-                      ) : (
-                        <AlertCircle className="w-6 h-6 text-yellow-600" />
-                      )}
-                      <div>
-                        <p className="font-medium">
-                          {selectedTest.statistics.is_significant 
-                            ? 'Statistisch signifikant!' 
-                            : 'Noch nicht signifikant'}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Konfidenz-Level: {(selectedTest.statistics.confidence_level * 100).toFixed(0)}%
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                {!selectedTest.statistics.sample_reached && (
-                  <Card className="bg-blue-50 border-blue-200">
-                    <CardContent className="py-4">
-                      <div className="flex items-center gap-3">
-                        <Info className="w-6 h-6 text-blue-600" />
-                        <div>
-                          <p className="font-medium text-blue-800">
-                            Mindest-Stichprobe noch nicht erreicht
-                          </p>
-                          <p className="text-sm text-blue-600">
-                            Warten Sie auf mehr Impressionen fuer zuverlaessige Ergebnisse.
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-              
-              <TabsContent value="config" className="mt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Variante A</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <pre className="text-xs bg-gray-100 p-3 rounded overflow-auto max-h-48">
-                        {JSON.stringify(selectedTest.test.variant_a_config, null, 2)}
-                      </pre>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Variante B</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <pre className="text-xs bg-gray-100 p-3 rounded overflow-auto max-h-48">
-                        {JSON.stringify(selectedTest.test.variant_b_config, null, 2)}
-                      </pre>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
-            </Tabs>
-            
-            {/* Actions */}
-            {selectedTest.test.status === 'running' && selectedTest.statistics.is_significant && (
-              <div className="mt-6 flex gap-2 justify-end">
-                <Button 
-                  variant="outline"
-                  onClick={() => stopTest(selectedTest.test.id, 'A')}
+                    <p className="text-2xl font-semibold dark:text-white text-gray-900 mt-2">
+                      {v.rate.toLocaleString('de-DE', { maximumFractionDigits: 2 })} %
+                    </p>
+                    <p className="text-xs dark:text-zinc-500 text-gray-500">
+                      Zustimmung · {v.accepted_all.toLocaleString('de-DE')} von{' '}
+                      {v.impressions.toLocaleString('de-DE')} Einblendungen
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Einordnung: erst Stichprobe, dann Signifikanz — in dieser Reihenfolge
+                entscheidet auch das Backend. */}
+            <div className="rounded-lg border dark:border-zinc-800 border-gray-200 p-4 space-y-2">
+              {!detail.statistics.sample_reached ? (
+                <p className="text-sm flex items-start gap-2 text-amber-500">
+                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  Die Mindest-Stichprobe von{' '}
+                  {detail.test.min_sample_size.toLocaleString('de-DE')} je Variante ist noch
+                  nicht erreicht. Das Ergebnis ist noch nicht belastbar.
+                </p>
+              ) : detail.statistics.is_significant ? (
+                <p className="text-sm flex items-start gap-2 text-emerald-500">
+                  <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  Der Unterschied ist statistisch signifikant (p ={' '}
+                  {detail.statistics.p_value.toLocaleString('de-DE', { maximumFractionDigits: 4 })}
+                  , Konfidenz{' '}
+                  {(detail.statistics.confidence_level * 100).toLocaleString('de-DE')} %).
+                  {detail.results.leading_variant && (
+                    <> Variante {detail.results.leading_variant} liegt um{' '}
+                    {Math.abs(detail.results.improvement_percent).toLocaleString('de-DE', { maximumFractionDigits: 1 })} % vorn.</>
+                  )}
+                </p>
+              ) : (
+                <p className="text-sm flex items-start gap-2 dark:text-zinc-400 text-gray-600">
+                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  Kein statistisch signifikanter Unterschied (p ={' '}
+                  {detail.statistics.p_value.toLocaleString('de-DE', { maximumFractionDigits: 4 })}).
+                  Der gemessene Abstand kann Zufall sein.
+                </p>
+              )}
+            </div>
+
+            {detail.test.status === 'running' && (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm" variant="outline"
+                  onClick={() => fuehreAus(detail.test.id, () => stopTest(detail.test.id, 'A'))}
                 >
-                  <Trophy className="w-4 h-4 mr-2" />
-                  A als Gewinner
+                  Beenden, Variante A behalten
                 </Button>
-                <Button 
-                  className="bg-green-500 hover:bg-green-600"
-                  onClick={() => stopTest(selectedTest.test.id, 'B')}
+                <Button
+                  size="sm" variant="outline"
+                  onClick={() => fuehreAus(detail.test.id, () => stopTest(detail.test.id, 'B'))}
                 >
-                  <Trophy className="w-4 h-4 mr-2" />
-                  B als Gewinner
+                  Beenden, Variante B behalten
                 </Button>
               </div>
             )}
@@ -753,7 +491,4 @@ const ABTestManager: React.FC<ABTestManagerProps> = ({ siteId, currentConfig }) 
       )}
     </div>
   );
-};
-
-export default ABTestManager;
-
+}

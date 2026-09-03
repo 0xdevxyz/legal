@@ -8,9 +8,16 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from uuid import UUID
+import asyncpg
+import json
 import traceback
 import logging
 from dependencies import get_current_user
+from compliance_engine.jurisdictions import (
+    DEFAULT_JURISDICTION,
+    is_supported_jurisdiction,
+    normalize_jurisdiction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +27,54 @@ auth_service = None
 
 router = APIRouter(prefix="/api/v2/websites", tags=["websites"])
 
+
+def _kritische_aus_pillar_scores(wert: Any) -> int:
+    """
+    Liest die critical-Zählung aus einem score_history-Eintrag — robust für
+    den Altbestand, der in DREI Gestalten vorliegt:
+
+      - Dict  {"accessibility": .., "critical_issues": ..}   (Writer in
+        main_production; das Zielformat)
+      - Dict ohne "critical_issues"                          (website_monitor,
+        alter Mehrseiten-Rescore: rohes {pillar: score})
+      - Liste [{"pillar": .., "score": ..}, ...]             (website_monitor,
+        Einzelseiten-Ergebnis)
+
+    Dazu kommt: asyncpg liefert JSONB ohne registrierten Codec als STRING —
+    der frühere `isinstance(.., dict)`-Check lief deshalb auf JEDER Zeile ins
+    Leere und meldete critical=0. Erst parsen, dann unterscheiden.
+
+    Für Formen ohne critical-Information ist 0 "unbekannt", nicht "keine".
+    """
+    if isinstance(wert, str):
+        try:
+            wert = json.loads(wert)
+        except (ValueError, TypeError):
+            return 0
+    if isinstance(wert, dict):
+        try:
+            return int(wert.get("critical_issues") or 0)
+        except (ValueError, TypeError):
+            return 0
+    return 0
+
 # Pydantic Models
 class WebsiteCreate(BaseModel):
     url: str
-    score: int
+    # Der Score ist ein ERGEBNIS, keine Eigenschaft beim Anlegen.
+    #
+    # Als Pflichtfeld war er eine Sackgasse: eine Agentur, die zwanzig
+    # Kundenseiten einpflegt und danach scannen will, bekam 422 "Field
+    # required". Nur der Weg "erst scannen, dann anlegen" funktionierte —
+    # genau der, den die Oberflaeche zufaellig geht.
+    #
+    # Jetzt optional mit 0 (= noch nicht bewertet). Aufrufer, die einen Score
+    # mitschicken, verhalten sich unveraendert; die Aenderung kann nichts
+    # brechen, sie erlaubt nur mehr.
+    score: int = 0
+    # "de" | "eu" — Feld weggelassen = Wert unangetastet lassen (bzw. Account-Default
+    # erben beim Anlegen); explizit null/"" = Override löschen.
+    jurisdiction: Optional[str] = None
 
 class TrackedWebsite(BaseModel):
     id: Union[str, int, UUID]
@@ -32,6 +83,8 @@ class TrackedWebsite(BaseModel):
     last_scan_date: Optional[str] = None
     scan_count: int
     is_primary: bool
+    jurisdiction: Optional[str] = None  # Pro-Site-Override (None = Account-Default)
+    effective_jurisdiction: Optional[str] = None  # aufgelöst: Site-Override oder Account-Default
 
 class WebsitesResponse(BaseModel):
     success: bool
@@ -48,19 +101,22 @@ async def get_websites(user=Depends(get_current_user)):
         user_id = user["id"]
 
         async with db_pool.acquire() as conn:
-            # Get tracked websites
+            # Get tracked websites (inkl. effektiver Jurisdiction: Site-Override oder Account-Default)
             rows = await conn.fetch("""
                 SELECT 
-                    id,
-                    url,
-                    last_score,
-                    last_scan_date,
-                    scan_count,
-                    is_primary,
-                    created_at
-                FROM tracked_websites
-                WHERE user_id = $1
-                ORDER BY is_primary DESC, last_scan_date DESC
+                    tw.id,
+                    tw.url,
+                    tw.last_score,
+                    tw.last_scan_date,
+                    tw.scan_count,
+                    tw.is_primary,
+                    tw.created_at,
+                    tw.jurisdiction,
+                    ul.jurisdiction AS account_jurisdiction
+                FROM tracked_websites tw
+                LEFT JOIN user_limits ul ON ul.user_id = tw.user_id
+                WHERE tw.user_id = $1
+                ORDER BY tw.is_primary DESC, tw.last_scan_date DESC
             """, user_id)
             
             websites = [
@@ -70,7 +126,11 @@ async def get_websites(user=Depends(get_current_user)):
                     "last_score": int(row["last_score"]) if row["last_score"] is not None else 0,
                     "last_scan_date": row["last_scan_date"].isoformat() if row["last_scan_date"] else None,
                     "scan_count": int(row.get("scan_count", 0)) if row.get("scan_count") is not None else 0,
-                    "is_primary": bool(row.get("is_primary", False))
+                    "is_primary": bool(row.get("is_primary", False)),
+                    "jurisdiction": row.get("jurisdiction"),
+                    "effective_jurisdiction": normalize_jurisdiction(
+                        row.get("jurisdiction") or row.get("account_jurisdiction")
+                    ),
                 }
                 for row in rows
             ]
@@ -85,14 +145,29 @@ async def get_websites(user=Depends(get_current_user)):
     except Exception as e:
         print(f"❌ Error fetching websites: {str(e)}")
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to fetch websites: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch websites")
 
 @router.post("", response_model=WebsiteResponse)
 async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
     """Save or update a tracked website"""
     try:
         user_id = user["id"]
-        
+
+        # Jurisdiction validieren.
+        # Drei Fälle unterscheiden:
+        #   - Feld nicht mitgesendet  -> jurisdiction_sent=False  -> Wert unangetastet lassen
+        #   - explizit null oder ""   -> jurisdiction_sent=True, site_jurisdiction=None -> Override löschen
+        #   - "de"/"eu"               -> jurisdiction_sent=True, site_jurisdiction=Wert  -> Override setzen
+        jurisdiction_sent = "jurisdiction" in data.model_fields_set
+        site_jurisdiction = None
+        if data.jurisdiction:
+            if not is_supported_jurisdiction(data.jurisdiction):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unbekannte Jurisdiction '{data.jurisdiction}' (unterstützt: de, eu)"
+                )
+            site_jurisdiction = normalize_jurisdiction(data.jurisdiction)
+
         async with db_pool.acquire() as conn:
             # Check if website already exists
             existing = await conn.fetchrow("""
@@ -102,18 +177,22 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
             """, user_id, data.url)
             
             if existing:
-                # Update existing website
+                # Update existing website.
+                # $5 = "Feld wurde mitgesendet?" — nur dann wird jurisdiction überhaupt
+                # angefasst. So löscht ein Request ohne jurisdiction den Override NICHT,
+                # ein Request mit explizitem null löscht ihn dagegen sehr wohl.
                 website = await conn.fetchrow("""
                     UPDATE tracked_websites
-                    SET 
+                    SET
                         last_score = $1,
                         last_scan_date = $2,
-                        scan_count = scan_count + 1
+                        scan_count = scan_count + 1,
+                        jurisdiction = CASE WHEN $5 THEN $4 ELSE jurisdiction END
                     WHERE id = $3
-                    RETURNING 
-                        id, url, last_score, last_scan_date, 
-                        scan_count, is_primary
-                """, data.score, datetime.utcnow(), existing["id"])
+                    RETURNING
+                        id, url, last_score, last_scan_date,
+                        scan_count, is_primary, jurisdiction
+                """, data.score, datetime.utcnow(), existing["id"], site_jurisdiction, jurisdiction_sent)
             else:
                 # Check user limits
                 user_limits = await conn.fetchrow("""
@@ -136,16 +215,18 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                 is_primary = (website_count == 0)
                 
                 # Create new website
+                # jurisdiction mit anlegen — ein beim Anlegen mitgesendeter Override
+                # ging bisher verloren. NULL = kein Override (Account-Default gilt).
                 website = await conn.fetchrow("""
                     INSERT INTO tracked_websites (
-                        user_id, url, last_score, last_scan_date, 
-                        scan_count, is_primary
+                        user_id, url, last_score, last_scan_date,
+                        scan_count, is_primary, jurisdiction
                     )
-                    VALUES ($1, $2, $3, $4, 1, $5)
-                    RETURNING 
-                        id, url, last_score, last_scan_date, 
-                        scan_count, is_primary
-                """, user_id, data.url, data.score, datetime.utcnow(), is_primary)
+                    VALUES ($1, $2, $3, $4, 1, $5, $6)
+                    RETURNING
+                        id, url, last_score, last_scan_date,
+                        scan_count, is_primary, jurisdiction
+                """, user_id, data.url, data.score, datetime.utcnow(), is_primary, site_jurisdiction)
                 
                 # Update user_limits.websites_count
                 await conn.execute("""
@@ -179,7 +260,6 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                         scraped_bg = '#ffffff'
                         try:
                             from website_crawler import WebsiteCrawler
-                            import aiohttp
                             from bs4 import BeautifulSoup
                             from ssrf_protection import validate_url, SSRFError
                             _crawl_url = data.url if data.url.startswith('http') else f'https://{data.url}'
@@ -276,6 +356,11 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                 except Exception as e:
                     logger.warning(f"Legal Text Generator init fehlgeschlagen: {e}")
             
+            # Account-Default für die Auflösung der effektiven Jurisdiction
+            account_jurisdiction = await conn.fetchval("""
+                SELECT jurisdiction FROM user_limits WHERE user_id = $1
+            """, user_id)
+
             return {
                 "success": True,
                 "website": {
@@ -284,16 +369,40 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                     "last_score": int(website["last_score"]) if website["last_score"] is not None else 0,
                     "last_scan_date": website["last_scan_date"].isoformat() if website["last_scan_date"] else None,
                     "scan_count": int(website.get("scan_count", 0)) if website.get("scan_count") is not None else 0,
-                    "is_primary": bool(website.get("is_primary", False))
+                    "is_primary": bool(website.get("is_primary", False)),
+                    "jurisdiction": website.get("jurisdiction"),
+                    "effective_jurisdiction": normalize_jurisdiction(
+                        website.get("jurisdiction") or account_jurisdiction
+                    ),
                 }
             }
             
     except HTTPException:
         raise
+    except asyncpg.UniqueViolationError:
+        # `tracked_websites.url` ist GLOBAL eindeutig — eine Domain gehoert
+        # genau einem Konto. Das ist Absicht und passt zum Rest: Fixes,
+        # Fix-Manifest und Pruefnachweis haengen alle an der site_id (der
+        # Domain), nicht am Konto. Zwei Konten mit derselben Domain wuerden
+        # sich Freigaben und Nachweis teilen.
+        #
+        # Falsch war nur die Antwort. Der Kunde bekam HTTP 500 "Failed to save
+        # website" — ohne jeden Hinweis, was er tun soll. Beim Audit-Durchstich
+        # ist genau das passiert, und es ist der wahrscheinlichste Fall
+        # ueberhaupt: die Domain wurde frueher unter einem Testkonto oder von
+        # der betreuenden Agentur angelegt.
+        logger.info("Domain %s ist bereits einem anderen Konto zugeordnet", data.url)
+        raise HTTPException(
+            status_code=409,
+            detail=(f"Die Domain {data.url} ist bereits einem complyo-Konto "
+                    f"zugeordnet. Eine Domain kann immer nur von einem Konto "
+                    f"betreut werden. Wenn sie Ihnen gehört, übernimmt der "
+                    f"Support sie für Sie: support@complyo.de"),
+        )
     except Exception as e:
-        print(f"❌ Error saving website: {str(e)}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to save website: {str(e)}")
+        logger.error("Website %s konnte nicht gespeichert werden: %r",
+                     getattr(data, "url", "?"), e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save website")
 
 @router.delete("/{website_id}")
 async def delete_website(website_id: str, user=Depends(get_current_user)):
@@ -319,26 +428,50 @@ async def delete_website(website_id: str, user=Depends(get_current_user)):
             
             if not website:
                 raise HTTPException(status_code=404, detail="Website not found")
-            
-            if website["is_primary"]:
+
+            # Plan-Typ bestimmen: Einzel-Pläne haben eine dauerhaft verknüpfte
+            # Primärseite (Single-Domain-Lock). Agentur/Expert verwalten mehrere
+            # Seiten frei und dürfen jede Seite — auch die primäre — entfernen.
+            plan_row = await conn.fetchrow(
+                "SELECT plan_type FROM user_limits WHERE user_id = $1", user_id
+            )
+            plan_type = (plan_row["plan_type"] if plan_row else None) or "free"
+            is_agency = plan_type in ("agency", "expert")
+
+            if website["is_primary"] and not is_agency:
                 raise HTTPException(
                     status_code=403,
-                    detail="Die primäre Website kann nicht gelöscht werden. Diese Verknüpfung ist dauerhaft. Bitte kontaktieren Sie den Support unter support@complyo.tech für Änderungen."
+                    detail="Die primäre Website kann nicht gelöscht werden. Diese Verknüpfung ist dauerhaft. Bitte kontaktieren Sie den Support unter support@complyo.de für Änderungen."
                 )
-            
+
             # Delete website
             await conn.execute("""
                 DELETE FROM tracked_websites
                 WHERE id = $1
             """, website_uuid)
-            
+
+            # War die gelöschte Seite primär (nur bei Agentur/Expert möglich),
+            # eine verbleibende Seite zur neuen Primärseite befördern, damit das
+            # Dashboard weiterhin eine Standardseite hat.
+            if website["is_primary"]:
+                await conn.execute("""
+                    UPDATE tracked_websites
+                    SET is_primary = TRUE
+                    WHERE id = (
+                        SELECT id FROM tracked_websites
+                        WHERE user_id = $1
+                        ORDER BY created_at ASC
+                        LIMIT 1
+                    )
+                """, user_id)
+
             # Update user_limits.websites_count
             await conn.execute("""
                 UPDATE user_limits
                 SET websites_count = websites_count - 1
                 WHERE user_id = $1
             """, user_id)
-            
+
             return {"success": True, "message": "Website deleted"}
             
     except HTTPException:
@@ -346,7 +479,7 @@ async def delete_website(website_id: str, user=Depends(get_current_user)):
     except Exception as e:
         print(f"❌ Error deleting website: {str(e)}")
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to delete website: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete website")
 
 @router.get("/{website_id}/last-scan")
 async def get_last_scan(
@@ -406,7 +539,7 @@ async def get_last_scan(
     except Exception as e:
         print(f"❌ Error getting last scan: {str(e)}")
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to get last scan: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get last scan")
 
 @router.get("/{website_id}/score-history")
 async def get_score_history(
@@ -479,8 +612,7 @@ async def get_score_history(
             
             result = []
             for entry in history:
-                pillar_scores = entry["pillar_scores"] or {}
-                critical_count = pillar_scores.get("critical_issues", 0) if isinstance(pillar_scores, dict) else 0
+                critical_count = _kritische_aus_pillar_scores(entry["pillar_scores"])
                 result.append({
                     "date": entry["date"].isoformat() if entry["date"] else None,
                     "score": entry["score"] or 0,
@@ -493,7 +625,7 @@ async def get_score_history(
         raise
     except Exception as e:
         logger.error(f"Error getting score history: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get score history: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get score history")
 
 
 @router.get("/{website_id}/scan-status")

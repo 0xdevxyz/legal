@@ -50,11 +50,30 @@ export interface WaitlistJoinRequest {
   name?: string;
   phone?: string;
   consent: boolean;
-  website?: string;
+  website?: string;        // Honeypot – bleibt bei Menschen leer
   source?: string;
+  form_ts?: number;        // Alt-Feld, vom Server nicht mehr ausgewertet
+  form_token?: string;     // vom Server ausgestellt und signiert
+  turnstile_token?: string;
+
+  // Herkunft. Ohne diese Felder laesst sich nicht sagen, welche Anzeige einen
+  // Lead gebracht hat — bei bezahltem Traffic ist das die zentrale Frage.
+  campaign?: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  utm_term?: string;
+  landing_path?: string;
 }
 
 export interface WaitlistJoinResponse {
   status: 'pending_confirmation' | 'already_registered';
   message: string;
+}
+
+export interface WaitlistPlaetze {
+  gesamt: number;
+  vergeben: number;
+  frei: number;
 }

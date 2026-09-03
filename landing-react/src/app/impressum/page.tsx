@@ -3,11 +3,23 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { ArrowLeft, Mail, MapPin, Phone, Globe } from 'lucide-react';
+import { ArrowLeft, Mail, MapPin, Phone, Receipt, User } from 'lucide-react';
+import { ANBIETER } from '@/lib/anbieter';
+import AnbieterUnvollstaendig from '@/components/legal/AnbieterUnvollstaendig';
 
+/**
+ * Angaben nach § 5 DDG.
+ *
+ * Die Anbieterdaten stehen seit dem 01.09.2026 in @/lib/anbieter und werden von
+ * Impressum, AGB und Datenschutzerklaerung gemeinsam benutzt. Vorher trug jede
+ * der drei Seiten ihren eigenen Satz Platzhalter, und nur diese hier wurde
+ * gepflegt.
+ */
 export default function ImpressumPage() {
+  const anschrift = ANBIETER.plz + ' ' + ANBIETER.ort;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -22,132 +34,99 @@ export default function ImpressumPage() {
             Zurück zur Startseite
           </Link>
 
+          <AnbieterUnvollstaendig seite="Das Impressum" />
+
           <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">Impressum</h1>
-            <p className="text-gray-600">Angaben gemäß § 5 TMG</p>
+            <p className="text-gray-600">Angaben gemäß § 5 DDG</p>
           </div>
 
           <div className="bg-white rounded-xl shadow-lg p-8 space-y-8">
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Verantwortlich für den Inhalt</h2>
-              <div className="space-y-3 text-gray-700">
-                <div className="flex items-start gap-3">
-                  <MapPin className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
-                  <div>
-                    <p className="font-semibold">Complyo GmbH</p>
-                    <p>Musterstraße 123</p>
-                    <p>10115 Berlin</p>
-                    <p>Deutschland</p>
-                  </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Anbieter</h2>
+              <div className="flex items-start gap-3 text-gray-700">
+                <MapPin className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold">{ANBIETER.name || 'Name fehlt'}</p>
+                  <p className="text-gray-600">{ANBIETER.geschaeftsbezeichnung}</p>
+                  <p className="mt-2">{ANBIETER.strasse}</p>
+                  <p>{anschrift}</p>
+                  <p>{ANBIETER.land}</p>
                 </div>
               </div>
+              <p className="text-sm text-gray-500 mt-4">
+                Einzelunternehmen. Eine Eintragung im Handelsregister besteht nicht.
+              </p>
             </section>
 
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Kontakt</h2>
               <div className="space-y-3 text-gray-700">
                 <div className="flex items-center gap-3">
-                  <Phone className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                  <a href="tel:+49301234567" className="hover:text-blue-600 transition-colors">
-                    +49 (0) 30 1234567
-                  </a>
-                </div>
-                <div className="flex items-center gap-3">
                   <Mail className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                  <a href="mailto:info@complyo.tech" className="hover:text-blue-600 transition-colors">
-                    info@complyo.tech
+                  <a href={'mailto:' + ANBIETER.email} className="hover:text-blue-600 transition-colors">
+                    {ANBIETER.email}
                   </a>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Globe className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                  <a href="https://complyo.tech" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 transition-colors">
-                    www.complyo.tech
-                  </a>
-                </div>
+                {ANBIETER.telefon && (
+                  <div className="flex items-center gap-3">
+                    <Phone className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                    <a href={'tel:' + ANBIETER.telefon.replace(/[^+0-9]/g, '')} className="hover:text-blue-600 transition-colors">
+                      {ANBIETER.telefon}
+                    </a>
+                  </div>
+                )}
               </div>
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Rechtliche Angaben</h2>
-              <div className="space-y-4 text-gray-700">
-                <div>
-                  <p className="font-semibold mb-2">Handelsregister:</p>
-                  <p>HRB 123456 B</p>
-                  <p className="text-sm text-gray-600">Registergericht: Amtsgericht Berlin-Charlottenburg</p>
-                </div>
-                <div>
-                  <p className="font-semibold mb-2">Umsatzsteuer-ID:</p>
-                  <p>DE123456789</p>
-                  <p className="text-sm text-gray-600">gemäß § 27 a Umsatzsteuergesetz</p>
-                </div>
-                <div>
-                  <p className="font-semibold mb-2">Geschäftsführer:</p>
-                  <p>Max Mustermann</p>
-                </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Umsatzsteuer</h2>
+              <div className="flex items-start gap-3 text-gray-700">
+                <Receipt className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
+                <p>
+                  Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG:{' '}
+                  <span className="font-medium">{ANBIETER.ustIdNr || 'fehlt'}</span>
+                </p>
               </div>
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Haftungsausschluss</h2>
-              <div className="space-y-4 text-gray-700">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV
+              </h2>
+              <div className="flex items-start gap-3 text-gray-700">
+                <User className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
                 <div>
-                  <h3 className="font-semibold mb-2">Haftung für Inhalte</h3>
-                  <p className="text-sm leading-relaxed">
-                    Als Diensteanbieter sind wir gemäß § 7 Abs.1 TMG für eigene Inhalte auf diesen Seiten nach den allgemeinen Gesetzen verantwortlich. Nach §§ 8 bis 10 TMG sind wir als Diensteanbieter jedoch nicht verpflichtet, übermittelte oder gespeicherte fremde Informationen zu überwachen oder nach Umständen zu forschen, die auf eine rechtswidrige Tätigkeit hinweisen.
-                  </p>
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-2">Haftung für Links</h3>
-                  <p className="text-sm leading-relaxed">
-                    Unser Angebot enthält Links zu externen Websites Dritter, auf deren Inhalte wir keinen Einfluss haben. Deshalb können wir für diese fremden Inhalte auch keine Gewähr übernehmen. Für die Inhalte der verlinkten Seiten ist stets der jeweilige Anbieter oder Betreiber der Seiten verantwortlich.
-                  </p>
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-2">Urheberrecht</h3>
-                  <p className="text-sm leading-relaxed">
-                    Die durch die Seitenbetreiber erstellten Inhalte und Werke auf diesen Seiten unterliegen dem deutschen Urheberrecht. Die Vervielfältigung, Bearbeitung, Verbreitung und jede Art der Verwertung außerhalb der Grenzen des Urheberrechtes bedürfen der schriftlichen Zustimmung des jeweiligen Autors bzw. Erstellers.
-                  </p>
+                  <p>{ANBIETER.name || 'Name fehlt'}</p>
+                  <p>{ANBIETER.strasse}</p>
+                  <p>{anschrift}</p>
                 </div>
               </div>
-            </section>
-
-            <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">EU-Streitschlichtung</h2>
-              <p className="text-gray-700 text-sm leading-relaxed">
-                Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: 
-                <a 
-                  href="https://ec.europa.eu/consumers/odr/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline ml-1"
-                >
-                  https://ec.europa.eu/consumers/odr/
-                </a>
-                <br />
-                Unsere E-Mail-Adresse finden Sie oben im Impressum.
+              <p className="text-sm text-gray-500 mt-4">
+                Gilt für die redaktionellen Beiträge im{' '}
+                <Link href="/ratgeber" className="text-blue-600 hover:underline">Ratgeber</Link>.
               </p>
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Verbraucherstreitbeilegung / Universalschlichtungsstelle</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Streitbeilegung</h2>
               <p className="text-gray-700 text-sm leading-relaxed">
-                Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.
+                complyo schließt Verträge ausschließlich mit Unternehmern im Sinne des § 14 BGB.
+                Verbraucherschlichtungsverfahren nach dem VSBG kommen daher nicht in Betracht.
+                Zur Teilnahme an einem Streitbeilegungsverfahren vor einer Verbraucherschlichtungs&shy;stelle
+                sind wir weder verpflichtet noch bereit.
               </p>
             </section>
           </div>
 
           <div className="mt-8 text-center text-sm text-gray-600">
             <div className="flex justify-center gap-6">
-              <Link href="/datenschutz" className="hover:text-blue-600 transition-colors">
-                Datenschutz
-              </Link>
-              <Link href="/agb" className="hover:text-blue-600 transition-colors">
-                AGB
-              </Link>
+              <Link href="/agb" className="hover:text-blue-600 transition-colors">AGB</Link>
+              <Link href="/datenschutz" className="hover:text-blue-600 transition-colors">Datenschutz</Link>
             </div>
           </div>
         </motion.div>
       </div>
-    </div>
+    </main>
   );
 }

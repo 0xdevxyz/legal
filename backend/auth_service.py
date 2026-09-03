@@ -1,9 +1,31 @@
+"""
+Der Kern der Anmeldung: Passwoerter, Token, Sitzungen.
+
+AuthService bekommt den Datenbank-Pool und optional Redis. Ohne Redis
+funktioniert alles, nur die Sperrliste faellt weg, siehe unten.
+
+Zwei Tokenarten mit verschiedener Lebensdauer:
+- Access-Token, kurzlebig, signiert (HS256) und mit audience und issuer
+  geprueft. Traegt eine `jti`, damit ein einzelnes Token widerrufbar bleibt.
+- Refresh-Token, langlebig, liegt in `user_sessions` mit Geraet und IP, damit
+  der Nutzer einzelne Sitzungen beenden kann.
+
+Die `jti`-Sperrliste liegt in Redis (`_blacklist_jti`, `_is_jti_blacklisted`).
+Fehlt Redis, laesst sich ein bereits ausgegebener Access-Token bis zu seinem
+Ablauf nicht mehr zurueckziehen; `revoke_all_sessions` wirkt dann erst mit der
+naechsten Erneuerung.
+
+`cleanup_expired_sessions` raeumt abgelaufene Refresh-Token weg und will
+regelmaessig aufgerufen werden.
+"""
+
+
 import os
 import bcrypt as _bcrypt
 import jwt
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from uuid import uuid4
 import asyncpg
 import logging
@@ -17,6 +39,41 @@ _LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "900"))  # 15 min
 def _utcnow():
     return datetime.now(timezone.utc)
 
+
+# Module, die es gibt, und die Tarife, die per Definition ALLE enthalten.
+# Doppelt gefuehrt zu payment_routes/stripe_routes — dort wird beim Kauf
+# geschrieben, hier beim Lesen geprueft.
+_ALLE_MODULE = ['cookie', 'accessibility', 'legal_texts', 'monitoring']
+_VOLLZUGANG_TARIFE = ('pro', 'agency', 'expert', 'update')
+
+
+def _module_zugang(plan_type: str, gebuchte: list) -> list:
+    """
+    Welche Module ein Konto benutzen darf.
+
+    Bisher kam die Antwort ausschliesslich aus `user_modules`. Der Tarif war
+    dabei die eigentliche Wahrheit — `_resolve_modules()` im Kaufweg gibt fuer
+    pro/agency/expert/update grundsaetzlich ALLE Module zurueck. Die Zeilen in
+    `user_modules` sind nur die Buchhaltung dazu.
+
+    Faellt diese Buchhaltung aus, sieht ein zahlender Kunde "Modul nicht
+    aktiviert" — obwohl sein Tarif es einschliesst. Wege dorthin gibt es
+    mehrere: ein verlorener Stripe-Webhook, eine Tarifaenderung von Hand, eine
+    Migration, ein eingespieltes Backup. Genau dieser Fall ist im Kaufweg schon
+    einmal aufgetreten.
+
+    Deshalb hier abgeleitet statt nachgeschlagen: wer den Tarif hat, hat die
+    Module. Zusaetzlich gebuchte Einzelmodule kommen dazu — ein Konto verliert
+    durch diese Regel nie etwas.
+    """
+    zugang = list(gebuchte or [])
+    if (plan_type or '').lower() in _VOLLZUGANG_TARIFE:
+        for m in _ALLE_MODULE:
+            if m not in zugang:
+                zugang.append(m)
+    return zugang
+
+
 class AuthService:
     def __init__(self, db_pool: asyncpg.Pool, redis_client=None):
         self.db_pool = db_pool
@@ -25,7 +82,7 @@ class AuthService:
         self.jwt_secret = os.getenv("JWT_SECRET")
         if not self.jwt_secret:
             raise RuntimeError("❌ CRITICAL: JWT_SECRET environment variable is required!")
-        self.jwt_issuer = os.getenv("FRONTEND_URL", "https://complyo.tech")
+        self.jwt_issuer = os.getenv("FRONTEND_URL", "https://complyo.de")
         self.jwt_audience = "complyo-api"
         self.access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
         self.refresh_token_expire = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30")) * 24 * 60
@@ -75,7 +132,8 @@ class AuthService:
                 """,
                 user_id
             )
-            result['active_modules'] = [r['module_id'] for r in modules]
+            result['active_modules'] = _module_zugang(
+                result['plan_type'], [r['module_id'] for r in modules])
 
             return result
     

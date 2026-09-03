@@ -1,0 +1,18 @@
+{
+  "name": "@complyo/a11y-cli",
+  "version": "0.1.0",
+  "description": "Complyo Accessibility – HTML build-time source patcher (injects approved AI alt-texts into static .html files)",
+  "type": "module",
+  "bin": {
+    "complyo-a11y": "./complyo-a11y.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node complyo-a11y.mjs",
+    "test": "node --test"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

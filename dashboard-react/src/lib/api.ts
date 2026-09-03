@@ -1,11 +1,11 @@
 import axios, { AxiosResponse } from 'axios';
 import type { ComplianceAnalysis, FixResult, UserLimits, FixHistory } from '@/types/api';
-import { getApiClient } from '@/lib/api-client';
+import { getApiClient, LANGLAEUFER_TIMEOUT_MS } from '@/lib/api-client';
 
 const apiClient = getApiClient();
 
 // ✅ URL Validation Helper - Akzeptiert ALLE gängigen Formate
-// Unterstützt: https://, http://, www., nur domain (z.B. complyo.tech)
+// Unterstützt: https://, http://, www., nur domain (z.B. complyo.de)
 const validateAndNormalizeUrl = (url: string): string => {
  // Type-safe check für undefined/null
  if (!url || typeof url !== 'string') {
@@ -74,15 +74,28 @@ export const ensureCsrfCookie = async (): Promise<void> => {
 };
 
 // ✅ Website Analysis API Call
-export const analyzeWebsite = async (url: string, legalUpdateId?: number): Promise<ComplianceAnalysis> => {
+export const analyzeWebsite = async (url: string, legalUpdateId?: number, scanToken?: string): Promise<ComplianceAnalysis> => {
  try {
    const normalizedUrl = validateAndNormalizeUrl(url);
    const payload: Record<string, any> = { url: normalizedUrl };
    if (legalUpdateId !== undefined) {
      payload.legal_update_id = legalUpdateId;
    }
+   if (scanToken) {
+     // Unter diesem Token meldet der Scanner den echten Fortschritt —
+     // das Panel pollt /api/v2/analyze-progress/{token}.
+     payload.scan_token = scanToken;
+   }
 
-  const response: AxiosResponse<{ success: boolean; data: ComplianceAnalysis }> = await apiClient.post('/api/v2/analyze', payload);
+  // Eigenes Zeitlimit: der Scan laeuft serverseitig bis zu 300 s, der
+  // Vorgabewert des Clients liegt bei 60 s. Ohne das hier brach jeder Scan
+  // ab, der laenger als eine Minute brauchte — bei Agentur-Konten mit 40
+  // Unterseiten also praktisch jeder.
+  const response: AxiosResponse<{ success: boolean; data: ComplianceAnalysis }> = await apiClient.post(
+    '/api/v2/analyze',
+    payload,
+    { timeout: LANGLAEUFER_TIMEOUT_MS },
+  );
 
    if (!response.data || !response.data.success) {
      throw new Error('Analysis API did not return a successful response');
@@ -160,7 +173,9 @@ export const startAIFix = async (scanId: string, categories?: string[]): Promise
      fix_categories: categories,
    };
 
-   const response = await apiClient.post('/api/v2/ai-fix', payload);
+   const response = await apiClient.post('/api/v2/ai-fix', payload, {
+     timeout: LANGLAEUFER_TIMEOUT_MS,
+   });
 
    return response.data;
  } catch (error) {
@@ -581,7 +596,7 @@ export const createStripePortal = async (returnUrl?: string): Promise<PortalResp
  * Generiert Impressum, Datenschutz, AGB, Cookie-Policy via eigener KI + knowledge/laws/
  */
 
-export type LegalDocumentType = 'imprint' | 'privacy' | 'tos' | 'cookie-policy';
+export type LegalDocumentType = 'imprint' | 'privacy' | 'tos' | 'cookie-policy' | 'withdrawal';
 
 export interface LegalTextResponse {
   document_id: number | null;
@@ -596,19 +611,64 @@ export interface LegalTextResponse {
   source: string;
 }
 
+export interface LegalTextUserData {
+  // Stammdaten
+  company_name: string;
+  legal_form?: string;
+  address?: string;
+  zip_city?: string;
+  country?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  represented_by?: string;
+  representative_role?: string;
+  court?: string;
+  registration_number?: string;
+  vat_id?: string;
+  dpo_name?: string;
+  dpo_email?: string;
+  // Impressum
+  profession?: string;
+  regulatory_authority?: string;
+  content_responsible?: string;
+  content_responsible_address?: string;
+  // Datenschutz
+  hosting_provider?: string;
+  server_location?: string;
+  uses_analytics?: string;
+  uses_marketing?: string;
+  third_party_cookies?: string;
+  has_registration?: string;
+  has_contact_form?: string;
+  has_newsletter?: string;
+  has_shop?: string;
+  payment_providers?: string;
+  // Cookie
+  consent_tool?: string;
+  third_party_services?: string;
+  functional_cookie_duration?: string;
+  analytics_cookie_duration?: string;
+  marketing_cookie_duration?: string;
+  privacy_url?: string;
+  // AGB
+  target_audience?: string;
+  service_description?: string;
+  pricing_model?: string;
+  payment_methods?: string;
+  payment_due?: string;
+  invoicing?: string;
+  min_contract_duration?: string;
+  cancellation_period?: string;
+  auto_renewal?: string;
+  jurisdiction?: string;
+  // Widerruf
+  has_withdrawal_right?: string;
+  withdrawal_exceptions?: string;
+}
+
 export interface LegalTextGenerateRequest {
-  user_data: {
-    company_name: string;
-    legal_form?: string;
-    address?: string;
-    zip_city?: string;
-    country?: string;
-    phone?: string;
-    email?: string;
-    website?: string;
-    represented_by?: string;
-    vat_id?: string;
-  };
+  user_data: LegalTextUserData;
   language?: string;
   services_used?: string[];
   business_type?: string;
@@ -645,12 +705,11 @@ export interface EarlyWarning {
 
 export const getLegalText = async (
   type: LegalDocumentType,
-  userId: number,
 ): Promise<LegalTextResponse> => {
   try {
+    // user_id wird serverseitig aus dem JWT abgeleitet (Auth-Pflicht).
     const response: AxiosResponse<LegalTextResponse> = await apiClient.get(
       `/api/legal-texts/${type}`,
-      { params: { user_id: userId } },
     );
     return response.data;
   } catch (error) {
@@ -665,14 +724,13 @@ export const getLegalText = async (
 
 export const generateLegalText = async (
   type: LegalDocumentType,
-  userId: number,
   payload: LegalTextGenerateRequest,
 ): Promise<LegalTextResponse> => {
   try {
+    // user_id wird serverseitig aus dem JWT abgeleitet (Auth-Pflicht).
     const response: AxiosResponse<LegalTextResponse> = await apiClient.post(
       `/api/legal-texts/${type}/generate`,
       payload,
-      { params: { user_id: userId } },
     );
     return response.data;
   } catch (error) {
@@ -687,12 +745,12 @@ export const generateLegalText = async (
 
 export const getLegalTextHistory = async (
   type: LegalDocumentType,
-  userId: number,
   limit = 10,
 ): Promise<{ versions: LegalTextResponse[]; count: number }> => {
   try {
+    // user_id wird serverseitig aus dem JWT abgeleitet (Auth-Pflicht).
     const response = await apiClient.get(`/api/legal-texts/${type}/history`, {
-      params: { user_id: userId, limit },
+      params: { limit },
     });
     return response.data;
   } catch (error) {
@@ -844,7 +902,10 @@ const normalizeIssue = (issue: any): ComplianceIssue | null => {
         hint: 'Überprüfen Sie diesen Bereich'
       },
       solution: issue.solution || {
-        code_snippet: '',
+        // Der Scanner liefert kein solution-Objekt, wohl aber je Befund ein
+        // fix_code (z. B. das fertige img-Tag mit Alt-Text). Das stand hier
+        // fest auf leer und erreichte den Nutzer nie (31.08.2026).
+        code_snippet: issue.fix_code || '',
         steps: issue.recommendation ? [issue.recommendation] : []
       },
       auto_fixable: Boolean(issue.auto_fixable)

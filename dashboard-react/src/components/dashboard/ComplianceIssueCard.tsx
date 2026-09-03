@@ -3,9 +3,9 @@
 import React, { useState } from 'react';
 import { ComplianceIssue, FixResult } from '@/types/api';
 import { generateFix } from '@/lib/api';
-import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie, Lock, Image as ImageIcon, Pencil, Eye, ArrowRight } from 'lucide-react';
+import { Copy, Check, FileText, Shield, ExternalLink, Sparkles, Cookie, Lock, Image as ImageIcon, Pencil, Eye, ArrowRight, Globe, ChevronDown, X, Loader2 } from 'lucide-react';
 import { StripePaywallModal } from './StripePaywallModal';
-import { ConfirmFixModal } from './ConfirmFixModal';
+import { ConfirmFixModal, HINWEIS_VERSION } from './ConfirmFixModal';
 import { FixModal } from './FixModal';
 import { useToast } from '@/components/ui/Toast';
 import { AIFixPreview, AIFixPreviewMini } from '@/components/ai/AIFixPreview';
@@ -15,12 +15,66 @@ import { UnifiedFixButton } from './UnifiedFixButton';
 import { useRouter } from 'next/navigation';
 import { useDashboardStore } from '@/stores/dashboard';
 import { apiClient } from '@/lib/api-client';
+import { generateSiteId } from '@/lib/siteIdUtils';
+import { type WizardDocType } from '@/components/legal/LegalDocumentGenerator';
+import { LegalWizardModal } from '@/components/legal/LegalWizardModal';
 
 // Hilfsfunktion: Ist es ein Cookie-Problem?
 const isCookieIssue = (issue: ComplianceIssue): boolean => {
   const category = issue.category?.toLowerCase() || '';
   const title = issue.title?.toLowerCase() || '';
   return category.includes('cookie') || title.includes('cookie') || title.includes('consent');
+};
+
+// Hilfsfunktion: Hat dieses Issue eine dedizierte Complyo-Lösung?
+// (Cookie-Compliance-Seite, Barrierefreiheits-Widget, Datenschutz-/Impressum-Generator)
+// Für diese Issues ist der generische KI-Fix redundant — die konkreten
+// Handlungsanweisungen oben mit eigenem Button sind die richtige Lösung.
+const usesDedicatedSolution = (issue: ComplianceIssue): boolean => {
+  const category = issue.category?.toLowerCase() || '';
+  const title = issue.title?.toLowerCase() || '';
+
+  // Cookies → integrierte Cookie-Compliance-Lösung (/cookie-compliance)
+  if (isCookieIssue(issue)) return true;
+
+  // Barrierefreiheit → Complyo Widget fixt automatisch
+  if (
+    category.includes('barriere') ||
+    category.includes('accessibility') ||
+    title.includes('wcag') ||
+    title.includes('aria') ||
+    title.includes('kontrast') ||
+    title.includes('alt-text')
+  ) return true;
+
+  // DSGVO / Datenschutz / Impressum → interner Generator
+  if (
+    category.includes('dsgvo') ||
+    category.includes('gdpr') ||
+    category.includes('datenschutz') ||
+    category.includes('impressum') ||
+    title.includes('dsgvo') ||
+    title.includes('personenbezogen') ||
+    title.includes('verarbeitung') ||
+    title.includes('datenschutz') ||
+    title.includes('impressum')
+  ) return true;
+
+  return false;
+};
+
+// Weiche: Rechtstext-Issues gehen in den geführten Generator — alle 5
+// Dokumenttypen (Impressum, Datenschutz, AGB→tos, Widerruf→withdrawal,
+// Cookie-Richtlinie→cookie-policy). Direktgenerierung nur aus
+// Firmenname+E-Mail erzeugte Dokumente voller [Platzhalter].
+const getLegalWizardType = (issue: ComplianceIssue): WizardDocType | null => {
+  const title = issue.title?.toLowerCase() || '';
+  if (title.includes('impressum')) return 'impressum';
+  if (title.includes('datenschutz')) return 'datenschutz';
+  if (title.includes('agb') || title.includes('geschäftsbedingung')) return 'agb';
+  if (title.includes('widerruf') || title.includes('withdrawal')) return 'widerruf';
+  if (title.includes('cookie-richtlinie') || title.includes('cookie-policy')) return 'cookie';
+  return null;
 };
 
 const extractDomain = (url: string): string => {
@@ -93,7 +147,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   const router = useRouter();
   const createFixJob = useCreateFixJob();
   const { isInOptimizationMode, lockedOptimizationUrl } = useDashboardStore();
-  
+
   // KI-Fix immer verfügbar — Lock-Status nur als Hinweis, nicht als Blockade
   const canOptimize = true;
   const isOtherSiteLocked = isInOptimizationMode && 
@@ -111,6 +165,8 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   const [showAIPreview, setShowAIPreview] = useState(false);
   const [altTextValue, setAltTextValue] = useState(issue.suggested_alt || '');
   const [altTextSaved, setAltTextSaved] = useState(false);
+  const [altTextSaving, setAltTextSaving] = useState(false);
+  const [showLegalWizard, setShowLegalWizard] = useState<WizardDocType | null>(null);
   
   const domain = websiteUrl ? extractDomain(websiteUrl) : undefined;
 
@@ -147,6 +203,60 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
     }
   };
 
+  // Speichern geht über den kanonischen Freigabeweg (accessibility_alt_text_fixes):
+  // Die Karte kennt keine fix_id, deshalb wird die Zeile der Site über die
+  // Worklist gesucht — der Post-Scan-Processor legt sie als 'pending' an. Fehlt
+  // sie (Scan von vor dem Processor), legt generate-alt-texts sie an. Erst die
+  // Freigabe mit custom_alt macht den eingegebenen Text zum ausgelieferten Fix.
+  const speichereAltText = async () => {
+    const altText = altTextValue.trim();
+    const bildSrc = issue.image_src;
+    if (!altText || !bildSrc) return;
+    if (!websiteUrl) {
+      showToast('Keine Website zugeordnet — Speichern nicht möglich', 'error');
+      return;
+    }
+    const siteId = generateSiteId(websiteUrl);
+    type FixZeile = { id: number; image_src?: string; image_filename?: string };
+    const findeFixId = async (): Promise<number | null> => {
+      const worklist = await apiClient.get<{
+        alt_texts?: { pending?: FixZeile[]; approved?: FixZeile[] };
+      }>('/api/accessibility/worklist', { site_id: siteId });
+      const zeilen = [
+        ...(worklist.alt_texts?.pending ?? []),
+        ...(worklist.alt_texts?.approved ?? []),
+      ];
+      const dateiname = bildSrc.split('/').pop();
+      const treffer =
+        zeilen.find((z) => z.image_src === bildSrc) ??
+        zeilen.find((z) => z.image_filename && z.image_filename === dateiname);
+      return treffer?.id ?? null;
+    };
+    setAltTextSaving(true);
+    try {
+      let fixId = await findeFixId();
+      if (fixId === null) {
+        await apiClient.post('/api/accessibility/generate-alt-texts', {
+          site_id: siteId,
+          images: [{ url: bildSrc }],
+        });
+        fixId = await findeFixId();
+      }
+      if (fixId === null) throw new Error('Kein Fix-Eintrag für dieses Bild');
+      await apiClient.post('/api/accessibility/approve-alt-text', {
+        fix_id: fixId,
+        approved: true,
+        custom_alt: altText,
+      });
+      setAltTextSaved(true);
+      showToast('Alt-Text freigegeben — geht mit dem nächsten Manifest-Abruf live', 'success');
+    } catch {
+      showToast('Speichern fehlgeschlagen', 'error');
+    } finally {
+      setAltTextSaving(false);
+    }
+  };
+
   const handleStartFixClick = () => {
     if (!issue.auto_fixable) {
       showToast('Dieser Issue kann nicht automatisch behoben werden', 'warning');
@@ -167,73 +277,31 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
   };
 
   const handleConfirmFix = async () => {
-    console.log('🚀 KI-Fix gestartet!', { 
-      hasScanId: !!scanId, 
-      scanId, 
-      issueId: issue.id,
-      issueTitle: issue.title 
-    });
     
     setShowConfirmModal(false);
     
-    // Interner Rechtstexte-Generator
-    const isLegalText = issue.title.toLowerCase().includes('impressum') || 
-                       issue.title.toLowerCase().includes('datenschutz');
-    
-    if (isLegalText) {
-      setIsFixing(true);
-      try {
-        const textType = issue.title.toLowerCase().includes('impressum') ? 'imprint' : 'privacy_policy';
-        const endpoint = textType === 'imprint' 
-          ? '/api/legal-texts/imprint'
-          : '/api/legal-texts/privacy';
+    // Interner Rechtstexte-Generator — alle 5 Dokumenttypen über den
+    // geführten Assistenten. KEINE Direktgenerierung aus Firmenname+E-Mail:
+    // Ohne Adresse, Rechtsform und Vertretungsberechtigten entsteht ein
+    // Dokument voller [Platzhalter] (das Backend lehnt so etwas mit 422 ab).
+    const legalWizardType = getLegalWizardType(issue);
 
-        const data = await apiClient.get(`${endpoint}`, { language: 'de' } as any) as any;
-
-        if (!data) {
-          throw new Error('Generierung fehlgeschlagen');
-        }
-
-        // Auto-Download
-        // ✅ SSR-Check
-        if (typeof document !== 'undefined') {
-          const filename = textType === 'imprint' ? 'impressum.html' : 'datenschutzerklaerung.html';
-          const blob = new Blob([data.html], { type: 'text/html;charset=utf-8' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        }
-
-        showToast('✅ Rechtstext wurde generiert und heruntergeladen!', 'success', 5000);
-        
-        if (onStartFix) {
-          onStartFix(issue.id);
-        }
-      } catch (err) {
-        console.error('Fehler bei Rechtstext-Generierung:', err);
-        showToast('Generierung fehlgeschlagen. Bitte versuchen Sie es erneut.', 'error');
-      } finally {
-        setIsFixing(false);
-      }
+    if (legalWizardType) {
+      setShowLegalWizard(legalWizardType);
       return;
     }
-    
+
     // ✅ PERSISTENCE: Wenn scanId vorhanden, Job erstellen
     if (scanId) {
-      console.log('✅ ScanId vorhanden, erstelle Fix-Job...');
       try {
         const jobData = await createFixJob.mutateAsync({
           scan_id: scanId,
           issue_id: issue.id,
-          issue_data: issue
+          issue_data: issue,
+          fix_typ: getFixTypeForIssue(issue),
+          hinweis_version: HINWEIS_VERSION,
         });
         
-        console.log('✅ Fix-Job erstellt:', jobData);
         
         // Scroll to top to show the active jobs panel
         // ✅ SSR-Check
@@ -286,7 +354,6 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       return;
     }
     
-    console.log('⚠️ Keine ScanId, verwende Fallback-Methode...');
     
     // ✅ FALLBACK: Alte Methode wenn keine scanId (direkt generieren)
     setIsFixing(true);
@@ -299,6 +366,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         'DSGVO': 'dsgvo',
         'legal': 'legal_texts',
         'Rechtssichere Texte': 'legal_texts',
+        'Pflichttexte': 'legal_texts',
         'cookies': 'cookie_compliance',
         'Cookie Compliance': 'cookie_compliance'
       };
@@ -383,6 +451,52 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       {/* Beschreibung */}
       <p className="text-gray-700 mb-4 leading-relaxed">{issue.description}</p>
 
+      {/* Fundstellen aus dem Mehrseiten-Scan. Ohne diese Liste weiß der Nutzer
+          nur DASS etwas fehlt, nicht WO — und muss jede Seite selbst
+          durchgehen. Genau die Arbeit soll das Werkzeug abnehmen. */}
+      {(issue.metadata?.seiten_betroffen ?? 0) > 1 && (
+        <FundstellenListe
+          seiten={issue.metadata?.fundstellen ?? []}
+          anzahl={issue.metadata?.seiten_betroffen ?? 0}
+        />
+      )}
+
+      {/* Empfohlene Maßnahme — issue-spezifische Handlungsempfehlung vom Check.
+          Immer sichtbar, sobald vorhanden. Garantiert, dass jedes Problem (auch
+          DSA-/KI-/Drittland-Hinweise) einen konkreten Lösungsweg zeigt, statt nur
+          die Problembeschreibung. */}
+      {issue.recommendation && (
+        <div className="bg-white rounded-lg p-4 border border-[#25bac8]/40 mb-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-[#25bac8]/15 rounded-lg flex-shrink-0">
+              <Sparkles className="w-5 h-5 text-[#1a8a95]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                <h4 className="font-semibold text-gray-800">Empfohlene Maßnahme</h4>
+                {issue.effort && (() => {
+                  const cfg: Record<string, { label: string; cls: string }> = {
+                    gering:  { label: 'Aufwand: gering',  cls: 'bg-emerald-100 text-emerald-700' },
+                    mittel:  { label: 'Aufwand: mittel',  cls: 'bg-amber-100 text-amber-700' },
+                    experte: { label: 'Experte nötig',    cls: 'bg-red-100 text-red-700' },
+                  };
+                  const e = cfg[issue.effort] || cfg.mittel;
+                  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${e.cls}`}>{e.label}</span>;
+                })()}
+              </div>
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                {issue.recommendation}
+              </p>
+              {issue.legal_basis && issue.legal_basis !== 'Gesetzliche Anforderung' && (
+                <p className="text-xs text-gray-500 mt-2">
+                  <span className="font-medium">Rechtsgrundlage:</span> {issue.legal_basis}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Alt-Text Editor — nur für Bilder ohne Alt-Text */}
       {issue.image_src && (
         <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 overflow-hidden">
@@ -440,25 +554,14 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={async () => {
-                    if (!altTextValue.trim()) return;
-                    try {
-                      await apiClient.post('/api/accessibility/alt-text', {
-                        image_src: issue.image_src,
-                        alt_text: altTextValue.trim(),
-                        fix_code: `<img src="${issue.image_src}" alt="${altTextValue.trim()}" />`,
-                      });
-                      setAltTextSaved(true);
-                      showToast('Alt-Text gespeichert!', 'success');
-                    } catch {
-                      showToast('Speichern fehlgeschlagen', 'error');
-                    }
-                  }}
-                  disabled={!altTextValue.trim() || altTextSaved}
+                  onClick={speichereAltText}
+                  disabled={!altTextValue.trim() || altTextSaved || altTextSaving}
                   className="flex items-center gap-1.5 px-4 py-1.5 bg-[#25bac8] hover:bg-[#45d6e2] disabled:bg-gray-300 text-zinc-950 text-sm font-bold rounded-lg transition-colors"
                 >
-                  {altTextSaved ? <Check className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-                  {altTextSaved ? 'Gespeichert' : 'Alt-Text speichern'}
+                  {altTextSaving
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Check className="w-4 h-4" />}
+                  {altTextSaved ? 'Freigegeben' : altTextSaving ? 'Wird gespeichert…' : 'Alt-Text speichern'}
                 </button>
                 {issue.fix_code && (
                   <button
@@ -491,9 +594,14 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         </div>
       )}
 
-      {/* Lösung - IMMER SICHTBAR, mit spezifischen Handlungsanweisungen */}
-      {issue.solution && (
-        <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
+      {/* Lösung mit Weg zum passenden Werkzeug.
+          Frueher haing dieser gesamte Block an `issue.solution` — ein Feld, das
+          der Scanner nie befuellt (nachgezaehlt: 0 von 207 Befunden). Damit war
+          jeder Weiterleitungs-Button hier toter Code: der Nutzer sah den Fehler
+          und die Empfehlung, aber nie einen Weg zur Behebung. Die Bloecke
+          darunter decken jede Kategorie ab und enden in einem Fallback, also
+          bekommt jetzt jeder Befund einen Weg. */}
+      <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
           <h4 className="font-semibold text-gray-800 mb-3">📝 Konkrete Handlungsschritte:</h4>
           
           {/* ✅ Datenschutz/Impressum: Spezifische Anleitung */}
@@ -507,7 +615,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                 <li>Führen Sie einen neuen Scan durch, um die Behebung zu bestätigen</li>
               </ol>
               <p className="text-xs text-blue-600 mt-2">
-                💡 Der generierte Text ist rechtssicher und DSGVO-konform!
+                💡 Die Vorlage deckt die Pflichtangaben nach Art. 13 und 14 DSGVO ab. Bitte vor der Veröffentlichung prüfen, sie ersetzt keine Rechtsberatung.
               </p>
             </div>
           )}
@@ -635,14 +743,13 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                     <li>Prüfen Sie welche personenbezogenen Daten Sie erheben (Formulare, Analytics, Tracking)</li>
                     <li>Dokumentieren Sie die Rechtsgrundlage für jede Datenverarbeitung (Art. 6 DSGVO)</li>
                     <li>Aktualisieren Sie Ihre Datenschutzerklärung entsprechend der gefundenen Datenverarbeitungen</li>
-                    <li>Nutzen Sie unseren Generator für eine rechtssichere und vollständige Datenschutzerklärung</li>
+                    <li>Nutzen Sie unseren Generator für eine Datenschutzerklärung, die die erkannten Datenverarbeitungen abdeckt</li>
                   </ol>
+                  {/* Direkt den Generator oeffnen. Vorher wurde ein Event
+                      `complyo:open-legal-generator` gefeuert, das nirgends
+                      empfangen wurde — der Knopf tat schlicht nichts. */}
                   <button
-                    onClick={() => {
-                      if (typeof window !== 'undefined') {
-                        window.dispatchEvent(new CustomEvent('complyo:open-legal-generator', { detail: { type: 'datenschutz' } }));
-                      }
-                    }}
+                    onClick={() => setShowLegalWizard('datenschutz')}
                     className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all text-sm"
                   >
                     <Shield className="w-4 h-4" />
@@ -675,10 +782,10 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                   <FileText className="w-5 h-5 text-purple-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm text-purple-800 font-medium mb-2">Rechtssicherer Text fehlt:</p>
+                  <p className="text-sm text-purple-800 font-medium mb-2">Pflichttext fehlt:</p>
                   <ol className="list-decimal list-inside text-sm text-purple-700 space-y-2 mb-4">
                     <li>Prüfen Sie ob Sie AGB oder eine Widerrufserklärung benötigen (erforderlich bei Onlineshops & Dienstleistungen)</li>
-                    <li>Nutzen Sie unseren KI-Generator für rechtssichere, anwaltlich geprüfte Texte</li>
+                    <li>Nutzen Sie unseren KI-Generator für eine Textvorlage auf Basis Ihrer Angaben</li>
                     <li>Passen Sie den generierten Text auf Ihr Unternehmen an und veröffentlichen Sie ihn</li>
                   </ol>
                   <button
@@ -717,18 +824,42 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
            !issue.title?.toLowerCase().includes('datenschutz') &&
            !issue.title?.toLowerCase().includes('impressum') && (
             <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-4 mb-4">
-              <p className="text-sm text-zinc-700 font-medium mb-2">So beheben Sie dieses Problem:</p>
-              <ol className="list-decimal list-inside text-sm text-zinc-600 space-y-2">
-                <li>Lesen Sie die Beschreibung des Problems oben sorgfältig durch</li>
-                <li>Klicken Sie auf <strong>"KI-Fix starten"</strong> für eine automatisch generierte Lösung</li>
-                <li>Kopieren Sie den generierten Code oder Text und fügen Sie ihn in Ihre Website ein</li>
-                <li>Starten Sie anschließend einen neuen Scan, um die Behebung zu bestätigen</li>
-              </ol>
+              <p className="text-sm text-gray-700 font-medium mb-2">So beheben Sie dieses Problem:</p>
+              {/* Nur den Weg nennen, den es fuer DIESEN Befund wirklich gibt.
+                  Der Text verwies bisher pauschal auf "KI-Fix starten" — bei
+                  88 % der Befunde existiert dieser Knopf gar nicht. */}
+              {issue.auto_fixable ? (
+                <ol className="list-decimal list-inside text-sm text-gray-600 space-y-2">
+                  <li>Lesen Sie die Beschreibung und die empfohlene Maßnahme oben</li>
+                  <li>Klicken Sie unten auf <strong>„KI-Fix starten"</strong> für einen Lösungsvorschlag</li>
+                  <li>Übernehmen Sie den Vorschlag auf Ihrer Website</li>
+                  <li>Starten Sie einen neuen Scan, um die Behebung zu bestätigen</li>
+                </ol>
+              ) : (
+                <>
+                  <ol className="list-decimal list-inside text-sm text-gray-600 space-y-2 mb-3">
+                    <li>Dieser Punkt lässt sich nicht automatisch beheben — die empfohlene Maßnahme oben ist die Anleitung dazu</li>
+                    <li>Setzen Sie sie auf Ihrer Website um{(issue.metadata?.seiten_betroffen ?? 0) > 1 ? ' (betroffene Seiten stehen oben)' : ''}</li>
+                    <li>Starten Sie einen neuen Scan, um die Behebung zu bestätigen</li>
+                  </ol>
+                  <button
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('complyo:open-wizard'));
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-[#25bac8] text-zinc-950 font-bold rounded-lg hover:bg-[#45d6e2] transition-all text-sm"
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                    Im Schritt-für-Schritt-Assistenten öffnen
+                  </button>
+                </>
+              )}
             </div>
           )}
 
           {/* Steps für andere Issue-Typen */}
-          {issue.solution.steps && issue.solution.steps.length > 0 && 
+          {issue.solution?.steps && issue.solution.steps.length > 0 && 
            !issue.category?.includes('datenschutz') && 
            !issue.category?.includes('impressum') &&
            !issue.title?.toLowerCase().includes('datenschutz') &&
@@ -746,12 +877,12 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
           )}
 
           {/* Code Snippet mit Copy Button */}
-          {issue.solution.code_snippet && (
+          {issue.solution?.code_snippet && (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-semibold text-gray-700">💻 Code zum Kopieren:</span>
                 <button
-                  onClick={() => handleCopyCode(issue.solution.code_snippet)}
+                  onClick={() => handleCopyCode(issue.solution!.code_snippet)}
                   className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
                 >
                   {copiedCode ? (
@@ -767,22 +898,24 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                   )}
                 </button>
               </div>
-              <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">
-                <code>{issue.solution.code_snippet}</code>
+              <pre className="bg-white dark:bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">
+                <code>{issue.solution!.code_snippet}</code>
               </pre>
             </div>
           )}
-        </div>
-      )}
+      </div>
 
-      {/* AI-Fix Section */}
-      {issue.auto_fixable && !isAnalysisOnly && (planType === 'free' || planType === 'paid' || planType === 'expert') && (
+      {/* AI-Fix Section — nur für Issues OHNE dedizierte Complyo-Lösung.
+          Cookies/Barrierefreiheit/DSGVO/Impressum haben oben eigene Anleitungs-
+          und Routing-Buttons; der generische KI-Fix ist dort redundant (und war
+          für Cookie-Issues mangels issue.id sogar fehlerhaft). */}
+      {issue.auto_fixable && !isAnalysisOnly && !usesDedicatedSolution(issue) && (planType === 'free' || planType === 'paid' || planType === 'expert') && (
         <div className="mt-4 space-y-3">
           {/* Plan-Hinweis für Free-Nutzer — BEVOR sie klicken */}
           {planType === 'free' && (
             <div className="flex items-center gap-2 px-3 py-2 bg-zinc-100 border border-zinc-300 rounded-lg">
               <Lock className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-              <span className="text-xs text-zinc-600">
+              <span className="text-xs dark:text-zinc-600 text-gray-600">
                 KI-Fix erfordert einen kostenpflichtigen Plan — Klick zeigt Upgrade-Optionen
               </span>
             </div>
@@ -791,7 +924,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
           {/* Hinweis wenn andere Seite gelockt ist — aber Fix trotzdem möglich */}
           {isOtherSiteLocked && (
             <div className="flex items-center gap-2 px-3 py-2 bg-zinc-100 border border-zinc-300 rounded-lg mb-2">
-              <span className="text-xs text-zinc-600">
+              <span className="text-xs dark:text-zinc-600 text-gray-600">
                 Hinweis: Ihre KI-Fixes sind personalisiert für <strong>{lockedOptimizationUrl}</strong>. Der Fix gilt für die analysierte Seite.
               </span>
             </div>
@@ -823,7 +956,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
       {isAnalysisOnly && (
         <div className="mt-4 flex items-center gap-2 px-3 py-2 bg-zinc-100 border border-zinc-300 rounded-lg">
           <Lock className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-          <span className="text-xs text-zinc-600">
+          <span className="text-xs dark:text-zinc-600 text-gray-600">
             Fixes sind nur für Ihre registrierte Website verfügbar. Wechseln Sie zurück, um Optimierungen zu starten.
           </span>
         </div>
@@ -873,8 +1006,84 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
         fixesUsed={fixLimitInfo?.fixes_used}
         fixesLimit={fixLimitInfo?.fixes_limit}
       />
+
+      {/* Geführter Rechtstexte-Generator (statt Direktgenerierung mit Platzhaltern) */}
+      {showLegalWizard && (
+        <LegalWizardModal
+          documentType={showLegalWizard}
+          onClose={() => setShowLegalWizard(null)}
+          onComplete={() => {
+            setShowLegalWizard(null);
+            // Bewusst kein "Ersetzen Sie den alten Text": das Dokument
+            // ist ungeprüft und muss erst vom Nutzer kontrolliert werden.
+            showToast(
+              'Rechtstext erstellt. Bitte prüfen Sie das Dokument, bevor Sie es veröffentlichen.',
+              'success',
+              6000
+            );
+            if (onStartFix) {
+              onStartFix(issue.id);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };
 
 export default ComplianceIssueCard;
+
+
+/**
+ * Listet die Seiten, auf denen derselbe Mangel gefunden wurde.
+ *
+ * Bewusst eingeklappt: bei zwanzig betroffenen Seiten soll die Karte nicht
+ * zur Tapete werden. Die Anzahl steht aber immer sichtbar da — sie ist die
+ * eigentliche Information ("das betrifft nicht nur die Startseite").
+ */
+const FundstellenListe: React.FC<{ seiten: string[]; anzahl: number }> = ({ seiten, anzahl }) => {
+  const [offen, setOffen] = useState(false);
+
+  const kurz = (u: string) => {
+    try {
+      const p = new URL(u).pathname;
+      return p === '/' || p === '' ? 'Startseite' : p;
+    } catch {
+      return u;
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-lg border dark:border-zinc-700/50 border-gray-200 dark:bg-zinc-800/30 bg-gray-50 px-3 py-2">
+      <button
+        type="button"
+        onClick={() => setOffen(!offen)}
+        className="flex w-full items-center gap-2 text-left text-sm font-semibold dark:text-zinc-200 text-gray-800"
+        aria-expanded={offen}
+      >
+        <Globe className="h-4 w-4 flex-shrink-0 dark:text-zinc-400 text-gray-500" aria-hidden />
+        <span>Auf {anzahl} Seiten gefunden</span>
+        <ChevronDown
+          className={`ml-auto h-4 w-4 flex-shrink-0 transition-transform ${offen ? 'rotate-180' : ''}`}
+          aria-hidden
+        />
+      </button>
+      {offen && (
+        <ul className="mt-2 space-y-1 border-t dark:border-zinc-700/50 border-gray-200 pt-2">
+          {seiten.map((s) => (
+            <li key={s} className="text-xs dark:text-zinc-400 text-gray-600">
+              <a
+                href={s}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline break-all"
+              >
+                {kurz(s)}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};

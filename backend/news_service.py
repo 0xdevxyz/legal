@@ -6,7 +6,7 @@ Parst RSS-Feeds von Rechts- und Datenschutz-Quellen
 import feedparser
 import asyncio
 import asyncpg
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 import re
 from bs4 import BeautifulSoup
@@ -89,7 +89,7 @@ class NewsService:
             # Fetch RSS-Feed mit User-Agent (viele Seiten blockieren feedparser ohne UA)
             import requests
             headers = {
-                'User-Agent': 'Mozilla/5.0 (compatible; ComplyoBot/1.0; +https://complyo.tech)'
+                'User-Agent': 'Mozilla/5.0 (compatible; ComplyoBot/1.0; +https://complyo.de)'
             }
             
             response = await asyncio.get_event_loop().run_in_executor(

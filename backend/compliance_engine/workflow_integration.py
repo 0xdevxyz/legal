@@ -3,16 +3,13 @@ Complyo Workflow Integration - Database & API Implementation
 Complete integration between workflow engine and platform components
 """
 
-import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple
-from dataclasses import asdict
-import uuid
+from datetime import datetime
+from typing import Dict, Optional, Any, Tuple
 
 from .workflow_engine import (
-    WorkflowEngine, UserJourney, WorkflowStep, WorkflowStage, UserSkillLevel
+    UserJourney, WorkflowStep, WorkflowStage, UserSkillLevel
 )
 
 logger = logging.getLogger(__name__)
@@ -158,5 +155,12 @@ class WorkflowIntegration:
         elif technical_score <= 5: return "intermediate"
         else: return "advanced"
 
-# This should be initialized in main_production.py after db_pool is created
-# workflow_integration = WorkflowIntegration(db_pool)
+# Module-level singleton used by the workflow engine. The db_pool is wired up
+# during application startup in main_production.py (init_workflow_integration).
+workflow_integration = WorkflowIntegration(None)
+
+
+def init_workflow_integration(db_pool) -> "WorkflowIntegration":
+    """Attach the live db_pool to the shared workflow_integration singleton."""
+    workflow_integration.db_pool = db_pool
+    return workflow_integration

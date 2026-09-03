@@ -1,0 +1,506 @@
+"""
+Barrierefreiheit über ein ganzes Website-Portfolio.
+
+Warum es das braucht
+--------------------
+Der Agentur-Tarif kostet 299 €, der Einzeltarif 49 €. Bei zwanzig Kundenseiten
+sind das 980 € gegen 299 € — der Preis trägt sich nur, wenn die Arbeit auch wie
+EIN Vorgang läuft und nicht wie zwanzig. Für Barrierefreiheit gab es bisher
+keinen einzigen portfolioweiten Griff: zwanzig Websites hießen zwanzig Wechsel
+der aktiven Site, zwanzig Worklists, zwanzig Mal dieselbe Frage.
+
+Was gebündelt werden darf — und was nicht
+-----------------------------------------
+Die naheliegende Idee war, Entscheidungen über Websites hinweg
+zusammenzufassen: einmal entscheiden, überall anwenden. Die Messung über 24
+echte Kundenseiten (06.08.2026) hat sie widerlegt — **63 Farbpaare, kein
+einziges kommt auf mehr als einer Website vor**. Marken haben eigene Farben;
+eine websiteübergreifende Farbfreigabe wäre geraten, nicht abgeleitet. Sie
+gibt es hier deshalb nicht.
+
+Was sich sehr wohl bündeln lässt, ist die Alt-Text-Freigabe — nicht wegen
+Wiederholung, sondern weil die Konfidenz die Arbeit sauber trennt. Im echten
+Bestand gibt es genau zwei Werte: **0,900 für Vorschläge, bei denen Claude
+Vision das Bild gesehen hat, und 0,700 für die Kontext-Heuristik**, die
+Ergebnisse wie "Bild: Image 20" liefert — Texte, die ein Attribut füllen und
+nichts erklären. Die Schwelle ist damit gemessen, nicht gesetzt.
+
+Die Aufteilung also:
+  - Sammelfreigabe portfolioweit: Alt-Texte ab einer Konfidenzschwelle,
+    nichtssagende ausgeschlossen.
+  - Farben: je Website in einem Zug, aber alle Websites in EINER Liste, nach
+    Wirkung sortiert. Der Weg wird kurz, die Entscheidung bleibt beim Menschen.
+"""
+import logging
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+
+from accessibility_fix_saver import AccessibilityFixSaver
+from dependencies import get_current_user as get_required_user
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/accessibility/agency", tags=["accessibility-agency"])
+
+db_pool = None
+
+# Unterhalb dieser Konfidenz hat keine KI das Bild gesehen — der Vorschlag
+# stammt aus der Kontext-Heuristik. Im Bestand liegt dazwischen nichts: 0,900
+# oder 0,700, nichts dazwischen. Als Standard deshalb 0,9.
+VISION_SCHWELLE = 0.9
+
+# Ab wann gilt eine Website als verstummt. Eine Woche ist grosszuegig: selbst
+# eine kleine Handwerkerseite hat in sieben Tagen Besucher. Wer sich laenger
+# nicht meldet, hat das Skript nicht mehr drin.
+STILL_AB_TAGEN = 7
+
+
+class SammelfreigabeRequest(BaseModel):
+    """Portfolioweite Alt-Text-Freigabe ab einer Konfidenzschwelle."""
+    min_konfidenz: float = Field(
+        VISION_SCHWELLE, ge=0.0, le=1.0,
+        description="Nur Vorschläge ab dieser Konfidenz. 0,9 = Claude Vision.",
+    )
+    site_ids: Optional[List[str]] = Field(
+        None, description="Auf diese Websites beschränken. Standard: alle eigenen."
+    )
+
+
+class FarbenFreigabeRequest(BaseModel):
+    """Alle offenen Farbentscheidungen EINER Website in einem Zug."""
+    site_id: str
+
+
+async def _eigene_sites(user_id: Any) -> List[Dict[str, str]]:
+    """Websites des Kontos, mit Kundenzuordnung falls hinterlegt.
+
+    Die Zuordnung steht in `cookie_banner_configs` (dort legt der
+    Agentur-Bereich sie an), die Website-Liste in `tracked_websites`.
+    """
+    if not db_pool:
+        return []
+    from cookie_compliance_routes import _url_to_site_id
+
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT url FROM tracked_websites WHERE user_id = $1 ORDER BY url", user_id
+        )
+        kunden = {
+            r["site_id"]: r["client_name"]
+            for r in await conn.fetch(
+                """SELECT site_id, client_name FROM cookie_banner_configs
+                   WHERE user_id = $1 AND client_name IS NOT NULL""",
+                user_id,
+            )
+        }
+
+    sites = []
+    for r in rows:
+        sid = _url_to_site_id(r["url"])
+        if sid:
+            sites.append({"site_id": sid, "url": r["url"],
+                          "client_name": kunden.get(sid, "")})
+    return sites
+
+
+def _ist_brauchbar(fix: Dict[str, Any], schwelle: float) -> bool:
+    """Taugt dieser Alt-Text für eine Freigabe ohne Einzelprüfung?"""
+    from fix_patch_builder import ist_nichtssagend
+
+    try:
+        konfidenz = float(fix.get("confidence") or 0)
+    except (TypeError, ValueError):
+        return False
+    if konfidenz < schwelle:
+        return False
+    # Doppelter Boden: auch ein hoch bewerteter Vorschlag darf nicht
+    # nichtssagend sein. Kostet nichts und schliesst eine ganze Fehlerklasse aus.
+    return not ist_nichtssagend(fix.get("suggested_alt") or "")
+
+
+async def _auslieferung(site_id: str) -> Dict[str, Any]:
+    """
+    Meldet sich auf dieser Website ueberhaupt ein Widget?
+
+    Fuenf Zustaende, und nur der erste ist gut:
+
+      "laeuft"         meldet sich, und die Reparaturen finden ihr Ziel
+      "greift_nicht"   meldet sich, aber die meisten Reparaturen laufen ins
+                       Leere — Theme-Update, Umbau, falsche Selektoren
+      "verstummt"      hat sich lange nicht mehr gemeldet; das Skript wurde
+                       vermutlich entfernt
+      "nichts_da"      freigegebene Reparaturen, nie eine Meldung — das Skript
+                       fehlt auf der Seite oder wird blockiert
+      "nichts_zu_tun"  nichts freigegeben, also auch nichts zu erwarten
+
+    Die drei mittleren sind der eigentliche Grund fuer diese Funktion: das
+    Dashboard zeigte "erledigt", der Besucher sah nichts davon, und der
+    Betreiber erfuhr es erst, wenn ihn jemand darauf ansprach.
+
+    Warum es nicht bei "hat sich mal gemeldet" bleibt: spedition-mahn.de hatte
+    GENAU EINEN Aufruf, dabei 1 angewendet und **33 verfehlt**, und im HTML
+    steht das Skript inzwischen gar nicht mehr. Eine Anzeige, die daraus
+    "laeuft" macht, ist eine falsche Entwarnung — und damit schlimmer als
+    keine Anzeige.
+    """
+    if not db_pool:
+        return {"auslieferung": "unbekannt"}
+    async with db_pool.acquire() as conn:
+        freigegeben = await conn.fetchval(
+            """SELECT
+                 (SELECT COUNT(*) FROM accessibility_alt_text_fixes
+                  WHERE site_id = $1 AND status = 'approved')
+               + (SELECT COUNT(*) FROM accessibility_document_fixes
+                  WHERE site_id = $1 AND status = 'approved')""",
+            site_id) or 0
+        meldung = await conn.fetchrow(
+            """SELECT COUNT(*) AS seiten, MAX(zuletzt) AS zuletzt,
+                      SUM(angewendet) AS angewendet, SUM(verfehlt) AS verfehlt,
+                      SUM(aufrufe) AS aufrufe,
+                      NOW() - MAX(zuletzt) AS her
+               FROM accessibility_wirkung WHERE site_id = $1""",
+            site_id)
+        # Die Aufschluesselung je Art — der Alarm braucht sie, weil
+        # Alt-Text-Fehlschlaege anders zu lesen sind als selektorgebundene.
+        je_art_zeilen = await conn.fetch(
+            "SELECT je_art FROM accessibility_wirkung WHERE site_id = $1", site_id)
+
+    import json as _json
+    je_art = []
+    for z in je_art_zeilen:
+        w = z["je_art"]
+        if isinstance(w, str):
+            try:
+                w = _json.loads(w)
+            except (ValueError, TypeError):
+                continue
+        if isinstance(w, dict):
+            je_art.append(w)
+
+    seiten = int((meldung and meldung["seiten"]) or 0)
+    if not seiten:
+        if freigegeben:
+            return {
+                "auslieferung": "nichts_da",
+                "hinweis": (f"{freigegeben} Reparaturen sind freigegeben, es hat "
+                            f"sich aber noch nie ein Widget von dieser Website "
+                            f"gemeldet. Vermutlich fehlt das Skript auf der Seite."),
+            }
+        return {"auslieferung": "nichts_zu_tun"}
+
+    angewendet = int(meldung["angewendet"] or 0)
+    verfehlt = int(meldung["verfehlt"] or 0)
+    tage_her = (meldung["her"].days if meldung["her"] else 0)
+
+    basis = {
+        "zuletzt_gesehen": meldung["zuletzt"].strftime("%Y-%m-%d %H:%M"),
+        "angewendet": angewendet,
+        "verfehlt": verfehlt,
+        "seiten_beobachtet": seiten,
+        "aufrufe": int(meldung["aufrufe"] or 0),
+    }
+
+    # Laenger als eine Woche kein Lebenszeichen: auf einer Website mit
+    # Besuchern heisst das, dass das Skript weg ist.
+    if tage_her >= STILL_AB_TAGEN:
+        return {**basis, "auslieferung": "verstummt",
+                "hinweis": (f"Seit {tage_her} Tagen keine Meldung mehr. Auf einer "
+                            f"besuchten Website heisst das meist, dass das Skript "
+                            f"entfernt wurde.")}
+
+    # Greifen die Reparaturen noch?
+    #
+    # Die erste Regel war `verfehlt > angewendet` ueber ALLE Arten — und schlug
+    # damit ausgerechnet im gesunden Fall Alarm. Auf zua-zwickau.de stand
+    # "0 angewendet, 5 verfehlt", obwohl dort alles stimmt:
+    #
+    #   * angewendet = 0, weil die Bilder ihre Alt-Texte laengst TRAGEN. Das
+    #     Widget ueberschreibt ein vorhandenes `alt` nie — es gibt schlicht
+    #     nichts zu tun.
+    #   * verfehlt = 5, weil ein freigegebener Alt-Text zu einem Bild gehoert,
+    #     das auf DIESER Seite nicht vorkommt. Auf Unterseiten ist das der
+    #     Normalfall; das Widget sagt das in seinem eigenen Kommentar.
+    #
+    # Alt-Text-Fehlschlaege sind also kein Regressionssignal, sondern Rauschen
+    # aus der Seitenstruktur. Sie fliessen hier nicht mehr in den Alarm ein.
+    #
+    # Selektor-gebundene Reparaturen sind etwas anderes: eine CSS-Regel oder
+    # eine Struktur-Setzung wurde auf einer konkreten Seite gemessen und soll
+    # dort greifen. Trifft dort KEINE davon mehr, ist das das Bild eines
+    # Theme-Updates.
+    #
+    # Lieber ein Alarm zu wenig als einer zu viel: eine Warnung, der niemand
+    # glaubt, ist so wertlos wie eine falsche Entwarnung.
+    selektor_arten = ("css_regeln", "struktur", "link_labels", "dokument_fixes")
+    s_angewendet = s_verfehlt = 0
+    for eintrag in (je_art or []):
+        for art in selektor_arten:
+            werte = (eintrag or {}).get(art) or {}
+            s_angewendet += int(werte.get("angewendet") or 0)
+            s_verfehlt += int(werte.get("verfehlt") or 0)
+
+    if s_verfehlt and not s_angewendet:
+        return {**basis, "auslieferung": "greift_nicht",
+                "hinweis": (f"{s_verfehlt} selektorgebundene Reparaturen haben ihr "
+                            f"Ziel nicht gefunden, keine einzige hat gegriffen. "
+                            f"Die Seite wurde vermutlich umgebaut — ein neuer Scan "
+                            f"ist faellig. (Nicht gefundene Bilder zaehlen hier "
+                            f"nicht mit: die kommen auf Unterseiten normal vor.)")}
+
+    return {**basis, "auslieferung": "laeuft"}
+
+
+@router.get("/worklist")
+async def agentur_worklist(
+    current_user: Dict[str, Any] = Depends(get_required_user)
+) -> Dict[str, Any]:
+    """
+    Eine Liste für alle Websites des Kontos.
+
+    Liefert je Website die offenen Posten und zusätzlich alle offenen
+    Farbentscheidungen in einer gemeinsamen, nach Wirkung sortierten Liste —
+    damit der Weg durchs Portfolio einmal geht und nicht zwanzigmal.
+    """
+    user_id = current_user.get("user_id") or current_user.get("id")
+    sites = await _eigene_sites(user_id)
+    if not sites:
+        return {"success": True, "sites": [], "kontrast_offen": [],
+                "summe": {"websites": 0, "websites_mit_arbeit": 0,
+                          "offen": 0, "stellen": 0}}
+
+    saver = AccessibilityFixSaver(db_pool)
+    je_site: List[Dict[str, Any]] = []
+    kontrast_offen: List[Dict[str, Any]] = []
+
+    for site in sites:
+        sid = site["site_id"]
+        try:
+            alt_pending = await saver.get_review_queue(sid, status="pending")
+            link_pending = await saver.get_link_fixes_for_site(sid, status="pending")
+            kontrast = await saver.get_kontrast_entscheidungen(sid)
+        except Exception as e:
+            logger.warning(f"Portfolio: {sid} übersprungen ({e})")
+            continue
+
+        offene_farben = [e for e in kontrast if e.get("freigabe") == "pending"]
+        for e in offene_farben:
+            kontrast_offen.append({**e, "site_id": sid, "url": site["url"],
+                                   "client_name": site["client_name"]})
+
+        je_site.append({
+            **site,
+            "alt_texte_offen": len(alt_pending),
+            "alt_texte_sammelbar": len(
+                [f for f in alt_pending if _ist_brauchbar(f, VISION_SCHWELLE)]
+            ),
+            "links_offen": len(link_pending),
+            "farben_offen": len(offene_farben),
+            "farben_freigegeben": len([e for e in kontrast
+                                       if e.get("freigabe") == "approved"]),
+            # Die Zahl, die den Aufwand rechtfertigt: nicht wie viele Klicks,
+            # sondern wie viele Fundstellen daran haengen.
+            "stellen_offen": sum(int(e.get("stellen") or 0) for e in offene_farben),
+            "offen_gesamt": len(alt_pending) + len(link_pending) + len(offene_farben),
+            # Kommt die freigegebene Arbeit auf der Website ueberhaupt an?
+            #
+            # Beim Durchlauf durch die Oberflaeche war das der teuerste Befund:
+            # von vier angefassten Kundenseiten lieferte genau EINE aus. Auf
+            # ferienpark-waldenburg.de laeuft das Cookie-Widget, das
+            # Barrierefreiheits-Widget fehlt ganz; auf spedition-mahn.de
+            # ebenfalls. Freigegeben war dort alles, angekommen nichts — und
+            # das Dashboard meldete zufrieden "erledigt".
+            #
+            # Eine Zahl, die niemand sieht, ist keine Reparatur. Deshalb steht
+            # der Auslieferungszustand jetzt neben der Arbeit.
+            **(await _auslieferung(sid)),
+        })
+
+    kontrast_offen.sort(key=lambda e: -int(e.get("stellen") or 0))
+    je_site.sort(key=lambda s: -s["offen_gesamt"])
+
+    return {
+        "success": True,
+        "sites": je_site,
+        "kontrast_offen": kontrast_offen,
+        "summe": {
+            "websites": len(je_site),
+            "websites_mit_arbeit": len([s for s in je_site if s["offen_gesamt"]]),
+            "offen": sum(s["offen_gesamt"] for s in je_site),
+            "stellen": sum(s["stellen_offen"] for s in je_site),
+            "alt_texte_sammelbar": sum(s["alt_texte_sammelbar"] for s in je_site),
+            # Die Zahl, die vor jeder Erfolgsmeldung kommen muss: auf wie
+            # vielen Websites kommt die freigegebene Arbeit NICHT an.
+            "websites_ohne_auslieferung": len(
+                [s for s in je_site
+                 if s.get("auslieferung") in ("nichts_da", "verstummt",
+                                              "greift_nicht")]),
+        },
+    }
+
+
+@router.get("/sammelfreigabe/vorschau")
+async def sammelfreigabe_vorschau(
+    min_konfidenz: float = Query(VISION_SCHWELLE, ge=0.0, le=1.0),
+    current_user: Dict[str, Any] = Depends(get_required_user)
+) -> Dict[str, Any]:
+    """
+    Was eine Sammelfreigabe treffen würde — vor dem Klick, nicht danach.
+
+    Eine Massenaktion ohne vorherige Auskunft darüber, was sie anfasst, ist
+    genau die Art von Knopf, den man einmal drückt und danach bereut.
+    """
+    user_id = current_user.get("user_id") or current_user.get("id")
+    saver = AccessibilityFixSaver(db_pool)
+
+    trifft, bleibt, verworfen = 0, 0, 0
+    websites = 0
+    beispiele: List[Dict[str, Any]] = []
+
+    for site in await _eigene_sites(user_id):
+        try:
+            offen = await saver.get_review_queue(site["site_id"], status="pending")
+        except Exception:
+            continue
+        treffer = 0
+        for fix in offen:
+            if _ist_brauchbar(fix, min_konfidenz):
+                treffer += 1
+                if len(beispiele) < 5:
+                    beispiele.append({
+                        "site_id": site["site_id"],
+                        "bild": fix.get("image_filename"),
+                        "alt": fix.get("suggested_alt"),
+                        "konfidenz": float(fix.get("confidence") or 0),
+                    })
+            elif float(fix.get("confidence") or 0) >= min_konfidenz:
+                verworfen += 1          # hohe Konfidenz, aber nichtssagend
+            else:
+                bleibt += 1
+        trifft += treffer
+        if treffer:
+            websites += 1
+
+    return {
+        "success": True,
+        "min_konfidenz": min_konfidenz,
+        "wird_freigegeben": trifft,
+        "auf_websites": websites,
+        "bleibt_zur_pruefung": bleibt,
+        "wegen_nichtssagend_uebersprungen": verworfen,
+        "beispiele": beispiele,
+        "hinweis": (
+            "Farben sind bewusst nicht dabei: 63 Farbpaare über 24 gemessene "
+            "Websites, kein einziges auf mehr als einer. Eine "
+            "websiteübergreifende Farbfreigabe wäre geraten, nicht abgeleitet."
+        ),
+    }
+
+
+@router.post("/sammelfreigabe")
+async def sammelfreigabe(
+    request: SammelfreigabeRequest,
+    current_user: Dict[str, Any] = Depends(get_required_user)
+) -> Dict[str, Any]:
+    """Gibt die Alt-Texte ab der Konfidenzschwelle über das Portfolio frei."""
+    user_id = current_user.get("user_id") or current_user.get("id")
+
+    sites = await _eigene_sites(user_id)
+    if request.site_ids:
+        erlaubt = {s["site_id"] for s in sites}
+        fremd = set(request.site_ids) - erlaubt
+        if fremd:
+            raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Website")
+        sites = [s for s in sites if s["site_id"] in set(request.site_ids)]
+
+    saver = AccessibilityFixSaver(db_pool)
+    # Die Sites, die dieser Agentur gehoeren — der Speicher autorisiert ueber
+    # die Website, nicht ueber den Erzeuger der Zeile. Vorher wurde
+    # `row['user_id']` verglichen, und weil hier PermissionError still
+    # uebersprungen wird, meldete eine Sammelfreigabe eine Erfolgszahl,
+    # waehrend sie jeden von einem Kollegen gescannten Fix ausliess.
+    erlaubte = {s["site_id"] for s in sites}
+    freigegeben = 0
+    je_site: Dict[str, int] = {}
+    for site in sites:
+        try:
+            offen = await saver.get_review_queue(site["site_id"], status="pending")
+        except Exception as e:
+            logger.warning(f"Sammelfreigabe: {site['site_id']} übersprungen ({e})")
+            continue
+        for fix in offen:
+            if not _ist_brauchbar(fix, request.min_konfidenz):
+                continue
+            fix_id = fix.get("id")
+            if fix_id is None:
+                continue
+            try:
+                await saver.set_status(fix_id=fix_id, status="approved",
+                                       erlaubte_sites=erlaubte)
+            except PermissionError:
+                continue
+            freigegeben += 1
+            je_site[site["site_id"]] = je_site.get(site["site_id"], 0) + 1
+
+    logger.info(f"Sammelfreigabe user={user_id}: {freigegeben} Alt-Texte "
+                f"auf {len(je_site)} Website(s), Schwelle {request.min_konfidenz}")
+    return {
+        "success": True,
+        "freigegeben": freigegeben,
+        "auf_websites": len(je_site),
+        "je_website": je_site,
+        "min_konfidenz": request.min_konfidenz,
+    }
+
+
+@router.post("/farben-freigeben")
+async def farben_freigeben(
+    request: FarbenFreigabeRequest,
+    current_user: Dict[str, Any] = Depends(get_required_user)
+) -> Dict[str, Any]:
+    """
+    Alle offenen Farbentscheidungen EINER Website in einem Zug.
+
+    Die Website bleibt die Einheit — nicht das Portfolio. Farben gehören zur
+    Marke, und wer sie ändert, sollte die Seite vor Augen haben. Der Gewinn
+    liegt darin, dass die Agentur dafür nicht mehr die aktive Website wechseln
+    und eine eigene Worklist öffnen muss.
+
+    Vorschläge, die die Vorgabe nicht erreichen, sind nicht dabei: sie stehen
+    gar nicht als lösbar in der Liste.
+    """
+    user_id = current_user.get("user_id") or current_user.get("id")
+    sites = {s["site_id"] for s in await _eigene_sites(user_id)}
+    if request.site_id not in sites:
+        raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Website")
+
+    saver = AccessibilityFixSaver(db_pool)
+    entscheidungen = await saver.get_kontrast_entscheidungen(request.site_id)
+    offen = [e for e in entscheidungen
+             if e.get("freigabe") == "pending" and e.get("loesbar")]
+
+    freigegeben, stellen = 0, 0
+    for e in offen:
+        ergebnis = await saver.set_kontrast_freigabe(
+            request.site_id, index=e["index"], status="approved",
+            erlaubte_sites=sites,
+        )
+        if ergebnis.get("ok"):
+            freigegeben += 1
+            stellen += int(e.get("stellen") or 0)
+
+    return {
+        "success": True,
+        "site_id": request.site_id,
+        "freigegeben": freigegeben,
+        "stellen": stellen,
+        "nicht_loesbar": len([e for e in entscheidungen
+                              if e.get("freigabe") == "pending" and not e.get("loesbar")]),
+    }
+
+
+def init_agentur_a11y_routes(pool) -> None:
+    global db_pool
+    db_pool = pool
+    logger.info("✅ Agentur-A11y-Routen bereit")

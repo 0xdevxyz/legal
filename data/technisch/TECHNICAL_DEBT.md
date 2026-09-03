@@ -63,6 +63,24 @@
 | `legal_change_routes.py` | 201-202 | Compliance-Areas nicht aus Config |
 | `fix_generator.py` | 703 | Services nicht aus Scan-Ergebnissen |
 
+### 7. Double-Opt-In-Rueckleitung auf die Startseite ohne Anzeige
+| Datei | Zeile | Problem |
+|-------|-------|---------|
+| `backend/lead_routes.py` | 445, 456, 487 | Leitet nach dem Bestaetigungsklick auf `{landing_path}?confirmed=1\|0` |
+| `landing-react/src/app/page.tsx` | — | Startseite liest `confirmed` nicht aus |
+
+Gefunden am 02.09.2026 beim Loeschen von `JoinEarlySection`. Nur
+`EarlyAccessKampagne` (`/early-access`) wertet den Parameter aus. Wer ohne
+`landing_path` in der Warteliste steht, und jeder mit unbekanntem oder
+abgelaufenem Token, landet auf `/?confirmed=1` bzw. `?confirmed=0` und sieht
+die unveraenderte Startseite: keine Bestaetigung, kein Hinweis auf den toten
+Link. Der Banner dafuer stand frueher in `JoinEarlySection`, die aber seit
+`e630896` nicht mehr eingebunden war, die Luecke besteht also unabhaengig von
+der Loeschung.
+
+**Fix:** `confirmed` in der Startseite auswerten oder das Redirect-Ziel im
+Backend auf `/early-access` festlegen, wenn kein `landing_path` gespeichert ist.
+
 ---
 
 ## 🟢 NIEDRIG - Template-Platzhalter (BEABSICHTIGT)

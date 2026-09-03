@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ComplianceAnalysis, ApiResponse, WaitlistJoinRequest, WaitlistJoinResponse } from '@/types/api';
+import { ComplianceAnalysis, ApiResponse, WaitlistJoinRequest, WaitlistJoinResponse, WaitlistPlaetze } from '@/types/api';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de',
@@ -30,7 +30,7 @@ api.interceptors.response.use(
 
 /**
  * Normalisiert URLs zu vollständigen https:// URLs
- * Akzeptiert: https://, http://, www., nur domain (z.B. complyo.tech)
+ * Akzeptiert: https://, http://, www., nur domain (z.B. complyo.de)
  * Entfernt trailing slashes für saubere URLs
  */
 const normalizeUrl = (input: string): string => {
@@ -89,9 +89,13 @@ export const complianceApi = {
   analyzeWebsite: async (url: string): Promise<ComplianceAnalysis> => {
     // Normalisiere URL vor dem API-Call
     const normalizedUrl = normalizeUrl(url);
-    console.log('🔗 Landing API - Original:', url, '→ Normalized:', normalizedUrl);
     // ✅ FIX: Verwende /api/analyze-preview für Landing-Seite (keine Auth erforderlich)
-    const response = await api.post<ComplianceAnalysis>('/api/analyze-preview', { url: normalizedUrl });
+    // Ein echter Scan braucht 20-27s (gemessen 12.08.2026), der Default von
+    // 30s lag also mitten in der Streuung: Kundenseiten brachen sporadisch ab
+    // und der Besucher las, SEINE Seite sei nicht erreichbar. 65s deckt den
+    // Scan ab und bleibt über dem proxy_read_timeout von nginx (60s), damit
+    // ein Überschreiten als Serverfehler ankommt und nicht als Client-Timeout.
+    const response = await api.post<ComplianceAnalysis>('/api/analyze-preview', { url: normalizedUrl }, { timeout: 65000 });
     return response.data;
   },
 
@@ -119,6 +123,21 @@ export const complianceApi = {
 export const leadsApi = {
   joinWaitlist: async (payload: WaitlistJoinRequest): Promise<WaitlistJoinResponse> => {
     const response = await api.post<WaitlistJoinResponse>('/api/leads/waitlist', payload);
+    return response.data;
+  },
+
+  // Signiertes Formular-Token. Wer es nicht vorlegt, wird beim Absenden still
+  // verworfen — deshalb holt das Formular es direkt beim Anzeigen und nicht
+  // erst beim Klick, damit die Wartezeit nicht auf den Absendevorgang faellt.
+  waitlistToken: async (): Promise<string> => {
+    const response = await api.get<{ token: string }>('/api/leads/waitlist/token', { timeout: 8000 });
+    return response.data.token;
+  },
+
+  // Kurzer Timeout: der Zaehler ist Beiwerk. Antwortet er nicht, soll die Seite
+  // das Angebot ohne Zahl zeigen und nicht auf einen Ladebalken warten.
+  waitlistPlaetze: async (): Promise<WaitlistPlaetze> => {
+    const response = await api.get<WaitlistPlaetze>('/api/leads/waitlist/plaetze', { timeout: 5000 });
     return response.data;
   },
 };

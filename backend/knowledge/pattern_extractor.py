@@ -2,11 +2,16 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import yaml
 
 logger = logging.getLogger(__name__)
+
+# Ab wann ein Befund als veraltet gilt. Wer laenger nicht auftrat, stammt
+# erfahrungsgemaess aus einer entfernten Pruefung, nicht aus reparierten
+# Kundenseiten - und darf die Rangfolge nicht mehr anfuehren.
+VERALTET_AB_TAGEN = 30
 
 VAULT_ROOT = Path(os.getenv("KNOWLEDGE_VAULT_PATH", "/home/clawd/saas/legal/knowledge"))
 PATTERNS_DIR = VAULT_ROOT / "patterns"
@@ -47,21 +52,21 @@ KNOWN_PATTERNS = [
         "slug": "impressum-check",
         "title": "Impressum Fehler",
         "law_areas": ["TMG", "UWG"],
-        "description": "Typische Fehler bei der Impressumspflicht nach § 5 TMG",
+        "description": "Typische Fehler bei der Impressumspflicht nach § 5 DDG",
         "patterns": [
             {
                 "name": "Nur Kontaktformular ohne E-Mail",
                 "frequency": "sehr häufig",
                 "bad_code": "<!-- Impressum -->\nKontaktformular: <a href='/kontakt'>Kontakt</a>",
                 "good_code": "<!-- Impressum -->\nE-Mail: <a href='mailto:info@beispiel.de'>info@beispiel.de</a>",
-                "law_ref": "§ 5 Abs. 1 Nr. 2 TMG – E-Mail-Adresse Pflicht",
+                "law_ref": "§ 5 Abs. 1 Nr. 2 DDG – E-Mail-Adresse Pflicht",
             },
             {
                 "name": "Impressum nur 3+ Klicks erreichbar",
                 "frequency": "mittel",
                 "bad_code": "<!-- Impressum im verschachtelten Menü -->\nÜber uns > Rechtliches > Impressum",
                 "good_code": "<!-- Impressum direkt im Footer -->\n<footer>\n  <a href='/impressum'>Impressum</a>\n</footer>",
-                "law_ref": "§ 5 TMG – muss leicht erkennbar und unmittelbar erreichbar sein",
+                "law_ref": "§ 5 DDG – muss leicht erkennbar und unmittelbar erreichbar sein",
             },
         ],
     },
@@ -187,32 +192,127 @@ class PatternExtractor:
         return paths
 
     async def extract_from_scan_data(self) -> List[str]:
+        """
+        Zieht die haeufigsten echten Befunde aus den eigenen Scans und legt sie
+        als Muster-Datei im Vault ab.
+
+        Zwei Fehler steckten hier bis zum 01.09.2026 uebereinander: die Abfrage
+        las die Tabelle `scan_issues`, die es in dieser Datenbank nie gab, und
+        selbst im Erfolgsfall wurde `rows` weggeworfen und nur der statische
+        Katalog zurueckgegeben. Der Lernweg "aus eigenen Scans" war damit reine
+        Zierde. Die Befunde liegen tatsaechlich in
+        `scan_history.scan_data->'issues'`, je Eintrag mit `category` und
+        `title` — genau darauf setzt die Abfrage jetzt auf.
+        """
+        pfade = self.generate_static_patterns()
+
         if not self.db_pool:
-            logger.info("No DB pool, using static patterns only")
-            return self.generate_static_patterns()
+            logger.info("Kein DB-Pool, nur statische Muster")
+            return pfade
 
         try:
             async with self.db_pool.acquire() as conn:
-                rows = await conn.fetch(
+                zeilen = await conn.fetch(
                     """
                     SELECT
-                        check_type,
-                        issue_title,
-                        COUNT(*) as frequency,
-                        MAX(created_at) as last_seen
-                    FROM scan_issues
-                    WHERE created_at >= NOW() - INTERVAL '30 days'
-                    GROUP BY check_type, issue_title
-                    HAVING COUNT(*) >= 5
-                    ORDER BY frequency DESC
+                        befund->>'category'          AS kategorie,
+                        befund->>'title'             AS titel,
+                        COUNT(*)                     AS haeufigkeit,
+                        COUNT(DISTINCT sh.url)       AS websites,
+                        COUNT(DISTINCT sh.id)        AS scans,
+                        MAX(sh.created_at)           AS zuletzt
+                    FROM scan_history sh
+                    CROSS JOIN LATERAL jsonb_array_elements(
+                        COALESCE(sh.scan_data->'issues', '[]'::jsonb)
+                    ) AS befund
+                    WHERE sh.created_at >= NOW() - INTERVAL '90 days'
+                      AND befund->>'title' IS NOT NULL
+                    GROUP BY 1, 2
+                    HAVING COUNT(*) >= 3
+                    -- Nach Verbreitung ordnen, nicht nach Fundstellen. Warum,
+                    -- steht bei _schreibe_haeufigkeitsmuster.
+                    ORDER BY websites DESC, haeufigkeit DESC
                     LIMIT 50
                     """
                 )
-                logger.info(f"Found {len(rows)} frequent patterns in DB scan data")
         except Exception as e:
-            logger.warning(f"Could not fetch scan data from DB: {e}")
+            logger.warning(f"Eigene Scans nicht auswertbar: {e}")
+            return pfade
 
-        return self.generate_static_patterns()
+        if not zeilen:
+            logger.info("Noch zu wenig eigene Scandaten fuer ein Haeufigkeitsmuster")
+            return pfade
+
+        pfad = self._schreibe_haeufigkeitsmuster(zeilen)
+        if pfad:
+            pfade.append(pfad)
+        logger.info(
+            f"{len(zeilen)} wiederkehrende Befunde aus eigenen Scans gesichert"
+        )
+        return pfade
+
+    def _schreibe_haeufigkeitsmuster(self, zeilen) -> str:
+        """Schreibt die Haeufigkeitsliste als eine Vault-Datei."""
+        fm = {
+            "title": "Muster: haeufigste Befunde aus eigenen Scans",
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "category": "pattern",
+            "law_areas": ["DSGVO", "DDG", "BFSG", "TDDDG"],
+            "relevance_score": 0.95,
+            "impact": "high",
+            "source_url": "",
+            "source_type": "internal",
+            "affected_checks": [],
+            "tags": ["pattern", "haeufigkeit", "eigene-scans"],
+            "obsidian_links": [],
+            "status": "active",
+            "embedding_hash": "",
+            "last_embedded": "",
+        }
+        kopf = "---\n" + yaml.dump(fm, allow_unicode=True, default_flow_style=False) + "---\n"
+
+        heute = datetime.now().date()
+        rumpf = [
+            "\n# Haeufigste Befunde aus eigenen Scans\n",
+            "Gezaehlt ueber die letzten 90 Tage, nur Befunde, die mindestens "
+            "dreimal aufgetreten sind. Diese Liste kommt aus echten Scans, "
+            "nicht aus dem statischen Katalog.\n",
+            "Geordnet nach **Websites**, nicht nach Fundstellen. Eine einzelne "
+            "icon-lastige Seite erzeugt sonst den Spitzenplatz: gemessen am "
+            "03.09.2026 stand \"SVG ohne <title>\" mit 98 Fundstellen ganz oben "
+            "und stammte aus 4 Scans auf 2 Websites, waehrend die fehlende "
+            "Werbekennzeichnung 5 Websites betraf und tiefer rangierte. Die "
+            "Fundstellen bleiben als zweite Spalte stehen - sie sagen, wie viel "
+            "Arbeit ein Fix erspart, nicht, wie viele Kunden ihn brauchen.\n",
+            "\"Zuletzt\" ist keine Nebensache: ein Befund, der seit Wochen nicht "
+            "mehr auftrat, kommt meist aus einer entfernten Pruefung und nicht "
+            "aus reparierten Kundenseiten. Solche Zeilen sind als veraltet "
+            "markiert.\n",
+            "| Websites | Fundstellen | Scans | Kategorie | Befund | Zuletzt |",
+            "| ---: | ---: | ---: | --- | --- | --- |",
+        ]
+        for z in zeilen:
+            titel = (z["titel"] or "").replace("|", "/")
+            if z["zuletzt"]:
+                tage_her = (heute - z["zuletzt"].date()).days
+                zuletzt = z["zuletzt"].strftime("%Y-%m-%d")
+                if tage_her >= VERALTET_AB_TAGEN:
+                    zuletzt += f" (veraltet, {tage_her} Tage)"
+            else:
+                zuletzt = ""
+            rumpf.append(
+                f"| {z['websites']} | {z['haeufigkeit']} | {z['scans']} | "
+                f"{z['kategorie'] or 'unbekannt'} | {titel} | {zuletzt} |"
+            )
+        rumpf.append("")
+
+        try:
+            pfad = PATTERNS_DIR / "haeufigste-befunde-patterns.md"
+            pfad.write_text(kopf + "\n".join(rumpf), encoding="utf-8")
+            return str(pfad)
+        except Exception as e:
+            logger.warning(f"Haeufigkeitsmuster nicht schreibbar: {e}")
+            return ""
 
     async def run(self) -> List[str]:
         return await self.extract_from_scan_data()

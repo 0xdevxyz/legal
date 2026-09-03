@@ -10,12 +10,12 @@ Teil des Hybrid-Modells:
 from bs4 import BeautifulSoup
 import zipfile
 import io
-from typing import List, Dict, Optional
+from typing import List, Dict
 import aiohttp
 from datetime import datetime
 import logging
 import json
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -64,10 +64,9 @@ class AccessibilityPatchGenerator:
                 for filename, content in html_patches.items():
                     zip_file.writestr(f"html/{filename}", content)
             
-            # 2. CSS-Patches
-            if contrast_fixes or True:  # Immer CSS für Focus-Styles
-                css_content = self._generate_css_patches(contrast_fixes)
-                zip_file.writestr("css/accessibility-fixes.css", css_content)
+            # 2. CSS-Patches (immer, auch für Focus-Styles)
+            css_content = self._generate_css_patches(contrast_fixes)
+            zip_file.writestr("css/accessibility-fixes.css", css_content)
             
             # 3. WordPress-Export
             if alt_text_fixes:
@@ -208,7 +207,7 @@ class AccessibilityPatchGenerator:
     </main>
     
     <footer>
-        <p>Barrierefreiheit optimiert durch <a href="https://complyo.tech">Complyo</a></p>
+        <p>Barrierefreiheit optimiert durch <a href="https://complyo.de">Complyo</a></p>
     </footer>
 </body>
 </html>
@@ -347,12 +346,12 @@ body {
     xmlns:wp="http://wordpress.org/export/1.2/">
 <channel>
   <title>Complyo Barrierefreiheits-Fixes</title>
-  <link>https://complyo.tech</link>
+  <link>https://complyo.de</link>
   <description>AI-generierte Alt-Texte für WordPress Mediathek</description>
   <language>de-DE</language>
   <wp:wxr_version>1.2</wp:wxr_version>
-  <wp:base_site_url>https://complyo.tech</wp:base_site_url>
-  <wp:base_blog_url>https://complyo.tech</wp:base_blog_url>
+  <wp:base_site_url>https://complyo.de</wp:base_site_url>
+  <wp:base_blog_url>https://complyo.de</wp:base_blog_url>
   <generator>Complyo.tech Accessibility Patch Generator</generator>
   
 """
@@ -415,7 +414,7 @@ WICHTIG: KI-generierte Inhalte können Fehler oder Ungenauigkeiten
 enthalten. Bitte prüfen Sie jeden Fix vor der Anwendung und erstellen 
 Sie ein Backup Ihrer Website.
 
-Vollständige AGB: https://complyo.tech/terms-liability
+Vollständige AGB: https://complyo.de/terms-liability
 
 ═══════════════════════════════════════════════════════════════════
 
@@ -479,7 +478,7 @@ Dauer: 15-30 Minuten
 
 Zu technisch? Wir machen das für Sie!
 
-→ Expertservice buchen: https://complyo.tech/expertservice
+→ Expertservice buchen: https://complyo.de/expertservice
 → Preis: €3.000 (einmalig, nur Barrierefreiheit)
 → Dauer: 48 Stunden
 → Inkl.: Alle Fixes + Testing + Dokumentation
@@ -523,9 +522,9 @@ NACHHER (Widget + Patches):
 
 Fragen? Probleme? Wir helfen!
 
-📧 E-Mail:  support@complyo.tech
+📧 E-Mail:  support@complyo.de
 📞 Telefon: +49 (0) 123 456789
-💬 Chat:    https://complyo.tech/support
+💬 Chat:    https://complyo.de/support
 
 Öffnungszeiten: Mo-Fr 9-18 Uhr
 
@@ -620,7 +619,7 @@ Das Widget läuft weiterhin für zusätzliche Features.
 
 ═══════════════════════════════════════════════════════════════════
 
-Support: support@complyo.tech | +49 (0) 123 456789
+Support: support@complyo.de | +49 (0) 123 456789
 """
     
     def _generate_ftp_guide(self) -> str:
@@ -731,7 +730,7 @@ HTML:
 
 ═══════════════════════════════════════════════════════════════════
 
-Support: support@complyo.tech | +49 (0) 123 456789
+Support: support@complyo.de | +49 (0) 123 456789
 """
     
     def _url_to_filename(self, url: str) -> str:
@@ -916,9 +915,9 @@ Support: support@complyo.tech | +49 (0) 123 456789
 
 ## Support
 
-- **E-Mail:** support@complyo.tech
-- **Dokumentation:** https://complyo.tech/docs
-- **Dashboard:** https://app.complyo.tech
+- **E-Mail:** support@complyo.de
+- **Dokumentation:** https://complyo.de/docs
+- **Dashboard:** https://app.complyo.de
 
 ---
 
@@ -1222,11 +1221,11 @@ select:focus {{
         return f"""<?php
 /**
  * Plugin Name: Complyo Accessibility
- * Plugin URI: https://complyo.tech
+ * Plugin URI: https://complyo.de
  * Description: Barrierefreiheits-Fixes für Ihre WordPress-Website. Automatisch generiert von Complyo.
  * Version: 1.0.0
  * Author: Complyo.tech
- * Author URI: https://complyo.tech
+ * Author URI: https://complyo.de
  * License: GPL v2 or later
  * Text Domain: complyo-accessibility
  */
@@ -1303,7 +1302,7 @@ class Complyo_Accessibility {{
                 </ul>
                 
                 <p style="margin-top: 20px;">
-                    <a href="https://app.complyo.tech" target="_blank" class="button button-primary">
+                    <a href="https://app.complyo.de" target="_blank" class="button button-primary">
                         Zum Complyo Dashboard
                     </a>
                 </p>
@@ -1433,7 +1432,7 @@ Erste Version des automatisch generierten Accessibility-Plugins.
     </ul>
     
     <hr>
-    <p>Support: <a href="https://complyo.tech/support">complyo.tech/support</a></p>
+    <p>Support: <a href="https://complyo.de/support">complyo.de/support</a></p>
 </body>
 </html>
 """

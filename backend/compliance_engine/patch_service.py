@@ -13,7 +13,6 @@ import os
 import re
 import asyncio
 import aiohttp
-import json
 import time
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
@@ -22,11 +21,11 @@ from enum import Enum
 import logging
 
 from .feature_engine import (
-    FeatureEngine, FeatureId, StructuredIssue, 
-    AutoFixLevel, Difficulty, FixType, feature_engine
+    FeatureId, StructuredIssue, 
+    Difficulty, FixType, feature_engine
 )
 from .prompts.bfsg_prompts import (
-    BFSGPromptBuilder, PromptTemplate, PromptContext,
+    PromptTemplate, PromptContext,
     bfsg_prompt_builder
 )
 
@@ -39,15 +38,15 @@ logger = logging.getLogger(__name__)
 
 class AIModel(str, Enum):
     """Verfügbare AI-Modelle"""
-    CLAUDE_SONNET = "anthropic/claude-sonnet-4-20250514"
-    CLAUDE_HAIKU = "anthropic/claude-3-haiku"
+    CLAUDE_SONNET = "anthropic/claude-sonnet-4-20250514"  # veraltet/abgeschaltet – nicht mehr primär
+    CLAUDE_HAIKU = "anthropic/claude-haiku-4.5"  # aktuelles Haiku (OpenRouter), jetzt Primärmodell
     GPT4_TURBO = "openai/gpt-4-turbo-preview"
     GPT4O = "openai/gpt-4o"
 
 
-# Model-Fallback-Kette (günstigere Modelle zuerst für einfache Tasks)
+# Model-Fallback-Kette (Haiku 4.5 primär; GPT-Modelle als Fallback)
 MODEL_FALLBACK_CHAIN = [
-    AIModel.CLAUDE_SONNET.value,
+    AIModel.CLAUDE_HAIKU.value,
     AIModel.GPT4O.value,
     AIModel.GPT4_TURBO.value,
 ]
@@ -153,7 +152,7 @@ class PatchAIClient:
         self,
         prompt: str,
         system_message: str,
-        model: str = AIModel.CLAUDE_SONNET.value,
+        model: str = AIModel.CLAUDE_HAIKU.value,
         temperature: float = 0.2,  # Niedrigere Temperatur für konsistente Patches
         max_tokens: int = 4000
     ) -> Tuple[bool, Optional[str], Dict[str, Any]]:
@@ -182,7 +181,7 @@ class PatchAIClient:
                     headers = {
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
-                        "HTTP-Referer": "https://complyo.tech",
+                        "HTTP-Referer": "https://complyo.de",
                         "X-Title": "Complyo BFSG Patch Service"
                     }
                     
@@ -665,7 +664,7 @@ class PatchService:
         
         return f'''<!-- Complyo Accessibility Widget -->
 <script 
-  src="https://api.complyo.tech/api/widgets/accessibility.js"
+  src="https://api.complyo.de/api/widgets/accessibility.js"
   data-site-id="{site_id}"
   data-auto-fix="true"
   data-features="{feature_id.value.lower()}"
@@ -725,7 +724,7 @@ Betroffenes WCAG-Kriterium: {', '.join(issue.wcag_criteria)}"""
         
         resources.append({
             "title": "Complyo Barrierefreiheits-Guide",
-            "url": "https://complyo.tech/guides/accessibility"
+            "url": "https://complyo.de/guides/accessibility"
         })
         
         return resources

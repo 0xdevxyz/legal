@@ -17,7 +17,9 @@ import { ComplianceGauge } from '@/components/dashboard/ComplianceGauge'
 import { ComplianceFlowWidget } from '@/components/dashboard/ComplianceFlowWidget'
 import { MetricsCards } from '@/components/dashboard/MetricsCards'
 import { DomainHeroSection } from '@/components/dashboard/DomainHeroSection'
+import { AgenturPortfolioKarte } from '@/components/dashboard/AgenturPortfolioKarte'
 import { AIComplianceCard } from '@/components/dashboard/AIComplianceCard'
+import { Orientierungsband } from '@/components/dashboard/Orientierungsband'
 import { useDashboardMetrics } from '@/hooks/useMetrics'
 
 export default function Page() {
@@ -63,6 +65,12 @@ export default function Page() {
 
         <main role="main" aria-label="Hauptinhalt" className="px-4 sm:px-6 py-6 space-y-6 max-w-[1600px] mx-auto">
 
+          {/* Orientierung zuerst: wo stehe ich, was ist passiert, was ist der
+              nächste Schritt. Steht bei JEDEM Besuch da — nicht nur beim ersten. */}
+          <ErrorBoundary componentName="Orientierungsband">
+            <Orientierungsband />
+          </ErrorBoundary>
+
           {/* ORION Hero band: domain hero (2/3) + score cluster (1/3) */}
           <section aria-label="Website-Analyse" className="grid grid-cols-1 xl:grid-cols-3 gap-5 items-stretch">
             <div className="xl:col-span-2">
@@ -76,6 +84,9 @@ export default function Page() {
                   userName={user?.full_name || user?.email}
                   scoreTrend={scoreTrend}
                 />
+              </ErrorBoundary>
+              <ErrorBoundary componentName="AgenturPortfolioKarte">
+                <AgenturPortfolioKarte />
               </ErrorBoundary>
               <ErrorBoundary componentName="AIComplianceCard">
                 <AIComplianceCard />

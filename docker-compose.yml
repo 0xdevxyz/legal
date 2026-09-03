@@ -52,6 +52,7 @@ services:
   backend:
     build: ./backend
     container_name: complyo-backend
+    init: true   # tini als PID 1 -> reapt verwaiste Kindprozesse (uvicorn reapt als PID 1 nicht)
     mem_limit: 1g
     memswap_limit: 1.5g
     ports:
@@ -61,8 +62,23 @@ services:
       - REDIS_HOST=redis
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}
       - AUTO_ACTIVATE_GENERATED_CHECKS=${AUTO_ACTIVATE_GENERATED_CHECKS:-false}
       - ENVIRONMENT=production
+      # IP des Proxy-Hops vor dem Backend. Fehlt sie, sieht das Backend
+      # nur die Proxy-IP und alle Besucher teilen sich ein Rate-Limit.
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
+      # Oeffentlicher Pruefnachweis. Ohne Geheimnis liefert /api/nachweis
+      # nichts aus — bewusst, denn ein ratbarer Schluessel waere schlimmer
+      # als kein Nachweis. Aendern macht alle verschickten Nachweis-Links
+      # ungueltig, auch die in Barrierefreiheitserklaerungen.
+      - COMPLYO_NACHWEIS_SECRET=${COMPLYO_NACHWEIS_SECRET}
+      - COMPLYO_PUBLIC_URL=${COMPLYO_PUBLIC_URL:-https://complyo.de}
+      # Lizenzdurchsetzung fuer eingebettete Widgets: off | warn | block.
+      # Bleibt auf warn, bis die [Lizenz]-Logs keine legitimen Kunden mehr
+      # zeigen — erst dann darf block gesetzt werden (license_check.py).
+      - COMPLYO_LICENSE_ENFORCEMENT=${COMPLYO_LICENSE_ENFORCEMENT:-warn}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - STRIPE_WEBHOOK_SECRET_ADDONS=${STRIPE_WEBHOOK_SECRET_ADDONS:-${STRIPE_WEBHOOK_SECRET}}
@@ -70,11 +86,26 @@ services:
       - STRIPE_PRICE_PRO_YEARLY=${STRIPE_PRICE_PRO_YEARLY}
       - STRIPE_PRICE_AGENCY_MONTHLY=${STRIPE_PRICE_AGENCY_MONTHLY}
       - STRIPE_PRICE_AGENCY_YEARLY=${STRIPE_PRICE_AGENCY_YEARLY}
-      # Neue Pläne: single (19€/Modul), complete (49€), expert (39€/Monat)
+      # Pläne: single (19€/Modul), pro (49€/Mon), agency (299€/Mon),
+      # expert (Einmalservice), update (29€/Mon Folgebetreuung)
       - STRIPE_PRICE_SINGLE_MODULE=${STRIPE_PRICE_SINGLE_MODULE}
-      - STRIPE_PRICE_COMPLETE=${STRIPE_PRICE_COMPLETE}
-      - STRIPE_PRICE_EXPERT_MONTHLY=${STRIPE_PRICE_EXPERT_MONTHLY}
+      - STRIPE_PRICE_EXPERT=${STRIPE_PRICE_EXPERT}
+      - STRIPE_PRICE_UPDATE_MONTHLY=${STRIPE_PRICE_UPDATE_MONTHLY:-${STRIPE_PRICE_UPDATE}}
+      # Monitor-Abo (19€/Mon bzw. 190€/Jahr) — stripe_routes liest beide Namen
+      - STRIPE_PRICE_MONITOR_MONTHLY=${STRIPE_PRICE_MONITOR_MONTHLY:-}
+      - STRIPE_PRICE_MONITOR_YEARLY=${STRIPE_PRICE_MONITOR_YEARLY:-}
+      # Add-ons (in Stripe anzulegen; ohne Wert schlaegt der Kauf mit klarer Meldung fehl)
+      - STRIPE_PRICE_COMPLOAI_GUARD=${STRIPE_PRICE_COMPLOAI_GUARD:-}
+      - STRIPE_PRICE_PRIORITY_SUPPORT=${STRIPE_PRICE_PRIORITY_SUPPORT:-}
+      - STRIPE_PRICE_AGENCY_SITES_EXTRA=${STRIPE_PRICE_AGENCY_SITES_EXTRA:-}
+      - STRIPE_PRICE_EXPERT_AUDIT=${STRIPE_PRICE_EXPERT_AUDIT:-}
+      - STRIPE_PRICE_IMPLEMENTATION=${STRIPE_PRICE_IMPLEMENTATION:-}
+      - STRIPE_PRICE_CUSTOM_INTEGRATION=${STRIPE_PRICE_CUSTOM_INTEGRATION:-}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required in .env}
+      # Git-Integration (PR-Kanal): Token-Verschluesselung + GitHub-OAuth-App
+      - GIT_TOKEN_ENC_KEY=${GIT_TOKEN_ENC_KEY:-}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
       - FRONTEND_URL=https://complyo.de
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
       - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
@@ -85,6 +116,18 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SENDER_EMAIL=${SENDER_EMAIL:-noreply@complyo.de}
       - SENDER_NAME=${SENDER_NAME:-Complyo Compliance}
+      # Empfaenger der internen Benachrichtigung bei jeder Wartelisten-
+      # Anmeldung. Stand in der .env, wurde aber nie durchgereicht — und
+      # send_waitlist_admin_notification steigt ohne Adresse still mit
+      # `return False` aus. Die Mails an die Interessenten gingen also raus,
+      # die Meldung an uns nie, ohne eine Zeile im Log.
+      - ADMIN_NOTIFY_EMAIL=${ADMIN_NOTIFY_EMAIL:-}
+      # Early-Access-Kampagne (/early-access). PLAETZE ist das Kontingent, das
+      # die Seite oeffentlich zusagt; ANGEBOT ist die Fassung des zugesagten
+      # Preises und wird je Anmeldung mitgeschrieben. Beides aendern heisst,
+      # eine oeffentliche Zusage zu aendern — nicht beilaeufig anfassen.
+      - EARLY_ACCESS_PLAETZE=${EARLY_ACCESS_PLAETZE:-100}
+      - EARLY_ACCESS_ANGEBOT=${EARLY_ACCESS_ANGEBOT:-ea100-35eur-12m}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - METRICS_TOKEN=${METRICS_TOKEN:-}
       - VIRTUAL_HOST=api.complyo.de
@@ -181,18 +224,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-
-  # Admin Panel
-  admin:
-    image: nginx:alpine
-    container_name: complyo-admin
-    ports:
-      - "127.0.0.1:3004:80"
-    volumes:
-      - ./simple-admin:/usr/share/nginx/html:ro
-    networks:
-      - complyo-network
-    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest

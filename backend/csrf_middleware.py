@@ -27,6 +27,13 @@ EXEMPT_PATHS: Set[str] = {
     "/api/v2/analyze",
     "/api/v2/analyze/quick",
     "/api/v2/analyze/complete",
+    # Public widget telemetry endpoints — called cross-origin from customer
+    # websites by the embedded banner/widget. They carry no session cookie and
+    # no Bearer token, so the double-submit CSRF check can never succeed and
+    # would silently drop every consent log (DSGVO Art. 7 proof of consent).
+    "/api/cookie-compliance/consent",
+    "/api/ab-tests/track",
+    "/api/widgets/analytics",
     "/health",
     "/metrics",
 }
@@ -36,6 +43,13 @@ EXEMPT_PREFIXES = (
     "/widget/",
     "/api/widget/",
     "/api/leads/",
+    # Wirksamkeitsmeldung des A11y-Widgets. Gleicher Fall wie die
+    # Consent-Meldung oben: sie kommt cross-origin von der Kundendomain, ohne
+    # Sitzungscookie und ohne Bearer-Token — der Double-Submit-Check kann dort
+    # nie aufgehen. Ohne diese Ausnahme wird jede Meldung mit 403 verworfen und
+    # die Selbstueberwachung ist wirkungslos, ohne dass es jemandem auffaellt.
+    # Die Meldung traegt nur Pfad und Zaehler; es gibt nichts zu missbrauchen.
+    "/api/wirkung/",
     "/mcp",
 )
 

@@ -17,16 +17,53 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-REVIEW_MODEL = "moonshotai/kimi-k2-thinking"
-SOLUTION_MODEL = "moonshotai/kimi-k2-thinking"
+# v4.0: Umstellung auf Claude — moonshotai/kimi-k2-thinking lieferte über OpenRouter
+# leeren Inhalt (content=None) → KI-Review/Lösungen liefen ins Leere. Claude Haiku 4.5
+# ist schnell, günstig und auf dem vorhandenen OpenRouter-Key verfügbar. Per ENV override.
+REVIEW_MODEL = os.getenv("COMPLYO_REVIEW_MODEL", "anthropic/claude-haiku-4.5")
+SOLUTION_MODEL = os.getenv("COMPLYO_SOLUTION_MODEL", "anthropic/claude-haiku-4.5")
+# Verifikationsmodell (v4.0): schnell/günstig, empfohlen Claude Haiku 4.5 via OpenRouter.
+# Override per ENV; Fallback auf das bereits konfigurierte REVIEW_MODEL, falls das
+# Anthropic-Modell über den OpenRouter-Key nicht verfügbar ist.
+VERIFY_MODEL = os.getenv("COMPLYO_VERIFY_MODEL", "anthropic/claude-haiku-4.5")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 _HEADERS = {
     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
     "Content-Type": "application/json",
-    "HTTP-Referer": "https://complyo.tech",
+    "HTTP-Referer": "https://complyo.de",
     "X-Title": "Complyo AI Review Engine",
 }
+
+# Prometheus-Zähler für OpenRouter-Aufrufe (wie ai_fix_engine.unified_fix_engine).
+# Fail-open: ohne metrics-Modul (z.B. isolierte Tests) laufen die Calls ohne Zähler.
+try:
+    from metrics import openrouter_requests_total as _openrouter_counter
+except Exception:
+    _openrouter_counter = None
+
+# Solution-Cache-Wiring (Lernkreislauf): Die in main_production initialisierte
+# AISolutionCache-Instanz hängt an public_routes.solution_cache. Bisher lief
+# generate_individual_solution IMMER gegen das LLM — der Cache war eine
+# Attrappe. Tests/Integration können hier direkt eine Instanz setzen.
+solution_cache = None
+
+# Eigener Kategorien-Namespace im Cache: Diese Engine speichert strukturiertes
+# JSON ({ai_solution, steps, code_snippet}), public_routes speichert Fließtext.
+# Ohne Namespace würde ein Fuzzy-Match dem jeweils anderen Verbraucher das
+# falsche Format liefern (rohes JSON in der Nutzer-UI).
+_CACHE_CATEGORY_PREFIX = "review:"
+
+
+def _get_solution_cache():
+    """Liefert die Cache-Instanz: explizit gesetzte, sonst die aus public_routes."""
+    if solution_cache is not None:
+        return solution_cache
+    try:
+        import public_routes
+        return getattr(public_routes, "solution_cache", None)
+    except Exception:
+        return None
 
 
 async def _call_ai(prompt: str, model: str, max_tokens: int = 600, temperature: float = 0.2) -> Optional[str]:
@@ -47,11 +84,17 @@ async def _call_ai(prompt: str, model: str, max_tokens: int = 600, temperature: 
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
+                    if _openrouter_counter:
+                        _openrouter_counter.labels(status="success").inc()
                     return data["choices"][0]["message"]["content"].strip()
                 logger.warning(f"AI call {model} status {resp.status}")
+                if _openrouter_counter:
+                    _openrouter_counter.labels(status="error").inc()
                 return None
     except Exception as e:
         logger.warning(f"AI call failed ({model}): {e}")
+        if _openrouter_counter:
+            _openrouter_counter.labels(status="error").inc()
         return None
 
 
@@ -76,6 +119,86 @@ async def _call_ai_json(prompt: str, model: str, max_tokens: int = 800) -> Optio
             except Exception:
                 pass
     return None
+
+
+# ─────────────────────────────────────────────
+# 0. Säulen-Verifikation (v4.0) — nur bei UNVERIFIED
+# ─────────────────────────────────────────────
+
+# Was muss pro Säule am realen Seiteninhalt nachweisbar sein?
+_PILLAR_VERIFY_CRITERIA = {
+    "legal": (
+        "ein gültiges Impressum nach DDG §5 (vollständiger Name/Firma, ladungsfähige "
+        "Anschrift mit PLZ und Ort, schnelle Kontaktmöglichkeit wie E-Mail)"
+    ),
+    "gdpr": (
+        "eine gültige Datenschutzerklärung nach DSGVO (Verantwortlicher, Zwecke und "
+        "Rechtsgrundlagen der Verarbeitung, Betroffenenrechte, Speicherdauer)"
+    ),
+    "cookies": (
+        "ein funktionsfähiges Cookie-Consent-Banner mit echter Ablehnen-Option "
+        "(Opt-In, kein reines 'OK'), sofern nicht-notwendige Cookies/Tracking genutzt werden"
+    ),
+    "accessibility": (
+        "grundlegende Barrierefreiheit (Barrierefreiheitserklärung nach BFSG bzw. "
+        "ein Barrierefreiheits-/Accessibility-Widget oder klare WCAG-Konformität)"
+    ),
+}
+
+
+async def ai_verify_pillar(
+    pillar: str,
+    page_text: str,
+    evidence: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Verifiziert per KI, ob eine NICHT eindeutig prüfbare Säule am realen
+    Seiteninhalt erfüllt ist. Wird nur bei Status UNVERIFIED / niedriger
+    Confidence aufgerufen (Kostenkontrolle).
+
+    Returns striktes JSON-Dict oder None (kein Key / Fehler / Modell nicht verfügbar):
+        {"compliant": bool, "missing": [str, ...], "reason": str, "confidence": float}
+
+    Bei None bleibt die Säule UNVERIFIED — der Scan funktioniert ohne KI weiter.
+    """
+    if not OPENROUTER_API_KEY:
+        return None
+    criteria = _PILLAR_VERIFY_CRITERIA.get(pillar)
+    if not criteria:
+        return None
+
+    text = (page_text or "").strip()[:6000]
+    if not text:
+        return None
+
+    prompt = f"""Du bist ein deutscher Compliance-Experte. Prüfe ausschließlich anhand des unten stehenden Seiteninhalts, ob folgende Anforderung erfüllt ist:
+
+ANFORDERUNG ({pillar}): {criteria}
+
+Beurteile nur, was im Text tatsächlich belegbar ist. Wenn der relevante Inhalt nicht enthalten ist, gilt die Anforderung als NICHT erfüllt.
+
+Seiteninhalt:
+\"\"\"
+{text}
+\"\"\"
+
+Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema:
+{{"compliant": true|false, "missing": ["..."], "reason": "kurze Begründung auf Deutsch", "confidence": 0.0-1.0}}"""
+
+    result = await _call_ai_json(prompt, VERIFY_MODEL, max_tokens=500)
+    if not result or "compliant" not in result:
+        # Fallback auf das bereits konfigurierte Review-Modell, falls das
+        # Verifikationsmodell (z.B. Claude via OpenRouter) nicht erreichbar ist.
+        if VERIFY_MODEL != REVIEW_MODEL:
+            result = await _call_ai_json(prompt, REVIEW_MODEL, max_tokens=500)
+    if not result or "compliant" not in result:
+        return None
+    return {
+        "compliant": bool(result.get("compliant")),
+        "missing": result.get("missing") or [],
+        "reason": str(result.get("reason") or ""),
+        "confidence": float(result.get("confidence") or 0.0),
+    }
 
 
 # ─────────────────────────────────────────────
@@ -167,6 +290,34 @@ async def generate_individual_solution(
     other_issues = "\n".join(f"  - {t}" for t in all_issue_titles[:8]) or "  - (keine weiteren)"
     category = issue.get('category', '')
     title = issue.get('title', '')
+    description = issue.get('description', '') or ''
+
+    # ── Cache-Lookup VOR dem LLM-Call (Lernkreislauf) ──
+    # Fingerprint aus Kategorie (namespaced) + Titel + Beschreibung; Treffer
+    # sparen den API-Call komplett. Fail-open: Cache-Fehler → normaler LLM-Weg.
+    cache = _get_solution_cache()
+    cache_category = f"{_CACHE_CATEGORY_PREFIX}{category or 'unbekannt'}"
+    if cache is not None:
+        try:
+            cached = await cache.get_cached_solution(
+                category=cache_category,
+                title=title,
+                description=description,
+                use_fuzzy=True,
+            )
+            if cached and cached.get("solution"):
+                try:
+                    parsed = json.loads(cached["solution"])
+                except (ValueError, TypeError):
+                    parsed = None
+                if isinstance(parsed, dict) and parsed.get("ai_solution"):
+                    logger.info(f"🎯 Lösung aus Cache ({cached.get('match_type', '?')}): {title[:50]}")
+                    return parsed
+                # Altbestand/Fließtext im Cache → als reine ai_solution verwenden
+                logger.info(f"🎯 Textlösung aus Cache ({cached.get('match_type', '?')}): {title[:50]}")
+                return {"ai_solution": cached["solution"]}
+        except Exception as e:
+            logger.error(f"❌ Solution-Cache-Lookup fehlgeschlagen ({title[:40]}): {e}")
 
     prompt = f"""Du bist ein Experte für Website-Compliance (deutsches Recht, DSGVO, WCAG 2.1).
 
@@ -217,7 +368,21 @@ WICHTIG für code_snippet:
             f"Website: {url} | CMS: {cms} | Problem: {title}\nErstelle 4 konkrete Lösungsschritte auf Deutsch.",
             SOLUTION_MODEL, max_tokens=400, temperature=0.4
         )
-        return {"ai_solution": plain} if plain else None
+        result = {"ai_solution": plain} if plain else None
+
+    # ── Erfolgreiche LLM-Lösung in den Cache schreiben ──
+    if result and cache is not None:
+        try:
+            await cache.store_solution(
+                category=cache_category,
+                title=title,
+                description=description,
+                solution=json.dumps(result, ensure_ascii=False),
+                model=SOLUTION_MODEL,
+            )
+        except Exception as e:
+            logger.error(f"❌ Solution-Cache-Store fehlgeschlagen ({title[:40]}): {e}")
+
     return result
 
 

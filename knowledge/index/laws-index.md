@@ -20,14 +20,4 @@ SORT title ASC
 - [[TTDSG]] – Telekommunikations-Telemedien-Datenschutz-Gesetz
 - [[UWG]] – Gesetz gegen unlauteren Wettbewerb
 - [[AGB-Recht]] – §§ 305 ff. BGB
-- [[Impressumspflicht]] – § 5 TMG / § 18 MStV
-
-## Updates je Gesetz
-
-```dataview
-TABLE date, impact
-FROM "updates"
-FLATTEN law_areas as area
-GROUP BY area
-SORT rows.date DESC
-```
+- [[Impressumspflicht]] – § 5 DDG / § 18 MStV

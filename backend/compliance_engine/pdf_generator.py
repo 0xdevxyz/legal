@@ -6,12 +6,9 @@ Creates branded, professional compliance reports with charts, scores and detaile
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm, mm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image, HRFlowable
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
-from reportlab.graphics.shapes import Drawing, Rect, String, Circle
-from reportlab.graphics.charts.piecharts import Pie
-from reportlab.graphics import renderPDF
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, HRFlowable
+from reportlab.lib.enums import TA_CENTER
 from datetime import datetime
 import io
 from typing import Dict, Any, List
@@ -151,6 +148,26 @@ class ComplianceReportGenerator:
         else:
             return self.success_green
     
+    @staticmethod
+    def _sicher(text: Any, grenze: int = 0) -> str:
+        """Scan-Text fuer ReportLab entschaerfen.
+
+        Empfehlungen enthalten regelmaessig Code-Beispiele
+        (`<a href="#main" class="skip-link">`). ReportLabs Mini-HTML-Parser
+        kennt weder `class` noch offene Tags und warf dafuer ein ValueError —
+        der PDF-Download endete fuer fast jeden echten Scan in einem 500.
+        Fremdtext gehoert deshalb escaped, bevor er in Markup eingesetzt wird;
+        die Formatierungs-Tags setzt der Generator selbst um das Ergebnis.
+        """
+        s = "" if text is None else str(text)
+        if grenze and len(s) > grenze:
+            s = s[:grenze] + "..."
+        return (
+            s.replace("&", "&amp;")
+             .replace("<", "&lt;")
+             .replace(">", "&gt;")
+        )
+
     def _format_euro(self, amount) -> str:
         try:
             num = float(amount) if amount else 0
@@ -176,6 +193,8 @@ class ComplianceReportGenerator:
         story.append(PageBreak())
         story.extend(self._create_detailed_findings(analysis_data))
         story.extend(self._create_recommendations(analysis_data))
+        story.append(PageBreak())
+        story.extend(self._create_manual_checks_section(analysis_data))
         story.extend(self._create_footer())
         
         doc.build(story)
@@ -298,6 +317,7 @@ class ComplianceReportGenerator:
         content.append(Paragraph("Compliance nach Kategorien", self.styles['SectionHeading']))
         
         pillars = analysis_data.get('pillar_scores', analysis_data.get('pillars', {}))
+        pillars = self._normalisiere_saeulen(pillars, analysis_data.get('issues', []))
         
         if not pillars:
             issues = analysis_data.get('issues', [])
@@ -325,7 +345,7 @@ class ComplianceReportGenerator:
                 score = data
                 issues_count = 0
             
-            name = pillar_names.get(key.lower(), key.title())
+            name = pillar_names.get(str(key).lower(), str(key).title())
             score_text = f"{score}%"
             
             if score >= 80:
@@ -359,6 +379,41 @@ class ComplianceReportGenerator:
         content.append(Spacer(1, 0.5*cm))
         return content
     
+    def _normalisiere_saeulen(self, saeulen: Any, issues: List[Dict]) -> Dict[str, Dict]:
+        """Saeulen-Scores kommen aus dem Scan als LISTE, die Tabelle braucht ein Dict.
+
+        Der Scanner legt `pillar_scores` als [{'pillar': 'cookies', 'score': 10}, ...]
+        ab. Die Tabelle rief darauf `.items()` auf — jeder PDF-Download endete
+        deshalb in `'list' object has no attribute 'items'` und damit in einem 500.
+        Die Issue-Zahl steht in der Liste nicht drin; sie wird hier aus den
+        Issues nachgezaehlt, sonst zeigt die Spalte fuer jede Kategorie 0.
+        """
+        if isinstance(saeulen, dict):
+            return saeulen
+        if not isinstance(saeulen, list):
+            return {}
+
+        from compliance_engine.score_calculator import ScoreCalculator
+
+        anzahl: Dict[str, int] = {}
+        for issue in issues or []:
+            if not isinstance(issue, dict):
+                continue
+            schluessel = ScoreCalculator.categorize(issue.get('category', ''))
+            anzahl[schluessel] = anzahl.get(schluessel, 0) + 1
+
+        ergebnis: Dict[str, Dict] = {}
+        for i, eintrag in enumerate(saeulen):
+            if not isinstance(eintrag, dict):
+                continue
+            name = eintrag.get('pillar') or eintrag.get('name') or eintrag.get('id')
+            name = str(name) if name else 'kategorie_%d' % i
+            ergebnis[name] = {
+                'score': eintrag.get('score', 0),
+                'issues': eintrag.get('issues', anzahl.get(name, 0)),
+            }
+        return ergebnis
+
     def _calculate_pillar_scores(self, issues: List[Dict]) -> Dict:
         """4 Säulen (SSOT v3.0) — delegiert an ScoreCalculator.categorize()."""
         from compliance_engine.score_calculator import ScoreCalculator
@@ -430,12 +485,12 @@ class ComplianceReportGenerator:
             risk = issue.get('risk_euro', 0)
             
             issue_data = [
-                [Paragraph(f"<font color='#{color.hexval()[2:]}'>{idx}.</font> {title}", self.styles['IssueTitle'])],
-                [Paragraph(description[:300] + ('...' if len(description) > 300 else ''), self.styles['BodyText'])],
+                [Paragraph(f"<font color='#{color.hexval()[2:]}'>{idx}.</font> {self._sicher(title)}", self.styles['IssueTitle'])],
+                [Paragraph(self._sicher(description, 300), self.styles['BodyText'])],
             ]
             
             if recommendation:
-                issue_data.append([Paragraph(f"<b>Empfehlung:</b> {recommendation[:200]}", self.styles['BodyText'])])
+                issue_data.append([Paragraph(f"<b>Empfehlung:</b> {self._sicher(recommendation, 200)}", self.styles['BodyText'])])
             
             if risk:
                 issue_data.append([Paragraph(f"<b>Risiko:</b> {self._format_euro(risk)}", self.styles['BodyText'])])
@@ -495,11 +550,64 @@ class ComplianceReportGenerator:
             ]
         
         for idx, rec in enumerate(recommendations, 1):
-            content.append(Paragraph(f"{idx}. {rec}", self.styles['BodyText']))
+            content.append(Paragraph(f"{idx}. {self._sicher(rec)}", self.styles['BodyText']))
         
         content.append(Spacer(1, 1*cm))
         return content
     
+    def _create_manual_checks_section(self, analysis_data: Dict[str, Any]) -> List:
+        """
+        Manuell zu pruefende Kriterien mit Schritt-fuer-Schritt-Anleitung.
+
+        Der Abschnitt existierte nur im Generator fuer die E-Mail-Anlage
+        (pdf_report_generator.py). Der herunterladbare Report laeuft ueber
+        diesen Generator hier und trug ihn nicht — das Versprechen
+        "erkennen ODER anleiten" fehlte also genau in dem Dokument, das der
+        Kunde weiterreicht (31.08.2026).
+        """
+        content = []
+        checks = analysis_data.get('manual_checks')
+        if not checks:
+            try:
+                from compliance_engine.score_calculator import MANUAL_CHECKS
+                checks = MANUAL_CHECKS
+            except Exception:
+                return content
+
+        pillar_labels = {
+            'accessibility': 'Barrierefreiheit',
+            'gdpr': 'Datenschutz',
+            'legal': 'Rechtstexte',
+            'cookies': 'Cookies',
+        }
+
+        content.append(Paragraph('Manuell zu prüfende Punkte', self.styles['SectionHeading']))
+        content.append(Paragraph(
+            'Kein automatisches Prüfverfahren kann alle rechtlichen Anforderungen '
+            'bewerten — einige Kriterien erfordern eine kurze manuelle Kontrolle. '
+            'Damit nichts offen bleibt, finden Sie hier für jeden dieser Punkte '
+            'eine konkrete Anleitung.',
+            self.styles['BodyText'],
+        ))
+        content.append(Spacer(1, 0.5*cm))
+
+        note = (analysis_data.get('pillar_notes') or {}).get('accessibility')
+        if note:
+            content.append(Paragraph('<i>' + self._sicher(note) + '</i>', self.styles['BodyText']))
+            content.append(Spacer(1, 0.4*cm))
+
+        for check in checks:
+            label = pillar_labels.get(check.get('pillar', ''), check.get('pillar', ''))
+            content.append(Paragraph(
+                '[' + self._sicher(label) + '] ' + self._sicher(check.get('title', '')),
+                self.styles['SubHeading']
+            ))
+            content.append(Paragraph(self._sicher(check.get('anleitung', '')), self.styles['BodyText']))
+            content.append(Spacer(1, 0.3*cm))
+
+        content.append(Spacer(1, 0.5*cm))
+        return content
+
     def _create_footer(self) -> List:
         content = []
         
@@ -512,7 +620,7 @@ class ComplianceReportGenerator:
         ))
         
         content.append(Paragraph(
-            f"Generiert von Complyo.tech am {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')}",
+            f"Generiert von complyo.de am {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')}",
             self.styles['Footer']
         ))
         content.append(Paragraph(
@@ -520,7 +628,7 @@ class ComplianceReportGenerator:
             self.styles['Footer']
         ))
         content.append(Paragraph(
-            "© 2025 Complyo - KI-gestützte Website-Compliance | www.complyo.tech",
+            f"© {datetime.now().year} Complyo - KI-gestützte Website-Compliance | www.complyo.de",
             self.styles['Footer']
         ))
         

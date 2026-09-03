@@ -24,7 +24,7 @@
     // Configuration & Constants
     // ========================================================================
     
-    const VERSION = '2.0.0';
+    const VERSION = '2.1.0';
     const API_BASE = 'https://api.complyo.de';
     const CONSENT_STORAGE_KEY = 'complyo_cookie_consent';
     const CONSENT_DATE_KEY = 'complyo_consent_date';
@@ -85,7 +85,7 @@
         
         // Texts (default German) - synchronisiert mit Dashboard
         texts: {
-            title: 'Datenschutz-Präferenz',
+            title: 'Privatsphäre-Einstellungen',
             description: 'Wir benötigen Ihre Einwilligung, bevor Sie unsere Website weiter besuchen können.\n\nWenn Sie unter 16 Jahre alt sind und Ihre Einwilligung zu optionalen Services geben möchten, müssen Sie Ihre Erziehungsberechtigten um Erlaubnis bitten.\n\nWir verwenden Cookies und andere Technologien auf unserer Website. Einige von ihnen sind essenziell, während andere uns helfen, diese Website und Ihre Erfahrung zu verbessern. Personenbezogene Daten können verarbeitet werden (z. B. IP-Adressen), z. B. für personalisierte Anzeigen und Inhalte oder die Messung von Anzeigen und Inhalten. Weitere Informationen über die Verwendung Ihrer Daten finden Sie in unserer Datenschutzerklärung. Es besteht keine Verpflichtung, in die Verarbeitung Ihrer Daten einzuwilligen, um dieses Angebot zu nutzen. Sie können Ihre Auswahl jederzeit unter Einstellungen widerrufen oder anpassen. Bitte beachten Sie, dass aufgrund individueller Einstellungen möglicherweise nicht alle Funktionen der Website verfügbar sind.',
             description2: 'Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwilligung zur Nutzung dieser Services willigen Sie auch in die Verarbeitung Ihrer Daten in den USA gemäß Art. 49 (1) lit. a DSGVO ein. Der EuGH stuft die USA als ein Land mit unzureichendem Datenschutz nach EU-Standards ein. Es besteht beispielsweise die Gefahr, dass US-Behörden personenbezogene Daten in Überwachungsprogrammen verarbeiten, ohne dass für Europäerinnen und Europäer eine Klagemöglichkeit besteht.',
             ageNotice: '',
@@ -209,7 +209,25 @@
             if (this.siteId && this.siteId !== 'demo-site') {
                 await this.loadServerConfig();
             }
-            
+
+            // 🔒 Lizenzprüfung: Wurde die Website im Dashboard entfernt, zeigen wir
+            // statt des funktionsfähigen Banners einen Hinweis an den Betreiber.
+            const license = this.config.license;
+            const violation = license && license.status && license.status !== 'active';
+
+            // Im Warnmodus bleibt der Banner funktionsfähig — der Verstoß wird nur
+            // protokolliert, damit ein Fehlalarm keine Kundenseite lahmlegt.
+            if (violation) {
+                console.warn('[Complyo] ' + (license.message || 'Lizenzverstoß erkannt.'));
+            }
+
+            if (this.config.licenseActive === false) {
+                const severe = !!(license && license.status === 'unlicensed_domain');
+                this.renderLicenseNotice(license && license.message, severe);
+                return;
+            }
+
+
             // ✅ Phase 2: Check Geo-Restriction
             if (this.config.geo_restriction_enabled && this.config.geo_countries?.length > 0) {
                 const shouldShow = await this.checkGeoRestriction();
@@ -243,6 +261,87 @@
             }
         }
         
+        /**
+         * 🔒 Lizenz-Hinweis: Wird angezeigt, wenn für diese Website keine aktive
+         * Lizenz mehr besteht (Website wurde im Complyo-Dashboard entfernt).
+         */
+        renderLicenseNotice(message, severe) {
+            const FALLBACK =
+                'Für dieses Cookie-Banner besteht keine aktive Lizenz. ' +
+                'Bitte wenden Sie sich an Ihren Administrator.';
+            const text = message || FALLBACK;
+
+            const show = () => {
+                if (document.getElementById('complyo-license-notice')) return;
+
+                // Nicht lizenzierte Domain: unübersehbare Sperre. Der Betreiber
+                // hat den Einbettungscode auf eine Seite kopiert, für die keine
+                // Lizenz besteht — das soll nicht beiläufig wirken.
+                if (severe) {
+                    const overlay = document.createElement('div');
+                    overlay.id = 'complyo-license-notice';
+                    overlay.setAttribute('role', 'alertdialog');
+                    overlay.setAttribute('aria-modal', 'true');
+                    overlay.setAttribute('aria-label', 'Lizenzhinweis');
+                    overlay.style.cssText = [
+                        'position:fixed', 'inset:0', 'z-index:2147483647',
+                        'background:rgba(9,9,11,.94)', 'color:#f9fafb',
+                        'display:flex', 'align-items:center', 'justify-content:center',
+                        'padding:24px',
+                        'font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif'
+                    ].join(';');
+
+                    const box = document.createElement('div');
+                    box.style.cssText = [
+                        'max-width:620px', 'text-align:center',
+                        'border:1px solid rgba(255,255,255,.14)', 'border-radius:16px',
+                        'background:#18181b', 'padding:32px 28px',
+                        'box-shadow:0 24px 60px rgba(0,0,0,.5)'
+                    ].join(';');
+
+                    const heading = document.createElement('p');
+                    heading.textContent = 'Nicht lizenzierte Nutzung';
+                    heading.style.cssText =
+                        'margin:0 0 12px;font-size:13px;font-weight:700;' +
+                        'letter-spacing:.08em;text-transform:uppercase;color:#00FFF7';
+
+                    const body = document.createElement('p');
+                    body.textContent = text;
+                    body.style.cssText = 'margin:0 0 20px;font-size:17px';
+
+                    const hint = document.createElement('p');
+                    hint.textContent =
+                        'Der Cookie-Banner ist deshalb außer Betrieb. ' +
+                        'Eine Lizenz für diese Domain erhalten Sie über den Complyo-Support.';
+                    hint.style.cssText = 'margin:0;font-size:14px;opacity:.7';
+
+                    box.appendChild(heading);
+                    box.appendChild(body);
+                    box.appendChild(hint);
+                    overlay.appendChild(box);
+                    document.body.appendChild(overlay);
+                    return;
+                }
+
+                const bar = document.createElement('div');
+                bar.id = 'complyo-license-notice';
+                bar.setAttribute('role', 'alert');
+                bar.style.cssText = [
+                    'position:fixed', 'left:0', 'right:0', 'bottom:0', 'z-index:2147483647',
+                    'background:#1f2937', 'color:#f9fafb', 'padding:14px 18px',
+                    'font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif',
+                    'text-align:center', 'box-shadow:0 -2px 12px rgba(0,0,0,.25)'
+                ].join(';');
+                bar.textContent = text;
+                document.body.appendChild(bar);
+            };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', show);
+            } else {
+                show();
+            }
+        }
+
         /**
          * ✅ Phase 2: Geo-Restriction Check
          */
@@ -367,6 +466,41 @@
             return false;
         }
         
+        /**
+         * Schwarz oder Weiss — was auf dieser Farbe besser lesbar ist.
+         *
+         * Beide Kandidaten werden nach WCAG 2.1 (relative Leuchtdichte)
+         * gemessen und der bessere gewinnt. Auf einer beliebigen Markenfarbe
+         * erreicht mindestens einer der beiden 4,5:1 — die Markenfarbe selbst
+         * muss deshalb nie angefasst werden.
+         */
+        static lesbareSchrift(hintergrund) {
+            try {
+                const kanal = (v) => {
+                    v = v / 255;
+                    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+                };
+                const leuchtdichte = (hex) => {
+                    const m = String(hex).trim().replace(/^#/, '');
+                    const voll = m.length === 3 ? m.split('').map(c => c + c).join('') : m;
+                    if (!/^[0-9a-fA-F]{6}$/.test(voll)) return null;
+                    const r = parseInt(voll.slice(0, 2), 16);
+                    const g = parseInt(voll.slice(2, 4), 16);
+                    const b = parseInt(voll.slice(4, 6), 16);
+                    return 0.2126 * kanal(r) + 0.7152 * kanal(g) + 0.0722 * kanal(b);
+                };
+                const l = leuchtdichte(hintergrund);
+                if (l === null) return '#ffffff';   // unlesbare Angabe: wie bisher
+                const gegenWeiss = 1.05 / (l + 0.05);
+                const gegenSchwarz = (l + 0.05) / 0.05;
+                // #1a1a1a statt reinem Schwarz: auf hellen Marken angenehmer
+                // und immer noch deutlich ueber der Vorgabe.
+                return gegenWeiss >= gegenSchwarz ? '#ffffff' : '#1a1a1a';
+            } catch (e) {
+                return '#ffffff';
+            }
+        }
+
         async loadServerConfig() {
             try {
                 // Check for A/B test variant first
@@ -469,7 +603,7 @@
             }
             
             try {
-                const servicesResponse = await fetch(`${API_BASE}/api/cookie-compliance/services`);
+                const servicesResponse = await fetch(`${API_BASE}/api/cookie-compliance/services?site_id=${encodeURIComponent(this.siteId)}`);
                 if (servicesResponse.ok) {
                     const servicesData = await servicesResponse.json();
                     if (servicesData.success && servicesData.services) {
@@ -515,6 +649,11 @@
             this.config.showBranding = serverConfig.show_branding !== false;
             this.config.services = serverConfig.services || [];
             this.config.isActiveFromServer = serverConfig.is_active === true;
+            // 🔒 Lizenzstatus vom Server (false = Website im Dashboard entfernt)
+            this.config.licenseActive = serverConfig.license_active !== false;
+            // Details zur Lizenzlage: status ('active' | 'revoked' |
+            // 'unlicensed_domain'), enforced und der anzuzeigende Text.
+            this.config.license = serverConfig.license || null;
             this.configHash = serverConfig.config_hash || null;
 
             // Konfigurierbare Legal-Links (Task 2.5)
@@ -771,7 +910,8 @@
                             necessary: true,
                             functional: consent.functional || false,
                             analytics: consent.analytics || false,
-                            marketing: consent.marketing || false
+                            marketing: consent.marketing || false,
+                            third_country_consent: consent.third_country || false
                         },
                         services_accepted: consent.services || [],
                         language: navigator.language.split('-')[0],
@@ -1085,7 +1225,8 @@
                         necessary: true,
                         functional: consent.functional || false,
                         analytics: consent.analytics || false,
-                        marketing: consent.marketing || false
+                        marketing: consent.marketing || false,
+                        third_country: consent.third_country || false
                     },
                     services: consent.services || [],
                     // ✅ Include Google Consent Mode status
@@ -1155,13 +1296,19 @@
         
         getStyles() {
             const { primaryColor, accentColor, textColor, bgColor, layout, position } = this.config;
-            
+            // WCAG 1.4.3: Schrift auf Marken-/Akzentfarbe automatisch lesbar
+            // halten — dieselbe Regel wie beim Floating-Button. Der Hover
+            // wechselt den Hintergrund auf accentColor, braucht also eine
+            // eigene Textfarbe.
+            const primaryTextColor = this.constructor.lesbareSchrift(primaryColor);
+            const accentTextColor = this.constructor.lesbareSchrift(accentColor);
+
             return `
                 /* Complyo Cookie Banner Styles v${VERSION} - Modern Edition */
                 .complyo-cookie-banner {
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
                     font-size: 14px;
-                    line-height: 1.6;
+                    line-height: 1.45;
                     box-sizing: border-box;
                 }
                 
@@ -1184,6 +1331,11 @@
                     border-top: 1px solid rgba(255, 255, 255, 0.2);
                     opacity: 0;
                     transition: opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                    /* Höhe begrenzen, damit der Bottom/Top-Banner bei langem
+                       Beschreibungstext nicht den gesamten Viewport ausfüllt,
+                       sondern ein Streifen bleibt und bei Bedarf scrollt. */
+                    max-height: 85vh;
+                    overflow-y: auto;
                 }
                 
                 .complyo-banner-layout.complyo-position-bottom {
@@ -1241,10 +1393,10 @@
                     background: ${bgColor};
                     color: ${textColor};
                     border-radius: 12px;
-                    padding: 48px 52px;
-                    max-width: 720px;
+                    padding: 28px 32px;
+                    max-width: 760px;
                     width: 92%;
-                    max-height: 88vh;
+                    max-height: 85vh;
                     overflow-y: auto;
                     box-shadow: 0 24px 72px rgba(0, 0, 0, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1);
                     z-index: 1000000;
@@ -1287,21 +1439,21 @@
                 }
                 
                 .complyo-title {
-                    margin: 0 0 28px 0;
-                    font-size: 26px;
+                    margin: 0 0 14px 0;
+                    font-size: 21px;
                     font-weight: 700;
                     color: ${textColor};
                     text-align: center;
                     letter-spacing: -0.02em;
-                    line-height: 1.3;
+                    line-height: 1.25;
                 }
-                
+
                 .complyo-description {
-                    margin: 0 0 18px 0;
+                    margin: 0 0 12px 0;
                     color: ${textColor};
                     opacity: 0.88;
-                    line-height: 1.75;
-                    font-size: 15px;
+                    line-height: 1.5;
+                    font-size: 14px;
                     text-align: left;
                     white-space: pre-line;
                 }
@@ -1328,18 +1480,42 @@
                     border-radius: 4px;
                 }
                 
+                /* Two-Column-Layout: Text links, Buttons rechts daneben */
+                .complyo-main {
+                    display: flex;
+                    align-items: center;
+                    gap: 0;
+                }
+
+                .complyo-text {
+                    flex: 1 1 auto;
+                    min-width: 0;
+                    padding-right: 36px;
+                }
+
+                .complyo-main .complyo-title {
+                    text-align: left;
+                }
+
+                .complyo-main .complyo-description:last-child,
+                .complyo-main .complyo-age-notice:last-child {
+                    margin-bottom: 0;
+                }
+
                 /* Buttons - Clean & Professional */
                 .complyo-actions {
                     display: flex;
                     flex-direction: column;
-                    gap: 14px;
-                    margin-top: 36px;
+                    gap: 10px;
+                    flex: 0 0 250px;
+                    padding-left: 36px;
+                    border-left: 1px solid rgba(0, 0, 0, 0.09);
                 }
-                
+
                 .complyo-btn {
-                    padding: 17px 32px;
+                    padding: 13px 26px;
                     border: none;
-                    font-size: 16px;
+                    font-size: 15px;
                     font-weight: 600;
                     cursor: pointer;
                     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1367,12 +1543,13 @@
                 
                 .complyo-btn-primary {
                     background: ${primaryColor};
-                    color: white;
+                    color: ${primaryTextColor};
                     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
                 }
                 
                 .complyo-btn-primary:hover {
                     background: ${accentColor};
+                    color: ${accentTextColor};
                     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
                     transform: translateY(-1px);
                 }
@@ -1382,21 +1559,25 @@
                     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
                 }
                 
+                /* DSGVO/DSK: "Ablehnen" muss gleichwertig zu "Akzeptieren" sein
+                   (gleiche Größe, gleiche visuelle Gewichtung). Daher ebenfalls
+                   gefüllt mit Schatten – kein schwächerer Outline-Button. */
                 .complyo-btn-secondary {
-                    background: white;
-                    color: ${primaryColor};
-                    border: 2px solid ${primaryColor};
-                }
-                
-                .complyo-btn-secondary:hover {
-                    background: ${primaryColor};
+                    background: #4b5563;
                     color: white;
+                    border: none;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+                }
+
+                .complyo-btn-secondary:hover {
+                    background: #374151;
                     transform: translateY(-1px);
                     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
                 }
-                
+
                 .complyo-btn-secondary:active {
                     transform: translateY(0);
+                    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
                 }
                 
                 .complyo-btn-link {
@@ -1656,8 +1837,8 @@
                 
                 /* Footer Links */
                 .complyo-footer {
-                    margin-top: 32px;
-                    padding-top: 24px;
+                    margin-top: 20px;
+                    padding-top: 14px;
                     border-top: 1px solid rgba(0, 0, 0, 0.08);
                     display: flex;
                     justify-content: center;
@@ -1683,18 +1864,43 @@
                 /* Branding */
                 .complyo-branding {
                     margin-top: 16px;
-                    text-align: center;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 7px;
                     font-size: 12px;
-                    opacity: 0.6;
                 }
-                
-                .complyo-branding a {
-                    color: ${primaryColor};
+
+                .complyo-branding-prefix {
+                    color: ${textColor};
+                    opacity: 0.55;
+                }
+
+                .complyo-branding-link {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
                     text-decoration: none;
+                    transition: opacity 0.2s ease;
                 }
-                
-                .complyo-branding a:hover {
-                    text-decoration: underline;
+
+                .complyo-branding-link:hover {
+                    opacity: 0.8;
+                }
+
+                .complyo-branding-logo {
+                    height: 14px;
+                    width: auto;
+                    display: inline-block;
+                    vertical-align: middle;
+                    opacity: 0.85;
+                }
+
+                .complyo-branding-word {
+                    color: ${textColor};
+                    font-weight: 600;
+                    letter-spacing: -0.1px;
+                    text-transform: lowercase;
                 }
                 
                 /* Responsive */
@@ -1704,19 +1910,19 @@
                     }
                     
                     .complyo-box-layout {
-                        padding: 36px 28px;
+                        padding: 24px 22px;
                         width: 94%;
                         max-height: 90vh;
                     }
-                    
+
                     .complyo-title {
-                        font-size: 22px;
-                        margin-bottom: 22px;
+                        font-size: 20px;
+                        margin-bottom: 14px;
                     }
-                    
+
                     .complyo-description {
                         font-size: 14px;
-                        line-height: 1.7;
+                        line-height: 1.5;
                     }
                     
                     .complyo-age-notice {
@@ -1729,14 +1935,25 @@
                         font-size: 15px;
                     }
                     
-                    .complyo-actions {
-                        margin-top: 28px;
-                        gap: 12px;
+                    .complyo-main {
+                        flex-direction: column;
+                        gap: 18px;
                     }
-                    
+
+                    .complyo-text {
+                        padding-right: 0;
+                    }
+
+                    .complyo-actions {
+                        flex: 1 1 auto;
+                        gap: 10px;
+                        padding-left: 0;
+                        border-left: none;
+                    }
+
                     .complyo-footer {
-                        margin-top: 28px;
-                        padding-top: 20px;
+                        margin-top: 16px;
+                        padding-top: 12px;
                         font-size: 13px;
                         gap: 12px;
                     }
@@ -1793,7 +2010,17 @@
             // Create banner
             const banner = document.createElement('div');
             banner.className = isBox ? 'complyo-box-layout' : 'complyo-banner-layout';
-            banner.classList.add(`complyo-position-${this.config.position}`);
+            // Position-Klasse KOHÄRENT aus dem Layout ableiten. Der Dashboard-
+            // Layout-Picker setzte historisch nur `layout` und ließ `position`
+            // unangetastet, sodass z.B. layout='banner_bottom' mit einer
+            // veralteten position='center' gespeichert sein kann — für diese
+            // Kombi gibt es KEINE CSS-Regel (kein top/bottom, kein .show) und der
+            // Banner bliebe unsichtbar. Darum hier hart aus dem Layout ableiten.
+            let position = this.config.position;
+            if (layout === 'banner_bottom') position = 'bottom';
+            else if (layout === 'banner_top') position = 'top';
+            else if (isBox) position = 'center';
+            banner.classList.add(`complyo-position-${position}`);
             banner.id = 'complyo-banner';
             
             // Content
@@ -1804,40 +2031,44 @@
 
             banner.innerHTML = `
                 <div class="complyo-content">
-                    <h2 id="complyo-banner-title" class="complyo-title">${sanitizeText(t.title)}</h2>
-                    <p id="complyo-banner-desc" class="complyo-description">
-                        ${sanitizeText(t.description)}
-                    </p>
-                    <p class="complyo-description">
-                        ${sanitizeText(t.description2)}
-                    </p>
-                    ${t.ageNotice ? `
-                        <div class="complyo-age-notice">
-                            ${sanitizeText(t.ageNotice)}
+                    <div class="complyo-main">
+                        <div class="complyo-text">
+                            <h2 id="complyo-banner-title" class="complyo-title">${sanitizeText(t.title)}</h2>
+                            <p id="complyo-banner-desc" class="complyo-description">
+                                ${sanitizeText(t.description)}
+                            </p>
+                            <p class="complyo-description">
+                                ${sanitizeText(t.description2)}
+                            </p>
+                            ${t.ageNotice ? `
+                                <div class="complyo-age-notice">
+                                    ${sanitizeText(t.ageNotice)}
+                                </div>
+                            ` : ''}
                         </div>
-                    ` : ''}
-                    <div class="complyo-actions">
-                        <button 
-                            id="complyo-accept-all" 
-                            class="complyo-btn complyo-btn-primary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
-                            aria-label="${sanitizeText(t.acceptAll)}"
-                        >
-                            ${sanitizeText(t.acceptAll)}
-                        </button>
-                        <button 
-                            id="complyo-reject-all" 
-                            class="complyo-btn complyo-btn-secondary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
-                            aria-label="${sanitizeText(t.continueWithout)}"
-                        >
-                            ${sanitizeText(t.continueWithout)}
-                        </button>
-                        <button 
-                            id="complyo-settings" 
-                            class="complyo-btn complyo-btn-link"
-                            aria-label="${sanitizeText(t.settingsLink)}"
-                        >
-                            ${sanitizeText(t.settingsLink)}
-                        </button>
+                        <div class="complyo-actions">
+                            <button
+                                id="complyo-accept-all"
+                                class="complyo-btn complyo-btn-primary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
+                                aria-label="${sanitizeText(t.acceptAll)}"
+                            >
+                                ${sanitizeText(t.acceptAll)}
+                            </button>
+                            <button
+                                id="complyo-reject-all"
+                                class="complyo-btn complyo-btn-secondary complyo-btn-${sanitizeText(this.config.buttonStyle)}"
+                                aria-label="${sanitizeText(t.continueWithout)}"
+                            >
+                                ${sanitizeText(t.continueWithout)}
+                            </button>
+                            <button
+                                id="complyo-settings"
+                                class="complyo-btn complyo-btn-link"
+                                aria-label="${sanitizeText(t.settingsLink)}"
+                            >
+                                ${sanitizeText(t.settingsLink)}
+                            </button>
+                        </div>
                     </div>
                     <div class="complyo-footer">
                         <a href="${privacyUrl}" target="_blank" rel="noopener">${sanitizeText(t.privacyPolicy)}</a>
@@ -1848,7 +2079,10 @@
                     </div>
                     ${this.config.showBranding ? `
                         <div class="complyo-branding">
-                            Powered by <a href="https://complyo.tech" target="_blank" rel="noopener">Complyo</a>
+                            <span class="complyo-branding-prefix">Powered by</span>
+                            <a class="complyo-branding-link" href="https://complyo.de" target="_blank" rel="noopener" aria-label="complyo">
+                                <img class="complyo-branding-logo" src="https://complyo.de/logo-dark-trim.png" alt="complyo" height="14" loading="lazy" decoding="async" />
+                            </a>
                         </div>
                     ` : ''}
                 </div>
@@ -1885,10 +2119,11 @@
                 functional: true,
                 analytics: true,
                 marketing: true,
+                third_country: true,
                 services: this.config.services,
                 timestamp: new Date().toISOString()
             };
-            
+
             // Track A/B test result
             if (this.abTest) {
                 this.trackABTestResult('accept_all');
@@ -1904,10 +2139,11 @@
                 functional: false,
                 analytics: false,
                 marketing: false,
+                third_country: false,
                 services: [],
                 timestamp: new Date().toISOString()
             };
-            
+
             // Track A/B test result
             if (this.abTest) {
                 this.trackABTestResult('reject_all');
@@ -1929,10 +2165,11 @@
                 functional: selections.functional || false,
                 analytics: selections.analytics || false,
                 marketing: selections.marketing || false,
+                third_country: selections.thirdCountry || false,
                 services: selections.services || [],
                 timestamp: new Date().toISOString()
             };
-            
+
             console.log('[Complyo] Saving consent:', consent);
             
             // Track A/B test result
@@ -1987,14 +2224,16 @@
                     necessary: true,
                     functional: this.consent.functional || false,
                     analytics: this.consent.analytics || false,
-                    marketing: this.consent.marketing || false
+                    marketing: this.consent.marketing || false,
+                    thirdCountry: this.consent.third_country || false
                 };
             } else {
                 this.categorySelections = {
                     necessary: true,
                     functional: false,
                     analytics: false,
-                    marketing: false
+                    marketing: false,
+                    thirdCountry: false
                 };
             }
             
@@ -2040,7 +2279,9 @@
                     position: fixed;
                     inset: 0;
                     background: rgba(0, 0, 0, 0.5);
-                    z-index: 999998;
+                    /* MUSS über dem Banner liegen (Box-Layout = 1000000), sonst
+                       erscheinen die Detail-Einstellungen HINTER dem Banner. */
+                    z-index: 2147483646;
                     opacity: 0;
                     transition: opacity 0.3s ease;
                 }
@@ -2058,7 +2299,8 @@
                     max-height: 90vh;
                     display: flex;
                     flex-direction: column;
-                    z-index: 999999;
+                    /* über Banner (1000000) UND eigenem Backdrop (…646) */
+                    z-index: 2147483647;
                     opacity: 0;
                     transition: all 0.3s ease;
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -2229,6 +2471,13 @@
                 }
                 .cps-item:last-child {
                     border-bottom: none;
+                }
+                .cps-thirdcountry-item {
+                    background: #fff7ed;
+                    border-left: 3px solid #f59e0b;
+                }
+                .cps-thirdcountry-item .cps-item-title::before {
+                    content: "🌍 ";
                 }
                 .cps-item-header {
                     display: flex;
@@ -2466,7 +2715,7 @@
                 <div class="cps-header">
                     <div class="cps-header-left">
                         <div class="cps-logo">C</div>
-                        <h2 class="cps-title" id="complyo-settings-title">Datenschutz-Präferenz</h2>
+                        <h2 class="cps-title" id="complyo-settings-title">${sanitizeText(this.config.texts?.title || 'Privatsphäre-Einstellungen')}</h2>
                     </div>
                     <div class="cps-header-links">
                         <a href="${privacyUrl}" target="_blank">Datenschutzerklärung</a>
@@ -2550,7 +2799,28 @@
                     <button class="cps-action-btn" id="cps-deselect-all">○ Alle abwählen</button>
                 </div>
             `;
-            
+
+            // Art. 49 Abs. 1 lit. a DSGVO — gesonderte Einwilligung in die
+            // Datenverarbeitung in unsicheren Drittländern (z. B. USA). Eigener
+            // Toggle, weil dies eine separate, informierte Einwilligung erfordert.
+            html += `
+                <div class="cps-item cps-thirdcountry-item" data-category="thirdCountry">
+                    <div class="cps-item-header">
+                        <div class="cps-item-checkbox">
+                            <input type="checkbox"
+                                   id="cps-third-country"
+                                   aria-label="Datenverarbeitung in unsicheren Drittländern zulassen"
+                                   data-category="thirdCountry"
+                                   ${this.categorySelections.thirdCountry ? 'checked' : ''}>
+                        </div>
+                        <div class="cps-item-content">
+                            <h3 class="cps-item-title">Datenverarbeitung in unsicheren Drittländern</h3>
+                            <p class="cps-item-desc">Einige Services verarbeiten Daten in Ländern außerhalb der EU/des EWR ohne anerkanntes Datenschutzniveau (z.&nbsp;B. USA). Mit dieser gesonderten Einwilligung nach Art.&nbsp;49 Abs.&nbsp;1 lit.&nbsp;a DSGVO stimmst du dieser Übermittlung ausdrücklich zu. Sie ist freiwillig und jederzeit widerrufbar.</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+
             categories.forEach(cat => {
                 const services = this.serviceDetails[cat.key] || [];
                 const isChecked = this.categorySelections[cat.key];
@@ -2561,6 +2831,7 @@
                             <div class="cps-item-checkbox">
                                 <input type="checkbox" 
                                        id="cat-${sanitizeText(cat.key)}" 
+                                       aria-label="${sanitizeText(cat.name)} zulassen"
                                        data-category="${sanitizeText(cat.key)}"
                                        ${isChecked ? 'checked' : ''} 
                                        ${cat.required ? 'checked disabled' : ''}>
@@ -2606,7 +2877,7 @@
             
             let html = `
                 <div class="cps-search-bar">
-                    <input type="text" class="cps-search-input" id="cps-service-search" placeholder="Services suchen...">
+                    <input type="text" class="cps-search-input" id="cps-service-search" aria-label="Dienste durchsuchen" placeholder="Services suchen...">
                     <span class="cps-search-count">${allServices.length} Services</span>
                 </div>
                 <div id="cps-services-list">
@@ -2631,6 +2902,7 @@
                                     </button>
                                     <label class="cps-toggle">
                                         <input type="checkbox" 
+                                               aria-label="${sanitizeText(service.name || service.service_key)} zulassen"
                                                data-service-toggle="${sanitizeText(service.service_key || service.name)}"
                                                data-category="${sanitizeText(service.category)}"
                                                ${isEnabled || isEssential ? 'checked' : ''} 
@@ -2698,7 +2970,7 @@
             
             let html = `
                 <div class="cps-search-bar">
-                    <input type="text" class="cps-search-input" id="cps-provider-search" placeholder="Provider suchen...">
+                    <input type="text" class="cps-search-input" id="cps-provider-search" aria-label="Anbieter durchsuchen" placeholder="Provider suchen...">
                     <span class="cps-search-count">${providerList.length} Provider</span>
                 </div>
                 <div id="cps-providers-list">
@@ -3037,6 +3309,19 @@
             if (existing) existing.remove();
             
             const primaryColor = this.config.primaryColor || '#7c3aed';
+            // Lesbare Schriftfarbe fuer den Hauptknopf.
+            //
+            // Der Knopf trug immer `color: white`, egal welche Markenfarbe
+            // dahinterlag. Auf zua-zwickau.de ergab das weiss auf #1597a3 =
+            // 3,5:1 — WCAG 1.4.3 verlangt 4,5:1. complyo lieferte damit auf
+            // jeder Kundenseite mit heller Markenfarbe einen eigenen
+            // Barrierefreiheitsfehler aus. Gefunden hat es der Wirkungsscan:
+            // MIT complyo war ein Kontrastbefund MEHR da als ohne.
+            //
+            // Die Markenfarbe bleibt unangetastet — geaendert wird nur die
+            // Schrift darauf. Genau die Regel, die complyo auf Kundenseiten
+            // anwendet, jetzt auch auf sich selbst.
+            const primaryTextColor = this.constructor.lesbareSchrift(primaryColor);
             
             const button = document.createElement('button');
             button.id = 'complyo-cookie-settings-btn';
@@ -3107,9 +3392,23 @@
         setupSettingsLinks() {
             // Aktiviere alle existierenden Links mit data-complyo-settings
             document.querySelectorAll('[data-complyo-settings], [href="#cookie-settings"], [href="#datenschutz-einstellungen"]').forEach(link => {
+                if (link.dataset.complyoBound === '1') return;
+                link.dataset.complyoBound = '1';
                 link.addEventListener('click', (e) => {
                     e.preventDefault();
                     this.openSettings();
+                });
+                link.style.cursor = 'pointer';
+            });
+
+            // Aktiviere Widerruf-Links: löscht die Einwilligung und lädt neu,
+            // sodass der Banner erneut erscheint (z.B. via WP-Shortcode im Footer/Menü)
+            document.querySelectorAll('[data-complyo-revoke], [href="#cookie-widerrufen"]').forEach(link => {
+                if (link.dataset.complyoBound === '1') return;
+                link.dataset.complyoBound = '1';
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.revokeConsent();
                 });
                 link.style.cursor = 'pointer';
             });
@@ -3268,7 +3567,7 @@
                 </p>
                 
                 <div style="margin-bottom: 24px;">
-                    <label style="display: block; font-size: 14px; font-weight: 500; color: ${textColor || '#374151'}; margin-bottom: 8px;">
+                    <label for="complyo-birth-year" style="display: block; font-size: 14px; font-weight: 500; color: ${textColor || '#374151'}; margin-bottom: 8px;">
                         Geburtsjahr eingeben:
                     </label>
                     <input 

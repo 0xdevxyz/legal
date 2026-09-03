@@ -7,9 +7,10 @@ Prüft Website auf Barrierefreiheitsstärkungsgesetz-Compliance
 
 from bs4 import BeautifulSoup
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, is_dataclass
 import re
-from urllib.parse import urljoin, urlparse
+import asyncio
+from urllib.parse import urldefrag, urljoin, urlparse
 import logging
 import aiohttp
 from xml.etree import ElementTree as ET
@@ -17,7 +18,9 @@ from xml.etree import ElementTree as ET
 logger = logging.getLogger(__name__)
 
 
-async def check_barrierefreiheit_compliance_smart(url: str, html: str = None, session=None) -> List[Dict[str, Any]]:
+async def check_barrierefreiheit_compliance_smart(
+    url: str, html: str = None, session=None, *, seitenweit: bool = False
+) -> List[Dict[str, Any]]:
     """
     🚀 SMART Barrierefreiheits-Check mit automatischer Browser-Erkennung
     
@@ -68,7 +71,7 @@ async def check_barrierefreiheit_compliance_smart(url: str, html: str = None, se
         
         # 3. Führe normalen Check mit (potenziell gerenderten) HTML durch
         soup = BeautifulSoup(html, 'html.parser')
-        issues = await check_barrierefreiheit_compliance(url, soup, session)
+        issues = await check_barrierefreiheit_compliance(url, soup, session, seitenweit=seitenweit)
         
         # 4. Füge Metadaten hinzu
         for issue_dict in issues:
@@ -84,7 +87,7 @@ async def check_barrierefreiheit_compliance_smart(url: str, html: str = None, se
         # Fallback zu normalem Check
         logger.info("📋 Falling back to simple check")
         soup = BeautifulSoup(html if html else "", 'html.parser')
-        return await check_barrierefreiheit_compliance(url, soup, session)
+        return await check_barrierefreiheit_compliance(url, soup, session, seitenweit=seitenweit)
 
 
 @dataclass
@@ -105,7 +108,181 @@ class BarrierefreiheitIssue:
     image_src: Optional[str] = None  # NEU: Bild-URL
     metadata: Dict[str, Any] = field(default_factory=dict)  # NEU: Zusätzliche Metadaten
 
-async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, session=None) -> List[Dict[str, Any]]:
+
+# ============================================================================
+# axe-core Integration: echte WCAG-2.1-AA-Engine auf gerendertem DOM
+# ============================================================================
+
+_WCAG_CRIT_RE = re.compile(r'(\d\.\d+\.\d+)')
+# Kriterien, die nur axe verlässlich auf dem gerenderten DOM messen kann
+# (echte Farbkontraste). Hier bekommt axe immer Vorrang vor der Heuristik.
+_CONTRAST_CRITERIA = {'1.4.3', '1.4.6', '1.4.11'}
+
+
+async def _run_axe_core_safe(url: str, timeout: float = 35.0) -> Optional[List[Dict[str, Any]]]:
+    """
+    Führt den axe-core-Scan (Playwright + axe-core) auf der gerenderten Seite aus.
+
+    Returns:
+        Liste strukturierter Issues bei Erfolg, sonst None.
+        Fail-open: Jeder Fehler/Timeout/fehlende Abhängigkeit → None, d.h. der
+        Scan verhält sich exakt wie zuvor (nur Heuristik) und stürzt nie ab.
+    """
+    try:
+        from ..axe_scanner import run_axe_scan
+        result, axe_issues = await asyncio.wait_for(run_axe_scan(url), timeout=timeout)
+        # _create_empty_result() setzt by_impact={"error": ...} bei Fehlern
+        if isinstance(result.by_impact, dict) and "error" in result.by_impact:
+            logger.warning(f"⚠️ axe-core lieferte kein valides Ergebnis: {result.by_impact.get('error')}")
+            return None
+        logger.info(f"✅ axe-core: {result.total_violations} Violations → {len(axe_issues)} Issues")
+
+        # Verifizierte Kontrast-Reparaturen mitnehmen. Sie entstehen im selben
+        # Browserlauf (die Nachmessung braucht die geoeffnete Seite) und werden
+        # als eigener Befund durchgereicht, damit der Post-Scan-Prozessor sie zu
+        # einem dokumentweiten Fix machen kann — ohne dass jede Schicht
+        # dazwischen eine neue Signatur braucht.
+        sf = getattr(result, "struktur_fixes", None)
+        if sf and (sf.get("fixes") or sf.get("css_rules")):
+            axe_issues.append({
+                "category": "barrierefreiheit",
+                "severity": "info",
+                "title": "Struktur-Reparatur vorbereitet",
+                "description": (
+                    f"{sf['vorher']} Struktur-Fundstellen, davon "
+                    f"{sf['vorher'] - sf['nachher']} im Browser nachgemessen behoben "
+                    f"(Hauptinhalt, Zoom-Sperre, Einbettungen)."
+                ),
+                "risk_euro": 0,
+                "recommendation": "Wird ueber Widget bzw. Plugin ausgeliefert.",
+                "legal_basis": "WCAG 2.1 (1.3.1, 1.4.4, 4.1.2), BFSG §12",
+                "auto_fixable": True,
+                "is_missing": False,
+                "rechtspflicht": True,
+                "metadata": {
+                    "source": "complyo-struktur-fix",
+                    "fixes": sf["fixes"],
+                    "css_rules": sf["css_rules"],
+                    "haupt_selektor": sf.get("haupt_selektor"),
+                    "vorher": sf["vorher"],
+                    "nachher": sf["nachher"],
+                    # Je Regel vorher/nachher — daraus baut der Pruefnachweis
+                    # seine Tabelle. Ohne diese Zeile bleibt die Messung dort
+                    # leer und der Nachweis antwortet 404, obwohl Reparaturen
+                    # gespeichert sind.
+                    "je_regel": sf.get("je_regel") or {},
+                },
+            })
+
+        kf = getattr(result, "kontrast_fixes", None)
+        if kf and kf.get("entscheidungen"):
+            from compliance_engine.kontrast_fixes import als_css_regeln
+            regeln = als_css_regeln(kf["entscheidungen"])
+            if regeln:
+                axe_issues.append({
+                    "category": "barrierefreiheit",
+                    "severity": "info",
+                    "title": "Kontrast-Reparatur vorbereitet",
+                    "description": (
+                        f"{kf['vorher']} Kontrast-Fundstellen lassen sich ueber "
+                        f"{len(kf['entscheidungen'])} Farbentscheidung(en) beheben "
+                        f"({kf['vorher'] - kf['nachher']} im Browser nachgemessen)."
+                    ),
+                    "risk_euro": 0,
+                    "recommendation": "Farben in der Worklist pruefen und freigeben.",
+                    "legal_basis": "WCAG 2.1 (1.4.3), BFSG §12",
+                    "auto_fixable": True,
+                    "is_missing": False,
+                    "rechtspflicht": True,
+                    "metadata": {
+                        "source": "complyo-kontrast-fix",
+                        "css_rules": regeln,
+                        "entscheidungen": kf["entscheidungen"],
+                        "vorher": kf["vorher"],
+                        "nachher": kf["nachher"],
+                    },
+                })
+
+        return axe_issues
+    except ImportError:
+        logger.warning("⚠️ axe-core/Playwright nicht verfügbar – Scan läuft heuristisch weiter")
+        return None
+    except asyncio.TimeoutError:
+        logger.warning(f"⚠️ axe-core Timeout nach {timeout}s für {url} – heuristisch weiter")
+        return None
+    except Exception as e:
+        logger.warning(f"⚠️ axe-core fehlgeschlagen ({type(e).__name__}: {e}) – heuristisch weiter")
+        return None
+
+
+def _issue_field(issue, name: str, default=""):
+    """Liest ein Feld aus einem Issue, egal ob Dataclass oder Dict."""
+    if is_dataclass(issue):
+        return getattr(issue, name, default)
+    if isinstance(issue, dict):
+        return issue.get(name, default)
+    return default
+
+
+def _heuristic_wcag_criteria(issue) -> set:
+    """Extrahiert die abgedeckten WCAG-Kriterien aus Titel + legal_basis."""
+    text = f"{_issue_field(issue, 'title')} {_issue_field(issue, 'legal_basis')}"
+    return set(_WCAG_CRIT_RE.findall(text))
+
+
+def _is_manual_contrast_hint(issue) -> bool:
+    """Der heuristische 'bitte manuell prüfen'-Kontrast-Hinweis."""
+    title = _issue_field(issue, 'title') or ''
+    category = _issue_field(issue, 'category') or ''
+    return category == 'kontraste' or 'Kontrast-Prüfung empfohlen' in title
+
+
+def _collect_reported_criteria(issues: list) -> set:
+    """Sammelt alle bereits gemeldeten WCAG-Kriterien (Dataclass- und Dict-Issues)."""
+    reported = set()
+    for it in issues:
+        if isinstance(it, dict):
+            meta = it.get('metadata') or {}
+            reported |= set(meta.get('wcag_criteria') or [])
+            if it.get('wcag_criterion'):
+                reported.add(it['wcag_criterion'])
+        else:
+            meta = getattr(it, 'metadata', None) or {}
+            if isinstance(meta, dict):
+                reported |= set(meta.get('wcag_criteria') or [])
+    return reported
+
+
+def _merge_axe_into_heuristic(heuristic_issues: list, axe_issues: List[Dict[str, Any]]) -> list:
+    """
+    Führt axe-Issues mit den Heuristik-Issues zusammen.
+
+    Regeln:
+    - Kontrast besitzt axe immer (echte Messung ersetzt den manuellen Hinweis).
+    - Für andere Kriterien wird ein axe-Issue verworfen, wenn die Heuristik das
+      Kriterium bereits meldet (vermeidet Doppelzählung in Score/Risiko).
+    - Alle übrigen axe-Issues (neue Kriterien) werden ergänzt → echte Mehr-Abdeckung.
+    """
+    covered = set()
+    for it in heuristic_issues:
+        covered |= _heuristic_wcag_criteria(it)
+
+    # Manuellen Kontrast-Hinweis entfernen – axe liefert jetzt echte Werte
+    merged = [it for it in heuristic_issues if not _is_manual_contrast_hint(it)]
+
+    for ax in axe_issues:
+        crit = set((ax.get('metadata') or {}).get('wcag_criteria') or [])
+        if crit & _CONTRAST_CRITERIA:
+            merged.append(ax)                 # axe besitzt Kontrast
+        elif crit and crit.issubset(covered):
+            continue                          # Heuristik deckt dieses Kriterium bereits ab
+        else:
+            merged.append(ax)                 # neues Kriterium → echte Mehr-Abdeckung
+    return merged
+
+async def check_barrierefreiheit_compliance(
+    url: str, soup: BeautifulSoup, session=None, *, seitenweit: bool = False
+) -> List[Dict[str, Any]]:
     """
     Umfassender Barrierefreiheits-Check mit Multi-Page Scanning
     
@@ -125,100 +302,45 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
     
     issues = []
     
-    # 1. Check für Accessibility-Tools/Widgets
+    # 1. Hinweis auf Assistenz-Widget — rein informativ (info, 0 EUR).
+    #    Ein Overlay-Widget stellt KEINE WCAG-/BFSG-Konformitaet her und
+    #    beeinflusst weder Score noch Prueftiefe.
     widget_issue = await _check_accessibility_widget(soup)
     if widget_issue:
         issues.append(widget_issue)
 
-        # Nur konkret prüfbare WCAG-Kriterien direkt am vorliegenden HTML auswerten
-        # (keine pauschalen "vermutlich fehlt"-Issues)
-
-        # WCAG 1.1.1: Bilder ohne Alt-Text — pro Bild ein eigenes Issue mit KI-Vorschlag
+    # WCAG 1.1.1: Alt-Texte.
+    #
+    # ACHTUNG (gemessen 01.09.2026 an zua-zwickau.de): Die Prueftiefe hing bis
+    # hierher daran, OB eine Session mitgegeben wurde. Der Mehrseiten-Scan gibt
+    # seine Session weiter — und damit startete jede einzelne Unterseite einen
+    # eigenen, vollstaendigen Crawl derselben Website: 88 Abrufe je Seite,
+    # ~311 s, dreimal parallel. Der Scan brauchte 389 s und lief in den
+    # 300-s-Abbruch des Endpunkts, der Kunde bekam ueberhaupt kein Ergebnis.
+    #
+    # Welche Seiten geprueft werden, entscheidet EINE Stelle: page_discovery im
+    # Scanner. Dieser Check sieht nur die Seite, die er bekommen hat. Der
+    # seitenweite Crawl bleibt als ausdrueckliche Option erhalten (seitenweit=True),
+    # wird aber von keinem Scanpfad gesetzt — eine Session allein ist kein Auftrag,
+    # die halbe Website nachzuladen.
+    if seitenweit and session:
+        logger.info(f"🔍 Starting multi-page accessibility scan for {url}")
+        all_pages = await _discover_pages(url, session)
+        logger.info(f"📄 Discovered {len(all_pages)} pages to scan")
+        for page_url in all_pages[:50]:
+            try:
+                page_content = await _fetch_page(page_url, session)
+                if page_content:
+                    page_soup = BeautifulSoup(page_content, 'html.parser')
+                    page_issues = await _check_images_for_alt_text(page_url, page_soup)
+                    issues.extend(page_issues)
+                    logger.info(f"  ✓ {page_url}: {len(page_issues)} issues found")
+            except Exception as e:
+                logger.warning(f"  ✗ Failed to scan {page_url}: {e}")
+                continue
+    else:
         alt_issues = await _check_alt_texts_enhanced(url, soup, session)
         issues.extend(alt_issues)
-
-        # WCAG 3.1.1: Sprache nicht gesetzt
-        html_tag = soup.find('html')
-        if not html_tag or not html_tag.get('lang'):
-            issues.append(BarrierefreiheitIssue(
-                category='barrierefreiheit',
-                severity='critical',
-                title='WCAG 3.1.1: Sprache der Seite nicht angegeben (lang-Attribut fehlt)',
-                description='Das <html>-Tag hat kein lang-Attribut. Screenreader können die Sprache '
-                           'nicht korrekt erkennen.',
-                risk_euro=1000,
-                recommendation='Fügen Sie lang="de" (oder die jeweilige Sprache) zum <html>-Tag hinzu.',
-                legal_basis='WCAG 2.1 Level A (3.1.1), BFSG §12',
-                auto_fixable=True,
-                is_missing=False
-            ))
-
-        # WCAG 4.1.2: Inputs ohne Label
-        inputs_without_label = []
-        for inp in soup.find_all(['input', 'select', 'textarea']):
-            inp_id = inp.get('id')
-            inp_type = inp.get('type', '').lower()
-            if inp_type in ('hidden', 'submit', 'button', 'reset'):
-                continue
-            has_label = (
-                inp.get('aria-label') or
-                inp.get('aria-labelledby') or
-                inp.get('title') or
-                (inp_id and soup.find('label', attrs={'for': inp_id}))
-            )
-            if not has_label:
-                inputs_without_label.append(inp)
-        if inputs_without_label:
-            issues.append(BarrierefreiheitIssue(
-                category='barrierefreiheit',
-                severity='warning',
-                title=f'WCAG 4.1.2: {len(inputs_without_label)} Formularfeld(er) ohne Label',
-                description=f'{len(inputs_without_label)} Eingabefeld(er) haben kein zugehöriges Label. '
-                           'Screenreader können den Zweck des Felds nicht vermitteln.',
-                risk_euro=1500,
-                recommendation='Verknüpfen Sie jedes Formularfeld mit einem <label for="...">-Element oder aria-label.',
-                legal_basis='WCAG 2.1 Level A (4.1.2), BFSG §12',
-                auto_fixable=False,
-                is_missing=False
-            ))
-
-        # WCAG 1.3.1: Keine semantischen HTML5-Strukturelemente
-        has_semantic = bool(soup.find(['main', 'nav', 'header', 'footer', 'aside', 'article', 'section']))
-        if not has_semantic:
-            issues.append(BarrierefreiheitIssue(
-                category='barrierefreiheit',
-                severity='warning',
-                title='WCAG 1.3.1: Keine semantischen HTML5-Strukturelemente gefunden',
-                description='Die Seite verwendet keine semantischen HTML5-Elemente (main, nav, header, footer). '
-                           'Dies erschwert die Navigation mit Screenreadern.',
-                risk_euro=1000,
-                recommendation='Verwenden Sie semantische HTML5-Elemente zur Strukturierung der Seite.',
-                legal_basis='WCAG 2.1 Level A (1.3.1), BFSG §12',
-                auto_fixable=False,
-                is_missing=False
-            ))
-
-    else:
-        # Widget vorhanden — führe detaillierte Checks durch
-        # Multi-Page Scan für Bilder
-        logger.info(f"🔍 Starting multi-page accessibility scan for {url}")
-        if session:
-            all_pages = await _discover_pages(url, session)
-            logger.info(f"📄 Discovered {len(all_pages)} pages to scan")
-            for page_url in all_pages[:50]:
-                try:
-                    page_content = await _fetch_page(page_url, session)
-                    if page_content:
-                        page_soup = BeautifulSoup(page_content, 'html.parser')
-                        page_issues = await _check_images_for_alt_text(page_url, page_soup)
-                        issues.extend(page_issues)
-                        logger.info(f"  ✓ {page_url}: {len(page_issues)} issues found")
-                except Exception as e:
-                    logger.warning(f"  ✗ Failed to scan {page_url}: {e}")
-                    continue
-        else:
-            alt_issues = await _check_alt_texts_enhanced(url, soup, session)
-            issues.extend(alt_issues)
 
     # Detaillierte WCAG-Struktur-Checks laufen immer — unabhängig vom Widget
     aria_issues = await _check_aria_labels(soup)
@@ -386,7 +508,78 @@ async def check_barrierefreiheit_compliance(url: str, soup: BeautifulSoup, sessi
             is_missing=False,
         ))
 
-    return [asdict(issue) for issue in issues]
+    # ── axe-core: echte WCAG-2.1-AA-Engine auf dem gerenderten DOM ──────────
+    # Ergänzt die HTML-Heuristik um real berechnete Kriterien (Kontrast 1.4.3,
+    # ARIA-Validität, Heading-Order, Target-Size u.v.m.). Hinweis: 2.4.7
+    # (Fokus-Sichtbarkeit) prüft axe NICHT — bewusst nicht versprochen.
+    # Fail-open: schlägt axe fehl/fehlt Playwright, bleibt das Ergebnis exakt
+    # wie zuvor (nur Heuristik).
+    axe_issues = await _run_axe_core_safe(url)
+    if axe_issues is not None:
+        issues = _merge_axe_into_heuristic(issues, axe_issues)
+
+    # ── Tiefen-Checks (zuvor brachliegender Code, jetzt verdrahtet) ─────────
+    # axe bleibt führend: ergänzt wird nur, was noch kein Issue desselben
+    # WCAG-Kriteriums gemeldet hat (kein Doppel-Scoring).
+    reported_criteria = _collect_reported_criteria(issues)
+
+    try:
+        from .aria_checker import ARIAChecker
+        for extra in ARIAChecker().check_aria_compliance(soup, url):
+            crit = extra.get('wcag_criterion')
+            if crit and crit in reported_criteria:
+                continue
+            issues.append(extra)
+            if crit:
+                reported_criteria.add(crit)
+    except Exception as e:
+        logger.warning(f"ARIA-Tiefenprüfung übersprungen: {e}")
+
+    try:
+        from .media_accessibility_check import check_media_accessibility
+        for extra in await check_media_accessibility(url, str(soup)):
+            crit = extra.get('wcag_criterion')
+            if crit and crit in reported_criteria:
+                continue
+            issues.append(extra)
+            if crit:
+                reported_criteria.add(crit)
+    except Exception as e:
+        logger.warning(f"Media-Barrierefreiheitsprüfung übersprungen: {e}")
+
+    if axe_issues is None:
+        # axe lief nicht — statische Kontrastanalyse (Inline-<style>) als
+        # Fallback, damit 1.4.3 nicht komplett unbeleuchtet bleibt.
+        try:
+            from ..contrast_analyzer import ContrastAnalyzer
+            css_blobs = "\n".join(st.string or "" for st in soup.find_all("style"))
+            if css_blobs.strip():
+                for ci in ContrastAnalyzer(target_level="AA").analyze_css_string(css_blobs)[:10]:
+                    issues.append({
+                        'category': 'barrierefreiheit',
+                        'severity': 'warning',
+                        'title': f'WCAG 1.4.3: Kontrast {ci.contrast_ratio:.1f}:1 unter {ci.required_ratio}:1',
+                        'description': (
+                            f'Farbpaar {ci.foreground} auf {ci.background} '
+                            f'(Selektor {ci.selector}) erreicht nur {ci.contrast_ratio:.1f}:1.'
+                        ),
+                        'recommendation': (
+                            f'Vorschlag: Vordergrund {ci.suggested_foreground or ci.foreground} '
+                            f'oder Hintergrund {ci.suggested_background or ci.background} anpassen.'
+                        ),
+                        'legal_basis': 'WCAG 2.1 Level AA (1.4.3), BFSG §12',
+                        'risk_euro': 500,
+                        'auto_fixable': False,
+                        'wcag_criterion': '1.4.3',
+                    })
+        except Exception as e:
+            logger.warning(f"Statische Kontrastanalyse übersprungen: {e}")
+
+    # issues enthält gemischt BarrierefreiheitIssue-Instanzen UND bereits per asdict()
+    # konvertierte Dicts (AUDIT-09…13 + axe liefern Dicts). asdict() auf ein Dict wirft
+    # TypeError und ließ bisher den GESAMTEN Check abstürzen → Barrierefreiheit fiel
+    # im Scanner stumm weg (Säule defaultete auf 100, "Widget vorhanden").
+    return [asdict(issue) if is_dataclass(issue) else issue for issue in issues]
 
 async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIssue | None:
     """
@@ -480,7 +673,7 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
     
     # NEU: Suche im gesamten HTML nach Complyo Widget-URLs (inkl. Preload-Links)
     html_text = str(soup).lower()
-    if 'api.complyo.tech/api/widgets/accessibility' in html_text or 'api.complyo.de/api/widgets/accessibility' in html_text:
+    if 'api.complyo.de/api/widgets/accessibility' in html_text:
         return None  # Complyo Widget URL im HTML gefunden (z.B. als <link rel="preload">)
 
     # Zusätzlich: Suche in allen link-Tags unabhängig von rel-Attribut
@@ -532,20 +725,24 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
         if 'barrierefreiheit' in aria or 'accessibility' in aria or 'einstellung' in aria:
             return None
     
-    # Kein Widget gefunden - HAUPTELEMENT FEHLT
+    # Kein Widget gefunden — reiner Hinweis. Overlay-Widgets stellen KEINE
+    # WCAG-/BFSG-Konformitaet her (fachlicher Konsens: Overlays ersetzen keine
+    # strukturellen Fixes) und duerfen deshalb weder Score noch Risiko treiben.
     return BarrierefreiheitIssue(
         category='barrierefreiheit',
-        severity='critical',
-        title='Kein Barrierefreiheits-Tool/Widget gefunden',
-        description='Es wurde kein Accessibility-Widget (UserWay, AccessiBe, Eye-Able etc.) gefunden. '
-                    'Solche Tools erleichtern die Barrierefreiheit erheblich durch Funktionen wie Schriftvergrößerung, '
-                    'Kontraständerung, Vorlese-Funktion etc.',
-        risk_euro=8000,
-        recommendation='Implementieren Sie ein Accessibility-Widget wie UserWay, AccessiBe oder Eye-Able. '
-                      'Diese bieten sofortige Barrierefreiheit-Features für Ihre Nutzer.',
-        legal_basis='BFSG §12-15',
-        auto_fixable=True,
-        is_missing=True  # ✅ Hauptelement fehlt komplett
+        severity='info',
+        title='Hinweis: Kein Assistenz-Widget gefunden',
+        description='Es wurde kein Accessibility-Assistenz-Widget gefunden. Solche Widgets '
+                    'können den Bedienkomfort verbessern (Schriftgröße, Kontrast, Vorlesen), '
+                    'stellen aber KEINE WCAG-/BFSG-Konformität her und ersetzen keine '
+                    'strukturellen Korrekturen im Quellcode.',
+        risk_euro=0,
+        recommendation='Optional: Ein Assistenz-Widget kann ergänzend eingesetzt werden. '
+                      'Maßgeblich für die Rechtskonformität sind die strukturellen Fixes '
+                      '(Alt-Texte, Kontraste, Tastaturbedienbarkeit) — siehe übrige Befunde.',
+        legal_basis='BFSG §12-15 (Hinweis, keine Pflicht)',
+        auto_fixable=False,
+        is_missing=False
     )
 
 async def _check_alt_texts(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
@@ -629,6 +826,46 @@ async def _check_alt_texts_enhanced(url: str, soup: BeautifulSoup, session=None)
             logger.warning(f"Screenshot capture failed: {e}, falling back to basic check")
             return await _check_alt_texts(soup)
     
+    # Sicherheitsnetz: Der Screenshot-Service sieht nur Bilder, die im Render
+    # tatsaechlich geladen wurden. Bilder ohne alt, die er NICHT erfasst hat
+    # (404/Broken, Lazy-Load, Render-Problem, leeres Ergebnis), werden per
+    # DOM-Check gemeldet — sonst entsteht ein False-Negative-Loch, in dem
+    # eine Seite voller alt-loser Bilder 0 Issues bekommt.
+    from urllib.parse import urljoin as _urljoin
+    covered_srcs = {
+        _urljoin(url, (d.get('src') or '').strip())
+        for d in screenshot_data if (d.get('src') or '').strip()
+    }
+    for img in soup.find_all('img'):
+        src = (img.get('src') or '').strip()
+        alt_val = img.get('alt')
+        if img.get('role') == 'presentation' or img.get('aria-hidden') == 'true':
+            continue
+        if alt_val is not None and str(alt_val).strip() != '':
+            continue
+        if alt_val is not None and str(alt_val) == '':
+            # alt="" = explizit dekorativ markiert -> zulaessig
+            continue
+        if src and _urljoin(url, src) in covered_srcs:
+            continue  # wird unten vom Screenshot-Pfad bewertet
+        filename = src.split('/')[-1] if '/' in src else (src or 'unbekannt')
+        issues.append(BarrierefreiheitIssue(
+            category='barrierefreiheit',
+            severity='critical',
+            title='WCAG 1.1.1: Bild ohne Alt-Text',
+            description=(
+                f'Das Bild "{filename}" hat keinen Alt-Text und ist nicht als '
+                f'dekorativ markiert. Screenreader können es nicht beschreiben.'
+            ),
+            risk_euro=500,
+            recommendation='Fügen Sie ein beschreibendes alt-Attribut hinzu '
+                           '(oder alt="" für rein dekorative Bilder).',
+            legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
+            auto_fixable=True,
+            element_html=str(img)[:300],
+            image_src=src,
+        ))
+
     # Erstelle Issues für jedes Bild ohne Alt-Text
     for img_data in screenshot_data:
         if not img_data.get('has_alt') and not img_data.get('is_decorative'):
@@ -647,7 +884,7 @@ async def _check_alt_texts_enhanced(url: str, soup: BeautifulSoup, session=None)
                 risk_euro=500,
                 recommendation=f'Fügen Sie einen Alt-Text hinzu. AI-Vorschlag: "{suggested_alt}"',
                 legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
-                auto_fixable=True,  # Via Widget fixbar!
+                auto_fixable=True,  # Via Fix-Manifest/KI-Alt-Text behebbar
                 screenshot_url=img_data.get('screenshot_data_url'),
                 element_html=f'<img src="{src}" ... />',
                 fix_code=f'<img src="{src}" alt="{suggested_alt}" />',
@@ -672,7 +909,7 @@ async def _check_alt_texts_enhanced(url: str, soup: BeautifulSoup, session=None)
             description=f'Die Seite enthält {len(issues)} Bilder ohne Alt-Text. '
                        f'Dies ist ein kritisches Barrierefreiheitsproblem.',
             risk_euro=min(len(issues) * 500, 5000),  # Max 5000€
-            recommendation='Nutzen Sie das Complyo Smart-Widget für automatische Alt-Text-Fixes.',
+            recommendation='Nutzen Sie die Complyo KI-Alt-Text-Generierung (Fix-Manifest/Review-Queue) für automatische Korrekturen im Quellcode.',
             legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
             auto_fixable=True
         )
@@ -741,8 +978,7 @@ async def _check_aria_labels(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
         aria_label = inp.get('aria-label', '').strip()
         aria_labelledby = inp.get('aria-labelledby', '').strip()
         title = inp.get('title', '').strip()
-        placeholder = inp.get('placeholder', '').strip()
-        
+
         # Check if there's a <label for="..."> element
         has_label = False
         if input_id:
@@ -759,7 +995,9 @@ async def _check_aria_labels(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
                     break
                 parent = parent.parent
         
-        if not any([has_label, aria_label, aria_labelledby, title]) and not placeholder:
+        # Hinweis: placeholder zählt bewusst NICHT als Label (WCAG 3.3.2/4.1.2 –
+        # ein Platzhalter ersetzt kein <label>/aria-label).
+        if not any([has_label, aria_label, aria_labelledby, title]):
             inputs_without_label.append(input_type)
     
     if inputs_without_label:
@@ -993,6 +1231,13 @@ async def _crawl_links_recursive(
     Returns:
         Liste von gefundenen URLs
     """
+    # Ohne Normalisierung ist /impressum, /impressum/, /impressum#consent-change
+    # und /impressum/#consent-history viermal dieselbe Seite und viermal ein
+    # Abruf. An zua-zwickau.de waren so 44 "Seiten" in Wahrheit 9.
+    def _schluessel(u: str) -> str:
+        ohne_anker, _ = urldefrag(u)
+        return ohne_anker.rstrip("/") or ohne_anker
+
     visited = set()
     to_visit = [(base_url, 0)]  # (url, depth)
     found_urls = []
@@ -1001,11 +1246,12 @@ async def _crawl_links_recursive(
     
     while to_visit and len(found_urls) < max_pages:
         current_url, depth = to_visit.pop(0)
+        schluessel = _schluessel(current_url)
         
-        if current_url in visited or depth > max_depth:
+        if schluessel in visited or depth > max_depth:
             continue
         
-        visited.add(current_url)
+        visited.add(schluessel)
         found_urls.append(current_url)
         
         # Hole Links von dieser Seite
@@ -1022,7 +1268,7 @@ async def _crawl_links_recursive(
                     if urlparse(absolute_url).netloc == base_domain:
                         # Filter: Nur HTML-Seiten (keine PDFs, Bilder, etc.)
                         if not any(absolute_url.endswith(ext) for ext in ['.pdf', '.jpg', '.png', '.gif', '.zip', '.doc']):
-                            if absolute_url not in visited:
+                            if _schluessel(absolute_url) not in visited:
                                 to_visit.append((absolute_url, depth + 1))
         except Exception as e:
             logger.debug(f"Failed to crawl {current_url}: {e}")
@@ -1042,10 +1288,14 @@ async def _fetch_page(url: str, session: aiohttp.ClientSession) -> Optional[str]
     Returns:
         HTML-Inhalt oder None bei Fehler
     """
+    # Ueber sicherer_abruf: die Adresse stammt aus einem <a href> der geprueften
+    # Seite, ist also fremdgesetzt. Der Sicherheitsreview vom 31.08.2026 hat vier
+    # solche Stellen gebuendelt und diese hier uebersehen.
+    from ..sicherer_abruf import hole
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
-            if response.status == 200:
-                return await response.text()
+        abruf = await hole(session, url, timeout=15)
+        if abruf is not None and abruf.status == 200:
+            return abruf.text()
     except Exception as e:
         logger.debug(f"Failed to fetch {url}: {e}")
     
@@ -1197,13 +1447,19 @@ async def check_barrierefreiheit_enhanced(
             axe_result, axe_issues = await run_axe_scan(url)
             
             # Dedupliziere: Nur axe-Issues hinzufügen, die nicht schon gefunden wurden
-            existing_selectors = {issue.get('selector') for issue in all_issues if issue.get('selector')}
-            
+            def _selector_of(issue):
+                meta = issue.get('metadata') or {}
+                return meta.get('selector') or issue.get('selector')
+
+            existing_selectors = {s for s in (_selector_of(i) for i in all_issues) if s}
+
             for issue in axe_issues:
-                selector = issue.get('selector', '')
+                selector = _selector_of(issue)
                 if selector and selector not in existing_selectors:
                     all_issues.append(issue)
                     existing_selectors.add(selector)
+                elif not selector:
+                    all_issues.append(issue)
             
             logger.info(f"✅ axe-core Check: {len(axe_issues)} Issues ({axe_result.total_violations} Violations)")
         except ImportError:
@@ -1336,6 +1592,69 @@ def _check_wcag_aaa(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
 # AUDIT-11: Tabellen / SVG / Canvas Accessibility
 # =============================================================================
 
+_SVG_IMAGE_ROLES = {'img', 'graphics-document', 'graphics-symbol', 'graphics-object'}
+_SVG_DECORATIVE_ROLES = {'presentation', 'none'}
+_CONTROL_TAGS = {'button', 'a', 'summary'}
+_CONTROL_ROLES = {'button', 'link', 'menuitem', 'tab', 'checkbox', 'switch'}
+
+
+def _svg_accessible_name(svg) -> str:
+    """Zugänglicher Name eines <svg> (aria-label, aria-labelledby, <title>, <desc>)."""
+    for attr in ('aria-label', 'aria-labelledby'):
+        value = (svg.get(attr) or '').strip()
+        if value:
+            return value
+    for tag in ('title', 'desc'):
+        node = svg.find(tag)
+        if node is not None and node.get_text(strip=True):
+            return node.get_text(strip=True)
+    return ''
+
+
+def _is_control(tag) -> bool:
+    """Ist das Element ein Bedienelement (nativ oder per role)?"""
+    if getattr(tag, 'name', None) in _CONTROL_TAGS:
+        return True
+    return (tag.get('role') or '').strip().lower() in _CONTROL_ROLES
+
+
+def _svg_needs_alternative(svg) -> bool:
+    """
+    True, wenn ein <svg> zwingend einen zugänglichen Namen braucht.
+
+    Bewusst eng gefasst und deckungsgleich mit axe-core: gemeldet werden nur
+    Grafiken mit expliziter Bild-Rolle sowie Icons, die allein ein Bedienelement
+    beschriften. Ein nacktes Deko-Icon neben sichtbarem Text ist kein Verstoß —
+    sonst erzeugt jede Icon-Bibliothek Dutzende Phantom-Issues (complyo.de:
+    59 Stück, Säulen-Score 100 → 0).
+    """
+    if svg.get('aria-hidden') == 'true':
+        return False
+    role = (svg.get('role') or '').strip().lower()
+    if role in _SVG_DECORATIVE_ROLES:
+        return False
+    if _svg_accessible_name(svg):
+        return False
+
+    # Fall 1: explizit als Bild ausgezeichnet → Name ist Pflicht
+    if role in _SVG_IMAGE_ROLES:
+        return True
+
+    # Fall 2: einziger Inhalt eines Bedienelements → das Icon MUSS es benennen
+    control = svg.find_parent(_is_control)
+    if control is None:
+        return False
+    if control.get('aria-hidden') == 'true':
+        return False
+    for attr in ('aria-label', 'aria-labelledby', 'title'):
+        if (control.get(attr) or '').strip():
+            return False
+    # sichtbarer Text im Bedienelement benennt es bereits (Icon ist dann Deko)
+    if control.get_text(strip=True):
+        return False
+    return True
+
+
 def _check_tables_svg_canvas(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
     issues = []
 
@@ -1367,24 +1686,34 @@ def _check_tables_svg_canvas(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
                 auto_fixable=False,
             ))
 
-    # SVG: ohne <title> und role="img"
-    for svg in soup.find_all('svg'):
-        if svg.get('aria-hidden') == 'true':
-            continue
-        missing_title = not svg.find('title')
-        missing_role = svg.get('role') != 'img'
-        if missing_title or missing_role:
-            issues.append(BarrierefreiheitIssue(
-                category='barrierefreiheit',
-                severity='warning',
-                title='WCAG 1.1.1: SVG ohne <title> oder role="img"',
-                description='Ein SVG-Element fehlt entweder ein <title>-Kind-Element oder das Attribut role="img". Screenreader können das Bild nicht beschreiben.',
-                risk_euro=400,
-                recommendation='Fügen Sie <title>Beschreibung</title> als erstes SVG-Kind ein und setzen Sie role="img" auf dem <svg>-Element.',
-                legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
-                auto_fixable=False,
-                element_html=str(svg)[:200],
-            ))
+    # SVG: nur bedeutungstragende Grafiken brauchen eine Textalternative.
+    # Ein nacktes <svg> ohne Rolle wird von Screenreadern nicht als Bild
+    # exponiert — dekorative Icon-Bibliotheken (Lucide, Heroicons …) sind
+    # deshalb KEIN Verstoß. Ein Befund, nicht einer pro Icon: sonst zieht
+    # eine einzige Icon-Bibliothek die Säule Barrierefreiheit auf 0.
+    svg_offenders = [s for s in soup.find_all('svg') if _svg_needs_alternative(s)]
+    if svg_offenders:
+        anzahl = len(svg_offenders)
+        issues.append(BarrierefreiheitIssue(
+            category='barrierefreiheit',
+            severity='warning',
+            title=f'WCAG 1.1.1: {anzahl} SVG-Grafik(en) ohne Textalternative',
+            description=(
+                f'{anzahl} SVG-Grafik(en) tragen Bedeutung — sie sind entweder als Bild '
+                'ausgezeichnet oder beschriften allein einen Button/Link — haben aber '
+                'keinen zugänglichen Namen. Screenreader können sie nicht beschreiben. '
+                'Rein dekorative Icons neben sichtbarem Text sind davon nicht betroffen.'
+            ),
+            risk_euro=400,
+            recommendation=(
+                'Ergänzen Sie <title>Beschreibung</title> als erstes Kind des <svg> oder '
+                'setzen Sie aria-label="Beschreibung". Rein dekorative Grafiken markieren '
+                'Sie stattdessen mit aria-hidden="true".'
+            ),
+            legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
+            auto_fixable=False,
+            element_html=str(svg_offenders[0])[:200],
+        ))
 
     # Canvas: ohne aria-label
     for canvas in soup.find_all('canvas'):
@@ -1417,8 +1746,8 @@ def _check_video_captions(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
         if not caption_tracks:
             issues.append(BarrierefreiheitIssue(
                 category='barrierefreiheit',
-                severity='error',
-                title='WCAG 1.2.2: Video ohne Untertitel-Track',
+                severity='critical',
+                title='Video ohne Untertitel',
                 description='Ein <video>-Element hat kein <track kind="captions"> oder <track kind="subtitles">. Gehörlose und schwerhörige Nutzer können den Inhalt nicht konsumieren.',
                 risk_euro=1500,
                 recommendation='Fügen Sie <track kind="captions" src="untertitel.vtt" srclang="de" label="Deutsch"> innerhalb des <video>-Elements ein.',

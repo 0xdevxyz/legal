@@ -45,6 +45,16 @@ async function resolveAccessToken(): Promise<string | null> {
     return null;
   }
 }
+/**
+ * Zeitlimit fuer die langlaufenden Auswertungen (Scan, KI-Fix).
+ *
+ * Der Scan-Endpunkt raeumt sich serverseitig 300 s ein. Ein Client, der schon
+ * nach 60 s aufgibt, wirft ein Ergebnis weg, das gerade erzeugt wird — der
+ * Nutzer sieht einen Fehler, obwohl der Scan durchlaeuft. Etwas Luft oben
+ * drauf, damit die Antwort noch ankommt.
+ */
+export const LANGLAEUFER_TIMEOUT_MS = 330_000;
+
 export function getApiClient(): AxiosInstance {
   if (_client) return _client;
 

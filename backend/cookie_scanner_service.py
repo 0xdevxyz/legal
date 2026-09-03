@@ -7,12 +7,11 @@ Unterstützt zwei Modi:
 2. Deep Scan (Headless Browser) - Vollständig mit Cookie/Storage-Erkennung
 """
 
-import asyncio
 import re
 from typing import List, Dict, Any, Set, Optional
 import aiohttp
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urljoin
 import logging
 from ssrf_protection import validate_url, SSRFError
 from compliance_engine.privacy_transfer_findings import detect_transfers
@@ -422,11 +421,29 @@ class CookieScanner:
             
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(url, allow_redirects=True) as response:
+                    content = await response.text()
                     if response.status == 200:
-                        return await response.text()
-                    else:
-                        logger.warning(f"HTTP {response.status} for {url}")
-                        return ''
+                        return content
+                    # Manche (WordPress-)Seiten setzen wegen eines PHP-Fatals/Plugin-
+                    # Fehlers im Shutdown einen 500er, liefern den Body aber komplett
+                    # aus (Browser zeigen die Seite normal). Solche Seiten sind voll
+                    # scanbar → akzeptieren, statt mit "Failed to fetch" abzubrechen.
+                    # Echte Wartung/Sperre (502/503/504, 401/403) und 404 bleiben hart.
+                    lower = content.lower()
+                    delivers_full_page = (
+                        response.status not in (401, 403, 404, 502, 503, 504)
+                        and len(content) > 3000
+                        and '</html>' in lower
+                        and '<title>' in lower
+                    )
+                    if delivers_full_page:
+                        logger.warning(
+                            f"HTTP {response.status} für {url}, aber vollständige Seite "
+                            f"({len(content)} Bytes) — wird trotzdem gescannt."
+                        )
+                        return content
+                    logger.warning(f"HTTP {response.status} for {url}")
+                    return ''
         except Exception as e:
             logger.error(f"Error fetching {url}: {e}")
             return ''

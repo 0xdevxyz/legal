@@ -59,7 +59,7 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
 
   const integrationCode = `<!-- Complyo Cookie-Banner -->
 <script
-  src="https://cdn.complyo.tech/cookie-banner.js"
+  src="https://cdn.complyo.de/cookie-banner.js"
   data-site-id="${siteId}"
   async
 ></script>`;
@@ -74,18 +74,18 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-800 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
           <div>
-            <h2 className="text-xl font-bold text-white">Ersteinrichtung</h2>
-            <p className="text-sm text-gray-400 mt-0.5">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Ersteinrichtung</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
               Schritt {currentStep} von {STEPS.length} · {STEPS[currentStep - 1].title}
             </p>
           </div>
           <button
             onClick={onSkip}
-            className="p-2 text-gray-500 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+            className="p-2 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
             aria-label="Schließen"
           >
             <X className="w-5 h-5" />
@@ -132,8 +132,8 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                 <div className="w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
                   <Globe className="w-8 h-8 text-orange-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-white">Website automatisch scannen</h3>
-                <p className="text-sm text-gray-400 mt-1 max-w-md mx-auto">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Website automatisch scannen</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-md mx-auto">
                   Wir erkennen automatisch alle Tracking-Services und Cookies auf Ihrer Website — in unter 10 Sekunden.
                 </p>
               </div>
@@ -141,7 +141,7 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
               {websiteLocked && url ? (
                 <div className="flex items-center gap-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                   <Lock className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                  <span className="text-sm text-white font-medium flex-1 truncate">{url}</span>
+                  <span className="text-sm text-gray-900 dark:text-white font-medium flex-1 truncate">{url}</span>
                   <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs flex-shrink-0">Gesperrt</Badge>
                 </div>
               ) : (
@@ -151,17 +151,17 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && !scanning && url && runScan()}
-                    className="flex-1 bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                    className="flex-1 bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500"
                   />
                 </div>
               )}
 
               {scanning && (
                 <div className="space-y-2">
-                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full animate-pulse" style={{ width: '100%' }} />
                   </div>
-                  <p className="text-xs text-gray-400 text-center">Analysiere {url}…</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 text-center">Analysiere {url}…</p>
                 </div>
               )}
 
@@ -189,7 +189,7 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                               ))}
                             </div>
                           )}
-                          <p className="text-xs text-gray-400 mt-2">Weiter zum nächsten Schritt →</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Weiter zum nächsten Schritt →</p>
                         </>
                       ) : (
                         <p className="text-sm text-red-400">{scanResult.error}</p>
@@ -216,8 +216,8 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
           {currentStep === 2 && (
             <div className="space-y-4">
               <div className="text-center">
-                <h3 className="text-lg font-semibold text-white">Erkannte Services überprüfen</h3>
-                <p className="text-sm text-gray-400 mt-1">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Erkannte Services überprüfen</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                   Diese Services wurden automatisch aktiviert. Sie können sie jederzeit im Tab „Services" anpassen.
                 </p>
               </div>
@@ -225,13 +225,13 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
               {scanResult?.detected_services?.length > 0 ? (
                 <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                   {scanResult.detected_services.map((s: any) => (
-                    <div key={s.service_key} className="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+                    <div key={s.service_key} className="flex items-center gap-3 p-3 bg-gray-100/50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
                       <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white">{s.name}</p>
-                        <p className="text-xs text-gray-400 capitalize">{s.category}</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{s.name}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 capitalize">{s.category}</p>
                       </div>
-                      <Badge variant="secondary" className="text-xs bg-gray-700 text-gray-300 flex-shrink-0">
+                      <Badge variant="secondary" className="text-xs bg-gray-700 text-gray-700 dark:text-gray-300 flex-shrink-0">
                         {s.category}
                       </Badge>
                     </div>
@@ -241,7 +241,7 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                 <div className="p-6 bg-green-500/10 border border-green-500/30 rounded-lg text-center">
                   <CheckCircle className="w-10 h-10 text-green-400 mx-auto mb-2" />
                   <p className="text-sm font-semibold text-green-400">Kein Cookie-Banner erforderlich</p>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                     Ihre Website verwendet nur essenzielle Cookies — Sie sind bereits DSGVO-konform.
                   </p>
                 </div>
@@ -262,17 +262,17 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                 <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
                   <CheckCircle className="w-8 h-8 text-green-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-white">Alles bereit! Code einbinden.</h3>
-                <p className="text-sm text-gray-400 mt-1">
-                  Fügen Sie diesen Schnipsel in den <code className="text-orange-400 bg-gray-800 px-1 py-0.5 rounded">&lt;head&gt;</code> jeder Seite ein.
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Alles bereit! Code einbinden.</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  Fügen Sie diesen Schnipsel in den <code className="text-orange-400 bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">&lt;head&gt;</code> jeder Seite ein.
                 </p>
               </div>
 
-              <div className="bg-gray-950 rounded-lg p-4 border border-gray-700 relative group">
-                <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap pr-8">{integrationCode}</pre>
+              <div className="bg-gray-950 rounded-lg p-4 border border-gray-200 dark:border-gray-700 relative group">
+                <pre className="text-xs text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap pr-8">{integrationCode}</pre>
                 <button
                   onClick={handleCopy}
-                  className="absolute top-3 right-3 p-1.5 bg-gray-800 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition-colors"
+                  className="absolute top-3 right-3 p-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                   title="Code kopieren"
                 >
                   {copied ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
@@ -285,8 +285,8 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                   { name: 'Webflow', hint: 'Unter Site Settings → Custom Code → Head' },
                   { name: 'HTML', hint: 'Direkt vor dem </head>-Tag einfügen' },
                 ].map((p) => (
-                  <div key={p.name} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-center">
-                    <p className="text-xs font-medium text-white mb-1">{p.name}</p>
+                  <div key={p.name} className="p-3 bg-gray-100/50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 text-center">
+                    <p className="text-xs font-medium text-gray-900 dark:text-white mb-1">{p.name}</p>
                     <p className="text-xs text-gray-500 leading-tight">{p.hint}</p>
                   </div>
                 ))}
@@ -302,11 +302,11 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-800 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-800 flex-shrink-0">
           <Button
             variant="ghost"
             onClick={currentStep === 1 ? onSkip : () => setCurrentStep((s) => s - 1)}
-            className="text-gray-400 hover:text-white"
+            className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
           >
             {currentStep === 1 ? (
               'Überspringen'

@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
+from dependencies import rate_limit, require_admin
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
@@ -18,7 +20,7 @@ def _get_retriever():
     return KnowledgeRetriever()
 
 
-@router.get("/updates")
+@router.get("/updates", dependencies=[Depends(rate_limit("knowledge_list", 60, 60))])
 async def get_recent_updates(
     limit: int = Query(20, ge=1, le=100),
     impact: Optional[str] = Query(None, regex="^(high|medium|low)$"),
@@ -94,7 +96,7 @@ async def get_update_detail(update_id: str):
     }
 
 
-@router.get("/laws")
+@router.get("/laws", dependencies=[Depends(rate_limit("knowledge_list", 60, 60))])
 async def get_law_pages():
     """Alle Law-Stammseiten."""
     laws_dir = VAULT_ROOT / "laws"
@@ -122,7 +124,11 @@ async def get_law_pages():
     return {"laws": laws}
 
 
-@router.get("/search")
+# Die Suche bewertet bei jeder Anfrage den gesamten Wissensspeicher und
+# holt eine Einbettung fuer die Anfrage. Ohne Anmeldung und ohne Drossel
+# war das eine offene Tuer fuer Lastspitzen: nach dem Einzug der
+# EUR-Lex-Artikel sind das rund 1.900 Dokumente je Aufruf.
+@router.get("/search", dependencies=[Depends(rate_limit("knowledge_search", 20, 60))])
 async def search_knowledge(q: str = Query(..., min_length=2), top_k: int = Query(10, ge=1, le=30)):
     """Semantic Search über den gesamten Knowledge Vault."""
     if not q.strip():
@@ -151,8 +157,18 @@ async def get_vault_stats():
 
 
 @router.post("/trigger-refresh")
-async def trigger_refresh(background_tasks: BackgroundTasks):
-    """Manueller Update-Trigger (Admin). Startet Knowledge-Update im Hintergrund."""
+async def trigger_refresh(
+    background_tasks: BackgroundTasks,
+    admin: dict = Depends(require_admin),
+):
+    """Manueller Update-Trigger (Admin). Startet Knowledge-Update im Hintergrund.
+
+    Der Docstring sagte schon immer "(Admin)", die Dependency fehlte aber — jede
+    Session (und ohne Token sogar jeder) konnte einen vollen Ingestion-Lauf samt
+    OpenAI-Klassifizierung auslösen (Kosten + Vault-Schreibzugriff).
+    Die GET-Routen dieses Routers bleiben bewusst offen: veröffentlichte
+    Gesetzestexte und Updates sind keine Kundendaten.
+    """
     async def run_update():
         try:
             from knowledge.knowledge_ingestion_service import KnowledgeIngestionService

@@ -15,16 +15,19 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { safeStorage } from '@/lib/storage';
 import { PageContainer, PageHeader } from '@/components/dashboard/PageShell';
+import GitHubIntegration from '@/components/settings/GitHubIntegration';
+import { Github } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
 
-type Tab = 'profil' | 'benachrichtigungen' | 'sicherheit' | 'datenschutz';
+type Tab = 'profil' | 'benachrichtigungen' | 'sicherheit' | 'datenschutz' | 'integrationen';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'profil', label: 'Profil', icon: User },
   { id: 'benachrichtigungen', label: 'Benachrichtigungen', icon: Bell },
   { id: 'sicherheit', label: 'Sicherheit', icon: Shield },
   { id: 'datenschutz', label: 'Datenschutz', icon: Globe },
+  { id: 'integrationen', label: 'Integrationen', icon: Github },
 ];
 
 export default function SettingsPage() {
@@ -121,8 +124,9 @@ export default function SettingsPage() {
     }
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/api/user/change-password`, {
-        method: 'POST',
+      // Live existiert PUT /api/user/password — POST /change-password gab es nie.
+      const res = await fetch(`${API_BASE}/api/user/password`, {
+        method: 'PUT',
         headers: getHeaders(),
         body: JSON.stringify({ current_password: passwords.current, new_password: passwords.next }),
       });
@@ -138,6 +142,7 @@ export default function SettingsPage() {
 
   const handleExportData = async () => {
     try {
+      // GDPR-Export: aggregiert users + zugehörige Tabellen (gdpr_retention_service)
       const res = await fetch(`${API_BASE}/api/user/export-data`, {
         headers: getHeaders(),
       });
@@ -251,7 +256,7 @@ export default function SettingsPage() {
                       <Input
                         value={profile.email}
                         disabled
-                        className="dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-zinc-500 bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
+                        className="dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-zinc-500 bg-gray-100 border-gray-200 text-gray-600 dark:text-gray-400 cursor-not-allowed"
                       />
                     </div>
                   </div>
@@ -434,7 +439,7 @@ export default function SettingsPage() {
                       onClick={() => {
                         if (typeof window !== 'undefined' &&
                           window.confirm('Konto wirklich löschen? Diese Aktion ist nicht rückgängig zu machen.')) {
-                          window.location.href = 'mailto:support@complyo.tech?subject=Kontolöschung';
+                          window.location.href = 'mailto:support@complyo.de?subject=Kontolöschung';
                         }
                       }}
                     >
@@ -445,6 +450,8 @@ export default function SettingsPage() {
                 </Card>
               </div>
             )}
+
+            {activeTab === 'integrationen' && <GitHubIntegration />}
           </div>
         </div>
       </div>

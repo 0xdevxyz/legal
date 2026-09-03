@@ -24,6 +24,8 @@ import { generateSiteId, isScanHash } from '@/lib/siteIdUtils';
 import { OptimizationModeLock } from './OptimizationModeLock';
 import { ComplianceWizard } from './ComplianceWizard';
 import QuickWins from './QuickWins';
+import { ManualChecksSection } from './ManualChecksSection';
+import ScanProgressPanel from './ScanProgressPanel';
 import apiClient from '@/lib/api';
 
 export const WebsiteAnalysis: React.FC = () => {
@@ -45,41 +47,46 @@ export const WebsiteAnalysis: React.FC = () => {
     : rawPlanType !== 'free' ? 'paid'
     : 'free';
 
-  const isCurrentSiteLocked = isInOptimizationMode &&
+  // Agentur/Expert: jede getrackte Seite ist voll optimierbar → kein Single-Lock.
+  const isAgency = rawPlanType === 'agency' || rawPlanType === 'expert';
+
+  const isCurrentSiteLocked = isAgency || (isInOptimizationMode &&
     lockedOptimizationUrl &&
     currentWebsite?.url &&
     (currentWebsite.url === lockedOptimizationUrl ||
      currentWebsite.url.includes(lockedOptimizationUrl) ||
-     lockedOptimizationUrl.includes(currentWebsite.url));
+     lockedOptimizationUrl.includes(currentWebsite.url)));
 
-  const isAnalysisOnly = !!(isInOptimizationMode && lockedOptimizationUrl && !isCurrentSiteLocked);
+  const isAnalysisOnly = !isAgency && !!(isInOptimizationMode && lockedOptimizationUrl && !isCurrentSiteLocked);
   
   // ✅ PERSISTENCE: Lade letzte Scan-Ergebnisse beim Mount
   const { data: latestScanData, isLoading: isLoadingLatestScan } = useLatestScan();
   const { data: activeJobs = [] } = useActiveFixJobs();
   
+  // Fortschritts-Token fuer den Rescan: der Scanner meldet darunter, welche
+  // Pruefung gerade laeuft. Ohne ihn sah der Nutzer hier nur "Analysiere…",
+  // waehrend derselbe Scan auf der Startseite eine Live-Liste zeigte.
+  const scanTokenRef = useRef<string | null>(null);
+  const [istNeuScan, setIstNeuScan] = useState(false);
+
   // ✅ FIX: Zuerst aus Store lesen, dann ggf. neu laden
   const { data: fetchedAnalysisData, refetch, isLoading } = useComplianceAnalysis(
-    currentWebsite?.url || null // ← CRITICAL FIX: null statt undefined
+    currentWebsite?.url || null, // ← CRITICAL FIX: null statt undefined
+    scanTokenRef
   );
   
-  // Priorität: DB (latestScan) > Fetched > Store (localStorage-Cache)
-  const analysisData = latestScanData || fetchedAnalysisData || storedAnalysisData;
+  // Priorität: DB (latestScan) > Fetched > Store (localStorage-Cache).
+  // Bei Agentur NICHT den global letzten Scan bevorzugen — sonst überschreibt er
+  // beim Seitenwechsel die per-Domain-Analyse der aktiven Seite.
+  const analysisData = isAgency
+    ? (fetchedAnalysisData || storedAnalysisData)
+    : (latestScanData || fetchedAnalysisData || storedAnalysisData);
   
   // ✅ DEBUG: Log final analysisData
   React.useEffect(() => {
-    console.log('📊 Final analysisData:', {
-      hasData: !!analysisData,
-      url: analysisData?.url,
-      issues: analysisData?.issues?.length,
-      issue_groups: analysisData?.issue_groups?.length,
-      grouping_stats: analysisData?.grouping_stats,
-      source: storedAnalysisData ? 'store' : fetchedAnalysisData ? 'fetched' : latestScanData ? 'latest' : 'none'
-    });
     
     // 🔍 DEBUG: Log issue_groups im Detail
     if (analysisData?.issue_groups) {
-      console.log('🎯 Issue Groups gefunden:', analysisData.issue_groups);
     } else {
       console.warn('⚠️ Keine issue_groups in analysisData!', analysisData);
     }
@@ -97,16 +104,8 @@ export const WebsiteAnalysis: React.FC = () => {
   
   // ✅ PERSISTENCE: Letzte Scan-Ergebnisse beim Mount in Store laden
   React.useEffect(() => {
-    console.log('🔍 PERSISTENCE DEBUG:', {
-      hasLatestScanData: !!latestScanData,
-      hasStoredData: !!storedAnalysisData,
-      hasFetchedData: !!fetchedAnalysisData,
-      latestScanUrl: latestScanData?.url,
-      latestScanIssues: latestScanData?.issues?.length
-    });
     
     if (latestScanData && !storedAnalysisData && !fetchedAnalysisData) {
-      console.log('✅ Loading latest scan into store:', latestScanData.url);
       setAnalysisData(latestScanData);
       
       // ✅ WICHTIG: Auch die Website-URL im Store setzen, damit der Score angezeigt wird
@@ -120,22 +119,10 @@ export const WebsiteAnalysis: React.FC = () => {
         status: 'completed' as const
       });
       
-      // Metrics aktualisieren
-      const criticalCount = Array.isArray(latestScanData.issues)
-        ? latestScanData.issues.filter((issue: any) => {
-            if (typeof issue === 'string') {
-              return issue.toLowerCase().includes('fehlt') || 
-                     issue.toLowerCase().includes('nicht gefunden');
-            }
-            return issue.severity === 'critical';
-          }).length
-        : 0;
-      
-      updateMetrics({
-        totalScore: latestScanData.compliance_score || 0,
-        criticalIssues: criticalCount,
-        websites: 1
-      });
+      // Bewusst KEIN updateMetrics: die Kennzahlen-Kacheln zeigen das gesamte
+      // Portfolio. Der Score dieses einen Scans steht in currentWebsite (oben
+      // gesetzt) und in analysisData; hier hineingeschrieben hat er die
+      // Website-Zahl dauerhaft auf 1 genagelt.
     }
   }, [latestScanData, storedAnalysisData, fetchedAnalysisData, setAnalysisData]);
   
@@ -148,11 +135,19 @@ export const WebsiteAnalysis: React.FC = () => {
       return;
     }
 
+    // Token VOR der Anfrage erzeugen, damit das Fortschrittspanel vom ersten
+    // Moment an pollen kann.
+    scanTokenRef.current =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `scan-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    setIstNeuScan(true);
+
     try {
       // Cache komplett leeren vor dem Rescan
       const { setAnalysisData } = useDashboardStore.getState();
       setAnalysisData(undefined as any);
-      
+
       // React Query Cache für diese URL invalidieren
       await queryClient.invalidateQueries({ queryKey: ['compliance-analysis', currentWebsite.url] });
       await queryClient.invalidateQueries({ queryKey: ['latest-scan'] });
@@ -161,29 +156,19 @@ export const WebsiteAnalysis: React.FC = () => {
       
       // Update Dashboard Store mit den Ergebnissen
       if (result.data) {
-        const { setAnalysisData, updateMetrics } = useDashboardStore.getState();
+        const { setAnalysisData, setCurrentWebsite } = useDashboardStore.getState();
         setAnalysisData(result.data);
-        
-        // Metrics aktualisieren
-        const criticalCount = Array.isArray(result.data.issues)
-          ? result.data.issues.filter((issue: any) => {
-              if (typeof issue === 'string') {
-                return issue.toLowerCase().includes('fehlt') || 
-                       issue.toLowerCase().includes('nicht gefunden');
-              }
-              return issue.severity === 'critical';
-            }).length
-          : 0;
-        
+
         const newScore = result.data.compliance_score || 0;
-        const oldScore = useDashboardStore.getState().metrics.totalScore || 0;
-        
-        updateMetrics({
-          totalScore: newScore,
-          criticalIssues: criticalCount,
-          scansUsed: (useDashboardStore.getState().metrics.scansUsed || 0) + 1
-        });
-        
+        const oldScore = currentWebsite.complianceScore || 0;
+
+        // Der neue Score gehoert an DIESE Seite, nicht in die Portfolio-Kachel.
+        setCurrentWebsite({ ...currentWebsite, complianceScore: newScore, lastScan: new Date().toISOString() });
+
+        // Portfolio-Kennzahlen neu vom Server holen — der Scan liegt jetzt in
+        // der Historie und faellt damit korrekt in Durchschnitt und Summe.
+        queryClient.invalidateQueries({ queryKey: ['dashboard-metrics'] });
+
         // ✅ Success-Animation bei Score-Verbesserung
         if (newScore > oldScore && newScore >= 100) {
           setPreviousScore(oldScore);
@@ -192,6 +177,8 @@ export const WebsiteAnalysis: React.FC = () => {
       }
     } catch (error) {
       console.error('Rescan failed:', error);
+    } finally {
+      setIstNeuScan(false);
     }
   };
 
@@ -259,7 +246,23 @@ export const WebsiteAnalysis: React.FC = () => {
             auto_fixable: category === 'impressum' || category === 'datenschutz' || category === 'cookies'
           } as ComplianceIssue;
         }
-        return issue as ComplianceIssue;
+        // Objekt-Issue (von Check-Modulen): id sicherstellen.
+        // Manche Check-Module (z. B. Cookie/AGB) liefern keine id mit — ohne id
+        // bricht der KI-Fix mit "Ungültige Issue-ID" ab. Fallback wie im Backend:
+        // Slug aus Kategorie + Titel.
+        const obj = issue as ComplianceIssue;
+        if (!obj.id || typeof obj.id !== 'string') {
+          const cat = (obj.category || 'compliance').toLowerCase();
+          const slug = (obj.title || obj.description || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, '')
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 4)
+            .join('-');
+          obj.id = `${cat}-${slug}`.slice(0, 50) || `issue-${index}`;
+        }
+        return obj;
       })
     : [];
   
@@ -276,7 +279,7 @@ export const WebsiteAnalysis: React.FC = () => {
       icon: Eye,
       color: 'blue',
       description: 'WCAG 2.1 AA Konformität',
-      keywords: ['accessibility', 'wcag', 'barrierefreiheit', 'barriere', 'alt', 'kontrast', 'contrast', 'tastat']
+      keywords: ['accessibility', 'wcag', 'aria', 'barrierefreiheit', 'barriere', 'alt-text', 'alt_text', 'kontrast', 'contrast', 'tastat']
     },
     {
       id: 'gdpr',
@@ -289,7 +292,7 @@ export const WebsiteAnalysis: React.FC = () => {
     },
     {
       id: 'legal',
-      name: 'Rechtssichere Texte',
+      name: 'Pflichttexte',
       icon: FileText,
       color: 'purple',
       description: 'Impressum, AGB, Widerruf, Preisangaben, Shop',
@@ -307,11 +310,26 @@ export const WebsiteAnalysis: React.FC = () => {
   ];
 
   const categorizeIssue = (issue: ComplianceIssue): string => {
-    const text = `${issue.title} ${issue.description} ${issue.category}`.toLowerCase();
-
     // Reihenfolge der Säulen = Priorität (erste Übereinstimmung gewinnt),
     // damit z.B. "tracking" zuerst Cookies und nicht versehentlich Legal trifft.
     const ordered = ['accessibility', 'cookies', 'gdpr', 'legal'];
+
+    // 1. PRIMÄR: nur über das category-Feld zuordnen — identisch zum Backend
+    //    (ScoreCalculator.categorize). So kann ein Wort wie "Inhalt" nicht über den
+    //    Teilstring "alt" ein Datenschutz-Issue fälschlich in Barrierefreiheit kippen.
+    const cat = (issue.category || '').toLowerCase();
+    if (cat) {
+      for (const id of ordered) {
+        const pillar = pillars.find(p => p.id === id);
+        if (pillar && pillar.keywords.some(keyword => cat.includes(keyword))) {
+          return pillar.id;
+        }
+      }
+    }
+
+    // 2. FALLBACK (nur für Legacy-String-Issues ohne brauchbares category-Feld):
+    //    Titel/Beschreibung heranziehen.
+    const text = `${issue.title} ${issue.description}`.toLowerCase();
     for (const id of ordered) {
       const pillar = pillars.find(p => p.id === id);
       if (pillar && pillar.keywords.some(keyword => text.includes(keyword))) {
@@ -332,7 +350,7 @@ export const WebsiteAnalysis: React.FC = () => {
     );
     
     let score = 100; // Default wenn keine Issues
-    
+
     if (backendPillarScore) {
       // ✅ BESTE OPTION: Backend-Score verwenden!
       score = backendPillarScore.score;
@@ -345,11 +363,19 @@ export const WebsiteAnalysis: React.FC = () => {
 
       score = Math.max(0, 100 - (criticalCount * 25 + warningCount * 8));
     }
-    
+
+    // ✅ v4.0 evidenz-basiert: Status vom Backend übernehmen, sonst aus Score ableiten.
+    // 'unverified' = konnte nicht geprüft werden → NIE als grün/bestanden darstellen.
+    const criticalCount = pillarIssues.filter(i => i.severity === 'critical').length;
+    const status: string =
+      backendPillarScore?.status ||
+      (criticalCount > 0 ? 'non_compliant' : pillarIssues.length > 0 ? 'partial' : 'compliant');
+
     return {
       ...pillar,
       issues: pillarIssues,
-      score: Math.round(score)
+      score: Math.round(score),
+      status,
     };
   });
 
@@ -402,6 +428,22 @@ export const WebsiteAnalysis: React.FC = () => {
     return () => window.removeEventListener('complyo:scroll-to-pillar', handler);
   }, []);
 
+  // Aus einem einzelnen Befund heraus in den gefuehrten Assistenten springen —
+  // fuer alles, was sich nicht automatisch beheben laesst.
+  useEffectAlias(() => {
+    const handler = () => setShowWizard(true);
+    window.addEventListener('complyo:open-wizard', handler);
+    return () => window.removeEventListener('complyo:open-wizard', handler);
+  }, []);
+
+  // Neu-Scan aus dem Orientierungsband heraus anstossen.
+  useEffectAlias(() => {
+    const handler = () => { void handleRescan(); };
+    window.addEventListener('complyo:rescan', handler);
+    return () => window.removeEventListener('complyo:rescan', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWebsite?.url]);
+
   return (
     <div className="space-y-6">
       {/* ✅ PROMINENTER WEBSITE-BANNER - IMMER SICHTBAR */}
@@ -414,9 +456,9 @@ export const WebsiteAnalysis: React.FC = () => {
               </div>
               <div className="flex-1">
                 <div className="text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--lime)' }}>📊 Analysierte Website</div>
-                <div className="text-2xl font-bold text-white mb-1">{currentWebsite.name || currentWebsite.url}</div>
-                <div className="flex items-center gap-3 text-sm text-zinc-400">
-                  <span className="font-mono bg-zinc-900/70 px-3 py-1 rounded-lg border border-zinc-700">{currentWebsite.url}</span>
+                <div className="text-2xl font-bold text-gray-900 dark:text-white mb-1">{currentWebsite.name || currentWebsite.url}</div>
+                <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-zinc-400">
+                  <span className="font-mono px-3 py-1 rounded-lg border bg-gray-100 dark:bg-zinc-900/70 border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300">{currentWebsite.url}</span>
                   <span className="flex items-center gap-2">
                     <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                     {formatRelativeTime(currentWebsite.lastScan)}
@@ -466,6 +508,14 @@ export const WebsiteAnalysis: React.FC = () => {
               </Button>
             </div>
           </div>
+
+          {/* Beim Neu-Scan denselben Live-Fortschritt zeigen wie auf der
+              Startseite — vorher lief hier nur ein Spinner ohne Auskunft. */}
+          {istNeuScan && (
+            <div className="mt-5">
+              <ScanProgressPanel url={currentWebsite.url} token={scanTokenRef.current} />
+            </div>
+          )}
         </div>
       )}
 
@@ -475,6 +525,28 @@ export const WebsiteAnalysis: React.FC = () => {
           <OptimizationModeLock hasInteracted={expandedPillar !== null} />
         </ErrorBoundary>
       )}
+
+    {/* ✅ v4.0: Hinweis bei Platzhalter-/Baustellenseiten + erkanntem Grundsystem */}
+    {(analysisData as any)?.scan_notice && (
+      <div className="mb-6 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-5">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="w-6 h-6 text-amber-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-base font-bold text-amber-300 mb-1">
+              Hinweis zum Scan
+              {(analysisData as any)?.detected_cms && (
+                <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200">
+                  Grundsystem: {(analysisData as any).detected_cms}
+                </span>
+              )}
+            </h4>
+            <p className="text-sm text-amber-100/90 leading-relaxed">
+              {(analysisData as any).scan_notice}
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
 
     <Card className="mb-8">
         <CardHeader>
@@ -532,8 +604,20 @@ export const WebsiteAnalysis: React.FC = () => {
         {/* ✅ 4-SÄULEN COMPLIANCE-ANALYSE */}
         {!isActuallyLoading && findings.length > 0 && (
           <div>
+            {/* Klartext-Bewertung: ein Satz, der den Score erklaert, bevor die
+                Kategorien kommen. Nennt die kritischen Befunde beim Namen und
+                zaehlt auch das BESTANDENE — der Nutzer soll sehen, was schon
+                in Ordnung ist, nicht nur was fehlt. */}
+            <VerdictHeader
+              score={complianceScore}
+              issues={findings}
+              positiveChecks={(analysisData as any)?.positive_checks ?? []}
+              detectedCms={(analysisData as any)?.detected_cms}
+              pagesScanned={(analysisData as any)?.pages_scanned?.total}
+            />
+
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <span className="w-1 h-6 rounded-full" style={{ background: 'var(--lime)' }}></span>
                 Compliance-Analyse nach Kategorien
               </h3>
@@ -560,7 +644,7 @@ export const WebsiteAnalysis: React.FC = () => {
                   <div 
                     key={pillar.id}
                     ref={(el) => { pillarRefs.current[pillar.id] = el; }}
-                    className="glass-card rounded-2xl overflow-hidden border border-zinc-800/50 hover:border-zinc-700/70 transition-all"
+                    className="glass-card rounded-2xl overflow-hidden border dark:border-zinc-800/50 border-gray-200 hover:border-zinc-700/70 transition-all"
                   >
                     {/* Header - Klickbar */}
                     <button
@@ -572,15 +656,30 @@ export const WebsiteAnalysis: React.FC = () => {
                           <Icon className="w-6 h-6" style={{ color: 'var(--lime)' }} />
                         </div>
                         <div className="text-left">
-                          <h4 className="text-lg font-bold text-white flex items-center gap-2">
+                          <h4 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
                             {pillar.name}
+                            {/* ✅ v4.0: evidenz-basierter Status-Badge */}
+                            {(() => {
+                              const cfg: Record<string, { label: string; cls: string }> = {
+                                compliant:     { label: '✓ Bestanden',    cls: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' },
+                                partial:       { label: 'Teilweise',      cls: 'bg-amber-500/15 text-amber-400 border border-amber-500/30' },
+                                non_compliant: { label: '✗ Nicht erfüllt', cls: 'bg-red-500/15 text-red-400 border border-red-500/30' },
+                                unverified:    { label: '? Ungeprüft',    cls: 'bg-zinc-500/15 text-zinc-300 border border-zinc-500/40' },
+                              };
+                              const s = cfg[(pillar as any).status] || cfg.compliant;
+                              return (
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.cls}`}>
+                                  {s.label}
+                                </span>
+                              );
+                            })()}
                             {issueCount > 0 && (
                               <Badge variant={criticalCount > 0 ? 'critical' : 'warning'}>
                                 {issueCount} Issue{issueCount !== 1 ? 's' : ''}
                               </Badge>
                             )}
                           </h4>
-                          <p className="text-sm text-zinc-400 mt-0.5">{pillar.description}</p>
+                          <p className="text-sm text-gray-600 dark:text-zinc-400 mt-0.5">{pillar.description}</p>
                         </div>
                       </div>
                       
@@ -589,9 +688,13 @@ export const WebsiteAnalysis: React.FC = () => {
                         {(() => {
                           const r = 26;
                           const circ = 2 * Math.PI * r;
+                          const isUnverified = (pillar as any).status === 'unverified';
                           const pct = Math.max(0, Math.min(100, pillar.score));
-                          const off = circ - (pct / 100) * circ;
-                          const ringColor = pillar.score >= 80 ? '#25bac8' : pillar.score >= 60 ? '#eab308' : '#ef4444';
+                          // Ungeprüft: voller neutraler Ring, kein irreführender 0%-Wert
+                          const off = isUnverified ? 0 : circ - (pct / 100) * circ;
+                          const ringColor = isUnverified
+                            ? '#71717a' // zinc-500
+                            : pillar.score >= 80 ? '#25bac8' : pillar.score >= 60 ? '#eab308' : '#ef4444';
                           return (
                             <div className="relative w-[68px] h-[68px] flex-shrink-0">
                               <svg className="w-full h-full -rotate-90" viewBox="0 0 68 68">
@@ -604,8 +707,14 @@ export const WebsiteAnalysis: React.FC = () => {
                                 />
                               </svg>
                               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-lg font-black text-white leading-none">{pillar.score}</span>
-                                <span className="text-[9px] text-zinc-500 leading-none mt-0.5">/100</span>
+                                {isUnverified ? (
+                                  <span className="text-2xl font-black text-gray-700 dark:text-zinc-300 leading-none" title="Konnte nicht geprüft werden">?</span>
+                                ) : (
+                                  <>
+                                    <span className="text-lg font-black text-gray-900 dark:text-white leading-none">{pillar.score}</span>
+                                    <span className="text-[9px] text-zinc-500 leading-none mt-0.5">/100</span>
+                                  </>
+                                )}
                               </div>
                             </div>
                           );
@@ -618,7 +727,7 @@ export const WebsiteAnalysis: React.FC = () => {
 
                     {/* Ausklappbare Details */}
                     {isExpanded && issueCount > 0 && (
-                      <div className="border-t border-zinc-800/50 p-6 bg-black/20 animate-slide-down">
+                      <div className="border-t dark:border-zinc-800/50 border-gray-200 p-6 bg-black/20 animate-slide-down">
                         <div className="space-y-4">
                           {/* ✨ NEU: Gruppierte Issues (wenn vorhanden) */}
                           {(() => {
@@ -626,11 +735,6 @@ export const WebsiteAnalysis: React.FC = () => {
                             const ungroupedIssues = (analysisData as any)?.ungrouped_issues || [];
                             
                             // 🔍 DEBUG: Log für diese Säule
-                            console.log(`🔧 Rendering pillar: ${pillar.id}`, {
-                              totalGroups: issueGroups.length,
-                              groups: issueGroups,
-                              pillarIssues: pillar.issues.length
-                            });
                             
                             // Filtere Gruppen für diese Säule
                             const pillarGroups = issueGroups.filter((group: any) => 
@@ -639,7 +743,6 @@ export const WebsiteAnalysis: React.FC = () => {
                               (pillar.id === 'legal' && group.category === 'impressum')
                             );
                             
-                            console.log(`📦 Filtered groups for ${pillar.id}:`, pillarGroups.length, pillarGroups);
                             
                             // Filtere ungrouped Issues für diese Säule
                             const pillarUngrouped = pillar.issues.filter((issue: any) => {
@@ -660,7 +763,7 @@ export const WebsiteAnalysis: React.FC = () => {
                                 {isAnalysisOnly && (
                                   <div className="flex items-center justify-between gap-3 px-4 py-2.5 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                                     <span className="text-xs text-amber-300">
-                                      Analyse-Modus — Optimierungen sind nur für <strong className="text-white">{lockedOptimizationUrl}</strong> verfügbar
+                                      Analyse-Modus — Optimierungen sind nur für <strong className="text-gray-900 dark:text-white">{lockedOptimizationUrl}</strong> verfügbar
                                     </span>
                                     <button
                                       onClick={() => {
@@ -668,7 +771,7 @@ export const WebsiteAnalysis: React.FC = () => {
                                           window.dispatchEvent(new CustomEvent('complyo:back-to-optimization'));
                                         }
                                       }}
-                                      className="text-xs text-amber-300 hover:text-white underline whitespace-nowrap"
+                                      className="text-xs text-amber-300 hover:text-gray-900 dark:hover:text-white underline whitespace-nowrap"
                                     >
                                       Zurück zur Optimierung
                                     </button>
@@ -748,9 +851,9 @@ export const WebsiteAnalysis: React.FC = () => {
                     
                     {/* Leerer Zustand wenn keine Issues */}
                     {isExpanded && issueCount === 0 && (
-                      <div className="border-t border-zinc-800/50 p-6 bg-black/20 text-center">
+                      <div className="border-t dark:border-zinc-800/50 border-gray-200 p-6 bg-black/20 text-center">
                         <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-3" />
-                        <p className="text-zinc-300 font-medium">Keine Issues gefunden</p>
+                        <p className="text-gray-700 dark:text-zinc-300 font-medium">Keine Issues gefunden</p>
                         <p className="text-zinc-500 text-sm mt-1">Diese Kategorie ist vollständig compliant! 🎉</p>
                       </div>
                     )}
@@ -761,12 +864,22 @@ export const WebsiteAnalysis: React.FC = () => {
           </div>
         )}
 
+        {/* 🧭 Manuell pruefen: Anleitungen fuer nicht-automatisierbare Kriterien */}
+        {analysisData && (
+          <ErrorBoundary componentName="ManualChecksSection">
+            <ManualChecksSection
+              checks={(analysisData as any)?.manual_checks || []}
+              accessibilityNote={(analysisData as any)?.pillar_notes?.accessibility}
+            />
+          </ErrorBoundary>
+        )}
+
         {/* ✅ EMPTY STATE - Nur anzeigen wenn wirklich keine Daten */}
         {!currentWebsite && !analysisData && !isActuallyLoading && (
           <div className="text-center py-8">
-            <Globe className="mx-auto mb-4 h-12 w-12 text-gray-400" />
-            <p className="text-gray-300 mb-4">Keine Website analysiert</p>
-            <p className="text-gray-400 text-sm">Geben Sie eine Website-URL ein, um eine Compliance-Analyse zu starten.</p>
+            <Globe className="mx-auto mb-4 h-12 w-12 text-gray-600 dark:text-gray-400" />
+            <p className="text-gray-700 dark:text-gray-300 mb-4">Keine Website analysiert</p>
+            <p className="text-gray-600 dark:text-gray-400 text-sm">Geben Sie eine Website-URL ein, um eine Compliance-Analyse zu starten.</p>
           </div>
         )}
 
@@ -774,8 +887,8 @@ export const WebsiteAnalysis: React.FC = () => {
         {currentWebsite && !isActuallyLoading && findings.length === 0 && analysisData && (
           <div className="text-center py-8">
             <CheckCircle className="mx-auto mb-4 h-12 w-12 text-green-400" />
-            <p className="text-gray-300 mb-2">Analyse abgeschlossen</p>
-            <p className="text-gray-400 text-sm">
+            <p className="text-gray-700 dark:text-gray-300 mb-2">Analyse abgeschlossen</p>
+            <p className="text-gray-600 dark:text-gray-400 text-sm">
               {complianceScore >= 80 
                 ? 'Ihre Website ist gut konfiguriert!' 
                 : 'Es wurden einige Bereiche zur Verbesserung identifiziert.'}
@@ -798,6 +911,68 @@ export const WebsiteAnalysis: React.FC = () => {
         />
       </ErrorBoundary>
     )}
+    </div>
+  );
+};
+
+
+/** Klartext-Bewertung ueber der Kategorien-Analyse. */
+const VerdictHeader: React.FC<{
+  score: number;
+  issues: Array<{ severity?: string; title?: string }>;
+  positiveChecks: Array<unknown>;
+  detectedCms?: string | null;
+  pagesScanned?: number;
+}> = ({ score, issues, positiveChecks, detectedCms, pagesScanned }) => {
+  const kritisch = issues.filter((i) => i.severity === 'critical');
+  const warnungen = issues.filter((i) => i.severity === 'warning').length;
+  const hinweise = issues.filter((i) => i.severity === 'info').length;
+
+  const ueberschrift =
+    score >= 90 ? 'Sehr gut aufgestellt.'
+    : score >= 70 ? 'Solide Basis — wenige Punkte offen.'
+    : score >= 40 ? 'Verbesserungsbedarf erkannt.'
+    : 'Dringender Handlungsbedarf.';
+
+  // Die kritischen Befunde beim Namen nennen — der Score allein erklaert nichts.
+  const kritischText = kritisch.length > 0
+    ? `Kritisch: ${kritisch.slice(0, 2).map((i) => i.title).join(' und ')}${kritisch.length > 2 ? ` — und ${kritisch.length - 2} weitere` : ''}.`
+    : 'Keine kritischen Verstöße gefunden.';
+
+  return (
+    <div className="mb-6 rounded-2xl border dark:border-zinc-700/50 border-gray-200 dark:bg-zinc-900/60 bg-white p-5">
+      <h3 className="text-2xl font-bold dark:text-white text-gray-900 mb-1.5">{ueberschrift}</h3>
+      <p className="text-sm dark:text-zinc-400 text-gray-600 leading-relaxed max-w-3xl">
+        {kritischText}
+        {pagesScanned && pagesScanned > 1 ? ` Geprüft wurden ${pagesScanned} Seiten Ihrer Website.` : ''}
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold">
+        {positiveChecks.length > 0 && (
+          <span className="px-2.5 py-1 rounded-full bg-green-500/15 text-green-500 border border-green-500/30">
+            ✓ {positiveChecks.length} bestanden
+          </span>
+        )}
+        {kritisch.length > 0 && (
+          <span className="px-2.5 py-1 rounded-full bg-red-500/15 text-red-500 border border-red-500/30">
+            {kritisch.length} kritisch
+          </span>
+        )}
+        {warnungen > 0 && (
+          <span className="px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/30">
+            {warnungen} Warnungen
+          </span>
+        )}
+        {hinweise > 0 && (
+          <span className="px-2.5 py-1 rounded-full dark:bg-zinc-700/50 bg-gray-100 dark:text-zinc-400 text-gray-600 border dark:border-zinc-600 border-gray-200">
+            {hinweise} Hinweise
+          </span>
+        )}
+        {detectedCms && (
+          <span className="px-2.5 py-1 rounded-full bg-blue-500/15 text-blue-500 border border-blue-500/30">
+            {detectedCms}
+          </span>
+        )}
+      </div>
     </div>
   );
 };

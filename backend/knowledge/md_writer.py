@@ -215,7 +215,7 @@ class MDWriter:
             "- [[TTDSG]] – Telekommunikations-Telemedien-Datenschutz-Gesetz\n"
             "- [[UWG]] – Gesetz gegen unlauteren Wettbewerb\n"
             "- [[AGB-Recht]] – §§ 305 ff. BGB\n"
-            "- [[Impressumspflicht]] – § 5 TMG / § 18 MStV\n"
+            "- [[Impressumspflicht]] – § 5 DDG / § 18 MStV\n"
         )
         filepath.write_text(content, encoding="utf-8")
         logger.info("Rebuilt laws-index.md")

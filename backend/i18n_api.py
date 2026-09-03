@@ -3,10 +3,11 @@ Internationalization API Endpoints
 Provides language switching and translation endpoints for frontend
 """
 
-from fastapi import APIRouter, Request, Query
-from typing import Dict, Any, Optional
+from fastapi import APIRouter, Depends, Request, Query
+from typing import Optional
 import logging
 from i18n_service import i18n_service
+from dependencies import require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -167,10 +168,14 @@ async def get_email_templates(
 
 @i18n_router.post("/set-language")
 async def set_default_language(
-    language: str = Query(..., description="Language code to set as default")
+    language: str = Query(..., description="Language code to set as default"),
+    admin: dict = Depends(require_admin),
 ):
     """
     Admin endpoint to change the default language
+
+    Der Docstring behauptete "Admin", die Dependency fehlte — jeder Anonyme
+    konnte die Default-Sprache prozessweit umstellen. Jetzt rollenbasiert.
     """
     try:
         if language not in i18n_service.supported_languages:

@@ -20,7 +20,7 @@ Usage:
 """
 
 import os
-from typing import Optional, AsyncGenerator, List
+from typing import Optional, List
 from functools import lru_cache
 
 import asyncpg
@@ -45,7 +45,7 @@ class Settings:
         self.jwt_secret = os.getenv("JWT_SECRET")
         self.jwt_algorithm = "HS256"
         self.jwt_audience = "complyo-api"
-        self.jwt_issuer = os.getenv("FRONTEND_URL", "https://complyo.tech")
+        self.jwt_issuer = os.getenv("FRONTEND_URL", "https://complyo.de")
         self.environment = os.getenv("ENVIRONMENT", "production")
         self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
         
@@ -121,18 +121,24 @@ async def get_db() -> asyncpg.Pool:
         await init_db_pool()
     return _db_pool
 
+async def get_db_pool() -> asyncpg.Pool:
+    """Alias auf get_db — mehrere Router importieren diesen Namen."""
+    return await get_db()
+
 async def get_redis() -> Optional[aioredis.Redis]:
     """
     Dependency: Get Redis client (optional).
-    
+
     Returns None if Redis is not available.
-    
+
     Usage:
         @router.get("/cached")
         async def get_cached(redis: Optional[aioredis.Redis] = Depends(get_redis)):
             if redis:
                 cached = await redis.get("key")
     """
+    if _redis_client is None:
+        await init_redis()
     return _redis_client
 
 # ==========================================
@@ -234,6 +240,7 @@ async def get_current_user(
         )
 
     user["id"] = int(user["id"])
+    user["user_id"] = user["id"]  # beide Key-Varianten bedienen (Alt-Code liest teils nur user_id)
     return user
 
 async def get_current_user_optional(
@@ -279,6 +286,7 @@ async def get_current_user_optional(
         return None
 
     user["id"] = int(user["id"])
+    user["user_id"] = user["id"]  # beide Key-Varianten bedienen (Alt-Code liest teils nur user_id)
     return user
 
 async def require_admin(
@@ -308,7 +316,6 @@ async def require_admin(
 
 # Import services lazily to avoid circular imports
 _auth_service = None
-_stripe_service = None
 _news_service = None
 
 async def get_auth_service():
@@ -327,15 +334,6 @@ async def get_auth_service():
         _auth_service = AuthService(db)
     return _auth_service
 
-async def get_stripe_service():
-    """Dependency: Get StripeService instance."""
-    global _stripe_service
-    if _stripe_service is None:
-        from payment.stripe_service import StripeService
-        db = await get_db()
-        _stripe_service = StripeService(db)
-    return _stripe_service
-
 async def get_news_service():
     """Dependency: Get NewsService instance."""
     global _news_service
@@ -349,12 +347,69 @@ async def get_news_service():
 # Utility Dependencies
 # ==========================================
 
+def rate_limit(scope: str, max_requests: int, window_seconds: int = 60):
+    """
+    Dependency-Factory: Redis-Sliding-Window-Rate-Limit pro Client-IP.
+
+    Für Router-Dekoratoren gedacht, damit Handler-Signaturen unverändert bleiben:
+        @router.post("/generate", dependencies=[Depends(rate_limit("ai", 5))])
+
+    Fail-open ohne Redis (Limit dann nicht durchgesetzt, nur geloggt).
+    """
+    async def _check(request: Request) -> None:
+        redis = await get_redis()
+        if not redis:
+            logger.warning(f"rate_limit({scope}): Redis nicht verfügbar — Limit nicht durchgesetzt")
+            return
+        ip = get_client_ip(request)
+        key = f"rate_limit:{scope}:{ip}"
+        import time as _time
+        now = _time.time()
+        try:
+            pipe = redis.pipeline()
+            pipe.zremrangebyscore(key, 0, now - window_seconds)
+            pipe.zadd(key, {str(now): now})
+            pipe.zcard(key)
+            pipe.expire(key, window_seconds * 2)
+            results = await pipe.execute()
+        except Exception as e:
+            logger.warning(f"rate_limit({scope}): Redis-Fehler — {e}")
+            return
+        if results[2] > max_requests:
+            try:
+                await redis.zrem(key, str(now))
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Zu viele Anfragen. Bitte versuchen Sie es später erneut.",
+                headers={"Retry-After": str(window_seconds)},
+            )
+    return _check
+
 def get_client_ip(request: Request) -> str:
     """
     Dependency: Get client IP address.
     
     Only trusts X-Forwarded-For from known trusted proxies (TRUSTED_PROXIES env var,
     comma-separated). Falls back to direct client IP if the source is not trusted.
+
+    Ausgewertet wird von RECHTS. Der Grund steht in der nginx-Konfiguration:
+
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    `$proxy_add_x_forwarded_for` HAENGT die gesehene Adresse an einen bereits
+    vorhandenen Header AN, statt ihn zu ersetzen. Schickt ein Besucher selbst
+    `X-Forwarded-For: 9.9.9.9`, kommt hier `9.9.9.9, 203.0.113.7` an. Der linke
+    Eintrag ist frei erfunden, der rechte stammt von unserem Proxy. Wer den
+    ersten nimmt, uebernimmt genau den Wert, den der Besucher bestimmt hat: der
+    Einwilligungsnachweis waere faelschbar und das Rate-Limit mit einem
+    beliebigen Header zu umgehen.
+
+    Von rechts nach links wird deshalb der erste Eintrag genommen, der nicht
+    selbst ein bekannter Proxy ist. Bei mehreren Proxies in Reihe (jeder in
+    TRUSTED_PROXIES) bleibt das richtig; alles links davon kann der Besucher
+    geschrieben haben und wird verworfen.
     """
     _trusted_raw = os.getenv("TRUSTED_PROXIES", "")
     trusted_proxies: List[str] = [p.strip() for p in _trusted_raw.split(",") if p.strip()]
@@ -363,9 +418,38 @@ def get_client_ip(request: Request) -> str:
     
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded and direct_ip and direct_ip in trusted_proxies:
-        return forwarded.split(",")[0].strip()
+        kette = [teil.strip() for teil in forwarded.split(",") if teil.strip()]
+        for eintrag in reversed(kette):
+            if eintrag not in trusted_proxies:
+                return eintrag
+        # Nur bekannte Proxies in der Kette: dann ist der direkte Peer das
+        # Genaueste, was wir haben. Keinen erfundenen Wert zurueckgeben.
+        return direct_ip
+    
+    # Steht hier ein X-Forwarded-For, stammt die Anfrage aus einem Proxy, den
+    # wir nicht kennen. Dann faellt jeder Besucher auf die IP dieses Proxys
+    # zusammen — alle teilen sich einen Rate-Limit-Eimer. Genau so war der
+    # Landing-Scanner ab dem 4. Scan pro Minute fuer ALLE tot (12.08.2026),
+    # weil TRUSTED_PROXIES fehlte und nichts es gemeldet hat. Darum laut.
+    if forwarded and direct_ip and direct_ip not in trusted_proxies:
+        _warn_untrusted_proxy(direct_ip)
     
     return direct_ip or "unknown"
+
+
+_gemeldete_proxies: set = set()
+
+
+def _warn_untrusted_proxy(direct_ip: str) -> None:
+    """Meldet jede unbekannte Proxy-IP genau einmal pro Prozess."""
+    if direct_ip in _gemeldete_proxies:
+        return
+    _gemeldete_proxies.add(direct_ip)
+    logger.warning(
+        f"TRUSTED_PROXIES: Anfragen mit X-Forwarded-For kommen von {direct_ip}, "
+        f"diese IP ist nicht als Proxy hinterlegt. Alle Besucher werden als eine "
+        f"IP gezaehlt (gemeinsames Rate-Limit). Fix: TRUSTED_PROXIES={direct_ip} setzen."
+    )
 
 # ==========================================
 # Lifecycle Management

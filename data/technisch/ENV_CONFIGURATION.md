@@ -58,13 +58,19 @@ NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=G-XXXXXXXXXX
 ## 🟡 OPTIONAL - Email & Benachrichtigungen
 
 ### SMTP Konfiguration
+
+Seit 2026-08-11 in Produktion aktiv (Versand ueber den eigenen Mailserver).
+Das Passwort steht NUR in der Server-.env, nie im Repo. Wichtig: Wert in der
+.env in einfache Anfuehrungszeichen setzen, wenn er $ oder # enthaelt —
+Docker Compose interpoliert sonst bzw. schneidet ab.
+
 ```bash
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=your-email@gmail.com
-SMTP_PASSWORD=your-app-specific-password
-SENDER_EMAIL=noreply@complyo.tech
-SENDER_NAME=Complyo Compliance
+SMTP_HOST=mail.complyo.de
+SMTP_PORT=587                      # STARTTLS
+SMTP_USERNAME=noreply@complyo.de
+SMTP_PASSWORD=<nur-in-server-env>
+SENDER_EMAIL=noreply@complyo.de
+SENDER_NAME=complyo
 ```
 
 ---

@@ -67,19 +67,19 @@ export function AgencyLogoUpload({ onUploaded }: AgencyLogoUploadProps) {
   };
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+    <div className="dark:bg-zinc-900 bg-white border dark:border-zinc-800 border-gray-200 rounded-xl p-6">
       <div className="flex items-start gap-4">
         <div className="p-3 bg-purple-500/20 rounded-lg flex-shrink-0">
           <ImageIcon className="w-5 h-5 text-purple-400" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-white font-semibold mb-1">Agentur-Logo</h3>
-          <p className="text-zinc-400 text-sm mb-3">
+          <h3 className="text-gray-900 dark:text-white font-semibold mb-1">Agentur-Logo</h3>
+          <p className="text-gray-600 dark:text-zinc-400 text-sm mb-3">
             Wird in den generierten Client-PDFs eingebettet. PNG, max 2 MB.
           </p>
 
           {preview && (
-            <div className="mb-3 inline-block p-2 bg-zinc-800 rounded">
+            <div className="mb-3 inline-block p-2 dark:bg-zinc-800 bg-gray-50 rounded">
               <img src={preview} alt="Logo-Vorschau" className="max-h-16" />
             </div>
           )}

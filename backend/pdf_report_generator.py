@@ -3,20 +3,15 @@ Professional PDF Report Generator for Complyo Compliance Analysis
 Creates branded, professional compliance reports with charts and recommendations
 """
 
-from reportlab.lib.pagesizes import A4, letter
+from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch, cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-from reportlab.platypus import Image as RLImage
-from reportlab.graphics.shapes import Drawing, Rect, String
-from reportlab.graphics.charts.piecharts import Pie
-from reportlab.graphics.charts.barcharts import VerticalBarChart
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
+from reportlab.lib.enums import TA_CENTER
 from datetime import datetime
 import io
-import base64
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 import logging
 
 logger = logging.getLogger(__name__)
@@ -134,6 +129,10 @@ class ComplianceReportGenerator:
             
             # Recommendations
             story.extend(self._create_recommendations(analysis_data))
+            story.append(PageBreak())
+
+            # Manuell zu pruefende Kriterien (Automatik-Grenzen, mit Anleitung)
+            story.extend(self._create_manual_checks_section(analysis_data))
             story.append(PageBreak())
             
             # Appendix
@@ -350,6 +349,55 @@ class ComplianceReportGenerator:
         
         return content
     
+    def _create_manual_checks_section(self, analysis_data: Dict[str, Any]) -> List:
+        """
+        Manuell zu pruefende Kriterien: Punkte, die keine automatische Pruefung
+        zuverlaessig bewerten kann — mit konkreter Schritt-fuer-Schritt-Anleitung.
+        Teil des Ehrlichkeits-Versprechens (erkennen ODER anleiten). Faellt auf
+        den zentralen Katalog zurueck, wenn der Scan (Altbestand) keinen traegt.
+        """
+        content = []
+        checks = analysis_data.get('manual_checks')
+        if not checks:
+            try:
+                from compliance_engine.score_calculator import MANUAL_CHECKS
+                checks = MANUAL_CHECKS
+            except Exception:
+                return content
+
+        pillar_labels = {
+            'accessibility': 'Barrierefreiheit',
+            'gdpr': 'Datenschutz',
+            'legal': 'Rechtstexte',
+            'cookies': 'Cookies',
+        }
+
+        content.append(Paragraph("Manuell zu prüfende Punkte", self.styles['ComplyoTitle']))
+        content.append(Spacer(1, 0.2*inch))
+        content.append(Paragraph(
+            "Kein automatisches Prüfverfahren kann alle rechtlichen Anforderungen "
+            "bewerten — einige Kriterien erfordern eine kurze manuelle Kontrolle. "
+            "Damit nichts offen bleibt, finden Sie hier für jeden dieser Punkte "
+            "eine konkrete Anleitung.",
+            self.styles['Normal'],
+        ))
+        content.append(Spacer(1, 0.25*inch))
+
+        note = (analysis_data.get('pillar_notes') or {}).get('accessibility')
+        if note:
+            content.append(Paragraph(f"<i>{note}</i>", self.styles['Normal']))
+            content.append(Spacer(1, 0.2*inch))
+
+        for check in checks:
+            label = pillar_labels.get(check.get('pillar', ''), check.get('pillar', ''))
+            content.append(Paragraph(
+                f"[{label}] {check.get('title', '')}", self.styles['ComplyoHeading']
+            ))
+            content.append(Paragraph(check.get('anleitung', ''), self.styles['Normal']))
+            content.append(Spacer(1, 0.15*inch))
+
+        return content
+
     def _create_appendix(self, analysis_data: Dict[str, Any], lead_data: Dict[str, Any]) -> List:
         """Create appendix with technical details"""
         content = []
@@ -365,7 +413,7 @@ class ComplianceReportGenerator:
             ['Analyse-URL', analysis_data.get('url', 'N/A')],
             ['Analyse-Datum', datetime.now().strftime('%d.%m.%Y %H:%M')],
             ['Report-Version', '2.0'],
-            ['Analysierte Bereiche', 'DSGVO, TMG, TTDSG, Accessibility'],
+            ['Analysierte Bereiche', 'DSGVO, DDG, TDDDG, Barrierefreiheit'],
             ['Compliance-Engine', 'Complyo AI v2.2.0']
         ]
         
@@ -400,9 +448,9 @@ class ComplianceReportGenerator:
         content.append(Paragraph("Kontakt", self.styles['ComplyoHeading']))
         contact = """
         <b>Complyo GmbH</b><br/>
-        E-Mail: support@complyo.tech<br/>
-        Website: https://complyo.tech<br/>
-        Datenschutz: datenschutz@complyo.tech
+        E-Mail: support@complyo.de<br/>
+        Website: https://complyo.de<br/>
+        Datenschutz: datenschutz@complyo.de
         """
         content.append(Paragraph(contact, self.styles['Normal']))
         

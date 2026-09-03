@@ -10,10 +10,8 @@ Abgedeckte Szenarien:
 - Admin Approve/Reject
 """
 
-import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
 
 
 # ---------------------------------------------------------------------------
@@ -195,14 +193,19 @@ async def test_websites_flagged_after_legal_update(mock_legal_update):
 
 @pytest.mark.asyncio
 async def test_fix_quality_gate_passes_valid_fix(mock_fix_valid):
-    """Valider Fix (kein gefährlicher Code, kein Placeholder) → validated."""
+    """Valider Fix (Syntax ok), aber ohne verifizierbares Ziel im Original.
+    Neuer Vertrag: kein Silent-Pass mehr — Stufe 1 besteht, aber der
+    Gesamtstatus ist pending_review, weil der Fix nicht re-scan-verifiziert
+    werden konnte (Button ohne stabile Identitaet, nur angehaengt)."""
     from ai_fix_engine.fix_quality_gate import FixQualityGate
 
     gate = FixQualityGate()
     result = await gate.run(mock_fix_valid, original_html="<html><body></body></html>")
 
-    assert result.final_status == "validated"
     assert all(s.passed for s in result.stage_results if s.stage == 1)
+    assert result.final_status == "pending_review"
+    s2 = next(s for s in result.stage_results if s.stage == 2)
+    assert s2.details.get("verified") is False
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +260,7 @@ async def test_rescan_notification_triggered():
     )
 
     svc = LegalNewsNotificationService(pool)
-    svc.frontend_url = "https://app.complyo.tech"
+    svc.frontend_url = "https://app.complyo.de"
 
     await svc.notify_rescan_required(
         website_id="site-1",
@@ -275,6 +278,12 @@ async def test_rescan_notification_triggered():
 # Test 9: Admin Approve Fix (via mock DB)
 # ---------------------------------------------------------------------------
 
+# Seit 2026-07-29 laeuft der Adminbereich ueber require_admin: die Dependency
+# liefert das User-Dict, nicht mehr ein bool aus der Schluesselpruefung.
+# admin_routes._reviewer_name() liest daraus den Namen fuer reviewed_by.
+ADMIN_USER = {"id": 1, "email": "admin@complyo.de", "role": "admin"}
+
+
 @pytest.mark.asyncio
 async def test_admin_approve_fix():
     """
@@ -282,10 +291,13 @@ async def test_admin_approve_fix():
     """
     from admin_routes import approve_fix
 
+    # approve_fix bekommt die Connection per Depends(get_db) injiziert; im
+    # Direktaufruf wird sie schlicht als Argument übergeben. Das frühere
+    # patch("admin_routes.get_db_pool") stammt aus der Zeit vor der Umstellung
+    # auf Dependency Injection — das Attribut existiert nicht mehr.
     pool, conn = make_db_pool(fetchval=99)
 
-    with patch("admin_routes.get_db_pool", return_value=pool):
-        result = await approve_fix(fix_id=99, admin=True, db=conn)
+    result = await approve_fix(fix_id=99, admin=ADMIN_USER, db=conn)
 
     assert result["success"] is True
     assert result["new_status"] == "validated"
@@ -304,7 +316,7 @@ async def test_admin_reject_fix_requires_reason():
     pool, conn = make_db_pool(fetchval=99)
 
     with pytest.raises(HTTPException) as exc_info:
-        await reject_fix(fix_id=99, reason="ab", admin=True, db=conn)
+        await reject_fix(fix_id=99, reason="ab", admin=ADMIN_USER, db=conn)
 
     assert exc_info.value.status_code == 422
 
@@ -319,7 +331,7 @@ async def test_admin_reject_fix_valid():
     result = await reject_fix(
         fix_id=99,
         reason="Fix enthält falschen ARIA-Role-Wert",
-        admin=True,
+        admin=ADMIN_USER,
         db=conn,
     )
 

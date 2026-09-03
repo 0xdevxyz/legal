@@ -138,8 +138,8 @@ const EmailVerificationContent: React.FC = () => {
               
               <p className="text-xs text-gray-400">
                 Bei anhaltenden Problemen kontaktieren Sie uns unter: 
-                <a href="mailto:support@complyo.tech" className="text-blue-400 hover:underline">
-                  support@complyo.tech
+                <a href="mailto:support@complyo.de" className="text-blue-400 hover:underline">
+                  support@complyo.de
                 </a>
               </p>
             </div>

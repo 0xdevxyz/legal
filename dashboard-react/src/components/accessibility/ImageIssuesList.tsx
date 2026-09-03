@@ -128,7 +128,7 @@ export function ImageIssuesList({ issues, onApplyFix, siteUrl }: ImageIssuesList
               </div>
             ) : (
               <div className="bg-gray-200 h-48 flex items-center justify-center">
-                <ImageIcon className="w-12 h-12 text-gray-400" />
+                <ImageIcon className="w-12 h-12 text-gray-600 dark:text-gray-400" />
                 <span className="ml-2 text-sm text-gray-500">Kein Screenshot verfügbar</span>
               </div>
             )}

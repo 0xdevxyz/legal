@@ -5,8 +5,9 @@ Crawlt Bilder mit Playwright und erstellt visuelle Screenshots
 
 import asyncio
 import base64
+import os
 from typing import Dict, List, Any, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 import logging
 from playwright.async_api import async_playwright, Browser, Page
 import re
@@ -59,7 +60,15 @@ class ScreenshotService:
             
             # Navigate zur Seite
             try:
-                await page.goto(url, wait_until='networkidle', timeout=30000)
+                # DOM-ready statt networkidle: Seiten mit Polling/Chat-Widgets erreichen
+                # nie Netzwerkruhe und liefen hier bei jedem Scan in den vollen Timeout.
+                # Netzwerkruhe bekommt danach eine begrenzte Chance — Tracker/Inhalte,
+                # die bis dahin nicht geladen sind, sieht der Scan eben nicht.
+                await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+                try:
+                    await page.wait_for_load_state('networkidle', timeout=5000)
+                except Exception:
+                    pass  # Bilder sind nach DOM-ready + kurzer Wartezeit da oder eben nicht
             except Exception as e:
                 logger.warning(f"Navigation timeout/error: {e}, continuing anyway")
                 await asyncio.sleep(2)  # Warte kurz
@@ -133,9 +142,14 @@ class ScreenshotService:
             if width < 20 or height < 20:
                 return None
             
-            # Screenshot des Bildes (nur wenn sichtbar und groß genug)
+            # Element-Screenshot (base64) standardmäßig DEAKTIVIERT:
+            # Die base64-Screenshots blähten den Scan-Response auf mehrere MB auf
+            # (→ localStorage-QuotaExceededError) und das Capturing pro Bild ist sehr
+            # langsam. Das Frontend zeigt Bilder ohnehin über image_src (echte URL) an.
+            # Per ENV COMPLYO_CAPTURE_IMAGE_SCREENSHOTS=true wieder aktivierbar.
             screenshot_b64 = None
-            if is_visible and width >= 50 and height >= 50:
+            if (os.getenv("COMPLYO_CAPTURE_IMAGE_SCREENSHOTS", "false").lower() == "true"
+                    and is_visible and width >= 50 and height >= 50):
                 try:
                     screenshot_bytes = await img.screenshot(timeout=5000)
                     screenshot_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')

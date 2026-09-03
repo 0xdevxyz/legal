@@ -1,0 +1,226 @@
+# Complyo Compliance – Translation Template (POT)
+# Copyright (C) 2026 Complyo
+# This file is distributed under the same license as the Complyo Compliance plugin.
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: Complyo Compliance 2.6.0\n"
+"Report-Msgid-Bugs-To: https://complyo.de\n"
+"POT-Creation-Date: 2026-07-17 20:21+0000\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"X-Domain: complyo-compliance\n"
+
+#: complyo-compliance.php:252
+msgid "Cookie-Einstellungen"
+msgstr ""
+
+#: complyo-compliance.php:269
+msgid "Cookies widerrufen"
+msgstr ""
+
+#: complyo-compliance.php:365 complyo-compliance.php:366
+msgid "Complyo Compliance"
+msgstr ""
+
+#: complyo-compliance.php:414 includes/class-complyo-a11y-remediation.php:94 includes/class-complyo-local-fonts.php:349
+msgid "Keine Berechtigung."
+msgstr ""
+
+#: complyo-compliance.php:438
+msgid "Google Fonts lokalisiert: %1$d gefunden, %2$d lokal gespeichert, %3$d Fehler."
+msgstr ""
+
+#: complyo-compliance.php:442
+msgid "Bitte ggf. Caching-Plugin-Cache leeren."
+msgstr ""
+
+#: complyo-compliance.php:451
+msgid "Dashboard öffnen"
+msgstr ""
+
+#: complyo-compliance.php:461
+msgid "Verbindung"
+msgstr ""
+
+#: complyo-compliance.php:465
+msgid "Site-ID"
+msgstr ""
+
+#: complyo-compliance.php:475
+msgid "Ihre eindeutige Site-ID aus dem Complyo-Dashboard."
+msgstr ""
+
+#: complyo-compliance.php:477
+msgid "Site-ID anzeigen"
+msgstr ""
+
+#: complyo-compliance.php:486
+msgid "Module"
+msgstr ""
+
+#: complyo-compliance.php:489 complyo-compliance.php:645
+msgid "Cookie-Banner"
+msgstr ""
+
+#: complyo-compliance.php:496
+msgid "DSGVO-konformes Cookie-Consent-Banner aktivieren"
+msgstr ""
+
+#: complyo-compliance.php:501
+msgid "IAB TCF 2.2 (Coming Soon)"
+msgstr ""
+
+#: complyo-compliance.php:508
+msgid "IAB Transparency & Consent Framework 2.2 (in Vorbereitung – noch nicht produktiv nutzen)"
+msgstr ""
+
+#: complyo-compliance.php:511
+msgid "Coming Soon:"
+msgstr ""
+
+#: complyo-compliance.php:512
+msgid "Complyo ist noch nicht als IAB-registriertes CMP zertifiziert. Diese Option aktiviert vorerst nur einen Test-Stub (cmpId 0) und ist KEIN Ersatz für ein registriertes TCF-CMP – für Google Ads / DV360 / Programmatic noch nicht verwenden."
+msgstr ""
+
+#: complyo-compliance.php:515
+msgid "Sie nutzen Google AdSense?"
+msgstr ""
+
+#: complyo-compliance.php:516
+msgid "Google stellt ein kostenloses eigenes CMP-Tool (ID 300) bereit, das direkt in AdSense aktiviert werden kann – ohne zusätzliche Kosten."
+msgstr ""
+
+#: complyo-compliance.php:519
+msgid "Google Datenschutz-Nachrichten einrichten →"
+msgstr ""
+
+#: complyo-compliance.php:521
+msgid "AdSense → Datenschutz und Nachrichten → Nachricht erstellen"
+msgstr ""
+
+#: complyo-compliance.php:526 complyo-compliance.php:651
+msgid "Accessibility-Widget"
+msgstr ""
+
+#: complyo-compliance.php:533
+msgid "WCAG 2.2 Level AA Barrierefreiheits-Widget aktivieren"
+msgstr ""
+
+#: complyo-compliance.php:536
+msgid "Barrierefreiheitserklärung (URL)"
+msgstr ""
+
+#: complyo-compliance.php:545
+msgid "Barriere melden – Kontakt (E-Mail oder URL)"
+msgstr ""
+
+#: complyo-compliance.php:554
+msgid "Diese Links erscheinen im Widget unter „Rechtliches & Barrierefreiheit“. Der Haftungs-Hinweis und die Schlichtungsstelle BGG werden automatisch angezeigt."
+msgstr ""
+
+#: complyo-compliance.php:562
+msgid "Alt-Texte serverseitig an der Quelle anwenden (empfohlen)"
+msgstr ""
+
+#: complyo-compliance.php:565
+msgid "Holt freigegebene KI-Alt-Texte stündlich von Complyo und schreibt sie in die Mediathek (_wp_attachment_image_alt) sowie in Inhalts-Bilder ohne Alt – echte Quell-Korrektur statt nur Overlay. Vorhandene Alt-Texte werden nie überschrieben."
+msgstr ""
+
+#: complyo-compliance.php:569
+msgid "Letzter Sync: %s"
+msgstr ""
+
+#: complyo-compliance.php:571
+msgid "Noch kein Sync gelaufen."
+msgstr ""
+
+#: complyo-compliance.php:575
+msgid "Jetzt synchronisieren"
+msgstr ""
+
+#: complyo-compliance.php:582
+msgid "Google Fonts lokal"
+msgstr ""
+
+#: complyo-compliance.php:589
+msgid "Google Fonts lokal ausliefern (kein Request an Google – DSGVO, LG München)"
+msgstr ""
+
+#: complyo-compliance.php:592
+msgid "Externe Google-Fonts-Stylesheets werden auf den eigenen Server kopiert und in der Seite ersetzt. Damit verlässt vor dem Consent keine IP-Adresse die Website an Google."
+msgstr ""
+
+#: complyo-compliance.php:594
+msgid "%d lokalisierte Font-Stylesheets."
+msgstr ""
+
+#: complyo-compliance.php:600
+msgid "Inline-Tracker blockieren"
+msgstr ""
+
+#: complyo-compliance.php:607
+msgid "Inline-Tracking-Snippets server-seitig vor Consent neutralisieren"
+msgstr ""
+
+#: complyo-compliance.php:610
+msgid "Neutralisiert direkt im HTML eingebettete Tracker (Google Analytics/gtag, Meta Pixel, Hotjar, Matomo, LinkedIn, TikTok, Pinterest, Bing, Clarity), die client-seitig nicht zuverlässig stoppbar sind. Nach Einwilligung werden sie automatisch nachgeladen."
+msgstr ""
+
+#: complyo-compliance.php:611
+msgid "Empfohlen, aber nach dem Aktivieren bitte Seite + zentrale Funktionen testen (konservativ kuratierte Muster)."
+msgstr ""
+
+#: complyo-compliance.php:618
+msgid "Einstellungen speichern"
+msgstr ""
+
+#: complyo-compliance.php:623
+msgid "Google Fonts lokalisieren"
+msgstr ""
+
+#: complyo-compliance.php:625
+msgid "Lädt die aktuell auf der Startseite eingebundenen Google Fonts herunter und speichert sie lokal. Neue Fonts auf anderen Seiten werden automatisch im Hintergrund nachgezogen."
+msgstr ""
+
+#: complyo-compliance.php:630
+msgid "Google Fonts jetzt lokalisieren"
+msgstr ""
+
+#: complyo-compliance.php:636
+msgid "Eingebundene Scripts"
+msgstr ""
+
+#: complyo-compliance.php:637
+msgid "Folgende Scripts werden automatisch eingebunden (Reihenfolge ist entscheidend):"
+msgstr ""
+
+#: complyo-compliance.php:640
+msgid "Cookie-Blocker"
+msgstr ""
+
+#: complyo-compliance.php:641
+msgid "synchron in &lt;head&gt; priority 1 (blockiert Tracking vor Consent)"
+msgstr ""
+
+#: complyo-compliance.php:646 complyo-compliance.php:652
+msgid "async am Ende von &lt;body&gt;"
+msgstr ""
+
+#: complyo-compliance.php:658
+msgid "WP Rocket, W3 Total Cache, Autoptimize, LiteSpeed Cache und SiteGround Optimizer werden automatisch konfiguriert (Scripts werden von Minifizierung und Defer ausgenommen)."
+msgstr ""
+
+#: complyo-compliance.php:664
+msgid "Banner-Design, Texte, Kategorien und Cookie-Deklaration konfigurieren Sie in Ihrem"
+msgstr ""
+
+#: complyo-compliance.php:666
+msgid "Complyo-Dashboard"
+msgstr ""
+
+#: complyo-compliance.php:676
+msgid "Einstellungen"
+msgstr ""

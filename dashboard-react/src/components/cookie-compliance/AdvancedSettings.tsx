@@ -70,7 +70,7 @@ export default function AdvancedSettings({ siteId, config, onSave }: AdvancedSet
   return (
     <div className="space-y-6">
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-6 bg-gray-900/50 p-1 h-auto">
+        <TabsList className="grid w-full grid-cols-6 bg-white/50 dark:bg-gray-900/50 p-1 h-auto">
           {features.map(feature => (
             <TabsTrigger 
               key={feature.id}

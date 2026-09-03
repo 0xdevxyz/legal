@@ -83,7 +83,7 @@ export default function TCFManager({ siteId, config, onSave }: TCFManagerProps) 
             <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
             <div>
               <h4 className="font-semibold text-yellow-300">TCF 2.2 - Registrierung erforderlich</h4>
-              <p className="text-sm text-gray-300 mt-1">
+              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
                 Um TCF zu nutzen, müssen Sie sich bei IAB Europe als Consent Management Platform (CMP) registrieren.
                 Diese Funktion ist derzeit als Vorschau verfügbar.
               </p>
@@ -101,12 +101,12 @@ export default function TCFManager({ siteId, config, onSave }: TCFManagerProps) 
       </Card>
 
       {/* Main Settings */}
-      <Card className="bg-gray-800/50 border-gray-700">
+      <Card className="bg-gray-100/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
+          <CardTitle className="text-gray-900 dark:text-white flex items-center gap-2">
             <Shield className="w-5 h-5 text-yellow-400" />
             TCF 2.2 Konfiguration
-            <Badge className="ml-2 bg-gray-500/20 text-gray-400 border border-gray-500/30">Coming Soon</Badge>
+            <Badge className="ml-2 bg-gray-500/20 text-gray-600 dark:text-gray-400 border border-gray-500/30">Coming Soon</Badge>
           </CardTitle>
           <CardDescription>
             Transparency and Consent Framework für standardisierte Einwilligungen
@@ -114,13 +114,13 @@ export default function TCFManager({ siteId, config, onSave }: TCFManagerProps) 
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Enable/Disable */}
-          <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg border border-gray-700">
+          <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
             <div>
-              <Label className="text-white font-medium flex items-center gap-2">
+              <Label className="text-gray-900 dark:text-white font-medium flex items-center gap-2">
                 TCF 2.2 aktivieren
                 <Lock className="w-4 h-4 text-gray-500" />
               </Label>
-              <p className="text-sm text-gray-400 mt-1">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 Standardisierte Einwilligungen nach IAB Europe
               </p>
             </div>
@@ -133,18 +133,18 @@ export default function TCFManager({ siteId, config, onSave }: TCFManagerProps) 
 
           {/* TCF Purposes */}
           <div className="space-y-3">
-            <h4 className="text-sm font-medium text-gray-300">TCF 2.2 Zwecke</h4>
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">TCF 2.2 Zwecke</h4>
             <div className="grid gap-2">
               {TCF_PURPOSES.map(purpose => (
                 <div 
                   key={purpose.id}
-                  className="flex items-center justify-between p-3 bg-gray-900/30 rounded-lg border border-gray-700"
+                  className="flex items-center justify-between p-3 bg-white/30 dark:bg-gray-900/30 rounded-lg border border-gray-200 dark:border-gray-700"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="w-6 h-6 flex items-center justify-center bg-gray-800 rounded text-xs text-gray-400">
+                    <span className="w-6 h-6 flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded text-xs text-gray-600 dark:text-gray-400">
                       {purpose.id}
                     </span>
-                    <span className="text-sm text-gray-300">{purpose.name}</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">{purpose.name}</span>
                   </div>
                   {purpose.required && (
                     <Badge variant="outline" className="text-xs text-green-400 border-green-500/50">
@@ -157,9 +157,9 @@ export default function TCFManager({ siteId, config, onSave }: TCFManagerProps) 
           </div>
 
           {/* Vendor Info */}
-          <div className="p-4 bg-gray-900/50 rounded-lg border border-gray-700">
-            <h4 className="text-sm font-medium text-gray-300 mb-3">Vendor-Verwaltung</h4>
-            <p className="text-sm text-gray-400">
+          <div className="p-4 bg-white/50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Vendor-Verwaltung</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               Nach der Registrierung bei IAB Europe können Sie hier Ihre TCF-Vendors verwalten.
               {vendors.length > 0 && ` (${vendors.length} Vendors verfügbar)`}
             </p>
@@ -170,10 +170,16 @@ export default function TCFManager({ siteId, config, onSave }: TCFManagerProps) 
             <div className="flex items-start gap-3">
               <CheckCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-sm font-medium text-blue-300">Google Zertifizierte CMP</h4>
-                <p className="text-xs text-gray-300 mt-1">
-                  Nach TCF-Aktivierung wird Complyo als Google-zertifizierte CMP konfiguriert,
-                  kompatibel mit AdSense und Google Ad Manager.
+                {/* Stand hier als Tatsache: "Google Zertifizierte CMP". Complyo
+                    ist bei IAB Europe nicht als CMP registriert und traegt keine
+                    CMP-ID, die Zertifizierung gibt es also nicht. Formuliert jetzt,
+                    was zutrifft: das Signal ist TCF-formatiert (01.09.2026). */}
+                <h4 className="text-sm font-medium text-blue-300">TCF-Signal nach IAB-Format</h4>
+                <p className="text-xs text-gray-700 dark:text-gray-300 mt-1">
+                  Nach der Aktivierung gibt Complyo das Einwilligungssignal im TCF-v2-Format
+                  aus, das AdSense und Google Ad Manager auswerten. Fuer den Eintrag in die
+                  Liste zertifizierter CMPs ist zusaetzlich eine Registrierung bei
+                  IAB Europe noetig; die besteht derzeit nicht.
                 </p>
               </div>
             </div>

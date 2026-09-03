@@ -19,14 +19,12 @@ import stripe.financial_connections
 import stripe.climate
 import stripe.test_helpers
 import os
-import hmac
-import hashlib
 from fastapi import APIRouter, HTTPException, Depends, Request, Header
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import HTTPBearer
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
+import json
 import logging
-from datetime import datetime
 import uuid
 
 from database_service import DatabaseService
@@ -67,6 +65,17 @@ STRIPE_PRICES = {
     "agency_monthly":  os.getenv("STRIPE_PRICE_AGENCY_MONTHLY", None),   # 299€/Monat
     "agency_yearly":   os.getenv("STRIPE_PRICE_AGENCY_YEARLY", None),    # 2.990€/Jahr
     "single_monthly":  os.getenv("STRIPE_PRICE_SINGLE_MODULE", None),    # 19€/Monat
+    "monitor_monthly": os.getenv("STRIPE_PRICE_MONITOR_MONTHLY", None),  # 19€/Monat
+    "monitor_yearly":  os.getenv("STRIPE_PRICE_MONITOR_YEARLY", None),   # 190€/Jahr
+    # ── Agency Add-ons (greifen, wenn die 25 Projekte voll sind) ──────────────
+    # agency_extra: +1 Website, 19€/Monat (nutzt den Single-Preis als Fallback)
+    "agency_extra_monthly": os.getenv("STRIPE_PRICE_AGENCY_EXTRA_SITE")
+        or os.getenv("STRIPE_PRICE_SINGLE_MODULE", None),
+    # agency2: weitere 25 Websites (fällt auf den regulären Agency-Preis zurück)
+    "agency2_monthly": os.getenv("STRIPE_PRICE_AGENCY2_MONTHLY")
+        or os.getenv("STRIPE_PRICE_AGENCY_MONTHLY", None),
+    "agency2_yearly":  os.getenv("STRIPE_PRICE_AGENCY2_YEARLY")
+        or os.getenv("STRIPE_PRICE_AGENCY_YEARLY", None),
 }
 
 # Websites-Limit je Plan (für user_limits nach Checkout)
@@ -74,10 +83,127 @@ PLAN_WEBSITES_MAX = {
     "free":   1,
     "single": 1,
     "pro":    1,
+    # Monitoring: 10 beobachtete Websites. Der zweistufige Wachdienst
+    # (Leichtcheck taeglich, Vollscan nur bei Grund) macht das wirtschaftlich.
+    "monitor": 10,
     "agency": 25,
     "expert": 1,
     "update": 1,
 }
+
+# Add-on-Pläne: erhöhen NUR das Website-Limit additiv, plan_type bleibt 'agency'.
+# Werden gekauft, wenn das 25-Projekte-Limit eines Agency-Accounts erreicht ist.
+ADDON_PLANS = {
+    "agency_extra": 1,    # +1 Website (19€/Monat)
+    "agency2":      25,   # +25 Websites
+}
+
+# Die vier Säulen, die ein Plan freischalten kann.
+ALL_MODULES = ['cookie', 'accessibility', 'legal_texts', 'monitoring']
+
+# Nur diese Pläne sind per Selbstbedienung buchbar. Alles andere wird abgelehnt,
+# statt still auf pro_monthly zurückzufallen (sonst zahlt der Kunde 49€ für einen
+# Plan, den er nie gewählt hat).
+SELF_SERVE_PLANS = {'single', 'pro', 'agency', 'agency_extra', 'agency2', 'monitor'}
+
+
+def _resolve_modules(plan, modules=None):
+    """Welche Säulen schaltet dieser Plan frei?"""
+    if plan in ('pro', 'agency', 'expert', 'update'):
+        return list(ALL_MODULES)
+    if plan == 'single':
+        return [m for m in (modules or []) if m in ALL_MODULES]
+    return []
+
+
+def is_addon_plan(plan: str) -> bool:
+    return plan in ADDON_PLANS
+
+
+def _parse_modules_metadata(raw):
+    """Liest die Säulen-Liste aus Stripe-Metadata (JSON-String) defensiv aus."""
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+    except (ValueError, TypeError):
+        logger.warning(f"Unlesbare modules-Metadata: {raw!r}")
+        return []
+    return [m for m in value if isinstance(m, str)] if isinstance(value, list) else []
+
+
+async def _apply_plan_activation(conn, user_id, plan, customer_id, subscription_id, modules=None):
+    """
+    Aktiviert einen Plan oder ein Add-on idempotent (Single Source of Truth für
+    Webhook und verify-checkout-Fallback).
+
+    - Reguläre Pläne: setzen plan_type + websites_max absolut.
+    - Add-ons (agency_extra/agency2): erhöhen websites_max additiv, plan_type
+      bleibt 'agency'. Der Ledger-Eintrag wird ebenfalls als 'agency' geführt,
+      damit /subscription-status weiterhin den Basisplan anzeigt.
+
+    Gibt True zurück, wenn eine NEUE Subscription aktiviert wurde (sonst False —
+    z. B. bei Webhook-Retries für dieselbe subscription_id).
+    """
+    # Aus Stripe-Metadata kommt user_id als String — die Spalten sind integer.
+    user_id = int(user_id)
+
+    # Säulen immer setzen (idempotenter UPSERT), auch wenn die Subscription
+    # bereits bekannt ist: so wird ein fehlgeschlagener erster Versuch nachgeholt.
+    if not is_addon_plan(plan):
+        for module_id in _resolve_modules(plan, modules):
+            await conn.execute(
+                """
+                INSERT INTO user_modules
+                    (user_id, module_id, status, stripe_subscription_id)
+                VALUES ($1, $2, 'active', $3)
+                ON CONFLICT (user_id, module_id) DO UPDATE
+                    SET status                 = 'active',
+                        stripe_subscription_id = $3,
+                        cancelled_at           = NULL,
+                        updated_at             = NOW()
+                """,
+                user_id, module_id, subscription_id,
+            )
+
+    existing = await conn.fetchrow(
+        "SELECT id FROM subscriptions WHERE stripe_subscription_id = $1", subscription_id
+    )
+    if existing:
+        await conn.execute(
+            "UPDATE subscriptions SET status='active', updated_at=CURRENT_TIMESTAMP "
+            "WHERE stripe_subscription_id = $1",
+            subscription_id,
+        )
+        return False
+
+    if is_addon_plan(plan):
+        await conn.execute(
+            "UPDATE user_limits SET websites_max = COALESCE(websites_max, 0) + $2 "
+            "WHERE user_id = $1",
+            user_id, ADDON_PLANS[plan],
+        )
+        ledger_plan = "agency"
+    else:
+        websites_max = PLAN_WEBSITES_MAX.get(plan, 1)
+        await conn.execute(
+            "UPDATE user_limits SET plan_type=$1, fixes_limit=999999, "
+            "websites_max=$3, exports_max=999 WHERE user_id=$2",
+            plan, user_id, websites_max,
+        )
+        ledger_plan = plan
+
+    await conn.execute(
+        """
+        INSERT INTO subscriptions
+            (user_id, stripe_customer_id, stripe_subscription_id, plan_type, status)
+        VALUES ($1, $2, $3, $4, 'active')
+        ON CONFLICT (stripe_subscription_id) DO UPDATE
+            SET status='active', updated_at=CURRENT_TIMESTAMP
+        """,
+        user_id, customer_id, subscription_id, ledger_plan,
+    )
+    return True
 
 logger.info(f"🔧 Payment System - DEV_MODE: {DEV_MODE}, BYPASS_PAYMENT: {BYPASS_PAYMENT}")
 
@@ -96,6 +222,7 @@ async def _ensure_db():
 class CheckoutRequest(BaseModel):
     plan: str = "pro"  # 'pro' 
     billing_period: str = "monthly"  # 'monthly' or 'yearly'
+    modules: List[str] = []  # Pflicht bei plan='single' — bestimmt Preis und Freischaltung
     domain: Optional[str] = None  # Domain für Domain-Lock
     success_url: str
     cancel_url: str
@@ -142,23 +269,14 @@ async def create_checkout_session(
             mock_subscription_id = f"sub_dev_{uuid.uuid4().hex[:24]}"
             mock_customer_id = f"cus_dev_{uuid.uuid4().hex[:24]}"
             
-            # Upgrade User direkt in der Datenbank
-            _websites_max = PLAN_WEBSITES_MAX.get(request.plan, 999)
+            # Upgrade User direkt in der Datenbank (additiv für Add-ons via Helper)
             await _ensure_db()
             async with db_service.pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    UPDATE user_limits
-                    SET
-                        plan_type = $1,
-                        fixes_limit = 999999,
-                        websites_max = $3,
-                        exports_max = 999
-                    WHERE user_id = $2
-                    """,
-                    request.plan, user_id, _websites_max
+                await _apply_plan_activation(
+                    conn, user_id, request.plan, mock_customer_id, mock_subscription_id,
+                    modules=request.modules,
                 )
-                
+
                 # Unlock Domain falls vorhanden
                 if request.domain:
                     logger.info(f"DEV_MODE: Unlocking domain {request.domain} for user {user_id}")
@@ -166,22 +284,8 @@ async def create_checkout_session(
                         "SELECT unlock_domain($1, $2)",
                         user_id, request.domain
                     )
-                
-                # Insert Mock Subscription
-                await conn.execute(
-                    """
-                    INSERT INTO subscriptions 
-                    (user_id, stripe_customer_id, stripe_subscription_id, plan_type, status)
-                    VALUES ($1, $2, $3, $4, 'active')
-                    ON CONFLICT (stripe_subscription_id) 
-                    DO UPDATE SET
-                        status = 'active',
-                        updated_at = CURRENT_TIMESTAMP
-                    """,
-                    user_id, mock_customer_id, mock_subscription_id, request.plan
-                )
-            
-            logger.info(f"✅ DEV_MODE: User {user_id} upgraded to {request.plan}" + 
+
+            logger.info(f"✅ DEV_MODE: User {user_id} upgraded to {request.plan}" +
                        (f" (domain: {request.domain})" if request.domain else ""))
             
             # Redirect direkt zur Success-URL
@@ -195,18 +299,44 @@ async def create_checkout_session(
         
         # ✅ PRODUCTION MODE: Echter Stripe Checkout
         # Wähle passenden Price ID
+        if request.plan not in SELF_SERVE_PLANS:
+            logger.warning(
+                f"Checkout abgelehnt — Plan {request.plan!r} ist nicht buchbar (user {user_id})"
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=f"Der Plan '{request.plan}' kann nicht online gebucht werden.",
+            )
+
+        if request.billing_period not in ('monthly', 'yearly'):
+            raise HTTPException(
+                status_code=400,
+                detail="Abrechnungszeitraum muss 'monthly' oder 'yearly' sein.",
+            )
+
+        checkout_modules = _resolve_modules(request.plan, request.modules)
+        if request.plan == 'single' and not checkout_modules:
+            raise HTTPException(
+                status_code=400,
+                detail="Bitte mindestens eine Säule auswählen.",
+            )
+
         price_key = f"{request.plan}_{request.billing_period}"
         price_id = STRIPE_PRICES.get(price_key)
         
         if not price_id:
-            logger.error(f"No Stripe Price ID found for {price_key}")
-            price_id = STRIPE_PRICES["pro_monthly"]  # Fallback
+            logger.error(f"Keine Stripe-Price-ID für {price_key} konfiguriert")
+            raise HTTPException(
+                status_code=500,
+                detail="Dieser Tarif ist derzeit nicht buchbar. Bitte kontaktiere den Support.",
+            )
         
         # Erstelle Checkout Session
         checkout_metadata = {
             'user_id': user_id,
             'plan': request.plan,
-            'billing_period': request.billing_period
+            'billing_period': request.billing_period,
+            'modules': json.dumps(checkout_modules),
         }
         
         # Domain hinzufügen falls vorhanden
@@ -220,7 +350,7 @@ async def create_checkout_session(
             payment_method_types=['card', 'sepa_debit'],
             line_items=[{
                 'price': price_id,
-                'quantity': 1,
+                'quantity': len(checkout_modules) if request.plan == 'single' else 1,
             }],
             mode='subscription',
             success_url=request.success_url,
@@ -242,12 +372,20 @@ async def create_checkout_session(
             'session_id': checkout_session.id
         }
         
+    except HTTPException:
+        raise
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error creating checkout: {e}")
-        raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
+        raise HTTPException(
+            status_code=502,
+            detail="Der Zahlungsanbieter ist gerade nicht erreichbar. Bitte später erneut versuchen.",
+        )
     except Exception as e:
-        logger.error(f"Error creating checkout: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error creating checkout: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Checkout konnte nicht gestartet werden.",
+        )
 
 @router.post("/create-portal-session")
 async def create_portal_session(
@@ -301,7 +439,7 @@ async def create_portal_session(
         
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error creating portal: {e}")
-        raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Stripe error")
     except Exception as e:
         logger.error(f"Error creating portal: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -377,37 +515,20 @@ async def verify_checkout_session(
     if session.get('payment_status') != 'paid':
         return {"activated": False, "reason": "Zahlung noch nicht abgeschlossen"}
 
-    plan = session.get('metadata', {}).get('plan', 'pro')
+    _meta = session.get('metadata', {}) or {}
+    plan = _meta.get('plan', 'pro')
+    session_modules = _parse_modules_metadata(_meta.get('modules'))
     customer_id = session.get('customer')
     subscription_id = session.get('subscription')
 
     await _ensure_db()
     async with db_service.pool.acquire() as conn:
-        existing = await conn.fetchrow(
-            "SELECT id FROM subscriptions WHERE stripe_subscription_id = $1", subscription_id
+        newly_activated = await _apply_plan_activation(
+            conn, user_id, plan, customer_id, subscription_id, modules=session_modules
         )
-        if existing:
-            return {"activated": True, "plan": plan, "already_active": True}
 
-        websites_max = PLAN_WEBSITES_MAX.get(plan, 999)
-        await conn.execute(
-            """
-            UPDATE user_limits
-            SET plan_type = $1, fixes_limit = 999999, websites_max = $3, exports_max = 999
-            WHERE user_id = $2
-            """,
-            plan, user_id, websites_max
-        )
-        await conn.execute(
-            """
-            INSERT INTO subscriptions
-                (user_id, stripe_customer_id, stripe_subscription_id, plan_type, status)
-            VALUES ($1, $2, $3, $4, 'active')
-            ON CONFLICT (stripe_subscription_id) DO UPDATE
-                SET status = 'active', updated_at = CURRENT_TIMESTAMP
-            """,
-            user_id, customer_id, subscription_id, plan
-        )
+    if not newly_activated:
+        return {"activated": True, "plan": plan, "already_active": True}
 
     logger.info(f"Plan activated via verify-checkout: user={user_id}, plan={plan}")
     return {"activated": True, "plan": plan}
@@ -440,6 +561,8 @@ async def get_plans():
     return {
         "plans": [
             {"id": "free", "name": "Free", "price_monthly": 0, "price_yearly": 0, "websites_max": 1, "fixes_limit": 1},
+            {"id": "monitor", "name": "Monitoring", "price_monthly": 19, "price_yearly": 190, "websites_max": 10, "fixes_limit": 0,
+             "price_id_monthly": STRIPE_PRICES.get("monitor_monthly"), "price_id_yearly": STRIPE_PRICES.get("monitor_yearly")},
             {"id": "pro", "name": "Pro", "price_monthly": 49, "price_yearly": 490, "websites_max": 1, "fixes_limit": 999999,
              "price_id_monthly": STRIPE_PRICES.get("pro_monthly"), "price_id_yearly": STRIPE_PRICES.get("pro_yearly")},
             {"id": "agency", "name": "Agency", "price_monthly": 299, "price_yearly": 2990, "websites_max": 25, "fixes_limit": 999999,
@@ -505,6 +628,7 @@ async def handle_checkout_completed(session):
     try:
         user_id = session['metadata'].get('user_id')
         plan = session['metadata'].get('plan', 'pro')
+        modules = _parse_modules_metadata(session['metadata'].get('modules'))
         domain = session['metadata'].get('domain')  # Domain aus Metadata
         customer_id = session['customer']
         subscription_id = session['subscription']
@@ -513,23 +637,10 @@ async def handle_checkout_completed(session):
             logger.error("No user_id in checkout session metadata")
             return
         
-        websites_max = PLAN_WEBSITES_MAX.get(plan, 999)
-
         await _ensure_db()
 
         async with db_service.pool.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE user_limits
-                SET
-                    plan_type = $1,
-                    fixes_limit = 999999,
-                    websites_max = $3,
-                    exports_max = 999
-                WHERE user_id = $2
-                """,
-                plan, user_id, websites_max
-            )
+            await _apply_plan_activation(conn, user_id, plan, customer_id, subscription_id, modules=modules)
 
             # Unlock Domain falls vorhanden
             if domain:
@@ -539,21 +650,7 @@ async def handle_checkout_completed(session):
                     user_id, domain
                 )
                 logger.info(f"✅ Domain {domain} unlocked for user {user_id}")
-            
-            # Insert/Update subscription
-            await conn.execute(
-                """
-                INSERT INTO subscriptions 
-                (user_id, stripe_customer_id, stripe_subscription_id, plan_type, status)
-                VALUES ($1, $2, $3, $4, 'active')
-                ON CONFLICT (stripe_subscription_id) 
-                DO UPDATE SET
-                    status = 'active',
-                    updated_at = CURRENT_TIMESTAMP
-                """,
-                user_id, customer_id, subscription_id, plan
-            )
-            
+
         logger.info(f"✅ User {user_id} upgraded to {plan}" + (f" (domain: {domain})" if domain else ""))
         
     except Exception as e:

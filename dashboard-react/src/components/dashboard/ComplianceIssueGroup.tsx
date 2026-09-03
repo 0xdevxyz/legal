@@ -5,7 +5,8 @@ import { ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Info, Sparkles, Down
 import { ComplianceIssueCard } from './ComplianceIssueCard';
 import { UnifiedFixButton } from './UnifiedFixButton';
 import { useToast } from '@/components/ui/Toast';
-import { LegalDocumentGenerator } from '@/components/legal/LegalDocumentGenerator';
+import { type WizardDocType } from '@/components/legal/LegalDocumentGenerator';
+import { LegalWizardModal } from '@/components/legal/LegalWizardModal';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api-client';
 
@@ -47,15 +48,29 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [isFixingAll, setIsFixingAll] = useState(false);
-  const [showLegalWizard, setShowLegalWizard] = useState<'impressum' | 'datenschutz' | null>(null);
+  const [showLegalWizard, setShowLegalWizard] = useState<WizardDocType | null>(null);
 
-  // ✅ Prüfe ob es sich um Impressum/Datenschutz handelt
-  const isLegalTextGroup = group.category === 'datenschutz' || 
-                           group.category === 'impressum' ||
-                           group.title.toLowerCase().includes('datenschutz') ||
-                           group.title.toLowerCase().includes('impressum');
-  
-  const legalDocumentType = group.title.toLowerCase().includes('impressum') ? 'impressum' : 'datenschutz';
+  // ✅ Welcher Rechtstext gehört zu dieser Gruppe? (Titel/Kategorie-Heuristik)
+  const _gt = `${group.title} ${group.category || ''}`.toLowerCase();
+  const legalDocumentType: WizardDocType | null =
+    _gt.includes('impressum') ? 'impressum' :
+    (_gt.includes('widerruf') || _gt.includes('withdrawal')) ? 'widerruf' :
+    (_gt.includes('agb') || _gt.includes('geschäftsbedingung') || _gt.includes('tos') || _gt.includes('terms')) ? 'agb' :
+    _gt.includes('datenschutz') ? 'datenschutz' :
+    null;
+
+  // Cookie-Richtlinie wird über die dedizierte Cookie-Compliance-Seite gepflegt,
+  // daher hier NICHT als Wizard-Gruppe behandelt.
+  const isLegalTextGroup = legalDocumentType !== null;
+
+  // Label-Map für UI-Texte
+  const DOC_LABELS: Record<WizardDocType, { title: string; basis: string; cta: string }> = {
+    impressum:   { title: 'Impressum erstellen',            basis: 'ein Impressum mit den Pflichtangaben nach § 5 DDG',                 cta: 'Impressum Generator starten' },
+    datenschutz: { title: 'Datenschutzerklärung erstellen', basis: 'eine Datenschutzerklärung mit den Pflichtangaben nach DSGVO',                  cta: 'Datenschutz Generator starten' },
+    agb:         { title: 'AGB erstellen',                  basis: 'Allgemeine Geschäftsbedingungen auf Basis Ihrer Angaben',             cta: 'AGB Generator starten' },
+    cookie:      { title: 'Cookie-Richtlinie erstellen',    basis: 'eine Cookie-Richtlinie mit den Pflichtangaben nach TDDDG',                     cta: 'Cookie-Richtlinie Generator starten' },
+    widerruf:    { title: 'Widerrufsbelehrung erstellen',   basis: 'eine Widerrufsbelehrung inkl. Muster-Widerrufsformular',    cta: 'Widerruf Generator starten' },
+  };
 
   // Severity-basierte Farben
   const severityColors = {
@@ -115,32 +130,19 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                           group.title.toLowerCase().includes('impressum');
       
       if (isLegalText) {
-        const textType = group.title.toLowerCase().includes('impressum') ? 'imprint' : 'privacy_policy';
-        const endpoint = textType === 'imprint' 
-          ? '/api/legal-texts/imprint'
-          : '/api/legal-texts/privacy';
-
-        const data = await apiClient.get(endpoint, { language: 'de' }) as any;
-        
-        // Auto-Download
-        if (typeof document !== 'undefined' && data.html) {
-          const filename = textType === 'imprint' ? 'impressum.html' : 'datenschutzerklaerung.html';
-          const blob = new Blob([data.html], { type: 'text/html;charset=utf-8' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        }
-
+        // KEINE Direktgenerierung aus company_name+email: Das Profil enthält
+        // weder Adresse noch Rechtsform noch Vertretungsberechtigten — das
+        // Ergebnis wäre ein Dokument voller [Platzhalter]. Stattdessen Weiche
+        // in den geführten Generator, der alle Pflichtangaben abfragt.
+        const wizardType: WizardDocType = group.title.toLowerCase().includes('impressum') ? 'impressum' : 'datenschutz';
         showToast(
-          `✅ ${textType === 'imprint' ? 'Impressum' : 'Datenschutzerklärung'} generiert und heruntergeladen! Ersetzen Sie den alten Text auf Ihrer Website.`, 
-          'success', 
-          7000
+          'Für ein vollständiges Dokument fehlen Stammdaten (Adresse, Rechtsform, Vertretungsberechtigter). Der Assistent fragt alle Angaben ab.',
+          'info',
+          6000
         );
+        setShowLegalWizard(wizardType);
+        // Kein onStartFix: es wurde noch nichts behoben, nur der Assistent geöffnet.
+        return;
       } else {
         // ✅ TECHNISCHE FIXES: Batch-Fix API nutzen
         let result: any;
@@ -195,7 +197,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-xl font-bold text-white">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
                     {group.title}
                   </h3>
                   
@@ -213,7 +215,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                   )}
                 </div>
                 
-                <p className="text-sm text-zinc-400 mt-1">
+                <p className="text-sm text-gray-600 dark:text-zinc-400 mt-1">
                   {group.description}
                 </p>
               </div>
@@ -242,7 +244,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
             {/* Expand Button */}
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors text-sm font-medium"
+              className="flex items-center gap-2 px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-900 dark:text-white rounded-lg transition-colors text-sm font-medium"
             >
               {isExpanded ? (
                 <>
@@ -263,12 +265,12 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
         {group.completed_count > 0 && (
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-zinc-400">Fortschritt</span>
-              <span className="text-sm font-semibold text-white">
+              <span className="text-sm text-gray-600 dark:text-zinc-400">Fortschritt</span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">
                 {group.completed_count} / {group.total_count} behoben
               </span>
             </div>
-            <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+            <div className="h-2 dark:bg-zinc-800 bg-gray-50 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-500"
                 style={{ width: `${progress}%` }}
@@ -285,15 +287,12 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
               <div className="flex items-start gap-3">
                 <FileText className="w-5 h-5 text-blue-400 mt-0.5" />
                 <div>
-                  <p className="text-sm text-white font-medium mb-1">
-                    {legalDocumentType === 'impressum' ? 'Impressum erstellen' : 'Datenschutzerklärung erstellen'}
+                  <p className="text-sm text-gray-900 dark:text-white font-medium mb-1">
+                    {legalDocumentType && DOC_LABELS[legalDocumentType].title}
                   </p>
-                  <p className="text-xs text-zinc-400">
-                    Unser Assistent führt Sie durch alle notwendigen Angaben und erstellt 
-                    {legalDocumentType === 'impressum' 
-                      ? ' ein rechtssicheres Impressum nach § 5 TMG' 
-                      : ' eine DSGVO-konforme Datenschutzerklärung'
-                    } basierend auf Ihrer Website.
+                  <p className="text-xs text-gray-600 dark:text-zinc-400">
+                    Unser Assistent führt Sie durch alle notwendigen Angaben und erstellt{' '}
+                    {legalDocumentType && DOC_LABELS[legalDocumentType].basis} basierend auf Ihrer Website.
                   </p>
                 </div>
               </div>
@@ -301,12 +300,12 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
             
             {/* Wizard-Button */}
             <Button
-              onClick={() => setShowLegalWizard(legalDocumentType)}
+              onClick={() => legalDocumentType && setShowLegalWizard(legalDocumentType)}
               className="w-full gap-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-3"
               size="lg"
             >
               <FileText className="w-5 h-5" />
-              {legalDocumentType === 'impressum' ? 'Impressum Generator starten' : 'Datenschutz Generator starten'}
+              {legalDocumentType && DOC_LABELS[legalDocumentType].cta}
             </Button>
           </div>
         ) : (
@@ -334,7 +333,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
 
       {/* Expanded Content: Issue Cards */}
       {isExpanded && (
-        <div className="border-t border-zinc-800/50 bg-black/20">
+        <div className="border-t dark:border-zinc-800/50 border-gray-200 bg-black/20">
           <div className="p-6 space-y-4">
             {/* Parent Issue (if exists) */}
             {group.parent_issue && (
@@ -378,7 +377,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                 {hasMore && !showAllIssues && (
                   <button
                     onClick={() => setShowAllIssues(true)}
-                    className="mt-4 w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    className="mt-4 w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-900 dark:text-white rounded-lg text-sm font-medium transition-colors"
                   >
                     Zeige {(group.sub_issues ?? []).length - 3} weitere Problem{(group.sub_issues ?? []).length - 3 > 1 ? 'e' : ''}
                   </button>
@@ -387,7 +386,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                 {showAllIssues && hasMore && (
                   <button
                     onClick={() => setShowAllIssues(false)}
-                    className="mt-4 w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    className="mt-4 w-full px-4 py-2 dark:bg-zinc-800 bg-gray-50 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-900 dark:text-white rounded-lg text-sm font-medium transition-colors"
                   >
                     Weniger anzeigen
                   </button>
@@ -400,42 +399,21 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
 
       {/* ✅ Legal Document Generator Modal/Overlay */}
       {showLegalWizard && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
-            onClick={() => setShowLegalWizard(null)}
-          />
-          
-          {/* Modal Content */}
-          <div className="relative min-h-screen flex items-start justify-center p-4 pt-10 pb-20">
-            <div className="relative w-full max-w-4xl bg-zinc-950 rounded-2xl shadow-2xl border border-zinc-800">
-              {/* Close Button */}
-              <button
-                onClick={() => setShowLegalWizard(null)}
-                className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors z-10"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              
-              {/* Wizard Content */}
-              <div className="p-6">
-                <LegalDocumentGenerator
-                  documentType={showLegalWizard}
-                  onComplete={(data) => {
-                    setShowLegalWizard(null);
-                    showToast(
-                      `✅ ${showLegalWizard === 'impressum' ? 'Impressum' : 'Datenschutzerklärung'} erfolgreich erstellt!`,
-                      'success',
-                      5000
-                    );
-                  }}
-                  onBack={() => setShowLegalWizard(null)}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+        <LegalWizardModal
+          documentType={showLegalWizard}
+          onClose={() => setShowLegalWizard(null)}
+          onComplete={() => {
+            const label = DOC_LABELS[showLegalWizard].title.replace(' erstellen', '');
+            setShowLegalWizard(null);
+            // Bewusst kein "Ersetzen Sie den alten Text": das Dokument
+            // ist ungeprüft und muss erst vom Nutzer kontrolliert werden.
+            showToast(
+              `${label} erstellt. Bitte prüfen Sie das Dokument, bevor Sie es veröffentlichen.`,
+              'success',
+              6000
+            );
+          }}
+        />
       )}
     </div>
   );

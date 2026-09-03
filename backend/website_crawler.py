@@ -5,9 +5,8 @@ Mit Caching-Support für bessere Performance und geringere API-Kosten
 """
 
 import aiohttp
-import asyncio
 from bs4 import BeautifulSoup
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 from urllib.parse import urljoin, urlparse
 from datetime import datetime, timedelta
 import asyncpg
@@ -22,7 +21,7 @@ logger = logging.getLogger(__name__)
 class WebsiteCrawler:
     def __init__(self, timeout: int = 30, db_pool: Optional[asyncpg.Pool] = None):
         self.timeout = timeout
-        self.user_agent = 'Mozilla/5.0 (compatible; ComplyoBot/1.0; +https://complyo.tech/bot)'
+        self.user_agent = 'Mozilla/5.0 (compatible; ComplyoBot/1.0; +https://complyo.de/bot)'
         self.db_pool = db_pool
         self.cache_max_age_hours = 168  # 7 days
     

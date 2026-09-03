@@ -3,8 +3,7 @@ Complyo Data Validator
 Validates scan completeness and triggers intelligent re-scans with specific parameters
 """
 
-from typing import Dict, List, Any
-import re
+from typing import Dict, Any
 
 
 class DataValidator:

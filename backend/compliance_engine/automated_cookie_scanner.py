@@ -9,10 +9,8 @@ import asyncio
 import hashlib
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -88,40 +86,9 @@ COOKIE_DB: dict[str, dict] = {
     "csrftoken":     {"provider": "Django",           "category": "necessary",  "duration": "1 Jahr",     "purpose": "CSRF-Schutz"},
 }
 
-# Script URL → Service Mapping
-SCRIPT_SERVICE_MAP: list[tuple[str, dict]] = [
-    ("google-analytics.com/analytics.js",    {"name": "Google Analytics (UA)",  "category": "analytics",  "provider": "Google"}),
-    ("google-analytics.com/ga.js",           {"name": "Google Analytics (legacy)", "category": "analytics", "provider": "Google"}),
-    ("googletagmanager.com/gtm.js",          {"name": "Google Tag Manager",     "category": "analytics",  "provider": "Google"}),
-    ("googletagmanager.com/gtag/js",         {"name": "Google Tag (GA4)",       "category": "analytics",  "provider": "Google"}),
-    ("connect.facebook.net",                 {"name": "Meta Pixel",             "category": "marketing",  "provider": "Meta"}),
-    ("static.hotjar.com",                    {"name": "Hotjar",                 "category": "analytics",  "provider": "Hotjar"}),
-    ("clarity.ms/tag",                       {"name": "Microsoft Clarity",      "category": "analytics",  "provider": "Microsoft"}),
-    ("bat.bing.com",                         {"name": "Microsoft Ads (UET)",    "category": "marketing",  "provider": "Microsoft"}),
-    ("snap.licdn.com",                       {"name": "LinkedIn Insight Tag",   "category": "marketing",  "provider": "LinkedIn"}),
-    ("ads.linkedin.com",                     {"name": "LinkedIn Ads",           "category": "marketing",  "provider": "LinkedIn"}),
-    ("analytics.tiktok.com",                 {"name": "TikTok Pixel",           "category": "marketing",  "provider": "TikTok"}),
-    ("sc-static.net",                        {"name": "Snapchat Pixel",         "category": "marketing",  "provider": "Snapchat"}),
-    ("js.hs-scripts.com",                    {"name": "HubSpot Tracking",       "category": "analytics",  "provider": "HubSpot"}),
-    ("js.hs-analytics.net",                  {"name": "HubSpot Analytics",      "category": "analytics",  "provider": "HubSpot"}),
-    ("widget.intercom.io",                   {"name": "Intercom Chat",          "category": "functional", "provider": "Intercom"}),
-    ("js.intercomcdn.com",                   {"name": "Intercom",               "category": "functional", "provider": "Intercom"}),
-    ("cdn.segment.com",                      {"name": "Segment",                "category": "analytics",  "provider": "Segment"}),
-    ("cdn.amplitude.com",                    {"name": "Amplitude",              "category": "analytics",  "provider": "Amplitude"}),
-    ("cdn.mxpnl.com",                        {"name": "Mixpanel",               "category": "analytics",  "provider": "Mixpanel"}),
-    ("script.hotjar.com",                    {"name": "Hotjar",                 "category": "analytics",  "provider": "Hotjar"}),
-    ("cdn.logrocket.io",                     {"name": "LogRocket",              "category": "analytics",  "provider": "LogRocket"}),
-    ("fullstory.com/s/fs.js",                {"name": "FullStory",              "category": "analytics",  "provider": "FullStory"}),
-    ("maps.googleapis.com",                  {"name": "Google Maps",            "category": "functional", "provider": "Google"}),
-    ("fonts.googleapis.com",                 {"name": "Google Fonts",           "category": "functional", "provider": "Google"}),
-    ("youtube.com/embed",                    {"name": "YouTube",                "category": "marketing",  "provider": "Google"}),
-    ("vimeo.com/video",                      {"name": "Vimeo",                  "category": "marketing",  "provider": "Vimeo"}),
-    ("app.crisp.chat",                       {"name": "Crisp Chat",             "category": "functional", "provider": "Crisp"}),
-    ("crisp.chat",                           {"name": "Crisp Chat",             "category": "functional", "provider": "Crisp"}),
-    ("js.driftt.com",                        {"name": "Drift Chat",             "category": "functional", "provider": "Drift"}),
-    ("cdn.cookielaw.org",                    {"name": "OneTrust CMP",           "category": "necessary",  "provider": "OneTrust"}),
-    ("consent.cookiebot.com",                {"name": "Cookiebot CMP",          "category": "necessary",  "provider": "Usercentrics"}),
-]
+# Script URL -> Service Mapping — SSOT liegt in tracker_catalog.py
+# (Re-Export hier, damit bestehende Importe weiter funktionieren).
+from compliance_engine.tracker_catalog import SCRIPT_SERVICE_MAP  # noqa: F401
 
 
 @dataclass
@@ -208,7 +175,7 @@ class CookieScanner:
                     ]
                 )
                 context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (compatible; ComplyoScanner/2.0; +https://complyo.tech/scanner)",
+                    user_agent="Mozilla/5.0 (compatible; ComplyoScanner/2.0; +https://complyo.de/scanner)",
                     locale="de-DE",
                     timezone_id="Europe/Berlin",
                     ignore_https_errors=True,
@@ -226,7 +193,16 @@ class CookieScanner:
 
                 for page_url in pages_to_scan:
                     try:
-                        await page.goto(page_url, wait_until="networkidle", timeout=self.timeout_ms)
+                        # DOM-ready statt networkidle: Seiten mit Polling/Chat-Widgets erreichen
+                        # nie Netzwerkruhe und liefen hier bei jedem Scan in den vollen Timeout.
+                        # Netzwerkruhe bekommt danach eine begrenzte Chance — Tracker/Inhalte,
+                        # die bis dahin nicht geladen sind, sieht der Scan eben nicht.
+                        await page.goto(page_url, wait_until="domcontentloaded", timeout=self.timeout_ms)
+                        try:
+                            # Tracker brauchen einen Moment zum Feuern — aber begrenzt.
+                            await page.wait_for_load_state("networkidle", timeout=10000)
+                        except Exception:
+                            pass
                         await asyncio.sleep(1.5)
                     except Exception as e:
                         logger.warning(f"[Scanner] Fehler beim Laden von {page_url}: {e}")
@@ -416,7 +392,11 @@ def _guess_category(name: str) -> str:
         return "necessary"
     if any(x in n for x in ("lang", "theme", "pref", "locale", "currency", "cart")):
         return "functional"
-    return "necessary"
+    # Unbekannte Cookies duerfen NICHT als "necessary" durchgehen — necessary
+    # wird vor Consent geladen. uncategorized wird downstream wie marketing
+    # behandelt (consent-pflichtig, fail-safe). Gleiches Verhalten wie
+    # deep_cookie_scanner.
+    return "uncategorized"
 
 
 # Synchroner Wrapper für nicht-async Kontexte

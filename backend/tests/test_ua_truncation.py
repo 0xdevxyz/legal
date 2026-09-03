@@ -1,5 +1,4 @@
 """Unit tests for truncate_user_agent (AUDIT-03 — DSGVO-compliant UA truncation)."""
-import pytest
 from cookie_compliance_routes import truncate_user_agent
 
 

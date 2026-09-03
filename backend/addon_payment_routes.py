@@ -2,10 +2,10 @@
 Add-On Payment Routes - ComploAI Guard & Priority Support
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.security import HTTPBearer
 from pydantic import BaseModel
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 import stripe
 import os
 import logging
@@ -13,8 +13,8 @@ import json
 import smtplib
 from email.mime.text import MIMEText
 
-from auth_service import AuthService
 from database_service import db_service
+from dependencies import get_current_user
 
 router = APIRouter(prefix="/api/addons", tags=["Add-Ons"])
 security = HTTPBearer()
@@ -43,11 +43,13 @@ def _notify_sales(subject: str, body: str) -> None:
     except Exception as e:
         logger.error(f"Failed to send sales notification: {e}")
 
-async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Get current user ID from JWT token"""
-    from auth_routes import get_current_user
-    user = await get_current_user(credentials)
-    return user["id"]
+async def get_current_user_id(current_user: dict = Depends(get_current_user)):
+    """
+    Get current user ID. Nutzt die kanonische Auth-Dependency korrekt via Depends
+    (vorher wurde get_current_user manuell mit 'credentials' aufgerufen, wodurch der
+    request-Parameter falsch belegt war → 'Depends' object has no attribute 'credentials').
+    """
+    return current_user["id"]
 
 # Stripe Configuration
 stripe.api_key = os.getenv("STRIPE_API_KEY", "")
@@ -55,7 +57,7 @@ _addon_webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET_ADDONS", "")
 if not _addon_webhook_secret:
     raise RuntimeError("STRIPE_WEBHOOK_SECRET_ADDONS environment variable is required!")
 STRIPE_WEBHOOK_SECRET = _addon_webhook_secret
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.complyo.tech")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.complyo.de")
 
 # ==================== PRICING CONFIGURATION ====================
 
@@ -83,7 +85,7 @@ MONTHLY_ADDONS = {
             "business": {"ai_systems": 25},
             "enterprise": {"ai_systems": -1}
         },
-        "stripe_price_id": os.getenv("STRIPE_PRICE_COMPLOAI_GUARD", "price_1234"),  # Set in Stripe Dashboard
+        "stripe_price_id": os.getenv("STRIPE_PRICE_COMPLOAI_GUARD"),
         "badge": "NEW",
         "discount_text": "Spare bis zu 50.000€ Bußgeld",
         "compatible_plans": ["starter", "professional", "business", "enterprise"]
@@ -102,7 +104,7 @@ MONTHLY_ADDONS = {
             "Monatliches Compliance-Review (30 Min)",
             "Priorisierte Feature-Requests"
         ],
-        "stripe_price_id": os.getenv("STRIPE_PRICE_PRIORITY_SUPPORT", "price_5678"),  # Set in Stripe Dashboard
+        "stripe_price_id": os.getenv("STRIPE_PRICE_PRIORITY_SUPPORT"),
         "badge": "PREMIUM",
         "compatible_plans": ["starter", "professional", "business", "enterprise"]
     },
@@ -119,7 +121,7 @@ MONTHLY_ADDONS = {
         "limits_by_plan": {
             "agency": {"extra_sites": 25},
         },
-        "stripe_price_id": os.getenv("STRIPE_PRICE_AGENCY_SITES_EXTRA", "price_agency_extra"),
+        "stripe_price_id": os.getenv("STRIPE_PRICE_AGENCY_SITES_EXTRA"),
         "badge": "ADD-ON",
         "compatible_plans": ["agency"],
     }
@@ -140,7 +142,7 @@ ONETIME_ADDONS = {
             "Follow-up nach 3 Monaten"
         ],
         "duration": "2-3 Wochen",
-        "stripe_price_id": os.getenv("STRIPE_PRICE_EXPERT_AUDIT", "price_9999")
+        "stripe_price_id": os.getenv("STRIPE_PRICE_EXPERT_AUDIT")
     },
     "implementation_support": {
         "name": "AI Act Implementation Support",
@@ -155,7 +157,7 @@ ONETIME_ADDONS = {
             "Email-Support während Laufzeit"
         ],
         "duration": "4 Wochen",
-        "stripe_price_id": os.getenv("STRIPE_PRICE_IMPLEMENTATION", "price_8888")
+        "stripe_price_id": os.getenv("STRIPE_PRICE_IMPLEMENTATION")
     },
     "custom_integration": {
         "name": "Custom Integration",
@@ -170,7 +172,7 @@ ONETIME_ADDONS = {
             "3 Monate Wartung inklusive"
         ],
         "duration": "4-6 Wochen",
-        "stripe_price_id": os.getenv("STRIPE_PRICE_CUSTOM_INTEGRATION", "price_7777")
+        "stripe_price_id": os.getenv("STRIPE_PRICE_CUSTOM_INTEGRATION")
     }
 }
 
@@ -178,7 +180,72 @@ ONETIME_ADDONS = {
 
 class AddAddonRequest(BaseModel):
     addon_key: str
-    user_plan: Optional[str] = "professional"  # To determine limits
+    # DEPRECATED und WIRKUNGSLOS: Der Plan wird ausschliesslich serverseitig aus der
+    # DB ermittelt (resolve_addon_plan). Frueher bestimmte dieses Body-Feld die Limits
+    # — ein Professional-Kunde konnte "enterprise" senden und unbegrenzte Limits zum
+    # Professional-Preis bekommen (Rechteausweitung). Das Feld bleibt nur im Model,
+    # damit der bestehende Frontend-Aufruf (dashboard-react/src/lib/ai-compliance-api.ts)
+    # nicht mit einem Validierungsfehler bricht. Es wird nirgends gelesen.
+    user_plan: Optional[str] = None
+
+
+# ==================== PLAN-AUFLÖSUNG (serverseitig) ====================
+
+# Namensraum-Mapping: Das übrige System speichert in `subscriptions.plan_type`
+# Werte wie free/single/pro/premium/agency/expert/update/enterprise/complete
+# (vgl. stripe_routes.PLAN_WEBSITES_MAX und deep_cookie_scanner_routes.check_premium_plan).
+# Der Add-on-Katalog oben nutzt dagegen starter/professional/business/enterprise
+# (+ agency für agency_sites_extra). Diese Tabelle übersetzt explizit.
+PLAN_TYPE_TO_ADDON_PLAN = {
+    # kein/kleinster bezahlter Umfang → starter
+    "free": "starter",
+    "single": "starter",
+    "update": "starter",
+    "starter": "starter",
+    # Pro-Ebene
+    "pro": "professional",
+    "professional": "professional",
+    # gehobene Einzelplätze
+    "premium": "business",
+    "business": "business",
+    "expert": "business",
+    "complete": "business",
+    # Agentur / Enterprise
+    "agency": "agency",
+    "enterprise": "enterprise",
+}
+
+# Unbekannter/fehlender Plan → konservativster (kleinster) Limit-Satz, nie der grösste.
+FALLBACK_ADDON_PLAN = "starter"
+
+
+async def resolve_addon_plan(user_id: int) -> str:
+    """
+    Ermittelt den Add-on-Katalog-Plan des Users serverseitig aus der DB.
+
+    Quelle: aktive Zeile in `subscriptions` (neueste zuerst) — dieselbe Quelle,
+    aus der deep_cookie_scanner_routes.check_premium_plan sein Premium-Gate zieht.
+    Kein Vertrauen in Client-Angaben. Bei fehlender/unbekannter Subscription oder
+    DB-Fehler gilt der kleinste Limit-Satz.
+    """
+    plan_type = None
+    try:
+        async with db_service.get_connection() as conn:
+            plan_type = await conn.fetchval(
+                """
+                SELECT plan_type FROM subscriptions
+                WHERE user_id = $1 AND status = 'active'
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                user_id,
+            )
+    except Exception as e:
+        logger.error(f"Plan-Auflösung für user {user_id} fehlgeschlagen: {e}")
+        return FALLBACK_ADDON_PLAN
+
+    if not plan_type:
+        return FALLBACK_ADDON_PLAN
+    return PLAN_TYPE_TO_ADDON_PLAN.get(str(plan_type).strip().lower(), FALLBACK_ADDON_PLAN)
 
 class CheckoutResponse(BaseModel):
     checkout_url: str
@@ -251,10 +318,17 @@ async def subscribe_to_addon(
         user_row = await conn.fetchrow("SELECT email FROM users WHERE id = $1", user_id)
     user_email = user_row["email"] if user_row else ""
 
-    # Determine limits based on user plan
-    user_plan = data.user_plan or "professional"
+    # Limits ausschliesslich aus dem serverseitig ermittelten Plan ableiten.
+    # data.user_plan wird bewusst ignoriert (siehe AddAddonRequest).
+    user_plan = await resolve_addon_plan(user_id)
     limits = addon.get("limits_by_plan", {}).get(user_plan, {})
     
+    if not addon.get('stripe_price_id'):
+        raise HTTPException(
+            status_code=503,
+            detail=f"Add-on '{addon_key}' ist noch nicht buchbar: keine Stripe-Preis-ID konfiguriert.",
+        )
+
     # Create Stripe checkout session
     try:
         checkout_session = stripe.checkout.Session.create(
@@ -312,6 +386,12 @@ async def purchase_onetime_addon(
     async with db_service.get_connection() as conn:
         user_row = await conn.fetchrow("SELECT email FROM users WHERE id = $1", user_id)
     user_email = user_row["email"] if user_row else ""
+
+    if not addon.get('stripe_price_id'):
+        raise HTTPException(
+            status_code=503,
+            detail=f"Add-on '{addon_key}' ist noch nicht buchbar: keine Stripe-Preis-ID konfiguriert.",
+        )
 
     # Create Stripe checkout session for one-time payment
     try:
@@ -471,6 +551,24 @@ async def handle_addon_checkout_completed(session):
         )
         
         logger.info(f"Created monthly add-on subscription: {addon_key} for user {user_id}")
+
+        # Site-Kontingent-Add-ons müssen das Website-Limit auch tatsächlich erhöhen.
+        # Bisher legte der Webhook nur eine user_addons-Zeile an — der Kunde zahlte
+        # 200€/Monat und bekam keine einzige zusätzliche Site. Gleiches additives
+        # Muster wie stripe_routes._apply_plan_activation (agency_extra +1, agency2 +25);
+        # plan_type bleibt unverändert.
+        extra_sites = limits.get("extra_sites")
+        if extra_sites:
+            try:
+                async with db_service.get_connection() as conn:
+                    await conn.execute(
+                        "UPDATE user_limits SET websites_max = COALESCE(websites_max, 0) + $2 "
+                        "WHERE user_id = $1",
+                        int(user_id), int(extra_sites),
+                    )
+                logger.info(f"websites_max um {extra_sites} erhöht (user={user_id}, addon={addon_key})")
+            except Exception as e:
+                logger.error(f"Konnte websites_max für user {user_id} nicht erhöhen: {e}")
     
     else:
         # One-time purchase — notify sales team

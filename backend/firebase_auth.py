@@ -100,7 +100,7 @@ async def verify_firebase_token(id_token: str) -> Dict:
         print(f"Firebase token verification error: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Token verification failed: {str(e)}"
+            detail="Token verification failed"
         )
 
 async def get_firebase_user(uid: str) -> Optional[Dict]:

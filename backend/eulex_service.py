@@ -5,13 +5,11 @@ Fokus auf: DSGVO, ePrivacy, AI Act, Digital Services Act
 """
 
 import aiohttp
-import asyncio
 import asyncpg
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import xml.etree.ElementTree as ET
 import logging
-import re
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +42,7 @@ class EULexService:
         if not self.session or self.session.closed:
             self.session = aiohttp.ClientSession(
                 headers={
-                    'User-Agent': 'ComplyoBot/1.0 (+https://complyo.tech)',
+                    'User-Agent': 'ComplyoBot/1.0 (+https://complyo.de)',
                     'Accept': 'application/sparql-results+xml, application/xml'
                 }
             )

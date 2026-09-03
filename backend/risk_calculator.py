@@ -10,6 +10,114 @@ import time
 
 logger = logging.getLogger(__name__)
 
+# --- Risikodarstellung -------------------------------------------------------
+#
+# In der Risikomatrix stehen zwei voellig verschiedene Groessen, die bis zum
+# 03.09.2026 in einer einzigen Zahl vermengt wurden:
+#
+#   1. Der GESETZLICHE RAHMEN - was das Gesetz im Hoechstfall zulaesst
+#      (Art. 83 DSGVO: bis 50.000 EUR in der Matrix). Das ist eine belegbare
+#      Tatsache, aber keine Prognose fuer einen Handwerksbetrieb.
+#   2. Das REALISTISCHE KOSTENRISIKO - was den Betrieb tatsaechlich trifft.
+#      Das ist in aller Regel eine Abmahnung: Streitwert plus Anwaltskosten,
+#      in der Praxis 1.000-8.000 EUR.
+#
+# Aufsummiert ergab (1) fuer die leere Platzhalterseite example.com 91.800 EUR.
+# Eine solche Zahl entspricht keiner Bussgeldpraxis und macht ausgerechnet
+# einen Compliance-Anbieter nach Paragraph 5 UWG selbst angreifbar. Sie einfach
+# zu deckeln haette es nicht besser gemacht: dann steht auf fast jeder Seite
+# derselbe Deckelwert, und die Zahl sagt gar nichts mehr.
+#
+# Deshalb werden beide Groessen getrennt ausgewiesen. Die Schlagzeile ist das
+# Kostenrisiko; der gesetzliche Rahmen steht daneben, als das, was er ist.
+
+# Typische Abmahnkosten fuer eine KMU-Website (Streitwert + Anwaltskosten).
+TYPISCHE_ABMAHNUNG_MIN_EUR = 1_000
+TYPISCHE_ABMAHNUNG_MAX_EUR = 8_000
+
+# Sicherheitsnetz. Wird im Normalfall nicht erreicht - wenn doch, stimmt etwas
+# mit den Eingangsdaten nicht, und die Zahl darf trotzdem nicht entgleisen.
+KMU_RISIKO_MAX_EUR = 25_000
+KMU_RISIKO_MIN_DECKEL_EUR = 10_000
+
+# Zuschlag fuer die Breite der Betroffenheit: wer mehrere Bereiche zugleich
+# verletzt, bekommt dafuer trotzdem in aller Regel EINE Abmahnung - aber mit
+# hoeherem Streitwert. Kritische Bereiche wiegen schwerer. Gedeckelt bei +60 %.
+ZUSCHLAG_JE_KRITISCHEM_BEREICH = 0.20
+ZUSCHLAG_JE_WEITEREM_BEREICH = 0.10
+ZUSCHLAG_MAX = 0.60
+
+
+def _spanne(min_eur: int, max_eur: int) -> str:
+    if min_eur == max_eur:
+        return f"{max_eur:,}€".replace(',', '.')
+    return f"{min_eur:,}€ - {max_eur:,}€".replace(',', '.')
+
+
+def gesamtrisiko_aus_kategorien(kategorien: list) -> Dict[str, Any]:
+    """Fasst Kategorierisiken zusammen - ohne zu addieren.
+
+    Args:
+        kategorien: Kategoriedicts mit 'detected', 'severity', 'risk_min', 'risk_max'
+
+    Returns:
+        dict mit
+          risk_min / risk_max / risk_range  - realistisches Kostenrisiko
+          rahmen_max / rahmen_range         - gesetzlicher Hoechstrahmen, getrennt
+          bereiche_betroffen, bereiche_kritisch, gedeckelt
+    """
+    betroffen = [k for k in kategorien if k.get('detected')]
+
+    if not betroffen:
+        return {
+            'risk_min': 0,
+            'risk_max': 0,
+            'risk_range': None,
+            'rahmen_max': 0,
+            'rahmen_range': None,
+            'bereiche_betroffen': 0,
+            'bereiche_kritisch': 0,
+            'gedeckelt': False,
+        }
+
+    kritisch = sum(1 for k in betroffen if k.get('severity') == 'critical')
+    weitere = len(betroffen) - kritisch
+
+    zuschlag = 1.0 + min(
+        ZUSCHLAG_MAX,
+        ZUSCHLAG_JE_KRITISCHEM_BEREICH * kritisch
+        + ZUSCHLAG_JE_WEITEREM_BEREICH * weitere,
+    )
+
+    risk_min = int(TYPISCHE_ABMAHNUNG_MIN_EUR * zuschlag)
+    risk_max = int(TYPISCHE_ABMAHNUNG_MAX_EUR * zuschlag)
+
+    gedeckelt = risk_max > KMU_RISIKO_MAX_EUR
+    if gedeckelt:
+        risk_max = KMU_RISIKO_MAX_EUR
+        if risk_min > KMU_RISIKO_MIN_DECKEL_EUR:
+            risk_min = KMU_RISIKO_MIN_DECKEL_EUR
+
+    if risk_min > risk_max:
+        risk_min = risk_max
+
+    # Der gesetzliche Rahmen wird NICHT summiert und NICHT gedeckelt - er ist
+    # eine Tatsache, kein Schaetzwert. Ausgewiesen wird der hoechste Rahmen
+    # unter den betroffenen Bereichen.
+    rahmen_max = max(int(k.get('risk_max') or 0) for k in betroffen)
+
+    return {
+        'risk_min': risk_min,
+        'risk_max': risk_max,
+        'risk_range': _spanne(risk_min, risk_max),
+        'rahmen_max': rahmen_max,
+        'rahmen_range': f"bis {rahmen_max:,}€".replace(',', '.') if rahmen_max else None,
+        'bereiche_betroffen': len(betroffen),
+        'bereiche_kritisch': kritisch,
+        'gedeckelt': gedeckelt,
+    }
+
+
 class RiskCalculator:
     def __init__(self, db_pool: asyncpg.Pool, cache_ttl_seconds: int = 300):
         """
@@ -334,10 +442,10 @@ class RiskCalculator:
         # Eine einzelne Abmahnung kostet in der Praxis meist 1.000€ - 8.000€ (Streitwert + Anwaltskosten).
         # Bei mehreren Verstößen summieren sich Abmahnungen/Bußgelder, bleiben für eine
         # KMU-Website aber im realistischen Rahmen — kein utopisches Konzern-Bußgeld.
-        if total_max > 25000:  # Mehr als 25k€ ist für eine KMU-Website unrealistisch
-            total_max = 25000
-            if total_min > 10000:
-                total_min = 10000
+        if total_max > KMU_RISIKO_MAX_EUR:
+            total_max = KMU_RISIKO_MAX_EUR
+            if total_min > KMU_RISIKO_MIN_DECKEL_EUR:
+                total_min = KMU_RISIKO_MIN_DECKEL_EUR
         
         return {
             'total_risk_min': total_min,

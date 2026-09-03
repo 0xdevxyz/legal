@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { X, Check, Zap, CreditCard, Lock } from 'lucide-react';
 import { createStripeCheckout } from '@/lib/api';
+import { ClientOnlyPortal } from '@/components/ClientOnlyPortal';
 
 interface PaywallModalProps {
   isOpen: boolean;
@@ -48,13 +49,17 @@ export const StripePaywallModal: React.FC<PaywallModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Per Portal an <body>: die Issue-Karten stecken in einem Container mit
+  // backdrop-filter, der sonst zum Bezugsrahmen für `position: fixed` wird und
+  // das Overlay auf Kartengröße einsperrt.
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-2xl max-w-md w-full border-2 border-yellow-500/50 shadow-2xl relative">
+    <ClientOnlyPortal>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full border-2 border-yellow-500/50 shadow-2xl relative">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+          className="absolute top-4 right-4 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
           aria-label="Schließen"
         >
           <X className="w-6 h-6" />
@@ -63,10 +68,10 @@ export const StripePaywallModal: React.FC<PaywallModalProps> = ({
         {/* Header */}
         <div className="text-center p-8 pb-6">
           <div className="text-5xl mb-4 animate-bounce">🎉</div>
-          <h2 className="text-2xl font-bold text-white mb-2">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
             Ihr kostenloser Fix wurde genutzt!
           </h2>
-          <p className="text-gray-400">
+          <p className="text-gray-600 dark:text-gray-400">
             Upgraden Sie jetzt für unbegrenzte Fixes an dieser Domain
           </p>
           {domain && (
@@ -163,13 +168,14 @@ export const StripePaywallModal: React.FC<PaywallModalProps> = ({
           <button
             onClick={onClose}
             disabled={loading}
-            className="w-full text-gray-400 hover:text-white text-sm py-2 transition-colors"
+            className="w-full text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm py-2 transition-colors"
           >
             Später
           </button>
         </div>
       </div>
     </div>
+    </ClientOnlyPortal>
   );
 };
 

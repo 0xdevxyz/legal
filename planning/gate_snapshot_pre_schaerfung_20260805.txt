@@ -1,0 +1,6 @@
+63|abo-button-zahlungspflicht-kennzeichnung|{"keywords_any": ["abo", "abonnement", "subscription", "monatlich", "jährlich", "wiederkehrend", "mitgliedschaft", "membership"]}
+73|affiliate-link-kennzeichnung|{"keywords_any": ["affiliate", "partner", "provision", "empfehlung", "produktlink", "amazon", "awin", "digistore"]}
+89|affiliate-link-werbekennzeichnung|{"keywords_any": ["affiliate", "partner", "empfehlung", "produkttest", "review", "sponsored"]}
+102|abo-button-laufzeit-hinweis|{"keywords_any": ["abo", "abonnement", "subscription", "mitgliedschaft", "monatlich", "jährlich", "laufzeit"]}
+178|dsa-empfehlungssystem-transparenz|{"keywords_any": ["empfehlung", "für dich", "personalisiert", "recommended", "based on your"]}
+383|greenwashing-nachweispflicht-umweltaussagen|{"keywords_any": ["umweltfreundlich", "nachhaltig", "klimaneutral", "co2-neutral", "grün", "öko", "bio", "umweltschonend", "klimapositiv", "emissionsfrei"]}

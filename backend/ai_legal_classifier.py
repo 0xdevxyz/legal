@@ -20,7 +20,7 @@ import json
 import httpx
 import logging
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from enum import Enum
 from dataclasses import dataclass, asdict, field
 
@@ -535,7 +535,7 @@ WICHTIG:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://complyo.tech",
+            "HTTP-Referer": "https://complyo.de",
             "X-Title": "Complyo Legal Classifier"
         }
         

@@ -10,7 +10,6 @@ All tests use FastAPI TestClient + monkeypatch — zero live DB or file system d
 RED stage: tests fail with 404 until Task 3 implements the endpoints.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 from fastapi import FastAPI

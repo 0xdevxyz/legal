@@ -15,6 +15,9 @@ export const metadata: Metadata = {
   description: 'Automatische DSGVO, TTDSG & Barrierefreiheits-Compliance mit KI',
   keywords: ['DSGVO', 'TTDSG', 'Compliance', 'Website', 'KI', 'Automation'],
   authors: [{ name: 'Complyo Team' }],
+  // Das Dashboard ist eine eingeloggte Anwendung und gehoert nicht in den Index.
+  // Ohne das wurde app.complyo.de/register?plan=pro von Google indexiert.
+  robots: { index: false, follow: false },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -29,14 +32,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             __html: `
               (function() {
                 try {
+                  // One-time migration to the new light-by-default look: flips
+                  // any previously stored 'dark' to 'light' exactly once. The
+                  // theme toggle keeps working normally afterwards.
+                  var MIGRATION_KEY = 'complyo-theme-light-migration';
                   var theme = localStorage.getItem('complyo-theme');
+                  if (!localStorage.getItem(MIGRATION_KEY)) {
+                    theme = 'light';
+                    localStorage.setItem('complyo-theme', 'light');
+                    localStorage.setItem(MIGRATION_KEY, '1');
+                  }
                   if (!theme) {
-                    theme = 'dark';
-                    localStorage.setItem('complyo-theme', 'dark');
+                    theme = 'light';
+                    localStorage.setItem('complyo-theme', 'light');
                   }
                   document.documentElement.classList.add(theme);
                 } catch (e) {
-                  document.documentElement.classList.add('dark');
+                  document.documentElement.classList.add('light');
                 }
               })();
             `,

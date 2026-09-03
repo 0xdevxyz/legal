@@ -165,16 +165,9 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
       setAnalysisData(result);
       setScanResult(result);
 
-      // Update metrics
-      const criticalCount = Array.isArray(result.issues)
-        ? result.issues.filter((issue: any) => issue.severity === 'critical').length
-        : 0;
-
-      updateMetrics({
-        totalScore: result.compliance_score || 0,
-        criticalIssues: criticalCount,
-        websites: 1
-      });
+      // Bewusst keine Portfolio-Kennzahlen aus einem Einzelscan: Score und
+      // kritische Punkte dieser Seite stehen in currentWebsite/analysisData.
+      // `websites: 1` hat die Kachel dauerhaft auf 1/25 genagelt.
 
       // Move to results step
       setTimeout(() => {
@@ -377,7 +370,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
           <div className="bg-white rounded-2xl shadow-2xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <button
               onClick={handleSkip}
-              className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 transition-colors"
+              className="absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-400 hover:text-gray-600 transition-colors"
               aria-label="Onboarding überspringen"
             >
               <X className="w-5 h-5" />
@@ -393,7 +386,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
               Willkommen bei Complyo! 👋
             </h1>
             <p className="text-gray-500 text-center mb-8">
-              In 3 Schritten zu einer rechtssicheren Website
+              In 3 Schritten zu einer geprüften Website
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
@@ -437,7 +430,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
 
             <button
               onClick={handleSkip}
-              className="w-full mt-3 py-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
+              className="w-full mt-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-600 transition-colors"
             >
               Überspringen – ich kenne Complyo bereits
             </button>
@@ -473,7 +466,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
                   Welche Website möchten Sie prüfen?
                 </label>
                 <div className="relative">
-                  <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-600 dark:text-gray-400" />
                   <input
                     type="text"
                     id="onboarding-website-url"
@@ -674,12 +667,12 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
                               <p className={`font-medium ${catInfo.color}`}>{catInfo.label}</p>
                               <p className="text-sm text-gray-600">
                                 {cat.criticalCount > 0 && <span className="text-red-600">{cat.criticalCount} kritisch</span>}
-                                {cat.criticalCount > 0 && cat.warningCount > 0 && <span className="text-gray-400"> • </span>}
+                                {cat.criticalCount > 0 && cat.warningCount > 0 && <span className="text-gray-600 dark:text-gray-400"> • </span>}
                                 {cat.warningCount > 0 && <span className="text-yellow-600">{cat.warningCount} Warnung</span>}
                               </p>
                             </div>
                           </div>
-                          <span className="text-gray-400 font-semibold">{cat.issues.length}</span>
+                          <span className="text-gray-600 dark:text-gray-400 font-semibold">{cat.issues.length}</span>
                         </div>
                       );
                     })}

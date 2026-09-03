@@ -18,19 +18,24 @@ Pflicht-Seiten, ...).
 """
 
 import re
-import ssl
 import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse, urljoin
 
-import aiohttp
-import certifi
 from bs4 import BeautifulSoup
 
 from compliance_engine.checks.shop_check import detect_shop
+from compliance_engine.sicherer_abruf import hole
 
 logger = logging.getLogger(__name__)
+
+from compliance_engine.check_spec_rules import (
+    detection_is_weak,
+    gate_keyword_too_short,
+    MIN_GATE_KEYWORD_LEN,
+    AUTO_CHECK_RISK_CAP as _RISK_CAP,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +112,51 @@ def init_declarative_check_registry(db_pool) -> DeclarativeCheckRegistry:
 # ---------------------------------------------------------------------------
 # Gate-Auswertung: ist die Prüfung für diese Seite relevant?
 # ---------------------------------------------------------------------------
+def _sichtbarer_text(soup: BeautifulSoup, html_lower: str) -> str:
+    """
+    Sichtbarer Seitentext in Kleinschreibung — ohne Skripte, Stile und Attribute.
+
+    Das Gate fragt "geht es auf dieser Seite fachlich um X?". Ein Klassenname
+    wie "partner-logo" oder eine JS-Variable "review" beantwortet das nicht.
+    """
+    try:
+        kopie = soup
+        text = kopie.get_text(separator=" ")
+    except Exception:
+        return html_lower
+    return " ".join(text.split()).lower()
+
+
+# Bis zu dieser Laenge matcht ein Keyword nur als GANZES Wort. Grund (Audit
+# 2026-08): die Wortanfang-Regel machte aus dem Gate-Keyword "ki" einen Treffer
+# auf "Kindermobiliar", "Kino", "Kiefer" — eine Ferienpark-Seite ohne jede KI
+# bekam einen AI-Act-Befund ueber 15.000 EUR, eine Zahnarztseite 20.000 EUR.
+KURZ_KEYWORD_MAX_LEN = 3
+
+
+def _keyword_trifft(keyword: str, text: str) -> bool:
+    """
+    Trifft das Keyword als eigenes Wort — oder als Anfang eines Kompositums?
+
+    Ab 4 Zeichen gilt der Wortanfang, weil deutsche Komposita sonst
+    durchrutschen: "Grünstrom" und "Kündigungsbutton" SOLLEN treffen. Am
+    Wortende wird nicht geschnitten, dafuer aber am Anfang — so trifft "grün"
+    nicht mehr "Hintergrund".
+
+    Bis KURZ_KEYWORD_MAX_LEN Zeichen wird beidseitig geschnitten: ein Fragment
+    aus zwei bis drei Buchstaben trifft als Wortanfang zu viel ("ki" ->
+    Kindermobiliar, "bot" -> Botschaft). Der Preis ist, dass ein kurzes
+    Keyword sein Kompositum nicht mehr findet ("abo" trifft "Abo", nicht
+    "Abomodell") — ein verpasster Fund ist hier billiger als ein erfundener.
+    """
+    k = (keyword or "").strip().lower()
+    if not k:
+        return False
+    if len(k) <= KURZ_KEYWORD_MAX_LEN:
+        return re.search(r"(?<![\w])" + re.escape(k) + r"(?![\w])", text) is not None
+    return re.search(r"(?<![\w])" + re.escape(k), text) is not None
+
+
 def _gate_passes(applies_when: Dict[str, Any], soup: BeautifulSoup, html_lower: str) -> bool:
     if not applies_when or applies_when.get("always") is True:
         return True
@@ -117,11 +167,16 @@ def _gate_passes(applies_when: Dict[str, Any], soup: BeautifulSoup, html_lower: 
             return False
 
     kw_any = applies_when.get("keywords_any")
-    if kw_any and not any(k.lower() in html_lower for k in kw_any):
+    kw_all = applies_when.get("keywords_all")
+    if not kw_any and not kw_all:
+        return True
+
+    text = _sichtbarer_text(soup, html_lower)
+
+    if kw_any and not any(_keyword_trifft(k, text) for k in kw_any):
         return False
 
-    kw_all = applies_when.get("keywords_all")
-    if kw_all and not all(k.lower() in html_lower for k in kw_all):
+    if kw_all and not all(_keyword_trifft(k, text) for k in kw_all):
         return False
 
     return True
@@ -131,35 +186,15 @@ def _gate_passes(applies_when: Dict[str, Any], soup: BeautifulSoup, html_lower: 
 # Detektion eines Pflicht-Elements
 # ---------------------------------------------------------------------------
 async def _url_exists(url: str, session=None) -> bool:
-    ssl_ctx = ssl.create_default_context(cafile=certifi.where())
-    try:
-        if session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as r:
-                return r.status == 200
-        connector = aiohttp.TCPConnector(ssl=ssl_ctx)
-        async with aiohttp.ClientSession(connector=connector) as tmp:
-            async with tmp.get(url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as r:
-                return r.status == 200
-    except Exception:
-        return False
+    """Antwortet die Kandidatenseite mit 200? Abruf über die SSRF-Schranke."""
+    abruf = await hole(session, url, timeout=8)
+    return abruf is not None and abruf.status == 200
 
 
 async def _fetch_text(url: str, session=None) -> Optional[str]:
-    ssl_ctx = ssl.create_default_context(cafile=certifi.where())
-    try:
-        if session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10), allow_redirects=True) as r:
-                if r.status == 200:
-                    return await r.text()
-        else:
-            connector = aiohttp.TCPConnector(ssl=ssl_ctx)
-            async with aiohttp.ClientSession(connector=connector) as tmp:
-                async with tmp.get(url, timeout=aiohttp.ClientTimeout(total=10), allow_redirects=True) as r:
-                    if r.status == 200:
-                        return await r.text()
-    except Exception:
-        pass
-    return None
+    """Inhalt der Kandidatenseite, oder None. Abruf über die SSRF-Schranke."""
+    abruf = await hole(session, url, timeout=10)
+    return abruf.text() if abruf is not None and abruf.status == 200 else None
 
 
 async def _detect_required_element(
@@ -216,7 +251,9 @@ def _issue_dict(check: Dict[str, Any], *, title: str, description: str,
         "severity": severity,
         "title": title,
         "description": description,
-        "risk_euro": int(risk_euro),
+        # Laufzeit-Deckel: schutz vor DB-Altlasten (bis 300.000 EUR risk_euro
+        # in Kundenreports), unabhaengig vom Timing des DB-Cleanups.
+        "risk_euro": min(int(risk_euro), _RISK_CAP),
         "recommendation": check["recommendation"],
         "legal_basis": check["legal_basis"],
         "auto_fixable": False,
@@ -237,6 +274,17 @@ async def _run_single_check(
 ) -> List[Dict[str, Any]]:
     detection = check.get("detection", {})
     dtype = detection.get("type", "required_element")
+
+    # Defense in Depth: neutralisierte Detections (generische Rechtsseiten-
+    # Link-Keywords ohne content_requirements) erzeugen weder Schein-Pass
+    # noch False Positives — sie werden uebersprungen, selbst wenn eine
+    # solche Spec (Altbestand/Migration) noch in der DB liegt.
+    if detection_is_weak(detection):
+        logger.warning(
+            f"Declarative check '{check['slug']}': weak detection "
+            f"(generische Link-Keywords ohne content_requirements) — skipped"
+        )
+        return []
 
     if dtype != "required_element":
         logger.warning(f"Declarative check '{check['slug']}': unsupported detection.type '{dtype}' — skipped")
@@ -303,6 +351,17 @@ async def run_declarative_checks(url: str, soup: BeautifulSoup, session=None) ->
 
     for check in checks:
         try:
+            # Defense in Depth (analog weak detection): ein Gate-Keyword unter
+            # MIN_GATE_KEYWORD_LEN Zeichen trifft beliebige Woerter. Solche
+            # Specs lehnt der Generator ab; liegt noch eine im Altbestand,
+            # wird sie hier uebersprungen statt Befunde zu erfinden.
+            kurz = gate_keyword_too_short(check.get("applies_when") or {})
+            if kurz:
+                logger.warning(
+                    f"Declarative check '{check.get('slug')}': Gate-Keyword "
+                    f"'{kurz}' unter {MIN_GATE_KEYWORD_LEN} Zeichen — skipped"
+                )
+                continue
             if not _gate_passes(check.get("applies_when", {}), soup, html_lower):
                 continue
             issues.extend(await _run_single_check(check, url, soup, html_lower, session))

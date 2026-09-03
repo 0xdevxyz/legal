@@ -11,16 +11,95 @@ Features:
 
 import asyncio
 import json
+import re
 import logging
+import os
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
-from urllib.parse import urljoin, urlparse
 
 logger = logging.getLogger(__name__)
 
-# axe-core CDN URL (wird in Playwright injiziert)
-AXE_CORE_CDN = "https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.4/axe.min.js"
+from compliance_engine.axe_translations import uebersetze as uebersetze_axe
+
+# axe-core wird lokal gebundelt und zur Scan-Zeit injiziert — kein externes CDN
+# (SPOF vermieden; vendored axe-core 4.11.4).
+_AXE_CORE_PATH = os.path.join(os.path.dirname(__file__), "vendor", "axe.min.js")
+try:
+    with open(_AXE_CORE_PATH, "r", encoding="utf-8") as _axe_f:
+        AXE_CORE_JS = _axe_f.read()
+except OSError as _axe_err:  # pragma: no cover - Deploy-Fehlkonfiguration
+    AXE_CORE_JS = ""
+    logger.error(f"axe-core Bundle nicht gefunden unter {_AXE_CORE_PATH}: {_axe_err}")
+
+
+# Zeit, die einer Seite hoechstens fuer ihre Einblendungen zugestanden wird.
+# Laenger zu warten hiesse, auf Endlos-Animationen (Spinner, Karussells) zu
+# warten, die nie fertig werden.
+ANIMATIONS_WARTEZEIT_MS = 1200
+
+
+async def loese_scroll_einblendungen_aus(page) -> None:
+    """
+    Scrollt einmal durch die Seite und wieder nach oben.
+
+    Einblendungen, die auf Sichtkontakt warten, laufen sonst nie an: das
+    Element bleibt bei der Deckkraft seines Ausgangszustands stehen und misst
+    sich wie ein Kontrastfehler. Gemessen werden soll, was ein Besucher sieht.
+    """
+    try:
+        await page.evaluate(
+            """async () => {
+                const hoehe = document.body.scrollHeight;
+                const HOECHSTENS = 20;   // Deckel gegen sehr lange Seiten
+                const schritt = Math.max(window.innerHeight * 0.8, hoehe / HOECHSTENS, 400);
+                for (let y = 0, n = 0; y < hoehe && n < HOECHSTENS; y += schritt, n++) {
+                    window.scrollTo(0, y);
+                    await new Promise(r => setTimeout(r, 50));
+                }
+                window.scrollTo(0, hoehe);
+                await new Promise(r => setTimeout(r, 50));
+                window.scrollTo(0, 0);
+                await new Promise(r => setTimeout(r, 80));
+            }"""
+        )
+    except Exception:
+        # Seiten koennen das Scrollen unterbinden; dann wird gemessen wie bisher.
+        pass
+
+
+async def warte_auf_ruhige_darstellung(page, hoechstens_ms: int = ANIMATIONS_WARTEZEIT_MS) -> None:
+    """
+    Bringt die Seite in den Zustand, den ein Besucher sieht, und wartet dann,
+    bis keine Einblendung mehr laeuft.
+
+    Netzwerkruhe allein reicht nicht: Einblende-Bibliotheken starten erst
+    danach oder erst bei Sichtkontakt, und ein Text mit halber Deckkraft misst
+    sich wie ein Kontrastfehler. Beruecksichtigt CSS-Animationen, Transitions
+    und die Web Animations API. Endlos laufende Animationen (Spinner,
+    Karussells) werden ausgenommen, sonst wartet man vergeblich.
+    """
+    await loese_scroll_einblendungen_aus(page)
+    try:
+        await page.wait_for_function(
+            """() => {
+                if (!document.getAnimations) return true;
+                return document.getAnimations().filter(a => {
+                    if (a.playState !== 'running') return false;
+                    const t = a.effect && a.effect.getTiming ? a.effect.getTiming() : null;
+                    return !t || t.iterations !== Infinity;
+                }).length === 0;
+            }""",
+            timeout=hoechstens_ms,
+        )
+    except Exception:
+        pass
+    # Kurze Setzzeit fuer Einblendungen, die ueber requestAnimationFrame statt
+    # ueber die Animations-API laufen und in getAnimations() nicht auftauchen.
+    try:
+        await page.wait_for_timeout(400)
+    except Exception:
+        pass
 
 
 # =============================================================================
@@ -57,6 +136,23 @@ class AxeScanResult:
     total_violations: int = 0
     by_impact: Dict[str, int] = field(default_factory=dict)
     by_wcag: Dict[str, int] = field(default_factory=dict)
+
+    # Im Browser verifizierte Kontrast-Reparaturen (siehe kontrast_verifizierer).
+    # Entstehen waehrend des Scans, weil sie die geoeffnete Seite brauchen: der
+    # Vorschlag wird eingespielt und nachgemessen. Ein zweiter Browserlauf
+    # spaeter waere dieselbe Arbeit ein zweites Mal.
+    kontrast_fixes: Optional[Dict[str, Any]] = None
+    # Ebenso die Struktur-Reparatur (role=main, viewport, iframe-Titel …).
+    # Laeuft im selben Lauf, weil sie denselben geoeffneten Baum braucht.
+    struktur_fixes: Optional[Dict[str, Any]] = None
+
+    # Hat die Seite waehrend der Messung das complyo-Widget geladen?
+    #
+    # Nur im Wirkungsscan interessant (dort ist die Sperre aus). Er kann damit
+    # "gar kein Widget eingebaut" von "Widget laeuft, bewirkt aber nichts"
+    # unterscheiden — zwei voellig verschiedene Befunde, die in der Messung
+    # gleich aussehen: beide Male ist die Differenz null.
+    widget_geladen: Optional[bool] = None
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -66,6 +162,8 @@ class AxeScanResult:
             "passes": self.passes,
             "incomplete": self.incomplete,
             "inapplicable": self.inapplicable,
+            "kontrast_fixes": self.kontrast_fixes,
+            "struktur_fixes": self.struktur_fixes,
             "total_violations": self.total_violations,
             "by_impact": self.by_impact,
             "by_wcag": self.by_wcag
@@ -76,6 +174,60 @@ class AxeScanResult:
 # axe Rule to Feature Mapping
 # =============================================================================
 
+# =============================================================================
+# WCAG-Stufen -> axe-Tags
+# =============================================================================
+#
+# axe-Tags sind FLACH, nicht hierarchisch. `wcag21aa` bezeichnet ausschliesslich
+# die Regeln, die WCAG 2.1 auf Stufe AA NEU eingefuehrt hat — nicht die aus 2.0
+# uebernommenen. Wer nur diesen einen Tag setzt, prueft einen Bruchteil.
+#
+# Genau das war hier der Fall: `runOnly: [wcag21aa, best-practice]` liess
+# `image-alt`, `link-name`, `label`, `color-contrast`, `button-name`,
+# `html-has-lang` und die gesamte ARIA-Familie aus — allesamt WCAG 2.0. Auf
+# spedition-mahn.de meldete der Scan 35 Befunde, samt und sonders
+# "best-practice", und uebersah 13x link-name, 7x color-contrast, 6x
+# nested-interactive (serious) sowie 3x aria-required-parent (critical).
+# Das Feature-Mapping unten kennt diese Regeln laengst — sie konnten nur nie
+# feuern. Der Fehler war der Filter, nicht das Modell.
+#
+# EN 301 549 (und damit das BFSG) verweist auf WCAG 2.1 Stufe AA. Das schliesst
+# 2.0 A und AA vollstaendig ein; die Mengen sind deshalb kumulativ. WCAG 2.2
+# bleibt bewusst draussen: rechtlich nicht gefordert, und ein Befund, den
+# niemand einfordern kann, gehoert nicht in einen Pflichten-Report.
+WCAG_TAG_MENGEN: Dict[str, List[str]] = {
+    "wcag2a":   ["wcag2a"],
+    "wcag2aa":  ["wcag2a", "wcag2aa"],
+    "wcag21a":  ["wcag2a", "wcag21a"],
+    "wcag21aa": ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
+}
+
+
+def axe_tags_fuer(wcag_level: str, mit_best_practice: bool = True) -> List[str]:
+    """Vollstaendige Tag-Liste fuer eine WCAG-Stufe.
+
+    `best-practice` bleibt drin, weil Landmark- und Ueberschriften-Befunde
+    echten Nutzen haben — sie muessen im Bericht aber als Empfehlung kenntlich
+    sein und nicht als Rechtspflicht (siehe `ist_rechtspflicht`).
+    """
+    tags = list(WCAG_TAG_MENGEN.get(wcag_level, WCAG_TAG_MENGEN["wcag21aa"]))
+    if mit_best_practice:
+        tags.append("best-practice")
+    return tags
+
+
+def ist_rechtspflicht(tags: List[str]) -> bool:
+    """Faellt dieser Befund unter WCAG 2.1 AA — oder ist er nur Empfehlung?
+
+    Der Unterschied ist der Kern der Glaubwuerdigkeit: `region` und
+    `heading-order` sind best-practice und keine BFSG-Pflicht. Sie als Verstoss
+    zu verkaufen waere genau die Angstmacherei, die man einem
+    Compliance-Anbieter am schnellsten uebelnimmt.
+    """
+    rechtlich = set(WCAG_TAG_MENGEN["wcag21aa"])
+    return any(t in rechtlich for t in tags)
+
+
 AXE_RULE_TO_FEATURE: Dict[str, str] = {
     # Alt-Text (WCAG 1.1.1)
     "image-alt": "ALT_TEXT",
@@ -85,6 +237,14 @@ AXE_RULE_TO_FEATURE: Dict[str, str] = {
     "svg-img-alt": "ALT_TEXT",
     "role-img-alt": "ALT_TEXT",
     
+    # Sprache (WCAG 3.1.1, 3.1.2) — der Patch-Builder setzt lang mechanisch,
+    # die Regeln hatten aber keine Feature-Zuordnung und galten damit als
+    # "nicht auto-fixable", obwohl genau dieser Fix existiert.
+    "html-has-lang": "LANGUAGE",
+    "html-lang-valid": "LANGUAGE",
+    "html-xml-lang-mismatch": "LANGUAGE",
+    "valid-lang": "LANGUAGE",
+
     # Kontrast (WCAG 1.4.3, 1.4.11)
     "color-contrast": "CONTRAST",
     "color-contrast-enhanced": "CONTRAST",
@@ -120,9 +280,9 @@ AXE_RULE_TO_FEATURE: Dict[str, str] = {
     "scrollable-region-focusable": "KEYBOARD",
     "tabindex": "KEYBOARD",
     
-    # Focus (WCAG 2.4.7)
-    "focus-visible": "FOCUS",
-    
+    # Hinweis: 2.4.7 (focus-visible) existiert als axe-Regel NICHT —
+    # das fruehere Mapping war tot und taeuschte Abdeckung vor.
+
     # ARIA (WCAG 4.1.2)
     "aria-allowed-attr": "ARIA",
     "aria-allowed-role": "ARIA",
@@ -136,6 +296,9 @@ AXE_RULE_TO_FEATURE: Dict[str, str] = {
     "aria-required-attr": "ARIA",
     "aria-required-children": "ARIA",
     "aria-required-parent": "ARIA",
+    # Verschachtelte Bedienelemente (Link im Button o. ae.) — auf echten
+    # WordPress-Seiten haeufig und bisher ohne Zuordnung.
+    "nested-interactive": "ARIA",
     "aria-roledescription": "ARIA",
     "aria-roles": "ARIA",
     "aria-text": "ARIA",
@@ -231,7 +394,9 @@ class AxeScanner:
         self,
         url: str,
         wcag_level: str = "wcag21aa",
-        timeout: int = 30000
+        timeout: int = 30000,
+        mit_kontrast_fixes: bool = False,
+        widget_blockieren: bool = True,
     ) -> AxeScanResult:
         """
         Scannt eine einzelne Seite mit axe-core
@@ -255,24 +420,110 @@ class AxeScanner:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
-            
+
+            # Das eigene Widget waehrend der Messung blockieren.
+            #
+            # Ohne diese Sperre misst der Scan eine Seite, die complyo bereits
+            # repariert hat: das Widget setzt Alt-Texte, role="main" und die
+            # freigegebenen Farben zur Laufzeit. Der Scan faende dann nichts
+            # mehr — und wuerde den gespeicherten Messwert mit einer Null
+            # ueberschreiben.
+            #
+            # Die Folge waere absurd: je besser die Reparatur wirkt, desto
+            # leerer wird der Pruefnachweis, der sie belegen soll. Genau das
+            # ist beim ersten echten Kundenscan passiert (zua-zwickau.de,
+            # struktur 3->0 im ersten Lauf, im zweiten gar kein Befund mehr).
+            #
+            # Gemessen wird deshalb immer der Zustand, den ein Besucher OHNE
+            # complyo vorfaende.
+            #
+            # `widget_blockieren=False` dreht das absichtlich um: dann misst
+            # der Scan, was ein Besucher WIRKLICH vorfindet — mit allem, was
+            # complyo zur Laufzeit repariert. Nur so herum ist die Auslieferung
+            # ueberhaupt messbar (siehe scan_wirkung()).
+            # Mitschreiben, ob das Widget ueberhaupt angefordert wird.
+            # Kostet nichts und beantwortet im Wirkungsscan die entscheidende
+            # Frage.
+            widget_gesehen = {"ja": False}
+
+            def _merke_widget(anfrage):
+                try:
+                    if "api.complyo." in (anfrage.url or ""):
+                        widget_gesehen["ja"] = True
+                except Exception:  # pragma: no cover
+                    pass
+
             try:
-                # Lade Seite
-                await page.goto(url, timeout=timeout, wait_until="networkidle")
+                page.on("request", _merke_widget)
+            except Exception as e:  # pragma: no cover - Playwright-Eigenheit
+                logger.warning(f"Widget-Beobachtung nicht moeglich: {e}")
+
+            if widget_blockieren:
+                try:
+                    await page.route(
+                        re.compile(r"https?://api\.complyo\.(de|tech)/"),
+                        lambda route: asyncio.ensure_future(route.abort()),
+                    )
+                except Exception as e:  # pragma: no cover - Playwright-Eigenheit
+                    logger.warning(f"Widget-Sperre nicht gesetzt: {e}")
+
+            try:
+                # Seite laden. "networkidle" ist bewusst NICHT das primaere
+                # Kriterium: Seiten mit dauerhaftem Polling, Chat-Widgets oder
+                # Werbung erreichen nie Netzwerkruhe und liefen damit garantiert
+                # in den Timeout ("Timeout 30000ms exceeded"). DOM-ready reicht
+                # fuer axe; danach geben wir Netzwerkruhe eine kurze Chance,
+                # ohne den Scan daran scheitern zu lassen.
+                antwort = await page.goto(url, timeout=timeout,
+                                          wait_until="domcontentloaded")
+
+                # Der Rueckgabewert von goto() wurde frueher verworfen. Damit
+                # vermass der Scanner die Fehlerseite des Hosters, als waere sie
+                # die Kundenseite: ein Tippfehler in der Adresse oder eine
+                # Stunde Ausfall genuegten. Die Befunde landeten unter der
+                # echten site_id, ueberschrieben die gueltige Messung, und der
+                # Pruefnachweis behauptete anschliessend, eine Seite gemessen zu
+                # haben, die dem Kunden nie gehoert hat.
+                #
+                # Fuer ein Produkt, dessen ganzer Wert "nachgemessen und
+                # belegbar" ist, ist das der teuerste denkbare Fehler. Deshalb
+                # hier hart: kein Ergebnis statt eines falschen.
+                if antwort is None:
+                    return self._create_empty_result(
+                        url, "Seite nicht erreichbar — keine Antwort erhalten")
+                if antwort.status >= 400:
+                    return self._create_empty_result(
+                        url,
+                        f"Seite antwortet mit HTTP {antwort.status} — "
+                        f"gemessen wurde nicht, weil das die Fehlerseite waere "
+                        f"und nicht die Website")
+
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=5000)
+                except Exception:
+                    # Kein Fehler: die Seite laedt dauerhaft nach — axe laeuft
+                    # auf dem Stand von jetzt.
+                    logger.info(f"axe-core: {url} erreicht keine Netzwerkruhe — scanne den aktuellen Stand")
+
+                # Einblendungen zu Ende laufen lassen: ein Text bei 81 %
+                # Deckkraft misst sich wie ein Kontrastfehler, ist aber keiner.
+                await warte_auf_ruhige_darstellung(page)
                 
-                # Injiziere axe-core
-                await page.add_script_tag(url=AXE_CORE_CDN)
+                # Injiziere axe-core (lokal gebundelt)
+                await page.add_script_tag(content=AXE_CORE_JS)
                 
                 # Warte kurz auf Script-Laden
                 await page.wait_for_function("typeof axe !== 'undefined'", timeout=5000)
                 
-                # Führe axe-core aus
+                # Führe axe-core aus. Die Tag-Menge wird aufgeloest, nicht
+                # durchgereicht — axe-Tags sind flach (siehe WCAG_TAG_MENGEN).
                 axe_config = {
                     "runOnly": {
                         "type": "tag",
-                        "values": [wcag_level, "best-practice"]
+                        "values": axe_tags_fuer(wcag_level)
                     }
                 }
+                logger.info(f"axe-core Regelsatz: {', '.join(axe_config['runOnly']['values'])}")
                 
                 results = await page.evaluate(f"""
                     async () => {{
@@ -281,8 +532,36 @@ class AxeScanner:
                     }}
                 """)
                 
-                # Parse Ergebnisse
-                return self._parse_results(url, results)
+                ergebnis = self._parse_results(url, results)
+                ergebnis.widget_geladen = widget_gesehen["ja"]
+
+                # Kontrast-Reparatur solange die Seite offen ist. Danach ist
+                # das Dokument veraendert (eingespieltes CSS) — deshalb erst
+                # NACH dem regulaeren Parsen, und nichts darf danach noch
+                # gemessen werden.
+                if mit_kontrast_fixes:
+                    # Struktur ZUERST: sie setzt Attribute am Baum, der
+                    # Kontrast-Schritt spielt danach CSS ein und veraendert die
+                    # Farben. Andersherum wuerde die Struktur-Nachmessung auf
+                    # einer bereits umgefaerbten Seite laufen.
+                    try:
+                        from compliance_engine.struktur_verifizierer import (
+                            verifizierte_struktur_fixes,
+                        )
+                        ergebnis.struktur_fixes = await verifizierte_struktur_fixes(page)
+                    except Exception as e:
+                        logger.warning(f"Struktur-Fixes uebersprungen: {e}")
+                    try:
+                        from compliance_engine.kontrast_verifizierer import (
+                            verifizierte_kontrast_fixes,
+                        )
+                        ergebnis.kontrast_fixes = await verifizierte_kontrast_fixes(page)
+                    except Exception as e:
+                        # Fail-open wie der Rest des Scans: ohne Kontrast-Fixes
+                        # ist der Scan schlechter, aber nicht kaputt.
+                        logger.warning(f"Kontrast-Fixes uebersprungen: {e}")
+
+                return ergebnis
             
             except Exception as e:
                 logger.error(f"❌ axe-core Scan fehlgeschlagen: {e}")
@@ -403,34 +682,74 @@ class AxeScanner:
             Liste von Issue-Dictionaries
         """
         issues = []
-        
+
+        # Pro Regel die betroffenen Knoten deckeln, damit ein einzelner
+        # Massen-Verstoß (z. B. 80 Elemente mit zu wenig Kontrast) nicht den
+        # Score und die Risiko-Summe sprengt.
+        MAX_NODES_PER_RULE = 10
+
         for violation in scan_result.violations:
-            # Für jeden betroffenen Node ein Issue
-            for node in violation.nodes:
+            extra = max(0, len(violation.nodes) - MAX_NODES_PER_RULE)
+            # Trennt Rechtspflicht von Empfehlung. Vorher trug JEDER Befund
+            # "BFSG §12" — auch `region` und `heading-order`, die reine
+            # axe-Empfehlungen sind. Einem Compliance-Anbieter nimmt man
+            # nichts schneller uebel als eine erfundene Pflicht.
+            pflicht = ist_rechtspflicht(violation.tags)
+            for idx, node in enumerate(violation.nodes[:MAX_NODES_PER_RULE]):
                 severity = self._impact_to_severity(violation.impact)
-                
+                if not pflicht:
+                    # Empfehlungen erzeugen keinen Rechtsdruck: hoechstens
+                    # Hinweis-Rang, kein Bussgeldrisiko in der Summe.
+                    severity = "info" if severity in ("critical", "high") else severity
+
+                # target ist eine Liste von Selektoren → ersten als String verwenden
+                target = node.get("target") or []
+                selector = target[0] if target else ""
+
+                wcag_str = ", ".join(violation.wcag_criteria) if violation.wcag_criteria else "Name, Role, Value"
+                failure = (node.get("failureSummary") or violation.help or "").strip()
+
+                # axe-core liefert help/description nur auf Englisch — in einer
+                # deutschsprachigen Anwendung standen Saetze wie "All page content
+                # should be contained by landmarks" unuebersetzt im Report.
+                titel_de, beschreibung_de = uebersetze_axe(
+                    violation.id, violation.help, violation.description
+                )
+
+                description = beschreibung_de
+                if idx == 0 and extra > 0:
+                    description = f"{description} (und {extra} weitere Element(e) mit demselben Problem)"
+
                 issues.append({
-                    "id": f"{violation.id}_{hash(node.get('target', []))}"[:32],
-                    "title": violation.help,
-                    "description": violation.description,
                     "category": "barrierefreiheit",
                     "severity": severity,
-                    "feature_id": violation.feature_id,
-                    "wcag_criteria": violation.wcag_criteria,
-                    "legal_basis": f"WCAG 2.1 ({', '.join(violation.wcag_criteria)})",
-                    "page_url": scan_result.url,
-                    "selector": node.get("target", [""])[0] if node.get("target") else "",
-                    "element_html": node.get("html", ""),
-                    "recommendation": node.get("failureSummary", ""),
+                    "title": titel_de or violation.id,
+                    "description": description,
+                    "risk_euro": self._impact_to_risk_euro(violation.impact) if pflicht else 0,
+                    "recommendation": failure,
+                    "legal_basis": (
+                        f"WCAG 2.1 ({wcag_str}), BFSG §12" if pflicht
+                        else "Empfehlung (axe best-practice) — nicht aus WCAG 2.1 AA gefordert"
+                    ),
                     "auto_fixable": violation.feature_id in ["ALT_TEXT", "CONTRAST", "FOCUS", "LANDMARKS"],
+                    "is_missing": False,
+                    "element_html": node.get("html", ""),
+                    "rechtspflicht": pflicht,
                     "metadata": {
+                        "source": "axe-core",
+                        "rechtspflicht": pflicht,
                         "axe_rule_id": violation.id,
                         "axe_impact": violation.impact,
                         "axe_help_url": violation.help_url,
-                        "axe_tags": violation.tags
-                    }
+                        "axe_tags": violation.tags,
+                        "wcag_criteria": violation.wcag_criteria,
+                        "feature_id": violation.feature_id,
+                        "selector": selector,
+                        "page_url": scan_result.url,
+                        "extra_affected": extra if idx == 0 else 0,
+                    },
                 })
-        
+
         return issues
     
     def _impact_to_severity(self, impact: str) -> str:
@@ -443,6 +762,16 @@ class AxeScanner:
         }
         return mapping.get(impact, "warning")
 
+    def _impact_to_risk_euro(self, impact: str) -> int:
+        """Schätzt das Bußgeld-/Abmahnrisiko je axe-Impact (für Score & Reporting)."""
+        mapping = {
+            "critical": 2000,
+            "serious": 1500,
+            "moderate": 800,
+            "minor": 300,
+        }
+        return mapping.get(impact, 800)
+
 
 # Globale Instanz
 axe_scanner = AxeScanner()
@@ -454,7 +783,8 @@ axe_scanner = AxeScanner()
 
 async def run_axe_scan(
     url: str,
-    wcag_level: str = "wcag21aa"
+    wcag_level: str = "wcag21aa",
+    mit_kontrast_fixes: bool = True,
 ) -> Tuple[AxeScanResult, List[Dict[str, Any]]]:
     """
     Führt axe-core Scan durch und gibt Ergebnisse zurück
@@ -466,7 +796,7 @@ async def run_axe_scan(
     Returns:
         Tuple von (AxeScanResult, strukturierte Issues)
     """
-    result = await axe_scanner.scan_page(url, wcag_level)
+    result = await axe_scanner.scan_page(url, wcag_level, mit_kontrast_fixes=mit_kontrast_fixes)
     issues = axe_scanner.convert_to_structured_issues(result)
     
     logger.info(f"✅ axe-core Scan abgeschlossen: {result.total_violations} Violations, {len(issues)} Issues")

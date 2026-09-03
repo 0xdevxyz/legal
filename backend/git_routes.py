@@ -20,8 +20,9 @@ from datetime import datetime
 from dependencies import get_current_user
 
 from git_service import (
-    git_service, GitProvider, GitCredentials, RepoInfo, PullRequestResult
+    git_service, GitProvider, GitCredentials, RepoInfo, PullRequestResult, PRStatus
 )
+from git_token_crypto import GitTokenCryptoError, decrypt_token, encrypt_token
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,26 @@ async def get_oauth_url(
     """
     if provider not in ["github", "gitlab"]:
         raise HTTPException(status_code=400, detail="Unterstützte Provider: github, gitlab")
-    
+
+    # Ohne registrierte OAuth-App ist die Anmeldung bei GitHub sinnlos: die URL
+    # wuerde mit leerem client_id gebaut und der Kunde landete auf einer
+    # GitHub-Fehlerseite, ohne zu erfahren, dass der Fehler bei uns liegt.
+    _schluessel = {
+        "github": (git_service.github_client_id, git_service.github_client_secret),
+        "gitlab": (git_service.gitlab_client_id, git_service.gitlab_client_secret),
+    }[provider]
+    if not all(_schluessel):
+        logger.error(f"OAuth fuer {provider} angefragt, aber client_id/secret sind leer.")
+        _name = {"github": "GitHub", "gitlab": "GitLab"}[provider]
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"Die Verbindung zu {_name} ist auf unserer Seite noch nicht "
+                "eingerichtet. Ihre Fixes können Sie in der Zwischenzeit als "
+                "Patch-Datei herunterladen oder über das complyo-Widget ausliefern."
+            ),
+        )
+
     # Generiere State für CSRF-Schutz
     state = secrets.token_urlsafe(32)
     await _set_oauth_state(state, {
@@ -405,6 +425,294 @@ async def apply_patches(
     )
 
 
+class ApplyApprovedFixesRequest(BaseModel):
+    """Ein-Klick-Fix: freigegebene Fixes einer Site als PR."""
+    repo_id: str = Field(..., description="Verbundenes Repository")
+    site_id: str = Field(..., description="Site, deren freigegebene Fixes angewendet werden")
+
+
+@git_router.post("/apply-approved-fixes")
+async def apply_approved_fixes(
+    request: ApplyApprovedFixesRequest,
+    user: Dict[str, Any] = Depends(get_current_user)
+) -> ApplyPatchesResponse:
+    """
+    Ein Klick: freigegebene Fixes -> Pull Request. Ohne LLM.
+
+    Der Weg bis hierher war zweigeteilt: die KI erzeugt Vorschlaege (einmal,
+    mit menschlicher Freigabe in der Worklist), und ein EXTERNER Agent via MCP
+    musste daraus Patches formulieren. Dieser Endpunkt ersetzt den Agenten
+    durch Mechanik: Manifest lesen, Repo-Baum holen, Kandidaten-Templates
+    laden, guarded transformieren, PR erstellen. Deterministisch — dieselben
+    freigegebenen Fixes ergeben denselben PR. Gemerged wird weiterhin nur vom
+    Kunden; Revert bleibt verfuegbar.
+    """
+    from fix_patch_builder import baue_patches, ist_kandidat, zaehle_pr_faehig, MAX_DATEIEN
+    from widget_routes import db_pool as widget_db_pool
+    from accessibility_fix_saver import AccessibilityFixSaver
+
+    user_id = user.get("user_id")
+
+    repo_data = await _get_connected_repo(user_id, request.repo_id)
+    if not repo_data:
+        return ApplyPatchesResponse(success=False, error="Repository nicht gefunden")
+    credentials = await _get_git_credentials(user_id, repo_data["provider"])
+    if not credentials:
+        return ApplyPatchesResponse(success=False, error="Git-Verbindung abgelaufen. Bitte erneut verbinden.")
+    if repo_data["provider"] != "github":
+        return ApplyPatchesResponse(success=False, error="Ein-Klick-Fix ist aktuell nur für GitHub verfügbar.")
+
+    # Freigegebene Fixes laden — dieselbe Quelle wie das Fix-Manifest.
+    pool = widget_db_pool or db_pool
+    if not pool:
+        return ApplyPatchesResponse(success=False, error="Datenbank nicht verfügbar.")
+    saver = AccessibilityFixSaver(pool)
+    manifest = {
+        "alt_texts": await saver.get_fixes_for_site(request.site_id, status="approved"),
+        "document_fixes": await saver.get_document_fixes_for_site(request.site_id, status="approved"),
+    }
+    # Link-Zwecke werden hier nur GEZAEHLT, nicht angewendet — sie gehen ueber
+    # Widget/Plugin raus (Begruendung in fix_patch_builder.zaehle_pr_faehig).
+    # Ohne diese Zahl lautete die Fehlermeldung faelschlich "keine Fixes
+    # freigegeben", obwohl der Kunde gerade welche freigegeben hatte.
+    link_fixes = await saver.get_link_fixes_for_site(request.site_id, status="approved")
+    zaehlung = zaehle_pr_faehig(manifest["alt_texts"], link_fixes, manifest["document_fixes"])
+
+    if zaehlung["deliverable"] == 0:
+        if zaehlung["manifest_only"] > 0:
+            return ApplyPatchesResponse(
+                success=False,
+                error=(
+                    f"Ihre {zaehlung['manifest_only']} freigegebenen Fixes werden über das "
+                    f"Widget bzw. WordPress-Plugin ausgeliefert und nicht als Code-Änderung — "
+                    f"für einen Pull Request braucht es Alt-Texte oder dokumentweite Fixes "
+                    f"(Sprache, Sprunglink)."
+                ),
+            )
+        return ApplyPatchesResponse(
+            success=False,
+            error="Keine freigegebenen Fixes vorhanden. Bitte zuerst Vorschläge in der Worklist prüfen und freigeben.",
+        )
+
+    repo_info = RepoInfo(
+        provider=GitProvider(repo_data["provider"]),
+        owner=repo_data["owner"],
+        repo=repo_data["repo"],
+        default_branch=repo_data["default_branch"],
+    )
+    client = git_service.get_client(repo_info.provider, credentials)
+
+    baum = await client.get_tree(repo_info.owner, repo_info.repo, repo_info.default_branch)
+    kandidaten = [e["path"] for e in baum if ist_kandidat(e["path"], e.get("size"))][:MAX_DATEIEN]
+    if not kandidaten:
+        return ApplyPatchesResponse(
+            success=False,
+            error=(
+                "Keine bearbeitbaren Template-Dateien (.html/.php/.twig …) im Repository gefunden. "
+                "Für Build-basierte Projekte (React/Vue) nutzen Sie den MCP-Agenten-Weg."
+            ),
+        )
+
+    dateien: Dict[str, str] = {}
+    for pfad in kandidaten:
+        inhalt, _sha = await client.get_file_content(
+            repo_info.owner, repo_info.repo, pfad, repo_info.default_branch
+        )
+        if inhalt:
+            dateien[pfad] = inhalt
+
+    patches = baue_patches(manifest, dateien)
+    if not patches:
+        return ApplyPatchesResponse(
+            success=False,
+            error=(
+                "Die freigegebenen Fixes treffen keine Datei in diesem Repository "
+                "(Bilder nicht gefunden oder bereits versorgt). Nichts zu tun."
+            ),
+        )
+
+    feature_ids = sorted({p["feature_id"] for p in patches})
+    logger.info(
+        f"Ein-Klick-Fix: {len(patches)} Patch(es) aus {len(dateien)} Dateien "
+        f"für {repo_info.full_name} (site {request.site_id})"
+    )
+    result = await git_service.create_accessibility_pr(
+        credentials=credentials,
+        repo_info=repo_info,
+        patches=patches,
+        feature_ids=feature_ids,
+        scan_id=None,
+    )
+    if result.success:
+        if db_pool:
+            await _save_pr_record(user_id, request.repo_id, result, feature_ids, None)
+        return ApplyPatchesResponse(
+            success=True,
+            branch_name=result.branch_name,
+            pr_url=result.pr_url,
+            pr_number=result.pr_number,
+            files_changed=[p["file_path"] for p in patches],
+        )
+    return ApplyPatchesResponse(success=False, error=result.error)
+
+
+@git_router.get("/status")
+async def git_connection_status(
+    user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Verbindungsstatus fuer die Einstellungs-Seite.
+
+    Bewusst ohne Token-Inhalte — nur ob eine Verbindung existiert und unter
+    welchem Git-Namen sie laeuft.
+    """
+    user_id = user.get("user_id")
+    if not db_pool:
+        return {"connected": False, "providers": []}
+
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT provider, git_username, created_at FROM git_credentials WHERE user_id = $1",
+            user_id,
+        )
+    return {
+        "connected": bool(rows),
+        "providers": [
+            {
+                "provider": r["provider"],
+                "git_username": r["git_username"],
+                "connected_at": r["created_at"].isoformat() if r["created_at"] else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@git_router.get("/prs")
+async def list_pull_requests(
+    user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Alle ueber complyo erstellten PRs des Kontos (fuer PR-Liste + Rollback)."""
+    user_id = user.get("user_id")
+    if not db_pool:
+        return {"prs": []}
+
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT p.id, p.pr_number, p.pr_url, p.branch_name, p.feature_ids,
+                   p.scan_id, p.status, p.created_at,
+                   r.provider, r.owner, r.repo
+            FROM git_pull_requests p
+            JOIN git_connected_repos r ON p.repo_id = r.id
+            WHERE p.user_id = $1
+            ORDER BY p.created_at DESC
+            LIMIT 100
+            """,
+            user_id,
+        )
+    return {
+        "prs": [
+            {
+                "id": r["id"],
+                "pr_number": r["pr_number"],
+                "pr_url": r["pr_url"],
+                "branch_name": r["branch_name"],
+                "feature_ids": list(r["feature_ids"] or []),
+                "scan_id": r["scan_id"],
+                "status": r["status"],
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                "repo_full_name": f"{r['owner']}/{r['repo']}",
+                "provider": r["provider"],
+            }
+            for r in rows
+        ]
+    }
+
+
+@git_router.post("/prs/{pr_id}/revert")
+async def revert_pull_request(
+    pr_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Nimmt einen ueber complyo erstellten PR zurueck.
+
+    Offene PRs werden geschlossen; gemergte bekommen einen Gegen-PR, der den
+    Stand von vor dem Merge wiederherstellt. Auch der Revert wird nur
+    vorgeschlagen — gemerged wird vom Kunden (gleiche Regel wie hinwaerts).
+    """
+    user_id = user.get("user_id")
+
+    async with db_pool.acquire() as conn:
+        pr_row = await conn.fetchrow(
+            """
+            SELECT p.id, p.pr_number, p.status, p.repo_id,
+                   r.provider, r.owner, r.repo, r.default_branch
+            FROM git_pull_requests p
+            JOIN git_connected_repos r ON p.repo_id = r.id
+            WHERE p.id = $1 AND p.user_id = $2
+            """,
+            pr_id, user_id,
+        )
+    if not pr_row:
+        raise HTTPException(status_code=404, detail="Pull Request nicht gefunden.")
+
+    credentials = await _get_git_credentials(user_id, pr_row["provider"])
+    if not credentials:
+        raise HTTPException(
+            status_code=409,
+            detail="Git-Verbindung abgelaufen. Bitte erneut mit GitHub verbinden.",
+        )
+
+    repo_info = RepoInfo(
+        provider=GitProvider(pr_row["provider"]),
+        owner=pr_row["owner"],
+        repo=pr_row["repo"],
+        default_branch=pr_row["default_branch"],
+    )
+
+    result = await git_service.revert_pull_request(
+        credentials=credentials,
+        repo_info=repo_info,
+        pr_number=pr_row["pr_number"],
+    )
+    if not result.success:
+        raise HTTPException(status_code=422, detail=result.error or "Revert fehlgeschlagen.")
+
+    async with db_pool.acquire() as conn:
+        if result.status == PRStatus.CLOSED:
+            # Offener PR wurde geschlossen — Original-Eintrag nachziehen.
+            await conn.execute(
+                "UPDATE git_pull_requests SET status = 'CLOSED', updated_at = NOW() WHERE id = $1",
+                pr_id,
+            )
+            aktion = "closed"
+        else:
+            # Gegen-PR entstanden: Original als MERGED markieren (Revert setzt
+            # einen Merge voraus) und den Revert-PR fuers Tracking speichern.
+            await conn.execute(
+                "UPDATE git_pull_requests SET status = 'MERGED', updated_at = NOW() WHERE id = $1",
+                pr_id,
+            )
+            await conn.execute(
+                """
+                INSERT INTO git_pull_requests
+                (user_id, repo_id, pr_number, pr_url, branch_name, feature_ids, scan_id, status, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, NOW())
+                """,
+                user_id, pr_row["repo_id"], result.pr_number, result.pr_url,
+                result.branch_name, ["REVERT"], result.status.value,
+            )
+            aktion = "revert_pr_created"
+
+    return {
+        "success": True,
+        "action": aktion,
+        "pr_number": result.pr_number,
+        "pr_url": result.pr_url,
+        "branch_name": result.branch_name,
+    }
+
+
 # =============================================================================
 # Database Helpers
 # =============================================================================
@@ -419,13 +727,25 @@ async def _save_git_credentials(
     if not db_pool:
         return
     
+    # Tokens niemals im Klartext ablegen: ein GitHub-Token erlaubt
+    # Schreibzugriff auf Kunden-Repos. Ohne Schluessel wird nicht gespeichert.
+    try:
+        access_enc = encrypt_token(credentials.access_token)
+        refresh_enc = encrypt_token(credentials.refresh_token)
+    except GitTokenCryptoError as e:
+        logger.error(f"Git-Credentials nicht gespeichert: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Git-Integration ist serverseitig nicht konfiguriert (Verschlüsselung).",
+        )
+
     async with db_pool.acquire() as conn:
         await conn.execute("""
             INSERT INTO git_credentials (user_id, provider, access_token, refresh_token, git_username, created_at)
             VALUES ($1, $2, $3, $4, $5, NOW())
             ON CONFLICT (user_id, provider)
             DO UPDATE SET access_token = $3, refresh_token = $4, git_username = $5, updated_at = NOW()
-        """, user_id, provider, credentials.access_token, credentials.refresh_token, user_name)
+        """, user_id, provider, access_enc, refresh_enc, user_name)
 
 
 async def _get_git_credentials(user_id: str, provider: str) -> Optional[GitCredentials]:
@@ -441,11 +761,17 @@ async def _get_git_credentials(user_id: str, provider: str) -> Optional[GitCrede
         """, user_id, provider)
         
         if row:
-            return GitCredentials(
-                provider=GitProvider(provider),
-                access_token=row["access_token"],
-                refresh_token=row.get("refresh_token")
-            )
+            try:
+                return GitCredentials(
+                    provider=GitProvider(provider),
+                    access_token=decrypt_token(row["access_token"]),
+                    refresh_token=decrypt_token(row["refresh_token"]),
+                )
+            except GitTokenCryptoError as e:
+                # Schluessel rotiert/fehlt: wie "nicht verbunden" behandeln —
+                # der Aufrufer fordert den Nutzer zum erneuten Verbinden auf.
+                logger.error(f"Git-Credentials nicht lesbar (user={user_id}, {provider}): {e}")
+                return None
     
     return None
 

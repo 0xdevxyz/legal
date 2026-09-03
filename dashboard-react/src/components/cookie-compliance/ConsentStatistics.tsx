@@ -12,7 +12,9 @@ import {
   PieChart as PieChartIcon,
   Info,
   Loader2,
+  Download,
 } from 'lucide-react';
+import { getApiClient } from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -46,6 +48,31 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
   const [period, setPeriod] = useState('30');
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    if (!siteId) return;
+    try {
+      setExporting(true);
+      const res = await getApiClient().get(
+        `/api/cookie-compliance/consents/${siteId}/export`,
+        { responseType: 'blob' }
+      );
+      const url = window.URL.createObjectURL(res.data as Blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `consent-log_${siteId}_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting consent log:', error);
+      alert('Export fehlgeschlagen. Bitte versuchen Sie es erneut.');
+    } finally {
+      setExporting(false);
+    }
+  };
   
   useEffect(() => {
     loadStatistics();
@@ -76,7 +103,7 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
         <Loader2 className="w-12 h-12 text-orange-500 animate-spin" />
-        <p className="text-gray-400">Lade Statistiken...</p>
+        <p className="text-gray-600 dark:text-gray-400">Lade Statistiken...</p>
       </div>
     );
   }
@@ -88,8 +115,8 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
           <div className="flex items-start gap-3">
             <Info className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
             <div>
-              <h4 className="font-semibold text-white mb-1">Keine Daten vorhanden</h4>
-              <p className="text-sm text-gray-300">
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-1">Keine Daten vorhanden</h4>
+              <p className="text-sm text-gray-700 dark:text-gray-300">
                 Sobald Besucher Ihre Website besuchen, werden hier Statistiken angezeigt.
               </p>
             </div>
@@ -120,36 +147,47 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white">Consent-Statistiken</h3>
-          <p className="text-sm text-gray-400 mt-1">Analyse Ihrer Cookie-Banner-Performance</p>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Consent-Statistiken</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Analyse Ihrer Cookie-Banner-Performance</p>
         </div>
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-[180px] bg-gray-800 border-gray-700 text-white">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-gray-800 border-gray-700">
-            <SelectItem value="7" className="text-white hover:bg-gray-700">Letzte 7 Tage</SelectItem>
-            <SelectItem value="30" className="text-white hover:bg-gray-700">Letzte 30 Tage</SelectItem>
-            <SelectItem value="90" className="text-white hover:bg-gray-700">Letzte 90 Tage</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            title="Einwilligungs-Nachweis als CSV exportieren (DSGVO Art. 7)"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            <span>Consent-Log (CSV)</span>
+          </button>
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-[180px] bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+              <SelectItem value="7" className="text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-700">Letzte 7 Tage</SelectItem>
+              <SelectItem value="30" className="text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-700">Letzte 30 Tage</SelectItem>
+              <SelectItem value="90" className="text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-700">Letzte 90 Tage</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Impressions */}
-        <Card className="border-gray-700 bg-gradient-to-br from-gray-800/80 to-gray-800/50 backdrop-blur-sm hover:shadow-lg hover:shadow-gray-900/50 transition-all">
+        <Card className="border-gray-200 dark:border-gray-700 bg-gradient-to-br from-gray-800/80 to-gray-800/50 backdrop-blur-sm hover:shadow-lg hover:shadow-gray-900/50 transition-all">
           <CardContent className="pt-6">
             <div className="flex items-start justify-between">
               <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-400">Gesamt-Impressions</p>
-                <p className="text-3xl font-bold text-white">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Gesamt-Impressions</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">
                   {summary.total_impressions.toLocaleString('de-DE')}
                 </p>
                 <p className="text-xs text-gray-500">Banner angezeigt</p>
               </div>
               <div className="p-3 bg-gray-700/50 rounded-lg">
-                <Users className="w-6 h-6 text-gray-400" />
+                <Users className="w-6 h-6 text-gray-600 dark:text-gray-400" />
               </div>
             </div>
           </CardContent>
@@ -225,9 +263,9 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
       </div>
       
       {/* Daily Trend Chart */}
-      <Card className="border-gray-700 bg-gray-800/50 backdrop-blur-sm">
+      <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm">
         <CardHeader>
-          <CardTitle className="text-white">Täglicher Verlauf</CardTitle>
+          <CardTitle className="text-gray-900 dark:text-white">Täglicher Verlauf</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">
@@ -292,9 +330,9 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
       {/* Category Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Category Rates */}
-        <Card className="border-gray-700 bg-gray-800/50 backdrop-blur-sm">
+        <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="text-white">Kategorien</CardTitle>
+            <CardTitle className="text-gray-900 dark:text-white">Kategorien</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -351,9 +389,9 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
         
         {/* Pie Chart */}
         {categoryData.length > 0 && (
-          <Card className="border-gray-700 bg-gray-800/50 backdrop-blur-sm">
+          <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="text-white">Verteilung</CardTitle>
+              <CardTitle className="text-gray-900 dark:text-white">Verteilung</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-[240px]">
@@ -395,8 +433,8 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
           <div className="flex items-start gap-3">
             <Info className="w-5 h-5 text-orange-400 mt-0.5 flex-shrink-0" />
             <div>
-              <h4 className="font-semibold text-white mb-1">💡 Tipp zur Optimierung</h4>
-              <p className="text-sm text-gray-300">
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-1">💡 Tipp zur Optimierung</h4>
+              <p className="text-sm text-gray-700 dark:text-gray-300">
                 Eine Opt-In-Rate über 70% gilt als sehr gut. Wenn Ihre Rate niedriger ist,
                 versuchen Sie die Texte zu optimieren oder das Design anzupassen.
               </p>

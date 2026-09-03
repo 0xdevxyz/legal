@@ -1,11 +1,17 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { LogIn, Loader2, AlertCircle, Lock, Mail, Eye, EyeOff, ArrowRight, CheckCircle2 } from 'lucide-react';
 import SocialLoginButtons from '@/components/SocialLoginButtons';
 import { Logo } from '@/components/Logo';
+// Gemeinsame Gestaltung mit der Registrierung. Vorher lagen Verlauf,
+// Partikelfeld und Kartenstil doppelt vor — heute gleich, in drei Monaten
+// nicht mehr. Eine Quelle, damit die beiden Seiten nicht auseinanderlaufen.
+import {
+    AuthBackground, AuthVertrauen, AUTH_KARTE, AUTH_VERLAUF, feldStil,
+} from '@/components/AuthBackground';
 
 const loadingMessages = [
     "Sicherheitsprotokolle werden geladen...",
@@ -27,73 +33,7 @@ export default function LoginPage() {
     const [loadingProgress, setLoadingProgress] = useState(0);
     const [emailFocused, setEmailFocused] = useState(false);
     const [passwordFocused, setPasswordFocused] = useState(false);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-
-        const particles: { x: number; y: number; vx: number; vy: number; size: number; opacity: number }[] = [];
-        for (let i = 0; i < 60; i++) {
-            particles.push({
-                x: Math.random() * canvas.width,
-                y: Math.random() * canvas.height,
-                vx: (Math.random() - 0.5) * 0.3,
-                vy: (Math.random() - 0.5) * 0.3,
-                size: Math.random() * 1.5 + 0.5,
-                opacity: Math.random() * 0.4 + 0.1,
-            });
-        }
-
-        let animId: number;
-        const draw = () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            particles.forEach(p => {
-                p.x += p.vx;
-                p.y += p.vy;
-                if (p.x < 0) p.x = canvas.width;
-                if (p.x > canvas.width) p.x = 0;
-                if (p.y < 0) p.y = canvas.height;
-                if (p.y > canvas.height) p.y = 0;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(99, 179, 237, ${p.opacity})`;
-                ctx.fill();
-            });
-            particles.forEach((p, i) => {
-                for (let j = i + 1; j < particles.length; j++) {
-                    const dx = particles[j].x - p.x;
-                    const dy = particles[j].y - p.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < 100) {
-                        ctx.beginPath();
-                        ctx.strokeStyle = `rgba(99, 179, 237, ${0.08 * (1 - dist / 100)})`;
-                        ctx.lineWidth = 0.5;
-                        ctx.moveTo(p.x, p.y);
-                        ctx.lineTo(particles[j].x, particles[j].y);
-                        ctx.stroke();
-                    }
-                }
-            });
-            animId = requestAnimationFrame(draw);
-        };
-        draw();
-
-        const handleResize = () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        };
-        window.addEventListener('resize', handleResize);
-        return () => {
-            cancelAnimationFrame(animId);
-            window.removeEventListener('resize', handleResize);
-        };
-    }, []);
 
     useEffect(() => {
         if (!isSubmitting) return;
@@ -143,21 +83,15 @@ export default function LoginPage() {
         <main
             role="main"
             aria-label="Login"
-            className="min-h-screen flex items-center justify-center relative overflow-hidden"
-            style={{ background: 'linear-gradient(135deg, #050812 0%, #0a0f1e 40%, #0d1428 70%, #050812 100%)' }}
+            className="on-dark min-h-screen flex items-center justify-center relative overflow-hidden"
+            style={{ background: AUTH_VERLAUF }}
         >
-            <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />
-
-            <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(59,130,246,0.07) 0%, transparent 70%)' }} />
-                <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.06) 0%, transparent 70%)' }} />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(16,24,64,0.4) 0%, transparent 60%)' }} />
-            </div>
+            <AuthBackground />
 
             <div className="relative w-full max-w-md mx-4 z-10">
                 <div className="mb-8 text-center">
                     <div className="flex justify-center mb-4">
-                        <Logo size="lg" />
+                        <Logo size="lg" variant="dark" />
                     </div>
                     <p className="text-sm" style={{ color: 'rgba(148,163,184,0.7)' }}>
                         Legal Compliance Platform
@@ -166,13 +100,7 @@ export default function LoginPage() {
 
                 <section
                     className="relative rounded-2xl p-8 overflow-hidden"
-                    style={{
-                        background: 'rgba(15, 23, 42, 0.7)',
-                        backdropFilter: 'blur(24px)',
-                        WebkitBackdropFilter: 'blur(24px)',
-                        border: '1px solid rgba(255,255,255,0.06)',
-                        boxShadow: '0 0 0 1px rgba(255,255,255,0.03), 0 32px 64px rgba(0,0,0,0.5), 0 0 80px rgba(59,130,246,0.05)',
-                    }}
+                    style={AUTH_KARTE}
                 >
                     <div className="absolute top-0 left-0 right-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(99,179,237,0.3), transparent)' }} />
 
@@ -185,6 +113,8 @@ export default function LoginPage() {
 
                     {error && (
                         <div
+                            role="alert"
+                            aria-live="assertive"
                             className="mb-5 p-3.5 rounded-xl flex items-start gap-3 text-sm animate-errorfade"
                             style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
                         >
@@ -232,6 +162,7 @@ export default function LoginPage() {
                                 />
                                 <input
                                     id="email"
+                                    autoComplete="username"
                                     type="email"
                                     placeholder="ihre@email.com"
                                     value={formData.email}
@@ -241,11 +172,7 @@ export default function LoginPage() {
                                     required
                                     disabled={isSubmitting}
                                     className="w-full pl-10 pr-10 py-3 rounded-xl text-sm text-white placeholder-slate-600 outline-none transition-all duration-200 disabled:opacity-40"
-                                    style={{
-                                        background: emailFocused ? 'rgba(59,130,246,0.04)' : 'rgba(255,255,255,0.03)',
-                                        border: emailFocused ? '1px solid rgba(59,130,246,0.4)' : '1px solid rgba(255,255,255,0.07)',
-                                        boxShadow: emailFocused ? '0 0 0 3px rgba(59,130,246,0.08)' : 'none',
-                                    }}
+                                    style={feldStil(emailFocused)}
                                 />
                                 {emailHasValue && !isSubmitting && (
                                     <CheckCircle2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#34d399' }} />
@@ -263,7 +190,7 @@ export default function LoginPage() {
                                     Passwort
                                 </label>
                                 <a
-                                    href="mailto:support@complyo.tech"
+                                    href="mailto:support@complyo.de"
                                     className="text-xs transition-colors duration-200 hover:opacity-80"
                                     style={{ color: 'rgba(96,165,250,0.6)' }}
                                 >
@@ -277,6 +204,7 @@ export default function LoginPage() {
                                 />
                                 <input
                                     id="password"
+                                    autoComplete="current-password"
                                     type={showPassword ? 'text' : 'password'}
                                     placeholder="••••••••••••"
                                     value={formData.password}
@@ -286,11 +214,7 @@ export default function LoginPage() {
                                     required
                                     disabled={isSubmitting}
                                     className="w-full pl-10 pr-10 py-3 rounded-xl text-sm text-white placeholder-slate-600 outline-none transition-all duration-200 disabled:opacity-40"
-                                    style={{
-                                        background: passwordFocused ? 'rgba(59,130,246,0.04)' : 'rgba(255,255,255,0.03)',
-                                        border: passwordFocused ? '1px solid rgba(59,130,246,0.4)' : '1px solid rgba(255,255,255,0.07)',
-                                        boxShadow: passwordFocused ? '0 0 0 3px rgba(59,130,246,0.08)' : 'none',
-                                    }}
+                                    style={feldStil(passwordFocused)}
                                 />
                                 {passwordHasValue && (
                                     <button
@@ -350,16 +274,7 @@ export default function LoginPage() {
                     </div>
                 </section>
 
-                <div className="mt-5 flex items-center justify-center gap-4">
-                    <div className="flex items-center gap-1.5">
-                        <Lock className="w-3 h-3" style={{ color: 'rgba(100,116,139,0.4)' }} />
-                        <span className="text-xs" style={{ color: 'rgba(100,116,139,0.4)' }}>256-bit SSL</span>
-                    </div>
-                    <div className="w-px h-3" style={{ background: 'rgba(100,116,139,0.2)' }} />
-                    <span className="text-xs" style={{ color: 'rgba(100,116,139,0.4)' }}>DSGVO-konform</span>
-                    <div className="w-px h-3" style={{ background: 'rgba(100,116,139,0.2)' }} />
-                    <span className="text-xs" style={{ color: 'rgba(100,116,139,0.4)' }}>ISO 27001</span>
-                </div>
+                <AuthVertrauen />
             </div>
 
             <style jsx>{`

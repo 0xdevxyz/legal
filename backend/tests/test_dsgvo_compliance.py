@@ -5,7 +5,6 @@ banner_shown=False is not treated as a valid consent signal.
 """
 
 import datetime
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, MagicMock

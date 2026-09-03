@@ -3,13 +3,15 @@ A/B Testing Routes for Cookie Banner
 API endpoints for managing and evaluating A/B tests
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+
+from dependencies import get_current_user
+from typing import Dict, Any, Optional
 import asyncpg
 import hashlib
 import json
-from datetime import datetime, date
+from datetime import date
 import math
 
 router = APIRouter(prefix="/api/ab-tests", tags=["A/B Testing"])
@@ -69,6 +71,89 @@ async def get_db_connection():
     return db_pool
 
 
+async def assert_site_owner(db_pool, current_user: dict, site_id: str) -> None:
+    """Die Seite muss dem angemeldeten Konto gehoeren.
+
+    Ownership-Anker ist cookie_banner_configs(site_id, user_id) — dieselbe
+    Zuordnung, die auch die Banner-Konfiguration verwendet. 404 statt 403,
+    damit fremde site_ids nicht als existierend erkennbar werden.
+    """
+    row = await db_pool.fetchrow(
+        "SELECT 1 FROM cookie_banner_configs WHERE site_id = $1 AND user_id = $2 LIMIT 1",
+        site_id, int(current_user["id"]),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Site not found")
+
+
+# Felder aus der Varianten-Config, die auf cookie_banner_configs uebertragen
+# werden duerfen. Bewusst eine Allowlist: eine Variante ist Besucher-sichtbare
+# Gestaltung, sie darf keine Zaehler, Fremdschluessel oder Flags ueberschreiben.
+UEBERTRAGBARE_FELDER = (
+    "layout", "primary_color", "accent_color", "text_color", "bg_color",
+    "button_style", "position", "width_mode", "texts",
+)
+
+
+async def wende_variante_an(db_pool, site_id: str, config: dict) -> list:
+    """Uebernimmt die Gestaltung der Gewinner-Variante in die Banner-Config.
+
+    Gibt die tatsaechlich geschriebenen Feldnamen zurueck. Unbekannte Felder
+    werden still ignoriert — eine alte Variante darf keinen Fehler ausloesen.
+    """
+    if not isinstance(config, dict):
+        return []
+
+    felder, werte = [], []
+    for name in UEBERTRAGBARE_FELDER:
+        if name not in config or config[name] is None:
+            continue
+        wert = config[name]
+        if name == "texts":
+            felder.append(f"texts = ${len(werte) + 1}::jsonb")
+            werte.append(json.dumps(wert))
+        else:
+            felder.append(f"{name} = ${len(werte) + 1}")
+            werte.append(wert)
+
+    if not felder:
+        return []
+
+    werte.append(site_id)
+    await db_pool.execute(
+        f"UPDATE cookie_banner_configs SET {', '.join(felder)}, updated_at = NOW() "
+        f"WHERE site_id = ${len(werte)}",
+        *werte,
+    )
+    return [f.split(" =")[0] for f in felder]
+
+
+async def assert_test_owner(db_pool, current_user: dict, test_id: int) -> str:
+    """Wie assert_site_owner, aber ueber die Test-ID. Gibt die site_id zurueck."""
+    row = await db_pool.fetchrow(
+        "SELECT site_id FROM cookie_ab_tests WHERE id = $1", test_id
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Test not found")
+    await assert_site_owner(db_pool, current_user, row["site_id"])
+    return row["site_id"]
+
+
+def als_dict(wert):
+    """JSONB-Spalten kommen ohne registrierten Codec als str aus asyncpg.
+
+    Ohne diese Umwandlung liefert /assign die Varianten-Config als String —
+    das Banner (cookie_banner_v2.js) ruft damit applyServerConfig() mit einem
+    String statt einem Objekt auf und wendet die Variante nie an.
+    """
+    if isinstance(wert, str):
+        try:
+            return json.loads(wert)
+        except (ValueError, TypeError):
+            return {}
+    return wert or {}
+
+
 def hash_visitor_id(visitor_id: str) -> str:
     """Hash visitor ID for consistent assignment"""
     return hashlib.sha256(visitor_id.encode()).hexdigest()
@@ -116,13 +201,15 @@ def is_significant(z_score: float, confidence_level: float = 0.95) -> bool:
 @router.post("")
 async def create_ab_test(
     test: ABTestCreate,
-    db_pool: asyncpg.Pool = Depends(get_db_connection)
+    db_pool: asyncpg.Pool = Depends(get_db_connection),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Create a new A/B test
     
     Test starts in 'draft' status and must be activated separately.
     """
+    await assert_site_owner(db_pool, current_user, test.site_id)
     try:
         # Check if there's already an active test for this site
         existing_query = """
@@ -174,15 +261,17 @@ async def create_ab_test(
         raise
     except Exception as e:
         print(f"Error creating A/B test: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create test: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create test")
 
 
 @router.get("/{test_id}")
 async def get_ab_test(
     test_id: int,
-    db_pool: asyncpg.Pool = Depends(get_db_connection)
+    db_pool: asyncpg.Pool = Depends(get_db_connection),
+    current_user: dict = Depends(get_current_user),
 ):
     """Get A/B test details with current results"""
+    await assert_test_owner(db_pool, current_user, test_id)
     try:
         # Get test
         test_query = """
@@ -281,8 +370,8 @@ async def get_ab_test(
                 "name": test['name'],
                 "description": test['description'],
                 "hypothesis": test['hypothesis'],
-                "variant_a_config": test['variant_a_config'],
-                "variant_b_config": test['variant_b_config'],
+                "variant_a_config": als_dict(test['variant_a_config']),
+                "variant_b_config": als_dict(test['variant_b_config']),
                 "traffic_split": test['traffic_split'],
                 "status": test['status'],
                 "winner": test['winner'],
@@ -312,16 +401,18 @@ async def get_ab_test(
         raise
     except Exception as e:
         print(f"Error getting A/B test: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get test: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get test")
 
 
 @router.get("/site/{site_id}")
 async def get_site_tests(
     site_id: str,
     status: Optional[str] = None,
-    db_pool: asyncpg.Pool = Depends(get_db_connection)
+    db_pool: asyncpg.Pool = Depends(get_db_connection),
+    current_user: dict = Depends(get_current_user),
 ):
     """Get all A/B tests for a site"""
+    await assert_site_owner(db_pool, current_user, site_id)
     try:
         query = """
             SELECT 
@@ -367,16 +458,18 @@ async def get_site_tests(
         
     except Exception as e:
         print(f"Error getting site tests: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get tests: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get tests")
 
 
 @router.patch("/{test_id}")
 async def update_ab_test(
     test_id: int,
     update: ABTestUpdate,
-    db_pool: asyncpg.Pool = Depends(get_db_connection)
+    db_pool: asyncpg.Pool = Depends(get_db_connection),
+    current_user: dict = Depends(get_current_user),
 ):
     """Update an A/B test (only allowed for draft tests)"""
+    await assert_test_owner(db_pool, current_user, test_id)
     try:
         # Check test exists and status
         check_query = "SELECT status FROM cookie_ab_tests WHERE id = $1"
@@ -430,15 +523,17 @@ async def update_ab_test(
         raise
     except Exception as e:
         print(f"Error updating A/B test: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update test: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update test")
 
 
 @router.post("/{test_id}/start")
 async def start_ab_test(
     test_id: int,
-    db_pool: asyncpg.Pool = Depends(get_db_connection)
+    db_pool: asyncpg.Pool = Depends(get_db_connection),
+    current_user: dict = Depends(get_current_user),
 ):
     """Start an A/B test"""
+    await assert_test_owner(db_pool, current_user, test_id)
     try:
         # Check test exists and status
         check_query = "SELECT site_id, status FROM cookie_ab_tests WHERE id = $1"
@@ -490,19 +585,24 @@ async def start_ab_test(
         raise
     except Exception as e:
         print(f"Error starting A/B test: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start test: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to start test")
 
 
 @router.post("/{test_id}/stop")
 async def stop_ab_test(
     test_id: int,
     winner: Optional[str] = None,
-    db_pool: asyncpg.Pool = Depends(get_db_connection)
+    db_pool: asyncpg.Pool = Depends(get_db_connection),
+    current_user: dict = Depends(get_current_user),
 ):
     """Stop an A/B test and optionally declare a winner"""
+    await assert_test_owner(db_pool, current_user, test_id)
     try:
         # Check test exists
-        check_query = "SELECT status FROM cookie_ab_tests WHERE id = $1"
+        check_query = """
+            SELECT status, site_id, variant_a_config, variant_b_config
+            FROM cookie_ab_tests WHERE id = $1
+        """
         test = await db_pool.fetchrow(check_query, test_id)
         
         if not test:
@@ -531,12 +631,22 @@ async def stop_ab_test(
         
         result = await db_pool.fetchrow(update_query, test_id, winner)
         
+        # Mit erklaertem Sieger wird dessen Gestaltung das neue Banner —
+        # sonst waere die Auswertung folgenlos.
+        uebernommen = []
+        if winner:
+            roh = als_dict(
+                test['variant_a_config'] if winner == 'A' else test['variant_b_config']
+            )
+            uebernommen = await wende_variante_an(db_pool, test['site_id'], roh)
+        
         return {
             "success": True,
             "message": "Test stopped",
             "test_id": test_id,
             "status": "completed",
             "winner": winner,
+            "applied_fields": uebernommen,
             "end_date": result['end_date'].isoformat()
         }
         
@@ -544,7 +654,7 @@ async def stop_ab_test(
         raise
     except Exception as e:
         print(f"Error stopping A/B test: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to stop test: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to stop test")
 
 
 # ============================================================================
@@ -610,7 +720,9 @@ async def get_variant_assignment(
             await db_pool.execute(insert_query, test['id'], visitor_hash, variant)
         
         # Get config for variant
-        config = test['variant_a_config'] if variant == 'A' else test['variant_b_config']
+        config = als_dict(
+            test['variant_a_config'] if variant == 'A' else test['variant_b_config']
+        )
         
         return {
             "success": True,
@@ -642,6 +754,13 @@ async def track_ab_result(
     
     Called by the cookie banner when a visitor interacts.
     """
+    laeuft = await db_pool.fetchrow(
+        "SELECT 1 FROM cookie_ab_tests WHERE id = $1 AND status = 'running'",
+        result.test_id,
+    )
+    if not laeuft:
+        raise HTTPException(status_code=404, detail="No running test with this ID")
+
     try:
         today = date.today()
         
@@ -662,10 +781,18 @@ async def track_ab_result(
                 accepted_analytics = cookie_ab_results.accepted_analytics + EXCLUDED.accepted_analytics,
                 accepted_marketing = cookie_ab_results.accepted_marketing + EXCLUDED.accepted_marketing,
                 accepted_functional = cookie_ab_results.accepted_functional + EXCLUDED.accepted_functional,
-                avg_decision_time_ms = (
-                    cookie_ab_results.avg_decision_time_ms * cookie_ab_results.impressions + 
-                    EXCLUDED.avg_decision_time_ms
-                ) / (cookie_ab_results.impressions + 1),
+                avg_decision_time_ms = CASE
+                    WHEN EXCLUDED.avg_decision_time_ms IS NULL
+                        THEN cookie_ab_results.avg_decision_time_ms
+                    WHEN cookie_ab_results.avg_decision_time_ms IS NULL
+                        THEN EXCLUDED.avg_decision_time_ms
+                    ELSE (
+                        cookie_ab_results.avg_decision_time_ms * cookie_ab_results.impressions
+                        + EXCLUDED.avg_decision_time_ms * GREATEST(EXCLUDED.impressions, 1)
+                    ) / NULLIF(
+                        cookie_ab_results.impressions + GREATEST(EXCLUDED.impressions, 1), 0
+                    )
+                END,
                 updated_at = NOW()
         """
         
@@ -689,17 +816,21 @@ async def track_ab_result(
             "message": "Result tracked"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error tracking A/B result: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to track result: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to track result")
 
 
 @router.delete("/{test_id}")
 async def delete_ab_test(
     test_id: int,
-    db_pool: asyncpg.Pool = Depends(get_db_connection)
+    db_pool: asyncpg.Pool = Depends(get_db_connection),
+    current_user: dict = Depends(get_current_user),
 ):
     """Delete an A/B test (only draft or completed tests)"""
+    await assert_test_owner(db_pool, current_user, test_id)
     try:
         # Check test exists and status
         check_query = "SELECT status FROM cookie_ab_tests WHERE id = $1"
@@ -727,5 +858,5 @@ async def delete_ab_test(
         raise
     except Exception as e:
         print(f"Error deleting A/B test: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete test: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete test")
 

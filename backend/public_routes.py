@@ -1,15 +1,41 @@
 """
-Public API Routes for Unauthenticated Access
-Provides website analysis without requiring authentication
+Die fuenf Endpunkte, die ohne Anmeldung erreichbar sind.
+
+/analyze und /analyze-preview fuehren den Scan fuer Interessenten aus,
+/v2/analyze-progress liefert den Fortschritt zum Token, /v2/site-screenshot das
+Vorschaubild, /health den Zustand.
+
+Das ist die Aussenhaut: alles hier ist von jedem im Netz aufrufbar. Zwei Dinge
+folgen daraus und stehen nicht zur Disposition. Erstens muss jede
+hereingereichte Adresse durch ssrf_protection.validate_url, bevor irgendetwas
+sie abruft. Zweitens haengt an den Scan-Endpunkten ein Rate-Limit, sonst
+bezahlt complyo fremde Lastspitzen.
+
+Der Seitenumfang eines Scans richtet sich nach dem Tarif (_seitenbudget); ohne
+Anmeldung gilt der kleinste.
 """
 
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 import logging
 import json
 import os
+# `re` wird in _recommendation_to_steps() benutzt und fehlte hier.
+#
+# Folge: JEDER Scan brach ab, sobald ein Befund eine Empfehlung mitbrachte —
+# NameError im Erzeugen der Loesungsschritte, nach aussen ein HTTP 400 mit
+# "Die Website konnte nicht gescannt werden". Ein Neukunde traf das beim
+# allerersten Klick, und der Text legte nahe, seine Website sei schuld.
+#
+# Gefunden beim Audit-Durchstich an naturheilzentrum.online.
+#
+# Derselbe Waechtertest (tests/test_fehlende_importe.py) hat sofort ein
+# zweites Loch in dieser Datei gefunden: `io.BytesIO` im ZIP-Download, ohne
+# `io`. Wer sein Code-Paket herunterladen wollte, bekam einen Abbruch.
+import io
+import re
 import asyncio
 import aiohttp
 import ipaddress
@@ -17,11 +43,9 @@ import socket
 from datetime import datetime
 from compliance_engine.scanner import ComplianceScanner
 from compliance_engine.priority_engine import priority_engine
-from compliance_engine.solution_generator import solution_generator
-from ai_review_engine import run_ai_review_pass
-from compliance_engine.cookie_analyzer import cookie_analyzer
+from ai_review_engine import run_ai_review_pass, SOLUTION_MODEL
 from website_crawler import WebsiteCrawler
-from auth_routes import get_current_user
+from dependencies import get_current_user, rate_limit
 from accessibility_post_scan_processor import AccessibilityPostScanProcessor
 from ai_solution_cache_service import AISolutionCache
 
@@ -49,6 +73,9 @@ def set_db_pool(pool):
 class AnalyzeRequest(BaseModel):
     url: str
     legal_update_id: Optional[int] = None
+    # Vom Client erzeugtes Token; darunter meldet der Scanner den echten
+    # Fortschritt (GET /v2/analyze-progress/{token}).
+    scan_token: Optional[str] = None
 
 class IssueLocation(BaseModel):
     area: str
@@ -70,9 +97,15 @@ class ComplianceIssue(BaseModel):
     legal_basis: str
     location: IssueLocation
     solution: IssueSolution
+    recommendation: Optional[str] = None  # ✅ Konkrete, issue-spezifische Handlungsempfehlung vom Check
     ai_solution: Optional[str] = None  # ✅ Individuelle KI-generierte Lösung
     auto_fixable: bool
     is_missing: bool = False  # True wenn komplettes Hauptelement fehlt (für 0-Score-Logik)
+    effort: str = "mittel"  # v4.0: Bearbeitungsaufwand — gering | mittel | experte
+    # Zusatzdaten des Scanners. Traegt beim Mehrseiten-Scan die Fundstellen
+    # ("fundstellen", "seiten_betroffen") — ohne sie sieht der Nutzer nur DASS
+    # etwas fehlt, nicht auf welcher seiner Seiten.
+    metadata: Optional[Dict[str, Any]] = None
 
 class PillarScore(BaseModel):
     """Score für eine Compliance-Säule"""
@@ -81,6 +114,7 @@ class PillarScore(BaseModel):
     issues_count: int
     critical_count: int
     warning_count: int
+    status: str = "compliant"  # v4.0: compliant | partial | non_compliant | unverified
 
 class AnalysisResponse(BaseModel):
     success: bool
@@ -93,10 +127,58 @@ class AnalysisResponse(BaseModel):
     issue_groups: Optional[List[Dict[str, Any]]] = []  # ✅ NEU: Gruppierte Issues
     grouping_stats: Optional[Dict[str, Any]] = {}  # ✅ NEU: Gruppierungs-Statistiken
     has_accessibility_widget: Optional[bool] = False  # ✅ NEU: Widget-Status
+    detected_cms: Optional[str] = None  # v4.0: erkanntes Grundsystem (z.B. WordPress)
+    pages_scanned: Optional[Dict[str, Any]] = None  # Mehrseiten-Scan: welche Seiten geprueft wurden
+    is_placeholder: Optional[bool] = False  # v4.0: Platzhalter-/Baustellenseite
+    scan_notice: Optional[str] = None  # v4.0: Hinweis (z.B. Maintenance/Go-Live)
     riskAmount: str
     score: int
     scan_duration_ms: Optional[int] = None
     timestamp: str
+
+# Wieviele Unterseiten je Tarif zusaetzlich zur Startseite geprueft werden.
+# Bis 08/2026 wurde ausschliesslich die Startseite geprueft — die
+# Widerrufsbelehrung auf /agb und das Formular ohne Datenschutzhinweis auf
+# /kontakt blieben damit systematisch unentdeckt.
+UNTERSEITEN_JE_TARIF = {
+    "free":    3,    # Pflichtseiten als Appetitmacher
+    "single":  8,
+    "monitor": 10,
+    "pro":     20,
+    "update":  20,
+    "expert":  40,
+    "agency":  40,
+    "agency2": 40,
+}
+UNTERSEITEN_STANDARD = 3
+
+
+def _fundstellen_metadata(issue: dict) -> "Optional[Dict[str, Any]]":
+    """
+    Reicht genau die Metadaten weiter, die das Dashboard anzeigt.
+
+    Bewusst eine Auswahl statt des ganzen metadata-Blocks: dort liegen auch
+    interne Felder (Selektoren, axe-Regel-IDs, Screenshot-Rohdaten), die im
+    Frontend nichts verloren haben und die Antwort unnoetig aufblaehen.
+    """
+    meta = issue.get("metadata")
+    if not isinstance(meta, dict):
+        return None
+    heraus = {}
+    if meta.get("seiten_betroffen"):
+        heraus["seiten_betroffen"] = meta["seiten_betroffen"]
+    if meta.get("fundstellen"):
+        heraus["fundstellen"] = meta["fundstellen"]
+    if meta.get("page_url"):
+        heraus["page_url"] = meta["page_url"]
+    return heraus or None
+
+
+def _seitenbudget(user: dict) -> int:
+    """Seitenbudget aus dem Tarif des angemeldeten Nutzers."""
+    plan = (user or {}).get("plan_type") or (user or {}).get("plan") or "free"
+    return UNTERSEITEN_JE_TARIF.get(str(plan).lower(), UNTERSEITEN_STANDARD)
+
 
 @public_router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_website_public(request: AnalyzeRequest, http_request: Request, current_user: dict = Depends(get_current_user)):
@@ -158,11 +240,20 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 logger.warning(f"Legal Update Cache refresh fehlgeschlagen (non-critical): {e}")
         
         # Perform compliance scan and crawl in parallel
+        scan_result = None  # für Fallback im except: erfolgreicher Scan darf nicht verloren gehen
         try:
             crawler = WebsiteCrawler(timeout=10)
+            seitenbudget = _seitenbudget(current_user)
+            from compliance_engine import scan_progress as _fortschritt
+            if request.scan_token and _fortschritt.token_gueltig(request.scan_token):
+                _fortschritt.starte(request.scan_token)
+            else:
+                request.scan_token = None
             async with ComplianceScanner() as scanner:
                 scan_result, website_structure = await asyncio.gather(
-                    scanner.scan_website(url),
+                    scanner.scan_website_multipage(
+                        url, max_seiten=seitenbudget, progress_token=request.scan_token
+                    ),
                     crawler.crawl_website(url),
                     return_exceptions=True
                 )
@@ -177,20 +268,49 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             if scan_result.get("error"):
                 # ❌ NO MOCK DATA! Return clear error to user
                 error_message = scan_result.get('error_message', 'Website konnte nicht gescannt werden')
-                logger.error(f"Scanner failed for {url}: {error_message}")
-                
+                reason = scan_result.get('error_reason', 'unreachable')
+                status_code_seen = scan_result.get('status_code', 0)
+                detected_cms = scan_result.get('detected_cms')
+                logger.error(f"Scanner failed for {url}: [{reason}] {error_message}")
+
+                # Klassifizierte Überschrift + passende Hinweise je nach Ursache
+                _titles = {
+                    "maintenance": f"Die Website '{url}' ist im Wartungsmodus.",
+                    "blocked":     f"Der Zugriff auf '{url}' wurde blockiert.",
+                    "not_found":   f"Unter '{url}' wurde keine Seite gefunden.",
+                    "http_error":  f"Die Website '{url}' lieferte einen Fehler.",
+                    "unreachable": f"Die Website '{url}' konnte nicht erreicht werden.",
+                }
+                _suggestions = {
+                    "maintenance": [
+                        "Eine Compliance-Prüfung ist nur bei produktiv erreichbaren Seiten möglich — bitte nach Wiederherstellung erneut scannen.",
+                        "Hinweis: Auch Wartungs-/Baustellenseiten müssen bereits ein Impressum und einen Link zur Datenschutzerklärung bereitstellen.",
+                        *( [f"Erkanntes Grundsystem: {detected_cms} — nach Go-Live sind Cookie-Banner & Datenschutzerklärung zu prüfen."] if detected_cms else [] ),
+                    ],
+                    "blocked": [
+                        "Die Seite ist passwort- oder firewall-geschützt.",
+                        "Prüfen Sie, ob unser Scanner (User-Agent 'Complyo-Scanner') zugelassen ist.",
+                    ],
+                    "not_found": [
+                        "Prüfen Sie die URL (z.B. 'example.com' statt 'example').",
+                        "Versuchen Sie es mit/ohne 'www.'-Prefix.",
+                    ],
+                }
                 raise HTTPException(
                     status_code=400,
                     detail={
-                        "error": "WEBSITE_NOT_REACHABLE",
-                        "message": f"Die Website '{url}' konnte nicht erreicht werden.",
+                        "error": "WEBSITE_NOT_SCANNABLE",
+                        "reason": reason,
+                        "status_code": status_code_seen,
+                        "detected_cms": detected_cms,
+                        "message": _titles.get(reason, _titles["unreachable"]),
                         "details": error_message,
-                        "suggestions": [
+                        "suggestions": _suggestions.get(reason, [
                             "Prüfen Sie, ob die URL korrekt ist (z.B. 'example.com' statt 'example')",
                             "Stellen Sie sicher, dass die Website online ist",
                             "Versuchen Sie es mit 'www.' Prefix (z.B. 'www.example.com')",
-                            "Prüfen Sie, ob die Website eine Firewall hat, die unseren Scanner blockiert"
-                        ]
+                            "Prüfen Sie, ob die Website eine Firewall hat, die unseren Scanner blockiert",
+                        ]),
                     }
                 )
             
@@ -200,7 +320,9 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             # Convert string issues to structured objects
             structured_issues = []
             if scan_result.get("issues"):
-                for idx, issue in enumerate(scan_result["issues"][:30]):  # Limit to 30 issues (für vollständige Compliance-Prüfung aller 4 Säulen)
+                for idx, issue in enumerate(scan_result["issues"][:60]):  # Limit: mit der
+                    # Mehrseiten-Pruefung kommen mehr echte Befunde zusammen; ein
+                    # stilles Abschneiden waere von "alles geprueft" nicht zu unterscheiden.
                     # ✅ FIX: Prüfe ob Issue bereits strukturiert ist (von Check-Modulen)
                     if isinstance(issue, dict) and 'severity' in issue:
                         # Issue kommt von Check-Modulen - behalte Original-Severity!
@@ -229,10 +351,18 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                             solution=_generate_solution_for_issue(
                                 category=issue.get('category', 'compliance'),
                                 title=issue.get('title', ''),
-                                description=issue.get('description', '')
+                                description=issue.get('description', ''),
+                                recommendation=issue.get('recommendation', '')
                             ),
+                            recommendation=issue.get('recommendation') or None,
                             auto_fixable=issue.get('auto_fixable', False),
-                            is_missing=issue.get('is_missing', False)  # ✅ is_missing von Check-Modulen übernehmen
+                            is_missing=issue.get('is_missing', False),  # ✅ is_missing von Check-Modulen übernehmen
+                            effort=issue.get('effort') or _classify_effort(
+                                issue.get('severity'),
+                                issue.get('auto_fixable', False),
+                                issue.get('is_missing', False),
+                            ),
+                            metadata=_fundstellen_metadata(issue),
                         )
                         structured_issues.append(structured_issue)
                     else:
@@ -263,7 +393,13 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                                 hint=f"{_determine_issue_area(risk_data['category'])} fehlt oder ist fehlerhaft"
                             ),
                             solution=_generate_solution(risk_data['category']),
-                            auto_fixable=risk_data['category'] in ['impressum', 'datenschutz', 'cookies', 'agb']
+                            recommendation=(issue.get('recommendation') if isinstance(issue, dict) else None) or None,
+                            auto_fixable=risk_data['category'] in ['impressum', 'datenschutz', 'cookies', 'agb'],
+                            effort=_classify_effort(
+                                risk_data['severity'],
+                                risk_data['category'] in ['impressum', 'datenschutz', 'cookies', 'agb'],
+                                False,
+                            ),
                         )
                         structured_issues.append(structured_issue)
             
@@ -376,7 +512,13 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         await conn.execute(
                             """
                             UPDATE tracked_websites
-                            SET last_scan_date = NOW(), last_score = $1, status = 'active', scan_count = COALESCE(scan_count, 0) + 1
+                            SET last_scan_date = NOW(), last_score = $1, status = 'active', scan_count = COALESCE(scan_count, 0) + 1,
+                                -- Rescan-Anforderung ist mit diesem Scan erfuellt.
+                                -- Ohne das Zuruecksetzen blieb das Flag dauerhaft TRUE und
+                                -- _flag_websites_for_rescan() markierte danach nie wieder
+                                -- eine Site -> 0 Benachrichtigungen bei jedem Legal-Update.
+                                rescan_required = FALSE, rescan_reason = NULL,
+                                rescan_triggered_by = NULL, rescan_flagged_at = NULL
                             WHERE id = $2
                             """,
                             overall_compliance_score,
@@ -385,8 +527,12 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         logger.info(f"✅ Updated website ID {website_id}")
                     
                     # 2. Save scan to scan_history
-                    scan_id = f"scan_{user_id_int}_{int(datetime.now().timestamp())}"
-                    await conn.execute(
+                    # Eigener try-Block (Audit 11.08.): Schema-Drift in genau diesem
+                    # INSERT (legal_update_id/website_id) übersprang früher still die
+                    # komplette Fix-Erzeugung dahinter. Persistenzfehler bleiben jetzt lokal.
+                    try:
+                        scan_id = f"scan_{user_id_int}_{int(datetime.now().timestamp())}"
+                        await conn.execute(
                         """
                         INSERT INTO scan_history (
                             scan_id, user_id, website_id, url, website_name, scan_timestamp,
@@ -408,14 +554,23 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                                     'title': i.title,
                                     'description': i.description,
                                     'risk_euro_min': i.risk_euro_min,
-                                    'risk_euro_max': i.risk_euro_max
+                                    'risk_euro_max': i.risk_euro_max,
+                                    'recommendation': i.recommendation,
+                                    'legal_basis': i.legal_basis,
+                                    'auto_fixable': i.auto_fixable,
+                                    'is_missing': i.is_missing,
+                                    'effort': i.effort,
+                                    'ai_solution': i.ai_solution,
                                 }
                                 for i in structured_issues
                             ],
                             'positive_checks': positive_checks,
-                            'pillar_scores': [{'pillar': p.pillar, 'score': p.score} for p in pillar_scores],
+                            'pillar_scores': [{'pillar': p.pillar, 'score': p.score, 'status': p.status} for p in pillar_scores],
                             'issue_groups': scan_result.get('issue_groups', []),
-                            'grouping_stats': scan_result.get('grouping_stats', {})
+                            'grouping_stats': scan_result.get('grouping_stats', {}),
+                            'detected_cms': scan_result.get('detected_cms'),
+                            'is_placeholder': scan_result.get('is_placeholder', False),
+                            'scan_notice': scan_result.get('scan_notice'),
                         }),
                         overall_compliance_score,
                         total_risk_data.get('total_risk_max', 0),
@@ -424,8 +579,10 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         len(structured_issues),
                         scan_result.get("scan_duration_ms"),
                         legal_update_id
-                    )
-                    logger.info(f"Saved scan history for website ID {website_id}" + (f" (triggered by legal update {legal_update_id})" if legal_update_id else ""))
+                        )
+                        logger.info(f"Saved scan history for website ID {website_id}" + (f" (triggered by legal update {legal_update_id})" if legal_update_id else ""))
+                    except Exception as persist_error:
+                        logger.error(f"❌ scan_history-Persistenz fehlgeschlagen — Fix-Erzeugung läuft trotzdem weiter: {persist_error}")
                     
                     # 🚀 NEU: Post-Process Accessibility-Issues (Alt-Text-Generierung)
                     try:
@@ -435,21 +592,37 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                             # Generiere scan_id basierend auf website_id + timestamp
                             scan_id = f"scan-{website_id}-{int(datetime.now().timestamp())}"
                             
+                            from compliance_engine import scan_progress as _fs
+                            _fs.setze_phase(request.scan_token, "KI-Analysen")
+                            _fs.registriere_checks(request.scan_token, "KI-Analysen",
+                                                   ["Alt-Text-Vorschläge (Bild-KI)"])
                             post_process_result = await processor.process_scan_results(
                                 scan_id=scan_id,
                                 user_id=str(user_id),
-                                scan_data={
-                                    'issues': [
-                                        {
-                                            'id': i.id,
-                                            'category': i.category,
-                                            'severity': i.severity,
-                                            'title': i.title,
-                                            'description': i.description
-                                        }
-                                        for i in structured_issues
-                                    ]
-                                },
+                                # Die ROHEN Befunde weiterreichen, nicht die fuer
+                                # das Dashboard zurechtgeschnittenen.
+                                #
+                                # `structured_issues` traegt nur id/category/
+                                # severity/title/description plus die Metadaten,
+                                # die `_fundstellen_metadata` durchlaesst — und
+                                # das ist bewusst wenig, weil es ans Frontend
+                                # geht. Der Post-Scan-Prozessor ist aber ein
+                                # Backend-Verbraucher und braucht mehr:
+                                #
+                                #   - `metadata.source` == "complyo-kontrast-fix"
+                                #     bzw. "complyo-struktur-fix", sonst werden
+                                #     die im Browser verifizierten Reparaturen
+                                #     NIE gespeichert.
+                                #   - `element.src` des Bildes, sonst greift die
+                                #     Notloesung `/image-N.jpg` und die Vision
+                                #     beschreibt eine Datei, die es nicht gibt
+                                #     ("Bild: Image 20").
+                                #
+                                # Beides ist lange unbemerkt geblieben, weil der
+                                # Aufruf erfolgreich aussieht: der Prozessor
+                                # findet die Marker nicht und meldet schlicht
+                                # null erzeugte Fixes.
+                                scan_data={'issues': scan_result.get("issues") or []},
                                 site_url=scan_result.get("url", url)
                             )
                             
@@ -474,6 +647,11 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             if not isinstance(grouping_stats, dict):
                 grouping_stats = {}
             
+            # Fortschritt abschliessen: die Live-Anzeige darf nie unfertig
+            # stehenbleiben, wenn die Antwort schon unterwegs ist.
+            from compliance_engine import scan_progress as _fs_ende
+            _fs_ende.abschliessen(request.scan_token)
+
             response_data = AnalysisResponse(
                 success=True,
                 url=scan_result.get("url", url),
@@ -484,6 +662,11 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 pillar_scores=pillar_scores,  # ✅ NEU: Säulen-Scores
                 issue_groups=issue_groups,  # ✅ NEU: Gruppierte Issues (immer Liste)
                 grouping_stats=grouping_stats,  # ✅ NEU: Gruppierungs-Statistiken (immer Dict)
+                has_accessibility_widget=scan_result.get("has_accessibility_widget", False),
+                detected_cms=scan_result.get("detected_cms"),
+                pages_scanned=scan_result.get("pages_scanned"),
+                is_placeholder=scan_result.get("is_placeholder", False),
+                scan_notice=scan_result.get("scan_notice"),
                 riskAmount=total_risk_data['total_risk_range'],
                 score=overall_compliance_score,  # ✅ Durchschnitt statt Scanner-Score
                 scan_duration_ms=scan_result.get("scan_duration_ms"),
@@ -495,15 +678,55 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             return response_data
             
         except Exception as scanner_error:
-            # ❌ NO MOCK DATA! Return clear error to user
             logger.error(f"Scanner error for {url}: {scanner_error}", exc_info=True)
-            
+
+            # ✅ Resilienz: Wenn der SCAN selbst erfolgreich war, aber ein nachgelagerter
+            # Schritt (AI-Review/Quota/externer Dienst/Persistenz) scheitert, darf das den
+            # Scan NICHT als "nicht erreichbar" maskieren — Ergebnis trotzdem ausliefern.
+            if (isinstance(scan_result, dict) and not scan_result.get("error")
+                    and scan_result.get("issues") is not None):
+                try:
+                    logger.warning("⚠️ Liefere Scan-Ergebnis trotz Enrichment-Fehler aus (degraded).")
+                    return _minimal_response_from_scan(url, scan_result)
+                except Exception as fb_err:
+                    logger.error(f"Fallback-Response fehlgeschlagen: {fb_err}", exc_info=True)
+
+            # Was der Kunde liest, haengt davon ab, WER schuld ist.
+            #
+            # Vorher stand hier immer derselbe Text plus `str(scanner_error)`.
+            # Beim Audit las ein Neukunde deshalb: "Die Website konnte nicht
+            # gescannt werden. name 're' is not defined. Stellen Sie sicher,
+            # dass die Website online ist." — ein Fehler in UNSEREM Code,
+            # praesentiert als Problem SEINER Website, garniert mit einem
+            # Python-Innenleben, mit dem er nichts anfangen kann.
+            #
+            # Fuer ein Produkt, das Vertrauen verkauft, ist das teuer: der
+            # Kunde sucht den Fehler bei sich und findet ihn nie.
+            unser_fehler = isinstance(
+                scanner_error, (NameError, AttributeError, TypeError,
+                                ImportError, KeyError, IndexError))
+            if unser_fehler:
+                logger.error("Scanfehler in eigenem Code fuer %s: %r",
+                             url, scanner_error, exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "error": "SCANNER_ERROR",
+                        "message": ("Beim Prüfen ist auf unserer Seite etwas "
+                                    "schiefgegangen — nicht an Ihrer Website."),
+                        "suggestions": [
+                            "Bitte versuchen Sie es in ein paar Minuten erneut",
+                            "Der Fehler ist bei uns protokolliert und wird geprüft",
+                        ],
+                    },
+                )
             raise HTTPException(
                 status_code=400,
                 detail={
                     "error": "SCANNER_ERROR",
                     "message": f"Die Website '{url}' konnte nicht gescannt werden.",
-                    "details": str(scanner_error),
+                    # Bewusst ohne `str(scanner_error)`: interne Meldungen
+                    # helfen dem Kunden nicht und verraten Aufbau-Details.
                     "suggestions": [
                         "Stellen Sie sicher, dass die Website online ist",
                         "Prüfen Sie, ob die URL korrekt ist",
@@ -522,39 +745,122 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             detail="Fehler bei der Website-Analyse. Bitte versuchen Sie es erneut."
         )
 
-def _calculate_pillar_scores(issues: List[ComplianceIssue]) -> List[PillarScore]:
+def _minimal_response_from_scan(url: str, scan_result: Dict[str, Any]) -> "AnalysisResponse":
     """
-    Berechnet die 4 Säulen-Scores — delegiert an ScoreCalculator (SSOT v3.0).
-    Säule: max(0, 100 - (critical × 25 + warning × 8)), fehlendes Kern-Element → 0.
-    Sicherheit → gdpr (Art. 32), Shop → legal. Gesamtscore = gleichgewichteter
-    Mittelwert der 4 Säulen (siehe ScoreCalculator.calculate_overall_score).
+    Baut eine vollständige AnalysisResponse direkt aus dem (erfolgreichen) Scanner-
+    Ergebnis — als Fallback, wenn ein nachgelagerter Enrichment-Schritt scheitert.
+    So bekommt der Nutzer das Scan-Ergebnis statt einer irreführenden Fehlermeldung.
     """
     from compliance_engine.score_calculator import ScoreCalculator
 
-    # 4 Säulen (SSOT v3.0): Sicherheit → gdpr, Shop → legal.
-    # Vollständige Kategorie-Abdeckung über ScoreCalculator.categorize().
+    raw_issues = scan_result.get("issues", []) or []
+    issues: List[ComplianceIssue] = []
+    for i in raw_issues[:30]:
+        if not isinstance(i, dict):
+            continue
+        cat = i.get("category", "compliance")
+        title = (i.get("title") or i.get("description") or "")[:100]
+        slug = "-".join("".join(c if c.isalnum() or c.isspace() else "" for c in title.lower()).split()[:4])
+        sev = i.get("severity", "warning")
+        risk = i.get("risk_euro", 1000) or 0
+        issues.append(ComplianceIssue(
+            id=f"{cat}-{slug}"[:50],
+            category=cat,
+            severity=sev,
+            title=title,
+            description=i.get("description", ""),
+            risk_euro_min=risk,
+            risk_euro_max=risk,
+            risk_range=f"{risk:,}€".replace(",", "."),
+            legal_basis=i.get("legal_basis", "Gesetzliche Anforderung"),
+            location=IssueLocation(
+                area=_determine_issue_area(cat),
+                hint=f"{_determine_issue_area(cat)} prüfen",
+            ),
+            solution=_generate_solution(cat),
+            recommendation=i.get("recommendation") or None,
+            auto_fixable=i.get("auto_fixable", False),
+            is_missing=i.get("is_missing", False),
+            effort=i.get("effort") or _classify_effort(sev, i.get("auto_fixable", False), i.get("is_missing", False)),
+        ))
+
+    pillar_scores: List[PillarScore] = []
+    for p in (scan_result.get("pillar_scores", []) or []):
+        pid = p.get("pillar")
+        p_issues = [x for x in issues if ScoreCalculator.categorize(x.category) == pid]
+        pillar_scores.append(PillarScore(
+            pillar=pid,
+            score=p.get("score", 0),
+            issues_count=len(p_issues),
+            critical_count=sum(1 for x in p_issues if x.severity == "critical"),
+            warning_count=sum(1 for x in p_issues if x.severity == "warning"),
+            status=p.get("status", "compliant"),
+        ))
+
+    overall = scan_result.get("compliance_score", 0)
+    risk_total = scan_result.get("total_risk_euro", 0) or 0
+    risk_str = f"{risk_total:,}€".replace(",", ".")
+    return AnalysisResponse(
+        success=True,
+        url=scan_result.get("url", url),
+        compliance_score=overall,
+        estimated_risk_euro=risk_str,
+        issues=issues,
+        positive_checks=[],
+        pillar_scores=pillar_scores,
+        issue_groups=[],
+        grouping_stats={},
+        has_accessibility_widget=scan_result.get("has_accessibility_widget", False),
+        detected_cms=scan_result.get("detected_cms"),
+        is_placeholder=scan_result.get("is_placeholder", False),
+        scan_notice=scan_result.get("scan_notice"),
+        riskAmount=risk_str,
+        score=overall,
+        scan_duration_ms=scan_result.get("scan_duration_ms"),
+        timestamp=datetime.now().isoformat(),
+    )
+
+
+def _classify_effort(severity, auto_fixable: bool, is_missing: bool) -> str:
+    """Bearbeitungsaufwand eines Issues — delegiert an ScoreCalculator (SSOT v4.0)."""
+    from compliance_engine.score_calculator import ScoreCalculator
+    return ScoreCalculator.classify_effort(
+        severity=severity or "warning",
+        auto_fixable=bool(auto_fixable),
+        is_missing=bool(is_missing),
+    )
+
+
+def _calculate_pillar_scores(issues: List[ComplianceIssue]) -> List[PillarScore]:
+    """
+    Berechnet die 4 Säulen-Scores — delegiert vollständig an die evidenz-basierte
+    Engine ScoreCalculator.compute_with_status (SSOT v4.0). EINE Quelle für Score
+    UND Status, damit Backend, Scanner und Frontend nie auseinanderlaufen.
+
+    Säule: max(0, 100 - (critical × 25 + warning × 8)), fehlendes Kern-Element → 0,
+    ungeprüfte Säule → Status "unverified". Sicherheit → gdpr (Art. 32), Shop → legal.
+    """
+    from compliance_engine.score_calculator import ScoreCalculator
+
+    result = ScoreCalculator.compute_with_status(issues)
+    pillar_status = result["pillar_status"]
+    pillar_score_map = result["pillar_scores"]
+
+    # Issue-Zählung pro Säule (für die UI-Detailanzeige)
     buckets = {pillar: [] for pillar in ScoreCalculator.PILLAR_IDS}
     for issue in issues:
         buckets[ScoreCalculator.categorize(issue.category)].append(issue)
 
     pillar_scores = []
-    for pillar, pillar_issues in buckets.items():
-        has_missing_core = any(getattr(issue, 'is_missing', False) for issue in pillar_issues)
-        critical_count = sum(1 for i in pillar_issues if i.severity == 'critical')
-        warning_count  = sum(1 for i in pillar_issues if i.severity == 'warning')
-
-        score = ScoreCalculator.calculate_pillar_score(
-            critical_count=critical_count,
-            warning_count=warning_count,
-            has_missing_core=has_missing_core,
-        )
-
+    for pillar in ScoreCalculator.PILLAR_IDS:
+        pillar_issues = buckets[pillar]
         pillar_scores.append(PillarScore(
             pillar=pillar,
-            score=score,
+            score=pillar_score_map[pillar],
             issues_count=len(pillar_issues),
-            critical_count=critical_count,
-            warning_count=warning_count,
+            critical_count=sum(1 for i in pillar_issues if i.severity == 'critical'),
+            warning_count=sum(1 for i in pillar_issues if i.severity == 'warning'),
+            status=pillar_status[pillar],
         ))
 
     return pillar_scores
@@ -574,11 +880,17 @@ def _determine_issue_area(category: str) -> str:
         'tracking': 'Header/Scripts',
         'urheberrecht': 'Content/Bilder',
         'markenrecht': 'Content/Logos',
-        'preisangaben': 'Produktseiten',
         'uwg': 'Content/Werbung',
+        # Stand zweimal drin ('Produktseiten' und 'Produktseiten/Shop'); der
+        # zweite Wert gewann still. Bei einer Zuordnungstabelle fuer
+        # Rechtsbereiche ist eine stille Ueberschreibung genau das, was
+        # niemand bemerkt.
         'preisangaben': 'Produktseiten/Shop',
         'shop': 'Online-Shop',
-        'widerrufsbelehrung': 'Online-Shop',
+        # 'widerrufsbelehrung' stand hier ein zweites Mal ('Online-Shop') und
+        # ueberschrieb still das praezisere 'Footer/Checkout' weiter oben. Bei
+        # einer Tabelle, die dem Kunden sagt, WO er den Mangel findet, ist die
+        # unschaerfere Angabe der Rueckschritt.
         'avv': 'Datenschutz',
         'security': 'HTTP-Header/Server',
     }
@@ -703,11 +1015,11 @@ Antworte auf Deutsch, maximal 300 Wörter."""
                 headers={
                     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://complyo.tech",
+                    "HTTP-Referer": "https://complyo.de",
                     "X-Title": "Complyo Compliance Scanner"
                 },
                 json={
-                    "model": "moonshotai/kimi-k2-thinking",
+                    "model": SOLUTION_MODEL,
                     "messages": [
                         {
                             "role": "user",
@@ -734,7 +1046,7 @@ Antworte auf Deutsch, maximal 300 Wörter."""
                                 title=issue_title,
                                 description=issue_description,
                                 solution=ai_solution,
-                                model="moonshotai/kimi-k2-thinking"
+                                model=SOLUTION_MODEL
                             )
                         except Exception as e:
                             logger.error(f"❌ Failed to cache solution: {e}")
@@ -762,9 +1074,38 @@ Antworte auf Deutsch, maximal 300 Wörter."""
         logger.error(f"❌ KI-Lösung Generation failed: {e}")
         return None
 
-def _generate_solution_for_issue(category: str, title: str = '', description: str = '') -> IssueSolution:
-    """Generiert issue-spezifische Lösungsvorschläge basierend auf Kategorie UND konkretem Titel"""
-    
+def _recommendation_to_steps(recommendation: str) -> List[str]:
+    """Zerlegt einen Empfehlungstext in einzelne, nummerierte Handlungsschritte.
+
+    Viele Checks (v.a. die datengetriebenen Legal-Change-Checks) liefern eine
+    präzise, issue-spezifische Empfehlung. Diese ist als Lösung deutlich besser
+    als ein generischer Kategorie-Fallback. Wir splitten an Aufzählungen
+    (1), (2) ... bzw. an Satzgrenzen, damit das Frontend saubere Schritte zeigt.
+    """
+    text = (recommendation or '').strip()
+    if not text:
+        return []
+    # Aufzählungen im Stil "(1) ... (2) ..." aufbrechen
+    parts = re.split(r'\s*\(\d+\)\s*', text)
+    parts = [p.strip(' .;,') for p in parts if p.strip(' .;,')]
+    if len(parts) > 1:
+        return parts
+    # sonst an Satzgrenzen splitten (max. 6 Schritte)
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    return sentences[:6] if sentences else [text]
+
+
+def _generate_solution_for_issue(category: str, title: str = '', description: str = '',
+                                 recommendation: str = '') -> IssueSolution:
+    """Generiert issue-spezifische Lösungsvorschläge basierend auf Kategorie UND konkretem Titel.
+
+    Hat der Check selbst eine konkrete Empfehlung geliefert (z.B. datengetriebene
+    Legal-Change-Checks wie DSA-Werbekennzeichnung oder KI-Transparenzhinweis),
+    nutzen wir diese als Lösungsschritte — statt eines generischen Kategorie-
+    Fallbacks, der das eigentliche Problem nicht trifft.
+    """
+
     title_lower = title.lower()
     desc_lower = description.lower()
     
@@ -1038,6 +1379,12 @@ Name / Datum / Unterschrift</p>''',
     # AVV (Auftragsverarbeitungsvertrag)
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     if category == 'avv' or 'avv' in title_lower or 'auftragsverarbeit' in title_lower or 'datenverarbeit' in title_lower:
+        # Drittland-/Transfer-spezifische Checks (z.B. US-Dienste ohne
+        # Rechtsgrundlage) liefern eine passgenaue Empfehlung — diese schlägt
+        # den generischen AVV-Vertragstext.
+        rec_steps = _recommendation_to_steps(recommendation)
+        if rec_steps:
+            return IssueSolution(code_snippet='', steps=rec_steps)
         return IssueSolution(
             code_snippet='''<!-- Datenschutzerklärung: Auftragsverarbeiter nennen -->
 <h2>Auftragsverarbeitung</h2>
@@ -1318,6 +1665,14 @@ Art. 28 DSGVO abgeschlossen:</p>
                 ]
             )
         
+        # Spezifische Datenschutz-Checks (z.B. DSA-Werbekennzeichnung,
+        # KI-Transparenzhinweis, US-Drittlandtransfer) liefern eine präzise
+        # Empfehlung mit — diese ist die richtige Lösung, nicht der generische
+        # "Datenschutzerklärung anlegen"-Hinweis.
+        rec_steps = _recommendation_to_steps(recommendation)
+        if rec_steps:
+            return IssueSolution(code_snippet='', steps=rec_steps)
+
         return IssueSolution(
             code_snippet='''<!-- Datenschutzerklärung Footer-Link -->
 <footer>
@@ -1472,6 +1827,14 @@ RewriteRule ^(.*)$ https://%1/$1 [R=301,L]''',
             ]
         )
     
+    # Fallback: Wenn der Check eine konkrete, issue-spezifische Empfehlung
+    # mitgeliefert hat (z.B. datengetriebene Legal-Change-Checks wie
+    # DSA-Werbekennzeichnung oder KI-Transparenzhinweis), nutze diese als
+    # Lösungsschritte — sie trifft das Problem genauer als der Kategorie-Default.
+    rec_steps = _recommendation_to_steps(recommendation)
+    if rec_steps:
+        return IssueSolution(code_snippet='', steps=rec_steps)
+
     # Fallback für andere Kategorien
     return _generate_solution(category)
 
@@ -1669,14 +2032,19 @@ async def _generate_mock_analysis(url: str, risk_calculator) -> AnalysisResponse
         compliance_score=score,
         estimated_risk_euro=total_risk_data['total_risk_range'],
         issues=structured_issues,
-        has_accessibility_widget=scan_result.get('has_accessibility_widget', False),
+        # `scan_result` gibt es in dieser Funktion nicht — sie ist der
+        # RUECKFALL, wenn der echte Scan scheitert. Das Sicherheitsnetz
+        # riss also selbst: NameError statt Ersatzantwort. Ein Mock hat
+        # kein Scanergebnis, also False.
+        has_accessibility_widget=False,
         riskAmount=total_risk_data['total_risk_range'],
         score=score,
         scan_duration_ms=scan_duration,
         timestamp=datetime.now().isoformat()
     )
 
-@public_router.post("/analyze-preview", response_model=Dict[str, Any])
+@public_router.post("/analyze-preview", response_model=Dict[str, Any],
+                    dependencies=[Depends(rate_limit("analyze_preview", 3, 60))])
 async def analyze_website_preview(request: AnalyzeRequest, http_request: Request):
     """
     Preview-Analyse für Landing Page (ohne Details)
@@ -1707,8 +2075,10 @@ async def analyze_website_preview(request: AnalyzeRequest, http_request: Request
                 scan_result = await scanner.scan_website(url)
             
             if scan_result.get("error"):
-                # Fallback zu Mock
-                return await _generate_preview_mock(url, risk_calculator)
+                # Kein Mock mehr (Audit 11.08.): erfundene Befunde mit success:true
+                # täuschten Interessenten. Ehrlicher Fehler; die Landing zeigt
+                # dafür ihren bestehenden Fehlerzustand (WebsiteScanner hasData-Check).
+                return _preview_scan_fehler(url, scan_result.get("error_message"))
             
             # Aggregiere Issues nach Kategorien
             risk_categories = await _aggregate_risk_categories(
@@ -1716,24 +2086,44 @@ async def analyze_website_preview(request: AnalyzeRequest, http_request: Request
                 risk_calculator
             )
             
-            # Berechne Gesamt-Risiko
-            total_risk_min = sum(cat['risk_min'] for cat in risk_categories if cat['detected'])
-            total_risk_max = sum(cat['risk_max'] for cat in risk_categories if cat['detected'])
+            # Gesamt-Risiko: NICHT aufsummieren.
+            #
+            # Bis 03.09.2026 stand hier sum() ueber alle Kategorien. Die leere
+            # Platzhalterseite example.com kam damit auf 91.800 EUR - eine Zahl,
+            # die weder der Abmahn- noch der Bussgeldpraxis entspricht und die
+            # ausgerechnet einen Compliance-Anbieter nach Paragraph 5 UWG
+            # angreifbar macht. Innerhalb einer Kategorie wurde laengst nicht
+            # mehr addiert; der Fehler sass nur noch an der Kategoriegrenze.
+            from risk_calculator import gesamtrisiko_aus_kategorien
+            gesamt = gesamtrisiko_aus_kategorien(risk_categories)
+            total_risk_min = gesamt["risk_min"]
+            total_risk_max = gesamt["risk_max"]
             
             return {
                 "success": True,
                 "url": url,
                 "score": scan_result.get("compliance_score", 50),
                 "risk_categories": risk_categories,
-                "total_risk_range": f"{int(total_risk_min):,}€ - {int(total_risk_max):,}€".replace(',', '.'),
+                "total_risk_range": gesamt["risk_range"],
+                "total_risk_min": total_risk_min,
+                "total_risk_max": total_risk_max,
+                "rahmen_max": gesamt["rahmen_max"],
+                "rahmen_range": gesamt["rahmen_range"],
+                "risk_bereiche_betroffen": gesamt["bereiche_betroffen"],
+                "risk_bereiche_kritisch": gesamt["bereiche_kritisch"],
+                "risk_gedeckelt": gesamt["gedeckelt"],
                 "issues_count": len(scan_result.get("issues", [])),
                 "critical_count": sum(1 for cat in risk_categories if cat['severity'] == 'critical' and cat['detected']),
+                # Phase 7.1 Lead-Magnet: explizite Regulierungs-Reports
+                "bfsg_report": scan_result.get("bfsg_report"),
+                "ai_act_report": scan_result.get("ai_act_report"),
                 "timestamp": datetime.now().isoformat()
             }
             
         except Exception as scanner_error:
             logger.error(f"Preview scanner error: {scanner_error}", exc_info=True)
-            return await _generate_preview_mock(url, risk_calculator)
+            # Kein Mock mehr — siehe oben.
+            return _preview_scan_fehler(url)
         
     except HTTPException:
         raise
@@ -1801,25 +2191,44 @@ async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict
     # Zähle Issues pro Säule
     for pillar_id, pillar_data in all_pillars.items():
         detected_issues = []
-        pillar_risk_min = 0
-        pillar_risk_max = 0
+        issue_risks_min = []
+        issue_risks_max = []
         max_severity = 'info'
-        
+
         for issue in issues:
             issue_text = issue if isinstance(issue, str) else issue.get("description", str(issue))
             risk_data = await risk_calculator.calculate_issue_risk(issue_text)
-            
+
             if risk_data['category'] in pillar_data['categories']:
                 detected_issues.append(issue_text)
-                pillar_risk_min += risk_data['risk_min']
-                pillar_risk_max += risk_data['risk_max']
-                
-                # Update max severity
+                issue_risks_min.append(risk_data['risk_min'])
+                issue_risks_max.append(risk_data['risk_max'])
+
                 if risk_data['severity'] == 'critical':
                     max_severity = 'critical'
                 elif risk_data['severity'] == 'warning' and max_severity != 'critical':
                     max_severity = 'warning'
-        
+
+        # Risiko-Aggregation: NICHT aufsummieren.
+        #
+        # Aus 48 Cookie-Verstoessen auf einer Website werden keine 48 Verfahren,
+        # sondern eines. Das Aufsummieren der Einzelrisiken hat frueher Betraege
+        # bis in den zweistelligen Millionenbereich erzeugt - fuer die Zielgruppe
+        # (KMU) unglaubwuerdig und als Werbeaussage angreifbar.
+        #
+        # Modell: hoechstes Einzelrisiko der Kategorie als Basis, plus einen
+        # unterlinearen Zuschlag fuer die Anzahl der Fundstellen (viele Verstoesse
+        # erhoehen Wahrscheinlichkeit und Bussgeldzumessung, aber nicht linear).
+        # Zuschlag gedeckelt bei +50 %.
+        if detected_issues:
+            escalation = 1.0 + min(0.5, 0.05 * (len(detected_issues) - 1))
+            pillar_risk_min = int(max(issue_risks_min) * escalation)
+            pillar_risk_max = int(max(issue_risks_max) * escalation)
+        else:
+            pillar_risk_min = 0
+            pillar_risk_max = 0
+
+
         result.append({
             'id': pillar_id,
             'label': pillar_data['label'],
@@ -1834,57 +2243,20 @@ async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict
     
     return result
 
-async def _generate_preview_mock(url: str, risk_calculator) -> Dict[str, Any]:
-    """Mock Preview wenn Scanner fehlschlägt"""
-    
-    # FIXED: Deterministischer Pseudo-Random Generator basierend auf URL
-    def seeded_value(seed: str, min_val: int, max_val: int) -> int:
-        """Generiere deterministische Werte basierend auf Seed (URL)"""
-        hash_val = 0
-        for char in seed:
-            hash_val = ((hash_val << 5) - hash_val) + ord(char)
-            hash_val = hash_val & 0xFFFFFFFF  # 32-bit integer
-        normalized = abs(hash_val) / 0xFFFFFFFF
-        return int(normalized * (max_val - min_val + 1)) + min_val
-    
-    # Mock Issues
-    mock_issues = [
-        "Es wurde kein Link zum Impressum gefunden",
-        "Cookie-Banner fehlt",
-        "Datenschutzerklärung nicht gefunden",
-        "Fehlende Alt-Texte für Barrierefreiheit"
-    ]
-    
-    # FIXED: Deterministisch bestimmen, wie viele Issues angezeigt werden
-    num_issues = seeded_value(url + "count", 2, 4)
-    # Deterministisch Issues auswählen basierend auf URL
-    selected_indices = []
-    for i in range(num_issues):
-        seed_idx = seeded_value(url + f"issue_{i}", 0, len(mock_issues) - 1)
-        if seed_idx not in selected_indices:
-            selected_indices.append(seed_idx)
-    # Falls Duplikate, einfach die ersten num_issues nehmen
-    if len(selected_indices) < num_issues:
-        selected_indices = list(range(min(num_issues, len(mock_issues))))
-    
-    selected = [mock_issues[i] for i in selected_indices[:num_issues]]
-    
-    risk_categories = await _aggregate_risk_categories(selected, risk_calculator)
-    
-    total_risk_min = sum(cat['risk_min'] for cat in risk_categories if cat['detected'])
-    total_risk_max = sum(cat['risk_max'] for cat in risk_categories if cat['detected'])
-    
-    # FIXED: Deterministischer Score basierend auf URL
-    score = seeded_value(url + "score", 30, 60)
-    
+def _preview_scan_fehler(url: str, detail: str | None = None) -> Dict[str, Any]:
+    """Ehrliche Fehlerantwort der Landing-Preview.
+
+    Ersetzt den früheren Mock (Audit 11.08.): der lieferte bei Scannerfehlern
+    aus dem URL-Hash gewürfelte Befunde mit success:true und Score 30-60 —
+    Interessenten sahen erfundene Verstöße. Bewusst OHNE score-Feld, damit
+    der hasData-Check der Landing (WebsiteScanner.tsx) den Fehlerzustand zeigt.
+    """
     return {
-        "success": True,
+        "success": False,
+        "error": "scan_failed",
+        "message": detail or "Die Website konnte nicht automatisch gescannt werden. "
+                             "Bitte prüfen Sie die URL oder versuchen Sie es später erneut.",
         "url": url,
-        "score": score,
-        "risk_categories": risk_categories,
-        "total_risk_range": f"{int(total_risk_min):,}€ - {int(total_risk_max):,}€".replace(',', '.'),
-        "issues_count": len(selected),
-        "critical_count": sum(1 for cat in risk_categories if cat['severity'] == 'critical' and cat['detected']),
         "timestamp": datetime.now().isoformat()
     }
 
@@ -2043,46 +2415,9 @@ def convert_issues_to_fixes(issues: List[Dict], base_url: str) -> Dict[str, List
     return fixes
 
 
-@v1_router.post("/sites/{site_id}/widget-feedback")
-async def widget_feedback(
-    site_id: str,
-    feedback: Dict[str, Any]
-):
-    """
-    Empfängt Feedback vom Widget über angewendete Fixes
-    
-    Hilft bei Monitoring und Analytics:
-    - Welche Fixes wurden angewendet?
-    - Gab es Fehler?
-    - Performance-Metriken
-    """
-    try:
-        logger.info(f"Widget feedback from {site_id}: {feedback.get('event')}")
-
-        from main_production import db_pool as main_db_pool
-        if main_db_pool:
-            async with main_db_pool.acquire() as conn:
-                await conn.execute(
-                    """INSERT INTO widget_events
-                       (site_id, widget_type, event_name, event_data)
-                       VALUES ($1, $2, $3, $4)""",
-                    site_id,
-                    "widget-feedback",
-                    feedback.get("event", "feedback"),
-                    json.dumps(feedback),
-                )
-
-        return {
-            "success": True,
-            "message": "Feedback received"
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to process widget feedback: {e}")
-        return {
-            "success": False,
-            "message": "Failed to process feedback"
-        }
+# /sites/{site_id}/widget-feedback wurde entfernt (Audit 11.08.): kein einziges
+# Widget/Plugin rief den Endpunkt je auf, widget_events blieb seit je leer.
+# Die echte Selbstüberwachung läuft über POST /api/wirkung (wirkung_routes).
 
 
 @v1_router.get("/widget/version")
@@ -2094,8 +2429,8 @@ async def widget_version():
     """
     return {
         "version": "2.0.0",
-        "cdn_url": "https://cdn.complyo.tech/accessibility-v2.js",
-        "changelog_url": "https://complyo.tech/widget/changelog",
+        "cdn_url": "https://cdn.complyo.de/accessibility-v2.js",
+        "changelog_url": "https://complyo.de/widget/changelog",
         "deprecated_versions": ["1.0.0", "1.5.0"]
     }
 
@@ -2176,3 +2511,100 @@ async def download_code_package(
 
  
 
+
+@public_router.get("/v2/analyze-progress/{token}")
+async def analyze_progress(token: str, current_user: dict = Depends(get_current_user)):
+    """
+    Echter Scan-Fortschritt zum Client-Token.
+
+    Die Checks melden sich selbst beim Abschluss; hier wird nur gelesen.
+    Unbekanntes Token liefert einen leeren Stand statt 404 — der Client
+    pollt ab dem ersten Moment, noch bevor starte() gelaufen ist.
+    """
+    from compliance_engine import scan_progress as _fortschritt
+    if not _fortschritt.token_gueltig(token):
+        raise HTTPException(status_code=400, detail="Ungültiges Token")
+    return _fortschritt.hole(token) or {"phase": "Scan startet", "gruppen": [], "fertig": False}
+
+
+_SCREENSHOT_VERZEICHNIS = "/tmp/complyo-screenshots"
+_SCREENSHOT_TTL = 24 * 3600
+_screenshot_semaphor = asyncio.Semaphore(2)
+
+
+def _host_ist_privat(hostname: str) -> bool:
+    """SSRF-Schutz: keine Screenshots interner Adressen."""
+    import ipaddress
+    import socket
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return True
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return True
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return True
+    return False
+
+
+@public_router.get("/v2/site-screenshot")
+async def site_screenshot(url: str, current_user: dict = Depends(get_current_user)):
+    """
+    Screenshot der analysierten Website fuer die Hero-Vorschau.
+
+    24h-Cache auf Platte: der Anblick der eigenen Startseite aendert sich
+    selten, ein Playwright-Start pro Aufruf waere Verschwendung. Der
+    SSRF-Guard ist Pflicht — sonst waere das ein Kamera-Proxy ins interne
+    Netz ("http://10.0.0.5/admin" als Bild).
+    """
+    import hashlib
+    import os
+    import time as _time
+    from urllib.parse import urlparse
+    from fastapi.responses import FileResponse
+
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    teile = urlparse(url)
+    if teile.scheme not in ("http", "https") or not teile.hostname or teile.port not in (None, 80, 443):
+        raise HTTPException(status_code=400, detail="Ungültige URL")
+    if _host_ist_privat(teile.hostname):
+        raise HTTPException(status_code=400, detail="Adresse nicht erlaubt")
+
+    os.makedirs(_SCREENSHOT_VERZEICHNIS, exist_ok=True)
+    schluessel = hashlib.sha256(f"{teile.scheme}://{teile.netloc}{teile.path}".encode()).hexdigest()[:32]
+    pfad = os.path.join(_SCREENSHOT_VERZEICHNIS, f"{schluessel}.png")
+
+    if os.path.exists(pfad) and _time.time() - os.path.getmtime(pfad) < _SCREENSHOT_TTL:
+        return FileResponse(pfad, media_type="image/png",
+                            headers={"Cache-Control": "private, max-age=3600"})
+
+    async with _screenshot_semaphor:
+        # Doppelpruefung: waehrend des Wartens kann ein paralleler Aufruf
+        # dasselbe Bild schon erzeugt haben.
+        if os.path.exists(pfad) and _time.time() - os.path.getmtime(pfad) < _SCREENSHOT_TTL:
+            return FileResponse(pfad, media_type="image/png",
+                                headers={"Cache-Control": "private, max-age=3600"})
+        try:
+            from playwright.async_api import async_playwright
+            async with async_playwright() as pw:
+                browser = await pw.chromium.launch(
+                    args=["--no-sandbox", "--disable-dev-shm-usage"]
+                )
+                try:
+                    seite = await browser.new_page(viewport={"width": 1280, "height": 800})
+                    await seite.goto(url, timeout=20000, wait_until="domcontentloaded")
+                    await seite.wait_for_timeout(1500)
+                    await seite.screenshot(path=pfad, full_page=False)
+                finally:
+                    await browser.close()
+        except Exception as e:
+            logger.warning(f"Screenshot fehlgeschlagen für {url}: {e}")
+            raise HTTPException(status_code=502, detail="Screenshot nicht möglich")
+
+    return FileResponse(pfad, media_type="image/png",
+                        headers={"Cache-Control": "private, max-age=3600"})

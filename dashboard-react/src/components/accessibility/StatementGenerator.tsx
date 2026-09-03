@@ -172,7 +172,7 @@ export default function StatementGenerator() {
               className="block text-sm font-medium text-gray-700"
             >
               Kontakt-E-Mail{' '}
-              <span className="text-gray-400 font-normal">(optional)</span>
+              <span className="text-gray-600 dark:text-gray-400 font-normal">(optional)</span>
             </label>
             <input
               id="contactEmail"

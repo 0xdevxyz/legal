@@ -27,11 +27,21 @@ export interface ComplianceIssue {
   solution: IssueSolution;
   auto_fixable: boolean;
   is_missing?: boolean;
+  effort?: 'gering' | 'mittel' | 'experte';
   ai_explanation?: string;
   image_src?: string;
   suggested_alt?: string;
   screenshot_url?: string;
   fix_code?: string;
+  /** Zusatzdaten des Scanners. Beim Mehrseiten-Scan stehen hier die
+   *  Fundstellen: auf welchen Seiten derselbe Mangel auftritt. */
+  metadata?: {
+    page_url?: string;
+    /** Alle betroffenen Seiten — erst ab zwei gesetzt. */
+    fundstellen?: string[];
+    seiten_betroffen?: number;
+    [key: string]: unknown;
+  };
 }
 
 // Positive Check
@@ -107,6 +117,9 @@ export interface ComplianceAnalysis {
   issues: ComplianceIssue[];
   positive_checks?: PositiveCheck[]; // NEW: Was funktioniert bereits
   has_accessibility_widget?: boolean; // ✅ NEU: Widget-Status vom Scanner
+  detected_cms?: string | null; // v4.0: erkanntes Grundsystem (z.B. WordPress)
+  is_placeholder?: boolean; // v4.0: Platzhalter-/Baustellenseite
+  scan_notice?: string | null; // v4.0: Hinweis (Maintenance/Go-Live)
   recommendations: string[];
   next_steps: any[]; // Can be typed more strictly if needed
   issue_groups?: IssueGroup[]; // ✅ NEU: Gruppierte Issues

@@ -2,13 +2,13 @@
 Complyo AI Fix Engine - Prompt Management System v2.0
 
 Strukturierte Prompts mit JSON-Schema-Validation für alle Fix-Typen.
-Optimiert für Claude 3.5 Sonnet und GPT-4.
+Aktuelles Modell: moonshotai/kimi-k2.5 (via OpenRouter, siehe AIModel).
 
 © 2025 Complyo.tech
 """
 
 import json
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from enum import Enum
 
 
@@ -21,7 +21,17 @@ class FixType(Enum):
 
 
 class AIModel(Enum):
-    """Unterstützte AI-Modelle"""
+    """
+    Unterstützte AI-Modelle (alle Aufrufe laufen über OpenRouter).
+
+    Ehrlich benannt: Aktuell ist genau EIN Modell konfiguriert — kimi-k2.5.
+    Die alten Namen CLAUDE_SONNET/GPT4/GPT4_TURBO waren irreführend, sie
+    zeigten alle auf dasselbe kimi-Modell. Sie bleiben unten als deprecated
+    Aliasse erhalten (gleicher Wert = Enum-Alias auf KIMI_K25), damit
+    Bestandscode und -tests nicht brechen. Neue Referenzen: KIMI_K25.
+    """
+    KIMI_K25 = "moonshotai/kimi-k2.5"
+    # Deprecated Aliasse — NICHT mehr verwenden, zeigen auf KIMI_K25:
     CLAUDE_SONNET = "moonshotai/kimi-k2.5"
     GPT4 = "moonshotai/kimi-k2.5"
     GPT4_TURBO = "moonshotai/kimi-k2.5"
@@ -187,7 +197,7 @@ class PromptBuilder:
         ]
         
         self.legal_keywords_tmg = [
-            "Impressum", "§ 5 TMG", "Angaben gemäß", "Verantwortlich",
+            "Impressum", "§ 5 DDG", "Angaben gemäß", "Verantwortlich",
             "Registergericht", "Umsatzsteuer-ID", "Vertretungsberechtigt"
         ]
         
@@ -279,7 +289,7 @@ Generiere einen vollständigen, sofort einsetzbaren Code-Fix für das genannte P
 
         return {
             "prompt": prompt,
-            "model": AIModel.CLAUDE_SONNET.value,
+            "model": AIModel.KIMI_K25.value,
             "temperature": 0.2,
             "max_tokens": 3000,
             "schema": CODE_FIX_SCHEMA
@@ -502,7 +512,7 @@ Antworte NUR mit dem JSON im TEXT_FIX_SCHEMA-Format."""
 
         return {
             "prompt": prompt,
-            "model": AIModel.CLAUDE_SONNET.value,
+            "model": AIModel.KIMI_K25.value,
             "temperature": 0.1,
             "max_tokens": 4500,
             "schema": TEXT_FIX_SCHEMA
@@ -549,7 +559,7 @@ Antworte NUR mit dem JSON im TEXT_FIX_SCHEMA-Format."""
   "title": "Cookie-Consent-Widget Integration",
   "description": "DSGVO/TTDSG-konformes Cookie-Banner",
   "widget_type": "cookie-consent",
-  "integration_code": "<script src=\\"https://widgets.complyo.tech/cookie-banner-v2.0.0.min.js\\" data-site-id=\\"{site_id}\\" data-config='{{...}}'></script>",
+  "integration_code": "<script src=\\"https://widgets.complyo.de/cookie-banner-v2.0.0.min.js\\" data-site-id=\\"{site_id}\\" data-config='{{...}}'></script>",
   "configuration": {{
     "cookies": {json.dumps([c.get("name") for c in cookies[:20]])},
     "detected_tools": {json.dumps(detected_tools)},
@@ -557,7 +567,7 @@ Antworte NUR mit dem JSON im TEXT_FIX_SCHEMA-Format."""
     "primaryColor": "#7c3aed",
     "autoBlock": true
   }},
-  "preview_url": "https://widgets.complyo.tech/preview/cookie-consent?site={site_id}",
+  "preview_url": "https://widgets.complyo.de/preview/cookie-consent?site={site_id}",
   "features": [
     "Granulare Consent-Verwaltung",
     "Auto-Cookie-Blocking",
@@ -590,14 +600,14 @@ Generiere die Widget-Integration:"""
   "title": "Accessibility-Widget Integration",
   "description": "WCAG 2.1 AA Compliance durch automatische Fixes",
   "widget_type": "accessibility",
-  "integration_code": "<script src=\\"https://widgets.complyo.tech/accessibility-v2.0.0.min.js\\" data-site-id=\\"{site_id}\\" data-auto-fix=\\"true\\"></script>",
+  "integration_code": "<script src=\\"https://widgets.complyo.de/accessibility-v2.0.0.min.js\\" data-site-id=\\"{site_id}\\" data-auto-fix=\\"true\\"></script>",
   "configuration": {{
     "siteId": "{site_id}",
     "autoFix": true,
     "showToolbar": true,
     "features": ["contrast", "fontsize", "alt-text-fix", "aria-fix", "keyboard-nav"]
   }},
-  "preview_url": "https://widgets.complyo.tech/preview/accessibility?site={site_id}",
+  "preview_url": "https://widgets.complyo.de/preview/accessibility?site={site_id}",
   "features": [
     "Automatische Alt-Text-Ergänzung",
     "ARIA-Label-Fixes",
@@ -620,7 +630,7 @@ Generiere die Widget-Integration:"""
         
         return {
             "prompt": prompt,
-            "model": AIModel.GPT4_TURBO.value,  # Schneller für einfachere Widget-Tasks
+            "model": AIModel.KIMI_K25.value,  # ein konfiguriertes Modell für alle Fix-Typen
             "temperature": 0.2,
             "max_tokens": 1500,
             "schema": WIDGET_FIX_SCHEMA
@@ -714,7 +724,7 @@ WICHTIG:
 
         return {
             "prompt": prompt,
-            "model": AIModel.CLAUDE_SONNET.value,
+            "model": AIModel.KIMI_K25.value,
             "temperature": 0.3,
             "max_tokens": 3500,
             "schema": GUIDE_FIX_SCHEMA

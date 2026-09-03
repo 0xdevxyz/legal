@@ -8,7 +8,7 @@ Task 1 — Quality Process Implementation
 
 import logging
 from typing import Dict, List, Any, Optional
-from datetime import date, datetime
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,25 @@ CATEGORY_TO_RULE_KEYWORDS = {
     "wettbewerbsrecht": ["uwg", "wettbewerb", "werbung", "abmahnung"],
     "verbraucherschutz": ["verbraucherschutz", "pangv", "preisangabe", "widerrufsrecht"],
     "ai_act": ["ai act", "ki-verordnung", "artificial intelligence"],
+    "verpackung": ["verpackung", "ppwr", "packaging", "verpackg", "lucid"],
 }
+
+# `compliance_risk_matrix.category` benutzt ein eigenes, älteres Vokabular als die
+# LegalArea-Werte oben. Ohne diese Brücke matchten die Regeln 6, 7 und 9 nie —
+# unabhängig vom `issue_category`-Bug, der bis 29.07.2026 jede Abfrage abbrechen liess.
+RULE_CATEGORY_ALIASES = {
+    "cookies": "cookie_compliance",
+    "cookie": "cookie_compliance",
+    "datenverarbeitung": "datenschutz",
+    "shop": "verbraucherschutz",
+}
+
+
+def keywords_for_rule_category(category: Optional[str]) -> List[str]:
+    """Keyword-Liste für eine `compliance_risk_matrix.category` (inkl. Alias-Auflösung)."""
+    key = (category or "").lower().strip()
+    key = RULE_CATEGORY_ALIASES.get(key, key)
+    return CATEGORY_TO_RULE_KEYWORDS.get(key, [])
 
 
 class RuleVersioningService:
@@ -188,7 +206,7 @@ class RuleVersioningService:
                     """
                     SELECT
                         id,
-                        issue_category,
+                        category AS issue_category,
                         severity,
                         market,
                         legal_basis,
@@ -229,7 +247,7 @@ class RuleVersioningService:
             async with self.db_pool.acquire() as conn:
                 all_rules = await conn.fetch(
                     """
-                    SELECT id, issue_category, legal_basis, description
+                    SELECT id, category AS issue_category, legal_basis, description
                     FROM compliance_risk_matrix
                     WHERE (is_active IS NULL OR is_active = TRUE)
                     """
@@ -243,8 +261,7 @@ class RuleVersioningService:
 
             affected = []
             for rule in all_rules:
-                category = (rule["issue_category"] or "").lower()
-                keywords = CATEGORY_TO_RULE_KEYWORDS.get(category, [])
+                keywords = keywords_for_rule_category(rule["issue_category"])
 
                 if any(kw in title_desc for kw in keywords):
                     affected.append(dict(rule))

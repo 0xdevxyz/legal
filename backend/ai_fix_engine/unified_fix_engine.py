@@ -15,10 +15,9 @@ import asyncio
 import aiohttp
 import json
 import time
-from typing import Dict, Any, List, Optional, Tuple
-from dataclasses import dataclass, asdict
+from typing import Dict, Any, Optional
+from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
 
 from .prompts_v2 import PromptBuilder, FixType, AIModel, ContextBuilder
 from .prompts_v2 import CODE_FIX_SCHEMA, TEXT_FIX_SCHEMA, WIDGET_FIX_SCHEMA, GUIDE_FIX_SCHEMA
@@ -74,11 +73,14 @@ class AIApiClient:
         self.api_url = "https://openrouter.ai/api/v1/chat/completions"
         self.timeout = 60.0
         
-        # Model pricing (USD per 1M tokens)
+        # Model pricing (USD per 1M tokens) — SCHÄTZUNG für moonshotai/kimi-k2.5.
+        # Vorher standen hier Claude-/GPT-4-Listenpreise, obwohl alle Enum-Namen
+        # auf kimi zeigten (drei identische Dict-Keys — effektiv galt der
+        # GPT4_TURBO-Preis, 10/30 USD): Die Kostenrechnung war damit reine
+        # Fiktion. Die Werte hier sind grobe OpenRouter-Richtwerte; cost_usd
+        # ist als Schätzung zu lesen, nicht als Abrechnungsgrundlage.
         self.pricing = {
-            AIModel.CLAUDE_SONNET.value: {"input": 3.0, "output": 15.0},
-            AIModel.GPT4.value: {"input": 30.0, "output": 60.0},
-            AIModel.GPT4_TURBO.value: {"input": 10.0, "output": 30.0}
+            AIModel.KIMI_K25.value: {"input": 0.6, "output": 2.5},
         }
     
     async def call_ai(
@@ -113,7 +115,7 @@ class AIApiClient:
                     headers = {
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
-                        "HTTP-Referer": "https://complyo.tech",
+                        "HTTP-Referer": "https://complyo.de",
                         "X-Title": "Complyo AI Fix Engine"
                     }
                     
@@ -276,11 +278,16 @@ class UnifiedFixEngine:
             "guide": GUIDE_FIX_SCHEMA
         }
         
-        # Fallback chain: Primary model -> Fallback model -> Template-based
-        self.fallback_chain = [
-            AIModel.CLAUDE_SONNET.value,
-            AIModel.GPT4_TURBO.value
-        ]
+        # Es ist genau EIN Modell konfiguriert (AIModel.KIMI_K25). Eine
+        # "Fallback-Kette" aus mehreren Namen desselben Modells war wirkungslos:
+        # sie hätte bei einem Modellausfall nur exakt dasselbe Modell erneut
+        # befragt und dabei fälschlich fallback_used=True gemeldet. Ehrlicher:
+        # EIN Primärmodell (call_ai hat eigene Retries) und danach der
+        # Template-Fallback. dict.fromkeys dedupliziert, damit künftige echte
+        # Alternativmodelle in AIModel automatisch wieder eine echte Kette ergeben.
+        self.fallback_chain = list(dict.fromkeys([
+            AIModel.KIMI_K25.value,
+        ]))
     
     async def generate_fix(
         self,

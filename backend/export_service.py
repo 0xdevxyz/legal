@@ -4,19 +4,16 @@ Generiert PDF- und HTML-Exporte von Fixes
 """
 
 import asyncpg
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
 import logging
 import os
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Preformatted, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT, TA_CENTER
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-import io
+from reportlab.lib.enums import TA_CENTER
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +47,7 @@ class ExportService:
                     """
                     SELECT 
                         gf.*,
-                        COALESCE(ul.plan_type, 'expert') as plan_type,
+                        COALESCE(ul.plan_type, 'free') as plan_type,
                         COALESCE(ul.exports_this_month, 0) as exports_this_month,
                         COALESCE(ul.exports_max, 999) as exports_max
                     FROM generated_fixes gf
@@ -64,10 +61,11 @@ class ExportService:
                 if not fix:
                     raise Exception("Fix not found or access denied")
                 
-                # Check Export-Limit (nur für AI Plan)
-                if fix['plan_type'] == 'ai':
-                    if fix['exports_this_month'] >= fix['exports_max']:
-                        raise Exception(f"Export-Limit erreicht: {fix['exports_max']}/Monat")
+                # Export-Limit durchsetzen. exports_max = -1 heisst unbegrenzt.
+                _exports_max = fix['exports_max']
+                if _exports_max is not None and _exports_max >= 0:
+                    if fix['exports_this_month'] >= _exports_max:
+                        raise Exception(f"Export-Limit erreicht: {_exports_max}/Monat")
                 
                 # Generiere Export
                 if export_format == 'html':
@@ -88,8 +86,8 @@ class ExportService:
                     fix_id
                 )
                 
-                # Increment Export-Counter (nur für AI Plan)
-                if fix['plan_type'] == 'ai':
+                # Zaehler nur fuehren, wo es auch ein Limit gibt.
+                if _exports_max is not None and _exports_max >= 0:
                     await conn.execute(
                         """
                         UPDATE user_limits
@@ -128,7 +126,6 @@ class ExportService:
     async def _export_as_html(self, fix: asyncpg.Record) -> tuple[str, str]:
         """Generiert HTML-Export"""
         # Parse fix content (stored as JSON string in DB)
-        import json
         
         # Try to parse content_hash column which might contain the actual fix data
         # For now, create a simple HTML template

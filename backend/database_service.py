@@ -7,7 +7,7 @@ import asyncpg
 import os
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 import logging
 from contextlib import asynccontextmanager
@@ -129,6 +129,25 @@ class DatabaseService:
             logger.error(f"Error getting lead by email {email}: {e}")
             raise
     
+    async def get_lead_by_id(self, lead_id: str) -> Optional[Dict[str, Any]]:
+        """Lead per ID laden (u. a. für DSGVO-Löschläufe — vorher gab es dafür
+        nur einen {"email": "unknown"}-Platzhalter, der Bestätigungsmails
+        ins Leere schickte)."""
+        try:
+            async with self.get_connection() as conn:
+                row = await conn.fetchrow("SELECT * FROM leads WHERE id = $1", lead_id)
+
+                if row:
+                    lead = dict(row)
+                    if lead['analysis_data']:
+                        lead['analysis_data'] = json.loads(lead['analysis_data'])
+                    return lead
+                return None
+
+        except Exception as e:
+            logger.error(f"Error getting lead by id {lead_id}: {e}")
+            raise
+
     async def get_lead_by_verification_token(self, token: str) -> Optional[Dict[str, Any]]:
         """Get lead by verification token"""
         try:
@@ -164,8 +183,12 @@ class DatabaseService:
                 if not lead:
                     return False
                 
-                # Check if token is expired
-                if lead['verification_expires_at'] < datetime.now():
+                # Ablauf pruefen. verification_expires_at ist TIMESTAMPTZ, kommt also
+                # zeitzonenbehaftet aus Postgres. Der Vergleich mit einem naiven
+                # datetime.now() warf einen TypeError, den der Handler unten still zu
+                # "return False" verschluckt hat -- kein Lead konnte je bestaetigen.
+                jetzt = datetime.now(timezone.utc)
+                if lead['verification_expires_at'] < jetzt:
                     return False
                 
                 # Update lead as verified
@@ -177,7 +200,7 @@ class DatabaseService:
                     updated_at = $1
                 WHERE verification_token = $2
                 """
-                await conn.execute(update_query, datetime.now(), verification_token)
+                await conn.execute(update_query, jetzt, verification_token)
                 
                 # Log verification
                 verification_query = """
@@ -188,7 +211,7 @@ class DatabaseService:
                     verification_query,
                     lead['id'],
                     verification_token,
-                    datetime.now(),
+                    jetzt,
                     ip_address,
                     user_agent
                 )
@@ -542,11 +565,36 @@ class DatabaseService:
                     AND (expires_at IS NULL OR expires_at > NOW())
                 """
                 result = await conn.fetchrow(query, uid, module_id)
-                return result is not None
+                if result is not None:
+                    return True
+
+                # Kein Eintrag — aber der Tarif kann das Modul einschliessen.
+                #
+                # pro/agency/expert/update enthalten laut Kaufweg
+                # (_resolve_modules) grundsaetzlich ALLE Module; die Zeilen in
+                # user_modules sind nur die Buchhaltung dazu. Faellt sie aus —
+                # verlorener Webhook, Tarifaenderung von Hand, Migration,
+                # eingespieltes Backup — sah ein zahlender Kunde bisher
+                # "Modul nicht aktiviert". Beim Oberflaechen-Durchlauf ist
+                # genau das passiert.
+                return await self._tarif_schliesst_modul_ein(conn, uid, module_id)
 
         except Exception as e:
             logger.error(f"Error checking user module: {e}")
             return False
+
+    # Tarife, die per Definition alle Module enthalten, und die Modulliste.
+    # Doppelt gefuehrt zu payment_routes/stripe_routes: dort wird beim Kauf
+    # geschrieben, hier beim Lesen geprueft.
+    _VOLLZUGANG_TARIFE = ('pro', 'agency', 'expert', 'update')
+    _ALLE_MODULE = ('cookie', 'accessibility', 'legal_texts', 'monitoring')
+
+    async def _tarif_schliesst_modul_ein(self, conn, uid: int, module_id: str) -> bool:
+        if module_id not in self._ALLE_MODULE:
+            return False
+        plan = await conn.fetchval(
+            "SELECT plan_type FROM user_limits WHERE user_id = $1", uid)
+        return (plan or '').lower() in self._VOLLZUGANG_TARIFE
 
     async def get_user_modules(self, user_id: str) -> List[str]:
         """
@@ -562,7 +610,17 @@ class DatabaseService:
                     AND (expires_at IS NULL OR expires_at > NOW())
                 """
                 rows = await conn.fetch(query, uid)
-                return [row['module_id'] for row in rows]
+                module = [row['module_id'] for row in rows]
+
+                # Dieselbe Ableitung wie in check_user_module(): der Tarif ist
+                # die Wahrheit, user_modules die Buchhaltung.
+                plan = await conn.fetchval(
+                    "SELECT plan_type FROM user_limits WHERE user_id = $1", uid)
+                if (plan or '').lower() in self._VOLLZUGANG_TARIFE:
+                    for m in self._ALLE_MODULE:
+                        if m not in module:
+                            module.append(m)
+                return module
 
         except Exception as e:
             logger.error(f"Error getting user modules: {e}")

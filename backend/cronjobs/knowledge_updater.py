@@ -14,13 +14,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# stdout reicht: im Container-Betrieb leitet die Crontab-Zeile stdout host-seitig
+# nach /var/log/complyo-knowledge-updater.log um. Ein In-Container-FileHandler auf
+# /var/log scheitert (nicht beschreibbar) — daher nur best-effort ergänzen.
+_log_handlers = [logging.StreamHandler()]
+try:
+    _log_handlers.append(logging.FileHandler("/var/log/complyo-knowledge-updater.log", mode="a"))
+except OSError:
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("/var/log/complyo-knowledge-updater.log", mode="a"),
-    ],
+    handlers=_log_handlers,
 )
 logger = logging.getLogger("knowledge_updater")
 
@@ -84,6 +90,14 @@ async def run_knowledge_update():
         logger.info("Schritt 3/5: .md-Files schreiben...")
         written_paths = writer.write_batch(classified_items)
         logger.info(f"  → {len(written_paths)} Dateien geschrieben")
+
+        logger.info("Schritt 3b: Compliance-Pattern aus eigenen Scans extrahieren...")
+        try:
+            from knowledge.pattern_extractor import PatternExtractor
+            pattern_paths = await PatternExtractor(db_pool).run()
+            logger.info(f"  → {len(pattern_paths)} Pattern-Dateien im Vault")
+        except Exception as e:
+            logger.warning(f"  → Pattern-Extraktion übersprungen: {e}")
 
         logger.info("Schritt 4/5: RAG-Index aktualisieren...")
         await retriever.refresh_index()

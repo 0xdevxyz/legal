@@ -13,7 +13,27 @@ VAULT_ROOT = Path(os.getenv("KNOWLEDGE_VAULT_PATH", "/home/clawd/saas/legal/know
 META_DIR = VAULT_ROOT / "_meta"
 EMBEDDINGS_CACHE_FILE = META_DIR / "embeddings.json"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+# Base-URL fuer den OpenAI-kompatiblen Client. Default: OpenRouter, sodass der
+# vorhandene OpenRouter-Key (auch fuer Embeddings text-embedding-3-small und
+# Chat gpt-4o-mini) genutzt werden kann. Fuer echtes OpenAI: OPENAI_BASE_URL
+# auf https://api.openai.com/v1 setzen.
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
 EMBEDDING_MODEL = "text-embedding-3-small"
+
+# Welche Dateien den durchsuchbaren Vault bilden.
+# laws/<gesetz>.md        Stammwissen von Hand
+# laws/<sprache>/<G>.md   Uebersicht je Rechtsakt und Sprache (EUR-Lex-Crawler)
+# laws/<sprache>/<G>/*.md Volltext je Artikel (EUR-Lex-Crawler)
+# Die beiden letzten Muster fehlten: der gesamte per Crawler geholte
+# EU-Rechtsbestand lag ausserhalb der Suche, der AI Act war damit trotz
+# taeglicher Aktualisierung in keiner Antwort auffindbar (Audit 2026-08).
+DOC_PATTERNS = [
+    "updates/*.md",
+    "laws/*.md",
+    "laws/*/*.md",
+    "laws/*/*/*.md",
+    "patterns/*.md",
+]
 
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
@@ -28,8 +48,20 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
 def _parse_md_file(filepath: Path) -> Optional[Dict[str, Any]]:
     try:
         text = filepath.read_text(encoding="utf-8")
+        content_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
         if not text.startswith("---"):
-            return {"path": str(filepath), "frontmatter": {}, "body": text, "full_text": text}
+            # Gleiche Form wie unten, auch ohne Frontmatter. Vorher fehlten hier
+            # filename und content_hash; retrieve() greift auf content_hash mit
+            # [] zu und warf einen KeyError, sobald eine Datei ohne Frontmatter
+            # in den Suchraum kam (die laws/<sprache>/README.md, 2026-08-31).
+            return {
+                "path": str(filepath),
+                "filename": filepath.name,
+                "frontmatter": {},
+                "body": text,
+                "full_text": text,
+                "content_hash": content_hash,
+            }
 
         parts = text.split("---", 2)
         if len(parts) < 3:
@@ -44,7 +76,7 @@ def _parse_md_file(filepath: Path) -> Optional[Dict[str, Any]]:
             "frontmatter": fm,
             "body": body,
             "full_text": f"{fm.get('title', '')} {body}",
-            "content_hash": hashlib.sha256(text.encode()).hexdigest()[:16],
+            "content_hash": content_hash,
         }
     except Exception as e:
         logger.warning(f"Could not parse {filepath}: {e}")
@@ -56,6 +88,10 @@ class KnowledgeRetriever:
         self.vault_root = vault_root or VAULT_ROOT
         self._embeddings_cache: Dict[str, Dict[str, Any]] = {}
         self._documents: List[Dict[str, Any]] = []
+        # Geparste Dokumente, Schluessel Pfad -> (mtime, doc). Der Vault haelt
+        # seit der Artikel-Ablage einige tausend Dateien; ohne Cache laese jede
+        # einzelne Suche sie alle neu von der Platte.
+        self._doc_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
         self._openai_client = None
         META_DIR.mkdir(parents=True, exist_ok=True)
         self._load_cache()
@@ -64,7 +100,7 @@ class KnowledgeRetriever:
         if not self._openai_client and OPENAI_API_KEY:
             try:
                 from openai import AsyncOpenAI
-                self._openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+                self._openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
             except ImportError:
                 logger.warning("openai not installed, keyword-based fallback will be used")
         return self._openai_client
@@ -86,10 +122,19 @@ class KnowledgeRetriever:
 
     def _load_documents(self) -> List[Dict[str, Any]]:
         docs = []
-        for pattern in ["updates/*.md", "laws/*.md", "patterns/*.md"]:
+        for pattern in DOC_PATTERNS:
             for filepath in sorted(self.vault_root.glob(pattern)):
+                try:
+                    mtime = filepath.stat().st_mtime
+                except OSError:
+                    continue
+                cached = self._doc_cache.get(str(filepath))
+                if cached and cached[0] == mtime:
+                    docs.append(cached[1])
+                    continue
                 doc = _parse_md_file(filepath)
                 if doc:
+                    self._doc_cache[str(filepath)] = (mtime, doc)
                     docs.append(doc)
         logger.debug(f"Loaded {len(docs)} documents from vault")
         return docs
@@ -126,7 +171,7 @@ class KnowledgeRetriever:
         scored: List[Tuple[float, Dict[str, Any]]] = []
 
         for doc in documents:
-            cache_key = doc["content_hash"]
+            cache_key = doc.get("content_hash", "")
             doc_embedding = self._embeddings_cache.get(cache_key, {}).get("vector")
 
             if query_embedding and doc_embedding:

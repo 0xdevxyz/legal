@@ -28,6 +28,8 @@ from __future__ import annotations
 import re
 from typing import Dict, Iterable, List, Optional
 
+from .data_processing_countries import country_processing_info
+
 # ---------------------------------------------------------------------------
 # Registry: Drittanbieter-Ressourcen mit IP-Transfer in Drittländer ohne Consent
 # ---------------------------------------------------------------------------
@@ -245,16 +247,28 @@ def detect_transfers(
 def _build_finding(service: Dict, *, evidence: List[str], sources: List[str]) -> Dict:
     """Baut ein normalisiertes Finding-Dict aus einem Registry-Eintrag."""
     court = service.get("court_ref")
+
+    # Verarbeitungsländer + Art.-49-Bewertung aus dem Drittländer-SSOT.
+    countries = country_processing_info(service_key=service["key"])
+    if countries and countries["unsafe_country_names"]:
+        names = countries["unsafe_country_names"]
+        country_phrase = (
+            names[0] if len(names) == 1
+            else f"{names[0]} und {len(names) - 1} weitere unsichere Drittländer"
+        )
+    else:
+        country_phrase = "ein Drittland (USA)"
+
     description = (
         f"{service['name']} wird von externen Servern des Anbieters "
         f"({service['provider']}) geladen. Dabei wird die {service['transmits']} "
-        f"des Website-Besuchers OHNE vorherige Einwilligung in ein Drittland (USA) "
+        f"des Website-Besuchers OHNE vorherige Einwilligung in {country_phrase} "
         f"übertragen. Das ist ein abmahnfähiger Verstoß gegen die DSGVO."
     )
     if court:
         description += f" Einschlägige Rechtsprechung: {court}."
 
-    return {
+    finding = {
         "key": service["key"],
         "name": service["name"],
         "provider": service["provider"],
@@ -274,6 +288,17 @@ def _build_finding(service: Dict, *, evidence: List[str], sources: List[str]) ->
         "source": "+".join(sources),
         "auto_fixable": False,
     }
+
+    # Drittland-Details (Verarbeitungsländer, Art.-49-Spezialeinwilligung) anhängen,
+    # sofern für den Dienst Länder hinterlegt sind.
+    if countries:
+        finding["data_processing_countries"] = countries["countries"]
+        finding["data_processing_countries_named"] = countries["countries_named"]
+        finding["unsafe_third_countries"] = countries["unsafe_countries"]
+        finding["unsafe_third_country_names"] = countries["unsafe_country_names"]
+        finding["requires_special_consent"] = countries["requires_special_consent"]
+
+    return finding
 
 
 def detected_service_keys(

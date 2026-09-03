@@ -68,23 +68,44 @@ class DeepContentAnalyzer:
         self.impressum_patterns = {
             "firmenname": {
                 "patterns": [
+                    # Name nach der Impressums-Ueberschrift (Einzelunternehmen,
+                    # Freiberufler, Praxen fuehren keine Rechtsform im Namen).
+                    # Stoppwoerter verhindern Treffer wie "sind wir gemäß" aus
+                    # dem Haftungstext.
+                    r"(?:angaben\s+gem(?:ä|ae)(?:ß|ss)\s*§\s*5\s*(?:TMG|DDG)|"
+                    r"diensteanbieter|anbieterkennzeichnung|"
+                    r"verantwortlich\s+f(?:ü|ue)r\s+den\s+inhalt(?:\s+nach\s+§\s*\d+[^:]{0,40})?|"
+                    r"verantwortliche\s+stelle|betreiber\s+dieser\s+(?:website|seite))"
+                    r"[\s:.\-]*"
+                    r"((?!(?-i:Als|Sind|Wir|Die|Der|Das|Nach|Gemäß|Haftung|Inhalte|Diese|Ist)\b)"
+                    r"(?:(?-i:[A-ZÄÖÜ])[\wäöüß&.\-]*\s+){0,4}(?-i:[A-ZÄÖÜ])[\wäöüß&.\-]*)",
                     # Explizite Markierungen
-                    r"(?:firma|firmenname|company|unternehmen):\s*([A-ZÄÖÜa-zäöü\s&.-]+(?:GmbH|AG|UG|e\.K\.|KG)?)",
+                    r"(?:firma|firmenname|company|unternehmen)[\s:]+"
+                    r"((?:(?-i:[A-ZÄÖÜ])[\wäöüß&.\-]*\s+){0,3}(?-i:[A-ZÄÖÜ])[\wäöüß&.\-]*)",
                     # Nach bekannten Rechtsformen
-                    r"([A-ZÄÖÜa-zäöü\s&.-]+\s+(?:GmbH|AG|UG|e\.K\.|KG|OHG|PartG|Einzelunternehmen))",
+                    r"((?:(?-i:[A-ZÄÖÜ])[\wäöüß&.\-]*\s+){0,3}(?-i:[A-ZÄÖÜ])[\wäöüß&.\-]*\s*"
+                    r"(?-i:g?GmbH(?:\s*&\s*Co\.\s*KG)?|mbH|AG|SE|UG(?:\s*\(haftungsbeschränkt\))?|"
+                    r"e\.\s?K\.|e\.\s?V\.|e\.\s?G\.|KG|OHG|PartG(?:mbB)?|GbR|Einzelunternehmen))",
                     # Strukturierte Daten
                     r"<[^>]*(?:itemprop|property)=['\"]name['\"][^>]*>([^<]+)<",
                 ],
                 "required": True,
-                "min_confidence": 0.7
+                "min_confidence": 0.75
             },
-            
+
             "adresse": {
                 "patterns": [
-                    # Straße + Hausnummer + PLZ + Ort
-                    r"([A-ZÄÖÜa-zäöüß][a-zäöüß]+(?:straße|str\.|weg|platz|allee)[\s,]+\d+[a-z]?[\s,]+\d{5}[\s,]+[A-ZÄÖÜ][a-zäöüß]+)",
-                    # PLZ + Ort + Straße (umgekehrte Reihenfolge)
-                    r"(\d{5}[\s,]+[A-ZÄÖÜ][a-zäöüß]+[\s,]+[A-ZÄÖÜa-zäöüß][a-zäöüß]+(?:straße|str\.|weg|platz)[\s,]+\d+)",
+                    # Strasse + Hausnummer + PLZ + Ort. Strassenname auch getrennt
+                    # geschrieben ("Herrnsdorfer Straße"), "ss" statt "ß",
+                    # Hausnummer mit Zusatz ("4/2", "12a") und Klammerzusatz.
+                    r"((?:(?-i:[A-ZÄÖÜ])[\wäöüß.\-]*\s+){0,2}(?-i:[A-ZÄÖÜ])[\wäöüß.\-]*"
+                    r"(?:stra(?:ß|ss)e|str\.|weg|platz|allee|ring|gasse|damm|ufer|chaussee)"
+                    r"[\s,]*\d+\s?[a-z]?(?:\s*[/\-]\s*\d+\s?[a-z]?)?(?:\s*\([^)]{1,20}\))?"
+                    r"[\s,]+(?<![\d/\-.])\d{5}[\s,]+(?-i:[A-ZÄÖÜ])[a-zäöüß]+(?:-(?-i:[A-ZÄÖÜ])[a-zäöüß]+)*)",
+                    # PLZ + Ort + Strasse (umgekehrte Reihenfolge)
+                    r"((?<![\d/\-.])\d{5}[\s,]+(?-i:[A-ZÄÖÜ])[a-zäöüß]+(?:-(?-i:[A-ZÄÖÜ])[a-zäöüß]+)*"
+                    r"[\s,]+(?:(?-i:[A-ZÄÖÜ])[\wäöüß.\-]*\s+){0,2}(?-i:[A-ZÄÖÜ])[\wäöüß.\-]*"
+                    r"(?:stra(?:ß|ss)e|str\.|weg|platz|allee)[\s,]*\d+)",
                     # Address-Tag
                     r"<address[^>]*>([^<]+)</address>",
                     # Schema.org markup
@@ -93,16 +114,20 @@ class DeepContentAnalyzer:
                 "required": True,
                 "min_confidence": 0.8
             },
-            
+
             "plz_ort": {
                 "patterns": [
-                    r"(\d{5}[\s,]+[A-ZÄÖÜ][a-zäöüß-]+)",
+                    # PLZ darf nicht Teil einer laengeren Ziffernfolge sein —
+                    # "Steuer-Nr. 221/204/01878 Haftungsausschluss" wurde sonst
+                    # als "01878 Haftungsausschluss" gelesen. Ortsname: ein Wort,
+                    # optional mit Bindestrichteilen ("Limbach-Oberfrohna").
+                    r"((?<![\d/\-.])\d{5}\s+(?-i:[A-ZÄÖÜ])[a-zäöüß]+(?:-(?-i:[A-ZÄÖÜ])[a-zäöüß]+)*)",
                     r"itemprop=['\"]postalCode['\"][^>]*>(\d{5})",
                 ],
                 "required": True,
-                "min_confidence": 0.9
+                "min_confidence": 0.8
             },
-            
+
             "email": {
                 "patterns": [
                     r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})",
@@ -110,7 +135,7 @@ class DeepContentAnalyzer:
                     r"itemprop=['\"]email['\"][^>]*>([^<]+@[^<]+)",
                 ],
                 "required": True,
-                "min_confidence": 0.95
+                "min_confidence": 0.8
             },
             
             "telefon": {
@@ -122,13 +147,15 @@ class DeepContentAnalyzer:
                     r"itemprop=['\"]telephone['\"][^>]*>([^<]+)",
                 ],
                 "required": True,
-                "min_confidence": 0.85
+                "min_confidence": 0.8
             },
             
             "handelsregister": {
                 "patterns": [
-                    r"(?:handelsregister|amtsgericht|hrb|hra|registergericht)[\s:]*([A-Z][a-zäöüß]+[\s,]+(?:HRB|HRA)\s*\d+)",
-                    r"((?:HRB|HRA)\s*\d+[\s,]+AG\s+[A-Z][a-zäöüß]+)",
+                    r"(?:handelsregister|registernummer|register)[\s:]*((?:HRB|HRA|VR|GnR|PR)\s*\d+\s*[A-Z]?)",
+                    r"((?:HRB|HRA|VR|GnR|PR)\s*\d+\s*[A-Z]?)",
+                    r"(?:amtsgericht|registergericht)[\s:]*([A-ZÄÖÜ][a-zäöüß-]+[\s,]+(?:HRB|HRA)\s*\d+)",
+                    r"((?:HRB|HRA)\s*\d+[\s,]+AG\s+[A-ZÄÖÜ][a-zäöüß]+)",
                 ],
                 "required": False,  # Nur für Unternehmen
                 "min_confidence": 0.8
@@ -140,7 +167,7 @@ class DeepContentAnalyzer:
                     r"\b(DE\d{9})\b",
                 ],
                 "required": False,  # Optional
-                "min_confidence": 0.95
+                "min_confidence": 0.8
             },
             
             "geschaeftsfuehrer": {
@@ -159,11 +186,15 @@ class DeepContentAnalyzer:
         self.datenschutz_patterns = {
             "verantwortlicher": {
                 "patterns": [
-                    r"(?:verantwortlich|verantwortlicher|data controller|controller)[\s:]+([A-ZÄÖÜ][a-zäöüß\s&.-]+)",
+                    # "Die verantwortliche Stelle ... ist: Complyo GmbH"
+                    r"verantwortliche[rns]?\s+stelle[^:]{0,80}:\s*"
+                    r"((?:(?-i:[A-ZÄÖÜ])[\wäöüß&.\-]*\s+){0,4}(?-i:[A-ZÄÖÜ])[\wäöüß&.\-]*)",
+                    r"(?:verantwortlich(?:e[rns]?)?|data controller|controller)[\s:]+"
+                    r"((?-i:[A-ZÄÖÜ])[a-zäöüß\s&.\-]+)",
                     r"(?:im\s+sinne\s+(?:der|des)\s+dsgvo|nach\s+art\.\s*13|gemäß\s+art\.\s*13)[\s:]+([A-ZÄÖÜ][a-zäöüß\s]+)",
                 ],
                 "required": True,
-                "min_confidence": 0.75
+                "min_confidence": 0.7
             },
             
             "zwecke": {
@@ -181,7 +212,7 @@ class DeepContentAnalyzer:
                     r"(?:art\.?\s*6\s+abs\.?\s*1|artikel\s+6)[\s:]+([^.]{10,200})",
                 ],
                 "required": True,
-                "min_confidence": 0.75
+                "min_confidence": 0.7
             },
             
             "speicherdauer": {
@@ -215,7 +246,7 @@ class DeepContentAnalyzer:
                     r"(?:datenschutzbeauftragter|data protection officer|dpo)[\s:]+([A-ZÄÖÜ][a-zäöüß\s]+)",
                 ],
                 "required": False,  # Nur wenn benötigt
-                "min_confidence": 0.8
+                "min_confidence": 0.7
             },
             
             "drittland": {
@@ -223,7 +254,7 @@ class DeepContentAnalyzer:
                     r"(?:drittland|third country|außerhalb der eu|outside the eu)",
                 ],
                 "required": False,
-                "min_confidence": 0.8
+                "min_confidence": 0.65
             },
             
             "ssl_verschluesselung": {
@@ -231,7 +262,7 @@ class DeepContentAnalyzer:
                     r"(?:ssl|tls|verschlüsselung|encryption|https)",
                 ],
                 "required": False,
-                "min_confidence": 0.9
+                "min_confidence": 0.65
             }
         }
     
@@ -444,12 +475,31 @@ class DeepContentAnalyzer:
             confidence *= 0.7  # Zu lang
         
         # Kontext-Check (steht in der Nähe ein relevantes Keyword?)
+        # Fuer die meisten Felder fehlte hier ein Eintrag; ohne Kontextbonus
+        # blieb ein Treffer bei 0.65 und damit unter jeder Schwelle.
         context_keywords = {
-            "firmenname": ["firma", "unternehmen", "company"],
-            "adresse": ["anschrift", "address", "sitz"],
-            "email": ["e-mail", "email", "kontakt"],
-            "telefon": ["tel", "phone", "fon"],
-            "verantwortlicher": ["verantwortlich", "controller"],
+            "firmenname": ["firma", "unternehmen", "company", "diensteanbieter",
+                           "verantwortlich", "anbieter", "betreiber", "inhaber", "impressum"],
+            "adresse": ["anschrift", "address", "sitz", "adresse", "postanschrift",
+                        "impressum", "straße", "strasse"],
+            "plz_ort": ["straße", "strasse", "str.", "str ", "weg", "platz", "allee",
+                        "ring", "gasse", "anschrift", "adresse", "sitz",
+                        "deutschland", "germany"],
+            "email": ["e-mail", "email", "kontakt", "mail", "@"],
+            "telefon": ["tel", "phone", "fon", "kontakt", "ruf"],
+            "handelsregister": ["handelsregister", "registergericht", "amtsgericht",
+                                "register", "rechtsform"],
+            "ust_id": ["umsatzsteuer", "ust", "vat", "steuer", "§ 27", "27 a"],
+            "geschaeftsfuehrer": ["geschäftsführer", "geschäftsführung", "vertreten durch",
+                                  "inhaber", "vorstand", "ceo"],
+            "verantwortlicher": ["verantwortlich", "controller", "verantwortliche stelle"],
+            "zwecke": ["zweck", "verarbeitung", "verarbeiten"],
+            "rechtsgrundlage": ["rechtsgrundlage", "dsgvo", "art. 6", "artikel 6", "einwilligung"],
+            "speicherdauer": ["speicher", "aufbewahr", "löschung", "frist"],
+            "betroffenenrechte": ["recht", "dsgvo", "auskunft", "berichtigung"],
+            "beschwerderecht": ["beschwerde", "aufsichtsbehörde", "datenschutzbehörde"],
+            "datenschutzbeauftragter": ["datenschutzbeauftragt", "dsb"],
+            "drittland": ["drittland", "übermittlung", "eu", "usa"],
         }
         
         if field_name in context_keywords:
@@ -463,17 +513,59 @@ class DeepContentAnalyzer:
                         confidence *= 1.2
                         break
         
-        # Format-Validierung
+        # Format-Validierung. Ein Wert, der die Formprobe seines Feldes besteht,
+        # ist ein eigenstaendiger Beleg — er hebt die Confidence ueber die
+        # Schwelle, waehrend ein zufaelliger Zahlentreffer darunter bleibt.
         if field_name == "email":
             # Erweiterte Email-Validierung
             if "@" in value and "." in value.split("@")[1]:
                 confidence *= 1.3
         
         elif field_name == "ust_id":
-            # USt-ID Format: DE + 9 Ziffern
-            if re.match(r"^DE\d{9}$", value.replace(" ", "")):
+            # USt-ID Format: Laenderkennung + Ziffern
+            if re.match(r"^[A-Z]{2}\s?\d{8,12}$", value.replace(" ", "").upper()):
                 confidence *= 1.4
-        
+
+        elif field_name == "firmenname":
+            geputzt = value.strip()
+            # Durchgaengige Grossschreibung ist eine Abschnitts-Ueberschrift
+            # ("REGISTEREINTRAG"), kein Firmenname.
+            if len(geputzt) > 3 and geputzt.isupper():
+                confidence *= 0.4
+            # Rechtsform am Ende ist der belastbare Teil der Angabe
+            elif re.search(r"(?:GmbH|AG|UG|e\.\s?K\.|e\.\s?V\.|KG|OHG|PartG|GbR|Einzelunternehmen)\s*$",
+                           geputzt, re.IGNORECASE):
+                confidence *= 1.25
+
+        elif field_name == "adresse":
+            # Vollstaendig heisst: Strasse mit Hausnummer UND PLZ mit Ort
+            hat_strasse = bool(re.search(r"(?:stra(?:ß|ss)e|str\.|weg|platz|allee|ring|gasse)"
+                                         r"[\s,]*\d+", value, re.IGNORECASE))
+            hat_plz_ort = bool(re.search(r"\b\d{5}\b[\s,]+[A-ZÄÖÜ]", value))
+            if hat_strasse and hat_plz_ort:
+                confidence *= 1.3
+
+        elif field_name == "plz_ort":
+            # Deutsche PLZ (keine fuehrende 0 ausser 01-09) plus Ortsname
+            if re.match(r"^\d{5}[\s,]+[A-ZÄÖÜ][a-zäöüß.]+(?:[\s\-][A-ZÄÖÜa-zäöü][a-zäöüß.]*){0,3}$",
+                        value.strip()):
+                confidence *= 1.25
+
+        elif field_name == "telefon":
+            # Nur echte Rufnummern zaehlen als Beleg: Laendervorwahl oder
+            # fuehrende Null, und genug Ziffern fuer Vorwahl + Anschluss.
+            ziffern = re.sub(r"\D", "", value)
+            plausibel = (
+                len(ziffern) >= 9
+                and (value.strip().startswith("+") or ziffern.startswith("49") or ziffern.startswith("0"))
+            )
+            if plausibel:
+                confidence *= 1.25
+
+        elif field_name == "handelsregister":
+            if re.search(r"(?:HRB|HRA|VR|GnR|PR)\s*\d+", value, re.IGNORECASE):
+                confidence *= 1.25
+
         # Cap at 1.0
         return min(1.0, confidence)
     

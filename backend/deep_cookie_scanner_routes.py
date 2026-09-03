@@ -9,20 +9,20 @@ GET    /api/v2/deep-cookie-scan/{scan_id}/export - Export for Cookie Configurato
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import asyncpg
 import asyncio
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 
 from dependencies import get_current_user
-from database_service import db_service
 from compliance_engine.privacy_transfer_findings import detect_transfers
 from compliance_engine.deep_cookie_scanner import DeepCookieScanner
 
 import json
 import logging
 from dataclasses import asdict
+from dependencies import rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +62,31 @@ async def check_premium_plan(user_id: int, connection) -> bool:
     return result in ["pro", "premium", "agency", "enterprise", "complete"]
 
 
+# Das monatliche Deep-Scan-Kontingent entspricht der Anzahl freigeschalteter
+# Websites (user_limits.websites_max). Daraus ergibt sich automatisch:
+#   pro = 1, agency = 25, agency2 = 50 (Agency + Add-on, additiv).
+# Add-ons (agency_extra/agency2) erhöhen websites_max, plan_type bleibt 'agency'
+# — deshalb wird hier websites_max statt plan_type ausgewertet.
+DEFAULT_SCAN_LIMIT = 1
+UNLIMITED_SCAN_LIMIT = 999999
+
+
+async def resolve_scan_limit(user_id: int, connection) -> int:
+    """Ermittelt das monatliche Scan-Limit aus dem freigeschalteten Website-Kontingent."""
+    websites_max = await connection.fetchval(
+        "SELECT websites_max FROM user_limits WHERE user_id = $1",
+        user_id
+    )
+    if websites_max is None:
+        return DEFAULT_SCAN_LIMIT
+    if websites_max < 0:  # -1 = unbegrenzt (Master-Account)
+        return UNLIMITED_SCAN_LIMIT
+    return websites_max
+
+
 async def check_scan_limit(user_id: int, connection) -> Dict[str, int]:
     current_month = datetime.utcnow().strftime("%Y-%m")
+    scans_limit = await resolve_scan_limit(user_id, connection)
 
     usage = await connection.fetchrow(
         "SELECT scans_used, scans_limit FROM deep_scan_usage "
@@ -73,7 +96,6 @@ async def check_scan_limit(user_id: int, connection) -> Dict[str, int]:
     )
 
     if not usage:
-        scans_limit = 5
         await connection.execute(
             "INSERT INTO deep_scan_usage (user_id, current_month, scans_used, scans_limit) "
             "VALUES ($1, $2, 0, $3)",
@@ -84,26 +106,40 @@ async def check_scan_limit(user_id: int, connection) -> Dict[str, int]:
         return {"scans_used": 0, "scans_limit": scans_limit, "can_scan": True}
 
     scans_used = usage["scans_used"]
-    scans_limit = usage["scans_limit"]
+    # Limit an den aktuellen Plan angleichen (z. B. nach Upgrade auf Agency),
+    # ohne den bereits verbrauchten Zähler zurückzusetzen.
+    if usage["scans_limit"] != scans_limit:
+        await connection.execute(
+            "UPDATE deep_scan_usage SET scans_limit = $3 "
+            "WHERE user_id = $1 AND current_month = $2",
+            user_id,
+            current_month,
+            scans_limit
+        )
+
     can_scan = scans_used < scans_limit
 
     return {"scans_used": scans_used, "scans_limit": scans_limit, "can_scan": can_scan}
 
 
-@router.post("/deep-cookie-scan/start")
+class StartScanRequest(BaseModel):
+    url: str
+    website_id: Optional[str] = None
+
+
+@router.post("/deep-cookie-scan/start", dependencies=[Depends(rate_limit("deep_scan", 3, 60))])
 async def start_deep_scan(
-    url: str,
-    website_id: Optional[str] = None,
+    body: StartScanRequest,
     current_user: Dict = Depends(get_current_user),
     connection: asyncpg.Connection = Depends(get_db_connection),
 ):
     """
     Start a new deep cookie scan
-    
-    Request:
+
+    Request body (JSON):
         url: str - Website URL to scan
         website_id: Optional[str] - Tracked website ID for linking
-    
+
     Response:
         {
             "scan_id": 123,
@@ -112,6 +148,8 @@ async def start_deep_scan(
             "estimated_duration_seconds": 180
         }
     """
+    url = body.url
+    website_id = body.website_id
     user_id = current_user["id"]
     
     # 1. Check if user has premium plan
@@ -148,7 +186,8 @@ async def start_deep_scan(
             url
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create scan: {str(e)}")
+        logger.exception("Failed to create scan")
+        raise HTTPException(status_code=500, detail="Failed to create scan")
     
     # 5. Increment usage counter
     current_month = datetime.utcnow().strftime("%Y-%m")
@@ -162,11 +201,15 @@ async def start_deep_scan(
     asyncio.create_task(background_scan_job(scan_id, url))
     
     # 7. Log event
+    # event_data ist JSONB; der Pool hat keinen JSON-Codec registriert
+    # (asyncpg.create_pool ohne set_type_codec) → Wert MUSS als JSON-String
+    # übergeben werden, sonst wirft asyncpg. (Gleiche Konvention wie im
+    # background_scan_job, der json.dumps nutzt.)
     await connection.execute(
         "INSERT INTO deep_scan_history (scan_id, event_type, event_data) "
         "VALUES ($1, 'started', $2)",
         scan_id,
-        {"url": url, "initiated_at": datetime.utcnow().isoformat()}
+        json.dumps({"url": url, "initiated_at": datetime.utcnow().isoformat()})
     )
     
     return {
@@ -179,6 +222,91 @@ async def start_deep_scan(
             "scans_limit": usage["scans_limit"]
         }
     }
+
+
+@router.get("/deep-cookie-scan/usage")
+async def get_scan_usage(
+    current_user: Dict = Depends(get_current_user),
+    connection: asyncpg.Connection = Depends(get_db_connection),
+):
+    """
+    Aktuelles monatliches Scan-Kontingent des Nutzers (plan-abhängig).
+    Dient dem Frontend dazu, den korrekten Zähler/Limit schon vor dem
+    ersten Scan anzuzeigen.
+    """
+    user_id = current_user["id"]
+    usage = await check_scan_limit(int(user_id), connection)
+    return {
+        "scans_used": usage["scans_used"],
+        "scans_limit": usage["scans_limit"],
+        "can_scan": usage["can_scan"],
+    }
+
+
+# WICHTIG: Diese Route muss VOR /deep-cookie-scan/{scan_id} registriert sein.
+# FastAPI matcht Routen in Registrierungsreihenfolge — stand sie dahinter,
+# verschattete {scan_id} (int) den Pfad 'my-scans' und lieferte 422.
+@router.get("/deep-cookie-scan/my-scans")
+async def get_my_scans(
+    limit: int = Query(10, ge=1, le=50),
+    current_user: Dict = Depends(get_current_user),
+    connection: asyncpg.Connection = Depends(get_db_connection),
+):
+    """
+    Get user's recent completed scans for import into Cookie Configurator
+
+    Query Parameters:
+        limit: Maximum number of scans to return (default: 10, max: 50)
+
+    Response:
+        {
+            "scans": [
+                {
+                    "scan_id": 123,
+                    "url": "https://example.com",
+                    "created_at": "2026-04-20T14:30:00Z",
+                    "total_cookies": 47,
+                    "unique_services": 12
+                },
+                ...
+            ]
+        }
+    """
+    user_id = current_user["id"]
+
+    try:
+        scans = await connection.fetch(
+            """
+            SELECT
+                id as scan_id,
+                url,
+                created_at,
+                total_cookies,
+                unique_services
+            FROM deep_cookie_scans
+            WHERE user_id = $1 AND status = 'completed'
+            ORDER BY created_at DESC
+            LIMIT $2
+            """,
+            int(user_id),
+            limit
+        )
+
+        return {
+            "scans": [
+                {
+                    "scan_id": scan["scan_id"],
+                    "url": scan["url"],
+                    "created_at": scan["created_at"].isoformat(),
+                    "total_cookies": scan["total_cookies"],
+                    "unique_services": scan["unique_services"],
+                }
+                for scan in scans
+            ]
+        }
+    except Exception as e:
+        logger.exception("Failed to fetch scans")
+        raise HTTPException(status_code=500, detail="Failed to fetch scans")
 
 
 @router.get("/deep-cookie-scan/{scan_id}")
@@ -338,38 +466,124 @@ async def export_scan_for_configurator(
     
     categorized = _as_obj(scan["categorized"], {})
 
-    # Transform to service-centric format for configurator
+    # Transform to service-centric format for configurator.
+    # categorized trägt jetzt service_key/category/provider aus dem Katalog-Matching.
     services = []
-    
+
     for service_name, data in categorized.items():
         cookies = data.get("cookies", [])
         requests = data.get("requests", [])
-        
-        # Extract unique cookie names
-        cookie_names = list(set([c.get("name", "") for c in cookies if c.get("name")]))
-        
-        # Determine category based on service name and patterns
-        category = _determine_category(service_name, cookie_names)
-        
+        cookie_names = sorted({c.get("name", "") for c in cookies if c.get("name")})
+
+        service_key = data.get("service_key")
+        provider = data.get("provider") or ""
+        # Kategorie aus dem Katalog; Fallback-Heuristik nur für nicht zugeordnete Dienste.
+        category = data.get("category") or _determine_category(service_name, cookie_names)
+
         services.append({
+            "service_key": service_key,
             "name": service_name,
+            "provider": provider,
             "category": category,
             "cookies": cookie_names,
             "total_cookies": len(cookies),
             "total_requests": len(requests),
             "can_block": category != "necessary",
-            "description": _get_service_description(service_name),
+            "in_catalog": bool(service_key),
+            "description": provider or _get_service_description(service_name),
         })
-    
+
     # Sort by category priority (necessary first)
     category_priority = {"necessary": 0, "functional": 1, "analytics": 2, "marketing": 3}
     services.sort(key=lambda s: (category_priority.get(s["category"], 99), s["name"]))
-    
+
+    catalog_keys = sorted({s["service_key"] for s in services if s.get("service_key")})
+
     return {
         "scan_id": scan_id,
         "services": services,
+        "catalog_service_keys": catalog_keys,
         "import_ready": True,
         "message": "Ready to import into Cookie Configurator. Click '➜ Hinzufügen' to add each service."
+    }
+
+
+class ApplyScanRequest(BaseModel):
+    site_id: Optional[str] = None
+
+
+@router.post("/deep-cookie-scan/{scan_id}/apply")
+async def apply_scan_to_banner(
+    scan_id: int,
+    body: ApplyScanRequest = ApplyScanRequest(),
+    current_user: Dict = Depends(get_current_user),
+    connection: asyncpg.Connection = Depends(get_db_connection),
+):
+    """
+    Übernimmt die im Scan katalog-erkannten Dienste (service_keys) in die aktive
+    Cookie-Banner-Config des Nutzers. Die Dienste fließen damit automatisch in den
+    Banner UND in die öffentlich gehostete Cookie-Richtlinie (/cookie-richtlinie/{site_id}).
+    """
+    user_id = current_user["id"]
+
+    scan = await connection.fetchrow(
+        "SELECT categorized FROM deep_cookie_scans WHERE id = $1 AND user_id = $2 AND status = 'completed'",
+        scan_id, int(user_id),
+    )
+    if not scan:
+        raise HTTPException(status_code=404, detail="Completed scan not found")
+
+    categorized = _as_obj(scan["categorized"], {})
+    detected_keys = sorted({
+        data.get("service_key") for data in categorized.values() if data.get("service_key")
+    })
+    if not detected_keys:
+        return {
+            "applied": 0,
+            "added": [],
+            "message": "Keine katalog-erkannten Dienste im Scan — nichts zu übernehmen.",
+        }
+
+    # Ziel-Site bestimmen (explizit übergeben oder primäre Website des Nutzers)
+    site_id = body.site_id
+    if not site_id:
+        from cookie_compliance_routes import get_user_website_site_id
+        site_id = await get_user_website_site_id(int(user_id))
+    if not site_id:
+        raise HTTPException(status_code=400, detail="Keine Website/site_id für diesen Nutzer gefunden.")
+
+    cfg = await connection.fetchrow(
+        "SELECT services FROM cookie_banner_configs WHERE site_id = $1 AND is_active = true",
+        site_id,
+    )
+    current_services = _as_obj(cfg["services"], []) if cfg else []
+    if not isinstance(current_services, list):
+        current_services = []
+
+    merged = sorted(set(current_services) | set(detected_keys))
+    added = sorted(set(detected_keys) - set(current_services))
+
+    if cfg:
+        await connection.execute(
+            "UPDATE cookie_banner_configs SET services = $2, updated_at = NOW() "
+            "WHERE site_id = $1 AND is_active = true",
+            site_id, json.dumps(merged),
+        )
+    else:
+        # Noch keine aktive Config → minimal anlegen, damit Dienste nicht verloren gehen.
+        await connection.execute(
+            "INSERT INTO cookie_banner_configs (site_id, user_id, services, is_active) "
+            "VALUES ($1, $2, $3, true)",
+            site_id, int(user_id), json.dumps(merged),
+        )
+
+    return {
+        "applied": len(added),
+        "added": added,
+        "site_id": site_id,
+        "total_services": len(merged),
+        "policy_url": f"https://api.complyo.de/cookie-richtlinie/{site_id}",
+        "message": f"{len(added)} Dienst(e) in den Cookie-Banner übernommen.",
     }
 
 
@@ -417,6 +631,40 @@ def _get_service_description(service_name: str) -> str:
     return descriptions.get(service_name, f"External service: {service_name}")
 
 
+async def _load_service_catalog(connection) -> list:
+    """
+    Lädt den cookie_services-Katalog im CatalogMatcher-Format. Matcher-Quellen:
+    template.domains (215/217 Dienste) + cookie_names/template.cookies (Cookie-Pattern).
+    """
+    rows = await connection.fetch(
+        """
+        SELECT service_key, name, category, provider, template, cookie_names
+        FROM cookie_services
+        WHERE is_active = true
+        """
+    )
+    catalog = []
+    for r in rows:
+        tmpl = _as_obj(r["template"], {}) or {}
+        domains = tmpl.get("domains") if isinstance(tmpl.get("domains"), list) else []
+        cookie_patterns = []
+        cn = _as_obj(r["cookie_names"], []) or []
+        if isinstance(cn, list):
+            cookie_patterns += [c for c in cn if isinstance(c, str)]
+        tc = tmpl.get("cookies")
+        if isinstance(tc, list):
+            cookie_patterns += [c for c in tc if isinstance(c, str)]
+        catalog.append({
+            "service_key": r["service_key"],
+            "name": r["name"],
+            "category": (r["category"] or tmpl.get("category") or "functional"),
+            "provider": (r["provider"] or ""),
+            "domains": [d for d in domains if isinstance(d, str)],
+            "cookie_patterns": sorted(set(cookie_patterns)),
+        })
+    return catalog
+
+
 async def background_scan_job(scan_id: int, url: str):
     """
     Führt den echten Deep-Scan (Playwright) aus und persistiert das Ergebnis.
@@ -434,9 +682,11 @@ async def background_scan_job(scan_id: int, url: str):
                 "UPDATE deep_cookie_scans SET status = 'running' WHERE id = $1",
                 scan_id,
             )
+            catalog = await _load_service_catalog(connection)
 
-        # Echter Scan (DeepCookieScanner startet Playwright selbst)
-        scanner = DeepCookieScanner(scan_id, url)
+        # Echter Scan (DeepCookieScanner startet Playwright selbst), Dienst-Erkennung
+        # über den cookie_services-Katalog.
+        scanner = DeepCookieScanner(scan_id, url, catalog=catalog)
         result = await scanner.scan()
 
         if getattr(result, "error", None):
@@ -491,72 +741,6 @@ async def background_scan_job(scan_id: int, url: str):
                 )
         except Exception as inner:
             logger.error(f"[DeepScan {scan_id}] konnte Fehlerstatus nicht speichern: {inner}")
-"""
-Additional API endpoint for Scanner Import Panel
-
-Add this endpoint to 03_deep_cookie_scanner_routes.py after the existing endpoints
-"""
-
-@router.get("/deep-cookie-scan/my-scans")
-async def get_my_scans(
-    limit: int = Query(10, ge=1, le=50),
-    current_user: Dict = Depends(get_current_user),
-    connection: asyncpg.Connection = Depends(get_db_connection),
-):
-    """
-    Get user's recent completed scans for import into Cookie Configurator
-    
-    Query Parameters:
-        limit: Maximum number of scans to return (default: 10, max: 50)
-    
-    Response:
-        {
-            "scans": [
-                {
-                    "scan_id": 123,
-                    "url": "https://example.com",
-                    "created_at": "2026-04-20T14:30:00Z",
-                    "total_cookies": 47,
-                    "unique_services": 12
-                },
-                ...
-            ]
-        }
-    """
-    user_id = current_user["id"]
-    
-    try:
-        scans = await connection.fetch(
-            """
-            SELECT 
-                id as scan_id,
-                url,
-                created_at,
-                total_cookies,
-                unique_services
-            FROM deep_cookie_scans
-            WHERE user_id = $1 AND status = 'completed'
-            ORDER BY created_at DESC
-            LIMIT $2
-            """,
-            int(user_id),
-            limit
-        )
-        
-        return {
-            "scans": [
-                {
-                    "scan_id": scan["scan_id"],
-                    "url": scan["url"],
-                    "created_at": scan["created_at"].isoformat(),
-                    "total_cookies": scan["total_cookies"],
-                    "unique_services": scan["unique_services"],
-                }
-                for scan in scans
-            ]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch scans: {str(e)}")
 
 
 @router.delete("/deep-cookie-scan/{scan_id}")

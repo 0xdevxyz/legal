@@ -3,7 +3,7 @@ Fix API Routes für Complyo
 Endpoints für KI-Fix Generierung und Export
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status, Request
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
@@ -37,12 +37,6 @@ class FixRequest(BaseModel):
 class ExportRequest(BaseModel):
     fix_id: int
     export_format: str = 'html'  # 'html', 'pdf', 'txt'
-
-class ProposePRRequest(BaseModel):
-    fix_id: int
-    target_repo: str  # Format: "username/repo-name"
-    github_token: str
-    file_path: Optional[str] = None  # Optional: Ziel-Dateipfad im Repo
 
 class FixOutcomeRequest(BaseModel):
     decision: str
@@ -293,7 +287,16 @@ async def export_fix(
             )
         
         user_id = int(current_user['id'])
-        plan_type = current_user['plan']
+        # `current_user['plan']` stand hier und war gleich doppelt falsch:
+        # `get_current_user()` liefert `plan_type`, nie `plan` — der
+        # Subskript-Zugriff warf einen KeyError, also 500 bei JEDEM
+        # Fix-Export. Und gebraucht wurde der Wert gar nicht: der Export
+        # laeuft laut Kommentar unten fuer alle Plaene ueber den
+        # export_service.
+        #
+        # Derselbe Fehler war in fix_apply_routes.py schon einmal repariert
+        # worden, samt Waechtertest — der prueft aber nur jenes Modul. Hier
+        # hat er ueberlebt. Der Waechter deckt jetzt alle Module ab.
         
         logger.info(f"Exporting fix {request.fix_id} for user {user_id} in format {request.export_format}")
         
@@ -419,7 +422,11 @@ async def get_user_limits(
                 return {
                     'success': True,
                     'limits': {
-                        'plan_type': current_user.get('plan', 'ai'),
+                        # Las den Schluessel `plan` (den es nicht gibt) und fiel deshalb
+            # IMMER auf 'ai' zurueck — einen Tarif aus einem frueheren
+            # Modell, den heute nichts mehr kennt. Jeder Nutzer wurde hier
+            # als 'ai' ausgewiesen, unabhaengig von seinem echten Tarif.
+            'plan_type': current_user.get('plan_type', 'free'),
                         'websites_count': 0,
                         'websites_max': 1,
                         'exports_this_month': 0,
@@ -539,159 +546,11 @@ async def health_check():
         "timestamp": datetime.now().isoformat()
     }
 
-@fix_router.post("/propose-pr")
-async def propose_pr_via_github(
-    request: ProposePRRequest,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Triggert GitHub Actions Workflow für automatische PR-Erstellung
-    
-    Workflow:
-    1. Holt Fix-Daten aus DB
-    2. Generiert Unified Diff
-    3. Sendet repository_dispatch an GitHub
-    4. GitHub Actions erstellt PR mit dem Patch
-    
-    Args:
-        request: ProposePRRequest mit fix_id, target_repo, github_token
-        current_user: Authentifizierter User
-        
-    Returns:
-        Success-Message mit Workflow-Status
-        
-    Raises:
-        HTTPException: Bei GitHub API-Fehlern oder fehlenden Daten
-    """
-    import base64
-    import httpx
-    
-    try:
-        user_id = int(current_user['id'])
-        
-        logger.info(f"🚀 PR-Proposal gestartet: user_id={user_id}, fix_id={request.fix_id}, repo={request.target_repo}")
-        
-        # 1. Hole Fix-Daten aus DB
-        async with db_pool.acquire() as conn:
-            fix_record = await conn.fetchrow(
-                """
-                SELECT 
-                    gf.id,
-                    gf.issue_id,
-                    gf.issue_category,
-                    gf.fix_type,
-                    gf.generated_at
-                FROM generated_fixes gf
-                WHERE gf.id = $1 AND gf.user_id = $2
-                """,
-                request.fix_id,
-                user_id
-            )
-            
-            if not fix_record:
-                raise HTTPException(
-                    status_code=404,
-                    detail={
-                        "error": "fix_not_found",
-                        "message": f"Fix mit ID {request.fix_id} nicht gefunden oder gehört nicht zu diesem User."
-                    }
-                )
-        
-        # 2. Generiere Fix-Content (aus FixGenerator)
-        fix_result = await fix_generator.generate_fix(
-            issue={"id": fix_record['issue_id'], "category": fix_record['issue_category']},
-            context={"user_id": user_id, "plan_type": current_user.get('plan', 'ai')}
-        )
-        fix_data = fix_generator.to_dict(fix_result) if hasattr(fix_result, 'data') else fix_result
-        
-        # 3. Erstelle Unified Diff
-        code = fix_data.get('code', '')
-        file_path = request.file_path or f"fixes/{fix_record['issue_category']}.html"
-        
-        # Einfacher Patch (in Production: intelligentere Diff-Generierung)
-        patch = f"""--- a/{file_path}
-+++ b/{file_path}
-@@ -1,0 +1,{len(code.splitlines())} @@
-+{chr(10).join('+ ' + line for line in code.splitlines())}
-"""
-        
-        patch_b64 = base64.b64encode(patch.encode()).decode()
-        
-        # 4. Trigger GitHub Actions via repository_dispatch
-        github_url = f"https://api.github.com/repos/{request.target_repo}/dispatches"
-        headers = {
-            "Authorization": f"token {request.github_token}",
-            "Accept": "application/vnd.github.v3+json",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "event_type": "ai-fix-proposal",
-            "client_payload": {
-                "title": f"🤖 Fix: {fix_record['issue_category'].title()} Compliance",
-                "body": f"""## Automatischer Compliance-Fix
+# Entfernt 2026-07-30: POST /propose-pr (repository_dispatch-Variante mit
+# Kunden-Token im Request-Body und naiver Patch-Erzeugung). Der PR-Kanal
+# laeuft ausschliesslich ueber git_routes.py + git_service/ (OAuth,
+# verschluesselte Tokens, echte Branch+Patch+PR-Mechanik).
 
-**Kategorie:** {fix_record['issue_category']}
-**Issue ID:** {fix_record['issue_id']}
-**Generiert:** {fix_record['generated_at']}
-
-### Beschreibung
-Dieser PR behebt automatisch erkannte Compliance-Probleme.
-
-### Änderungen
-- Datei: `{file_path}`
-- Fix-Typ: {fix_record['fix_type']}
-
-### Nächste Schritte
-1. ✅ Code-Review durchführen
-2. ✅ Lokal testen
-3. ✅ Bei Bedarf anpassen
-4. ✅ Mergen
-
----
-🤖 Generiert von [Complyo](https://complyo.tech) | Fix-ID: {request.fix_id}
-""",
-                "patch_b64": patch_b64,
-                "branch": f"complyo-fix-{request.fix_id}"
-            }
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(github_url, json=payload, headers=headers)
-            
-        if response.status_code == 204:
-            logger.info(f"✅ GitHub Actions Workflow getriggert: {request.target_repo}")
-            return {
-                "success": True,
-                "message": "PR-Workflow erfolgreich gestartet",
-                "repo": request.target_repo,
-                "branch": f"complyo-fix-{request.fix_id}",
-                "github_actions_url": f"https://github.com/{request.target_repo}/actions"
-            }
-        else:
-            error_text = response.text
-            logger.error(f"❌ GitHub API Fehler {response.status_code}: {error_text}")
-            raise HTTPException(
-                status_code=502,
-                detail={
-                    "error": "github_api_error",
-                    "message": f"GitHub API Fehler: {response.status_code}",
-                    "details": error_text,
-                    "hint": "Prüfen Sie ob der GitHub Token gültig ist und 'repo' + 'workflow' Permissions hat."
-                }
-            )
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Unerwarteter Fehler in propose_pr: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "pr_proposal_failed",
-                "message": f"PR-Erstellung fehlgeschlagen: {str(e)}"
-            }
-        )
 
 @fix_router.post("/{fix_id}/outcome", response_model=Dict[str, Any])
 async def record_fix_outcome(

@@ -15,6 +15,7 @@ import {
   Zap,
   CheckCircle2,
   ChevronRight,
+  AlertTriangle,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -97,8 +98,8 @@ export default function Document() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h3 className="text-lg font-semibold text-white mb-2">Integration</h3>
-        <p className="text-sm text-gray-400">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Integration</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
           Fügen Sie das Cookie-Banner zu Ihrer Website hinzu.
         </p>
       </div>
@@ -107,7 +108,7 @@ export default function Document() {
       <Card className="border-green-500/30 bg-gradient-to-br from-green-500/10 to-green-600/5 backdrop-blur-sm">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-white">
+            <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
               <Zap className="w-5 h-5 text-green-400" />
               Quick Start
             </CardTitle>
@@ -117,12 +118,12 @@ export default function Document() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-gray-300">
-            Fügen Sie diesen Code-Snippet in den <code className="px-2 py-1 bg-gray-800 rounded text-orange-400">&lt;head&gt;</code> Bereich Ihrer Website ein:
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            Fügen Sie diesen Code-Snippet in den <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-orange-400">&lt;head&gt;</code> Bereich Ihrer Website ein:
           </p>
           
           <div className="relative">
-            <div className="bg-gray-950 border border-gray-800 rounded-lg p-4 font-mono text-sm overflow-x-auto">
+            <div className="bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-4 font-mono text-sm overflow-x-auto">
               <pre className="text-green-400">{scriptCode}</pre>
             </div>
             
@@ -130,7 +131,7 @@ export default function Document() {
               size="sm"
               variant="secondary"
               onClick={() => copyToClipboard(scriptCode)}
-              className="absolute top-2 right-2 bg-gray-800 hover:bg-gray-700 text-white"
+              className="absolute top-2 right-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-white"
             >
               {copied ? (
                 <>
@@ -148,24 +149,31 @@ export default function Document() {
           
           <div className="flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
             <Terminal className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-gray-300">
-              Das <code className="px-1.5 py-0.5 bg-gray-800 rounded text-blue-400">async</code> Attribut sorgt dafür, dass das Banner Ihre Website nicht verlangsamt.
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              Das <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-blue-400">async</code> Attribut sorgt dafür, dass das Banner Ihre Website nicht verlangsamt.
+            </p>
+          </div>
+
+          <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+            <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              <strong className="text-amber-300">Wichtig für die Wirksamkeit:</strong> Fügen Sie diesen Code als <strong>allerersten Eintrag</strong> im <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-amber-400">&lt;head&gt;</code> ein – <strong>vor</strong> Google Tag Manager, Analytics, Meta-Pixel und allen anderen Tracking-Skripten. Nur so kann der Blocker diese Dienste zuverlässig <strong>vor der Einwilligung</strong> stoppen. Stehen Tracker davor, laden sie ggf. bereits ohne Zustimmung.
             </p>
           </div>
         </CardContent>
       </Card>
       
       {/* Platform-specific Instructions */}
-      <Card className="border-gray-700 bg-gray-800/50 backdrop-blur-sm">
+      <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-white">
+          <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
             <Globe className="w-5 h-5 text-orange-400" />
             Platform-spezifische Anleitungen
           </CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="wordpress" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 bg-gray-900/50">
+            <TabsList className="grid w-full grid-cols-4 bg-white/50 dark:bg-gray-900/50">
               <TabsTrigger value="wordpress" className="data-[state=active]:bg-orange-500">
                 WordPress
               </TabsTrigger>
@@ -184,7 +192,7 @@ export default function Document() {
             <TabsContent value="wordpress" className="space-y-4 mt-6">
               <div className="flex items-center gap-2 mb-4">
                 <FileCode className="w-5 h-5 text-orange-400" />
-                <h4 className="font-semibold text-white">WordPress Installation</h4>
+                <h4 className="font-semibold text-gray-900 dark:text-white">WordPress Installation</h4>
               </div>
               <ol className="space-y-3">
                 {[
@@ -193,7 +201,7 @@ export default function Document() {
                   'Fügen Sie den Code vor dem schließenden </head> Tag ein',
                   'Speichern Sie die Änderungen'
                 ].map((step, idx) => (
-                  <li key={idx} className="flex items-start gap-3 text-sm text-gray-300">
+                  <li key={idx} className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-orange-500/20 text-orange-400 font-semibold flex-shrink-0 mt-0.5">
                       {idx + 1}
                     </span>
@@ -204,7 +212,7 @@ export default function Document() {
               
               <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg mt-4">
                 <CheckCircle2 className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-gray-300">
+                <p className="text-sm text-gray-700 dark:text-gray-300">
                   <strong className="text-yellow-300">Alternative:</strong> Nutzen Sie ein Plugin wie "Header and Footer Scripts" um Code ohne Theme-Bearbeitung einzufügen.
                 </p>
               </div>
@@ -214,7 +222,7 @@ export default function Document() {
             <TabsContent value="html" className="space-y-4 mt-6">
               <div className="flex items-center gap-2 mb-4">
                 <Code className="w-5 h-5 text-orange-400" />
-                <h4 className="font-semibold text-white">Statische HTML-Website</h4>
+                <h4 className="font-semibold text-gray-900 dark:text-white">Statische HTML-Website</h4>
               </div>
               <ol className="space-y-3">
                 {[
@@ -223,7 +231,7 @@ export default function Document() {
                   'Wiederholen Sie dies für alle Seiten oder nutzen Sie ein Template',
                   'Laden Sie die Dateien auf Ihren Server hoch'
                 ].map((step, idx) => (
-                  <li key={idx} className="flex items-start gap-3 text-sm text-gray-300">
+                  <li key={idx} className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-orange-500/20 text-orange-400 font-semibold flex-shrink-0 mt-0.5">
                       {idx + 1}
                     </span>
@@ -237,7 +245,7 @@ export default function Document() {
             <TabsContent value="react" className="space-y-4 mt-6">
               <div className="flex items-center gap-2 mb-4">
                 <Terminal className="w-5 h-5 text-orange-400" />
-                <h4 className="font-semibold text-white">React / Next.js Integration</h4>
+                <h4 className="font-semibold text-gray-900 dark:text-white">React / Next.js Integration</h4>
               </div>
               <ol className="space-y-3">
                 {[
@@ -245,7 +253,7 @@ export default function Document() {
                   'Für React: Fügen Sie den Code in public/index.html ein',
                   'Alternativ: Nutzen Sie react-helmet oder next/head'
                 ].map((step, idx) => (
-                  <li key={idx} className="flex items-start gap-3 text-sm text-gray-300">
+                  <li key={idx} className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-orange-500/20 text-orange-400 font-semibold flex-shrink-0 mt-0.5">
                       {idx + 1}
                     </span>
@@ -255,14 +263,14 @@ export default function Document() {
               </ol>
               
               <div className="relative mt-4">
-                <div className="bg-gray-950 border border-gray-800 rounded-lg p-4 font-mono text-xs overflow-x-auto">
+                <div className="bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-4 font-mono text-xs overflow-x-auto">
                   <pre className="text-green-400">{nextJsCode}</pre>
                 </div>
                 <Button
                   size="sm"
                   variant="secondary"
                   onClick={() => copyToClipboard(nextJsCode)}
-                  className="absolute top-2 right-2 bg-gray-800 hover:bg-gray-700 text-white text-xs"
+                  className="absolute top-2 right-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-white text-xs"
                 >
                   {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                 </Button>
@@ -273,7 +281,7 @@ export default function Document() {
             <TabsContent value="shopify" className="space-y-4 mt-6">
               <div className="flex items-center gap-2 mb-4">
                 <Globe className="w-5 h-5 text-orange-400" />
-                <h4 className="font-semibold text-white">Shopify Installation</h4>
+                <h4 className="font-semibold text-gray-900 dark:text-white">Shopify Installation</h4>
               </div>
               <ol className="space-y-3">
                 {[
@@ -283,7 +291,7 @@ export default function Document() {
                   'Fügen Sie den Code vor dem </head> Tag ein',
                   'Speichern Sie die Datei'
                 ].map((step, idx) => (
-                  <li key={idx} className="flex items-start gap-3 text-sm text-gray-300">
+                  <li key={idx} className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-orange-500/20 text-orange-400 font-semibold flex-shrink-0 mt-0.5">
                       {idx + 1}
                     </span>
@@ -297,15 +305,15 @@ export default function Document() {
       </Card>
       
       {/* Testing */}
-      <Card className="border-gray-700 bg-gray-800/50 backdrop-blur-sm">
+      <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-white">
+          <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
             <CheckCircle2 className="w-5 h-5 text-orange-400" />
             Testing
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-gray-300">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
             So überprüfen Sie, ob das Cookie-Banner funktioniert:
           </p>
           
@@ -317,7 +325,7 @@ export default function Document() {
               'Prüfen Sie in den Browser DevTools (Console) auf Fehler',
               'Öffnen Sie die Website erneut - das Banner sollte nicht mehr erscheinen'
             ].map((step, idx) => (
-              <li key={idx} className="flex items-start gap-3 text-sm text-gray-300">
+              <li key={idx} className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
                 <ChevronRight className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
                 <span>{step}</span>
               </li>
@@ -326,7 +334,7 @@ export default function Document() {
           
           <div className="flex items-start gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg mt-4">
             <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-gray-300">
+            <p className="text-sm text-gray-700 dark:text-gray-300">
               <strong className="text-green-300">Tipp:</strong> Löschen Sie Cookies & LocalStorage um das Banner erneut zu testen.
             </p>
           </div>
@@ -336,13 +344,13 @@ export default function Document() {
       {/* Auto-Blocking Info */}
       <Card className="border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-white">
+          <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
             <Zap className="w-5 h-5 text-purple-400" />
             Automatisches Blocking
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-gray-300">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
             Das integrierte Auto-Blocking-System blockiert automatisch alle konfigurierten Services, bis der User seine Zustimmung erteilt.
           </p>
           
@@ -350,38 +358,38 @@ export default function Document() {
             <div className="flex items-start gap-3">
               <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-white">Scripts blockieren</p>
-                <p className="text-xs text-gray-400">Tracking-Scripts werden vor der Ausführung geblockt</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">Scripts blockieren</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Tracking-Scripts werden vor der Ausführung geblockt</p>
               </div>
             </div>
             
             <div className="flex items-start gap-3">
               <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-white">iFrames ersetzen</p>
-                <p className="text-xs text-gray-400">YouTube, Google Maps etc. werden durch Platzhalter ersetzt</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">iFrames ersetzen</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">YouTube, Google Maps etc. werden durch Platzhalter ersetzt</p>
               </div>
             </div>
             
             <div className="flex items-start gap-3">
               <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-white">Cookies löschen</p>
-                <p className="text-xs text-gray-400">Bei Ablehnung werden alle Tracking-Cookies entfernt</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">Cookies löschen</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Bei Ablehnung werden alle Tracking-Cookies entfernt</p>
               </div>
             </div>
             
             <div className="flex items-start gap-3">
               <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-white">35+ Services unterstützt</p>
-                <p className="text-xs text-gray-400">Google Analytics, Facebook Pixel, WordPress, und viele mehr</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">35+ Services unterstützt</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Google Analytics, Facebook Pixel, WordPress, und viele mehr</p>
               </div>
             </div>
           </div>
           
           <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-            <p className="text-xs text-gray-300">
+            <p className="text-xs text-gray-700 dark:text-gray-300">
               <strong className="text-purple-300">100% DSGVO-konform:</strong> Keine Tracking-Scripts laden vor Zustimmung.
             </p>
           </div>
@@ -394,18 +402,18 @@ export default function Document() {
           <div className="flex items-start gap-3">
             <Mail className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
-              <h4 className="font-semibold text-white mb-1">Brauchen Sie Hilfe?</h4>
-              <p className="text-sm text-gray-300 mb-3">
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-1">Brauchen Sie Hilfe?</h4>
+              <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
                 Unser Support-Team hilft Ihnen gerne bei der Integration.
               </p>
               <Button
                 variant="outline"
                 size="sm"
                 className="border-blue-500 text-blue-400 hover:bg-blue-500/10"
-                onClick={() => window.open('mailto:support@complyo.tech', '_blank')}
+                onClick={() => window.open('mailto:support@complyo.de', '_blank')}
               >
                 <Mail className="w-4 h-4 mr-2" />
-                support@complyo.tech
+                support@complyo.de
               </Button>
             </div>
           </div>

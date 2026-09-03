@@ -1,3 +1,27 @@
+"""
+Anmeldung, Sitzungen und Kontoverwaltung (Prefix /api/auth).
+
+Registrierung, Login, Token-Erneuerung, Logout einzeln und geraetuebergreifend,
+Onboarding-Abschluss, /me. Dazu Endpunkte fuer NextAuth (verify-credentials,
+session-info) und die Firebase-Pruefung.
+
+Die harten Grenzen stehen als Dekorator direkt an der Route: Registrierung
+3/Stunde, Login und Credential-Pruefung 5/Minute, Token-Erneuerung 10/Minute,
+Passwort-Reset des Master-Kontos 3/Stunde.
+
+ACHTUNG, die OAuth-Endpunkte /google, /google/callback, /apple und
+/apple/callback sind tot. Das Modul-Attribut `oauth_service` wird nirgends
+gesetzt, die Routen antworten mit 500 (live nachgemessen 2026-08-31), und
+oauth_service.py ist am selben Tag als unbenutzt geloescht worden. Der lebende
+Weg fuer Google-Anmeldung ist Firebase: die Oberflaeche holt dort ein
+ID-Token und laesst es hier ueber /firebase-verify pruefen. Die vier Routen
+stehen noch, weil ihr Abbau eine Produktentscheidung ist.
+
+Die Dienste (`auth_service`, `db_pool`, `firebase_verify_token`) setzt
+main_production beim Start von aussen in dieses Modul.
+"""
+
+
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import RedirectResponse, JSONResponse
@@ -10,6 +34,7 @@ from datetime import datetime, timedelta
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from schemas.auth import LoginResponse, RegisterResponse, RefreshResponse, MeResponse
+from compliance_engine.jurisdictions import DEFAULT_JURISDICTION
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +56,24 @@ class RegisterRequest(BaseModel):
     password: str
     full_name: str
     company: Optional[str] = None
-    plan: str = "ki"  # 'ki' oder 'expert'
+    # Der Standardtarif einer Selbstregistrierung.
+    #
+    # Hier stand "ki" — ein Rest aus einem frueheren Tarifmodell. Den Tarif
+    # kennt heute niemand mehr: weder `_resolve_modules` im Kaufweg noch der
+    # Modul-Zugang noch die Tarifanzeige. Wer sich registrierte, landete
+    # darauf und bekam anschliessend auf JEDEN Modulaufruf 403 — Scan ging
+    # (oeffentlich), alles danach nicht. Beim Audit-Durchstich war das der
+    # letzte verbleibende Fehler.
+    #
+    # `free` ist der Tarif, den das Modell fuer genau diesen Fall vorsieht:
+    # 1 Fix, Cookies nutzbar, Rest Scan + Vorschau.
+    plan: str = "free"
+
+    # Die AGB schliessen Vertraege mit Verbrauchern aus (Ziffer 1 Absatz 3).
+    # Erhoben wurde das nie. Eine Beschraenkung, die man nicht belegen kann,
+    # haelt im Streitfall nicht.
+    unternehmer_bestaetigt: bool = False
+    agb_version: Optional[str] = None
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -46,6 +88,13 @@ class TokenResponse(BaseModel):
 class RefreshRequest(BaseModel):
     refresh_token: str
 
+# Die Tarife, die es wirklich gibt. Deckungsgleich mit `_resolve_modules`
+# im Kaufweg (payment_routes/stripe_routes).
+BEKANNTE_TARIFE = frozenset({
+    'free', 'single', 'monitor', 'pro', 'agency', 'expert', 'update',
+})
+
+
 async def init_user_limits(user_id: int, plan_type: str):
     """Initialize user_limits for new user"""
     async with db_pool.acquire() as conn:
@@ -56,17 +105,59 @@ async def init_user_limits(user_id: int, plan_type: str):
         )
         
         if not exists:
+            # Ein unbekannter Tarif ist schlimmer als der kleinste: er
+            # verriegelt alles, ohne dass irgendwo etwas davon steht.
+            if plan_type not in BEKANNTE_TARIFE:
+                logger.warning("Unbekannter Tarif %r bei Nutzer %s — nutze 'free'",
+                               plan_type, user_id)
+                plan_type = 'free'
             websites_max = 1
             exports_max = -1 if plan_type == 'expert' else 10
             
             await conn.execute(
                 """
-                INSERT INTO user_limits (user_id, plan_type, websites_max, exports_max, exports_reset_date)
-                VALUES ($1, $2, $3, $4, CURRENT_DATE + INTERVAL '1 month')
+                INSERT INTO user_limits (user_id, plan_type, websites_max, exports_max, exports_reset_date, jurisdiction)
+                VALUES ($1, $2, $3, $4, CURRENT_DATE + INTERVAL '1 month', $5)
                 """,
-                user_id, plan_type, websites_max, exports_max
+                user_id, plan_type, websites_max, exports_max, DEFAULT_JURISDICTION
             )
             logger.info(f"User limits initialized for user {user_id} with plan {plan_type}")
+
+
+from dependencies import get_client_ip as _besucher_ip
+
+
+async def protokolliere_vertragsannahme(user_id: int, email: str, request: Request,
+                                        unternehmer_bestaetigt: bool,
+                                        agb_version: Optional[str]) -> None:
+    """Haelt fest, wer wann welche AGB-Fassung als Unternehmer angenommen hat.
+
+    Best effort mit Absicht: schlaegt der Schreibvorgang fehl, etwa weil
+    Migration 0016 noch nicht gelaufen ist, darf das die Registrierung NICHT
+    abbrechen. Ein fehlender Nachweis ist ein Mangel, ein blockierter Kaufweg
+    ist ein Ausfall.
+    """
+    try:
+        # X-Forwarded-For darf nicht ungeprueft uebernommen werden: den Header
+        # setzt der Client selbst. Wer ihn faelscht, schreibt sich eine beliebige
+        # Adresse in den Nachweis der AGB-Annahme, und ein Nachweis, den der
+        # Nachweispflichtige nicht kontrolliert, traegt vor Gericht nichts.
+        # get_client_ip glaubt ihm nur hinter einem Proxy aus TRUSTED_PROXIES.
+        ip = _besucher_ip(request)
+
+        async with db_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO vertragsannahmen
+                    (user_id, email, agb_version, unternehmer_bestaetigt, ip_adresse, user_agent)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                """,
+                user_id, email, agb_version, unternehmer_bestaetigt,
+                ip, request.headers.get("user-agent"),
+            )
+    except Exception as exc:
+        logger.warning("Vertragsannahme fuer %s nicht protokolliert: %s", email, exc)
+
 
 @router.post("/register", response_model=RegisterResponse)
 @limiter.limit("3/hour")
@@ -105,6 +196,12 @@ async def register(request: Request, body: RegisterRequest):
         
         # Initialize user_limits
         await init_user_limits(user['id'], body.plan)
+
+        # Nachweis der Unternehmereigenschaft und der akzeptierten AGB-Fassung.
+        await protokolliere_vertragsannahme(
+            user['id'], user['email'], request,
+            body.unternehmer_bestaetigt, body.agb_version,
+        )
         
         # Create tokens
         access_token = auth_service.create_access_token(user['id'])
@@ -383,7 +480,7 @@ async def oauth_token_pickup(request: Request):
 async def logout(request: Request):
     """Logout user: blacklist JTI, revoke refresh token, clear cookies"""
     import jwt as _jwt
-    from dependencies import get_redis, get_settings
+    from dependencies import get_settings
 
     token_from_cookie = request.cookies.get("refresh_token")
     token_from_body: Optional[str] = None
@@ -434,12 +531,10 @@ async def logout(request: Request):
 async def logout_all(request: Request):
     """Logout all sessions for the current user: blacklist all JTIs, delete all sessions"""
     import jwt as _jwt
-    from dependencies import get_settings, get_current_user
+    from dependencies import get_settings
 
     current_user: Optional[dict] = None
     try:
-        from dependencies import get_settings as _gs, security as _sec
-        from fastapi.security import HTTPAuthorizationCredentials
         cred_header = request.headers.get("Authorization", "")
         token: Optional[str] = None
         if cred_header.startswith("Bearer "):
@@ -613,7 +708,7 @@ async def google_oauth_callback(code: str, state: str):
         
         # Set HttpOnly cookie and redirect cleanly — never put tokens in URL fragments
         is_secure = os.getenv("ENVIRONMENT", "production") == "production"
-        frontend_url = os.getenv("FRONTEND_URL", "https://app.complyo.tech")
+        frontend_url = os.getenv("FRONTEND_URL", "https://app.complyo.de")
         response = RedirectResponse(url=f"{frontend_url}/auth/callback?provider=google&status=ok")
         response.set_cookie(
             key="access_token_once",
@@ -699,7 +794,7 @@ async def apple_oauth_callback(code: str, state: str):
         refresh_token = await auth_service.create_refresh_token(user['id'])
         
         is_secure = os.getenv("ENVIRONMENT", "production") == "production"
-        frontend_url = os.getenv("FRONTEND_URL", "https://app.complyo.tech")
+        frontend_url = os.getenv("FRONTEND_URL", "https://app.complyo.de")
         response = RedirectResponse(url=f"{frontend_url}/auth/callback?provider=apple&status=ok")
         response.set_cookie(
             key="access_token_once",
@@ -791,7 +886,7 @@ async def firebase_verify(request: FirebaseTokenRequest):
         logger.error(f"Firebase verification error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Firebase Authentifizierung fehlgeschlagen: {str(e)}"
+            detail="Firebase Authentifizierung fehlgeschlagen"
         )
 
 # ============= Health Check =============
@@ -812,7 +907,7 @@ async def auth_health():
 @limiter.limit("3/hour")
 async def reset_master_password(request: Request, admin_key: str = Query(..., alias="admin_key")):
     """
-    Admin Endpoint: Setzt das Passwort für master@complyo.tech zurück
+    Admin Endpoint: Setzt das Passwort für master@complyo.de zurück
 
     Query Parameter:
     - admin_key: Admin-Schlüssel (muss als ADMIN_KEY env var gesetzt sein)
@@ -826,7 +921,10 @@ async def reset_master_password(request: Request, admin_key: str = Query(..., al
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Admin key not configured"
         )
-    if admin_key != expected_key:
+    # Zeitkonstanter Vergleich: ein == verraet ueber die Laufzeit, wie viele
+    # Zeichen stimmen. Das Rate-Limit von 3/Stunde macht den Angriff unpraktisch,
+    # aber der richtige Vergleich kostet nichts.
+    if not secrets.compare_digest(admin_key, expected_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized"
@@ -838,7 +936,7 @@ async def reset_master_password(request: Request, admin_key: str = Query(..., al
             detail="Services not initialized"
         )
 
-    email = "master@complyo.tech"
+    email = "master@complyo.de"
     # Password must be provided via query param — never hardcoded
     new_password = os.getenv("MASTER_RESET_PASSWORD")
     if not new_password:
@@ -896,5 +994,5 @@ async def reset_master_password(request: Request, admin_key: str = Query(..., al
         logger.error(f"Error resetting master password: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to reset password: {str(e)}"
+            detail="Failed to reset password"
         )

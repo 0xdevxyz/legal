@@ -27,10 +27,10 @@ SHOP_SIGNALS = [
 ]
 
 def _is_shop(soup: BeautifulSoup) -> bool:
-    text = soup.get_text(separator=' ', strip=True).lower()
-    html_lower = str(soup).lower()
-    hits = sum(1 for s in SHOP_SIGNALS if s in text or s in html_lower)
-    return hits >= 3
+    # Konsolidiert auf die zentrale Shop-Erkennung (shop_check.detect_shop),
+    # statt einer zweiten, driftenden Substring-Heuristik.
+    from .shop_check import detect_shop
+    return detect_shop(soup)
 
 
 @dataclass

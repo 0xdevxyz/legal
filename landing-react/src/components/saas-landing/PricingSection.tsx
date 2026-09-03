@@ -1,172 +1,208 @@
 'use client';
-import React, { useState } from 'react';
-import { Check, Zap, Crown, ArrowRight } from 'lucide-react';
+import React from 'react';
+import { Check, ArrowRight, Sparkles } from 'lucide-react';
 
-const getAppUrl = (path: string) => {
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') return `http://localhost:3000${path}`;
-  }
-  return `https://app.complyo.de${path}`;
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de';
+
+type Plan = {
+  id: string;
+  name: string;
+  price: string;
+  period: string;
+  note?: string;
+  description: string;
+  features: string[];
+  cta: string;
+  href: string;
+  highlighted?: boolean;
 };
 
+const PLANS: Plan[] = [
+  {
+    id: 'free',
+    name: 'Free',
+    price: '0 €',
+    period: '',
+    description: 'Der volle Befund, ohne Kreditkarte.',
+    features: [
+      'Vollständiger Scan aller vier Säulen',
+      'Ein Fix inklusive',
+      'Cookie-Banner konfigurierbar – ohne Einbettungscode',
+      'Rechtstexte und Barrierefreiheit als Scan und Vorschau',
+    ],
+    cta: 'Kostenlos starten',
+    href: APP_URL + '/register?plan=free',
+  },
+  {
+    id: 'single',
+    name: 'Einzelsäule',
+    price: '19 €',
+    period: '/Monat je Säule',
+    description: 'Nur das Thema, das gerade drückt.',
+    features: [
+      'Eine Säule vollständig freigeschaltet',
+      'Wahlweise Cookie und DSGVO, Barrierefreiheit, Rechtstexte oder Monitoring',
+      'Jederzeit weitere Säulen dazubuchen',
+      'Monatlich kündbar',
+    ],
+    cta: 'Säule wählen',
+    href: APP_URL + '/register?plan=single',
+  },
+  {
+    id: 'monitor',
+    name: 'Monitoring',
+    price: '19 €',
+    period: '/Monat',
+    note: 'oder 190 € im Jahr',
+    description: 'Wachdienst für bis zu 10 Websites.',
+    features: [
+      'Bis zu 10 Websites im täglichen Wachdienst',
+      'Alarm bei Score-Sturz oder neuen kritischen Befunden',
+      'Automatischer Neu-Check, sobald sich die Rechtslage ändert',
+      'Score-Verlauf je Website, monatlich kündbar',
+    ],
+    cta: 'Monitoring buchen',
+    href: APP_URL + '/register?plan=monitor',
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    price: '49 €',
+    period: '/Monat',
+    note: 'oder 490 € im Jahr',
+    description: 'Alles frei für eine Domain.',
+    features: [
+      'Alle vier Säulen ohne Limit',
+      'Einbettungscode für Cookie-Banner und Widget',
+      'Unbegrenzte Fixes und laufendes Monitoring',
+      'Domainwechsel über den Support',
+    ],
+    cta: 'Pro buchen',
+    href: APP_URL + '/register?plan=pro',
+    highlighted: true,
+  },
+  {
+    id: 'agency',
+    name: 'Agentur',
+    price: '299 €',
+    period: '/Monat',
+    note: 'oder 2.990 € im Jahr',
+    description: 'Für alle, die fremde Websites betreuen.',
+    features: [
+      '25 Projekte inklusive',
+      'Voller Pro-Funktionsumfang je Projekt',
+      'Erweiterbar um weitere 25 Projekte',
+      'Zentrale Übersicht über alle Domains',
+    ],
+    cta: 'Agentur buchen',
+    href: APP_URL + '/register?plan=agency',
+  },
+];
+
 export default function PricingSection() {
-  const [annual, setAnnual] = useState(false);
-
-  const plans = [
-    {
-      name: 'Starter',
-      icon: Zap,
-      price: annual ? 0 : 0,
-      period: 'kostenlos',
-      description: 'Perfekt zum Einstieg und Testen',
-      highlight: false,
-      cta: 'Kostenlos starten',
-      ctaUrl: '/register?plan=free',
-      features: [
-        '1 Website scannen',
-        'Basis-Compliance-Report',
-        'Impressum & Datenschutz Check',
-        'Cookie-Erkennung',
-        'E-Mail Support',
-      ],
-      notIncluded: [
-        'KI-generierte Fixes',
-        'Automatische Rechtstexte',
-        'WCAG 2.1 Vollprüfung',
-      ],
-    },
-    {
-      name: 'Pro',
-      icon: Crown,
-      price: annual ? 39 : 49,
-      period: '/Monat',
-      sub: annual ? 'zzgl. MwSt. • jährlich' : 'zzgl. MwSt.',
-      description: 'Alles für professionelle Compliance',
-      highlight: true,
-      badge: 'Beliebteste Wahl',
-      cta: 'Jetzt Pro starten',
-      ctaUrl: '/register?plan=pro',
-      features: [
-        'Unbegrenzte Websites',
-        'Alle 4 Compliance-Module',
-        'KI-generierte Code-Fixes',
-        'KI-Rechtstexte (DSGVO, AGB, Impressum)',
-        'WCAG 2.1 AA Vollprüfung',
-        'Cookie Consent Manager (TCF 2.2)',
-        'Rechtliches Monitoring & Alerts',
-        'Priority Support',
-      ],
-    },
-    {
-      name: 'Expert',
-      icon: Crown,
-      price: 2990,
-      period: 'einmalig',
-      sub: '+ 39€/Monat danach',
-      description: 'Wir übernehmen alles für Sie',
-      highlight: false,
-      cta: 'Beratung anfragen',
-      ctaUrl: '/contact?service=expert',
-      features: [
-        'Alles aus Pro',
-        'Vollständige Umsetzung durch Experten',
-        'WCAG 2.1 AA Zertifizierung',
-        'Persönlicher Ansprechpartner',
-        'Individuelle Workshops & Schulungen',
-        'Laufende Updates bei Gesetzesänderungen',
-        'SLA-Garantie',
-      ],
-    },
-  ];
-
   return (
-    <section className="bg-white py-24" id="pricing">
+    <section id="preise" className="bg-gray-50 py-20 scroll-mt-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="text-center mb-14">
-          <p className="text-sm font-semibold text-blue-600 uppercase tracking-widest mb-3">Pricing</p>
-          <h2 className="font-heading text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4">
-            Flexible pricing for every team
+
+        <div className="text-center max-w-2xl mx-auto mb-14">
+          <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Preise</span>
+          <h2 className="font-heading text-3xl sm:text-4xl font-extrabold text-gray-900 mt-3 mb-4">
+            Scannen ist kostenlos. Bezahlt wird erst das Beheben.
           </h2>
-          <p className="text-lg text-gray-500 max-w-2xl mx-auto mb-8">
-            Starten Sie kostenlos und skalieren Sie mit Ihren Anforderungen. Kein Risiko, jederzeit kündbar.
+          <p className="text-gray-500 leading-relaxed">
+            Du siehst zuerst, was auf deiner Website nicht stimmt – vollständig und ohne Zahlungsdaten.
+            Erst wenn du die Befunde abstellen willst, wird ein Tarif fällig.
           </p>
-          {/* Annual Toggle */}
-          <div className="inline-flex items-center gap-3 bg-gray-100 rounded-full px-2 py-2">
-            <button onClick={() => setAnnual(false)} className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${!annual ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Monatlich</button>
-            <button onClick={() => setAnnual(true)} className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${annual ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Jährlich</button>
-            {annual && <span className="text-xs font-semibold text-green-600 bg-green-100 px-2.5 py-1 rounded-full">-20%</span>}
-          </div>
         </div>
 
-        {/* Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-5xl mx-auto items-start">
-          {plans.map((plan, i) => (
-            <div key={i} className={`relative rounded-2xl p-8 border transition-all ${
-              plan.highlight
-                ? 'bg-blue-600 border-blue-500 shadow-2xl shadow-blue-200 scale-105 text-white'
-                : 'bg-white border-gray-200 shadow-sm hover:shadow-md'
-            }`}>
-              {plan.badge && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                  <span className="bg-gradient-to-r from-orange-400 to-yellow-400 text-gray-900 text-xs font-bold px-5 py-1.5 rounded-full shadow">
-                    ⭐ {plan.badge}
-                  </span>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 items-stretch">
+          {PLANS.map((plan) => (
+            <div
+              key={plan.id}
+              className={`relative flex flex-col rounded-2xl p-6 transition-shadow ${
+                plan.highlighted
+                  ? 'bg-white border-2 border-blue-600 shadow-xl'
+                  : 'bg-white border border-gray-200 hover:shadow-md'
+              }`}
+            >
+              {plan.highlighted && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">
+                  Am häufigsten gewählt
                 </div>
               )}
 
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${plan.highlight ? 'bg-white/20' : 'bg-blue-50'}`}>
-                <plan.icon className={`w-5 h-5 ${plan.highlight ? 'text-white' : 'text-blue-600'}`} />
+              <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
+              <p className="text-sm text-gray-500 mt-1 mb-5 min-h-[40px]">{plan.description}</p>
+
+              <div className="mb-1 flex items-baseline gap-1">
+                <span className="text-4xl font-extrabold text-gray-900">{plan.price}</span>
+                <span className="text-sm text-gray-500">{plan.period}</span>
               </div>
+              <p className="text-xs text-gray-500 mb-6 min-h-[16px]">{plan.note ?? ''}</p>
 
-              <h3 className={`font-heading text-xl font-extrabold mb-1 ${plan.highlight ? 'text-white' : 'text-gray-900'}`}>{plan.name}</h3>
-              <p className={`text-sm mb-5 ${plan.highlight ? 'text-blue-100' : 'text-gray-500'}`}>{plan.description}</p>
-
-              <div className="mb-6">
-                <div className="flex items-baseline gap-1.5">
-                  {plan.name === 'Expert' ? (
-                    <span className={`text-4xl font-extrabold ${plan.highlight ? 'text-white' : 'text-gray-900'}`}>2.990€</span>
-                  ) : (
-                    <>
-                      <span className={`text-4xl font-extrabold ${plan.highlight ? 'text-white' : 'text-gray-900'}`}>{plan.price}€</span>
-                      <span className={`text-sm ${plan.highlight ? 'text-blue-200' : 'text-gray-500'}`}>{plan.period}</span>
-                    </>
-                  )}
-                </div>
-                {plan.sub && <p className={`text-xs mt-1 ${plan.highlight ? 'text-blue-200' : 'text-gray-400'}`}>{plan.sub}</p>}
-              </div>
-
-              <ul className="space-y-2.5 mb-8">
-                {plan.features.map((f, j) => (
-                  <li key={j} className="flex items-start gap-2.5">
-                    <Check className={`w-4 h-4 flex-shrink-0 mt-0.5 ${plan.highlight ? 'text-green-300' : 'text-green-500'}`} />
-                    <span className={`text-sm ${plan.highlight ? 'text-blue-50' : 'text-gray-600'}`}>{f}</span>
-                  </li>
-                ))}
-                {plan.notIncluded?.map((f, j) => (
-                  <li key={j} className="flex items-start gap-2.5 opacity-40">
-                    <span className="w-4 h-4 flex-shrink-0 mt-0.5 text-center text-gray-400 text-xs">✕</span>
-                    <span className="text-sm text-gray-500">{f}</span>
+              <ul className="space-y-3 mb-8 flex-1">
+                {plan.features.map((feature, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-sm text-gray-600">
+                    <Check className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span>{feature}</span>
                   </li>
                 ))}
               </ul>
 
-              <a href={getAppUrl(plan.ctaUrl)} className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl font-semibold text-sm transition-all ${
-                plan.highlight
-                  ? 'bg-white text-blue-700 hover:bg-blue-50 shadow-lg'
-                  : plan.name === 'Expert'
-                    ? 'bg-gray-900 text-white hover:bg-gray-800'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
-              }`}>
-                {plan.cta} <ArrowRight className="w-4 h-4" />
+              <a
+                href={plan.href}
+                className={`inline-flex items-center justify-center gap-2 w-full font-semibold px-5 py-3 rounded-xl transition-colors ${
+                  plan.highlighted
+                    ? 'bg-blue-700 hover:bg-blue-800 text-white shadow-md shadow-blue-100'
+                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200'
+                }`}
+              >
+                {plan.cta}
+                <ArrowRight className="w-4 h-4" />
               </a>
             </div>
           ))}
         </div>
 
-        <p className="text-center text-sm text-gray-400 mt-10">
-          💳 Sichere Zahlung via Stripe &nbsp;·&nbsp; 🔒 DSGVO-konform &nbsp;·&nbsp; ✓ Jederzeit kündbar
+        <div className="mt-8 rounded-2xl bg-gray-900 text-white p-8 flex flex-col lg:flex-row lg:items-center gap-6">
+          <div className="flex-1">
+            <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-3 py-1 mb-3">
+              <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+              <span className="text-xs font-semibold uppercase tracking-wide">Expert-Paket</span>
+            </div>
+            <h3 className="text-2xl font-bold mb-2">Wir überarbeiten deine Website selbst.</h3>
+            <p className="text-gray-300 text-sm leading-relaxed max-w-2xl">
+              Kein Selbermachen: Wir setzen die Befunde auf deiner Seite um und übergeben sie mit Prüfnachweis.
+              Einmalig 3.990 € netto, danach 29 € im Monat für laufende Updates, damit es auch so bleibt.
+            </p>
+            {/* Foerderhinweis bewusst im Konjunktiv: Programme aendern sich, und
+                eine Zusage auf der Preisseite waere ein Werbeversprechen. */}
+            <p className="text-gray-400 text-xs leading-relaxed max-w-2xl mt-3">
+              <span className="font-semibold text-gray-300">Förderfähig?</span>{' '}
+              Für kleine und mittlere Unternehmen kann eine BAFA-Beratungsförderung
+              in Frage kommen — in den neuen Bundesländern mit einem höheren
+              Fördersatz als in den alten. Ob das für dich gilt und in welcher Höhe,
+              klären wir vorab gemeinsam; verbindlich entscheidet die BAFA.
+            </p>
+          </div>
+          <a
+            href="mailto:support@complyo.de?subject=Anfrage%20Expert-Paket"
+            className="inline-flex items-center justify-center gap-2 bg-white text-gray-900 font-semibold px-6 py-3.5 rounded-xl hover:bg-gray-100 transition-colors flex-shrink-0"
+          >
+            Expert-Paket anfragen
+            <ArrowRight className="w-4 h-4" />
+          </a>
+        </div>
+
+        <p className="text-center text-xs text-gray-500 mt-6">
+          Alle Preise zzgl. MwSt. · Abos monatlich kündbar · Zahlung per Karte oder SEPA-Lastschrift
+        </p>
+        {/* Die Klarstellung gehoert dorthin, wo bestellt wird — nicht nur in die
+            AGB. Nur so ist vor Vertragsschluss erkennbar, dass sich das Angebot
+            an Unternehmer richtet. */}
+        <p className="text-center text-xs text-gray-500 mt-2">
+          Unser Angebot richtet sich ausschließlich an Unternehmer im Sinne des § 14 BGB. Ein Verkauf an
+          Verbraucher findet nicht statt.
         </p>
       </div>
     </section>

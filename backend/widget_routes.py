@@ -4,14 +4,12 @@ Endpoints for serving and managing widgets
 """
 
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Depends
-from fastapi.responses import FileResponse, Response, JSONResponse, StreamingResponse
+from fastapi.responses import Response, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import os
-from datetime import datetime
 import time
 import gzip
-import io
 import hashlib
 import asyncpg
 import json
@@ -21,6 +19,10 @@ from accessibility_patch_generator import AccessibilityPatchGenerator
 import aiohttp
 from accessibility_fix_saver import AccessibilityFixSaver
 from dependencies import get_current_user, get_db
+# Gemeinsame Ownership-Prüfung (definiert in alt_text_routes, Quelle:
+# cookie_compliance_routes.get_user_site_ids). Kein Zyklus: alt_text_routes
+# importiert widget_routes nicht.
+from alt_text_routes import require_site_ownership
 
 router = APIRouter()
 
@@ -33,14 +35,14 @@ def set_db_pool(pool):
     return pool
 
 # Widget directory
+# Modul-Logger. Er fehlte, obwohl `logger.info(...)` an drei Stellen steht —
+# darunter die Widget-Analytik und das Patch-Paket. Jede dieser Zeilen haette
+# beim Ausfuehren einen NameError geworfen und die Antwort zerrissen.
+# Gefunden von ruff (F821), nachdem derselbe Fehlertyp als fehlender
+# `import re` den kompletten Scan lahmgelegt hatte.
+logger = logging.getLogger(__name__)
+
 WIDGET_DIR = os.path.join(os.path.dirname(__file__), 'widgets')
-
-
-class WidgetTrackingEvent(BaseModel):
-    siteId: str
-    event: str
-    timestamp: str
-    metadata: Optional[Dict[str, Any]] = None
 
 
 class WidgetAnalyticsRequest(BaseModel):
@@ -51,42 +53,12 @@ class WidgetAnalyticsRequest(BaseModel):
     session_id: str
 
 
-@router.get("/api/widgets/cookie-consent.js")
-async def serve_cookie_consent_widget(request: Request):
-    """
-    Serve the Cookie Consent Widget JavaScript (Legacy v1)
-    """
-    widget_path = os.path.join(WIDGET_DIR, 'cookie_consent.js')
-    
-    if not os.path.exists(widget_path):
-        raise HTTPException(status_code=404, detail="Widget not found")
-    
-    # Read widget content
-    with open(widget_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    headers = {
-        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=3600',
-        'Access-Control-Allow-Origin': '*',
-        'ETag': f'"{hashlib.md5(content.encode()).hexdigest()}"',
-        'Vary': 'Accept-Encoding',
-    }
-
-    accept_encoding = request.headers.get('Accept-Encoding', '')
-    if 'gzip' in accept_encoding:
-        compressed = gzip.compress(content.encode('utf-8'))
-        headers['Content-Encoding'] = 'gzip'
-        return Response(
-            content=compressed,
-            media_type='application/javascript',
-            headers=headers,
-        )
-
-    return Response(
-        content=content,
-        media_type='application/javascript',
-        headers=headers,
-    )
+# Hinweis: Die frühere Route GET /api/widgets/cookie-consent.js (Legacy v1) wurde
+# entfernt. Sie las die Datei backend/widgets/cookie_consent.js, die nicht (mehr)
+# existiert → jeder Abruf lieferte 404. Kein Konsument nutzte diese URL (belegt per
+# grep über backend/, dashboard-react/src, wordpress-plugin/, joomla-plugin/,
+# channels/ – 0 Treffer außer der Route selbst). Der aktuelle Banner wird über
+# /api/widgets/cookie-compliance.js bzw. /privacy-manager.js ausgeliefert (siehe unten).
 
 @router.get("/api/widgets/privacy-manager.js")
 @router.get("/api/widgets/cookie-compliance.js")  # Legacy support
@@ -108,23 +80,37 @@ async def serve_cookie_compliance_widget(request: Request, site_id: Optional[str
         # Load both widgets
         banner_path = os.path.join(WIDGET_DIR, 'cookie_banner_v2.js')
         blocker_path = os.path.join(WIDGET_DIR, 'content_blocker.js')
-        
+        # i18n: 17-Sprachen-Übersetzungen, die window.COMPLYO_TRANSLATIONS setzen.
+        # Der Banner liest window.COMPLYO_TRANSLATIONS (cookie_banner_v2.js), das ohne
+        # diese Datei nie gesetzt wurde → Mehrsprachigkeit war tot. Muss VOR dem Banner
+        # ausgeliefert werden, damit die globale Variable beim Init bereitsteht.
+        translations_path = os.path.join(WIDGET_DIR, 'locales', 'translations.js')
+
         if not os.path.exists(banner_path) or not os.path.exists(blocker_path):
             raise HTTPException(status_code=404, detail="Widget files not found")
-        
+
         # Read widgets
         with open(banner_path, 'r', encoding='utf-8') as f:
             banner_code = f.read()
-        
+
         with open(blocker_path, 'r', encoding='utf-8') as f:
             blocker_code = f.read()
-        
+
+        # Übersetzungen optional laden (fehlende Datei darf das Widget nicht brechen)
+        translations_code = ''
+        if os.path.exists(translations_path):
+            with open(translations_path, 'r', encoding='utf-8') as f:
+                translations_code = f.read()
+
         # Combine widgets
         combined_code = f"""/**
  * Complyo Cookie Compliance Widget - Combined Bundle
  * Version: 2.0.0
  * © 2025 Complyo - All rights reserved
  */
+
+/* ========== i18n Translations (sets window.COMPLYO_TRANSLATIONS before banner init) ========== */
+{translations_code}
 
 /* ========== Content Blocker (loads first to block before page renders) ========== */
 {blocker_code}
@@ -160,7 +146,7 @@ async def serve_cookie_compliance_widget(request: Request, site_id: Optional[str
         
     except Exception as e:
         print(f"Error serving cookie compliance widget: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to serve widget: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to serve widget")
 
 
 @router.get("/api/widgets/accessibility.js")
@@ -169,24 +155,60 @@ async def serve_accessibility_widget(request: Request, version: str = "6"):
     Serve the Accessibility Widget JavaScript (v6 only)
     """
     widget_filename = 'accessibility-v6.js'
-    
+
     widget_path = os.path.join(WIDGET_DIR, widget_filename)
-    
+
     if not os.path.exists(widget_path):
         raise HTTPException(status_code=404, detail=f"Widget {widget_filename} not found")
-    
+
     # Read widget content
     with open(widget_path, 'r', encoding='utf-8') as f:
         content = f.read()
+
+    # Die Remediation anhaengen — der Grund ist eine Luecke, die beim Ausrollen
+    # aufgefallen ist:
+    #
+    # accessibility-v6.js holt ausschliesslich Alt-Texte, ueber einen eigenen
+    # Endpunkt. Kontrast-, Struktur- und Linkname-Reparaturen laufen dagegen
+    # ueber das Fix-Manifest, das nur a11y_remediation.js liest — und die Datei
+    # wird unter einer ANDEREN Adresse ausgeliefert (/api/widgets/a11y-fixes.js).
+    # Auf den Kundenseiten steht aber ueberall dieses Skript hier. Ergebnis:
+    # alles ausser Alt-Texten erreichte niemanden, ohne dass es auffiel.
+    #
+    # Statt 25 Kunden ein zweites Skript einbauen zu lassen, kommen beide
+    # Teile aus derselben Adresse. Die Remediation ist eine eigenstaendige
+    # IIFE und liest ihre Konfiguration aus `script[data-site-id]` — also aus
+    # genau dem Tag, mit dem dieses Skript geladen wurde.
+    #
+    # Doppelt gesetzte Alt-Texte sind kein Problem: beide Wege ueberschreiben
+    # ein vorhandenes `alt` nie, wer zuerst kommt gewinnt.
+    remediation_path = os.path.join(WIDGET_DIR, 'a11y_remediation.js')
+    if os.path.exists(remediation_path):
+        with open(remediation_path, 'r', encoding='utf-8') as f:
+            content += "\n;/* --- complyo a11y remediation (Fix-Manifest) --- */\n" + f.read()
+    else:
+        logging.getLogger(__name__).warning(
+            "a11y_remediation.js fehlt — Kontrast-, Struktur- und "
+            "Linkname-Reparaturen werden nicht ausgeliefert"
+        )
     
     # Return as JavaScript with correct MIME type
+    etag = f'"{hashlib.md5(content.encode()).hexdigest()}"'
     headers = {
-        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=3600',
+        # no-cache = darf gecacht werden, MUSS aber bei jedem Load per ETag
+        # revalidiert werden. So erscheinen Widget-Updates sofort, während
+        # unveraenderte Inhalte als 304 (ohne Body) kommen → kaum Mehr-Traffic.
+        # (Vorher: max-age=86400 → bis zu 24h alter Stand beim Kunden.)
+        'Cache-Control': 'no-cache, must-revalidate',
         'Access-Control-Allow-Origin': '*',
-        'X-Complyo-Widget-Version': '6.1.0',
-        'ETag': f'"{hashlib.md5(content.encode()).hexdigest()}"',
+        'X-Complyo-Widget-Version': '1.0.0',
+        'ETag': etag,
         'Vary': 'Accept-Encoding',
     }
+
+    # Conditional GET: unveraenderte Datei → 304 Not Modified ohne Body
+    if request.headers.get('if-none-match') == etag:
+        return Response(status_code=304, headers=headers)
 
     accept_encoding = request.headers.get('Accept-Encoding', '')
     if 'gzip' in accept_encoding:
@@ -205,40 +227,45 @@ async def serve_accessibility_widget(request: Request, version: str = "6"):
     )
 
 
-@router.post("/api/widgets/track")
-async def track_widget_event(event: WidgetTrackingEvent):
+@router.get("/api/widgets/a11y-fixes.js")
+async def serve_a11y_remediation_widget(request: Request):
     """
-    Track widget events (consent decisions, accessibility usage, etc.)
+    Runtime-Alt-Text-Remediation für React/Vue/Angular/SPAs (Channel #3).
+    Wendet freigegebene KI-Alt-Texte ins Live-DOM an + MutationObserver.
     """
-    try:
-        if db_pool:
-            async with db_pool.acquire() as conn:
-                await conn.execute(
-                    """INSERT INTO widget_events
-                       (site_id, widget_type, event_name, event_data)
-                       VALUES ($1, $2, $3, $4)""",
-                    event.siteId,
-                    "tracking",
-                    event.event,
-                    json.dumps(event.metadata) if event.metadata else "{}",
-                )
-        else:
-            logger = logging.getLogger(__name__)
-            logger.warning(f"[Widget Tracking] DB not available - {event.siteId}: {event.event}")
+    widget_path = os.path.join(WIDGET_DIR, 'a11y_remediation.js')
+    if not os.path.exists(widget_path):
+        raise HTTPException(status_code=404, detail="Widget not found")
 
-        return {
-            "success": True,
-            "message": "Event tracked"
-        }
+    with open(widget_path, 'r', encoding='utf-8') as f:
+        content = f.read()
 
-    except Exception as e:
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error tracking widget event: {e}")
-        return {
-            "success": False,
-            "message": "Tracking failed"
-        }
+    etag = f'"{hashlib.md5(content.encode()).hexdigest()}"'
+    headers = {
+        # Wie accessibility.js: per ETag revalidieren statt lange cachen.
+        'Cache-Control': 'no-cache, must-revalidate',
+        'Access-Control-Allow-Origin': '*',
+        'ETag': etag,
+        'Vary': 'Accept-Encoding',
+    }
+    if request.headers.get('if-none-match') == etag:
+        return Response(status_code=304, headers=headers)
 
+    accept_encoding = request.headers.get('Accept-Encoding', '')
+    if 'gzip' in accept_encoding:
+        compressed = gzip.compress(content.encode('utf-8'))
+        headers['Content-Encoding'] = 'gzip'
+        return Response(content=compressed, media_type='application/javascript', headers=headers)
+
+    return Response(content=content, media_type='application/javascript', headers=headers)
+
+
+# Hinweis: Die frühere Route POST /api/widgets/track (+ Modell WidgetTrackingEvent)
+# wurde ersatzlos entfernt. Kein Widget und kein Frontend rief sie auf (belegt per
+# grep über backend/, dashboard-react/, landing-react/, widgets/ — 0 Treffer außer
+# der Route selbst), und die Zieltabelle widget_events war nach Monaten Betrieb
+# leer (count = 0, geprüft 11.08.2026). Die tatsächliche Selbstüberwachung läuft
+# über POST /api/wirkung/{site_id} (wirkung_routes.py).
 
 @router.post("/api/widgets/analytics")
 async def track_widget_analytics(
@@ -326,11 +353,18 @@ async def _check_upsell_opportunity(site_id: str):
 
 
 @router.get("/api/widgets/config/{site_id}")
-async def get_widget_config(site_id: str):
+async def get_widget_config(site_id: str, request: Request):
     """
     Get widget configuration for a specific site
     """
     _logger = logging.getLogger(__name__)
+
+    # Unangepasstes Snippet (z.B. 'SITE_ID_PLACEHOLDER') mit 400 sichtbar machen,
+    # statt still die Default-Config zu liefern. Zentrale Pruefung samt
+    # WARN-Log mit Referer liegt in cookie_compliance_routes.
+    from cookie_compliance_routes import reject_placeholder_site_id
+    reject_placeholder_site_id(site_id, request)
+
     default_config = {
         "cookie_consent": {
             "enabled": True,
@@ -366,24 +400,79 @@ async def get_widget_config(site_id: str):
         except Exception as e:
             _logger.warning(f"[Widget Config] Could not load config for {site_id}: {e}")
 
+    # 🔒 Laufzeit-Lizenzprüfung: Wurde die Website im Dashboard entfernt, ist die
+    # Lizenz entzogen → das Barrierefreiheits-Widget rendert dann nicht mehr.
+    license_state = {"status": "active", "enforced": False, "active": True, "message": None}
+    if db_pool:
+        try:
+            from license_check import evaluate_license
+            license_state = await evaluate_license(db_pool, site_id, request)
+        except Exception as e:
+            _logger.warning(f"[Widget Config] License check failed for {site_id}: {e}")
+
     return {
         "success": True,
+        "license_active": license_state["active"],
+        "license": license_state,
         "config": default_config,
     }
 
 
 @router.get("/api/widgets/snippet/{widget_type}")
-async def get_widget_snippet(widget_type: str, site_id: str):
+async def get_widget_snippet(
+    widget_type: str,
+    site_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """
-    Get HTML snippet to embed widget
+    Liefert den HTML-Einbettungscode fuer ein Widget.
+
+    Der Einbettungscode ist das eigentliche Produkt: Er schaltet Banner und
+    Widget auf der Kundenseite scharf. Im Free-Tarif ist er deshalb nicht
+    enthalten — dort bleibt es bei Scan, Konfiguration und Vorschau. Der
+    Endpunkt war bis dahin voellig ungeschuetzt: ohne Anmeldung, ohne
+    Tarifpruefung, mit beliebiger site_id aufrufbar.
     """
+    plan = (current_user.get('plan_type') or 'free').lower()
+    if plan in ('', 'free'):
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "plan_upgrade_required",
+                "plan": plan or "free",
+                "message": (
+                    "Der Einbettungscode ist im Free-Tarif nicht enthalten. "
+                    "Scan, Konfiguration und Vorschau bleiben kostenlos — zum "
+                    "Ausspielen auf deiner Website braucht es einen bezahlten Tarif."
+                ),
+            },
+        )
+
+    # Fremde site_id ist ein Missbrauchssignal, aber kein harter Blocker:
+    # Legacy-Konten haben nicht zwingend eine passende tracked_websites-Zeile.
+    try:
+        if db_pool:
+            from license_check import url_to_site_id
+            rows = await db_pool.fetch(
+                "SELECT url FROM tracked_websites WHERE user_id = $1",
+                current_user.get('id') or current_user.get('user_id'),
+            )
+            own = {url_to_site_id(r["url"]) for r in rows if r["url"]}
+            if own and site_id not in own:
+                logging.getLogger(__name__).warning(
+                    "[Widget Snippet] User %s fordert Snippet fuer fremde site_id %s an",
+                    current_user.get('id'), site_id,
+                )
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"[Widget Snippet] Ownership-Check fehlgeschlagen: {e}")
+
     base_url = "https://api.complyo.de"
     
     snippets = {
-        "cookie-consent": f'<script src="{base_url}/api/widgets/cookie-consent.js" data-site-id="{site_id}"></script>',
+        "cookie-consent": f'<script src="{base_url}/api/widgets/cookie-compliance.js" data-site-id="{site_id}"></script>',
         "accessibility": f'<script src="{base_url}/api/widgets/accessibility.js" data-site-id="{site_id}" data-complyo-a11y></script>',
         "all": f'''<!-- Complyo Widgets -->
-<script src="{base_url}/api/widgets/cookie-consent.js" data-site-id="{site_id}"></script>
+<script src="{base_url}/api/widgets/cookie-compliance.js" data-site-id="{site_id}"></script>
 <script src="{base_url}/api/widgets/accessibility.js" data-site-id="{site_id}" data-complyo-a11y></script>'''
     }
     
@@ -467,34 +556,12 @@ async def get_alt_text_fixes_for_widget(site_id: str):
             fix_saver = AccessibilityFixSaver(db_pool)
             fixes = await fix_saver.get_fixes_for_site(site_id, status='approved')
         else:
-            # Fallback: Demo-Daten wenn DB nicht verfügbar
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"DB pool not available, using demo data for site_id={site_id}")
-            
-            fixes = [
-                {
-                    "image_src": "/images/logo.png",
-                    "image_filename": "logo.png",
-                    "suggested_alt": "Firmenlogo Mustermann GmbH",
-                    "page_url": "/",
-                    "confidence": 0.95
-                },
-                {
-                    "image_src": "/images/team.jpg",
-                    "image_filename": "team.jpg",
-                    "suggested_alt": "Team-Foto der Mitarbeiter",
-                    "page_url": "/about",
-                    "confidence": 0.89
-                },
-                {
-                    "image_src": "/images/product.png",
-                    "image_filename": "product.png",
-                    "suggested_alt": "Produktabbildung Premium-Modell",
-                    "page_url": "/products",
-                    "confidence": 0.92
-                }
-            ]
+            # Kein Demo-Fallback: erfundene Alt-Texte ("Firmenlogo Mustermann
+            # GmbH") duerfen nie in einem Kundenprojekt landen.
+            raise HTTPException(
+                status_code=503,
+                detail="Datenbank nicht verfügbar — Fixes können nicht geladen werden."
+            )
         
         return JSONResponse(
             content={
@@ -527,6 +594,135 @@ async def get_alt_text_fixes_for_widget(site_id: str):
         )
 
 
+@router.get("/api/accessibility/fix-manifest/{site_id}")
+async def get_fix_manifest(site_id: str, request: Request):
+    """
+    Vereinheitlichtes Fix-Manifest für ALLE Auslieferungskanäle
+    (WordPress-Plugin / HTML-CLI / SPA-Runtime).
+
+    Bündelt content-adressiert die freigegebenen, auto-sicheren Fixes einer Site:
+      - alt_texts:      KI-Alt-Texte je Bild (image_url_hash / filename / src)
+      - document_fixes: dokumentweite Fixes (html-lang, skip-link, landmarks, css)
+
+    Nur Status 'approved' wird ausgeliefert. Die Channels wenden die Fixes guarded
+    an (nur setzen, wenn am Ziel noch nicht vorhanden) — nie etwas überschreiben.
+    """
+    _logger = logging.getLogger(__name__)
+    alt_texts = []
+    document_fixes = []
+    link_fixes = []
+
+    if db_pool:
+        try:
+            fix_saver = AccessibilityFixSaver(db_pool)
+            alt_texts = await fix_saver.get_fixes_for_site(site_id, status='approved')
+            document_fixes = await fix_saver.get_document_fixes_for_site(site_id, status='approved')
+            link_fixes = await fix_saver.get_link_fixes_for_site(site_id, status='approved')
+        except Exception as e:
+            _logger.error(f"[Fix-Manifest] Fehler beim Laden für {site_id}: {e}")
+            return JSONResponse(
+                content={"success": False, "site_id": site_id, "error": str(e),
+                         "alt_texts": [], "document_fixes": [], "link_fixes": []},
+                headers={'Access-Control-Allow-Origin': '*'}
+            )
+    else:
+        _logger.warning(f"[Fix-Manifest] DB-Pool nicht verfügbar für {site_id}")
+
+    # CSS-Regeln aus document_fixes herausziehen (Channels mögen es getrennt).
+    # `css-rule` traegt genau eine Regel, `kontrast-css` buendelt viele: die
+    # Tabelle laesst nur eine Zeile je (site_id, fix_type) zu, und eine
+    # Kontrast-Reparatur besteht aus einer Regel je Selektor.
+    css_rules = [
+        f["payload"] for f in document_fixes
+        if f.get("fix_type") == "css-rule" and isinstance(f.get("payload"), dict)
+    ]
+    for f in document_fixes:
+        if f.get("fix_type") == "struktur" and isinstance(f.get("payload"), dict):
+            css_rules.extend([
+                r for r in (f["payload"].get("css_rules") or [])
+                if isinstance(r, dict) and r.get("selector") and r.get("declarations")
+            ])
+        if f.get("fix_type") == "kontrast-css" and isinstance(f.get("payload"), dict):
+            css_rules.extend([
+                r for r in (f["payload"].get("rules") or [])
+                if isinstance(r, dict) and r.get("selector") and r.get("declarations")
+            ])
+
+    # Kennt complyo diese site_id ueberhaupt?
+    #
+    # Der Anlass ist ein echter Fund: auf loqal.io laedt das Cookie-Widget mit
+    # `data-site-id="loqal-io"`, das Barrierefreiheits-Widget daneben mit
+    # `data-site-id="scan_5_1783852724"` — einer Scan-Kennung. Das Manifest
+    # antwortete mit 200 und einem leeren Koerper, das Widget wendete brav
+    # nichts an, und niemand konnte es merken. Die Seite haette auch nach jeder
+    # Freigabe nie eine Reparatur bekommen.
+    #
+    # Ein leeres Manifest hat zwei voellig verschiedene Bedeutungen: "hier gibt
+    # es nichts zu tun" und "du fragst unter der falschen Kennung". Beide mit
+    # derselben Antwort zu beantworten, ist der Fehler. Deshalb dieses Feld —
+    # das Widget meldet es zurueck, und der Betreiber erfaehrt, dass sein
+    # Einbau ins Leere laeuft.
+    bekannt = bool(alt_texts or document_fixes or link_fixes)
+    if not bekannt and db_pool:
+        try:
+            async with db_pool.acquire() as conn:
+                bekannt = bool(await conn.fetchval(
+                    """SELECT 1 FROM tracked_websites
+                       WHERE replace(
+                               regexp_replace(
+                                 regexp_replace(lower(url), '^https?://(www\\.)?', ''),
+                                 '[/?#:].*$', ''),
+                               '.', '-') = $1
+                       LIMIT 1""",
+                    site_id))
+        except Exception as e:
+            _logger.warning(f"[Fix-Manifest] Bekanntheitspruefung fuer {site_id}: {e}")
+            bekannt = True   # im Zweifel nicht warnen
+
+    # Erst filtern, dann zählen: css-rule/kontrast-css werden separat als
+    # css_rules ausgeliefert. `counts` zählte früher die UNGEFILTERTE Liste —
+    # counts.document_fixes=4 bei 3 Einträgen im Manifest, und jede Auswertung,
+    # die counts gegen die Bilanz hält, ging von falschen Sollwerten aus.
+    sichtbare_document_fixes = [f for f in document_fixes
+                                if f.get("fix_type") not in ("css-rule", "kontrast-css")]
+
+    manifest = {
+        "success": True,
+        "version": "1.1.0",
+        "site_id": site_id,
+        "bekannt": bekannt,
+        "alt_texts": alt_texts,
+        "document_fixes": sichtbare_document_fixes,
+        # Attribut-Setzungen aus der Struktur-Reparatur — die Channels wenden
+        # sie guarded an (nur wo nichts steht). Getrennt von css_rules, weil es
+        # Markup betrifft und nicht Darstellung.
+        "struktur_fixes": next(
+            (f["payload"].get("fixes") or [] for f in document_fixes
+             if f.get("fix_type") == "struktur" and isinstance(f.get("payload"), dict)),
+            [],
+        ),
+        "link_fixes": link_fixes,
+        "css_rules": css_rules,
+        "counts": {
+            "alt_texts": len(alt_texts),
+            "document_fixes": len(sichtbare_document_fixes),
+            "link_fixes": len(link_fixes),
+        },
+    }
+
+    # ETag für effiziente Revalidierung (Channels cachen per If-None-Match).
+    etag = '"' + hashlib.md5(json.dumps(manifest, sort_keys=True, default=str).encode()).hexdigest() + '"'
+    headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache, must-revalidate',
+        'ETag': etag,
+    }
+    if request.headers.get('if-none-match') == etag:
+        return Response(status_code=304, headers=headers)
+
+    return JSONResponse(content=manifest, headers=headers)
+
+
 @router.post("/api/accessibility/patches/generate")
 async def generate_accessibility_patches(
     site_id: str,
@@ -549,55 +745,42 @@ async def generate_accessibility_patches(
         Download-URL für ZIP-Datei
     """
     try:
-        # ✅ FIX: Load real fixes from database
-        fixes = []
-        
-        try:
-            from main import get_db_pool
-            db_pool = await get_db_pool()
-            
-            # Query Alt-Text Fixes
-            alt_text_query = """
-                SELECT 
-                    'alt_text' as type,
-                    page_url,
-                    image_src,
-                    image_filename,
-                    suggested_alt,
-                    confidence
+        # Freigegebene Fixes aus der Datenbank laden.
+        # Kein Demo-Fallback: hier wurden frueher Beispieldaten
+        # ("Firmenlogo", "/images/logo.png") ins Kundenpaket geschrieben, weil
+        # ein falscher Import (`from main import ...` — es gibt nur
+        # main_production) den except-Zweig bei JEDEM Aufruf ausloeste.
+        if not db_pool:
+            raise HTTPException(
+                status_code=503,
+                detail="Datenbank nicht verfügbar — Patch-Paket kann nicht erstellt werden."
+            )
+
+        async with db_pool.acquire() as conn:
+            alt_text_fixes = await conn.fetch(
+                """
+                SELECT 'alt_text' AS type, page_url, image_src, image_filename,
+                       suggested_alt, confidence
                 FROM accessibility_alt_text_fixes
-                WHERE site_id = $1
-                  AND status = 'approved'
+                WHERE site_id = $1 AND status = 'approved'
                 ORDER BY created_at DESC
-            """
-            
-            alt_text_fixes = await db_pool.fetch(alt_text_query, site_id)
-            fixes.extend([dict(fix) for fix in alt_text_fixes])
-            
-            logger.info(f"✅ Loaded {len(fixes)} real fixes from database for site {site_id}")
-            
-        except Exception as db_error:
-            logger.warning(f"⚠️ Could not load fixes from DB: {db_error}. Using demo data.")
-            # Fallback to demo data if DB not available
-            fixes = [
-                {
-                    "type": "alt_text",
-                    "page_url": "/",
-                    "image_src": "/images/logo.png",
-                    "image_filename": "logo.png",
-                    "suggested_alt": "Firmenlogo",
-                    "confidence": 0.95
-                },
-                {
-                    "type": "alt_text",
-                    "page_url": "/",
-                    "image_src": "/images/hero.jpg",
-                    "image_filename": "hero.jpg",
-                    "suggested_alt": "Hero-Bild der Website",
-                    "confidence": 0.89
-                }
-            ]
-        
+                """,
+                site_id,
+            )
+
+        fixes = [dict(f) for f in alt_text_fixes]
+        logger.info(f"Patch-Paket für {site_id}: {len(fixes)} freigegebene Fixes geladen")
+
+        if not fixes:
+            # Ehrlich bleiben: ohne freigegebene Fixes gibt es nichts zu patchen.
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Noch keine freigegebenen Fixes vorhanden. Prüfen und bestätigen "
+                    "Sie die Vorschläge zuerst in der Barrierefreiheits-Worklist."
+                ),
+            )
+
         # Generate patches
         generator = AccessibilityPatchGenerator()
         zip_buffer = await generator.generate_patch_bundle(
@@ -622,7 +805,10 @@ async def generate_accessibility_patches(
             "download_url": f"/api/accessibility/patches/download/{download_id}",
             "file_size": len(zip_buffer.getvalue()),
             "expires_in": "1 Stunde",
-            "patches_count": len(demo_fixes)
+            # Hiess `demo_fixes` — ein Rest aus der Demo-Fassung. Die Liste
+            # heisst `fixes`; `demo_fixes` gab es nie, der Aufruf endete
+            # im NameError statt mit einem Download.
+            "patches_count": len(fixes)
         }
         
     except Exception as e:
@@ -632,26 +818,45 @@ async def generate_accessibility_patches(
         
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Generieren der Patches: {str(e)}"
+            detail="Fehler beim Generieren der Patches"
         )
 
 
 @router.get("/api/accessibility/patches/download/{download_id}")
-async def download_accessibility_patches(download_id: str):
+async def download_accessibility_patches(
+    download_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """
     Lädt generierte Barrierefreiheits-Patches herunter
-    
+
+    Bis 2026-07-17 ohne jede Auth erreichbar, bei erratbarer download_id
+    ("{site_id}_{unix_ts}") — fremde Patch-ZIPs waren damit abrufbar. Jetzt:
+    Login + Ownership auf der im download_id enthaltenen site_id.
+
     Args:
         download_id: Download-Identifier (von generate-Endpoint)
-        
+
     Returns:
         ZIP-Datei mit Patches
     """
+    import re as _re
+
+    # download_id landet in einem Dateinamen — strikt validieren, sonst ist
+    # "../../.." ein Path-Traversal.
+    if not _re.fullmatch(r"[A-Za-z0-9-]+_\d+", download_id):
+        raise HTTPException(status_code=404, detail="Download nicht gefunden oder abgelaufen")
+
+    # Ownership: site_id ist der Teil vor dem letzten "_" (site_ids sind
+    # hostname-basiert und enthalten keine Unterstriche).
+    site_id = download_id.rsplit("_", 1)[0]
+    await require_site_ownership(site_id, current_user)
+
     try:
         import tempfile
         import os as _os
         tmp_path = _os.path.join(tempfile.gettempdir(), f"complyo_patches_{download_id}.zip")
-        
+
         if not _os.path.exists(tmp_path):
             raise HTTPException(status_code=404, detail="Download nicht gefunden oder abgelaufen")
         
@@ -678,7 +883,7 @@ async def download_accessibility_patches(download_id: str):
         
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Download: {str(e)}"
+            detail="Fehler beim Download"
         )
 
 

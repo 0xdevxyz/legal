@@ -4,9 +4,7 @@ Handles scheduled scans and notification processing
 """
 
 import asyncio
-import os
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
 import logging
 
 logger = logging.getLogger(__name__)
@@ -27,7 +25,7 @@ class AIComplianceWorker:
                 await self.process_scheduled_scans()
                 await self.process_scan_reminders()
             except Exception as e:
-                logger.error(f"Worker error: {e}")
+                logger.exception(f"Worker error: {e}")
             
             await asyncio.sleep(self.check_interval)
     
@@ -39,7 +37,7 @@ class AIComplianceWorker:
     async def process_scheduled_scans(self):
         """Process all due scheduled scans"""
         from database_service import db_service
-        from ai_act_analyzer import ai_act_analyzer
+        from ai_act_analyzer import ai_act_analyzer, AISystem
         from ai_compliance_notification_service import ai_compliance_notification_service
         
         now = datetime.utcnow()
@@ -61,18 +59,26 @@ class AIComplianceWorker:
             try:
                 logger.info(f"Running scheduled scan for system: {scan['system_name']}")
                 
-                system_data = {
-                    "id": str(scan['ai_system_id']),
-                    "name": scan['system_name'],
-                    "description": scan['description'] or "",
-                    "vendor": scan['vendor'],
-                    "purpose": scan['purpose'] or "",
-                    "domain": scan['domain']
-                }
-                
-                classification = await ai_act_analyzer.classify_system(system_data)
-                compliance = await ai_act_analyzer.check_compliance(system_data, classification)
-                
+                # AIActAnalyzer erwartet ein AISystem-Modell, kein dict
+                ai_system = AISystem(
+                    id=str(scan['ai_system_id']),
+                    name=scan['system_name'],
+                    description=scan['description'] or "",
+                    vendor=scan['vendor'],
+                    purpose=scan['purpose'] or "",
+                    domain=scan['domain']
+                )
+
+                # classify_risk_category -> RiskClassification (nicht classify_system)
+                classification_model = await ai_act_analyzer.classify_risk_category(ai_system)
+                # check_compliance erwartet die Risikokategorie als str, nicht das Objekt
+                compliance_model = await ai_act_analyzer.check_compliance(
+                    ai_system, classification_model.risk_category
+                )
+
+                classification = classification_model.model_dump()
+                compliance = compliance_model.model_dump()
+
                 new_score = compliance.get('compliance_score', 0)
                 old_score = scan['old_score'] or 0
                 
@@ -148,7 +154,8 @@ class AIComplianceWorker:
                 logger.info(f"Scheduled scan completed for {scan['system_name']}: Score {new_score}%")
                 
             except Exception as e:
-                logger.error(f"Error processing scheduled scan for {scan.get('system_name')}: {e}")
+                # Stacktrace loggen: AttributeError/Signaturfehler blieben hier sonst unsichtbar
+                logger.exception(f"Error processing scheduled scan for {scan.get('system_name')}: {e}")
     
     async def process_scan_reminders(self):
         """Send reminders for systems not scanned recently"""
@@ -203,7 +210,7 @@ class AIComplianceWorker:
                     logger.info(f"Sent scan reminder to {user['email']} for {len(systems)} systems")
         
         except Exception as e:
-            logger.error(f"Error processing scan reminders: {e}")
+            logger.exception(f"Error processing scan reminders: {e}")
     
     async def _save_scan_result(self, system_id, user_id, classification, compliance):
         """Save scan result to database"""

@@ -10,12 +10,10 @@ Validierung von AI-generierten Fixes:
 © 2025 Complyo.tech
 """
 
-import json
 import re
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 import html.parser
-import jsonschema
 from jsonschema import validate, ValidationError
 
 
@@ -456,9 +454,11 @@ class LegalTextValidator:
                     warnings.append(f"Möglicherweise fehlend: {category}")
                     missing_keywords.extend(keywords[:1])
         
-        # Check ob § 5 TMG erwähnt wird
-        if "§ 5 tmg" not in text_lower and "§5 tmg" not in text_lower:
-            warnings.append("Hinweis: § 5 TMG sollte zur Rechtssicherheit genannt werden")
+        # Check ob die Impressums-Rechtsgrundlage genannt wird. Das TMG ist
+        # seit 14.05.2024 durch das DDG abgeloest; Alttexte mit TMG zaehlen
+        # weiter als genannt, neue sollen DDG tragen.
+        if not any(k in text_lower for k in ("§ 5 ddg", "§5 ddg", "§ 5 tmg", "§5 tmg")):
+            warnings.append("Hinweis: § 5 DDG sollte zur Rechtssicherheit genannt werden")
         
         # Check Mindestlänge
         if len(text) < 200:

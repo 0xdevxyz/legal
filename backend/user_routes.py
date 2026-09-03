@@ -5,7 +5,7 @@ User Routes - User Profile & Domain Locks
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import Optional
 import logging
 from passlib.context import CryptContext as _CryptContext
 
@@ -20,10 +20,8 @@ security = HTTPBearer()
 db_pool = None
 auth_service = None
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Get current user from Authorization header"""
-    from auth_routes import get_current_user as auth_get_user
-    return await auth_get_user(credentials)
+# Kanonische Auth-Dependency (Phase 2 Auth-Konsolidierung)
+from dependencies import get_current_user
 
 @router.get("/domain-locks")
 async def get_domain_locks(current_user: dict = Depends(get_current_user)):
@@ -84,7 +82,7 @@ async def get_domain_locks(current_user: dict = Depends(get_current_user)):
         logger.error(f"Error fetching domain locks: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Laden der Domain-Status: {str(e)}"
+            detail="Fehler beim Laden der Domain-Status"
         )
 
 @router.get("/profile")
@@ -111,7 +109,7 @@ async def get_user_profile(current_user: dict = Depends(get_current_user)):
                     fixes_limit,
                     websites_max,
                     exports_max,
-                    exports_used
+                    exports_this_month AS exports_used
                 FROM user_limits
                 WHERE user_id = $1
                 """,
@@ -171,8 +169,39 @@ async def get_user_profile(current_user: dict = Depends(get_current_user)):
         logger.error(f"Error fetching user profile: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Fehler beim Laden des Profils: {str(e)}"
+            detail="Fehler beim Laden des Profils"
         )
+
+@router.get("/export-data")
+async def export_user_data(current_user: dict = Depends(get_current_user)):
+    """
+    DSGVO-Datenexport (Art. 15/20) als JSON-Download.
+
+    Das Dashboard (Einstellungen → Datenschutz) rief diesen Pfad schon immer
+    auf — es gab ihn nur nicht. Delegiert an den GDPR-Service, der users +
+    zugehörige Tabellen aggregiert (nicht mehr nur die leere leads-Tabelle).
+    """
+    try:
+        user_id = current_user.get('id')
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        from gdpr_retention_service import gdpr_service
+        export = await gdpr_service.export_user_data(int(user_id), str(current_user.get('email')))
+        if export is None:
+            raise HTTPException(status_code=404, detail="Keine Daten zu diesem Konto gefunden")
+
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            content=export,
+            headers={"Content-Disposition": 'attachment; filename="complyo-daten-export.json"'},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting user data: {e}")
+        raise HTTPException(status_code=500, detail="Fehler beim Daten-Export")
+
 
 @router.get("/health")
 async def user_health():
@@ -235,7 +264,7 @@ async def update_user_profile(request: UpdateProfileRequest, current_user: dict 
         raise
     except Exception as e:
         logger.error(f"Error updating profile: {e}")
-        raise HTTPException(status_code=500, detail=f"Fehler beim Speichern: {str(e)}")
+        raise HTTPException(status_code=500, detail="Fehler beim Speichern")
 
 
 @router.put("/billing")
@@ -267,7 +296,7 @@ async def update_billing_data(request: UpdateBillingRequest, current_user: dict 
         raise
     except Exception as e:
         logger.error(f"Error updating billing: {e}")
-        raise HTTPException(status_code=500, detail=f"Fehler beim Speichern: {str(e)}")
+        raise HTTPException(status_code=500, detail="Fehler beim Speichern")
 
 
 @router.put("/password")
@@ -281,20 +310,23 @@ async def change_password(request: ChangePasswordRequest, current_user: dict = D
             raise HTTPException(status_code=400, detail="Passwort muss mindestens 8 Zeichen lang sein")
 
         async with db_pool.acquire() as conn:
-            user = await conn.fetchrow("SELECT hashed_password FROM users WHERE id = $1", user_id)
+            # Die Spalte heißt password_hash (siehe auth_service) — der alte
+            # Name hashed_password existiert im Schema nicht und machte aus
+            # jedem Passwortwechsel eine 500.
+            user = await conn.fetchrow("SELECT password_hash FROM users WHERE id = $1", user_id)
             if not user:
                 raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
 
-            if not _pwd_context.verify(request.current_password, user['hashed_password']):
+            if not _pwd_context.verify(request.current_password, user['password_hash']):
                 raise HTTPException(status_code=400, detail="Aktuelles Passwort ist falsch")
 
             new_hash = _pwd_context.hash(request.new_password)
-            await conn.execute("UPDATE users SET hashed_password = $1, updated_at = NOW() WHERE id = $2", new_hash, user_id)
+            await conn.execute("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", new_hash, user_id)
 
             return {"success": True, "message": "Passwort erfolgreich geaendert"}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error changing password: {e}")
-        raise HTTPException(status_code=500, detail=f"Fehler beim Aendern des Passworts: {str(e)}")
+        raise HTTPException(status_code=500, detail="Fehler beim Aendern des Passworts")
 

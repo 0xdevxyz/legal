@@ -10,26 +10,29 @@ Endpoints:
 - POST /api/v2/accessibility/generate-statement - BFSG Barrierefreiheitserklärung generieren (AUDIT-05)
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 import logging
-import io
 import json
 from datetime import datetime
 from jinja2 import Environment, select_autoescape
 from site_id_utils import derive_site_id
+# Bringt user_id auf den Spaltentyp integer. Die accessibility_*-Tabellen
+# fuehren user_id als integer, die Aufrufer reichen den Wert aber aus den
+# JWT-Claims als String durch.
+from accessibility_fix_saver import _als_user_id
 
 from compliance_engine.feature_engine import (
-    FeatureEngine, FeatureId, StructuredIssue,
-    AutoFixLevel, Difficulty, FixType, feature_engine
+    feature_engine
 )
 from compliance_engine.patch_service import (
-    PatchService, FixPackage, PatchResult, patch_service
+    patch_service
 )
 from accessibility_patch_generator import AccessibilityPatchGenerator
+from dependencies import rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -182,36 +185,8 @@ class GenerateStatementResponse(BaseModel):
 # Auth Helper
 # =============================================================================
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> Dict[str, Any]:
-    """Verify JWT token and return user data"""
-    try:
-        if not auth_service:
-            raise HTTPException(status_code=500, detail="Auth service not initialized")
-        
-        token = credentials.credentials
-        user_data = auth_service.verify_token(token)
-        
-        if not user_data:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        
-        return user_data
-    except Exception as e:
-        logger.error(f"Authentication failed: {e}")
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-
-async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
-) -> Optional[Dict[str, Any]]:
-    """Optional auth - returns None if not authenticated"""
-    if not credentials:
-        return None
-    try:
-        return await get_current_user(credentials)
-    except HTTPException:
-        return None
+# Kanonische Auth-Dependencies (Phase 2 Auth-Konsolidierung)
+from dependencies import get_current_user, get_current_user_optional as get_optional_user
 
 
 async def require_accessibility_module(user: Dict[str, Any]) -> bool:
@@ -227,9 +202,23 @@ async def require_accessibility_module(user: Dict[str, Any]) -> bool:
     has_module = await db_service.check_user_module(user_id, 'accessibility')
     
     if not has_module:
+        # Ein gesperrtes Modul ist ein Angebot, keine Sackgasse.
+        #
+        # Vorher stand hier "Bitte upgraden Sie Ihren Plan" — ohne zu sagen,
+        # WAS gesperrt ist, was es kostet und wo man es bekommt. Beim
+        # Audit-Durchstich war das der letzte Punkt, an dem ein Neukunde
+        # stehenblieb: Scan lief, Befunde da, und dann eine Absage ohne Weg.
+        #
+        # Bewusst weiter eine Zeichenkette und kein Objekt: Oberflaechen, die
+        # `detail` direkt anzeigen, wuerden an einem Objekt zerbrechen.
         raise HTTPException(
-            status_code=403, 
-            detail="Modul 'Barrierefreiheit' nicht gebucht. Bitte upgraden Sie Ihren Plan."
+            status_code=403,
+            detail=("Im Free-Tarif ist Barrierefreiheit als Scan und Vorschau "
+                    "enthalten. Reparaturen, Freigaben und die "
+                    "Barrierefreiheitserklärung gehören zur Säule "
+                    "„Barrierefreiheit\u201c (19 €/Monat) oder zum Pro-Paket "
+                    "(49 €/Monat, alle vier Säulen für eine Domain). "
+                    "Freischalten unter „Abo & Rechnung\u201c.")
         )
     
     return True
@@ -239,7 +228,7 @@ async def require_accessibility_module(user: Dict[str, Any]) -> bool:
 # Endpoints
 # =============================================================================
 
-@accessibility_fix_router.post("/analyze", response_model=AnalyzeResponse)
+@accessibility_fix_router.post("/analyze", response_model=AnalyzeResponse, dependencies=[Depends(rate_limit("a11y_analyze", 10, 60))])
 async def analyze_issues(
     request: AnalyzeRequest,
     user: Dict[str, Any] = Depends(get_current_user)
@@ -286,10 +275,10 @@ async def analyze_issues(
     
     except Exception as e:
         logger.error(f"❌ Analysis failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Analyse fehlgeschlagen: {str(e)}")
+        raise HTTPException(status_code=500, detail="Analyse fehlgeschlagen")
 
 
-@accessibility_fix_router.post("/generate-fixes", response_model=GenerateFixesResponse)
+@accessibility_fix_router.post("/generate-fixes", response_model=GenerateFixesResponse, dependencies=[Depends(rate_limit("a11y_fixes", 5, 60))])
 async def generate_fixes(
     request: GenerateFixesRequest,
     background_tasks: BackgroundTasks,
@@ -342,10 +331,10 @@ async def generate_fixes(
     
     except Exception as e:
         logger.error(f"❌ Fix generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Fix-Generierung fehlgeschlagen: {str(e)}")
+        raise HTTPException(status_code=500, detail="Fix-Generierung fehlgeschlagen")
 
 
-@accessibility_fix_router.post("/download-bundle")
+@accessibility_fix_router.post("/download-bundle", dependencies=[Depends(rate_limit("a11y_bundle", 5, 60))])
 async def download_bundle(
     request: DownloadBundleRequest,
     user: Dict[str, Any] = Depends(get_current_user)
@@ -386,10 +375,10 @@ async def download_bundle(
     
     except Exception as e:
         logger.error(f"❌ Bundle generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Bundle-Generierung fehlgeschlagen: {str(e)}")
+        raise HTTPException(status_code=500, detail="Bundle-Generierung fehlgeschlagen")
 
 
-@accessibility_fix_router.post("/generate-alt-text", response_model=GenerateAltTextResponse)
+@accessibility_fix_router.post("/generate-alt-text", response_model=GenerateAltTextResponse, dependencies=[Depends(rate_limit("a11y_alt", 5, 60))])
 async def generate_alt_text(
     request: GenerateAltTextRequest,
     user: Dict[str, Any] = Depends(get_current_user)
@@ -422,7 +411,7 @@ async def generate_alt_text(
     
     except Exception as e:
         logger.error(f"❌ Alt text generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Alt-Text-Generierung fehlgeschlagen: {str(e)}")
+        raise HTTPException(status_code=500, detail="Alt-Text-Generierung fehlgeschlagen")
 
 
 @accessibility_fix_router.get("/feature-definitions")
@@ -494,7 +483,94 @@ async def get_fix_summary(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@accessibility_fix_router.post("/generate-statement", response_model=GenerateStatementResponse)
+async def _besitzt_website(user: Dict[str, Any], site_id: str) -> bool:
+    """
+    Gehoert diese Website dem angemeldeten Konto?
+
+    Die alte Abfrage band die Erklaerung an den Nutzer, der den SCAN ausgeloest
+    hat. Wechselt eine Seite den Betreuer — Agenturwechsel, Uebergabe an den
+    Kunden, ein Kollege hat gescannt — faellt die Erklaerung stillschweigend auf
+    "Nicht bewertet" zurueck. Die Zugehoerigkeit gehoert an die gefuehrte
+    Website, nicht an eine Scan-Historie.
+    """
+    uid = _als_user_id(user.get("user_id") or user.get("id"))
+    if uid is None or not db_pool:
+        return False
+    async with db_pool.acquire() as conn:
+        return bool(await conn.fetchval(
+            """SELECT 1 FROM tracked_websites
+               WHERE user_id = $1
+                 AND replace(
+                       regexp_replace(
+                         regexp_replace(lower(url), '^https?://(www\\.)?', ''),
+                         '[/?#:].*$', ''),
+                       '.', '-') = $2
+               LIMIT 1""",
+            uid, site_id))
+
+
+async def _erklaerung_aus_pruefnachweis(request, user) -> Optional["GenerateStatementResponse"]:
+    """
+    Die Erklaerung aus der Messung — oder None, wenn es keine gibt.
+
+    Jede Zahl darin ist auf ein Protokoll zurueckfuehrbar, das oeffentlich
+    abrufbar ist; die offenen Punkte stehen mit Begruendung darin. Genau das
+    ist der Unterschied zu einer Vorlage, die jemand ausfuellt.
+    """
+    if not await _besitzt_website(user, request.site_id):
+        return None
+    try:
+        import nachweis_routes
+        from compliance_engine.nachweis_generator import (
+            baue_nachweis, erklaerung_aus_nachweis, nachweis_token,
+        )
+        daten = await nachweis_routes._daten_fuer(request.site_id)
+        if not daten:
+            return None
+
+        nachweis = baue_nachweis(
+            site_id=request.site_id, site_url=daten["site_url"],
+            messung_vorher=daten["vorher"], messung_nachher=daten["nachher"],
+            fixes=daten["fixes"], alt_texte_live=daten["alt_live"],
+            alt_texte_offen=daten["alt_offen"],
+            vorbereitet=daten["vorbereitet"], gemessen_am=daten["gemessen_am"],
+        )
+
+        import os as _os
+        geheim = _os.getenv("COMPLYO_NACHWEIS_SECRET", "")
+        basis = _os.getenv("COMPLYO_PUBLIC_URL", "https://complyo.de").rstrip("/")
+        link = (f"{basis}/nachweis/{request.site_id}/"
+                f"{nachweis_token(request.site_id, geheim)}") if geheim else ""
+
+        markdown = erklaerung_aus_nachweis(
+            nachweis,
+            anbieter=request.site_url or daten["site_url"],
+            kontakt=request.contact_email or "über das Kontaktformular dieser Website",
+            nachweis_url=link,
+        )
+        # Der Kunde bekommt HTML zum Einsetzen. Bewusst schlicht und ohne
+        # fremde Ressourcen — eine Erklaerung ueber Barrierefreiheit, die
+        # selbst Daten an Dritte abgibt, waere ein schlechter Witz.
+        import html as _html
+        absaetze = "".join(
+            f"<p>{_html.escape(z)}</p>" if not z.startswith(("#", "-", "*"))
+            else (f"<h2>{_html.escape(z.lstrip('# '))}</h2>" if z.startswith("#")
+                  else f"<li>{_html.escape(z.lstrip('- '))}</li>")
+            for z in markdown.splitlines() if z.strip()
+        )
+        return GenerateStatementResponse(
+            html=f"<article lang=\"de\">{absaetze}</article>",
+            markdown=markdown,
+            filename="barrierefreiheitserklaerung.html",
+        )
+    except Exception as e:
+        # Fail-open auf den alten Weg: lieber die schwaechere Erklaerung als
+        # gar keine. Aber laut im Log, denn hier faellt der USP aus.
+        logger.error(f"Erklaerung aus dem Pruefnachweis fehlgeschlagen: {e}")
+        return None
+
+
+@accessibility_fix_router.post("/generate-statement", response_model=GenerateStatementResponse, dependencies=[Depends(rate_limit("a11y_statement", 5, 60))])
 async def generate_statement(
     request: GenerateStatementRequest,
     user: Dict[str, Any] = Depends(get_current_user)
@@ -507,6 +583,26 @@ async def generate_statement(
     await require_accessibility_module(user)
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database not available")
+
+    # Zuerst der Pruefnachweis: die Erklaerung entsteht aus der MESSUNG.
+    #
+    # Bis hierher las dieser Endpunkt ausschliesslich
+    # `accessibility_fix_packages` — einen aelteren Speicher, der an den Nutzer
+    # gebunden ist, der den Scan ausgeloest hat. Fuer zua-zwickau.de lieferte er
+    # "Konformitaetsstatus: Nicht bewertet" und "Es sind aktuell keine nicht
+    # barrierefreien Inhalte bekannt", waehrend fuer dieselbe Website ein
+    # Protokoll mit 22 Abweichungen und 19 offenen Kontrast-Fundstellen vorlag.
+    #
+    # Das ist nicht nur schwach, sondern falsch: eine Barrierefreiheits-
+    # erklaerung, die bekannte Barrieren verschweigt, ist eine unrichtige
+    # Erklaerung — bei einem Compliance-Anbieter der teuerste denkbare Fehler.
+    # Und es war ausgerechnet der Knopf, den der Kunde dafuer drueckt.
+    #
+    # Der richtige Erzeuger existierte bereits (nachweis_generator), nur hat
+    # ihn die Oberflaeche nie aufgerufen.
+    aus_nachweis = await _erklaerung_aus_pruefnachweis(request, user)
+    if aus_nachweis:
+        return aus_nachweis
 
     # Defaults (used when no scan data exists)
     conformity_text = "Konformitätsstatus: Nicht bewertet — bisher wurde keine Barrierefreiheits-Prüfung durchgeführt."
@@ -523,7 +619,16 @@ async def generate_statement(
             LIMIT 1
             """,
             request.site_id,
-            str(user.get("user_id")),
+            # `str(...)` gegen eine integer-Spalte: asyncpg lehnt das ab, und
+            # zwar mit 500. Damit scheiterte JEDER Aufruf von
+            # "Barrierefreiheitserklaerung generieren" — das Kernstueck des
+            # Pro-Tarifs, und der Fehler lag offen sichtbar in der Oberflaeche.
+            # Gefunden beim Durchlauf als Pro-Kunde.
+            #
+            # Dieselbe Verwechslung hatte am 04.08. schon die Alt-Text-
+            # Speicherung sechs Wochen lang still lahmgelegt; deshalb dort der
+            # Helfer, der hier nachgenutzt wird.
+            _als_user_id(user.get("user_id") or user.get("id")),
         )
 
     if row:
@@ -609,140 +714,6 @@ async def generate_statement(
         markdown=markdown_out,
         filename="barrierefreiheitserklaerung.html",
     )
-
-
-# =============================================================================
-# AUDIT-15: Alt-Text Review Queue
-# =============================================================================
-
-class AltTextReviewItem(BaseModel):
-    id: int
-    site_id: str
-    image_src: str
-    suggested_alt: str
-    status: str
-    created_at: str
-    reviewed_at: Optional[str] = None
-    approved_alt: Optional[str] = None
-
-
-class AltTextQueueResponse(BaseModel):
-    items: List[AltTextReviewItem]
-    total: int
-    pending: int
-
-
-class AltTextApproveRequest(BaseModel):
-    approved_alt: str = Field(..., min_length=1, max_length=500)
-
-
-@accessibility_fix_router.post("/alt-text-review")
-async def queue_alt_text_for_review(
-    site_id: str,
-    image_src: str,
-    suggested_alt: str,
-    user: Dict[str, Any] = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """AUDIT-15: KI-generierten Alt-Text in die Review-Queue einreihen (Status: pending)."""
-    if not db_pool:
-        return {"success": True, "id": -1, "status": "pending", "note": "db_pool not connected"}
-    user_id = user["id"]
-    try:
-        async with db_pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """INSERT INTO alt_text_review_queue (user_id, site_id, image_src, suggested_alt, status, created_at)
-                   VALUES ($1, $2, $3, $4, 'pending', NOW())
-                   RETURNING id""",
-                user_id, site_id, image_src, suggested_alt
-            )
-        return {"success": True, "id": row["id"], "status": "pending"}
-    except Exception as e:
-        logger.error(f"❌ alt-text-review queue failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@accessibility_fix_router.get("/alt-text-review", response_model=AltTextQueueResponse)
-async def get_alt_text_review_queue(
-    user: Dict[str, Any] = Depends(get_current_user)
-) -> AltTextQueueResponse:
-    """AUDIT-15: Gibt alle Alt-Texte in der Review-Queue zurück."""
-    if not db_pool:
-        return AltTextQueueResponse(items=[], total=0, pending=0)
-    user_id = user["id"]
-    try:
-        async with db_pool.acquire() as conn:
-            rows = await conn.fetch(
-                """SELECT id, site_id, image_src, suggested_alt, status,
-                          created_at::text, reviewed_at::text, approved_alt
-                   FROM alt_text_review_queue
-                   WHERE user_id = $1
-                   ORDER BY created_at DESC
-                   LIMIT 100""",
-                user_id
-            )
-        items = [AltTextReviewItem(**dict(r)) for r in rows]
-        pending = sum(1 for i in items if i.status == "pending")
-        return AltTextQueueResponse(items=items, total=len(items), pending=pending)
-    except Exception as e:
-        logger.error(f"❌ alt-text-review GET failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@accessibility_fix_router.post("/alt-text-review/{item_id}/approve")
-async def approve_alt_text(
-    item_id: int,
-    body: AltTextApproveRequest,
-    user: Dict[str, Any] = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """AUDIT-15: Alt-Text manuell freigeben (Status: approved)."""
-    if not db_pool:
-        return {"success": True, "id": item_id, "status": "approved"}
-    user_id = user["id"]
-    try:
-        async with db_pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """UPDATE alt_text_review_queue
-                   SET status = 'approved', approved_alt = $1, reviewed_at = NOW()
-                   WHERE id = $2 AND user_id = $3
-                   RETURNING id, status""",
-                body.approved_alt, item_id, user_id
-            )
-        if not row:
-            raise HTTPException(status_code=404, detail="Item nicht gefunden")
-        return {"success": True, "id": row["id"], "status": row["status"]}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ alt-text approve failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@accessibility_fix_router.post("/alt-text-review/{item_id}/reject")
-async def reject_alt_text(
-    item_id: int,
-    user: Dict[str, Any] = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """AUDIT-15: Alt-Text ablehnen (Status: rejected) — erneute KI-Generierung erforderlich."""
-    if not db_pool:
-        return {"success": True, "id": item_id, "status": "rejected"}
-    user_id = user["id"]
-    try:
-        async with db_pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """UPDATE alt_text_review_queue
-                   SET status = 'rejected', reviewed_at = NOW()
-                   WHERE id = $1 AND user_id = $2
-                   RETURNING id, status""",
-                item_id, user_id
-            )
-        if not row:
-            raise HTTPException(status_code=404, detail="Item nicht gefunden")
-        return {"success": True, "id": row["id"], "status": row["status"]}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ alt-text reject failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # =============================================================================
@@ -872,7 +843,12 @@ async def save_fix_package_to_db(user_id: str, site_url: str, fix_package: Dict[
                 VALUES ($1, $2, $3, $4, NOW())
                 ON CONFLICT (user_id, site_id)
                 DO UPDATE SET fix_package = $4, updated_at = NOW()
-            """, str(user_id), site_id, site_url, json.dumps(fix_package))
+            # Wie beim Lesen: die Spalte ist integer. Mit `str(...)` warf
+            # asyncpg hier eine DataError — und weil der Aufrufer den Fehler
+            # nur protokolliert, wurde das Fix-Paket NIE gespeichert, ohne
+            # dass es jemandem auffiel. Die Barrierefreiheitserklaerung fand
+            # dadurch grundsaetzlich keine Messdaten.
+            """, _als_user_id(user_id), site_id, site_url, json.dumps(fix_package))
         
         logger.info(f"✅ Fix package saved for {site_url}")
     

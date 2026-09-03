@@ -94,6 +94,15 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio pytest-cov httpx
 
+      # Ohne Migrationen prueft der Schema-Kontrakt gegen eine leere Datenbank
+      # und meldet fehlende Tabellen, die es in der Produktion laengst gibt.
+      # Mit ihnen prueft er, wozu er da ist: ob Code und Migrationen
+      # auseinanderlaufen — genau die Drift, die Revision 0015 aufraeumen musste.
+      - name: 🗃️ Migrationen einspielen
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+        run: alembic upgrade head
+
       - name: 🧪 Run Tests
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
@@ -102,7 +111,7 @@ jobs:
           JWT_SECRET: test-jwt-secret-for-ci-only-not-for-production
           ENVIRONMENT: test
         run: |
-          pytest tests/ -v --cov=. --cov-report=xml || true
+          pytest tests/ -v --cov=. --cov-report=xml
 
       - name: 📊 Upload Coverage
         uses: codecov/codecov-action@v4

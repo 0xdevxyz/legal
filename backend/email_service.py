@@ -10,6 +10,12 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 import os
+# `datetime.now()` steht in vier Mail-Vorlagen (Loeschbestaetigung,
+# Datenexport, Warteliste), der Import fehlte. Diese Mails brachen beim
+# Zusammenbauen ab und wurden NIE verschickt — ohne Spur beim Empfaenger,
+# der nur nichts bekam. Gefunden vom Waechtertest fuer fehlende Importe,
+# nachdem derselbe Fehler den Hauptscan abgeraeumt hatte.
+from datetime import datetime
 from typing import Optional, Dict, Any
 import logging
 from jinja2 import Template
@@ -26,14 +32,17 @@ class EmailService:
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
         self.smtp_username = os.getenv('SMTP_USERNAME', '')
         self.smtp_password = os.getenv('SMTP_PASSWORD', '')
-        self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.tech')
+        self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.de')
         self.sender_name = os.getenv('SENDER_NAME', 'Complyo Compliance')
-        self.frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+        # Default war http://localhost:3000 — damit zeigten Kunden-Mails in
+        # Produktion auf localhost-Links.
+        self.frontend_url = os.getenv('FRONTEND_URL', 'https://complyo.de')
         self.admin_notify_email = os.getenv('ADMIN_NOTIFY_EMAIL', '')
+        self.environment = os.getenv('ENVIRONMENT', 'development')
 
         # For demo/testing purposes, we'll use console output if no SMTP is configured
         self.demo_mode = not all([self.smtp_username, self.smtp_password])
-        
+
         if self.demo_mode:
             logger.info("Email service running in DEMO MODE - emails will be logged to console")
 
@@ -125,6 +134,16 @@ class EmailService:
         Core email sending function
         """
         if self.demo_mode:
+            # In Produktion ist der Demo-Modus ein Konfigurationsfehler, kein
+            # Erfolg: Vorher wanderten DSGVO-Bestätigungen hier in die Konsole
+            # und der Aufrufer loggte "verschickt". Jetzt ehrlich False.
+            if self.environment.lower() in ('production', 'prod'):
+                logger.error(
+                    "MAIL NICHT VERSANDT (Demo-Modus in Produktion): an %s, "
+                    "Betreff '%s' — SMTP_USERNAME/SMTP_PASSWORD fehlen",
+                    to_email, subject,
+                )
+                return False
             # Demo mode - log email to console
             print(f"\n" + "="*60)
             print(f"📧 DEMO EMAIL (would be sent to: {to_email})")
@@ -231,7 +250,7 @@ class EmailService:
             <p style="margin-bottom: 0; font-size: 14px;">
                 Mit der Bestätigung willigen Sie ein, dass wir Ihnen den angeforderten Compliance-Report 
                 sowie gelegentlich relevante Compliance-Informationen zusenden dürfen. 
-                <strong>Widerruf jederzeit möglich</strong> unter datenschutz@complyo.tech
+                <strong>Widerruf jederzeit möglich</strong> unter datenschutz@complyo.de
             </p>
         </div>
         
@@ -244,8 +263,8 @@ class EmailService:
         
         <p style="font-size: 12px; color: #888; text-align: center;">
             Complyo GmbH • Compliance Made Simple<br>
-            <a href="mailto:datenschutz@complyo.tech" style="color: #667eea;">datenschutz@complyo.tech</a> • 
-            <a href="https://complyo.tech/datenschutz" style="color: #667eea;">Datenschutzerklärung</a>
+            <a href="mailto:datenschutz@complyo.de" style="color: #667eea;">datenschutz@complyo.de</a> • 
+            <a href="https://complyo.de/datenschutz" style="color: #667eea;">Datenschutzerklärung</a>
         </p>
     </div>
 </body>
@@ -270,14 +289,14 @@ vielen Dank für Ihr Interesse an unserem Compliance-Report!
 🇩🇪 DSGVO-HINWEIS:
 Mit der Bestätigung willigen Sie ein, dass wir Ihnen den angeforderten 
 Compliance-Report sowie gelegentlich relevante Compliance-Informationen 
-zusenden dürfen. Widerruf jederzeit möglich unter datenschutz@complyo.tech
+zusenden dürfen. Widerruf jederzeit möglich unter datenschutz@complyo.de
 
 ⏰ WICHTIG: Dieser Link ist 24 Stunden gültig.
 Falls Sie diese E-Mail nicht angefordert haben, können Sie sie einfach ignorieren.
 
 ---
 Complyo GmbH • Compliance Made Simple
-datenschutz@complyo.tech • https://complyo.tech/datenschutz
+datenschutz@complyo.de • https://complyo.de/datenschutz
         """
 
     def _get_report_email_template(self, name: str, analysis_data: Dict[str, Any]) -> str:
@@ -325,13 +344,13 @@ datenschutz@complyo.tech • https://complyo.tech/datenschutz
         <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;">
             <h4 style="margin-top: 0; color: #856404;">⚡ Nächste Schritte</h4>
             <p style="margin-bottom: 0; font-size: 14px;">
-                Für eine detaillierte Lösungsstrategie und automatische Umsetzung 
-                empfehlen wir Ihnen unseren KI-Automatisierung Service (39€/Monat).
+                Für eine detaillierte Lösungsstrategie und automatische Umsetzung
+                empfehlen wir Ihnen unsere Tarife Single (19€/Monat) oder Pro (49€/Monat).
             </p>
         </div>
-        
+
         <div style="text-align: center; margin: 30px 0;">
-            <a href="http://localhost:3000/#pricing" 
+            <a href="{{ frontend_url }}/#pricing"
                style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                       color: white; 
                       text-decoration: none; 
@@ -346,15 +365,15 @@ datenschutz@complyo.tech • https://complyo.tech/datenschutz
         
         <p style="font-size: 14px; color: #666;">
             <strong>🔒 Datenschutz:</strong> Ihre Daten werden DSGVO-konform verarbeitet. 
-            Widerruf jederzeit unter datenschutz@complyo.tech möglich.
+            Widerruf jederzeit unter datenschutz@complyo.de möglich.
         </p>
         
         <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
         
         <p style="font-size: 12px; color: #888; text-align: center;">
             Complyo GmbH • Compliance Made Simple<br>
-            <a href="mailto:support@complyo.tech" style="color: #667eea;">support@complyo.tech</a> • 
-            <a href="http://localhost:3000" style="color: #667eea;">complyo.tech</a>
+            <a href="mailto:support@complyo.de" style="color: #667eea;">support@complyo.de</a> •
+            <a href="{{ frontend_url }}" style="color: #667eea;">complyo.de</a>
         </p>
     </div>
 </body>
@@ -365,7 +384,8 @@ datenschutz@complyo.tech • https://complyo.tech/datenschutz
             name=name,
             compliance_score=compliance_score,
             risk_level=risk_level,
-            findings_count=findings_count
+            findings_count=findings_count,
+            frontend_url=self.frontend_url
         )
 
     def _get_report_email_text(self, name: str, analysis_data: Dict[str, Any]) -> str:
@@ -387,18 +407,18 @@ Ihre Website-Analyse ist abgeschlossen! Hier sind die wichtigsten Ergebnisse:
 • Gefundene Probleme: {findings_count} Bereiche
 
 ⚡ NÄCHSTE SCHRITTE:
-Für eine detaillierte Lösungsstrategie und automatische Umsetzung 
-empfehlen wir Ihnen unseren KI-Automatisierung Service (39€/Monat).
+Für eine detaillierte Lösungsstrategie und automatische Umsetzung
+empfehlen wir Ihnen unsere Tarife Single (19€/Monat) oder Pro (49€/Monat).
 
-🚀 Jetzt optimieren: http://localhost:3000/#pricing
+🚀 Jetzt optimieren: {self.frontend_url}/#pricing
 
-🔒 DATENSCHUTZ: 
-Ihre Daten werden DSGVO-konform verarbeitet. 
-Widerruf jederzeit unter datenschutz@complyo.tech möglich.
+🔒 DATENSCHUTZ:
+Ihre Daten werden DSGVO-konform verarbeitet.
+Widerruf jederzeit unter datenschutz@complyo.de möglich.
 
 ---
 Complyo GmbH • Compliance Made Simple
-support@complyo.tech • http://localhost:3000
+support@complyo.de • {self.frontend_url}
         """
 
     def send_deletion_confirmation_email(self, email: str, reference_id: str) -> bool:
@@ -448,8 +468,8 @@ support@complyo.tech • http://localhost:3000
                     
                     <div style="border-top: 1px solid #eee; padding-top: 20px; font-size: 12px; color: #666;">
                         <p><strong>Complyo GmbH</strong><br>
-                        E-Mail: datenschutz@complyo.tech<br>
-                        Website: https://complyo.tech</p>
+                        E-Mail: datenschutz@complyo.de<br>
+                        Website: https://complyo.de</p>
                         
                         <p>Bei Fragen wenden Sie sich gerne an unseren Datenschutzbeauftragten.</p>
                     </div>
@@ -473,7 +493,7 @@ support@complyo.tech • http://localhost:3000
             
             Ihre Daten wurden permanent und unwiderruflich gelöscht.
             
-            Bei Fragen: datenschutz@complyo.tech
+            Bei Fragen: datenschutz@complyo.de
             
             Mit freundlichen Grüßen,
             Ihr Complyo Team
@@ -491,14 +511,20 @@ support@complyo.tech • http://localhost:3000
         """
         try:
             subject = "Ihre Datenexport - Complyo DSGVO"
-            
-            # Convert export data to readable format
-            export_summary = {
-                "Persönliche Daten": len(export_data.get("personal_data", {})),
-                "Einwilligungsdaten": len(export_data.get("consent_data", {})),
-                "Analysedaten": "Ja" if export_data.get("analysis_data") else "Nein",
-                "Technische Daten": len(export_data.get("technical_data", {}))
-            }
+
+            # Zusammenfassung generisch aufbauen — der Export ist seit 2026-08-11
+            # das aggregierte Konto-JSON (users + zugehörige Tabellen), nicht
+            # mehr das feste Lead-Schema.
+            export_summary = {}
+            for kategorie, inhalt in export_data.items():
+                if kategorie == "export_info":
+                    continue
+                if isinstance(inhalt, list):
+                    export_summary[kategorie] = f"{len(inhalt)} Einträge"
+                elif isinstance(inhalt, dict):
+                    export_summary[kategorie] = "Ja"
+                else:
+                    export_summary[kategorie] = "Ja" if inhalt else "Nein"
             
             html_content = f"""
             <!DOCTYPE html>
@@ -543,8 +569,8 @@ support@complyo.tech • http://localhost:3000
                     
                     <div style="border-top: 1px solid #eee; padding-top: 20px; font-size: 12px; color: #666;">
                         <p><strong>Complyo GmbH</strong><br>
-                        E-Mail: datenschutz@complyo.tech<br>
-                        Website: https://complyo.tech</p>
+                        E-Mail: datenschutz@complyo.de<br>
+                        Website: https://complyo.de</p>
                     </div>
                     
                     <div style="margin-top: 30px; padding: 20px; background-color: #f8f9fa; border-radius: 8px;">
@@ -574,7 +600,7 @@ support@complyo.tech • http://localhost:3000
             
             Behandeln Sie diese Daten vertraulich.
             
-            Bei Fragen: datenschutz@complyo.tech
+            Bei Fragen: datenschutz@complyo.de
             
             Mit freundlichen Grüßen,
             Ihr Complyo Team
@@ -642,7 +668,7 @@ support@complyo.tech • http://localhost:3000
       <a href="mailto:support@complyo.de" style="color:#94a3b8;">support@complyo.de</a>
     </p>
     <p style="font-size:11px;color:#cbd5e1;text-align:center;">
-      Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.tech für Early Access angemeldet hast.
+      Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.de für Early Access angemeldet hast.
       Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
     </p>
   </div>
@@ -666,7 +692,7 @@ Impressum: https://complyo.de/impressum
 Datenschutz: https://complyo.de/datenschutz
 Kontakt: support@complyo.de
 
-Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.tech für Early Access angemeldet hast.
+Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.de für Early Access angemeldet hast.
 Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
 """
             return self._send_email(
@@ -680,22 +706,70 @@ Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
             logger.error(f"Failed to send waitlist confirmation to {email}: {e}")
             return False
 
-    def send_waitlist_admin_notification(self, email: str, name: str, phone: str, source: str) -> bool:
+    def send_waitlist_admin_notification(
+        self, email: str, name: str, phone: str, source: str,
+        herkunft: str = "", angebot: str = "",
+        bestaetigt: bool = False, platz_nr=None,
+    ) -> bool:
         """
         Interne Benachrichtigung an den Admin bei jeder neuen Waitlist-Anmeldung
+
+        `herkunft` traegt Kampagne und UTM-Parameter. Ohne sie steht in der
+        Meldung nur "landing", und bei laufenden Anzeigen ist genau die Frage
+        offen, welche davon den Eintrag gebracht hat.
         """
         if not self.admin_notify_email:
+            # Fehlt die Adresse, gibt es niemanden zu benachrichtigen. Das ist
+            # eine Konfigurationsluecke und kein Normalfall — deshalb sichtbar
+            # im Log statt stillem return False.
+            logger.warning(
+                "ADMIN_NOTIFY_EMAIL ist nicht gesetzt — Waitlist-Anmeldung "
+                f"von {email} wird nicht gemeldet"
+            )
             return False
         try:
             display_name = name or "(kein Name)"
             display_phone = phone or "(keine Telefonnummer)"
-            subject = f"[complyo] Neue Waitlist-Anmeldung: {display_name} <{email}>"
+
+            # Zwei Meldungen je Interessent, und der Unterschied gehoert in die
+            # Betreffzeile: die erste sagt nur, dass jemand das Formular
+            # abgeschickt hat, die zweite, dass er den Link in der Mail geklickt
+            # hat. Erst die zweite ist ein Lead, den man anschreiben darf, und
+            # erst sie belegt einen der 100 Plaetze.
+            # Betreff: das Wichtigste zuerst. Vorher stand die Platznummer am
+            # Ende und wurde auf dem Handy abgeschnitten — sichtbar war nur
+            # "[complyo] Bestätigt: (kein Name) <probe…". Das Präfix "[complyo]"
+            # ist ebenfalls weg: der Absender heißt bereits complyo, und die
+            # zehn Zeichen fehlten genau dort, wo die Zahl stehen soll.
+            # Der Name kommt nur noch vor, wenn es einen gibt; das Formular
+            # fragt keinen mehr ab, also stand dort immer "(kein Name)".
+            wer = f"{name.strip()} <{email}>" if name and name.strip() else email
+
+            if bestaetigt:
+                platz_text = f"Platz {platz_nr}" if platz_nr else "kein Platz mehr frei"
+                subject = (
+                    f"Platz {platz_nr} bestätigt: {wer}" if platz_nr
+                    else f"Bestätigt, kein Platz mehr frei: {wer}"
+                )
+                kopfzeile = "complyo – Wartelisten-Eintrag bestätigt"
+                fusszeile = (
+                    f"Double-Opt-In abgeschlossen – {platz_text}."
+                    if platz_nr else
+                    "Double-Opt-In abgeschlossen – das Kontingent war bereits vergeben, "
+                    "der Eintrag steht ohne Preiszusage auf der Liste."
+                )
+            else:
+                subject = f"Neue Anmeldung: {wer}"
+                kopfzeile = "complyo – Neue Waitlist-Anmeldung"
+                fusszeile = (
+                    "Double-Opt-In ausstehend – Bestätigungsmail wurde an den Nutzer gesendet."
+                )
             html_body = f"""<!DOCTYPE html>
 <html lang="de">
 <head><meta charset="utf-8"><title>Neue Waitlist-Anmeldung</title></head>
 <body style="font-family:Arial,sans-serif;color:#333;max-width:500px;margin:0 auto;padding:20px;">
   <div style="background:#2563eb;color:white;padding:16px 20px;border-radius:10px 10px 0 0;">
-    <strong>complyo – Neue Waitlist-Anmeldung</strong>
+    <strong>{kopfzeile}</strong>
   </div>
   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;padding:20px;border-radius:0 0 10px 10px;">
     <table style="width:100%;border-collapse:collapse;font-size:14px;">
@@ -703,21 +777,26 @@ Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
       <tr><td style="padding:6px 0;color:#64748b;">Name</td><td style="padding:6px 0;">{display_name}</td></tr>
       <tr><td style="padding:6px 0;color:#64748b;">Telefon</td><td style="padding:6px 0;">{display_phone}</td></tr>
       <tr><td style="padding:6px 0;color:#64748b;">Quelle</td><td style="padding:6px 0;">{source}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;">Herkunft</td><td style="padding:6px 0;">{herkunft or "(direkt)"}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;">Angebot</td><td style="padding:6px 0;">{angebot or "(keines)"}</td></tr>
     </table>
     <p style="font-size:12px;color:#94a3b8;margin-top:16px;">
-      Double-Opt-In ausstehend – Bestätigungsmail wurde an den Nutzer gesendet.
+      {fusszeile}
     </p>
   </div>
 </body>
 </html>"""
-            text_body = f"""Neue Waitlist-Anmeldung
+            text_body = f"""{kopfzeile}
 
 E-Mail:   {email}
 Name:     {display_name}
 Telefon:  {display_phone}
 Quelle:   {source}
+Herkunft: {herkunft or "(direkt)"}
+Angebot:  {angebot or "(keines)"}
 
-Double-Opt-In ausstehend.
+{fusszeile}
+
 """
             return self._send_email(
                 to_email=self.admin_notify_email,

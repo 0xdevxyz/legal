@@ -3,7 +3,6 @@ Code Generator für Barrierefreiheits-Fixes
 Generiert Code-Snippets in verschiedenen Frameworks (React, Vue, HTML)
 """
 
-import json
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 import logging

@@ -7,6 +7,112 @@
 
 ---
 
+## [2026-09-02]
+
+### Frontend
+- Kampagnen-Landingpage `/early-access` (`landing-react/src/app/early-access/`, `src/components/kampagne/`): Early-Access-Warteliste mit Anlass BFSG, Angebot 35 € statt 49 € für die ersten 100 bestätigten Anmeldungen. Bewusst auf `noindex` — ein befristetes Sonderangebot soll nicht dauerhaft in der Suche stehen und den regulären Preis untergraben
+- `WartelistenFormular` wertet eine `204`-Antwort nicht länger als Erfolg: bei ausgelöster Bot-Abwehr antwortet der Endpunkt still mit leerem Rumpf, das alte `JoinEarlySection` zeigte darauf eine Bestätigung an und der Besucher wartete auf eine Mail, die nie kam
+- Formular wartet vor dem Absenden bis zur 4-Sekunden-Marke der serverseitigen Zeitfalle, statt den Eintrag zu verlieren — Browser-Autofill unterschreitet sie mühelos
+- `PlatzZaehler` liest den Stand über `/api/leads/waitlist/plaetze` aus der Datenbank; fällt der Zähler aus, wird keine Zahl gezeigt statt einer geratenen
+
+### Frontend — Backoffice-Zugang von der Website entfernt
+- „Anmelden" aus Navigation und Fußzeile entfernt (Desktop und mobiles Menü). Der Link führte in ein Dashboard, das mit Stripe im Testmodus niemand gebucht haben kann. Damit steht auf der Website kein einziger Weg mehr in Kauf, Registrierung oder Backoffice — nur noch die Warteliste. Bestehende Zugänge erreichen das Dashboard weiterhin direkt unter `app.complyo.de`
+- Die dadurch ungenutzte Konstante `APP_URL` ist in beiden Komponenten entfallen
+
+### Backend — Betreff der Benachrichtigungen
+- Platznummer nach vorn: `Platz 7 bestätigt: max@firma.de` statt `[complyo] Bestätigt: (kein Name) <max@firma.de> — Platz 7`. Auf dem Handy wurde die Zahl vorher abgeschnitten, also genau die Information, um die es geht
+- Präfix `[complyo]` entfällt — der Absender heißt bereits complyo, und die zehn Zeichen fehlten vorne. `(kein Name)` entfällt ebenfalls: das Formular fragt keinen Namen mehr ab, der Platzhalter stand also immer da. Ist ein Name vorhanden, wird er weiterhin gezeigt
+
+### Backend — Bot-Abwehr ohne Drittanbieter
+- **Die bisherige Zeitfalle war wirkungslos gegen jeden Bot, der sie kennt**: sie prüfte `form_ts`, einen Zeitstempel, den der Client selbst setzt. Ein Skript schreibt dort „vor zehn Sekunden" hinein und ist durch — gefangen wurden nur Bots, die gar kein `form_ts` schickten
+- Neu `GET /api/leads/waitlist/token`: der Server stellt einen signierten Zeitstempel aus (HMAC über `JWT_SECRET`), den die Anmeldung vorlegen muss. Der Zeitpunkt ist damit nicht mehr frei wählbar, und wer direkt auf den Endpunkt schießt, hat kein gültiges Token. Jedes Token wird nach Gebrauch in Redis gesperrt (`SET NX`), damit eines nicht für viele Anmeldungen reicht; fällt Redis aus, wird durchgelassen statt blockiert — eine kaputte Sperrliste darf keine echten Anmeldungen verschlucken
+- `_fill_time_plausible` und die Auswertung von `form_ts` entfernt. Das Feld bleibt im Modell, wird aber nicht mehr geprüft: würde es weiterhin als Ersatz gelten, könnte ein Bot einfach das Token weglassen und die Umstellung wäre wirkungslos (`test_form_ts_allein_genuegt_nicht_mehr`)
+- Zustellbarkeitsprüfung vor dem Speichern (`domain_nimmt_mail_an`): MX-Abfrage der Empfängerdomain, mit A-Record-Rückfall nach RFC 5321 und Stundencache. Grund ist der eigene Mailserver — jede Anmeldung löst eine Mail an die eingetragene Adresse aus, und massenhaft erfundene Adressen kosten Zustellreputation. Bewusst fail-open: nur ein eindeutiges NXDOMAIN führt zur Ablehnung, ein DNS-Timeout nicht. Fängt nebenbei Tippfehler wie „gmial.com" ab, bevor jemand vergeblich auf eine Mail wartet
+- Bewusst kein Cloudflare Turnstile: der Schutz kommt ohne Drittanbieter aus, es verlassen keine Besucherdaten den Server und die Datenschutzerklärung braucht keinen zusätzlichen Absatz
+
+### Frontend
+- `WartelistenFormular` holt das Token beim Anzeigen (nicht beim Klick, weil es beim Absenden schon einige Sekunden alt sein muss) und holt es beim Fehlschlag nach. Nach einem Fehler wird das Token verworfen, damit der zweite Versuch ein frisches zieht
+- Die Ablehnung wegen unerreichbarer Domain wird als Klartext angezeigt statt als allgemeiner Fehler — ein Tippfehler in der Adresse ist der häufigste Fall und der einzige, den der Besucher selbst beheben kann
+
+### Frontend — Erklärvideo auf der Startseite
+- Erklärvideo aus `HeroSection` in die eigene Komponente `components/Erklaervideo.tsx` herausgelöst und auf der Early-Access-Startseite eingebunden. Eine Quelle statt zwei Kopien: Videodatei, VTT-Spur und Transkript müssen zusammenpassen, zwei Kopien hätten bedeutet, dass ein neues Video an einer Stelle nachgezogen wird und anderswo ein Transkript stehen bleibt, das nicht mehr zum Ton passt
+- Hero der Kampagnenseite ab `lg` zweispaltig: Text und Formular links, Video rechts. Im DOM steht der Textblock zuerst, damit die Seite auf dem Handy zu Text → Formular → Video zusammenfällt und der Eintrag nicht hinter ein 60-Sekunden-Video rutscht
+
+### Backend — Meldung bei jedem Eintrag
+- **`ADMIN_NOTIFY_EMAIL` zeigte auf `admin@complyo.tech` — die Domain hat keine MX-Records.** Sämtliche Benachrichtigungen über Wartelisten-Anmeldungen waren unzustellbar, während der Versand „Email sent successfully" meldete (der eigene SMTP-Server nimmt an, die Zustellung scheitert danach). Auf `mail@panoart360.de` umgestellt; `info@complyo.de` wurde vom Mailserver mit `550 5.1.1 User unknown in virtual mailbox table` abgelehnt, das Postfach existiert nicht
+- `send_waitlist_admin_notification` unterscheidet jetzt Anmeldung und Bestätigung: die Bestätigung löst eine zweite Meldung mit Platznummer aus. Erst der Klick im Opt-In-Link macht aus einer Formulareingabe einen Interessenten, den man anschreiben darf, und erst er belegt einen der 100 Plätze — vorher sah man nur Anmeldungen und nie, welche davon bestätigt wurden
+- `confirm_waitlist` nimmt `BackgroundTasks` und liest die Herkunftsfelder mit, damit die Meldung ohne Datenbankblick sagt, aus welcher Anzeige der bestätigte Eintrag stammt
+
+### Frontend — Startseite auf Early Access umgestellt
+- `/` zeigt die Early-Access-Seite statt der Produktseite mit Preistabelle. Anlass: Stripe läuft auf Testschlüsseln (`sk_test_`/`pk_test_`, alle Preis-IDs Test-IDs) — jeder Klick auf „Pro buchen" landete in einem Checkout, in dem echte Karten abgelehnt werden
+- Die bisherige Startseite ist **nicht gelöscht**: unverändert als `EarlyAccessLanding` erreichbar unter `/produkt/`, dort auf `noindex`, damit sie weder mit `/` um dieselben Begriffe konkurriert noch weiter Kaufversuche einsammelt. Rückweg in `src/app/page.tsx` dokumentiert
+- Startseite ist indexierbar mit `canonical: /`. Die Kampagnenseite trägt `noindex` und `canonical: /early-access/` — hätte man sie unverändert auf `/` gelegt, wäre complyo.de aus dem Index gefallen und der Canonical hätte auf eine nicht indexierte Seite gezeigt
+- Kampagnenkennung ist jetzt ein Prop statt einer Konstante: `/` schreibt `startseite`, `/early-access` schreibt `ea100-bfsg`. Ohne die Trennung liesse sich nicht mehr sagen, was die bezahlten Anzeigen gebracht haben und was ohnehin gekommen wäre
+- NavBar und Footer: „Preise" entfernt (der Anker `/#preise` zeigte auf die Preistabelle der alten Startseite und ginge ins Leere), „Kostenlos starten" führt als „Platz sichern" auf `/#anmeldung` statt auf `register?plan=free`. Auf der Startseite steht damit kein Kauf- oder Registrierungsweg mehr, nur noch `login` für bestehende Nutzer
+
+### Backend
+- **Waitlist-Strecke war vollständig tot**: `lead_routes.py` rief durchgehend `db_service.execute_query(...)` auf, eine Methode, die `DatabaseService` nicht hat. Jede Anmeldung wäre in einen `AttributeError` und damit in einen 500er gelaufen. Auf das echte Muster `async with db_service.get_connection()` mit asyncpg umgestellt
+- **Rate-Limit galt global statt pro Besucher**: `join_waitlist` las `request.client.host`, hinter nginx immer die Gateway-IP — nach drei Anmeldungen in zehn Minuten hätte das Formular jedem weiteren Besucher `429` geantwortet. Jetzt über `get_client_ip` (respektiert `TRUSTED_PROXIES`), derselbe Fehler wie beim Landing-Scanner am 12.08.2026
+- `source` wird gesäubert statt gegen eine Allowlist aus drei Werten verworfen; alles andere fiel vorher still auf `early-access` zurück und machte bezahlten Traffic nicht auswertbar
+- Herkunft je Anmeldung: `campaign`, `utm_*` und `landing_path` werden aufgenommen; `landing_path` gegen offene Weiterleitung geprüft (auch das protokollrelative `//fremde.domain`), weil er das Redirect nach dem Opt-In-Klick steuert
+- Double-Opt-In leitet auf die Ursprungsseite zurück statt immer auf `/` — wer über eine Anzeige kam, landete nach dem Klick auf etwas Fremdem
+- Neuer offener Endpunkt `GET /api/leads/waitlist/plaetze` (Kontingent, vergeben, frei); bewusst in `LEADS_OEFFENTLICH_GEWOLLT`, gibt nur die Zahl vergebener Plätze heraus, nicht die Lead-Gesamtzahl
+- Platznummern aus `waitlist_platz_seq`, vergeben erst bei der Bestätigung: ein unbestätigter Eintrag darf keinen der 100 Plätze blockieren. `angebot` ist eine Servereigenschaft und wird nicht aus dem Request übernommen
+- `send_waitlist_admin_notification` trägt Herkunft und zugesagtes Angebot und meldet eine fehlende `ADMIN_NOTIFY_EMAIL` im Log, statt still mit `return False` auszusteigen
+- Migration `0018_waitlist_kampagne`: Herkunfts- und Angebotsspalten auf `waitlist_leads`, Sequence `waitlist_platz_seq`
+- **Einwilligungsnachweis belegte nichts**: `collect_lead` (`POST /api/leads/collect`) und die Verify-Route (`GET /api/leads/verify/{token}`) schrieben `request.client.host` in den DSGVO-Audit-Trail (`consent_ip_address` bzw. `db_service.verify_email`). Hinter nginx ist das immer die Gateway-IP `172.22.0.x`, bei jedem einzelnen Lead stand also dieselbe interne Adresse. Ein Nachweis, der für alle Einwilligungen denselben Wert trägt, zeigt gegenüber der Aufsicht nur, dass die Anfrage durch den eigenen Proxy lief. Beide Stellen jetzt über `get_client_ip` wie `join_waitlist` (respektiert `TRUSTED_PROXIES`)
+- `cookie_compliance_routes.py` hatte eine eigene, ungeprüfte `get_client_ip`, die `X-Forwarded-For` blind übernahm und damit die richtige Fassung aus `dependencies` verdeckte. Diesen Header setzt der Client selbst: das Einwilligungsprotokoll des Cookie-Banners war so fälschbar, und ein fälschbarer Nachweis ist keiner. Die lokale Funktion greift jetzt auf `dependencies.get_client_ip` durch; der Rückgabetyp bleibt `Optional[str]`, damit `log_consent` bei fehlender IP wie bisher auf den Device-Fingerprint ausweicht statt den Wortlaut `unknown` zu hashen
+- `GET /api/cookie-compliance/geo-check` las `request.headers.get('X-Forwarded-For', request.client.host)`: derselbe fälschbare Header, dazu ein `AttributeError`, sobald `request.client` fehlt. Ohne ermittelbare IP wird jetzt nur der Geo-Cache übersprungen, die Länderkennung läuft weiter
+- Danach die gesamte Fehlerklasse durchgesucht statt nur die gemeldeten Stellen. Vier weitere Nachweispfade hingen daran, alle unauffällig, weil die Spalte ja gefüllt war:
+  - `protokolliere_vertragsannahme` (`auth_routes.py`, Tabelle `vertragsannahmen`): Nachweis, wer welche AGB-Fassung als Unternehmer angenommen hat, gespeist aus ungeprüftem `X-Forwarded-For`
+  - `protokolliere_fix_freigabe` (`main_production.py`, Tabelle `fix_freigaben`): Beleg, dass der Kunde den Hinweis nach Ziffer 8 AGB gesehen hat. Ein fälschbarer Beleg stützt kein Mitverschulden nach § 254 BGB
+  - `fix_apply_routes.py`: `audit_service.log_fix_application` und `log_rollback` bekamen die Gateway-IP, also bei jeder Auslieferung und jedem Rollback denselben Wert
+  Alle vier laufen jetzt über `dependencies.get_client_ip`
+- **`log_consent` nahm die IP aus dem Request-Body**: `consent.ip_address or get_client_ip(request)` gab einem Feld Vorrang, das der Einwilligende selbst mitschickt. Damit bestimmte der Betroffene, was im Nachweis über ihn steht. Das Feld ist aus `ConsentLog` **entfernt**, nicht stillschweigend ignoriert, damit niemand annimmt, es habe weiter Wirkung. Das ausgelieferte Banner-Skript (`widgets/cookie_banner_v2.js`) hat es nie geschickt, der Bruch trifft nur eigene Integrationen
+- `log_consent` protokolliert den User-Agent aus dem `User-Agent`-Header statt aus dem Request-Body; `consent.user_agent` ist nur noch Rückfall. Protokolliert gehört, was der Server gesehen hat
+- **`get_client_ip` selbst wertete die Kette falsch aus und war damit weiterhin fälschbar.** Beim Nachmessen an der Produktions-nginx gefunden: dort steht `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for`, und das **hängt an**, statt zu ersetzen. Schickt ein Besucher selbst `X-Forwarded-For: 9.9.9.9`, kommt im Backend `9.9.9.9, <echte IP>` an. `get_client_ip` nahm `split(",")[0]`, also genau den vom Besucher erfundenen Eintrag. Die Proxy-Prüfung über `TRUSTED_PROXIES` griff dabei korrekt und half trotzdem nichts. Folgen: jeder Einwilligungsnachweis blieb fälschbar, und das Rate-Limit der Waitlist ließ sich mit einem beliebigen Header umgehen. Die Kette wird jetzt **von rechts** ausgewertet, genommen wird der erste Eintrag, der nicht selbst ein bekannter Proxy ist; enthält sie nur Proxys, bleibt es beim direkten Peer statt bei einem erfundenen Wert
+
+### Tests
+- `tests/test_waitlist.py`: Mocks bildeten mit `mock_db.execute_query` eine Methode nach, die es nie gab — MagicMock erfindet jedes Attribut, deshalb war die Suite grün, während die Strecke in Produktion tot war. Auf das echte Verbindungsmuster umgestellt
+- Neu `TestDbServiceVertrag`: vergleicht die in `lead_routes` aufgerufenen `db_service`-Methoden gegen die echte Klasse — genau dieser Test hätte den Ausfall gefangen
+- Neu `TestEchteBesucherIp`, `TestHerkunft` sowie Prüfungen auf offene Weiterleitung im `landing_path`
+- `test_source_allowlist_ohne_duplikat` durch `test_herkunft_wird_gesaeubert_statt_verworfen` ersetzt (die Allowlist ist bewusst entfallen)
+- Neu `TestEinwilligungsIpImAuditTrail`: prüft an `collect_lead` und der Verify-Route, dass die IP des Besuchers im Nachweis landet, und zwar mit Gegenprobe gegen einen nicht hinterlegten Proxy. Beide Tests fallen gegen den alten Stand (`testclient` statt `203.0.113.7`); die Gegenprobe hält fest, dass ein blindes Übernehmen von `X-Forwarded-For` keine Lösung wäre
+- Neu `TestCookieConsentIpNichtFaelschbar`: schlägt an, sobald in `cookie_compliance_routes.py` wieder ein ungeprüftes `X-Forwarded-For` steht
+- Neu `tests/test_besucher_ip_quelle.py`. `TestKeineEigeneIpErmittlung` durchsucht **alle** Backend-Module (außer `dependencies.py`, dort steht die geprüfte Auswertung) nach `request.client.host` und nach selbst gelesenem `X-Forwarded-For`, Kommentare und Docstrings ausgenommen. Damit ist die Fehlerklasse abgedeckt und nicht nur die heute gefundenen Stellen; gegen eine eingeschmuggelte Probe-Datei fällt der Test wie vorgesehen
+- `TestConsentIpKommtVomServer` prüft verhaltensbasiert, dass eine im Body mitgeschickte `ip_address` nicht im Protokoll landet, dass das Feld aus dem Modell weg ist und dass der User-Agent aus dem Header kommt, mit Gegenprobe gegen einen nicht hinterlegten Proxy
+- Die Testdaten bilden die Kette jetzt so ab, wie nginx sie wirklich liefert (`9.9.9.9, 203.0.113.7` statt umgekehrt). Vier Tests decken den Ketten-Bypass ab und fallen gegen den alten `get_client_ip`
+
+### Infrastruktur
+- `docker-compose.yml`: `ADMIN_NOTIFY_EMAIL` wird an das Backend durchgereicht — stand in der `.env`, kam nie im Container an, und die Benachrichtigung stieg deshalb still aus. Dazu `EARLY_ACCESS_PLAETZE` und `EARLY_ACCESS_ANGEBOT`
+- backend und landing neu gebaut und deployt; Migration `0018` gegen Produktion gelaufen; Testsuite im Backend-Image: 1579 passed, 66 skipped
+- Anmeldung und Double-Opt-In über die öffentliche Domain durchgespielt (Herkunft in der Datenbank, Rückleitung auf `/early-access/`, Platz 1 vergeben), Testdaten anschließend entfernt und Sequence zurückgesetzt
+- Produktions-nginx nachgemessen statt angenommen: Quell-IP am Backend ist `172.22.0.1` (uvicorn-Access-Log), `TRUSTED_PROXIES=172.22.0.1,127.0.0.1` stimmt also. Dabei fiel `$proxy_add_x_forwarded_for` auf
+- Testsuite im Backend-Image nach den IP-Korrekturen: 1629 passed, 29 skipped
+
+### Tech Debt
+- `landing-react/src/components/saas-landing/JoinEarlySection.tsx` und die Sicherungskopie `JoinEarlySection.tsx.bak.20260729` gelöscht. Die Sektion war seit `e630896` ("Preise, Navigation und Kaufweg statt Warteliste") aus `EarlyAccessLanding` genommen und danach nirgends mehr eingebunden: kein Import, kein `#waitlist`-Anker, keine Route. Sie trug beide Fehler, die heute in `WartelistenFormular` behoben wurden (`204` als Erfolg gewertet, keine Wartezeit bis zur Zeitfalle), und hätte sie beim nächsten Wiedereinbau zurück in die Seite gebracht. Zwei Formulare gegen denselben Endpunkt zu pflegen war die Ursache der Abweichung, deshalb löschen statt nachziehen: `WartelistenFormular` ist der eine verbleibende Weg auf die Warteliste
+
+---
+
+## [2026-08-11]
+
+### Backend
+- Dashboard-Scanpfad `POST /api/v2/analyze` vollwertig: Multipage-Scan mit Seitenbudget, KI-Review (fail-open) und Accessibility-Post-Prozessor (Alt-Texte/Fix-Manifest) — vorher Single-Page ohne Fix-Erzeugung; `scan_token` (Live-Fortschritt) und `legal_update_id` werden jetzt angenommen und persistiert (`backend/main_production.py`)
+- Landing-Preview: Mock-Antwort bei Scannerfehlern entfernt — statt aus dem URL-Hash gewürfelter Befunde mit `success:true` kommt ein ehrlicher Fehlerzustand (`backend/public_routes.py:_preview_scan_fehler`)
+- `scan_history`-Persistenz im Analyze-Pfad in eigenen try-Block: Schema-Drift übersprang vorher still die komplette Fix-Erzeugung (`backend/public_routes.py`)
+- Toter Endpunkt `POST /sites/{site_id}/widget-feedback` entfernt (wurde von keinem Widget aufgerufen; Selbstüberwachung läuft über `POST /api/wirkung`)
+- Website-Monitor: Alarm-Vergleichsquery repariert (`scan_timestamp` statt `scan_date`, Join über `user_id`+`url` wegen NULL-`website_id`) — der „kritische Befunde gestiegen"-Alarm war seit je stumm; `score_history.pillar_scores` auf einheitliches Dict-Format inkl. `critical_issues` normalisiert (`backend/cronjobs/website_monitor.py`)
+- DSGVO-Cleanup erweitert: `leads`-Retention (Ablauf + Löschantrag > 30 Tage) im Daily-Cleanup, `cookie_consent_logs` einheitlich 24 Monate (vorher 1 Jahr hier, 24 Monate in der Policy, 3 Jahre DB-Default); GDPR-Retention-Service-Loop (Löschankündigungen/-bestätigungen, Kontolöschungen) wird jetzt beim Start tatsächlich gestartet (`backend/main_production.py`)
+- `tests/test_schema_completeness.py`: Schema-Parser erkennt `op.create_table`-Revisionen (z. B. 0014 `gdpr_deletion_requests`) — der Test meldete die Tabelle fälschlich als fehlend
+
+### Infrastruktur
+- `scripts/legal_updates_dedup.sql` gegen Produktion ausgeführt: 719 → 330 `legal_updates` (Titel-Duplikate entfernt, Referenzen in `notifications`/`pflichten_events` umgehängt, Backup-Tabelle angelegt); Reihenfolge beachtet — erst Monitor-Deploy, dann Dedup, damit der alte Cron keine neuen Duplikate erzeugt
+- backend/dashboard/landing neu gebaut und deployt (inkl. Audit-Stand c5876a4); Testsuite im Backend-Image: 1348 passed, 86 skipped
+- E-Mail-Versand live: SMTP auf eigenen Mailserver umgestellt (mail.complyo.de:587/STARTTLS, Absender noreply@complyo.de) — Demo-Modus in Produktion beendet, Zustellung mit Testmail verifiziert; Zugangsdaten nur in der Server-.env
+
+---
+
 ## [2026-05-23]
 
 ### Security — HttpOnly-Härtung Access-Token (Phase 5)

@@ -19,7 +19,7 @@ export const AccessibilityWidget: React.FC = () => {
       return;
     }
 
-    // ✅ Generiere Site-ID aus URL (z.B. "complyo.tech" -> "complyo-tech")
+    // ✅ Generiere Site-ID aus URL (z.B. "complyo.de" -> "complyo-tech")
     const siteId = generateSiteId(currentWebsite.url);
 
     // Prüfe ob Script bereits existiert
@@ -40,10 +40,6 @@ export const AccessibilityWidget: React.FC = () => {
     // Füge Script zum Body hinzu
     document.body.appendChild(script);
 
-    console.log('🚀 Complyo Widget geladen für:', {
-      website: currentWebsite.url,
-      siteId: siteId
-    });
 
     // Cleanup beim Unmount oder wenn Website wechselt
     return () => {

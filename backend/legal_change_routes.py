@@ -9,10 +9,10 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import json
 
-from auth_routes import get_current_user
+from dependencies import get_current_user
 from dependencies import require_admin
 from database_service import db_service
-from legal_change_monitor import legal_monitor, LegalArea, ChangeSeverity
+from legal_change_monitor import legal_monitor
 
 router = APIRouter(prefix="/api/legal-changes", tags=["Legal Changes"])
 
@@ -590,16 +590,19 @@ async def _run_legal_monitoring():
         detected = summary.get("detected", 0)
         checks_created = sum(1 for c in summary.get("generated_checks", []) if c.get("created"))
 
-        # Log
+        # Log — scan_date = Startzeit des Laufs, damit _fetch_news_since_last_run
+        # beim nächsten Lauf keine News verpasst, die während des Laufs eintrafen.
         async with db_service.pool.acquire() as conn:
             execution_time = (datetime.now() - start_time).total_seconds()
             await conn.execute(
                 """
                 INSERT INTO legal_monitoring_logs (
-                    changes_detected, status, execution_time_seconds
-                ) VALUES ($1, 'completed', $2)
+                    scan_date, changes_detected, sources_checked, status, execution_time_seconds
+                ) VALUES ($1, $2, $3, 'completed', $4)
                 """,
+                start_time,
                 detected,
+                ["legal_news"],
                 execution_time
             )
 
@@ -718,12 +721,26 @@ async def activate_compliance_check(
     return {"success": True, "slug": slug, "status": "active"}
 
 
+class DismissCheckRequest(BaseModel):
+    """Optionale Ablehnungs-Begründung für /checks/{id}/dismiss."""
+    reason: Optional[str] = None
+
+
 @router.post("/checks/{check_id}/dismiss")
 async def dismiss_compliance_check(
     check_id: int,
+    body: Optional[DismissCheckRequest] = None,
     admin: dict = Depends(require_admin),
 ):
-    """Verwirft einen Check ('disabled')."""
+    """
+    Verwirft einen Check ('disabled').
+
+    Eine optionale Begründung (Body: {"reason": "..."}) wird an
+    generation_notes angehängt — so bleibt nachvollziehbar, WARUM ein
+    auto-generierter Check abgelehnt wurde, ohne die Generierungs-Herkunft
+    zu überschreiben.
+    """
+    reason = (body.reason or "").strip() if body else ""
     async with db_service.pool.acquire() as conn:
         slug = await conn.fetchval(
             """
@@ -731,12 +748,18 @@ async def dismiss_compliance_check(
             SET status = 'disabled',
                 reviewed_by = $2,
                 reviewed_at = NOW(),
-                updated_at = NOW()
+                updated_at = NOW(),
+                generation_notes = CASE
+                    WHEN $3 = '' THEN generation_notes
+                    ELSE COALESCE(generation_notes || E'\\n\\n', '')
+                         || 'Abgelehnt (' || to_char(NOW(), 'YYYY-MM-DD') || '): ' || $3
+                END
             WHERE id = $1
             RETURNING slug
             """,
             check_id,
             str(admin.get("email") or admin.get("id") or "admin"),
+            reason,
         )
     if not slug:
         raise HTTPException(status_code=404, detail="Check nicht gefunden")
@@ -744,5 +767,108 @@ async def dismiss_compliance_check(
     if _dcr.declarative_check_registry:
         await _dcr.declarative_check_registry.get_active_checks(force_refresh=True)
 
-    return {"success": True, "slug": slug, "status": "disabled"}
+    return {"success": True, "slug": slug, "status": "disabled", "reason_saved": bool(reason)}
 
+
+# ==================== RULE-REVIEW-WARTESCHLANGE ====================
+#
+# Der Wissens-Cron markiert bestehende Checks, die eine neue Entscheidung
+# beruehrt haben koennte ("Schritt 5/5"). Geschrieben wurde das an zwei
+# Stellen, gelesen an keiner - die Eintraege waren nicht erreichbar.
+# Ohne diese Routen bleibt die Warteschlange eine leisere Art zu verlieren.
+
+
+class RuleReviewErledigtRequest(BaseModel):
+    """Begruendung beim Abhaken eines Eintrags."""
+    notiz: Optional[str] = None
+
+
+@router.get("/rule-reviews")
+async def list_rule_reviews(
+    status: str = "offen",
+    admin: dict = Depends(require_admin),
+):
+    """Checks, die wegen einer Rechtsaenderung nachgesehen werden sollten."""
+    if status not in ("offen", "erledigt", "verworfen", "alle"):
+        raise HTTPException(status_code=400, detail="Unbekannter Status")
+
+    bedingung = "" if status == "alle" else "WHERE status = $1"
+    parameter = [] if status == "alle" else [status]
+
+    async with db_service.pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT id, check_name, knowledge_file, title, law_areas, impact,
+                   status, bearbeitet_von, bearbeitet_am, notiz, created_at
+            FROM knowledge_rule_review_queue
+            {bedingung}
+            ORDER BY created_at DESC
+            LIMIT 200
+            """,
+            *parameter,
+        )
+
+    eintraege = []
+    for r in rows:
+        # check_name traegt bei einem der beiden Schreiber mehrere Checks
+        # komma-getrennt. Die Ansicht soll sie einzeln zeigen.
+        checks = [c.strip() for c in (r["check_name"] or "").split(",") if c.strip()]
+        eintraege.append(
+            {
+                "id": r["id"],
+                "checks": checks,
+                "knowledge_file": r["knowledge_file"],
+                "title": r["title"],
+                "law_areas": list(r["law_areas"] or []),
+                "impact": r["impact"],
+                "status": r["status"],
+                "bearbeitet_von": r["bearbeitet_von"],
+                "bearbeitet_am": r["bearbeitet_am"].isoformat() if r["bearbeitet_am"] else None,
+                "notiz": r["notiz"],
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+            }
+        )
+
+    return {"rule_reviews": eintraege, "count": len(eintraege), "status": status}
+
+
+@router.post("/rule-reviews/{review_id}/{aktion}")
+async def rule_review_abschliessen(
+    review_id: int,
+    aktion: str,
+    body: RuleReviewErledigtRequest | None = None,
+    admin: dict = Depends(require_admin),
+):
+    """Einen Eintrag abhaken ('erledigt') oder begruendet verwerfen ('verworfen').
+
+    Verwerfen ist ausdruecklich vorgesehen: nicht jede Rechtsaenderung, die ein
+    Stichwort trifft, verlangt eine Regelaenderung. Ohne diesen Weg staut sich
+    die Ansicht mit Eintraegen, die niemand mehr liest.
+    """
+    if aktion not in ("erledigt", "verworfen"):
+        raise HTTPException(status_code=400, detail="Aktion muss 'erledigt' oder 'verworfen' sein")
+
+    async with db_service.pool.acquire() as conn:
+        getroffen = await conn.fetchval(
+            """
+            UPDATE knowledge_rule_review_queue
+            SET status = $2,
+                bearbeitet_von = $3,
+                bearbeitet_am = NOW(),
+                notiz = COALESCE($4, notiz)
+            WHERE id = $1 AND status = 'offen'
+            RETURNING id
+            """,
+            review_id,
+            aktion,
+            str(admin.get("email") or admin.get("id") or "admin"),
+            (body.notiz if body else None),
+        )
+
+    if not getroffen:
+        raise HTTPException(
+            status_code=404,
+            detail="Eintrag nicht gefunden oder bereits bearbeitet",
+        )
+
+    return {"success": True, "id": review_id, "status": aktion}

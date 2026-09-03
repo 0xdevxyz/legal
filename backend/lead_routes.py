@@ -4,15 +4,18 @@ Handles lead collection, email verification, and statistics
 Also provides Early-Access Waitlist endpoints with Double-Opt-In.
 """
 
-from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Depends
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, EmailStr, validator
 from typing import Optional, Dict, Any
 import logging
 import secrets
 import hashlib
+import hmac
 import os
 import re
+import httpx
+from dependencies import require_admin, get_client_ip, get_redis
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from database_service import db_service
@@ -21,6 +24,24 @@ from email_service import email_service
 _rate_limit_store: Dict[str, list] = defaultdict(list)
 _RATE_LIMIT_MAX = 3
 _RATE_LIMIT_WINDOW_MINUTES = 10
+
+# Zeitfalle: schneller ausgefüllt als _MIN_FILL_SECONDS ist kein Mensch,
+# älter als _MAX_FORM_AGE_SECONDS ist ein abgestandenes Formular.
+_MIN_FILL_SECONDS = 4
+_MAX_FORM_AGE_SECONDS = 6 * 3600
+
+# Cloudflare Turnstile. Nicht gesetzt = Prüfung aus; Honeypot, Zeitfalle und
+# Rate-Limit greifen unabhängig davon.
+TURNSTILE_SECRET = os.getenv("TURNSTILE_SECRET", "")
+TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+
+# Early-Access-Kontingent. "Nur 100 Plaetze" ist eine Werbeaussage und muss
+# gedeckt sein: der Zaehler unten liest echte Zeilen, keine Schaetzung.
+EARLY_ACCESS_PLAETZE = int(os.getenv("EARLY_ACCESS_PLAETZE", "100"))
+
+# Fassung des Angebots, das auf der Kampagnenseite steht. Wird je Anmeldung
+# mitgeschrieben, damit spaeter belegbar ist, was wem zugesagt wurde.
+EARLY_ACCESS_ANGEBOT = os.getenv("EARLY_ACCESS_ANGEBOT", "ea100-35eur-12m")
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +56,21 @@ class WaitlistJoinRequest(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     consent: bool
-    website: Optional[str] = None
+    website: Optional[str] = None          # Honeypot – bleibt bei Menschen leer
     source: Optional[str] = "early-access"
+    form_ts: Optional[int] = None          # Alt-Feld, nur noch Beiwerk (siehe form_token)
+    form_token: Optional[str] = None       # vom Server ausgestellt, signiert
+    turnstile_token: Optional[str] = None  # cf-turnstile-response
+
+    # Herkunft. Ohne diese Felder landet jede Anmeldung im selben Topf und eine
+    # bezahlte Kampagne laesst sich nicht auswerten.
+    campaign: Optional[str] = None
+    utm_source: Optional[str] = None
+    utm_medium: Optional[str] = None
+    utm_campaign: Optional[str] = None
+    utm_content: Optional[str] = None
+    utm_term: Optional[str] = None
+    landing_path: Optional[str] = None
 
     @validator("name")
     def validate_name(cls, v):
@@ -61,9 +95,39 @@ class WaitlistJoinRequest(BaseModel):
 
     @validator("source")
     def validate_source(cls, v):
-        allowed = {"early-access", "complyo.de", "complyo.tech", "landing"}
-        if v not in allowed:
-            return "early-access"
+        """Saeubert die Quelle, statt sie zu verwerfen.
+
+        Vorher stand hier eine Allowlist aus drei Werten und alles andere fiel
+        still auf "early-access" zurueck. Fuer eine Anzeigenkampagne ist das
+        genau das falsche Verhalten: die Information, welche Seite den Lead
+        gebracht hat, ging dabei verloren. Statt einer Allowlist begrenzt jetzt
+        ein Zeichensatz, was in die Spalte darf - das haelt Fremdeingaben
+        genauso zuverlaessig heraus, ohne echte Quellen wegzuwerfen.
+        """
+        return _sauberer_kurztext(v, 40) or "early-access"
+
+    @validator("campaign", "utm_source", "utm_medium", "utm_campaign",
+               "utm_content", "utm_term")
+    def validate_herkunft(cls, v):
+        return _sauberer_kurztext(v, 120)
+
+    @validator("landing_path")
+    def validate_landing_path(cls, v):
+        """Nur ein Pfad auf der eigenen Seite.
+
+        Der Wert steuert nach der Bestaetigung ein Redirect. Ohne diese Pruefung
+        waere das eine offene Weiterleitung: ein praeparierter Link koennte den
+        Bestaetigungsklick auf eine fremde Domain schicken. Deshalb muss der
+        Wert mit genau einem Schraegstrich beginnen - "https://boese.example"
+        faellt damit raus, und der Lookahead sperrt zusaetzlich "//boese":
+        zwei Schraegstriche waeren eine protokollrelative URL, die der Browser
+        als fremde Domain aufloest, obwohl der Wert wie ein Pfad aussieht.
+        """
+        if not v:
+            return None
+        v = v.strip()[:200]
+        if not re.match(r'^/(?!/)[A-Za-z0-9/_\-]*$', v):
+            return None
         return v
 
 
@@ -76,9 +140,232 @@ class WaitlistJoinResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _sauberer_kurztext(v, max_len: int):
+    """Laesst durch, was in eine Herkunftsspalte gehoert, und wirft den Rest weg.
+
+    Google Ads und Meta haengen ihre Parameter ungefiltert an die Ziel-URL, und
+    die landen von dort in der Datenbank. Erlaubt sind deshalb nur Zeichen, die
+    in einer Kampagnenkennung vorkommen; alles andere - Anfuehrungszeichen,
+    spitze Klammern, Zeilenumbrueche - faellt heraus, bevor es gespeichert und
+    spaeter im Admin-Bereich wieder angezeigt wird.
+
+    Rueckgabe None statt Leerstring: die Spalten sind nullable, und "nicht
+    angegeben" soll sich in der Auswertung von "leer uebermittelt" unterscheiden.
+    """
+    if v is None:
+        return None
+    v = re.sub(r'[^A-Za-z0-9._\-]', '', str(v).strip())[:max_len]
+    return v or None
+
+
+# ---------------------------------------------------------------------------
+# Formular-Token
+#
+# Ersetzt die bisherige Zeitfalle als eigentliche Huerde. Die alte Pruefung
+# verliess sich auf `form_ts` aus dem Request — einen Zeitstempel, den der
+# Client selbst setzt. Ein Bot schreibt dort einfach "vor zehn Sekunden" hinein
+# und ist durch; die Falle fing nur Skripte, die gar kein form_ts schickten.
+#
+# Jetzt gibt der Server den Zeitpunkt aus und signiert ihn. Wer anmelden will,
+# muss die Seite geladen und sich ein Token abgeholt haben, und der darin
+# festgehaltene Zeitpunkt laesst sich nicht verschieben. Zusaetzlich wird jedes
+# Token nach der Verwendung in Redis gesperrt, damit eines nicht fuer viele
+# Anmeldungen reicht.
+# ---------------------------------------------------------------------------
+
+_TOKEN_VERSION = "v1"
+
+
+def _token_secret() -> str:
+    secret = os.getenv("JWT_SECRET") or ""
+    if not secret:
+        raise RuntimeError("JWT_SECRET fehlt — Formular-Token nicht signierbar")
+    return secret
+
+
+def formular_token_erzeugen() -> str:
+    """Signierter Zeitstempel plus Zufall, damit zwei Tokens nie gleich sind."""
+    ausgestellt = int(datetime.now(timezone.utc).timestamp())
+    zufall = secrets.token_urlsafe(9)
+    rumpf = f"{_TOKEN_VERSION}.{ausgestellt}.{zufall}"
+    signatur = hmac.new(
+        _token_secret().encode(), rumpf.encode(), hashlib.sha256
+    ).hexdigest()[:32]
+    return f"{rumpf}.{signatur}"
+
+
+def _token_pruefen(token: Optional[str]) -> bool:
+    """Signatur und Alter. Jeder Zweifel bedeutet ungueltig."""
+    if not token or token.count(".") != 3:
+        return False
+    version, ausgestellt_roh, zufall, signatur = token.split(".")
+    if version != _TOKEN_VERSION:
+        return False
+
+    rumpf = f"{version}.{ausgestellt_roh}.{zufall}"
+    try:
+        erwartet = hmac.new(
+            _token_secret().encode(), rumpf.encode(), hashlib.sha256
+        ).hexdigest()[:32]
+    except RuntimeError as e:
+        logger.error(f"Formular-Token nicht pruefbar: {e}")
+        return False
+    if not hmac.compare_digest(erwartet, signatur):
+        return False
+
+    try:
+        ausgestellt = int(ausgestellt_roh)
+    except ValueError:
+        return False
+
+    alter = datetime.now(timezone.utc).timestamp() - ausgestellt
+    # Dieselben Grenzen wie zuvor die Zeitfalle, nur jetzt mit einem
+    # Zeitpunkt, den der Absender nicht selbst bestimmt hat.
+    return _MIN_FILL_SECONDS <= alter <= _MAX_FORM_AGE_SECONDS
+
+
+async def _token_entwerten(token: str) -> bool:
+    """Sperrt ein Token nach Gebrauch. True heisst: war noch frisch.
+
+    Faellt Redis aus, wird durchgelassen statt blockiert — eine kaputte
+    Sperrliste darf keine echten Anmeldungen verschlucken. Signatur und
+    Altersgrenze gelten dann weiterhin.
+    """
+    try:
+        redis = await get_redis()
+        if not redis:
+            return True
+        schluessel = "waitlist:token:" + hashlib.sha256(token.encode()).hexdigest()
+        # SET NX: schlaegt fehl, wenn der Schluessel schon existiert.
+        gesetzt = await redis.set(
+            schluessel, "1", ex=_MAX_FORM_AGE_SECONDS, nx=True
+        )
+        return bool(gesetzt)
+    except Exception as e:
+        logger.warning(f"Token-Sperrliste nicht erreichbar, Token akzeptiert: {e}")
+        return True
+
+
+# ---------------------------------------------------------------------------
+# Zustellbarkeit der Adresse
+# ---------------------------------------------------------------------------
+
+_mx_cache: Dict[str, tuple] = {}
+_MX_CACHE_SEKUNDEN = 3600
+
+
+def domain_nimmt_mail_an(email: str) -> bool:
+    """Prueft, ob die Domain der Adresse ueberhaupt Mail empfangen kann.
+
+    Grund ist nicht Datenhygiene, sondern der eigene Mailserver: jede
+    Anmeldung loest eine Bestaetigungsmail an die eingetragene Adresse aus.
+    Traegt jemand massenhaft erfundene Adressen ein, verschickt complyo
+    Mails an Domains, die niemandem gehoeren — das kostet Zustellreputation
+    und im schlimmsten Fall einen Platz auf einer Blacklist. Nebenbei faengt
+    die Pruefung Tippfehler wie "gmial.com" ab, bevor jemand vergeblich auf
+    eine Mail wartet.
+
+    Bewusst fail-open: nur ein eindeutiges "diese Domain gibt es nicht" fuehrt
+    zur Ablehnung. Ein DNS-Timeout darf keine echte Anmeldung kosten — genau
+    wie bei der Turnstile-Pruefung weiter unten.
+    """
+    try:
+        domain = email.rsplit("@", 1)[1].lower()
+    except IndexError:
+        return False
+
+    jetzt = datetime.now(timezone.utc).timestamp()
+    zwischenstand = _mx_cache.get(domain)
+    if zwischenstand and zwischenstand[1] > jetzt:
+        return zwischenstand[0]
+
+    ergebnis = True
+    try:
+        import dns.resolver
+
+        aufloeser = dns.resolver.Resolver()
+        aufloeser.timeout = 3.0
+        aufloeser.lifetime = 5.0
+        try:
+            antwort = aufloeser.resolve(domain, "MX")
+            ergebnis = len(antwort) > 0
+        except dns.resolver.NoAnswer:
+            # Kein MX, aber die Domain gibt es. Nach RFC 5321 darf dann der
+            # A-Record als Mailziel dienen — viele kleine Domains machen das.
+            try:
+                aufloeser.resolve(domain, "A")
+                ergebnis = True
+            except Exception:
+                ergebnis = False
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoNameservers):
+            ergebnis = False
+    except Exception as e:
+        logger.warning(f"MX-Pruefung fuer {domain} nicht moeglich, akzeptiert: {e}")
+        ergebnis = True
+
+    _mx_cache[domain] = (ergebnis, jetzt + _MX_CACHE_SEKUNDEN)
+    return ergebnis
+
+
 def _hash_ip(ip: str) -> str:
     salt = os.getenv("SECRET_SALT", "complyo-salt-2026")
     return hashlib.sha256(f"{ip}{salt}".encode()).hexdigest()
+
+
+def unsubscribe_token_for(email: str) -> str:
+    """Leitet den Abmelde-Token deterministisch aus E-Mail + JWT_SECRET ab (HMAC-SHA256).
+
+    Bewusst kein DB-Feld: der Token muss ohne Migration in bereits versandte
+    E-Mails eingebettet werden können. Deterministisch heisst, derselbe
+    Abmeldelink bleibt dauerhaft gültig — genau das erwartet ein Empfänger,
+    der eine alte Mail wieder aufmacht.
+    """
+    secret = os.getenv("JWT_SECRET") or ""
+    if not secret:
+        # Ohne Secret gibt es keinen prüfbaren Token — dann darf auch nichts
+        # abgemeldet werden (fail closed statt fail open).
+        raise RuntimeError("JWT_SECRET fehlt — Unsubscribe-Token nicht ableitbar")
+    return hmac.new(
+        secret.encode(),
+        f"unsubscribe:{email.strip().lower()}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _verify_unsubscribe_token(email: str, token: Optional[str]) -> bool:
+    """Konstantzeit-Vergleich; jeder Fehlerfall bedeutet 'ungültig'."""
+    if not token:
+        return False
+    try:
+        erwartet = unsubscribe_token_for(email)
+    except RuntimeError as e:
+        logger.error(f"Unsubscribe-Token nicht prüfbar: {e}")
+        return False
+    return hmac.compare_digest(erwartet, token)
+
+
+async def _verify_turnstile(token: Optional[str], remote_ip: str) -> bool:
+    """Fragt Cloudflare, ob das Turnstile-Token echt ist."""
+    if not TURNSTILE_SECRET:
+        return True          # nicht konfiguriert
+    if not token:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(
+                TURNSTILE_VERIFY_URL,
+                data={
+                    "secret": TURNSTILE_SECRET,
+                    "response": token,
+                    "remoteip": remote_ip,
+                },
+            )
+        return bool(resp.json().get("success"))
+    except Exception as e:
+        # Cloudflare nicht erreichbar: lieber durchlassen als echte Anmeldungen
+        # verlieren. Honeypot, Zeitfalle und Rate-Limit greifen weiterhin.
+        logger.warning(f"Turnstile nicht erreichbar, Prüfung übersprungen: {e}")
+        return True
 
 
 def _check_rate_limit(ip_hash: str) -> bool:
@@ -97,6 +384,22 @@ def _check_rate_limit(ip_hash: str) -> bool:
 # Waitlist endpoints
 # ---------------------------------------------------------------------------
 
+@lead_router.get("/waitlist/token")
+async def waitlist_token():
+    """Stellt das Formular-Token aus, das die Anmeldung spaeter vorlegen muss.
+
+    Offen wie das Formular selbst: der Endpunkt gibt nur einen signierten
+    Zeitstempel heraus und verraet nichts. Seine Wirkung liegt darin, dass ein
+    Absender ihn ueberhaupt aufgerufen haben muss — wer direkt auf
+    POST /waitlist schiesst, hat kein gueltiges Token.
+    """
+    try:
+        return {"token": formular_token_erzeugen()}
+    except RuntimeError as e:
+        logger.error(f"Formular-Token nicht ausstellbar: {e}")
+        raise HTTPException(status_code=503, detail="Formular derzeit nicht verfuegbar")
+
+
 @lead_router.post("/waitlist", response_model=WaitlistJoinResponse)
 async def join_waitlist(
     payload: WaitlistJoinRequest,
@@ -106,12 +409,35 @@ async def join_waitlist(
     """
     Early-Access Waitlist Anmeldung (DSGVO-konform, Double-Opt-In)
     """
+    # Honeypot. 204 statt Fehler: der Bot soll nicht lernen, was ihn verrät.
     if payload.website:
         return Response(status_code=204)
 
-    client_ip = http_request.client.host if http_request.client else "0.0.0.0"
+    # get_client_ip statt request.client.host: hinter nginx ist letzteres immer
+    # die Gateway-IP. Rate-Limit und ip_hash haetten dann fuer ALLE Besucher
+    # denselben Wert — nach drei Anmeldungen in zehn Minuten waere das Formular
+    # fuer jeden weiteren Besucher mit 429 dicht. Bei bezahltem Traffic faellt
+    # das erst auf, wenn die Anzeigen schon laufen. Genau dieser Fehler hat am
+    # 12.08.2026 den Landing-Scanner lahmgelegt; der Helfer kennt seither
+    # TRUSTED_PROXIES und meldet eine unbekannte Proxy-IP von sich aus.
+    client_ip = get_client_ip(http_request)
     ip_hash = _hash_ip(client_ip)
     user_agent = http_request.headers.get("user-agent", "")[:500]
+
+    # Formular-Token. Ersetzt die alte Zeitfalle: deren Zeitstempel kam aus dem
+    # Request und liess sich beliebig setzen, dieser ist signiert.
+    if not _token_pruefen(payload.form_token):
+        logger.info("Waitlist: Formular-Token fehlt oder ist ungueltig")
+        return Response(status_code=204)
+
+    if not await _token_entwerten(payload.form_token):
+        logger.info("Waitlist: Formular-Token bereits verwendet")
+        return Response(status_code=204)
+
+    # Turnstile
+    if not await _verify_turnstile(payload.turnstile_token, client_ip):
+        logger.info("Waitlist: Turnstile fehlgeschlagen")
+        return Response(status_code=204)
 
     if not _check_rate_limit(ip_hash):
         raise HTTPException(
@@ -119,16 +445,25 @@ async def join_waitlist(
             detail="Zu viele Anfragen. Bitte versuchen Sie es später erneut.",
         )
 
+    # Zustellbarkeit vor dem Speichern: was hier durchgeht, bekommt gleich eine
+    # Mail von unserem Server geschickt.
+    if not domain_nimmt_mail_an(payload.email):
+        logger.info(f"Waitlist: Domain nimmt keine Mail an ({payload.email})")
+        raise HTTPException(
+            status_code=400,
+            detail="Diese E-Mail-Adresse konnten wir nicht erreichen. Bitte prüfe die Schreibweise.",
+        )
+
     confirm_token = secrets.token_urlsafe(32)
     token_expires = datetime.now(timezone.utc) + timedelta(days=7)
     now = datetime.now(timezone.utc)
 
     try:
-        existing = await db_service.execute_query(
-            "SELECT id, confirmed_at FROM waitlist_leads WHERE email = $1",
-            payload.email.lower(),
-            fetch_one=True,
-        )
+        async with db_service.get_connection() as conn:
+            existing = await conn.fetchrow(
+                "SELECT id, confirmed_at FROM waitlist_leads WHERE email = $1",
+                payload.email.lower(),
+            )
 
         if existing:
             logger.info(f"Waitlist duplicate for {payload.email}")
@@ -137,25 +472,41 @@ async def join_waitlist(
                 message="Diese E-Mail steht bereits auf der Warteliste.",
             )
 
-        await db_service.execute_query(
-            """
-            INSERT INTO waitlist_leads
-                (email, name, phone, consent_given_at, confirm_token,
-                 confirm_token_expires_at, source, ip_hash, user_agent, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            """,
-            payload.email.lower(),
-            payload.name,
-            payload.phone,
-            now,
-            confirm_token,
-            token_expires,
-            payload.source or "early-access",
-            ip_hash,
-            user_agent,
-            now,
-            fetch_one=False,
-        )
+        # angebot kommt bewusst NICHT aus dem Request: der Preis, der zugesagt
+        # wird, ist eine Servereigenschaft. Kaeme er vom Client, koennte sich
+        # jeder ein eigenes Angebot in die Datenbank schreiben.
+        angebot = EARLY_ACCESS_ANGEBOT if payload.campaign else None
+
+        async with db_service.get_connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO waitlist_leads
+                    (email, name, phone, consent_given_at, confirm_token,
+                     confirm_token_expires_at, source, ip_hash, user_agent,
+                     created_at, campaign, utm_source, utm_medium, utm_campaign,
+                     utm_content, utm_term, landing_path, angebot)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                        $11, $12, $13, $14, $15, $16, $17, $18)
+                """,
+                payload.email.lower(),
+                payload.name,
+                payload.phone,
+                now,
+                confirm_token,
+                token_expires,
+                payload.source or "early-access",
+                ip_hash,
+                user_agent,
+                now,
+                payload.campaign,
+                payload.utm_source,
+                payload.utm_medium,
+                payload.utm_campaign,
+                payload.utm_content,
+                payload.utm_term,
+                payload.landing_path,
+                angebot,
+            )
 
         frontend_url = os.getenv("FRONTEND_URL", "https://complyo.de")
         confirm_url = f"{frontend_url}/api/leads/waitlist/confirm?token={confirm_token}"
@@ -167,12 +518,26 @@ async def join_waitlist(
             confirm_url,
         )
 
+        # Herkunft in einer Zeile, damit die Meldung ohne Datenbankblick sagt,
+        # welche Anzeige den Eintrag gebracht hat.
+        herkunft = " / ".join(
+            t for t in (
+                payload.campaign,
+                payload.utm_source,
+                payload.utm_medium,
+                payload.utm_campaign,
+                payload.utm_content,
+            ) if t
+        )
+
         background_tasks.add_task(
             email_service.send_waitlist_admin_notification,
             payload.email.lower(),
             payload.name or "",
             payload.phone or "",
             payload.source or "early-access",
+            herkunft,
+            angebot or "",
         )
 
         logger.info(f"Waitlist registration pending confirmation: {payload.email}")
@@ -191,45 +556,130 @@ async def join_waitlist(
         )
 
 
+@lead_router.get("/waitlist/plaetze")
+async def waitlist_plaetze():
+    """Wie viele Early-Access-Plaetze noch frei sind.
+
+    Bewusst ohne Auth, im Unterschied zu /api/leads/stats: dort standen
+    Geschaeftszahlen offen im Netz, hier geht genau eine Zahl heraus, die
+    ohnehin gross auf der Werbeseite steht. Sie muss oeffentlich sein, weil die
+    Seite sie ungeloggt anzeigen soll - und sie muss aus der Datenbank kommen,
+    weil "nur noch X Plaetze" sonst eine unbelegte Werbeaussage waere.
+
+    Gezaehlt werden vergebene Plaetze, nicht Anmeldungen: die Gesamtzahl der
+    Leads ist eine Geschaeftszahl und bleibt drin.
+    """
+    try:
+        async with db_service.get_connection() as conn:
+            vergeben = int(
+                await conn.fetchval(
+                    "SELECT COUNT(*) FROM waitlist_leads WHERE platz_nr IS NOT NULL"
+                )
+                or 0
+            )
+    except Exception as e:
+        # Der Zaehler darf die Seite nicht mitreissen. Faellt er aus, zeigt das
+        # Frontend das Angebot ohne Zahl an, statt gar nichts anzuzeigen.
+        logger.error(f"Waitlist-Plaetze nicht lesbar: {e}", exc_info=True)
+        raise HTTPException(status_code=503, detail="Zaehler nicht verfuegbar")
+
+    return {
+        "gesamt": EARLY_ACCESS_PLAETZE,
+        "vergeben": vergeben,
+        "frei": max(0, EARLY_ACCESS_PLAETZE - vergeben),
+    }
+
+
 @lead_router.get("/waitlist/confirm")
-async def confirm_waitlist(token: str):
+async def confirm_waitlist(token: str, background_tasks: BackgroundTasks):
     """
     Double-Opt-In Bestätigung via E-Mail-Link
     """
     frontend_url = os.getenv("FRONTEND_URL", "https://complyo.de")
     try:
-        lead = await db_service.execute_query(
-            """
-            SELECT id, confirm_token_expires_at, confirmed_at
-            FROM waitlist_leads
-            WHERE confirm_token = $1
-            """,
-            token,
-            fetch_one=True,
-        )
+        async with db_service.get_connection() as conn:
+            lead = await conn.fetchrow(
+                """
+                SELECT id, email, name, phone, source, confirm_token_expires_at,
+                       confirmed_at, angebot, landing_path, platz_nr,
+                       campaign, utm_source, utm_medium, utm_campaign, utm_content
+                FROM waitlist_leads
+                WHERE confirm_token = $1
+                """,
+                token,
+            )
 
         if not lead:
             logger.warning(f"Waitlist confirm: unknown token {token[:8]}…")
             return RedirectResponse(url=f"{frontend_url}/?confirmed=0", status_code=302)
 
-        expires_at = lead.get("confirm_token_expires_at")
+        # Zurueck auf die Seite, von der die Anmeldung kam. Vorher landete jeder
+        # auf der Startseite - wer ueber eine Anzeige kam, sah nach dem Klick
+        # etwas anderes als das, wofuer er sich angemeldet hatte. Der Pfad ist
+        # beim Speichern gegen offene Weiterleitungen geprueft worden.
+        ziel = lead["landing_path"] or "/"
+
+        expires_at = lead["confirm_token_expires_at"]
         if expires_at and datetime.now(timezone.utc) > expires_at:
             logger.warning(f"Waitlist confirm: expired token {token[:8]}…")
-            return RedirectResponse(url=f"{frontend_url}/?confirmed=0", status_code=302)
+            return RedirectResponse(url=f"{frontend_url}{ziel}?confirmed=0", status_code=302)
 
-        await db_service.execute_query(
-            """
-            UPDATE waitlist_leads
-            SET confirmed_at = $1, confirm_token = NULL, confirm_token_expires_at = NULL
-            WHERE id = $2
-            """,
-            datetime.now(timezone.utc),
-            lead["id"],
-            fetch_one=False,
+        # Platznummer erst hier, nicht schon bei der Anmeldung: ein Eintrag, der
+        # nie bestaetigt wird, darf keinen der 100 Plaetze blockieren.
+        # nextval ist race-frei, zwei gleichzeitige Bestaetigungen koennen also
+        # nicht dieselbe Nummer ziehen. Wer ueber dem Kontingent liegt, bleibt
+        # auf der Warteliste, bekommt aber keinen Platz - und damit auch nicht
+        # den zugesagten Preis.
+        platz_nr = None
+        async with db_service.get_connection() as conn:
+            if lead["angebot"]:
+                gezogen = int(
+                    await conn.fetchval("SELECT nextval('waitlist_platz_seq')") or 0
+                )
+                if 0 < gezogen <= EARLY_ACCESS_PLAETZE:
+                    platz_nr = gezogen
+
+            await conn.execute(
+                """
+                UPDATE waitlist_leads
+                SET confirmed_at = $1, confirm_token = NULL,
+                    confirm_token_expires_at = NULL,
+                    platz_nr = COALESCE(platz_nr, $3)
+                WHERE id = $2
+                """,
+                datetime.now(timezone.utc),
+                lead["id"],
+                platz_nr,
+            )
+
+        # Zweite Meldung an uns: erst der Klick im Bestaetigungslink macht aus
+        # einer Formulareingabe einen Interessenten, den man anschreiben darf.
+        # Ohne diese Mail saehe man nur Anmeldungen und wuesste nie, welche davon
+        # bestaetigt wurden — genau die Zahl, an der sich das Interesse ablesen
+        # laesst.
+        herkunft = " / ".join(
+            t for t in (
+                lead["campaign"], lead["utm_source"], lead["utm_medium"],
+                lead["utm_campaign"], lead["utm_content"],
+            ) if t
+        )
+        background_tasks.add_task(
+            email_service.send_waitlist_admin_notification,
+            lead["email"],
+            lead["name"] or "",
+            lead["phone"] or "",
+            lead["source"] or "",
+            herkunft,
+            lead["angebot"] or "",
+            True,
+            platz_nr,
         )
 
-        logger.info(f"Waitlist confirmed for lead {lead['id']}")
-        return RedirectResponse(url=f"{frontend_url}/?confirmed=1", status_code=302)
+        logger.info(f"Waitlist confirmed for lead {lead['id']} (Platz {platz_nr})")
+        ziel_url = f"{frontend_url}{ziel}?confirmed=1"
+        if platz_nr:
+            ziel_url += f"&platz={platz_nr}"
+        return RedirectResponse(url=ziel_url, status_code=302)
 
     except HTTPException:
         raise
@@ -277,8 +727,13 @@ async def collect_lead(
     4. Returns success status
     """
     try:
-        # Get client information for GDPR audit trail
-        client_ip = http_request.client.host if http_request.client else "unknown"
+        # Einwilligungsnachweis: hier muss die IP des Besuchers stehen, nicht die
+        # des Gateways. Hinter nginx liefert request.client.host immer 172.22.0.x,
+        # und ein Audit-Trail, in dem bei jedem Lead dieselbe interne Proxy-IP
+        # steht, belegt gar nichts. get_client_ip wertet X-Forwarded-For nur aus,
+        # wenn die Anfrage von einem Proxy aus TRUSTED_PROXIES kommt; dem blanken
+        # Header zu glauben waere das andere Extrem, denn der Client setzt ihn selbst.
+        client_ip = get_client_ip(http_request)
         user_agent = http_request.headers.get("user-agent", "unknown")
         
         # Validate required fields
@@ -399,8 +854,9 @@ async def verify_email(
     3. Returns success page
     """
     try:
-        # Get client information for audit trail
-        client_ip = request.client.host if request.client else "unknown"
+        # Audit-Trail der Double-Opt-In-Bestaetigung, dieselbe Begruendung wie in
+        # collect_lead: hinter nginx ist request.client.host die Gateway-IP.
+        client_ip = get_client_ip(request)
         user_agent = request.headers.get("user-agent", "unknown")
         
         logger.info(f"Processing email verification for token: {token[:8]}...")
@@ -463,11 +919,13 @@ async def verify_email(
         )
 
 @lead_router.get("/stats")
-async def get_lead_statistics():
+async def get_lead_statistics(admin: dict = Depends(require_admin)):
     """
-    Get public lead statistics (for demo/transparency purposes)
-    
-    Returns anonymized statistics about lead generation
+    Lead-Statistiken — Admin-only.
+
+    Waren bis 2026-07-17 ohne jede Auth abrufbar ("public ... for transparency"):
+    Gesamt-/Verified-/Converted-Zahlen sind Geschäftszahlen und gehören nicht
+    an die Öffentlichkeit. Kein Aufrufer im Dashboard/Landing hängt daran.
     """
     try:
         stats = await db_service.get_lead_statistics()
@@ -493,11 +951,32 @@ async def get_lead_statistics():
             "timestamp": datetime.now().isoformat()
         }
 
+class UnsubscribeRequest(BaseModel):
+    email: EmailStr
+    token: Optional[str] = None
+
+
 @lead_router.post("/unsubscribe")
-async def unsubscribe_lead(email: EmailStr):
+async def unsubscribe_lead(request: UnsubscribeRequest):
     """
-    Unsubscribe lead from marketing communications (GDPR Article 7)
+    Abmeldung von Marketing-Kommunikation (Art. 7 DSGVO).
+
+    Bis 2026-07-17 genügte eine beliebige E-Mail-Adresse — jeder konnte jeden
+    abmelden. Analog zu GET /verify/{token} ist jetzt ein Token Pflicht; er wird
+    per HMAC aus E-Mail + JWT_SECRET abgeleitet (siehe unsubscribe_token_for)
+    und gehört in den Abmeldelink der versendeten Mails.
+
+    Die Signatur bleibt {email, token} — Aufrufer ohne gültigen Token: 403.
     """
+    email = request.email
+
+    if not _verify_unsubscribe_token(email, request.token):
+        logger.warning(f"Unsubscribe mit ungültigem/fehlendem Token für {email}")
+        raise HTTPException(
+            status_code=403,
+            detail="Ungültiger oder fehlender Abmelde-Token.",
+        )
+
     try:
         success = await db_service.update_lead_status_by_email(email, 'unsubscribed')
         

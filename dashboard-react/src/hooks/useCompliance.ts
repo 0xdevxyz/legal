@@ -2,7 +2,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { analyzeWebsite, startAIFix, bookExpertConsultation, getLegalNews, apiClient } from '@/lib/api';
 import type { ComplianceAnalysis } from '@/types/api';
 
-export const useComplianceAnalysis = (url: string | null) => {
+/**
+ * @param scanTokenRef Fortschritts-Token des laufenden Scans. Der Scanner meldet
+ *   darunter, welche Pruefung gerade laeuft (`/api/v2/analyze-progress/{token}`).
+ *   Ohne Token gibt es keinen Fortschritt — genau deshalb zeigte der Rescan im
+ *   Backoffice nur einen Spinner, waehrend der Scan auf der Startseite eine
+ *   Live-Liste hatte. Als Ref, damit der Query-Key stabil bleibt und die
+ *   bestehenden invalidateQueries-Aufrufe weiter greifen.
+ */
+export const useComplianceAnalysis = (
+  url: string | null,
+  scanTokenRef?: { current: string | null },
+) => {
   return useQuery<ComplianceAnalysis>({
     queryKey: ['compliance-analysis', url],
     queryFn: async () => {
@@ -16,7 +27,7 @@ export const useComplianceAnalysis = (url: string | null) => {
       const trimmedUrl = url.trim();
 
       try {
-        const result = await analyzeWebsite(trimmedUrl);
+        const result = await analyzeWebsite(trimmedUrl, undefined, scanTokenRef?.current ?? undefined);
 
         return result;
       } catch (error) {
@@ -118,7 +129,6 @@ export const useLatestScan = () => {
           // Noch keine Scans vorhanden
           return null;
         }
-        console.log('Latest scan nicht verfügbar');
         return null;
       }
     },
@@ -140,7 +150,6 @@ export const useScanHistory = (limit: number = 10) => {
         if (error?.response?.status === 404) {
           return [];
         }
-        console.log('Scan history nicht verfügbar');
         return [];
       }
     },
@@ -158,12 +167,13 @@ export const useCreateFixJob = () => {
       scan_id: string; 
       issue_id: string; 
       issue_data: any;
+      // Beleg der Freigabe, siehe Ziffer 8 der AGB.
+      fix_typ?: string;
+      hinweis_version?: string;
     }) => {
-      console.log('🔧 Creating fix job with payload:', payload);
       
       try {
         const response = await apiClient.post('/api/fix-jobs', payload);
-        console.log('✅ Fix job created successfully:', response.data);
         return response.data?.data;
       } catch (error: any) {
         console.error('❌ Fix job creation failed:', {
@@ -176,7 +186,6 @@ export const useCreateFixJob = () => {
       }
     },
     onSuccess: () => {
-      console.log('✅ Fix job created, invalidating queries...');
       // Invalidate active jobs to refresh UI
       queryClient.invalidateQueries({ queryKey: ['active-fix-jobs'] });
     },
@@ -221,7 +230,6 @@ export const useActiveFixJobs = () => {
           // Endpoint existiert nicht - return leeres Array
           return [];
         }
-        console.log('Active jobs nicht verfügbar');
         return [];
       }
     },

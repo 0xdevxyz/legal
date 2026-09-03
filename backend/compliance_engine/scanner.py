@@ -7,11 +7,10 @@ import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
 from typing import Dict, List, Any, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 import re
 from datetime import datetime
-import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 import ssl
 import certifi
 import logging
@@ -21,17 +20,19 @@ logger = logging.getLogger(__name__)
 # Import modulare Checks
 from compliance_engine.checks import (
     check_impressum_compliance,
-    check_impressum_compliance_smart,
     check_datenschutz_compliance,
-    check_datenschutz_compliance_smart,
     check_cookie_compliance,
     check_barrierefreiheit_compliance,
-    check_barrierefreiheit_compliance_smart,
     check_agb_compliance,
     check_shop_compliance,
     check_uwg_compliance,
+    check_ai_act_transparency,
 )
+from compliance_engine.checks.ki_bild_nachweis_check import check_ki_bild_nachweis
+from compliance_engine.checks.shop_check import detect_shop
 from compliance_engine.browser_renderer import smart_fetch_html, detect_client_rendering
+from compliance_engine.sicherer_abruf import hole
+from compliance_engine.checks.cookie_check import consent_render_needed
 
 # Import declarative (data-driven) checks — automatisch befüllbar durch den Legal-Change-Monitor
 from compliance_engine.declarative_check_runner import run_declarative_checks
@@ -52,7 +53,7 @@ except ImportError:
     logger.warning("⚠️ TCF 2.2 module not available")
 
 # Import centralized Score Calculator (✅ FIX: Einzige Source of Truth)
-from compliance_engine.score_calculator import ScoreCalculator
+from compliance_engine.score_calculator import ScoreCalculator, PillarStatus
 
 @dataclass
 class ComplianceIssue:
@@ -70,15 +71,185 @@ class ComplianceIssue:
     fix_code: Optional[str] = None  # Vorgeschlagener Fix-Code
     suggested_alt: Optional[str] = None  # AI-generierter Alt-Text
     image_src: Optional[str] = None  # Bild-URL
+    effort: str = ""  # Bearbeitungsaufwand (v4.0): gering | mittel | experte
     metadata: Dict = None  # Zusätzliche Metadaten
     
     def __post_init__(self):
         if self.metadata is None:
             self.metadata = {}
 
+# Bekannte Fremd-Schreibweisen -> die drei Stufen, die der ScoreCalculator kennt.
+# Alles Unbekannte wird bewusst zu 'warning' statt still zu verschwinden.
+_SEVERITY_ALIASE = {
+    "critical": "critical",
+    "error": "critical",
+    "high": "critical",
+    "serious": "critical",
+    "warning": "warning",
+    "moderate": "warning",
+    "medium": "warning",
+    "minor": "warning",
+    "info": "info",
+    "low": "info",
+    "notice": "info",
+}
+
+
+def normalize_severities(issues: "List[ComplianceIssue]") -> "List[ComplianceIssue]":
+    """
+    Bringt jeden Befund auf critical/warning/info.
+
+    Ohne das faellt ein Befund mit einer fremden Stufe (z.B. 'error') komplett
+    aus Score UND Saeulen-Status heraus — er steht in der Liste, kostet aber
+    nichts. Ein unbekannter Wert wird zu 'warning' hochgezogen, damit ein
+    Mangel im Zweifel zaehlt statt zu verschwinden.
+    """
+    for issue in issues:
+        roh = (getattr(issue, "severity", "") or "").strip().lower()
+        normalisiert = _SEVERITY_ALIASE.get(roh)
+        if normalisiert is None:
+            logger.warning(
+                f"Unbekannte Severity '{roh}' in '{getattr(issue, 'title', '')}' "
+                f"— als 'warning' gewertet"
+            )
+            normalisiert = "warning"
+        issue.severity = normalisiert
+    return issues
+
+
+_DEDUP_UMLAUTE = (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss"))
+
+
+# "WCAG 1.2.2: " am Titelanfang beschreibt die Norm, nicht den Mangel —
+# derselbe Fund mit und ohne dieses Praefix ist ein Fund.
+_WCAG_PRAEFIX = re.compile(r"^\s*wcag\s*[\d.]+\s*[:\-–]\s*")
+
+
+def _dedup_key(issue) -> str:
+    """
+    Formunabhaengiger Schluessel eines Befunds.
+
+    Zahlen, Trennzeichen und Umlaute fallen weg, damit "4 Formular-Felder ohne
+    Label" und "4 Formularfelder ohne Label" als derselbe Mangel erkannt werden.
+
+    Gruppiert wird ueber die SAEULE, nicht die Kategorie: "Video ohne
+    Untertitel" kam einmal aus 'barrierefreiheit' und einmal aus
+    'media_accessibility' — zwei Kategorien, eine Saeule, ein Mangel.
+    """
+    text = (getattr(issue, "title", "") or "").lower()
+    text = _WCAG_PRAEFIX.sub("", text)
+    for umlaut, ersatz in _DEDUP_UMLAUTE:
+        text = text.replace(umlaut, ersatz)
+    text = re.sub(r"[^a-z]", "", text)
+    saeule = ScoreCalculator.categorize(getattr(issue, "category", "") or "")
+    return f"{saeule}|{text}"
+
+
+# Felder, die einen Befund an ein konkretes Element binden. Traegt ein Issue
+# eines davon, ist es eine Fundstelle mit eigenen Fix-Daten — keine
+# Doppelmeldung, auch wenn zehn Geschwister denselben Titel haben.
+_FUNDSTELLEN_FELDER = ("image_src", "suggested_alt", "fix_code", "screenshot_url")
+
+
+def _ist_einzelfundstelle(issue) -> bool:
+    """True, wenn der Befund ein konkretes Element mit eigenen Fix-Daten meint."""
+    return any(
+        (getattr(issue, feld, None) or "").strip()
+        for feld in _FUNDSTELLEN_FELDER
+    )
+
+
+_SEVERITY_RANG = {"critical": 3, "warning": 2, "info": 1}
+
+
+def dedupe_issues(issues: "List[ComplianceIssue]") -> "List[ComplianceIssue]":
+    """
+    Fasst Mehrfachmeldungen desselben Mangels zu einer zusammen.
+
+    Es gewinnt die schwerwiegendste Variante — ein Mangel, den ein Checker als
+    critical und ein anderer als warning meldet, bleibt critical. Die Reihenfolge
+    der uebrigen Befunde bleibt erhalten.
+    """
+    beste = {}
+    reihenfolge = []
+    fundstellen = {}  # key -> Seiten, auf denen derselbe Mangel auftrat
+
+    def _seite_von(iss):
+        meta = getattr(iss, "metadata", None) or {}
+        return meta.get("page_url")
+
+    for issue in issues:
+        if _ist_einzelfundstelle(issue):
+            # Konkretes Element mit eigenen Fix-Daten — jede Fundstelle bleibt
+            # erhalten, sonst verliert die Alt-Text-Pipeline ihre Bilder.
+            reihenfolge.append(id(issue))
+            beste[id(issue)] = issue
+            continue
+        key = _dedup_key(issue)
+        if not key.split("|", 1)[1]:
+            # kein verwertbarer Titel → nicht zusammenfassen
+            reihenfolge.append(id(issue))
+            beste[id(issue)] = issue
+            continue
+
+        seite = _seite_von(issue)
+        if seite:
+            fundstellen.setdefault(key, [])
+            if seite not in fundstellen[key]:
+                fundstellen[key].append(seite)
+
+        vorhanden = beste.get(key)
+        if vorhanden is None:
+            beste[key] = issue
+            reihenfolge.append(key)
+            continue
+        neu_rang = _SEVERITY_RANG.get(getattr(issue, "severity", ""), 0)
+        alt_rang = _SEVERITY_RANG.get(getattr(vorhanden, "severity", ""), 0)
+        if neu_rang > alt_rang:
+            beste[key] = issue
+
+    # Fundstellen an den ueberlebenden Befund heften. Das ist der eigentliche
+    # Gewinn der Mehrseiten-Pruefung: nicht MEHR Befunde, sondern zu wissen,
+    # auf welchen Seiten derselbe Mangel zu beheben ist.
+    ergebnis = []
+    for k in reihenfolge:
+        iss = beste[k]
+        seiten = fundstellen.get(k) or []
+        if len(seiten) > 1:
+            iss.metadata = {
+                **(iss.metadata or {}),
+                "fundstellen": seiten,
+                "seiten_betroffen": len(seiten),
+            }
+        ergebnis.append(iss)
+    return ergebnis
+
+
+def _zeitnot_hinweis(nicht_geschafft: "List[str]") -> Dict[str, Any]:
+    """
+    Beschreibt offen gebliebene Unterseiten fuer den Report.
+
+    Ein Teilergebnis darf nicht so aussehen wie ein vollstaendiges: sonst liest
+    der Kunde "3 Seiten geprueft, alles sauber", wo in Wahrheit 17 Seiten nie
+    angefasst wurden.
+    """
+    if not nicht_geschafft:
+        return {}
+    return {
+        "unvollstaendig": True,
+        "nicht_geprueft": nicht_geschafft,
+        "zeitnot_hinweis": (
+            f"{len(nicht_geschafft)} Unterseite(n) konnten im Zeitrahmen dieses "
+            f"Scans nicht geprueft werden. Die Bewertung stuetzt sich auf die "
+            f"tatsaechlich geprueften Seiten."
+        ),
+    }
+
+
 class ComplianceScanner:
     def __init__(self):
         self.session = None
+        self._startseiten_html = None
         
     async def __aenter__(self):
         # Create SSL context
@@ -88,7 +259,7 @@ class ComplianceScanner:
             timeout=aiohttp.ClientTimeout(total=55),
             connector=connector,
             headers={
-                'User-Agent': 'Complyo-Scanner/2.0 (Compliance Bot; +https://complyo.tech/scanner)'
+                'User-Agent': 'Complyo-Scanner/2.0 (Compliance Bot; +https://complyo.de/scanner)'
             }
         )
         return self
@@ -97,13 +268,329 @@ class ComplianceScanner:
         if self.session:
             await self.session.close()
 
-    async def scan_website(self, url: str) -> Dict[str, Any]:
+    # ------------------------------------------------------------------
+    # Mehrseiten-Pruefung
+    # ------------------------------------------------------------------
+    # Checks, die pro Unterseite etwas Neues finden koennen. Alles andere
+    # (SSL, Security-Header, Cookie-Banner, Impressums-Existenz, KI-Systeme)
+    # gilt seitenweit und wird nur auf der Startseite geprueft.
+    SEITENSPEZIFISCHE_KATEGORIEN = {
+        "barrierefreiheit", "media_accessibility", "tastaturbedienung",
+        "kontraste", "shop", "uwg", "datenschutz",
+        # KI-Bilder stehen auf Unterseiten haeufiger als auf der Startseite
+        # (Leistungsseiten, Blog). Ohne diesen Eintrag faellt jeder Fund
+        # ausserhalb der Startseite stumm heraus.
+        "ai_act_transparency",
+    }
+
+    # Zeitbudgets (eingefuehrt 01.09.2026 nach dem Totalausfall an
+    # zua-zwickau.de: 389 s Scan gegen 300 s Endpunkt-Abbruch = kein Ergebnis).
+    #
+    # Der Grundsatz: ein langsamer Einzelcheck kostet seinen eigenen Befund,
+    # nicht den ganzen Scan. Ein Teilergebnis ist immer besser als ein Fehler.
+    CHECK_ZEITBUDGET = 60.0        # je Einzelcheck auf einer Unterseite
+    SEITE_ZEITBUDGET = 90.0        # je Unterseite insgesamt
+    SEITENSUCHE_ZEITBUDGET = 45.0  # fuer das Finden der Unterseiten
+    # Gesamtbudget eines Mehrseiten-Scans. Muss unter dem Abbruch des Aufrufers
+    # liegen (/api/v2/analyze bricht bei 300 s ab): laeuft ZUERST unsere Frist
+    # ab, liefern wir ein Teilergebnis; laeuft zuerst seine ab, faellt alles weg.
+    GESAMT_ZEITBUDGET = 265.0
+    # Was der Unterseiten-Phase mindestens bleibt, auch wenn Startseite und
+    # Seitensuche schon viel verbraucht haben — sonst waere sie wertlos.
+    MEHRSEITEN_MINDESTZEIT = 30.0
+
+    async def _pruefe_unterseite(self, seite_url: str, klasse: str) -> "List[ComplianceIssue]":
+        """
+        Schlanke Pruefung einer Unterseite.
+
+        Gibt Issues zurueck, die bereits mit der Fundstelle versehen sind —
+        ohne page_url waere im Report nicht erkennbar, WO der Mangel sitzt,
+        und der Nutzer muesste jede Seite selbst suchen.
+        """
+        from .checks.barrierefreiheit_check import check_barrierefreiheit_compliance_smart
+        from .checks.ki_bild_nachweis_check import check_ki_bild_nachweis
+        from .checks.shop_check import check_shop_compliance
+        from .declarative_check_runner import run_declarative_checks
+
+        issues: "List[ComplianceIssue]" = []
+        try:
+            seite = await self._fetch_page(seite_url)
+            if not seite or seite.get("status_code", 0) >= 400:
+                logger.info(f"Unterseite nicht auswertbar: {seite_url}")
+                return []
+            html = seite["content"]
+            soup = BeautifulSoup(html, "html.parser")
+        except Exception as e:
+            logger.warning(f"Unterseite {seite_url} nicht abrufbar: {e}")
+            return []
+
+        # Jeder Check bekommt sein eigenes Budget. Reisst einer es, faellt SEIN
+        # Befund weg und die uebrigen Checks liefern weiter — vorher zog ein
+        # haengender Check die ganze Seite und damit den ganzen Scan mit.
+        async def _mit_budget(name: str, koroutine):
+            try:
+                return await asyncio.wait_for(koroutine, timeout=self.CHECK_ZEITBUDGET)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"⏱️ Check '{name}' auf {seite_url} nach {self.CHECK_ZEITBUDGET:.0f}s "
+                    f"abgebrochen — die uebrigen Checks laufen weiter."
+                )
+                return []
+
+        aufgaben = [_mit_budget(
+            "barrierefreiheit",
+            check_barrierefreiheit_compliance_smart(seite_url, html, self.session),
+        )]
+        # Shop-Pflichten nur dort, wo verkauft wird — auf einer Impressumsseite
+        # nach dem Bestellbutton zu suchen, ergibt keinen Sinn.
+        if klasse in ("interaktion", "angebot"):
+            aufgaben.append(_mit_budget(
+                "shop", check_shop_compliance(seite_url, soup, self.session)))
+        aufgaben.append(_mit_budget(
+            "declarative", run_declarative_checks(seite_url, soup, self.session)))
+        aufgaben.append(_mit_budget("ki_bild", check_ki_bild_nachweis(
+            seite_url, soup, self.session,
+            bereits_geprueft=getattr(self, "_ki_bilder_gesehen", None),
+        )))
+
+        ergebnisse = await asyncio.gather(*aufgaben, return_exceptions=True)
+
+        known = {fld.name for fld in fields(ComplianceIssue)}
+        for erg in ergebnisse:
+            if isinstance(erg, Exception):
+                logger.warning(f"Check auf {seite_url} fehlgeschlagen: {erg}")
+                continue
+            for roh in (erg or []):
+                if isinstance(roh, ComplianceIssue):
+                    issue = roh
+                else:
+                    kwargs = {k: v for k, v in roh.items() if k in known}
+                    extra = {k: v for k, v in roh.items() if k not in known}
+                    issue = ComplianceIssue(**kwargs)
+                    if extra:
+                        issue.metadata = {**(issue.metadata or {}), **extra}
+                if issue.category not in self.SEITENSPEZIFISCHE_KATEGORIEN:
+                    continue
+                # Fundstelle festhalten
+                issue.metadata = {**(issue.metadata or {}), "page_url": seite_url}
+                issues.append(issue)
+        return issues
+
+    async def scan_website_multipage(
+        self, url: str, max_seiten: int = 10, progress_token: "Optional[str]" = None,
+        zeitbudget: "Optional[float]" = None,
+    ) -> Dict[str, Any]:
+        """
+        Prueft Startseite plus die rechtlich relevantesten Unterseiten.
+
+        Args:
+            url:        Startseite
+            max_seiten: Budget fuer Unterseiten (0 = wie scan_website)
+            zeitbudget: Sekunden fuer den GESAMTEN Scan (Startseite + Seitensuche
+                        + Unterseiten). Was die Startseite verbraucht hat, geht
+                        von der Unterseiten-Phase ab; laeuft die Frist ab, werden
+                        die offenen Seiten abgebrochen und das Ergebnis der
+                        fertigen Seiten ausgeliefert (Teilergebnis statt
+                        Totalausfall). None = GESAMT_ZEITBUDGET.
+
+        Returns:
+            Das Ergebnis von scan_website, ergaenzt um die Unterseiten-Befunde
+            und einen Block `pages_scanned`. Score und Saeulen werden ueber
+            ALLE Seiten neu berechnet.
+        """
+        from .page_discovery import entdecke_seiten
+
+        beginn = datetime.now()
+        gesamtbudget = self.GESAMT_ZEITBUDGET if zeitbudget is None else zeitbudget
+        def _restzeit() -> float:
+            return gesamtbudget - (datetime.now() - beginn).total_seconds()
+
+        ergebnis = await self.scan_website(url, progress_token=progress_token)
+        if max_seiten <= 0 or ergebnis.get("scan_status") == "error" or ergebnis.get("error"):
+            return ergebnis
+
+        try:
+            entdeckung = await asyncio.wait_for(
+                entdecke_seiten(
+                    url,
+                    html=getattr(self, "_startseiten_html", None),
+                    session=self.session,
+                    max_seiten=max_seiten,
+                ),
+                timeout=max(5.0, min(self.SEITENSUCHE_ZEITBUDGET, _restzeit())),
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"⏱️ Seitensuche fuer {url} abgebrochen (Restzeit aufgebraucht) — "
+                f"Ergebnis der Startseite wird ausgeliefert."
+            )
+            return ergebnis
+        except Exception as e:
+            logger.warning(f"Seitensuche fehlgeschlagen, bleibe bei der Startseite: {e}")
+            return ergebnis
+
+        if not entdeckung.seiten:
+            ergebnis["pages_scanned"] = {
+                "total": 1, "urls": [url],
+                "note": "Keine weiteren prüfenswerten Unterseiten gefunden.",
+            }
+            return ergebnis
+
+        # Unterseiten parallel, aber gedrosselt — wir sind Gast auf fremden Servern.
+        from . import scan_progress as _fortschritt
+        from urllib.parse import urlparse as _urlparse
+
+        def _seitenlabel(u: str) -> str:
+            pfad = _urlparse(u).path or "/"
+            return "Startseite" if pfad in ("", "/") else pfad
+
+        if progress_token:
+            _fortschritt.setze_phase(progress_token, "Unterseiten werden geprüft")
+            _fortschritt.registriere_checks(
+                progress_token, "Mehrseiten-Prüfung",
+                ["Unterseiten entdecken (Sitemap)"] + [_seitenlabel(s.url) for s in entdeckung.seiten],
+            )
+            _fortschritt.melde(progress_token, "Mehrseiten-Prüfung", "Unterseiten entdecken (Sitemap)")
+
+        semaphor = asyncio.Semaphore(4)
+
+        async def eine(seite):
+            async with semaphor:
+                try:
+                    return await asyncio.wait_for(
+                        self._pruefe_unterseite(seite.url, seite.klasse),
+                        timeout=self.SEITE_ZEITBUDGET,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        f"⏱️ Unterseite {seite.url} nach {self.SEITE_ZEITBUDGET:.0f}s "
+                        f"abgebrochen — der Scan laeuft mit den uebrigen Seiten weiter."
+                    )
+                    return []
+                finally:
+                    _fortschritt.melde(progress_token, "Mehrseiten-Prüfung", _seitenlabel(seite.url))
+
+        # Frist fuer die gesamte Unterseiten-Phase. Was bis dahin fertig ist,
+        # kommt ins Ergebnis; der Rest wird abgebrochen. Ein Kunde mit 40
+        # Unterseiten im Tarif bekommt so einen ehrlichen Teilbefund statt
+        # eines HTTP 504, hinter dem gar nichts steht.
+        frist = max(self.MEHRSEITEN_MINDESTZEIT, _restzeit())
+        # Reihenfolge bleibt die der Seitensuche (nach rechtlicher Relevanz) —
+        # asyncio.wait gibt Mengen zurueck, der Report soll aber nicht bei jedem
+        # Lauf eine andere Seitenliste zeigen.
+        laeufe = [(seite, asyncio.ensure_future(eine(seite))) for seite in entdeckung.seiten]
+        fertig, offen = await asyncio.wait([t for _, t in laeufe], timeout=frist)
+        for task in offen:
+            task.cancel()
+        if offen:
+            await asyncio.gather(*offen, return_exceptions=True)
+            logger.warning(
+                f"⏱️ Mehrseiten-Frist ({frist:.0f}s) erreicht: {len(offen)} von "
+                f"{len(entdeckung.seiten)} Unterseiten nicht geprueft — "
+                f"Teilergebnis wird ausgeliefert."
+            )
+
+        neue: "List[ComplianceIssue]" = []
+        geprueft = [url]
+        nicht_geschafft = []
+        for seite, task in laeufe:
+            if task not in fertig:
+                nicht_geschafft.append(seite.url)
+                continue
+            try:
+                liste = task.result()
+            except Exception as e:
+                logger.warning(f"Unterseite {seite.url} fehlgeschlagen: {e}")
+                continue
+            geprueft.append(seite.url)
+            neue.extend(liste)
+
+        if not neue:
+            ergebnis["pages_scanned"] = {
+                "total": len(geprueft), "urls": geprueft,
+                **_zeitnot_hinweis(nicht_geschafft),
+            }
+            return ergebnis
+
+        # Bestehende Startseiten-Issues zurueckholen und zusammenfuehren.
+        alt_dicts = ergebnis.get("issues") or []
+        known = {fld.name for fld in fields(ComplianceIssue)}
+        alt: "List[ComplianceIssue]" = []
+        for d in alt_dicts:
+            kwargs = {k: v for k, v in d.items() if k in known}
+            extra = {k: v for k, v in d.items() if k not in known}
+            iss = ComplianceIssue(**kwargs)
+            if extra:
+                iss.metadata = {**(iss.metadata or {}), **extra}
+            iss.metadata = {**(iss.metadata or {}), "page_url": iss.metadata.get("page_url", url)}
+            alt.append(iss)
+
+        alle = normalize_severities(alt + neue)
+        # Derselbe Mangel auf fuenf Unterseiten ist EINE Aufgabe, nicht fuenf.
+        # dedupe_issues fasst ueber die Saeule zusammen; die erste Fundstelle
+        # bleibt erhalten, die Anzahl merken wir uns separat.
+        vor_dedup = len(alle)
+        alle = dedupe_issues(alle)
+
+        # Ungeprüfte Säulen aus dem Erst-Scan durchreichen: scheiterte dort z.B.
+        # der axe-Check, lag für die Säule KEINE Evidenz vor (Status UNVERIFIED).
+        # Ohne diese Menge rechnete der Mehrseiten-Rescore die Säule wieder auf
+        # 100/compliant hoch — genau die falsche Entwarnung, die das
+        # UNVERIFIED-Prinzip verhindern soll. Liefern Unterseiten Issues für die
+        # Säule, gewinnen die Issues (echte Evidenz schlägt fehlende Evidenz).
+        unverified_pillars = {
+            pillar for pillar, status in (ergebnis.get("pillar_status") or {}).items()
+            if status == PillarStatus.UNVERIFIED
+        }
+
+        _scores = ScoreCalculator.compute_with_status(alle, unverified_pillars)
+        ergebnis["issues"] = [asdict(i) for i in alle]
+        ergebnis["overall_score"] = _scores["overall_score"]
+        ergebnis["compliance_score"] = _scores["overall_score"]
+        # EIN Format für pillar_scores: dieselbe Liste wie beim Einzelseiten-Scan
+        # (scan_website, s.u.). Vorher stand hier das rohe Dict {pillar: score} —
+        # je nach Scan-Weg landeten dadurch zwei Formate in score_history, und
+        # das Dashboard fand seine Säulen nicht (.find() auf einem Dict).
+        ergebnis["pillar_scores"] = [
+            {
+                "pillar": pillar,
+                "score": round(score),
+                "status": _scores["pillar_status"].get(pillar),
+            }
+            for pillar, score in _scores["pillar_scores"].items()
+        ]
+        ergebnis["pillar_status"] = _scores["pillar_status"]
+        ergebnis["total_issues"] = len(alle)
+        ergebnis["critical_issues"] = len([i for i in alle if i.severity == "critical"])
+        ergebnis["warning_issues"] = len([i for i in alle if i.severity == "warning"])
+        ergebnis["total_risk_euro"] = sum(i.risk_euro for i in alle)
+        ergebnis["pages_scanned"] = {
+            "total": len(geprueft),
+            "urls": geprueft,
+            "subpage_issues": len(neue),
+            "merged_duplicates": vor_dedup - len(alle),
+            "sitemap_used": entdeckung.sitemap_gefunden,
+            "note": entdeckung.hinweis or None,
+            **_zeitnot_hinweis(nicht_geschafft),
+        }
+        logger.info(
+            f"Mehrseiten-Scan {url}: {len(geprueft)} Seiten, {len(neue)} Unterseiten-Befunde, "
+            f"{vor_dedup - len(alle)} zusammengefasst, Score {_scores['overall_score']}"
+        )
+        return ergebnis
+
+    async def scan_website(self, url: str, progress_token: "Optional[str]" = None) -> Dict[str, Any]:
         """
         Comprehensive compliance scan of a website
         Returns detailed compliance report with risk assessment
         """
         start_time = datetime.now()
         issues = []
+        # Nie das HTML des vorigen Scans weiterreichen — dieselbe Scanner-Instanz
+        # kann mehrere Websites nacheinander pruefen.
+        self._startseiten_html = None
+        from . import scan_progress as _fortschritt
+        _fortschritt.setze_phase(progress_token, "Seite wird geladen")
         
         try:
             # Normalize URL
@@ -113,25 +600,129 @@ class ComplianceScanner:
             # Fetch main page
             main_page = await self._fetch_page(url)
             if not main_page:
-                return self._create_error_response(url, "Website nicht erreichbar")
-            
+                return self._create_error_response(
+                    url, "Website nicht erreichbar (Verbindungsfehler/Timeout).",
+                    reason="unreachable",
+                )
+
+            status_code = main_page.get('status_code', 0)
             soup = BeautifulSoup(main_page['content'], 'html.parser')
             main_page_headers = main_page.get('headers', {})
 
-            # Render once if browser is needed, share HTML across all checks
+            # ⚠️ Fehlerstatus, ABER vollständige Seite ausgeliefert: Viele (WordPress-)
+            # Seiten setzen wegen eines PHP-Fatals/Plugin-Fehlers im Shutdown einen
+            # 500er, rendern den Body aber komplett. Browser zeigen die Seite normal an
+            # und alle Compliance-Inhalte sind vorhanden → wir scannen den gelieferten
+            # Inhalt, statt irreführend abzubrechen. Echte Wartung/Down (502/503/504),
+            # Zugriffssperren (401/403) und 404 bleiben weiterhin "nicht scanbar".
+            body = main_page.get('content') or ""
+            title_tag = soup.title.string.strip() if (soup.title and soup.title.string) else ""
+            delivers_full_page = (
+                status_code not in (401, 403, 404, 502, 503, 504)
+                and len(body) > 3000
+                and '</html>' in body.lower()
+                and soup.find('body') is not None
+                and bool(title_tag)
+            )
+            if status_code >= 400 and delivers_full_page:
+                logger.warning(
+                    f"⚠️ {url} antwortet mit HTTP {status_code}, liefert aber eine "
+                    f"vollständige Seite ({len(body)} Bytes, Titel: '{title_tag[:60]}') "
+                    f"— Scan wird trotz Fehlerstatus durchgeführt."
+                )
+                status_code = 200  # als scanbar behandeln; Inhalt ist vollständig vorhanden
+
+            # 🚧 Nicht scanbar: HTTP-Fehlerstatus → Hinweis statt irreführendem Score.
+            # Grundsystem (CMS) trotzdem aus dem ausgelieferten HTML erkennen.
+            if status_code >= 400:
+                cms = self._detect_cms(soup, main_page_headers)
+                if status_code in (502, 503, 504):
+                    reason, notice = "maintenance", (
+                        f"Die Website ist aktuell nicht erreichbar (HTTP {status_code}, "
+                        f"vermutlich Wartungsmodus) und kann daher derzeit nicht auf "
+                        f"Compliance geprüft werden. Eine Prüfung ist nur bei produktiv "
+                        f"erreichbaren Seiten möglich — bitte wiederholen Sie den Scan nach "
+                        f"Wiederherstellung. Hinweis: Auch Wartungsseiten müssen bereits ein "
+                        f"Impressum und einen Link zur Datenschutzerklärung bereitstellen."
+                    )
+                elif status_code in (401, 403):
+                    reason, notice = "blocked", (
+                        f"Zugriff verweigert (HTTP {status_code}). Die Seite ist passwort-/"
+                        f"firewall-geschützt und konnte nicht gescannt werden."
+                    )
+                elif status_code == 404:
+                    reason, notice = "not_found", (
+                        f"Seite nicht gefunden (HTTP 404). Bitte prüfen Sie die URL."
+                    )
+                else:
+                    reason, notice = "http_error", (
+                        f"Die Website antwortete mit HTTP {status_code} und konnte nicht "
+                        f"vollständig gescannt werden."
+                    )
+                if cms:
+                    notice += f" Erkanntes Grundsystem: {cms}."
+                return self._create_error_response(
+                    url, notice, reason=reason, status_code=status_code, detected_cms=cms,
+                )
+
+            # Render once if browser is needed, share HTML across all checks.
+            # Zusätzlich zum klassischen CSR-Trigger wird auch gerendert, wenn ein
+            # (i.d.R. JS-injizierter) Cookie-Banner/Consent/Tracking vermutet wird,
+            # der im statischen HTML nicht sichtbar ist — sonst können dessen echte
+            # Buttons nicht funktional geprüft werden (Custom-Banner & Fehlkonfig.).
             rendered_html = main_page['content']
-            if detect_client_rendering(main_page['content'])[0]:
-                logger.info("🌐 Browser rendering needed — fetching once for all checks")
-                rendered_html, _ = await smart_fetch_html(url, main_page['content'])
-                logger.info("✅ Single browser render complete")
-                soup = BeautifulSoup(rendered_html, 'html.parser')
+            consent_buttons = None  # Button-Metriken aus dem Render (Dark-Pattern-Prüfung)
+            render_request_urls = None  # echte Netzwerk-Requests (Drittlandtransfer-Erkennung)
+            needs_render = detect_client_rendering(main_page['content'])[0]
+            render_reason = "client-side rendering"
+            if not needs_render and consent_render_needed(soup):
+                needs_render = True
+                render_reason = "consent/cookie-banner detection"
+            if needs_render:
+                logger.info(f"🌐 Browser rendering needed ({render_reason}) — fetching once for all checks")
+                try:
+                    rendered_html, render_meta = await smart_fetch_html(url, main_page['content'], force=True)
+                    logger.info("✅ Single browser render complete")
+                    soup = BeautifulSoup(rendered_html, 'html.parser')
+                    if isinstance(render_meta, dict):
+                        consent_buttons = render_meta.get('consent_buttons')
+                        render_request_urls = render_meta.get('request_urls')
+                except Exception as e:
+                    logger.warning(f"⚠️ Browser render failed ({e}); fallback auf statisches HTML")
+
+            # Fuer die Seitensuche im Mehrseiten-Scan aufheben: sie braucht genau
+            # dieses HTML, um die internen Links zu lesen, und holte die
+            # Startseite sonst ein zweites Mal (3-5 s, an schlechten Tagen mehr).
+            self._startseiten_html = rendered_html
+
+            # 🔎 Grundsystem (CMS) + Produktiv-Status erkennen
+            detected_cms = self._detect_cms(soup, main_page_headers)
+            is_placeholder, placeholder_kind = self._detect_placeholder(soup)
+            scan_notice = None
+            if is_placeholder:
+                scan_notice = (
+                    f"Diese Seite befindet sich aktuell im {placeholder_kind}-Modus "
+                    f"(Platzhalter-/Baustellenseite) und kann daher noch nicht vollständig "
+                    f"auf Compliance geprüft werden. Eine vollständige Prüfung ist nur bei "
+                    f"produktiv geschalteten (live erreichbaren) Seiten möglich — bitte "
+                    f"wiederholen Sie den Scan, sobald die Website online ist. "
+                    f"Wichtig: Auch Wartungs- und Baustellenseiten müssen bereits ein "
+                    f"Impressum sowie einen Link zur Datenschutzerklärung bereitstellen, "
+                    f"sobald sie öffentlich erreichbar sind."
+                )
+                if detected_cms:
+                    scan_notice += (
+                        f" Grundsystem erkannt: {detected_cms} — nach Veröffentlichung sind "
+                        f"zusätzlich i.d.R. ein Cookie-Banner und eine vollständige "
+                        f"Datenschutzerklärung erforderlich."
+                    )
 
             # Run all compliance checks in parallel using pre-rendered soup
             # barrierefreiheit: no session = single-page only (avoids multi-page scan)
             barriere_task = check_barrierefreiheit_compliance(url, soup, None)
             impressum_task = check_impressum_compliance(url, soup, self.session)
-            datenschutz_task = check_datenschutz_compliance(url, soup, self.session)
-            cookie_task = check_cookie_compliance(url, soup, self.session)
+            datenschutz_task = check_datenschutz_compliance(url, soup, self.session, request_urls=render_request_urls)
+            cookie_task = check_cookie_compliance(url, soup, self.session, consent_buttons=consent_buttons, request_urls=render_request_urls)
             agb_task = check_agb_compliance(url, soup, self.session)
             shop_task = check_shop_compliance(url, soup, self.session)
             declarative_task = run_declarative_checks(url, soup, self.session)
@@ -139,21 +730,68 @@ class ComplianceScanner:
             ssl_task = self._check_ssl_security(url, main_page_headers)
             contact_task = self._check_contact_data(url, soup)
             social_task = self._check_social_media_plugins(url, soup)
+            ai_act_task = check_ai_act_transparency(url, soup, request_urls=render_request_urls)
+            # Ueber alle Seiten mitgefuehrt: dasselbe Bild auf zehn Unterseiten
+            # ist ein Befund, nicht zehn.
+            self._ki_bilder_gesehen = set()
+            ki_bild_task = check_ki_bild_nachweis(
+                url, soup, self.session, bereits_geprueft=self._ki_bilder_gesehen
+            )
+
+            if progress_token:
+                _fortschritt.setze_phase(progress_token, "Prüfungen laufen")
+                _n = _fortschritt.nach
+                _RECHT = "Rechtstexte & Pflichtangaben"
+                _DSC = "Datenschutz & Cookies"
+                _A11Y = "Barrierefreiheit (BFSG)"
+                _TECH = "Technik & Sicherheit"
+                barriere_task = _n(barriere_task, progress_token, _A11Y, "axe-core & WCAG-Heuristiken (~100 Regeln)")
+                impressum_task = _n(impressum_task, progress_token, _RECHT, "Impressum")
+                agb_task = _n(agb_task, progress_token, _RECHT, "AGB & Widerruf")
+                shop_task = _n(shop_task, progress_token, _RECHT, "Shop-Pflichten (Button-Lösung, §312k)")
+                uwg_task = _n(uwg_task, progress_token, _RECHT, "Werbekennzeichnung (UWG)")
+                declarative_task = _n(declarative_task, progress_token, _RECHT, "Aktuelle Rechts-Checks (EUR-Lex)")
+                datenschutz_task = _n(datenschutz_task, progress_token, _DSC, "Datenschutzerklärung & Drittlandtransfer")
+                cookie_task = _n(cookie_task, progress_token, _DSC, "Cookie-Banner & Tracking (Netzwerk-Evidenz)")
+                ssl_task = _n(ssl_task, progress_token, _TECH, "SSL & Security-Header")
+                contact_task = _n(contact_task, progress_token, _TECH, "Kontaktformular (Art. 13)")
+                social_task = _n(social_task, progress_token, _TECH, "Social-Media-Plugins")
+                ai_act_task = _n(ai_act_task, progress_token, _TECH, "KI-Systeme & AI-Act-Transparenz")
+                ki_bild_task = _n(ki_bild_task, progress_token, _TECH, "Bilder auf KI-Nachweis (Art. 50)")
 
             results = await asyncio.gather(
                 barriere_task, impressum_task, datenschutz_task, cookie_task,
                 agb_task, shop_task, declarative_task, uwg_task,
-                ssl_task, contact_task, social_task,
+                ssl_task, contact_task, social_task, ai_act_task, ki_bild_task,
                 return_exceptions=True
             )
 
             barriere_issues, impressum_issues, datenschutz_issues, cookie_issues, \
                 agb_issues, shop_issues, declarative_issues, uwg_issues, \
-                ssl_issues, contact_issues, social_issues = results
+                ssl_issues, contact_issues, social_issues, ai_act_issues, \
+                ki_bild_issues = results
+
+            # ✅ v4.0 evidenz-basiert: Wenn der PRIMÄR-Check einer Säule abstürzt
+            # (Exception, Seite nicht auswertbar), liegt KEINE Evidenz vor → die
+            # Säule gilt als "ungeprüft" und darf NICHT als 100 (bestanden)
+            # durchrutschen. Mapping Primär-Check → Säule:
+            primary_check_by_pillar = {
+                "accessibility": barriere_issues,
+                "legal":         impressum_issues,
+                "gdpr":          datenschutz_issues,
+                "cookies":       cookie_issues,
+            }
+            unverified_pillars = {
+                pillar for pillar, res in primary_check_by_pillar.items()
+                if isinstance(res, Exception)
+            }
+            if unverified_pillars:
+                logger.warning(f"⚠️ Ungeprüfte Säulen (Primär-Check fehlgeschlagen): {unverified_pillars}")
 
             for check_issues in [barriere_issues, impressum_issues, datenschutz_issues,
                                   cookie_issues, agb_issues, shop_issues, declarative_issues, uwg_issues,
-                                  ssl_issues, contact_issues, social_issues]:
+                                  ssl_issues, contact_issues, social_issues, ai_act_issues,
+                                  ki_bild_issues]:
                 if isinstance(check_issues, Exception):
                     logger.warning(f"Check failed (non-critical): {check_issues}")
                     continue
@@ -161,7 +799,19 @@ class ComplianceScanner:
                     if isinstance(issue_dict, ComplianceIssue):
                         issues.append(issue_dict)
                     else:
-                        issues.append(ComplianceIssue(**issue_dict))
+                        # Defensiv: Checks liefern Dicts mit teils zusaetzlichen
+                        # Feldern (z.B. wcag_criterion aus dem ARIA-Tiefen-Check).
+                        # Ein unbekanntes Feld darf NIE den gesamten Scan crashen
+                        # — unbekannte Keys wandern nach metadata, bekannte werden
+                        # direkt uebernommen.
+                        known = {fld.name for fld in fields(ComplianceIssue)}
+                        kwargs = {k: v for k, v in issue_dict.items() if k in known}
+                        extra = {k: v for k, v in issue_dict.items() if k not in known}
+                        if extra:
+                            meta = kwargs.get('metadata') or {}
+                            if isinstance(meta, dict):
+                                kwargs['metadata'] = {**meta, **extra}
+                        issues.append(ComplianceIssue(**kwargs))
 
             # ✅ Prüfe ob Accessibility-Widget gefunden wurde
             has_accessibility_widget = not any(
@@ -184,12 +834,39 @@ class ComplianceScanner:
             
             # Anreicherung mit KI-Compliance-Beschreibungen (interner Generator)
             issues = await self._enrich_with_internal_descriptions(issues)
-            
-            # ✅ FIX v3.0: Gesamtscore = Mittelwert der 4 Säulen (eine Quelle!)
-            # So können Gesamtscore und Säulen-Scores nie auseinanderlaufen.
-            _scores = ScoreCalculator.compute(issues)
+
+            # 🤖 v4.0 KI-Verifikation: NUR ungeprüfte Säulen gegen den realen
+            # Seiteninhalt prüfen (Kostenkontrolle). Ergebnis fließt VOR dem Scoring
+            # zurück: bestätigt-konform → Säule wird geprüft+ok, bestätigt-fehlend →
+            # critical is_missing-Issue. Schlägt die KI fehl, bleibt die Säule UNVERIFIED.
+            if unverified_pillars:
+                issues, unverified_pillars = await self._ai_verify_unverified_pillars(
+                    soup, issues, unverified_pillars
+                )
+
+            # Erst die Stufen vereinheitlichen, dann zusammenfassen: sonst
+            # verliert ein 'error'-Befund gegen ein 'warning'-Duplikat.
+            issues = normalize_severities(issues)
+
+            # Doppelmeldungen zusammenfassen, BEVOR bewertet und angezeigt wird —
+            # sonst kostet ein Mangel doppelt und steht zweimal im Report.
+            issues = dedupe_issues(issues)
+
+            # ✅ v4.0 Klassifizierung: Bearbeitungsaufwand pro Issue (für Hinweise/Priorisierung)
+            for _issue in issues:
+                if not _issue.effort:
+                    _issue.effort = ScoreCalculator.classify_effort(
+                        severity=_issue.severity,
+                        auto_fixable=_issue.auto_fixable,
+                        is_missing=_issue.is_missing,
+                    )
+
+            # ✅ FIX v4.0: Evidenz-basierter Gesamtscore = Mittelwert der 4 Säulen,
+            # ungeprüfte Säulen zählen NICHT als bestanden (Status UNVERIFIED).
+            _scores = ScoreCalculator.compute_with_status(issues, unverified_pillars)
             compliance_score = _scores["overall_score"]
             _pillar_scores = _scores["pillar_scores"]
+            _pillar_status = _scores["pillar_status"]
             
             # Calculate overall risk
             total_risk_euro = sum(issue.risk_euro for issue in issues)
@@ -211,14 +888,36 @@ class ComplianceScanner:
                 "total_issues": len(issues),
                 "issues": [asdict(issue) for issue in issues],
                 "pillar_scores": [
-                    {"pillar": pillar, "score": round(score)}
+                    {
+                        "pillar": pillar,
+                        "score": round(score),
+                        "status": _pillar_status.get(pillar),
+                    }
                     for pillar, score in _pillar_scores.items()
                 ],
+                "pillar_status": _pillar_status,
+                # Ehrlichkeits-Layer: Automatik-Grenzen + manuelle Pruef-Anleitungen
+                # ("erkennen ODER anleiten" — nichts bleibt stillschweigend offen).
+                "pillar_notes": _scores.get("pillar_notes", {}),
+                "manual_checks": _scores.get("manual_checks", []),
                 "recommendations": self._generate_recommendations(issues),
                 "next_steps": self._generate_next_steps(issues),
                 "has_accessibility_widget": has_accessibility_widget,
                 "tcf_data": tcf_data,
-                "score_breakdown": ScoreCalculator.get_score_breakdown(issues)
+                "score_breakdown": ScoreCalculator.get_score_breakdown(issues),
+                # v4.0: Produktiv-Status & Grundsystem
+                "detected_cms": detected_cms,
+                "is_placeholder": is_placeholder,
+                "scan_notice": scan_notice,
+                # Phase 7.1: explizite Regulierungs-Reports (Lead-Magnet)
+                "bfsg_report": self._build_bfsg_report(
+                    issues, _pillar_scores, _pillar_status,
+                    is_shop=detect_shop(soup),
+                    has_widget=has_accessibility_widget,
+                ),
+                "ai_act_report": self._build_ai_act_report(
+                    ai_act_issues if not isinstance(ai_act_issues, Exception) else []
+                ),
             }
             
             # 🆕 LEGAL UPDATE INTEGRATION: Anwendung aktueller Gesetzesänderungen
@@ -245,22 +944,106 @@ class ComplianceScanner:
         except Exception as e:
             return self._create_error_response(url, f"Scanner-Fehler: {str(e)}")
     
+    @staticmethod
+    def _build_bfsg_report(issues, pillar_scores, pillar_status,
+                           is_shop: bool, has_widget: bool) -> Dict[str, Any]:
+        """
+        Phase 7.1: Expliziter BFSG-Report für den Lead-Magnet.
+
+        Haftungs-Design: keine individuelle Rechtsaussage („Sie sind
+        betroffen"), sondern belegte Indizien + Selbst-Check-Framing (RDG).
+        """
+        a11y_issues = [
+            i for i in issues
+            if ScoreCalculator.categorize(i.category) == "accessibility"
+        ]
+        statement_found = not any(
+            "barrierefreiheitserkl" in (i.title or "").lower() and i.is_missing
+            for i in issues
+        )
+        return {
+            "law": "Barrierefreiheitsstärkungsgesetz (BFSG)",
+            "in_force_since": "2025-06-28",
+            "deadline_passed": True,
+            "enforcement_note": (
+                "Das BFSG gilt seit 28.06.2025. Marktüberwachungsbehörden können "
+                "Dienste untersagen; Bußgelder bis 100.000 € (§ 37 BFSG)."
+            ),
+            "likely_in_scope": is_shop,
+            "scope_note": (
+                "Auf dieser Website wurden Shop-/E-Commerce-Merkmale erkannt — "
+                "elektronischer Geschäftsverkehr für Verbraucher fällt in den "
+                "BFSG-Anwendungsbereich (§ 1 Abs. 3 Nr. 5 BFSG). "
+                "Kleinstunternehmen (<10 MA und ≤2 Mio. € Umsatz) können bei "
+                "Dienstleistungen ausgenommen sein — bitte selbst prüfen."
+                if is_shop else
+                "Keine eindeutigen Shop-/E-Commerce-Merkmale erkannt. Ob das BFSG "
+                "gilt, hängt von Ihren Dienstleistungen ab (z. B. Terminbuchung, "
+                "Kundenkonto, Verträge online) — bitte selbst prüfen."
+            ),
+            "score": round(pillar_scores.get("accessibility", 0)),
+            "status": pillar_status.get("accessibility"),
+            "critical_issues": len([i for i in a11y_issues if i.severity == "critical"]),
+            "warning_issues": len([i for i in a11y_issues if i.severity == "warning"]),
+            "risk_euro": sum(i.risk_euro for i in a11y_issues),
+            "has_accessibility_widget": has_widget,
+            "statement_found": statement_found,
+            "disclaimer": (
+                "Automatisierter Selbst-Check auf Basis technischer Merkmale — "
+                "keine Rechtsberatung. Jede Feststellung nennt ihre Quelle im "
+                "jeweiligen Issue."
+            ),
+        }
+
+    @staticmethod
+    def _build_ai_act_report(ai_act_issues) -> Dict[str, Any]:
+        """Phase 7.1: AI-Act-Transparenz-Zusammenfassung (Art. 50 KI-VO)."""
+        def _meta(i):
+            return i.metadata if isinstance(i, ComplianceIssue) else i.get("metadata", {})
+        def _sev(i):
+            return i.severity if isinstance(i, ComplianceIssue) else i.get("severity")
+        providers = [
+            {
+                "provider": _meta(i).get("provider"),
+                "confidence": _meta(i).get("confidence"),
+                "evidence": _meta(i).get("evidence"),
+                "action_needed": _sev(i) == "warning",
+            }
+            for i in ai_act_issues
+        ]
+        return {
+            "law": "EU AI Act (VO (EU) 2024/1689), Art. 50 Transparenzpflichten",
+            "fines_note": (
+                "Verstöße gegen Transparenzpflichten sind seit 02.08.2026 "
+                "bußgeldbewehrt (bis 15 Mio. € bzw. 3 % Jahresumsatz, Art. 99 KI-VO)."
+            ),
+            "ai_systems_detected": len(providers),
+            "providers": providers,
+            "action_needed": any(p["action_needed"] for p in providers),
+            "disclaimer": (
+                "Automatisierte Erkennung eingebundener Chat-/KI-Systeme mit "
+                "Confidence und Fundstelle — keine Rechtsberatung."
+            ),
+        }
+
     async def _fetch_page(self, url: str) -> Optional[Dict[str, Any]]:
-        """Fetch webpage content with error handling"""
-        try:
-            async with self.session.get(url) as response:
-                if response.status == 200:
-                    content = await response.text()
-                    return {
-                        'url': url,
-                        'status_code': response.status,
-                        'content': content,
-                        'headers': dict(response.headers)
-                    }
-                else:
-                    return None
-        except Exception:
+        """
+        Fetch webpage content. Gibt Status UND Inhalt zurück (auch bei 4xx/5xx,
+        damit der Aufrufer 'nicht scanbar'-Fälle erkennen und das Grundsystem
+        analysieren kann). None nur bei echtem Verbindungsfehler.
+
+        Läuft über sicherer_abruf: die Startseite darf per Umleitung nicht ins
+        interne Netz zeigen (Sicherheitsreview 2026-08-31).
+        """
+        abruf = await hole(self.session, url)
+        if abruf is None:
             return None
+        return {
+            'url': abruf.url,
+            'status_code': abruf.status,
+            'content': abruf.text(),
+            'headers': abruf.headers,
+        }
     
     async def _check_ssl_security(self, url: str, response_headers: dict = None) -> List[ComplianceIssue]:
         """SSL/TLS-Sicherheitsprüfung — HTTPS, Redirect und Zertifikats-Grundprüfung"""
@@ -400,6 +1183,49 @@ class ComplianceScanner:
                     recommendation='Setzen Sie: X-Frame-Options: SAMEORIGIN oder frame-ancestors in der CSP.',
                 ))
 
+            # Hosting-Standort (DSGVO Art. 44 / Art. 28): Erkennbare US-Cloud-/CDN-
+            # Marker in den Response-Headern deuten auf Datenverarbeitung außerhalb
+            # der EU hin. Verlässlich extern nur über Header indizierbar → info,
+            # damit der Nutzer Hosting-Standort und AVV mit dem Anbieter prüft.
+            us_host_markers = {
+                'CloudFront (AWS)':   ['x-amz-cf-id', 'x-amz-cf-pop'],
+                'Amazon S3/AWS':      ['x-amz-request-id', 'x-amz-id-2'],
+                'Vercel':             ['x-vercel-id', 'x-vercel-cache'],
+                'Netlify':            ['x-nf-request-id'],
+                'GitHub Pages':       ['x-github-request-id'],
+                'Google Cloud':       ['x-goog-generation', 'x-guploader-uploadid'],
+                'Heroku':             ['x-heroku-dynos-in-use'],
+            }
+            detected_hosts = [
+                name for name, keys in us_host_markers.items()
+                if any(k in headers_lower for k in keys)
+            ]
+            # 'Server'-Header zusätzlich auswerten (z. B. AmazonS3, Vercel)
+            server_hdr = headers_lower.get('server', '').lower()
+            for name, needle in (('Amazon S3/AWS', 'amazons3'), ('Vercel', 'vercel'), ('Google Cloud', 'gws')):
+                if needle in server_hdr and name not in detected_hosts:
+                    detected_hosts.append(name)
+
+            if detected_hosts:
+                issues.append(ComplianceIssue(
+                    category='datenschutz',
+                    severity='info',
+                    title='Hosting/CDN außerhalb der EU prüfen',
+                    description=(
+                        'Die Response-Header deuten auf einen US-/Nicht-EU-Anbieter hin: '
+                        f'{", ".join(detected_hosts)}. Werden dort personenbezogene Daten '
+                        '(inkl. Server-Logs mit IP) verarbeitet, ist dies ein Drittlandtransfer '
+                        'und erfordert eine Rechtsgrundlage sowie einen AVV.'
+                    ),
+                    risk_euro=0,
+                    legal_basis='DSGVO Art. 44 ff., Art. 28',
+                    recommendation=(
+                        'Prüfen Sie den tatsächlichen Verarbeitungsstandort, schließen Sie einen '
+                        'AVV mit dem Anbieter ab und dokumentieren Sie die Transfer-Grundlage '
+                        '(EU-US DPF / SCCs). Alternativ: EU-Hosting wählen.'
+                    ),
+                ))
+
         return issues
 
     async def _check_contact_data(self, base_url: str, soup: BeautifulSoup) -> List[ComplianceIssue]:
@@ -456,8 +1282,110 @@ class ComplianceScanner:
                 ),
             ))
 
+        # ── Formular-Datenschutz (DSGVO Art. 13 bei Datenerhebung) ──────────
+        # Erhebt ein Formular personenbezogene Daten, muss am Erhebungspunkt auf
+        # die Datenschutzerklärung hingewiesen werden (Art. 13). Wir prüfen pro
+        # Formular, ob es personenbezogene Felder hat UND ob ein Datenschutz-/
+        # Einwilligungs-Bezug im Formular selbst erkennbar ist (Checkbox oder
+        # Datenschutz-/Einwilligungs-Hinweis). Newsletter-Anmeldungen werden
+        # zusätzlich auf Double-Opt-In/Einwilligung hingewiesen.
+        personal_field_names = (
+            'name', 'mail', 'email', 'e-mail', 'tel', 'phone', 'telefon',
+            'nachricht', 'message', 'betreff', 'subject', 'anrede', 'vorname',
+            'nachname', 'adresse', 'address', 'strasse', 'plz', 'ort',
+        )
+        form_privacy_flagged = False
+        newsletter_flagged = False
+
+        for form in soup.find_all('form'):
+            form_text = form.get_text(' ', strip=True).lower()
+            form_html = str(form).lower()
+
+            inputs = form.find_all(['input', 'textarea', 'select'])
+            input_types = {(i.get('type') or '').lower() for i in form.find_all('input')}
+            has_textarea = bool(form.find('textarea'))
+            has_email_field = 'email' in input_types or bool(
+                re.search(r'name=["\'][^"\']*(mail|email)', form_html)
+            )
+
+            # Personenbezogenes Formular? (Such-/Filterleisten ausschließen)
+            is_search = (
+                'search' in input_types
+                or (form.get('role') or '').lower() == 'search'
+                or 'search' in (form.get('class') and ' '.join(form.get('class')).lower() or '')
+            )
+            collects_personal = (
+                not is_search
+                and (
+                    has_textarea
+                    or has_email_field
+                    or 'tel' in input_types
+                    or any(
+                        kw in (i.get('name') or '').lower() or kw in (i.get('id') or '').lower()
+                        or kw in (i.get('placeholder') or '').lower()
+                        for i in inputs for kw in personal_field_names
+                    )
+                )
+            )
+            if not collects_personal:
+                continue
+
+            is_newsletter = bool(re.search(
+                r'newsletter|abonnier|subscribe|anmeld.*(news|verteiler)|verteiler',
+                form_text + ' ' + form_html
+            ))
+            has_privacy_ref = bool(re.search(
+                r'datenschutz|privacy|einwillig|consent|zustimm', form_html
+            )) or bool(form.find('input', attrs={'type': 'checkbox'}))
+
+            # (#4) Newsletter ohne erkennbaren Einwilligungs-/DOI-Bezug
+            if is_newsletter and not newsletter_flagged:
+                newsletter_flagged = True
+                if not has_privacy_ref:
+                    issues.append(ComplianceIssue(
+                        category='datenschutz',
+                        severity='warning',
+                        title='Newsletter-Anmeldung ohne erkennbare Einwilligung',
+                        description=(
+                            'Es wurde eine Newsletter-/E-Mail-Anmeldung gefunden, aber kein '
+                            'Einwilligungs-Bezug (Checkbox / Datenschutz-Hinweis) im Formular. '
+                            'Newsletter-Versand erfordert eine nachweisbare Einwilligung und '
+                            'ein Double-Opt-In-Verfahren (Bestätigungsmail).'
+                        ),
+                        risk_euro=2000,
+                        legal_basis='DSGVO Art. 6 Abs. 1 lit. a, Art. 7; § 7 UWG',
+                        recommendation=(
+                            'Ergänzen Sie eine aktive Einwilligungs-Checkbox mit Verweis auf die '
+                            'Datenschutzerklärung und richten Sie ein Double-Opt-In ein '
+                            '(Bestätigungs-Mail, deren Klick protokolliert wird).'
+                        ),
+                    ))
+                continue
+
+            # (#3) Personenbezogenes Formular ohne Datenschutz-Hinweis am Erhebungspunkt
+            if collects_personal and not has_privacy_ref and not form_privacy_flagged:
+                form_privacy_flagged = True
+                issues.append(ComplianceIssue(
+                    category='datenschutz',
+                    severity='warning',
+                    title='Formular ohne Datenschutzhinweis (Art. 13)',
+                    description=(
+                        'Ein Formular erhebt personenbezogene Daten, ohne dass am Erhebungspunkt '
+                        'ein Datenschutz-Hinweis oder eine Einwilligungs-Checkbox erkennbar ist. '
+                        'Nach DSGVO Art. 13 müssen Betroffene bereits bei der Datenerhebung über '
+                        'die Verarbeitung informiert werden.'
+                    ),
+                    risk_euro=1500,
+                    legal_basis='DSGVO Art. 13',
+                    recommendation=(
+                        'Fügen Sie direkt am Formular einen kurzen Datenschutzhinweis mit Link zur '
+                        'Datenschutzerklärung hinzu (ggf. zusätzlich eine Einwilligungs-Checkbox, '
+                        'wenn keine andere Rechtsgrundlage greift).'
+                    ),
+                ))
+
         return issues
-    
+
     async def _check_social_media_plugins(self, base_url: str, soup: BeautifulSoup) -> List[ComplianceIssue]:
         """
         Prüft auf eingebettete Social-Media-Plugins die ohne Consent Daten übertragen.
@@ -465,10 +1393,13 @@ class ComplianceScanner:
         """
         issues = []
 
+        # ⚠️ YouTube wird hier NICHT geprüft — Video-Embeds (inkl. korrektem
+        # youtube-nocookie-Ausschluss) deckt privacy_transfer_findings als
+        # eigenständiges Datenschutz-Issue ab. Doppelte Erfassung würde sonst
+        # ein Issue in zwei Säulen erzeugen und youtube-nocookie fälschlich flaggen.
         social_patterns = {
             'Facebook': [r'facebook\.com/plugins', r'connect\.facebook\.net', r'facebook\.com/tr'],
             'Twitter/X': [r'platform\.twitter\.com', r'syndication\.twitter\.com'],
-            'YouTube': [r'youtube\.com/embed', r'youtube-nocookie\.com', r'ytimg\.com'],
             'Instagram': [r'instagram\.com/embed', r'cdninstagram\.com'],
             'LinkedIn': [r'platform\.linkedin\.com', r'snap\.licdn\.com'],
             'TikTok': [r'tiktok\.com/embed', r'analytics\.tiktok\.com'],
@@ -504,7 +1435,7 @@ class ComplianceScanner:
             ))
 
         return issues
-    
+
     def _generate_recommendations(self, issues: List[ComplianceIssue]) -> List[str]:
         """Generate prioritized recommendations based on issues found"""
         recommendations = []
@@ -550,6 +1481,70 @@ class ComplianceScanner:
         
         return steps
     
+    # Säule → (Kategorie, Anzeigename) für KI-bestätigte Mangel-Issues
+    _PILLAR_ISSUE_META = {
+        "legal":         ("impressum",       "Pflichtangaben (Impressum/Rechtstexte)"),
+        "gdpr":          ("datenschutz",     "Datenschutzerklärung"),
+        "cookies":       ("cookies",         "Cookie-Consent"),
+        "accessibility": ("barrierefreiheit", "Barrierefreiheit"),
+    }
+
+    async def _ai_verify_unverified_pillars(self, soup, issues, unverified_pillars):
+        """
+        KI-Verifikation der ungeprüften Säulen gegen den realen Seitentext.
+        Gibt (issues, verbleibende_unverified_pillars) zurück.
+
+        - KI bestätigt konform  → Säule aus unverified entfernen (zählt als geprüft).
+        - KI bestätigt fehlend  → critical is_missing-Issue ergänzen (Säule = 0).
+        - KI nicht verfügbar    → Säule bleibt unverified (kein Risiko, Scan läuft weiter).
+        """
+        try:
+            from ai_review_engine import ai_verify_pillar
+        except Exception:
+            return issues, unverified_pillars
+
+        page_text = soup.get_text(" ", strip=True)
+        still_unverified = set(unverified_pillars)
+
+        for pillar in list(unverified_pillars):
+            meta = self._PILLAR_ISSUE_META.get(pillar)
+            if not meta:
+                continue
+            category, label = meta
+            try:
+                verdict = await ai_verify_pillar(pillar, page_text)
+            except Exception as e:
+                logger.warning(f"⚠️ KI-Verifikation '{pillar}' fehlgeschlagen: {e}")
+                verdict = None
+
+            if not verdict:
+                continue  # bleibt UNVERIFIED
+
+            if verdict["compliant"]:
+                still_unverified.discard(pillar)
+                logger.info(f"✅ KI bestätigt Säule '{pillar}' als konform (conf={verdict['confidence']})")
+            else:
+                still_unverified.discard(pillar)
+                missing = ", ".join(verdict.get("missing", [])) or verdict.get("reason", "")
+                issues.append(ComplianceIssue(
+                    category=category,
+                    severity="critical",
+                    title=f"{label} fehlt oder unzureichend (KI-geprüft)",
+                    description=(
+                        f"Die KI-Prüfung des Seiteninhalts ergab, dass die Anforderung nicht erfüllt ist. "
+                        f"{verdict.get('reason', '')}".strip()
+                    ),
+                    risk_euro=3000,
+                    recommendation=f"Ergänzen/vervollständigen Sie: {missing}" if missing else "Inhalt vervollständigen.",
+                    legal_basis="DSGVO / DDG / BFSG",
+                    auto_fixable=False,
+                    is_missing=True,
+                    metadata={"ai_verified": True, "confidence": verdict.get("confidence")},
+                ))
+                logger.info(f"⚠️ KI bestätigt Säule '{pillar}' als NICHT konform")
+
+        return issues, still_unverified
+
     async def _enrich_with_internal_descriptions(self, issues: List[ComplianceIssue]) -> List[ComplianceIssue]:
         """
         Anreicherung der technisch erkannten Issues mit KI-generierten Compliance-Beschreibungen.
@@ -561,17 +1556,102 @@ class ComplianceScanner:
             logger.warning(f"Beschreibungs-Anreicherung fehlgeschlagen: {e}")
             return issues
     
-    def _create_error_response(self, url: str, error_message: str) -> Dict[str, Any]:
-        """Create error response structure"""
+    @staticmethod
+    def _detect_cms(soup, headers: dict = None) -> Optional[str]:
+        """
+        Erkennt das Grundsystem (CMS) aus HTML-Signaturen und HTTP-Headern.
+        Wichtig auch bei Platzhalter-/Fehlerseiten: das darunterliegende System
+        (z.B. WordPress) bestimmt, welche Compliance-Pflichten nach Go-Live gelten.
+        """
+        html = str(soup).lower()
+        headers = {k.lower(): str(v).lower() for k, v in (headers or {}).items()}
+
+        # Generator-Meta auslesen
+        generator = ""
+        gen_tag = soup.find("meta", attrs={"name": re.compile(r"generator", re.I)})
+        if gen_tag and gen_tag.get("content"):
+            generator = gen_tag.get("content", "").lower()
+
+        signatures = [
+            ("WordPress", ["wp-content", "wp-includes", "/wp-json", "wp-emoji", "wordpress"]),
+            ("Shopify",   ["cdn.shopify.com", "shopify.theme", "x-shopify"]),
+            ("Wix",       ["static.wixstatic.com", "wix.com", "_wix"]),
+            ("Jimdo",     ["jimdo", "jimstatic.com"]),
+            ("Typo3",     ["typo3", "/typo3conf/"]),
+            ("Joomla",    ["/media/jui/", "joomla", "com_content"]),
+            ("Drupal",    ["drupal-settings-json", "/sites/default/files", "drupal"]),
+            ("Webflow",   ["webflow", "assets.website-files.com"]),
+            ("Squarespace", ["squarespace", "static1.squarespace.com"]),
+        ]
+        haystack = html + " " + generator + " " + " ".join(headers.values())
+        for name, markers in signatures:
+            if any(m in haystack for m in markers):
+                return name
+        return None
+
+    @staticmethod
+    def _detect_placeholder(soup) -> "tuple[bool, str]":
+        """
+        Erkennt Platzhalter-/Baustellen-/Coming-Soon-Seiten (HTTP 200, aber kein
+        produktiver Inhalt). Gibt (is_placeholder, art) zurück.
+        """
+        title = (soup.title.get_text() if soup.title else "").lower()
+        headings = " ".join(
+            h.get_text(" ", strip=True) for h in soup.find_all(["h1", "h2"])
+        ).lower()
+        body_text = soup.get_text(" ", strip=True).lower()
+        link_count = len(soup.find_all("a", href=True))
+
+        # ⚠️ Wichtig gegen False Positives: Ein Signalwort ("maintenance",
+        # "baustelle", …) allein reicht NICHT. Solche Wörter kommen auf produktiven
+        # Seiten völlig legitim im Fließtext vor (z.B. Blog-Teaser "Predictive
+        # Maintenance" oder "…während das Team auf der Baustelle ist"). Eine echte
+        # Wartungs-/Baustellen-/Coming-Soon-Seite ist strukturell "dünn" (kaum Links,
+        # wenig Text) UND trägt das Signalwort prominent im Titel/H1/H2. Eine Seite
+        # mit voller Navigation, Footer und viel Inhalt wird daher NIE als Platzhalter
+        # gewertet, egal welches Wort irgendwo im Text auftaucht.
+        is_content_rich = link_count > 10 or len(body_text) > 2000
+        prominent = f"{title} {headings}"
+
+        patterns = {
+            "Wartungs": ["wartungsmodus", "wartungsarbeiten", "maintenance", "under maintenance", "kurzfristig nicht verfügbar"],
+            "Baustellen": ["under construction", "im aufbau", "baustelle", "seite im aufbau", "website is being built"],
+            "Coming-Soon": ["coming soon", "demnächst", "in kürze online", "launching soon", "bald verfügbar", "wir sind bald für sie da"],
+        }
+        for kind, kws in patterns.items():
+            # Signalwort prominent (Titel/Überschrift) → bewusstes Placeholder-Signal,
+            # aber nur werten, wenn die Seite nicht produktiv-voll ist.
+            if not is_content_rich and any(kw in prominent for kw in kws):
+                return True, kind
+            # Signalwort nur im Fließtext → ausschließlich bei strukturell dünner Seite,
+            # sonst ist es fast immer regulärer Inhalt.
+            if len(body_text) < 600 and link_count <= 3 and any(kw in body_text for kw in kws):
+                return True, kind
+
+        # Sehr wenig Inhalt + kaum Links → wahrscheinlich Platzhalter
+        if len(body_text) < 400 and link_count <= 2:
+            return True, "Platzhalter"
+        return False, ""
+
+    def _create_error_response(
+        self, url: str, error_message: str,
+        reason: str = "error", status_code: int = 0,
+        detected_cms: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create error response structure (mit Klassifizierung für klare UI-Hinweise)."""
         return {
             "url": url,
             "scan_timestamp": datetime.now(),
             "error": True,
             "error_message": error_message,
+            "error_reason": reason,        # unreachable|maintenance|blocked|not_found|http_error
+            "status_code": status_code,
+            "not_scannable": True,
+            "detected_cms": detected_cms,
             "compliance_score": 0,
             "total_risk_euro": 0,
             "issues": [],
-            "recommendations": [f"Fehler beim Scannen: {error_message}"]
+            "recommendations": [error_message],
         }
 
 # Async context manager usage example:

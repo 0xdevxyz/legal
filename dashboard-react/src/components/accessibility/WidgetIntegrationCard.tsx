@@ -70,11 +70,11 @@ function complyo_accessibility_widget() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-purple-500 rounded-lg">
-              <Code className="w-6 h-6 text-white" />
+              <Code className="w-6 h-6 text-gray-900 dark:text-white" />
             </div>
             <div>
-              <CardTitle className="text-xl">⚡ Widget auf Website einbinden</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-xl text-gray-900">⚡ Widget auf Website einbinden</CardTitle>
+              <CardDescription className="text-gray-600">
                 In 60 Sekunden zu barrierefreiem Web
               </CardDescription>
             </div>
@@ -148,7 +148,7 @@ function complyo_accessibility_widget() {
                 📋 Code-Snippet (vor &lt;/body&gt; einfügen):
               </h4>
               <div className="relative">
-                <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-xs leading-relaxed">
+                <pre className="bg-white dark:bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-xs leading-relaxed">
                   <code>{widgetCode}</code>
                 </pre>
                 <Button
@@ -191,7 +191,7 @@ function complyo_accessibility_widget() {
                 🔌 WordPress-Integration:
               </h4>
               <div className="relative">
-                <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-xs leading-relaxed">
+                <pre className="bg-white dark:bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-xs leading-relaxed">
                   <code>{wordpressCode}</code>
                 </pre>
                 <Button
@@ -295,7 +295,7 @@ function complyo_accessibility_widget() {
             <Button
               variant="outline"
               className="flex-1"
-              onClick={() => window.open('https://docs.complyo.tech/widget', '_blank')}
+              onClick={() => window.open('https://docs.complyo.de/widget', '_blank')}
             >
               <BookOpen className="w-4 h-4 mr-2" />
               Dokumentation

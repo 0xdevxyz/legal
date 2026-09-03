@@ -44,19 +44,15 @@ export const LegalNews: React.FC = () => {
   const handleAction = (newsId: string, actionText: string) => {
     switch (actionText) {
       case 'Automatisch anpassen':
-        console.log('Starting automatic cookie adaptation...');
         alert('Cookie-Banner wird an neue TTDSG-Richtlinien angepasst!');
         break;
       case 'Templates abrufen':
-        console.log('Downloading templates...');
         alert('Templates werden vorbereitet und per E-Mail gesendet.');
         break;
       case 'Optimierung starten':
-        console.log('Starting accessibility optimization...');
         alert('Barrierefreiheits-Optimierung gestartet!');
         break;
       default:
-        console.log(`Action: ${actionText} for news: ${newsId}`);
     }
   };
 

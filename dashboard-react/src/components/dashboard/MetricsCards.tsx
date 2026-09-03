@@ -84,9 +84,16 @@ export const MetricsCards: React.FC = () => {
   const animScore = useAnimatedNumber(metrics.totalScore);
   const animCritical = useAnimatedNumber(metrics.criticalIssues);
 
+  // Die Kacheln zeigen das GESAMTE Portfolio: Score ist der Durchschnitt ueber
+  // den jeweils letzten Scan jeder Website, kritische Punkte sind deren Summe.
+  // Die Compliance-Analyse darunter zeigt dagegen nur die aktive Seite. Ohne
+  // Beschriftung war nicht erkennbar, welche Zahl welchen Umfang hat.
+  const mehrereSites = metrics.websites > 1;
+  const umfang = mehrereSites ? `über ${metrics.websites} Websites` : 'diese Website';
+
   const cards = [
     {
-      title: 'Gesamt-Score',
+      title: mehrereSites ? 'Ø Score (alle Websites)' : 'Gesamt-Score',
       value: animScore,
       suffix: '',
       sublabel: scoreTrend.text,
@@ -117,7 +124,7 @@ export const MetricsCards: React.FC = () => {
       onSublabelClick: aiLimitReached ? () => router.push('/subscription') : undefined,
     },
     {
-      title: 'Kritische Issues',
+      title: `Kritische Issues (${umfang})`,
       value: animCritical,
       suffix: '',
       sublabel: criticalTrend.text,

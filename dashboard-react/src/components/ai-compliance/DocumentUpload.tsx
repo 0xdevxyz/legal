@@ -99,10 +99,10 @@ export default function DocumentUpload({ systemId, onUploadComplete }: DocumentU
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-xl max-w-lg w-full p-6 relative">
+      <div className="bg-gray-100 dark:bg-gray-800 rounded-xl max-w-lg w-full p-6 relative">
         <button
           onClick={() => setIsOpen(false)}
-          className="absolute top-4 right-4 text-gray-400 hover:text-white"
+          className="absolute top-4 right-4 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
         >
           <X className="w-6 h-6" />
         </button>
@@ -111,13 +111,13 @@ export default function DocumentUpload({ systemId, onUploadComplete }: DocumentU
         
         {/* Document Type Selection */}
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Dokumenttyp
           </label>
           <select
             value={documentType}
             onChange={(e) => setDocumentType(e.target.value as DocumentType)}
-            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
           >
             {DOCUMENT_TYPES.map((type) => (
               <option key={type.value} value={type.value}>
@@ -129,7 +129,7 @@ export default function DocumentUpload({ systemId, onUploadComplete }: DocumentU
         
         {/* Title Input */}
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Titel (optional)
           </label>
           <input
@@ -137,7 +137,7 @@ export default function DocumentUpload({ systemId, onUploadComplete }: DocumentU
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="z.B. Risk Assessment v2.0"
-            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
         </div>
         
@@ -165,20 +165,20 @@ export default function DocumentUpload({ systemId, onUploadComplete }: DocumentU
             <div className="flex items-center justify-center gap-3">
               <FileText className="w-8 h-8 text-purple-400" />
               <div className="text-left">
-                <p className="font-medium text-white">{selectedFile.name}</p>
-                <p className="text-sm text-gray-400">{formatFileSize(selectedFile.size)}</p>
+                <p className="font-medium text-gray-900 dark:text-white">{selectedFile.name}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{formatFileSize(selectedFile.size)}</p>
               </div>
               <button
                 onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }}
-                className="ml-2 p-1 hover:bg-gray-700 rounded"
+                className="ml-2 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
               >
-                <X className="w-5 h-5 text-gray-400" />
+                <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
           ) : (
             <>
-              <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-300 mb-1">
+              <Upload className="w-12 h-12 text-gray-600 dark:text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-700 dark:text-gray-300 mb-1">
                 Datei hierher ziehen oder <span className="text-purple-400">durchsuchen</span>
               </p>
               <p className="text-sm text-gray-500">

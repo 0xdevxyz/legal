@@ -6,7 +6,7 @@ Erstellt ZIP-Pakete mit allen Accessibility-Fixes für verschiedene Frameworks
 import io
 import zipfile
 import json
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from datetime import datetime
 import logging
 
@@ -116,7 +116,7 @@ Die Verantwortung für das Ausrollen der Änderungen in produktive Systeme liegt
 - ✅ Testen Sie in einer Staging-Umgebung
 - ✅ Konsultieren Sie bei rechtlichen Fragen einen Anwalt
 
-**Vollständige AGB:** https://complyo.tech/terms-liability
+**Vollständige AGB:** https://complyo.de/terms-liability
 
 ---
 
@@ -160,8 +160,8 @@ complyo-accessibility-fixes/
 ├── accessibility.css            # CSS-Fixes (erforderlich!)
 ├── fixes.json                   # Metadaten
 └── {framework}/                 # Framework-spezifische Dateien
-    ├── alt-text-fixes.{ext}     # Image-Alt-Text-Beispiele
-    ├── aria-fixes.{ext}          # ARIA-Label-Beispiele
+    ├── alt-text-fixes.{{ext}}     # Image-Alt-Text-Beispiele
+    ├── aria-fixes.{{ext}}          # ARIA-Label-Beispiele
     └── components/               # Beispiel-Komponenten
 ```
 
@@ -188,9 +188,9 @@ Nach der Integration testen Sie bitte:
 
 Bei Fragen oder Problemen:
 
-- 📧 Email: support@complyo.tech
-- 🌐 Web: https://complyo.tech/support
-- 📚 Docs: https://complyo.tech/docs/accessibility
+- 📧 Email: support@complyo.de
+- 🌐 Web: https://complyo.de/support
+- 📚 Docs: https://complyo.de/docs/accessibility
 
 ---
 
@@ -449,7 +449,7 @@ Ziel: 0 kritische Fehler
 
 ## Support
 
-Bei Fragen: support@complyo.tech
+Bei Fragen: support@complyo.de
 """
         
         return content

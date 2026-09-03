@@ -153,9 +153,9 @@ export function FixStepCard({
           {hasDetails && (
             <button className="p-1 hover:bg-gray-100 rounded-lg transition">
               {isExpanded ? (
-                <ChevronUp className="w-5 h-5 text-gray-400" />
+                <ChevronUp className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-gray-400" />
+                <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               )}
             </button>
           )}
@@ -195,7 +195,7 @@ export function FixStepCard({
 
           {/* Code Snippet */}
           {codeSnippet && (
-            <div className="bg-gray-900 rounded-lg overflow-hidden">
+            <div className="bg-white dark:bg-gray-900 rounded-lg overflow-hidden">
               <pre className="p-4 text-sm text-green-400 overflow-x-auto">
                 <code>{codeSnippet}</code>
               </pre>

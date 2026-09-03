@@ -11,23 +11,62 @@ Kein externer API-Key erforderlich. Kein Abmahnschutz-Versprechen.
 Disclaimer wird automatisch angehängt (legal_disclaimer.py).
 """
 
+from __future__ import annotations
+
 import os
 import json
 import hashlib
 import logging
-import asyncpg
-import aiohttp
+import re
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from enum import Enum
 
+# asyncpg/aiohttp sind in der Produktion (Docker) vorhanden. Die Imports werden
+# tolerant gehalten, damit Template-/Prompt-Logik auch ohne DB/HTTP-Treiber
+# (z.B. in Unit-Tests) importierbar bleibt. Annotationen sind via
+# `from __future__ import annotations` ohnehin lazy.
+try:
+    import asyncpg
+except ImportError:  # pragma: no cover
+    asyncpg = None
+
+try:
+    import aiohttp
+except ImportError:  # pragma: no cover
+    aiohttp = None
+
 from legal_disclaimer import DISCLAIMER_LONG, DISCLAIMER_HTML
+from complyo_privacy_clause import build_complyo_privacy_clause
+from third_country_clause import build_third_country_clause
 
 logger = logging.getLogger(__name__)
 
-TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "..", "knowledge", "templates", "legal")
-LAWS_DIR = os.path.join(os.path.dirname(__file__), "..", "knowledge", "laws")
+# Knowledge-Vault (Templates + Gesetzestexte).
+#
+# ACHTUNG, hier lag ein stiller Totalausfall: Der frühere Pfad
+# `os.path.dirname(__file__)/../knowledge` stimmt nur im Repo-Layout (backend/../knowledge).
+# Im Container liegt der Code direkt in `/app`, also löste er zu `/knowledge` auf — das es
+# nicht gibt. Der Vault ist per docker-compose read-only nach `/data/knowledge` gemountet
+# (`KNOWLEDGE_VAULT_PATH`). Zusätzlich kollidiert der Name mit dem Python-Paket
+# `/app/knowledge`. Folge: JEDER Rechtstext wurde ohne Template und ohne Gesetzeskontext
+# generiert — ohne dass ein Fehler sichtbar wurde. Dieselbe Env-Variable nutzen bereits
+# `backend/knowledge/knowledge_retriever.py` u. a.
+KNOWLEDGE_DIR = os.getenv(
+    "KNOWLEDGE_VAULT_PATH",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "knowledge")),
+)
+TEMPLATES_DIR = os.path.join(KNOWLEDGE_DIR, "templates", "legal")
+LAWS_DIR = os.path.join(KNOWLEDGE_DIR, "laws")
+
+if not os.path.isdir(TEMPLATES_DIR):
+    # Laut scheitern: ohne Templates/Gesetze sind die erzeugten Rechtstexte wertlos.
+    logger.error(
+        f"Knowledge-Vault nicht gefunden: {TEMPLATES_DIR} existiert nicht. "
+        f"Rechtstexte würden ohne Template und ohne Gesetzeskontext generiert. "
+        f"KNOWLEDGE_VAULT_PATH prüfen (aktuell: {KNOWLEDGE_DIR})."
+    )
 
 
 class DocumentType(str, Enum):
@@ -35,6 +74,201 @@ class DocumentType(str, Enum):
     PRIVACY = "privacy"
     TOS = "tos"
     COOKIE_POLICY = "cookie-policy"
+    WITHDRAWAL = "withdrawal"  # Widerrufsbelehrung inkl. Muster-Widerrufsformular (B2C)
+
+
+# Pflicht-Marker je Dokumenttyp: (Label, [Substrings], [Regex]). Ein Marker gilt als
+# vorhanden, wenn EIN Substring ODER EIN Regex trifft. Heuristisch/nicht-blockierend —
+# dient als Qualitaets-Fruehwarnung fuer den KI-Output (frueher gar nicht geprueft).
+_MANDATORY_MARKERS = {
+    DocumentType.IMPRINT: [
+        ("Kontakt (E-Mail/Telefon)", ["telefon", "tel.", "kontakt"], [r"[\w.%+\-]+@[\w.\-]+\.\w{2,}"]),
+        ("Anschrift (PLZ + Ort)", [], [r"\b\d{5}\s+[a-zäöü]"]),
+        ("Verantwortlicher/Diensteanbieter", ["verantwortlich", "diensteanbieter", "angaben gem", "vertreten durch"], []),
+        # Rechtsform-/umsatzabhaengig — als Marker dennoch sinnvoll, weil der
+        # Generator die Firmendaten kennt; Fehlen landet nur in metadata
+        # (non-blocking) und dient als Review-Signal.
+        ("USt-IdNr", ["ust-id", "umsatzsteuer-identifikationsnummer", "ust.-id"], [r"de\s?\d{9}"]),
+        ("Registereintrag", ["handelsregister", "registergericht", "amtsgericht"], [r"hr[ab]\s?\d+"]),
+    ],
+    # Die Liste deckte bis 03.09.2026 vier von acht Pflichtangaben aus Art. 13
+    # DSGVO ab. Zwecke, Speicherdauer, Beschwerderecht und Drittlanduebermittlung
+    # fehlten - genau die vier, die am 01.09. in complyos EIGENER Erklaerung
+    # nachgetragen werden mussten. Fuer Kundendokumente galten sie weiter als
+    # vollstaendig.
+    #
+    # Die Suchbegriffe sind bewusst mehrgliedrig gewaehlt. "zweck" allein trifft
+    # jedes "zum Zwecke der", "beschwerde" allein jede Beschwerdestelle - ein
+    # Marker, der immer anschlaegt, prueft nichts.
+    DocumentType.PRIVACY: [
+        ("Verantwortlicher", ["verantwortlich"], []),
+        ("Personenbezogene Daten", ["personenbezogene daten"], []),
+        ("Rechtsgrundlage", ["rechtsgrundlage", "art. 6"], []),
+        ("Betroffenenrechte", ["betroffenenrechte", "auskunftsrecht", "auskunft"], []),
+        ("Zwecke der Verarbeitung", ["zweck der verarbeitung", "zwecke der verarbeitung", "verarbeitungszweck"], []),
+        ("Speicherdauer", ["speicherdauer", "aufbewahrungsdauer", "dauer der speicherung", "loeschfrist", "löschfrist"], []),
+        ("Beschwerderecht bei der Aufsichtsbehoerde", ["aufsichtsbehörde", "aufsichtsbehoerde"], []),
+        # Art. 13 Abs. 1 lit. f verlangt die Angabe nur, WENN uebermittelt wird.
+        # Die Vorlage laesst den Abschnitt deshalb in beide Richtungen
+        # beantworten ("findet nicht statt" ist eine gueltige Aussage) - damit
+        # ist ein fehlender Abschnitt ein echtes Signal und kein Rauschen.
+        ("Drittlanduebermittlung", ["drittland", "drittstaat", "ewr", "standardvertragsklausel", "angemessenheitsbeschluss"], [r"art\.\s?4[46]"]),
+    ],
+    DocumentType.TOS: [
+        ("Geltungsbereich", ["geltungsbereich", "anwendungsbereich"], []),
+        ("Vertrag/Leistung", ["vertrag", "leistung"], []),
+        ("Kündigung/Laufzeit", ["kündig", "laufzeit", "beendigung"], []),
+        ("Preise/Vergütung", ["preis", "vergütung", "entgelt", "zahlung"], []),
+    ],
+    DocumentType.COOKIE_POLICY: [
+        ("Cookies", ["cookie"], []),
+        ("Einwilligung", ["einwilligung", "consent"], []),
+    ],
+    DocumentType.WITHDRAWAL: [
+        ("Widerrufsrecht", ["widerruf"], []),
+        ("Widerrufsfrist", ["widerrufsfrist", "14 tage", "vierzehn tagen"], []),
+        ("Muster-Widerrufsformular", ["widerrufsformular"], []),
+    ],
+}
+
+
+# Unausgefüllte Platzhalter wie "[Firmenname]" oder "[E-MAIL AUSFÜLLEN]" im
+# fertigen Dokument. Mindestlänge 3 verhindert Treffer auf Kurzformen wie "[1]".
+PLACEHOLDER_PATTERN = re.compile(r"\[[^\]]{3,}\]")
+
+
+class UnvollstaendigeAngabenError(ValueError):
+    """Das generierte Dokument enthält unausgefüllte Platzhalter.
+
+    Wird von ``_save()`` VOR dem Persistieren geworfen — ein Dokument voller
+    Platzhalter darf weder gespeichert noch als fertiger Rechtstext
+    ausgeliefert werden. Die Route übersetzt diesen Fehler in HTTP 422.
+    """
+
+    def __init__(self, placeholders: List[str]):
+        self.placeholders = placeholders
+        super().__init__(
+            "Das generierte Dokument enthält unausgefüllte Platzhalter: "
+            + ", ".join(placeholders)
+            + ". Bitte ergänzen Sie die fehlenden Angaben und generieren Sie erneut."
+        )
+
+
+def find_placeholders(html: str) -> List[str]:
+    """Findet unausgefüllte Platzhalter (z.B. "[Firmenname]") im Dokument.
+
+    Ausnahme: der bewusste UNFERTIG-Fallback bei KI-Ausfall
+    (``_fallback_template``) — er ist bereits unmissverständlich als unfertig
+    markiert und darf nicht zusätzlich blockiert werden.
+    """
+    text = html or ""
+    if 'data-document-status="incomplete"' in text:
+        return []
+    seen: List[str] = []
+    for match in PLACEHOLDER_PATTERN.findall(text):
+        if match not in seen:
+            seen.append(match)
+    return seen
+
+
+def validate_document_content(doc_type: "DocumentType", html: str) -> List[str]:
+    """Prueft, ob die wichtigsten Pflicht-Marker im generierten Dokument vorkommen.
+    Rueckgabe: Liste fehlender Marker-Labels (leer = vollstaendig). Heuristisch und
+    nicht-blockierend; validiert den KI-Output, der bisher ungeprueft ausgeliefert wurde."""
+    text = (html or "").lower()
+    missing: List[str] = []
+    for label, subs, rxs in _MANDATORY_MARKERS.get(doc_type, []):
+        ok = any(sub in text for sub in subs) or any(re.search(rx, text) for rx in rxs)
+        if not ok:
+            missing.append(label)
+    return missing
+
+
+# =============================================================================
+# SSOT: Rechtsbereich → betroffene Dokumenttypen
+# =============================================================================
+# Die Schlüssel sind exakt die Werte von legal_change_monitor.LegalArea.
+# Bewusst hier (und nicht im Monitor) angesiedelt, weil nur dieses Modul
+# DocumentType kennt und die Re-Generation ausführt — der Monitor liefert nur
+# den Rechtsbereich, die Übersetzung in Dokumenttypen ist Generator-Wissen.
+# Wird ein neuer LegalArea-Wert ergänzt, MUSS er hier eingetragen werden
+# (Wächter: tests/test_legal_area_mapping.py).
+LEGAL_AREA_TO_DOCUMENT_TYPES: Dict[str, List["DocumentType"]] = {
+    # DSGVO
+    "datenschutz": [DocumentType.PRIVACY, DocumentType.COOKIE_POLICY],
+    # TTDSG / ePrivacy
+    "cookie_compliance": [DocumentType.PRIVACY, DocumentType.COOKIE_POLICY],
+    # Impressumspflicht (DDG/TMG)
+    "impressum": [DocumentType.IMPRINT],
+    # BFSG — Barrierefreiheitserklärung wird derzeit im Impressum getragen
+    "barrierefreiheit": [DocumentType.IMPRINT],
+    # UWG
+    "wettbewerbsrecht": [DocumentType.TOS],
+    # Verbraucherrecht / Widerrufsrecht / AGB-Recht
+    "verbraucherschutz": [DocumentType.TOS, DocumentType.WITHDRAWAL],
+    # AI Act erzeugt keinen der generierten Rechtstexte (eigener Doc-Generator)
+    "ai_act": [],
+    # PPWR: Kennzeichnungs-/Informationspflichten am Produkt und im Shop, kein
+    # Rechtstext-Dokument. Bewusst leer — verhindert, dass eine PPWR-Meldung
+    # eine unnötige AGB-Re-Generierung auslöst (und die "Unbekannter
+    # Rechtsbereich"-Warnung in jedem Monitoring-Lauf).
+    "verpackung": [],
+}
+
+# Aliasse: Gesetzesname → Rechtsbereich. Erlaubt, dass eine Änderung auch dann
+# aufgelöst wird, wenn sie über den Gesetzesnamen statt über den LegalArea-Wert
+# hereinkommt. Zielt bewusst NUR auf die SSOT oben, dupliziert sie nicht.
+LAW_NAME_TO_LEGAL_AREA: Dict[str, str] = {
+    "dsgvo": "datenschutz",
+    "bdsg": "datenschutz",
+    "ttdsg": "cookie_compliance",
+    # TTDSG heißt seit Mai 2024 TDDDG — beide Namen auflösen können
+    "tdddg": "cookie_compliance",
+    "eprivacy": "cookie_compliance",
+    "impressumspflicht": "impressum",
+    "ddg": "impressum",
+    "tmg": "impressum",
+    "bfsg": "barrierefreiheit",
+    "uwg": "wettbewerbsrecht",
+    "agb-recht": "verbraucherschutz",
+    "widerrufsrecht": "verbraucherschutz",
+    "verbraucherrecht": "verbraucherschutz",
+    "ai act": "ai_act",
+    "ki-verordnung": "ai_act",
+}
+
+
+def resolve_document_types(affected_areas: List[str]) -> List["DocumentType"]:
+    """
+    Löst Rechtsbereiche (LegalArea-Werte) bzw. Gesetzesnamen in Dokumenttypen auf.
+
+    Unbekannte Einträge werden geloggt und ignoriert — sie dürfen die
+    Re-Generation der übrigen Bereiche nicht verhindern.
+    """
+    doc_types: List[DocumentType] = []
+    for raw in affected_areas or []:
+        key = str(raw).strip().lower()
+        types = LEGAL_AREA_TO_DOCUMENT_TYPES.get(key)
+        if types is None:
+            # Gesetzesname? -> über Alias auf den Rechtsbereich abbilden
+            area = LAW_NAME_TO_LEGAL_AREA.get(key)
+            if area is None:
+                # Teiltreffer, z.B. "DSGVO-Novelle 2026"
+                for law_name, mapped_area in LAW_NAME_TO_LEGAL_AREA.items():
+                    if law_name in key:
+                        area = mapped_area
+                        break
+            if area is None:
+                logger.warning(
+                    f"resolve_document_types: Unbekannter Rechtsbereich '{raw}' — "
+                    f"kein Mapping in LEGAL_AREA_TO_DOCUMENT_TYPES/LAW_NAME_TO_LEGAL_AREA"
+                )
+                continue
+            types = LEGAL_AREA_TO_DOCUMENT_TYPES.get(area, [])
+        for t in types:
+            if t not in doc_types:
+                doc_types.append(t)
+    return doc_types
 
 
 @dataclass
@@ -52,6 +286,10 @@ class GeneratedDocument:
     generated_at: str
     disclaimer: str
     metadata: Dict[str, Any]
+    # False, wenn die DB-Speicherung fehlgeschlagen ist — das Dokument wurde
+    # dann zwar generiert, aber NICHT persistiert (keine Historie, kein
+    # Auto-Update). Die Route reicht das Feld an das Frontend durch.
+    persisted: bool = True
 
 
 class LegalTextGenerator:
@@ -61,7 +299,7 @@ class LegalTextGenerator:
     """
 
     OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-    MODEL = "anthropic/claude-3.5-sonnet"
+    MODEL = "anthropic/claude-sonnet-4.5"
     TEMPLATE_VERSION = "1.0"
 
     def __init__(self, db_pool: asyncpg.Pool):
@@ -85,7 +323,7 @@ class LegalTextGenerator:
         html_with_disclaimer = html + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.IMPRINT, language, html_with_disclaimer,
-            legal_update_id, regeneration_trigger
+            legal_update_id, regeneration_trigger, user_data=user_data
         )
         return GeneratedDocument(
             document_id=doc_id,
@@ -101,6 +339,7 @@ class LegalTextGenerator:
             generated_at=datetime.now().isoformat(),
             disclaimer=DISCLAIMER_LONG,
             metadata={"user_data_hash": self._hash(user_data)},
+            persisted=doc_id is not None,
         )
 
     async def generate_privacy_policy(
@@ -111,16 +350,59 @@ class LegalTextGenerator:
         language: str = "de",
         legal_update_id: Optional[str] = None,
         regeneration_trigger: str = "manual",
+        complyo_context: Optional[Dict[str, Any]] = None,
     ) -> GeneratedDocument:
         template = self._load_template(DocumentType.PRIVACY, language)
         laws_context = self._load_laws_context(["DSGVO", "TTDSG"], language)
-        enriched_data = {**user_data, "services_used": ", ".join(services_used or [])}
+        enriched_data = {**user_data}
+        if services_used is not None:
+            enriched_data["services_used"] = ", ".join(services_used)
+        elif "services_used" not in enriched_data:
+            enriched_data["services_used"] = ""
+
+        # Complyo-Passus: explizit übergebener Kontext hat Vorrang; andernfalls
+        # aus persistierten user_data lesen, damit das Auto-Update
+        # (regenerate_affected_users) den Abschnitt identisch reproduziert.
+        if complyo_context is None:
+            complyo_context = enriched_data.get("complyo_context")
+        if complyo_context:
+            enriched_data["complyo_context"] = complyo_context
+
+        # Drittland-Abschnitt deterministisch aus der SSOT (Art. 49 / Art. 44 ff.),
+        # damit Länderliste und Rechtsgrundlage nicht der KI-Varianz unterliegen.
+        # Beim Auto-Update kommt services_used=None — dann aus den persistierten
+        # user_data (komma-separiert) rekonstruieren, damit der Abschnitt identisch
+        # reproduziert wird statt zu verschwinden.
+        effective_services = services_used
+        if effective_services is None:
+            persisted = enriched_data.get("services_used") or ""
+            effective_services = [s.strip() for s in persisted.split(",") if s.strip()]
+        third_country_clause = build_third_country_clause(effective_services)
+
         prompt = self._build_prompt(template, enriched_data, laws_context, DocumentType.PRIVACY)
+        if complyo_context:
+            # Verhindert, dass die KI einen eigenen, abweichenden Abschnitt zum
+            # Consent-Tool erzeugt — der Complyo-Passus wird deterministisch angehängt.
+            prompt += (
+                "\n\nWICHTIG: Erstelle KEINEN eigenen Abschnitt zum eingesetzten "
+                "Cookie-/Consent-Management-Tool oder zum Barrierefreiheits-Assistenten "
+                "— dieser wird separat ergänzt.\n"
+            )
+        if third_country_clause:
+            # Doppelten/abweichenden Drittland-Abschnitt der KI vermeiden — der
+            # juristische Wortlaut wird deterministisch angehängt.
+            prompt += (
+                "\n\nWICHTIG: Erstelle KEINEN eigenen, aufgezählten Abschnitt zur "
+                "Datenübermittlung in Drittländer für die genannten Dienste — dieser "
+                "wird mit geprüftem Wortlaut separat ergänzt.\n"
+            )
+
         html = await self._call_ai(prompt)
-        html_with_disclaimer = html + DISCLAIMER_HTML
+        complyo_clause = build_complyo_privacy_clause(complyo_context) if complyo_context else ""
+        html_with_disclaimer = html + complyo_clause + third_country_clause + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.PRIVACY, language, html_with_disclaimer,
-            legal_update_id, regeneration_trigger
+            legal_update_id, regeneration_trigger, user_data=enriched_data
         )
         return GeneratedDocument(
             document_id=doc_id,
@@ -135,7 +417,12 @@ class LegalTextGenerator:
             is_active=True,
             generated_at=datetime.now().isoformat(),
             disclaimer=DISCLAIMER_LONG,
-            metadata={"services": services_used or [], "user_data_hash": self._hash(user_data)},
+            metadata={
+                "services": services_used or [],
+                "complyo_clause": bool(complyo_context),
+                "user_data_hash": self._hash(user_data),
+            },
+            persisted=doc_id is not None,
         )
 
     async def generate_tos(
@@ -149,13 +436,17 @@ class LegalTextGenerator:
     ) -> GeneratedDocument:
         template = self._load_template(DocumentType.TOS, language)
         laws_context = self._load_laws_context(["AGB-Recht", "UWG"], language)
-        enriched_data = {**user_data, "business_type": business_type}
+        enriched_data = {**user_data}
+        if business_type:
+            enriched_data["business_type"] = business_type
+        elif "business_type" not in enriched_data:
+            enriched_data["business_type"] = "saas"
         prompt = self._build_prompt(template, enriched_data, laws_context, DocumentType.TOS)
         html = await self._call_ai(prompt)
         html_with_disclaimer = html + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.TOS, language, html_with_disclaimer,
-            legal_update_id, regeneration_trigger
+            legal_update_id, regeneration_trigger, user_data=enriched_data
         )
         return GeneratedDocument(
             document_id=doc_id,
@@ -171,6 +462,7 @@ class LegalTextGenerator:
             generated_at=datetime.now().isoformat(),
             disclaimer=DISCLAIMER_LONG,
             metadata={"business_type": business_type, "user_data_hash": self._hash(user_data)},
+            persisted=doc_id is not None,
         )
 
     async def generate_cookie_policy(
@@ -184,16 +476,17 @@ class LegalTextGenerator:
     ) -> GeneratedDocument:
         template = self._load_template(DocumentType.COOKIE_POLICY, language)
         laws_context = self._load_laws_context(["TTDSG", "DSGVO"], language)
-        enriched_data = {
-            **user_data,
-            "cookie_inventory": json.dumps(cookie_inventory or [], ensure_ascii=False),
-        }
+        enriched_data = {**user_data}
+        if cookie_inventory is not None:
+            enriched_data["cookie_inventory"] = json.dumps(cookie_inventory, ensure_ascii=False)
+        elif "cookie_inventory" not in enriched_data:
+            enriched_data["cookie_inventory"] = "[]"
         prompt = self._build_prompt(template, enriched_data, laws_context, DocumentType.COOKIE_POLICY)
         html = await self._call_ai(prompt)
         html_with_disclaimer = html + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.COOKIE_POLICY, language, html_with_disclaimer,
-            legal_update_id, regeneration_trigger
+            legal_update_id, regeneration_trigger, user_data=enriched_data
         )
         return GeneratedDocument(
             document_id=doc_id,
@@ -209,6 +502,42 @@ class LegalTextGenerator:
             generated_at=datetime.now().isoformat(),
             disclaimer=DISCLAIMER_LONG,
             metadata={"cookie_count": len(cookie_inventory or []), "user_data_hash": self._hash(user_data)},
+            persisted=doc_id is not None,
+        )
+
+    async def generate_withdrawal(
+        self,
+        user_id: int,
+        user_data: Dict[str, str],
+        language: str = "de",
+        legal_update_id: Optional[str] = None,
+        regeneration_trigger: str = "manual",
+    ) -> GeneratedDocument:
+        """Widerrufsbelehrung inkl. gesetzlichem Muster-Widerrufsformular (B2C-Fernabsatz)."""
+        template = self._load_template(DocumentType.WITHDRAWAL, language)
+        laws_context = self._load_laws_context(["Widerrufsrecht", "Verbraucherrecht", "AGB-Recht"], language)
+        prompt = self._build_prompt(template, user_data, laws_context, DocumentType.WITHDRAWAL)
+        html = await self._call_ai(prompt)
+        html_with_disclaimer = html + DISCLAIMER_HTML
+        doc_id = await self._save(
+            user_id, DocumentType.WITHDRAWAL, language, html_with_disclaimer,
+            legal_update_id, regeneration_trigger, user_data=user_data
+        )
+        return GeneratedDocument(
+            document_id=doc_id,
+            user_id=user_id,
+            document_type=DocumentType.WITHDRAWAL,
+            language=language,
+            html_content=html_with_disclaimer,
+            plain_text=self._strip_html(html_with_disclaimer),
+            template_version=self.TEMPLATE_VERSION,
+            legal_update_id=legal_update_id,
+            regeneration_trigger=regeneration_trigger,
+            is_active=True,
+            generated_at=datetime.now().isoformat(),
+            disclaimer=DISCLAIMER_LONG,
+            metadata={"user_data_hash": self._hash(user_data)},
+            persisted=doc_id is not None,
         )
 
     async def get_active_document(
@@ -258,7 +587,7 @@ class LegalTextGenerator:
 
     async def regenerate_affected_users(
         self,
-        affected_laws: List[str],
+        affected_areas: List[str],
         legal_update_id: str,
         severity: str = "medium",
     ) -> Dict[str, Any]:
@@ -272,22 +601,11 @@ class LegalTextGenerator:
             logger.info(f"Re-Generation übersprungen: severity={severity} < medium")
             return {"skipped": True, "reason": f"severity {severity} < medium"}
 
-        doc_type_map = {
-            "Impressumspflicht": [DocumentType.IMPRINT],
-            "DSGVO": [DocumentType.PRIVACY, DocumentType.COOKIE_POLICY],
-            "TTDSG": [DocumentType.PRIVACY, DocumentType.COOKIE_POLICY],
-            "AGB-Recht": [DocumentType.TOS],
-            "UWG": [DocumentType.TOS],
-            "BFSG": [DocumentType.IMPRINT],
-        }
-        affected_doc_types = set()
-        for law in affected_laws:
-            for key, types in doc_type_map.items():
-                if key.lower() in law.lower():
-                    affected_doc_types.update(types)
+        # Auflösung über die SSOT (LEGAL_AREA_TO_DOCUMENT_TYPES)
+        affected_doc_types = set(resolve_document_types(affected_areas))
 
         if not affected_doc_types:
-            logger.info(f"Keine betroffenen Dokumenttypen für laws={affected_laws}")
+            logger.info(f"Keine betroffenen Dokumenttypen für areas={affected_areas}")
             return {"skipped": True, "reason": "no affected document types"}
 
         async with self.db_pool.acquire() as conn:
@@ -323,6 +641,8 @@ class LegalTextGenerator:
                         await self.generate_tos(uid, user_data, legal_update_id=legal_update_id, regeneration_trigger="legal_update")
                     elif dt == DocumentType.COOKIE_POLICY:
                         await self.generate_cookie_policy(uid, user_data, legal_update_id=legal_update_id, regeneration_trigger="legal_update")
+                    elif dt == DocumentType.WITHDRAWAL:
+                        await self.generate_withdrawal(uid, user_data, legal_update_id=legal_update_id, regeneration_trigger="legal_update")
                     triggered += 1
                 except Exception as e:
                     logger.error(f"Re-Generation fehlgeschlagen für user_id={uid}, doc_type={dt}: {e}")
@@ -341,7 +661,7 @@ class LegalTextGenerator:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://complyo.tech",
+            "HTTP-Referer": "https://complyo.de",
             "X-Title": "Complyo Legal Text Generator",
         }
         payload = {
@@ -373,7 +693,22 @@ class LegalTextGenerator:
                     logger.error(f"OpenRouter Fehler {resp.status}: {err}")
                     return self._fallback_template(prompt)
                 data = await resp.json()
-                return data["choices"][0]["message"]["content"]
+                html = self._strip_markdown_fences(data["choices"][0]["message"]["content"])
+                if not html.startswith("<"):
+                    logger.warning(
+                        "KI-Antwort beginnt nicht mit '<' — vermutlich kein reines HTML "
+                        f"(Anfang: {html[:80]!r})"
+                    )
+                return html
+
+    @staticmethod
+    def _strip_markdown_fences(text: str) -> str:
+        """Entfernt Markdown-Code-Fences (```html ... ```), die das Modell trotz
+        Systemanweisung gelegentlich um den HTML-Code legt."""
+        cleaned = (text or "").strip()
+        cleaned = re.sub(r"^```(html)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        return cleaned.strip()
 
     def _build_prompt(
         self,
@@ -382,15 +717,20 @@ class LegalTextGenerator:
         laws_context: str,
         doc_type: DocumentType,
     ) -> str:
+        # generated_at automatisch ergänzen, falls nicht vom Aufrufer gesetzt
+        fill_data = {"generated_at": datetime.now().strftime("%d.%m.%Y"), **user_data}
         filled = template
-        for key, value in user_data.items():
+        for key, value in fill_data.items():
             filled = filled.replace(f"{{{{{key}}}}}", str(value))
 
+        # Aktuelle Gesetzesbezeichnungen: TMG→DDG (seit 05/2024), §55 RStV→§18 MStV,
+        # TTDSG→TDDDG. Veraltete Zitate im Prompt landen sonst im generierten Text.
         doc_labels = {
-            DocumentType.IMPRINT: "Impressum gemäß §5 TMG / §55 RStV",
-            DocumentType.PRIVACY: "Datenschutzerklärung gemäß DSGVO Art. 13-14 & TTDSG",
+            DocumentType.IMPRINT: "Impressum gemäß §5 DDG / §18 MStV",
+            DocumentType.PRIVACY: "Datenschutzerklärung gemäß DSGVO Art. 13-14 & TDDDG",
             DocumentType.TOS: "Allgemeine Geschäftsbedingungen (AGB)",
-            DocumentType.COOKIE_POLICY: "Cookie-Richtlinie gemäß TTDSG & DSGVO",
+            DocumentType.COOKIE_POLICY: "Cookie-Richtlinie gemäß TDDDG & DSGVO",
+            DocumentType.WITHDRAWAL: "Widerrufsbelehrung inkl. Muster-Widerrufsformular gemäß §312g, §355 BGB & Art. 246a EGBGB",
         }
         return (
             f"Generiere ein vollständiges {doc_labels[doc_type]}.\n\n"
@@ -414,7 +754,12 @@ class LegalTextGenerator:
             if os.path.exists(p):
                 with open(p, "r", encoding="utf-8") as f:
                     return f.read()
-        logger.warning(f"Template nicht gefunden: {filename} — nutze leeres Template")
+        # Kein warning, sondern error: ohne Template erzeugt die KI einen frei improvisierten
+        # Rechtstext. Das ist kein Randfall, sondern Produktversagen — entsprechend laut.
+        logger.error(
+            f"Template nicht gefunden: {filename} (gesucht in {TEMPLATES_DIR}) — "
+            f"Rechtstext wird OHNE Vorlage generiert."
+        )
         return f"Erstelle {doc_type.value} für:\n{{{{company_name}}}}, {{{{address}}}}"
 
     def _load_laws_context(self, law_names: List[str], language: str) -> str:
@@ -433,7 +778,7 @@ class LegalTextGenerator:
                         content = f.read()
                     parts.append(f"### {name}\n{content[:2000]}")
                     break
-        return "\n\n".join(parts) if parts else "Aktuelle DSGVO- und TMG-Anforderungen beachten."
+        return "\n\n".join(parts) if parts else "Aktuelle DSGVO-, DDG- und TDDDG-Anforderungen beachten."
 
     async def _save(
         self,
@@ -443,13 +788,37 @@ class LegalTextGenerator:
         html_content: str,
         legal_update_id: Optional[str],
         regeneration_trigger: str,
+        user_data: Optional[Dict[str, Any]] = None,
     ) -> Optional[int]:
+        placeholders = find_placeholders(html_content)
+        if placeholders:
+            # Blockierend statt nur Warnung: ein Dokument voller Platzhalter ist
+            # kein speicher- oder auslieferbarer Rechtstext. Der bewusste
+            # UNFERTIG-Fallback bei KI-Ausfall ist in find_placeholders ausgenommen.
+            logger.error(
+                f"Generiertes Dokument enthält unausgefüllte Platzhalter (user={user_id}, "
+                f"type={doc_type.value}): {', '.join(placeholders)} — Generierung abgebrochen"
+            )
+            raise UnvollstaendigeAngabenError(placeholders)
+
+        missing_markers = validate_document_content(doc_type, html_content)
+        if missing_markers:
+            logger.warning(
+                f"Generiertes Dokument unvollstaendig (user={user_id}, "
+                f"type={doc_type.value}): fehlende Pflicht-Marker: "
+                f"{', '.join(missing_markers)}"
+            )
         meta = {
             "is_active": True,
+            "content_validation": {"missing_markers": missing_markers},
             "template_version": self.TEMPLATE_VERSION,
             "regeneration_trigger": regeneration_trigger,
             "legal_update_id": legal_update_id,
             "generator": "legal_text_generator",
+            # user_data wird gespeichert, damit legal_change_monitor die Dokumente
+            # bei Gesetzesänderungen automatisch neu generieren kann (Auto-Update).
+            "user_data": user_data or {},
+            "language": language,
         }
         try:
             async with self.db_pool.acquire() as conn:
@@ -480,7 +849,13 @@ class LegalTextGenerator:
                 )
                 return doc_id
         except Exception as e:
-            logger.error(f"Fehler beim Speichern des Dokuments (user={user_id}, type={doc_type}): {e}")
+            # ALARM: Das Dokument wurde generiert, aber NICHT persistiert — der
+            # Nutzer sieht den Text zwar (Response mit persisted=false), aber
+            # Historie und Auto-Update fehlen. Muss im Monitoring auffallen.
+            logger.error(
+                f"ALARM Rechtstext-Persistenz fehlgeschlagen (user={user_id}, "
+                f"type={doc_type.value}): Dokument generiert, aber NICHT gespeichert — {e}"
+            )
             return None
 
     @staticmethod
@@ -493,10 +868,34 @@ class LegalTextGenerator:
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()[:16]
 
     def _fallback_template(self, prompt: str) -> str:
+        """Notfall-Rückgabe, wenn die KI-Generierung nicht durchführbar war
+        (kein ``OPENROUTER_API_KEY`` gesetzt oder HTTP-Status ≠ 200).
+
+        Bewusst KEIN fertig aussehendes Dokument: Der frühere Stub
+        ("KI-Generierung aktuell nicht verfügbar") sah aus wie ein regulärer
+        Rechtstext und konnte so unbemerkt an Endnutzer ausgeliefert werden —
+        ein leerer Text im Gewand eines fertigen Dokuments. Stattdessen wird der
+        Zustand laut geloggt und ein unmissverständlich als UNFERTIG markierter
+        Platzhalter zurückgegeben, der nicht mit einem gültigen Dokument
+        verwechselt werden kann.
+        """
+        logger.error(
+            "KI-Generierung fehlgeschlagen — Fallback-Platzhalter wird zurückgegeben. "
+            "Kein gültiger Rechtstext erzeugt (OPENROUTER_API_KEY fehlt oder OpenRouter "
+            "lieferte keinen Status 200). Ursache prüfen; das Dokument ist NICHT fertig."
+        )
+        generated_at = datetime.now().strftime("%d.%m.%Y %H:%M")
         return (
-            "<h1>Dokument</h1>"
-            "<p>KI-Generierung aktuell nicht verfügbar. "
-            "Bitte füllen Sie das Dokument manuell aus oder wenden Sie sich an den Support.</p>"
+            '<div data-document-status="incomplete" role="alert">'
+            "<h1>⚠ Rechtstext konnte nicht erzeugt werden</h1>"
+            "<p><strong>Status: UNFERTIG — dies ist kein gültiges Rechtsdokument.</strong></p>"
+            "<p>Die automatische Generierung war zum Zeitpunkt der Anforderung "
+            f"({generated_at}) nicht verfügbar. Es wurde bewusst kein Ersatztext "
+            "erstellt, um den falschen Eindruck eines fertigen Dokuments zu vermeiden.</p>"
+            "<p>Bitte die Generierung erneut auslösen. Bleibt der Fehler bestehen, "
+            "wenden Sie sich an den Support — bis dahin darf dieser Platzhalter nicht "
+            "als Rechtstext verwendet oder veröffentlicht werden.</p>"
+            "</div>"
         )
 
 

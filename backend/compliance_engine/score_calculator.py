@@ -8,8 +8,24 @@ WICHTIG: Diese Funktion wird überall verwendet statt ad-hoc Berechnungen
 from typing import List, Dict, Any
 from dataclasses import dataclass
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+
+class PillarStatus:
+    """
+    Status einer Compliance-Säule (evidenz-basiert, v4.0).
+
+    Leitprinzip: Compliance muss AKTIV nachgewiesen werden. Abwesenheit von
+    erkannten Problemen ist NICHT automatisch "konform" — wenn eine Säule gar
+    nicht geprüft werden konnte (Check abgestürzt / Seite nicht lesbar / nur
+    per JS gerendert), ist sie UNVERIFIED und zählt NICHT als bestanden.
+    """
+    COMPLIANT = "compliant"          # Nachgewiesen konform (Pflichtelemente vorhanden + valide)
+    PARTIAL = "partial"              # Vorhanden, aber mit Mängeln
+    NON_COMPLIANT = "non_compliant"  # Kern-Element fehlt / nicht erfüllt
+    UNVERIFIED = "unverified"        # Konnte nicht geprüft werden → 0 Credit, separat ausgewiesen
 
 
 @dataclass
@@ -20,6 +36,107 @@ class ComplianceIssue:
     title: str
     legal_risk_score: float = 0.0
     risk_euro: float = 0.0
+
+
+# ---------------------------------------------------------------------------
+# Manuelle Pruef-Anleitungen — fuer Kriterien, die KEINE Automatik der Welt
+# zuverlaessig pruefen kann. Prinzip der Plattform: alles Automatisierbare
+# prueft der Scanner; fuer den Rest bekommt der Kunde eine konkrete
+# Schritt-fuer-Schritt-Anleitung statt Schweigen (kein falsches
+# Sicherheitsgefuehl durch einen hohen Score).
+# ---------------------------------------------------------------------------
+MANUAL_CHECKS = [
+    {
+        "pillar": "accessibility",
+        "id": "manual-keyboard",
+        "title": "Tastatur-Bedienbarkeit (WCAG 2.1.1, 2.1.2, 2.4.3, 2.4.7)",
+        "anleitung": (
+            "1. Maus beiseite legen. 2. Mit TAB durch die komplette Seite gehen. "
+            "3. Prüfen: Ist jedes interaktive Element (Links, Buttons, Formulare, "
+            "Menüs) erreichbar? Ist der Fokus immer sichtbar (Umrandung)? Folgt "
+            "die Reihenfolge der Leselogik? Kommen Sie aus Dialogen/Menüs mit "
+            "ESC oder TAB wieder heraus (keine Tastatur-Falle)?"
+        ),
+    },
+    {
+        "pillar": "accessibility",
+        "id": "manual-zoom",
+        "title": "Zoom & Umbruch (WCAG 1.4.4, 1.4.10)",
+        "anleitung": (
+            "1. Im Browser auf 200% zoomen (Strg + Plus). 2. Prüfen: Bleibt aller "
+            "Text lesbar, ohne horizontales Scrollen? Überlappen sich Elemente? "
+            "3. Zusätzlich Fenster auf ~320px Breite ziehen (Responsive-Ansicht)."
+        ),
+    },
+    {
+        "pillar": "accessibility",
+        "id": "manual-screenreader",
+        "title": "Screenreader-Stichprobe (WCAG 1.1.1, 4.1.2)",
+        "anleitung": (
+            "1. Kostenlosen Screenreader starten (Windows: NVDA, macOS: VoiceOver "
+            "mit Cmd+F5). 2. Startseite und ein Formular vorlesen lassen. "
+            "3. Prüfen: Werden Bilder sinnvoll beschrieben? Haben Buttons/Links "
+            "verständliche Namen? Werden Formularfelder korrekt angesagt?"
+        ),
+    },
+    {
+        "pillar": "accessibility",
+        "id": "manual-motion",
+        "title": "Bewegung, Blinken, Animation (WCAG 2.2.2, 2.3.1)",
+        "anleitung": (
+            "Prüfen: Gibt es automatisch bewegte/blinkende Inhalte länger als 5 "
+            "Sekunden (Slider, Videos, Animationen)? Falls ja: Pause/Stopp-Knopf "
+            "vorhanden? Blinkt nichts öfter als 3x pro Sekunde?"
+        ),
+    },
+    {
+        "pillar": "cookies",
+        "id": "manual-reject-test",
+        "title": "Ablehnen-Klick-Test (TDDDG §25)",
+        "anleitung": (
+            "1. Seite im privaten Fenster öffnen, Entwicklertools > Netzwerk-Tab "
+            "öffnen. 2. Im Cookie-Banner ABLEHNEN klicken. 3. Prüfen: Werden "
+            "danach trotzdem Requests an Tracker (google-analytics, facebook, "
+            "doubleclick …) geladen? Unter Anwendung > Cookies: Werden trotzdem "
+            "Marketing-/Statistik-Cookies gesetzt? Beides darf nicht passieren."
+        ),
+    },
+    {
+        "pillar": "gdpr",
+        "id": "manual-avv",
+        "title": "Auftragsverarbeitungsverträge (Art. 28 DSGVO)",
+        "anleitung": (
+            "Für jeden externen Dienst, der personenbezogene Daten verarbeitet "
+            "(Hosting, Newsletter-Tool, Analytics, CRM): Liegt ein "
+            "abgeschlossener AVV vor? Checkliste: Anbieter-Adminbereich prüfen "
+            "(meist unter 'Datenschutz' oder 'DPA'), Vertrag ablegen. Der "
+            "Scanner kann Verträge nicht von außen sehen."
+        ),
+    },
+    {
+        "pillar": "gdpr",
+        "id": "manual-vvt",
+        "title": "Verzeichnis von Verarbeitungstätigkeiten (Art. 30 DSGVO)",
+        "anleitung": (
+            "Intern prüfen: Existiert ein aktuelles VVT (welche Daten, Zwecke, "
+            "Empfänger, Löschfristen)? Pflicht für fast jedes Unternehmen mit "
+            "regelmäßiger Verarbeitung — der Pflichten-Report von Complyo "
+            "erstellt die Grundlage aus Ihrem Firmenprofil."
+        ),
+    },
+    {
+        "pillar": "legal",
+        "id": "manual-branche",
+        "title": "Branchenspezifische Pflichtangaben (§5 DDG, Berufsrecht)",
+        "anleitung": (
+            "Bei erlaubnispflichtigen Tätigkeiten (Handwerk, Makler, Gastronomie, "
+            "Heilberufe, Rechtsberatung): Prüfen, ob Aufsichtsbehörde, Kammer, "
+            "gesetzliche Berufsbezeichnung und berufsrechtliche Regelungen im "
+            "Impressum stehen. Der Scanner erkennt die Branche nicht immer "
+            "zuverlässig von außen."
+        ),
+    },
+]
 
 
 class ScoreCalculator:
@@ -38,7 +155,7 @@ class ScoreCalculator:
     - Gesamtscore: gewichteter Mittelwert über Säulen
     """
 
-    FORMULA_VERSION = "v3.0"
+    FORMULA_VERSION = "v4.0"
 
     # ========================================================================
     # 4 SÄULEN — einzige kanonische Definition (Frontend + Backend identisch)
@@ -67,6 +184,10 @@ class ScoreCalculator:
         ("gdpr", [
             "datenschutz", "dsgvo", "gdpr", "privacy", "personenbezogen",
             "datenverarbeitung", "avv",
+            # Social-Media-Plugins übertragen ohne Consent personenbezogene
+            # Daten (IP) an Dritte → DSGVO Art. 6 / EuGH Fashion ID (C-40/17),
+            # gehört in die Datenschutz-Säule, NICHT zu "Rechtssichere Texte".
+            "social_media", "social",
             # Sicherheit = DSGVO Art. 32 (technische Schutzmaßnahmen)
             "security", "sicherheit", "csp", "content-security", "hsts",
             "x-frame", "header", "ssl", "tls", "https",
@@ -75,7 +196,7 @@ class ScoreCalculator:
             "impressum", "agb", "legal", "rechtlich", "tmg", "uwg",
             "widerruf", "preisangaben", "preisangabe", "pangv", "preis",
             # Shop-Pflichttexte zählen rechtlich
-            "shop", "contact", "kontakt", "social_media", "social",
+            "shop", "contact", "kontakt",
             "urheberrecht", "markenrecht",
         ]),
     ]
@@ -94,6 +215,12 @@ class ScoreCalculator:
         "warning":  8,
         "info":     0,
     }
+
+    # Untergrenze fuer Saeulen ohne kritischen Befund. Ohne sie kollabiert eine
+    # Saeule schon bei 13 Warnungen auf 0 und ist von einem echten Totalausfall
+    # nicht mehr zu unterscheiden. 20 ist bewusst niedrig genug, um weh zu tun,
+    # und hoch genug, um "es steht etwas, aber es fehlt viel" zu zeigen.
+    WARNING_ONLY_FLOOR = 20
 
     # Legacy-Gewichte (v1, für Rückwärtskompatibilität in alten Methoden)
     WEIGHTS = {
@@ -171,9 +298,109 @@ class ScoreCalculator:
         """
         if has_missing_core:
             return 0
-        score = 100 - (critical_count * ScoreCalculator.SEVERITY_DEDUCTIONS["critical"]
-                       + warning_count * ScoreCalculator.SEVERITY_DEDUCTIONS["warning"])
+
+        critical_abzug = critical_count * ScoreCalculator.SEVERITY_DEDUCTIONS["critical"]
+        warning_abzug = warning_count * ScoreCalculator.SEVERITY_DEDUCTIONS["warning"]
+        score = 100 - (critical_abzug + warning_abzug)
+
+        # Boden fuer reine Warnungen: 0 muss Totalausfall bedeuten, nicht
+        # "viele Kleinigkeiten". panoart360.de stand auf 0 bei 14 Warnungen
+        # und keinem einzigen kritischen Verstoss — dieselbe Null wie eine
+        # Seite ganz ohne Datenschutzerklaerung. Wer kritische Befunde oder
+        # ein fehlendes Kern-Element hat, faellt weiterhin bis 0 durch.
+        if critical_count == 0:
+            return max(ScoreCalculator.WARNING_ONLY_FLOOR, score)
         return max(0, score)
+
+    # ---------------------------------------------------------------------
+    # Sättigung pro Befund-Typ (v4.1)
+    # ---------------------------------------------------------------------
+    # Ein einzelner Befund-Typ darf eine Säule nicht im Alleingang auf 0
+    # ziehen. Anlass: ein zu grober SVG-Check meldete jedes dekorative Icon
+    # einzeln — 59 Phantom-Warnungen (59 × 8 = 472 Punkte Abzug) drückten
+    # complyo.de von 100 auf 28. Fachlich sind 40 fehlende Alt-Texte EIN
+    # Mangel mit viel Arbeit, nicht 40 Mängel. Die ersten Funde derselben
+    # Sorte kosten deshalb voll, danach sättigt der Abzug.
+    MAX_DEDUCTIONS_PER_TYPE = 3
+
+    _TYPE_KEY_NUMBERS = re.compile(r"\d+")
+
+    @staticmethod
+    def issue_type_key(issue) -> str:
+        """
+        Stabiler Typ-Schlüssel eines Issues für die Sättigung.
+
+        Zahlen werden ersetzt, damit "3 Formularfelder ohne Label" und
+        "7 Formularfelder ohne Label" als derselbe Befund-Typ gelten.
+        """
+        title = (getattr(issue, "title", "") or "").strip().lower()
+        title = ScoreCalculator._TYPE_KEY_NUMBERS.sub("#", title)
+        category = (getattr(issue, "category", "") or "").strip().lower()
+        return f"{category}|{title}"
+
+    @staticmethod
+    def count_effective_severities(issues) -> "tuple[int, int]":
+        """
+        Zähle critical/warning für die Score-Berechnung — mit Sättigung.
+
+        Jeder Befund-Typ geht höchstens MAX_DEDUCTIONS_PER_TYPE-mal in den
+        Abzug ein. Die Issue-LISTE bleibt vollständig: der Nutzer sieht
+        weiterhin jeden einzelnen Fund, nur der Score wird nicht verzerrt.
+
+        Returns:
+            (critical_count, warning_count) — bereits gedeckelt
+        """
+        seen: Dict[str, int] = {}
+        critical = 0
+        warning = 0
+        for issue in issues:
+            severity = getattr(issue, "severity", "")
+            if severity not in ("critical", "warning"):
+                continue
+            titel = (getattr(issue, "title", "") or "").strip()
+            if not titel:
+                # Ohne Titel ist kein Befund-Typ bestimmbar. Dann lieber voll
+                # zählen als fremde Befunde fälschlich zusammenwerfen.
+                if severity == "critical":
+                    critical += 1
+                else:
+                    warning += 1
+                continue
+            key = f"{ScoreCalculator.issue_type_key(issue)}|{severity}"
+            seen[key] = seen.get(key, 0) + 1
+            if seen[key] > ScoreCalculator.MAX_DEDUCTIONS_PER_TYPE:
+                continue
+            if severity == "critical":
+                critical += 1
+            else:
+                warning += 1
+        return critical, warning
+
+    # Aufwands-Klassifizierung (v4.0) für Bearbeitungshinweise/Priorisierung
+    EFFORT_LOW = "gering"      # automatisch / per KI behebbar
+    EFFORT_MEDIUM = "mittel"   # manuell, aber überschaubar
+    EFFORT_EXPERT = "experte"  # rechtliche Beratung / vollständige Erstellung nötig
+
+    @staticmethod
+    def classify_effort(severity: str, auto_fixable: bool = False, is_missing: bool = False) -> str:
+        """
+        Klassifiziere den Bearbeitungsaufwand eines Issues (deterministisch).
+
+        - auto_fixable                      → gering   (Complyo/KI kann es erledigen)
+        - komplett fehlendes Kern-Element   → experte  (z.B. Impressum/Datenschutz neu erstellen)
+        - critical                          → experte
+        - warning                           → mittel
+        - sonst (info)                      → gering
+        """
+        if auto_fixable:
+            return ScoreCalculator.EFFORT_LOW
+        if is_missing and severity == "critical":
+            return ScoreCalculator.EFFORT_EXPERT
+        if severity == "critical":
+            return ScoreCalculator.EFFORT_EXPERT
+        if severity == "warning":
+            return ScoreCalculator.EFFORT_MEDIUM
+        return ScoreCalculator.EFFORT_LOW
 
     @staticmethod
     def categorize(category: str) -> str:
@@ -207,13 +434,16 @@ class ScoreCalculator:
 
         Args:
             pillar_scores: {"accessibility": 100, "gdpr": 100, "legal": 100, "cookies": 70}
-                           Fehlende Säulen werden als 100 (keine Issues) gewertet.
+                           ⚠️ v4.0: Eine fehlende Säule wird als 0 gewertet
+                           (Compliance muss NACHGEWIESEN werden — Abwesenheit ist
+                           kein Nachweis). Normalerweise liefert die Engine ohnehin
+                           für alle 4 Säulen einen Wert, sodass der Default nicht greift.
 
         Returns:
             int: Gesamtscore 0-100
         """
         scores = [
-            pillar_scores.get(pillar, 100)
+            pillar_scores.get(pillar, 0)
             for pillar in ScoreCalculator.PILLAR_IDS
         ]
         if not scores:
@@ -250,7 +480,8 @@ class ScoreCalculator:
         - cookies        (Cookie-Banner / TTDSG / TCF)
 
         Jede Säule: max(0, 100 - (critical×25 + warning×8)),
-        fehlendes Kern-Element (is_missing) → 0.
+        fehlendes Kern-Element (is_missing) → 0. Gleichartige Befunde gehen
+        höchstens MAX_DEDUCTIONS_PER_TYPE-mal in den Abzug ein.
 
         Returns:
             Dict mit pillar_id → score (0-100, int). Säulen ohne Issues = 100.
@@ -263,9 +494,18 @@ class ScoreCalculator:
 
         pillar_scores: Dict[str, int] = {}
         for pillar_id, pillar_issues in buckets.items():
-            critical_count = sum(1 for i in pillar_issues if i.severity == "critical")
-            warning_count = sum(1 for i in pillar_issues if i.severity == "warning")
-            has_missing_core = any(getattr(i, "is_missing", False) for i in pillar_issues)
+            critical_count, warning_count = ScoreCalculator.count_effective_severities(
+                pillar_issues
+            )
+            # is_missing wird von vielen Checks auch auf einzelne Warning-Sub-Findings
+            # gesetzt ("Widerrufsmöglichkeit fehlt", "Ablehnen-Button fehlt" …). Nur ein
+            # komplett fehlendes KERN-Element (Impressum, Datenschutz, Cookie-Banner,
+            # A11y-Widget) soll die Säule auf 0 ziehen — solche Issues sind immer
+            # critical. Sonst kollabiert jede Säule mit einer einzelnen "fehlt"-Warnung.
+            has_missing_core = any(
+                getattr(i, "is_missing", False) and i.severity == "critical"
+                for i in pillar_issues
+            )
             pillar_scores[pillar_id] = ScoreCalculator.calculate_pillar_score(
                 critical_count=critical_count,
                 warning_count=warning_count,
@@ -275,25 +515,111 @@ class ScoreCalculator:
         return pillar_scores
 
     @staticmethod
+    def _derive_pillar_status(score: int, critical: int, warning: int, has_missing_core: bool) -> str:
+        """Leite den anzeigbaren Säulen-Status aus den gezählten Issues ab (v4.0)."""
+        if has_missing_core or score == 0:
+            return PillarStatus.NON_COMPLIANT
+        if critical or warning:
+            return PillarStatus.PARTIAL
+        return PillarStatus.COMPLIANT
+
+    @staticmethod
+    def compute_with_status(
+        issues: List[ComplianceIssue],
+        unverified_pillars: "set[str] | None" = None,
+    ) -> Dict[str, Any]:
+        """
+        Evidenz-basierte Score-Berechnung (v4.0) — liefert zusätzlich pro Säule
+        einen Status (compliant / partial / non_compliant / unverified).
+
+        UNVERIFIED-Prinzip: Wenn der zuständige Check für eine Säule NICHT sauber
+        durchlaufen ist (z.B. Exception, Seite nur per JS, Timeout) und deshalb
+        KEINE Evidenz vorliegt, gilt die Säule als "ungeprüft" → Score 0, Status
+        UNVERIFIED. So kann eine nicht prüfbare Säule nie als 100 (bestanden)
+        durchrutschen. Liegen dennoch Issues vor, gewinnen die Issues (echte Evidenz).
+
+        Args:
+            issues: alle erkannten ComplianceIssues
+            unverified_pillars: Säulen-IDs, deren Primär-Check nicht auswertbar war
+
+        Returns:
+            {
+                "overall_score": int,
+                "pillar_scores": {pillar_id: int, ...},
+                "pillar_status": {pillar_id: PillarStatus, ...}
+            }
+        """
+        unverified = set(unverified_pillars or [])
+        buckets: Dict[str, list] = {pillar: [] for pillar in ScoreCalculator.PILLAR_IDS}
+        for issue in issues:
+            buckets[ScoreCalculator.categorize(issue.category)].append(issue)
+
+        pillar_scores: Dict[str, int] = {}
+        pillar_status: Dict[str, str] = {}
+        for pillar_id, pillar_issues in buckets.items():
+            critical_count, warning_count = ScoreCalculator.count_effective_severities(
+                pillar_issues
+            )
+            has_missing_core = any(
+                getattr(i, "is_missing", False) and i.severity == "critical"
+                for i in pillar_issues
+            )
+
+            # Ungeprüft UND keine Evidenz → 0 Credit, transparent als "ungeprüft"
+            if pillar_id in unverified and not pillar_issues:
+                pillar_scores[pillar_id] = 0
+                pillar_status[pillar_id] = PillarStatus.UNVERIFIED
+                continue
+
+            score = ScoreCalculator.calculate_pillar_score(
+                critical_count=critical_count,
+                warning_count=warning_count,
+                has_missing_core=has_missing_core,
+            )
+            pillar_scores[pillar_id] = score
+            pillar_status[pillar_id] = ScoreCalculator._derive_pillar_status(
+                score, critical_count, warning_count, has_missing_core
+            )
+
+        return {
+            "overall_score": ScoreCalculator.calculate_overall_score(pillar_scores),
+            "pillar_scores": pillar_scores,
+            "pillar_status": pillar_status,
+            # Ehrlichkeits-Hinweis: automatisierte A11y-Pruefung deckt nur einen
+            # Teil der WCAG-AA-Kriterien ab — ein hoher Score ist KEIN Nachweis
+            # vollstaendiger Barrierefreiheit.
+            # Nicht-automatisierbare Kriterien: konkrete Pruef-Anleitungen
+            # statt Schweigen — Teil des Produktversprechens ("erkennen ODER
+            # anleiten", nie stillschweigend auslassen).
+            "manual_checks": MANUAL_CHECKS,
+            "pillar_notes": {
+                "accessibility": (
+                    "Automatisierte Prüfung (axe-core + Heuristiken) deckt nur einen Teil "
+                    "der WCAG-2.1-AA-Kriterien ab (branchenüblich ~30–40%). Ein Score von "
+                    "100 bedeutet: keine automatisiert erkennbaren Verstöße — er ersetzt "
+                    "keine manuelle Prüfung (Tastaturbedienung, Fokus-Reihenfolge, "
+                    "Screenreader, Verständlichkeit)."
+                ),
+            },
+        }
+
+    @staticmethod
     def compute(issues: List[ComplianceIssue]) -> Dict[str, Any]:
         """
-        Einziger Einstiegspunkt für vollständige Score-Berechnung (v3.0).
+        Einziger Einstiegspunkt für vollständige Score-Berechnung (v4.0).
 
-        Liefert Säulen-Scores UND den daraus gleichgewichtet gemittelten
-        Gesamtscore in EINEM konsistenten Aufruf — so können Gesamt und
-        Säulen nie auseinanderlaufen.
+        Liefert Säulen-Scores, Säulen-Status UND den daraus gleichgewichtet
+        gemittelten Gesamtscore in EINEM konsistenten Aufruf — so können Gesamt
+        und Säulen nie auseinanderlaufen.
 
         Returns:
             {
                 "overall_score": int,                  # = Mittelwert der Säulen
-                "pillar_scores": {pillar_id: int, ...} # 4 Säulen
+                "pillar_scores": {pillar_id: int, ...},# 4 Säulen
+                "pillar_status": {pillar_id: str, ...} # evidenz-basierter Status
             }
         """
-        pillar_scores = ScoreCalculator.calculate_pillar_scores(issues)
-        return {
-            "overall_score": ScoreCalculator.calculate_overall_score(pillar_scores),
-            "pillar_scores": pillar_scores,
-        }
+        return ScoreCalculator.compute_with_status(issues)
     
     @staticmethod
     def get_score_breakdown(issues: List[ComplianceIssue]) -> Dict[str, Any]:

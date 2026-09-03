@@ -5,7 +5,6 @@ Provides German, English, French, Italian and Polish translations
 
 import json
 import logging
-from typing import Dict, Any
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -17,9 +16,32 @@ class SupportedLanguages(Enum):
     IT = "it"
     PL = "pl"
 
+# Formular-Pruefmeldungen. Nur die Sprachen, in denen sie wirklich
+# redigiert sind; alles andere faellt auf Englisch zurueck.
+VALIDIERUNG = {
+    "de": {
+        "required": "Dieses Feld wird benötigt.",
+        "email_invalid": "Bitte geben Sie eine gültige E-Mail-Adresse ein.",
+        "url_invalid": "Bitte geben Sie eine gültige Web-Adresse ein.",
+        "password_short": "Das Passwort muss mindestens 8 Zeichen haben.",
+        "terms_required": "Bitte stimmen Sie den AGB und der Datenschutzerklärung zu.",
+    },
+    "en": {
+        "required": "This field is required.",
+        "email_invalid": "Please enter a valid email address.",
+        "url_invalid": "Please enter a valid web address.",
+        "password_short": "The password must be at least 8 characters long.",
+        "terms_required": "Please accept the terms and the privacy policy.",
+    },
+}
+
+
 class I18nService:
     def __init__(self):
         self.supported_languages = ["de", "en", "fr", "it", "pl"]
+        # i18n_api liest default_language an sieben Stellen. Das Attribut
+        # fehlte, damit warf jede der fuenf /api/i18n-Routen 500 (01.09.2026).
+        self.default_language = "de"
         self.translations = {
             "de": {
                 "email_verification_subject": "Bestätigen Sie Ihre E-Mail-Adresse - Complyo",
@@ -138,7 +160,19 @@ class I18nService:
             if language not in self.supported_languages:
                 language = "de"
             
-            translation = self.translations[language].get(key, key)
+            # Rueckfallkette statt Rohschluessel. fr/it/pl tragen nur 9 der
+            # 25 Schluessel; fehlte einer, gab die Methode woertlich
+            # "email_report_subject" zurueck und genau das stand dann im
+            # Mailbetreff. Jetzt: gewuenschte Sprache, dann Englisch, dann
+            # Deutsch, und erst zuletzt der Schluessel selbst (01.09.2026).
+            translation = None
+            for kandidat in (language, "en", "de"):
+                treffer = self.translations.get(kandidat, {}).get(key)
+                if treffer:
+                    translation = treffer
+                    break
+            if translation is None:
+                translation = key
             
             if kwargs:
                 translation = translation.format(**kwargs)
@@ -159,6 +193,86 @@ class I18nService:
             return "de"
         return "en"
     
+    def set_default_language(self, language: str) -> None:
+        """Setzt die Vorgabesprache, sofern sie unterstuetzt wird."""
+        if language in self.supported_languages:
+            self.default_language = language
+
+    def get_text(self, key: str, language: str = None, **kwargs) -> str:
+        """Alias auf get_translation; i18n_api ruft den Text unter diesem Namen."""
+        return self.get_translation(key, language or self.default_language, **kwargs)
+
+    def get_language_from_request(self, headers: dict) -> str:
+        """
+        Liest die Wunschsprache aus dem Accept-Language-Kopf.
+
+        Bewusst schlicht: erste unterstuetzte Sprache aus der nach q-Wert
+        sortierten Liste, sonst die Vorgabesprache. Kein externes Paket, weil
+        der Kopf hier nur ueber fuenf bekannte Kuerzel entscheidet.
+        """
+        roh = ""
+        for name, wert in (headers or {}).items():
+            if str(name).lower() == "accept-language":
+                roh = str(wert)
+                break
+        if not roh:
+            return self.default_language
+
+        eintraege = []
+        for teil in roh.split(","):
+            teil = teil.strip()
+            if not teil:
+                continue
+            kuerzel, _, rest = teil.partition(";")
+            gewicht = 1.0
+            if rest.strip().startswith("q="):
+                try:
+                    gewicht = float(rest.strip()[2:])
+                except ValueError:
+                    gewicht = 0.0
+            eintraege.append((gewicht, kuerzel.strip().lower()))
+
+        for _, kuerzel in sorted(eintraege, key=lambda e: e[0], reverse=True):
+            basis = kuerzel.split("-")[0]
+            if basis in self.supported_languages:
+                return basis
+        return self.default_language
+
+    def get_email_template(self, name: str, language: str = None) -> dict:
+        """
+        Betreff und Anrede fuer eine Mailvorlage in der gewuenschten Sprache.
+
+        Greift auf die vorhandenen Uebersetzungsschluessel zu; erfindet nichts,
+        was nicht uebersetzt ist. Unbekannte Namen liefern einen leeren Betreff
+        statt einer Ausnahme.
+        """
+        sprache = language if language in self.supported_languages else self.default_language
+        schluessel = {
+            "verification": "email_verification_subject",
+            "report": "email_report_subject",
+            "gdpr_deletion": "email_deletion_subject",
+            "gdpr_export": "email_export_subject",
+        }.get(name)
+        return {
+            "name": name,
+            "language": sprache,
+            "subject": self.get_translation(schluessel, sprache) if schluessel else "",
+            "greeting": self.get_translation("greeting", sprache),
+        }
+
+    def get_form_validation_messages(self, language: str = None) -> dict:
+        """
+        Meldungen fuer die Formularpruefung.
+
+        Gepflegt in Deutsch und Englisch; die uebrigen unterstuetzten Sprachen
+        fallen bewusst auf Englisch zurueck, statt maschinell uebersetzte
+        Rechtstexte vorzutaeuschen. Welche Sprache tatsaechlich geliefert wurde,
+        steht im Feld language.
+        """
+        sprache = language if language in self.supported_languages else self.default_language
+        geliefert = sprache if sprache in VALIDIERUNG else "en"
+        return {"language": geliefert, "messages": dict(VALIDIERUNG[geliefert])}
+
     def get_supported_languages(self) -> list:
         """Get list of supported languages"""
         return self.supported_languages

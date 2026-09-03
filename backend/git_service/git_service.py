@@ -12,7 +12,6 @@ Features:
 
 import os
 import base64
-import asyncio
 import aiohttp
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
@@ -232,6 +231,43 @@ class GitHubClient:
         
         return None, None
     
+    async def get_tree(
+        self,
+        owner: str,
+        repo: str,
+        branch: str = "main",
+    ) -> List[Dict[str, Any]]:
+        """
+        Kompletter Dateibaum des Repos (rekursiv).
+
+        Grundlage fuer den deterministischen Patch-Builder: er muss wissen,
+        welche Template-Dateien existieren, ohne jede einzeln zu raten.
+
+        Returns:
+            Liste von {"path": ..., "size": ...} fuer Blobs; leere Liste bei
+            Fehlern. `truncated` grosser Repos wird geloggt, nicht verschwiegen.
+        """
+        sha = await self.get_branch_sha(owner, repo, branch)
+        if not sha:
+            return []
+        success, data = await self._request(
+            "GET",
+            f"/repos/{owner}/{repo}/git/trees/{sha}",
+            params={"recursive": "1"},
+        )
+        if not success:
+            return []
+        if data.get("truncated"):
+            logger.warning(
+                f"Repo-Baum {owner}/{repo} ist abgeschnitten (GitHub-Limit) — "
+                f"Patch-Builder sieht nicht alle Dateien"
+            )
+        return [
+            {"path": e.get("path", ""), "size": e.get("size")}
+            for e in (data.get("tree") or [])
+            if e.get("type") == "blob"
+        ]
+
     async def update_file(
         self,
         owner: str,
@@ -308,6 +344,50 @@ class GitHubClient:
             error=data.get("message", "PR-Erstellung fehlgeschlagen")
         )
     
+    async def get_pull_request(self, owner: str, repo: str, number: int) -> Optional[Dict[str, Any]]:
+        """PR-Details (state, merged, merge_commit_sha, base)."""
+        success, data = await self._request("GET", f"/repos/{owner}/{repo}/pulls/{number}")
+        return data if success else None
+
+    async def get_pull_request_files(self, owner: str, repo: str, number: int) -> List[Dict[str, Any]]:
+        """Geaenderte Dateien eines PRs (status: added|modified|removed|renamed)."""
+        dateien: List[Dict[str, Any]] = []
+        seite = 1
+        while True:
+            success, data = await self._request(
+                "GET", f"/repos/{owner}/{repo}/pulls/{number}/files",
+                params={"per_page": 100, "page": seite},
+            )
+            if not success or not data:
+                break
+            dateien.extend(data)
+            if len(data) < 100:
+                break
+            seite += 1
+        return dateien
+
+    async def get_commit_parent(self, owner: str, repo: str, sha: str) -> Optional[str]:
+        """Erster Parent eines Commits — bei einem Merge-Commit der Stand davor."""
+        success, data = await self._request("GET", f"/repos/{owner}/{repo}/commits/{sha}")
+        if success and data.get("parents"):
+            return data["parents"][0].get("sha")
+        return None
+
+    async def close_pull_request(self, owner: str, repo: str, number: int) -> bool:
+        success, _ = await self._request(
+            "PATCH", f"/repos/{owner}/{repo}/pulls/{number}", data={"state": "closed"}
+        )
+        return success
+
+    async def delete_file(
+        self, owner: str, repo: str, path: str, message: str, branch: str, file_sha: str
+    ) -> bool:
+        success, _ = await self._request(
+            "DELETE", f"/repos/{owner}/{repo}/contents/{path}",
+            data={"message": message, "branch": branch, "sha": file_sha},
+        )
+        return success
+
     async def apply_unified_diff(
         self,
         owner: str,
@@ -353,6 +433,64 @@ class GitHubClient:
         
         return CommitResult(success=False, error="Commit fehlgeschlagen")
     
+    async def apply_new_content(
+        self,
+        owner: str,
+        repo: str,
+        branch: str,
+        file_path: str,
+        new_content: str,
+        commit_message: str,
+        base_sha256: Optional[str] = None,
+    ) -> CommitResult:
+        """
+        Schreibt den fertig berechneten Zielzustand einer Datei.
+
+        Bevorzugter Weg gegenueber `apply_unified_diff`. Der Patch-Builder
+        kennt den gewuenschten Endzustand bereits exakt; ihn in einen Diff zu
+        verwandeln und den hier von Hand wieder anzuwenden, ist eine verlustige
+        Rundreise: `_apply_diff` ist ein vereinfachter Applier ohne
+        Kontextpruefung, und `splitlines()` im Builder gegen `split("\\n")`
+        hier zerlegt CRLF-Dateien unterschiedlich. Das Ergebnis waere still
+        falscher Inhalt in einem Kunden-Repository.
+
+        Statt dessen: Datei erneut lesen, Fingerabdruck gegen den Stand
+        pruefen, auf dem der Patch berechnet wurde, und nur bei Gleichstand
+        schreiben. Aendert jemand die Datei dazwischen, bricht der Patch ab,
+        statt fremde Arbeit zu ueberschreiben.
+        """
+        content, file_sha = await self.get_file_content(owner, repo, file_path, branch)
+        if content is None:
+            return CommitResult(success=False, error=f"Datei '{file_path}' nicht gefunden")
+
+        if base_sha256:
+            import hashlib
+            aktuell = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            if aktuell != base_sha256:
+                return CommitResult(
+                    success=False,
+                    error=(
+                        f"'{file_path}' hat sich seit der Analyse geaendert — "
+                        f"nicht ueberschrieben. Bitte neu scannen."
+                    ),
+                )
+
+        if content == new_content:
+            # Nichts zu tun. Kein leerer Commit, kein Rauschen im PR.
+            return CommitResult(success=False, error=f"'{file_path}': keine Aenderung noetig")
+
+        success, commit_sha = await self.update_file(
+            owner, repo, file_path, new_content, commit_message, branch, file_sha
+        )
+        if success:
+            return CommitResult(
+                success=True,
+                commit_sha=commit_sha,
+                branch_name=branch,
+                files_changed=[file_path],
+            )
+        return CommitResult(success=False, error=f"Commit fuer '{file_path}' fehlgeschlagen")
+
     def _apply_diff(self, original: str, diff: str) -> str:
         """
         Wendet einen Unified Diff auf Text an
@@ -616,6 +754,114 @@ class GitService:
             logger.error(f"❌ PR creation failed: {e}")
             return PullRequestResult(success=False, error=str(e))
     
+    async def revert_pull_request(
+        self,
+        credentials: GitCredentials,
+        repo_info: RepoInfo,
+        pr_number: int,
+    ) -> PullRequestResult:
+        """Nimmt einen ueber complyo erstellten PR zurueck.
+
+        - Offener PR: wird geschlossen (nichts wurde je gemerged — der Kunde
+          hat den letzten Schritt nie getan).
+        - Gemergter PR: Gegen-PR, der jede Datei auf den Stand VOR dem Merge
+          zurücksetzt (erster Parent des Merge-Commits). Auch der Revert wird
+          nur vorgeschlagen, nie direkt gemerged — gleiche Regel wie hinwaerts.
+        """
+        if repo_info.provider != GitProvider.GITHUB:
+            return PullRequestResult(success=False, error="Revert ist aktuell nur für GitHub verfügbar.")
+
+        client: GitHubClient = self.get_client(repo_info.provider, credentials)
+        pr = await client.get_pull_request(repo_info.owner, repo_info.repo, pr_number)
+        if not pr:
+            return PullRequestResult(success=False, error=f"PR #{pr_number} nicht gefunden.")
+
+        # Fall 1: offen -> schliessen genuegt.
+        if pr.get("state") == "open":
+            ok = await client.close_pull_request(repo_info.owner, repo_info.repo, pr_number)
+            if not ok:
+                return PullRequestResult(success=False, error="PR konnte nicht geschlossen werden.")
+            return PullRequestResult(
+                success=True, pr_number=pr_number, pr_url=pr.get("html_url"),
+                branch_name=pr.get("head", {}).get("ref"), status=PRStatus.CLOSED,
+            )
+
+        if not pr.get("merged_at"):
+            return PullRequestResult(
+                success=False,
+                error="PR ist geschlossen, wurde aber nie gemerged — es gibt nichts zurückzunehmen.",
+            )
+
+        merge_sha = pr.get("merge_commit_sha")
+        vorher_sha = await client.get_commit_parent(repo_info.owner, repo_info.repo, merge_sha)
+        if not vorher_sha:
+            return PullRequestResult(success=False, error="Stand vor dem Merge nicht ermittelbar.")
+
+        # Revert-Branch vom aktuellen Default-Branch abzweigen.
+        datum = datetime.now().strftime("%Y%m%d-%H%M%S")
+        revert_branch = f"revert/pr-{pr_number}-{datum}"
+        created = await client.create_branch(
+            repo_info.owner, repo_info.repo, revert_branch, repo_info.default_branch
+        )
+        if not created:
+            return PullRequestResult(success=False, error="Revert-Branch konnte nicht erstellt werden.")
+
+        dateien = await client.get_pull_request_files(repo_info.owner, repo_info.repo, pr_number)
+        if not dateien:
+            return PullRequestResult(success=False, error="Keine geänderten Dateien im PR gefunden.")
+
+        zurueckgesetzt = []
+        for datei in dateien:
+            pfad = datei.get("filename")
+            status_wert = datei.get("status")
+            nachricht = f"Revert PR #{pr_number}: {pfad}"
+
+            if status_wert == "added":
+                # Datei kam durch den PR — Revert heisst: entfernen.
+                _, aktueller_sha = await client.get_file_content(
+                    repo_info.owner, repo_info.repo, pfad, branch=revert_branch
+                )
+                if aktueller_sha:
+                    ok = await client.delete_file(
+                        repo_info.owner, repo_info.repo, pfad, nachricht,
+                        revert_branch, aktueller_sha,
+                    )
+                    if not ok:
+                        return PullRequestResult(success=False, error=f"'{pfad}' konnte nicht entfernt werden.")
+            else:
+                # modified/removed/renamed: Inhalt von vor dem Merge wiederherstellen.
+                alter_inhalt, _ = await client.get_file_content(
+                    repo_info.owner, repo_info.repo, pfad, branch=vorher_sha
+                )
+                if alter_inhalt is None:
+                    return PullRequestResult(
+                        success=False,
+                        error=f"Stand von '{pfad}' vor dem Merge nicht lesbar — Revert abgebrochen.",
+                    )
+                _, aktueller_sha = await client.get_file_content(
+                    repo_info.owner, repo_info.repo, pfad, branch=revert_branch
+                )
+                ok, _ = await client.update_file(
+                    repo_info.owner, repo_info.repo, pfad, alter_inhalt,
+                    nachricht, revert_branch, file_sha=aktueller_sha,
+                )
+                if not ok:
+                    return PullRequestResult(success=False, error=f"'{pfad}' konnte nicht zurückgesetzt werden.")
+            zurueckgesetzt.append(pfad)
+
+        titel = f"Revert: PR #{pr_number} zurücknehmen"
+        beschreibung = (
+            f"Dieser Pull Request nimmt die Änderungen aus #{pr_number} zurück.\n\n"
+            f"Zurückgesetzte Dateien:\n"
+            + "\n".join(f"- `{p}`" for p in zurueckgesetzt)
+            + "\n\n_Erstellt über complyo. Auch dieser Revert wird nur vorgeschlagen — "
+              "gemerged wird von Ihnen._"
+        )
+        return await client.create_pull_request(
+            repo_info.owner, repo_info.repo, titel, beschreibung,
+            revert_branch, repo_info.default_branch,
+        )
+
     async def _create_github_pr(
         self,
         client: GitHubClient,
@@ -634,23 +880,54 @@ class GitService:
         if not success:
             return PullRequestResult(success=False, error=f"Branch-Erstellung: {result}")
         
-        # 2. Patches committen
+        # 2. Patches committen.
+        #    Vorrang hat `new_content` (der Patch-Builder kennt den Zielzustand
+        #    exakt). `unified_diff` bleibt der Weg fuer Patches, die von aussen
+        #    kommen — der MCP-Agent liefert nur Diffs.
         files_changed = []
+        fehler: List[str] = []
         for patch in patches:
-            if patch.get("unified_diff") and patch.get("file_path"):
-                commit_result = await client.apply_unified_diff(
-                    owner, repo, branch_name,
-                    patch["file_path"],
-                    patch["unified_diff"],
-                    f"fix({patch.get('feature_id', 'a11y')}): {patch.get('description', 'Accessibility fix')[:50]}"
+            pfad = patch.get("file_path")
+            if not pfad:
+                continue
+            nachricht = (
+                f"fix({patch.get('feature_id', 'a11y')}): "
+                f"{patch.get('description', 'Accessibility fix')[:50]}"
+            )
+
+            if patch.get("new_content") is not None:
+                commit_result = await client.apply_new_content(
+                    owner, repo, branch_name, pfad,
+                    patch["new_content"], nachricht,
+                    base_sha256=patch.get("base_sha256"),
                 )
-                if commit_result.success:
-                    files_changed.extend(commit_result.files_changed)
-        
+            elif patch.get("unified_diff"):
+                commit_result = await client.apply_unified_diff(
+                    owner, repo, branch_name, pfad,
+                    patch["unified_diff"], nachricht,
+                )
+            else:
+                continue
+
+            if commit_result.success:
+                files_changed.extend(commit_result.files_changed)
+            else:
+                fehler.append(commit_result.error or f"{pfad}: unbekannter Fehler")
+                logger.warning(f"Patch nicht angewendet — {commit_result.error}")
+
         if not files_changed:
+            # Die Ursache mitgeben statt sie zu verschlucken: "Keine Dateien
+            # geaendert" allein ist fuer den Kunden nicht handlungsfaehig.
+            grund = "; ".join(fehler[:3]) if fehler else "keine anwendbaren Patches"
             return PullRequestResult(
                 success=False,
-                error="Keine Dateien geändert"
+                error=f"Keine Dateien geändert ({grund})"
+            )
+
+        if fehler:
+            logger.warning(
+                f"PR {owner}/{repo}: {len(files_changed)} Datei(en) geaendert, "
+                f"{len(fehler)} Patch(es) uebersprungen"
             )
         
         # 3. PR erstellen
@@ -738,7 +1015,7 @@ Diese Änderungen verbessern die Barrierefreiheit gemäß:
 ⚠️ Bitte prüfen Sie die semantische Korrektheit der generierten Texte (z.B. Alt-Texte, Labels).
 
 ---
-*Generiert von [Complyo.tech](https://complyo.tech) - Barrierefreiheit leicht gemacht.*
+*Generiert von [Complyo.tech](https://complyo.de) - Barrierefreiheit leicht gemacht.*
 """
         
         return title, body

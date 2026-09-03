@@ -9,24 +9,49 @@ import sys
 import types
 from unittest.mock import MagicMock
 
+# Diese Datei kann ohne installierte Web-Abhängigkeiten laufen (reiner Host-Lauf).
+# Dafür werden fehlende Module durch MagicMocks ersetzt.
+#
+# ACHTUNG — hier lag ein Suite-weiter Defekt: `sys.modules["fastapi"]` wurde
+# BEDINGUNGSLOS durch ein MagicMock ersetzt, auch wenn das echte fastapi vorhanden
+# war. Da pytest beim Sammeln alle Testmodule importiert, erbte jedes danach
+# importierte Modul das Mock — Folge: 66 Fehler/Errors im Gesamtlauf, während
+# dieselben Dateien isoliert grün waren (z. B. tests/test_waitlist.py: 10 passed
+# allein, 6 errors im Verbund). Die Suite war damit als Sicherheitsnetz wertlos.
+#
+# Jetzt: nur mocken, was tatsächlich fehlt. Im Backend-Container sind fastapi &
+# Co. installiert, also wird nichts ersetzt und keine fremde Datei vergiftet.
 for _mod in ("asyncpg", "bcrypt", "fastapi", "slowapi", "pydantic"):
     if _mod not in sys.modules:
-        sys.modules[_mod] = MagicMock()
+        try:
+            __import__(_mod)
+        except ImportError:
+            sys.modules[_mod] = MagicMock()
 
-_fastapi_exc = types.ModuleType("fastapi.exceptions")
-_fastapi_exc.HTTPException = type("HTTPException", (Exception,), {"__init__": lambda self, status_code=400, detail="": setattr(self, "status_code", status_code) or setattr(self, "detail", detail) or None})
-sys.modules["fastapi"] = MagicMock(HTTPException=_fastapi_exc.HTTPException)
-sys.modules["fastapi.exceptions"] = _fastapi_exc
+if isinstance(sys.modules.get("fastapi"), MagicMock):
+    # Nur im Mock-Fall: HTTPException nachrüsten, die die Tests brauchen.
+    _fastapi_exc = types.ModuleType("fastapi.exceptions")
+    _fastapi_exc.HTTPException = type(
+        "HTTPException",
+        (Exception,),
+        {
+            "__init__": lambda self, status_code=400, detail="": setattr(self, "status_code", status_code)
+            or setattr(self, "detail", detail)
+            or None
+        },
+    )
+    sys.modules["fastapi"] = MagicMock(HTTPException=_fastapi_exc.HTTPException)
+    sys.modules["fastapi.exceptions"] = _fastapi_exc
 
 import time
 import pytest
 import jwt
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timedelta, timezone
 
 JWT_SECRET = "test-secret-hardening"
 JWT_AUDIENCE = "complyo-api"
-JWT_ISSUER = "https://complyo.tech"
+JWT_ISSUER = "https://complyo.de"
 
 
 def _make_token(user_id=1, jti="test-jti", expired=False, extra_claims=None):

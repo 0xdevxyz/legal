@@ -42,6 +42,41 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 
 
+async def _write_monitoring_log(
+    db_pool,
+    started_at: datetime,
+    changes_detected: int,
+    status: str,
+    error_message: str = None,
+) -> None:
+    """
+    Schreibt je Cron-Lauf genau EINE Zeile legal_monitoring_logs.
+
+    scan_date = Startzeit des Laufs: der nächste Lauf holt via
+    _fetch_news_since_last_run alle News ab genau diesem Zeitpunkt —
+    so entsteht keine Lücke durch die Laufdauer. Best-effort: ein
+    fehlgeschlagener Log-Eintrag darf den Lauf nicht kippen.
+    """
+    try:
+        execution_time = (datetime.now() - started_at).total_seconds()
+        await db_pool.execute(
+            """
+            INSERT INTO legal_monitoring_logs
+                (scan_date, changes_detected, sources_checked, status,
+                 error_message, execution_time_seconds)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            """,
+            started_at,
+            changes_detected,
+            ["legal_news"],
+            status,
+            error_message,
+            execution_time,
+        )
+    except Exception as e:
+        logger.error(f"legal_monitoring_logs-Eintrag fehlgeschlagen: {e}")
+
+
 async def run() -> int:
     logger.info("=" * 60)
     logger.info(f"Legal Change Monitor gestartet: {datetime.now().isoformat()}")
@@ -57,6 +92,7 @@ async def run() -> int:
     import asyncpg
     from legal_change_monitor import LegalChangeMonitor
 
+    started_at = datetime.now()
     db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=3)
     try:
         monitor = LegalChangeMonitor(OPENROUTER_API_KEY, db_pool=db_pool)
@@ -65,12 +101,26 @@ async def run() -> int:
         logger.info(
             f"Fertig: {summary.get('detected', 0)} erkannt, "
             f"{summary.get('new_saved', 0)} neu, "
+            f"{summary.get('duplicates', 0)} Duplikate übersprungen, "
             f"{checks_created} neue Prüfungen erzeugt "
             f"(Status hängt an AUTO_ACTIVATE_GENERATED_CHECKS)."
+        )
+        await _write_monitoring_log(
+            db_pool,
+            started_at,
+            changes_detected=summary.get("detected", 0),
+            status="completed",
         )
         return 0
     except Exception as e:
         logger.error(f"Legal Change Monitor fehlgeschlagen: {e}", exc_info=True)
+        await _write_monitoring_log(
+            db_pool,
+            started_at,
+            changes_detected=0,
+            status="failed",
+            error_message=str(e),
+        )
         return 1
     finally:
         await db_pool.close()

@@ -17,8 +17,8 @@ interface SimpleExplanation {
 const explanations: Record<string, SimpleExplanation> = {
   'impressum': {
     simple: 'Das Impressum zeigt, wer die Website betreibt. Es ist wie das "Namensschild" Ihrer Firma im Internet.',
-    why: 'Jede gewerbliche Website muss ein Impressum haben (TMG § 5). Es schützt Verbraucher und schafft Vertrauen.',
-    risk: 'Bis zu 5.000€ Bußgeld pro Verstoß. Zudem können Abmahnungen von Wettbewerbern drohen.',
+    why: 'Geschäftsmäßige Websites brauchen ein Impressum (§ 5 DDG, seit 2024 Nachfolger des TMG). Es schützt Verbraucher und schafft Vertrauen.',
+    risk: 'Bußgeld nach dem DDG sowie Abmahnungen durch Wettbewerber. Die Höhe hängt vom Einzelfall ab.',
     fix: 'Erstellen Sie eine Impressum-Seite mit Name, Adresse, Kontaktdaten und Handelsregisternummer.',
     urgency: 'high',
     estimatedTime: '10 Minuten'
@@ -26,15 +26,15 @@ const explanations: Record<string, SimpleExplanation> = {
   'datenschutz': {
     simple: 'Die Datenschutzerklärung erklärt Besuchern, welche Daten Sie sammeln und was Sie damit machen.',
     why: 'Seit der DSGVO (2018) müssen Sie transparent sein, wie Sie mit Nutzerdaten umgehen.',
-    risk: 'Bis zu 20 Millionen € oder 4% des Jahresumsatzes. In der Praxis meist 5.000-20.000€.',
+    risk: 'Bußgeldrahmen nach Art. 83 DSGVO: bis 20 Mio. € oder 4 % des weltweiten Jahresumsatzes. Die tatsächliche Höhe hängt vom Einzelfall ab.',
     fix: 'Erstellen Sie eine detaillierte Datenschutzerklärung mit allen Datenverarbeitungen.',
     urgency: 'high',
     estimatedTime: '30 Minuten mit Generator'
   },
   'cookies': {
     simple: 'Ein Cookie-Banner fragt Besucher, ob Sie deren Surfverhalten tracken dürfen.',
-    why: 'Seit 2021 (TTDSG § 25) müssen Nutzer aktiv zustimmen, bevor Tracking-Cookies gesetzt werden.',
-    risk: 'Bis zu 50.000€ Bußgeld. Cookie-Banner sind heute Pflicht für fast alle Websites.',
+    why: 'Nutzer müssen aktiv zustimmen, bevor Tracking-Cookies gesetzt werden (§ 25 TDDDG, vormals TTDSG).',
+    risk: 'Bußgeld nach dem TDDDG sowie Abmahnungen. Die Höhe hängt vom Einzelfall ab.',
     fix: 'Nutzen Sie unsere integrierte Cookie-Compliance-Lösung unter "Cookie-Compliance" im Dashboard.',
     urgency: 'high',
     estimatedTime: '15 Minuten'
@@ -49,8 +49,8 @@ const explanations: Record<string, SimpleExplanation> = {
   },
   'barrierefreiheit': {
     simple: 'Barrierefreiheit bedeutet, dass auch Menschen mit Einschränkungen Ihre Website nutzen können.',
-    why: 'Ab 2025 ist Barrierefreiheit für viele Websites Pflicht (BFSG). Es erhöht auch die Nutzerfreundlichkeit für alle.',
-    risk: 'Ab 2025: Bußgelder bis 100.000€. Zudem Reputationsschaden.',
+    why: 'Seit dem 28.06.2025 gilt das BFSG für Websites, über die Verbrauchern Dienstleistungen angeboten werden. Kleinstunternehmen (unter 10 Beschäftigte und höchstens 2 Mio. € Jahresumsatz) sind bei Dienstleistungen ausgenommen.',
+    risk: 'Bußgeld nach dem BFSG sowie Anordnungen der Marktüberwachung. Die Höhe hängt vom Einzelfall ab.',
     fix: 'Fügen Sie Alt-Texte zu Bildern hinzu, sorgen Sie für ausreichende Kontraste und Tastaturnavigation.',
     urgency: 'medium',
     estimatedTime: '2-4 Stunden'
@@ -58,7 +58,7 @@ const explanations: Record<string, SimpleExplanation> = {
   'contact': {
     simple: 'Kontaktdaten müssen leicht auffindbar sein, damit Nutzer Sie erreichen können.',
     why: 'Transparenz und Erreichbarkeit sind Teil der Vertrauensbildung und gesetzlich vorgeschrieben.',
-    risk: 'Abmahnungen und Bußgelder bis 5.000€.',
+    risk: 'Abmahnungen durch Wettbewerber. Die Höhe hängt vom Einzelfall ab.',
     fix: 'Fügen Sie eine deutlich sichtbare Kontaktseite mit E-Mail und Telefonnummer hinzu.',
     urgency: 'medium',
     estimatedTime: '5 Minuten'
@@ -66,7 +66,7 @@ const explanations: Record<string, SimpleExplanation> = {
   'social-media': {
     simple: 'Social Media Plugins (z.B. Facebook Like-Button) übertragen oft Daten ohne Zustimmung.',
     why: 'Jede Datenübertragung an Dritte braucht die Zustimmung des Nutzers (DSGVO).',
-    risk: 'Abmahnungen und Bußgelder. Facebook wurde dafür bereits zu Millionenstrafen verurteilt.',
+    risk: 'Abmahnungen und Bußgelder wegen Datenübermittlung ohne Einwilligung.',
     fix: 'Verwenden Sie 2-Klick-Lösungen oder entfernen Sie die Plugins.',
     urgency: 'medium',
     estimatedTime: '30 Minuten'
@@ -95,7 +95,9 @@ export function explainInSimpleTerms(issue: ComplianceIssue): SimpleExplanation 
   return {
     simple: issue.description || 'Dieses Problem sollte behoben werden.',
     why: issue.legal_basis || 'Gesetzliche Anforderung',
-    risk: `Bis zu ${issue.risk_euro_max || '5.000'}€ Bußgeld möglich`,
+    risk: issue.risk_euro_max
+      ? `Bußgeldrahmen bis ${issue.risk_euro_max} €, abhängig vom Einzelfall`
+      : 'Abmahnung oder Bußgeld möglich, abhängig vom Einzelfall',
     fix: issue.solution?.steps?.[0] || 'Bitte Dokumentation prüfen',
     urgency: issue.severity === 'critical' ? 'high' : issue.severity === 'warning' ? 'medium' : 'low',
     estimatedTime: 'Unbekannt'

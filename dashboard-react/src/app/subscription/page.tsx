@@ -13,7 +13,7 @@ import { PageContainer, PageHeader } from '@/components/dashboard/PageShell';
 
 const PLAN_LABELS: Record<string, string> = {
   free: 'Kostenlos', single: 'Einzelne Säule', pro: 'Pro-Paket',
-  agency: 'Agentur', expert: 'Expertenservice', update: 'Updateservice',
+  agency: 'Agentur', expert: 'Expertenservice', update: 'Updateservice', monitor: 'Monitoring',
   unknown: 'Unbekannt',
 };
 
@@ -89,7 +89,7 @@ interface SubStatus {
 }
 
 const PLAN_RANK: Record<string, number> = {
-  free: 0, single: 1, pro: 2, agency: 3, expert: 2, update: 1,
+  free: 0, single: 1, monitor: 1, pro: 2, agency: 3, expert: 2, update: 1,
 };
 
 const MAX_RETRIES = 6;
@@ -236,6 +236,8 @@ export default function SubscriptionPage() {
   const planLabel = PLAN_LABELS[currentPlanType] ?? PLAN_LABELS['unknown'];
   const activeModuleIds = sub?.modules?.map(m => m.id) ?? user?.active_modules ?? [];
   const isFreePlan = !sub?.has_subscription || sub?.plan_type === 'free';
+  // Höchste Stufe erreicht (Agentur) → es gibt nichts mehr zu „upgraden".
+  const isTopTier = (PLAN_RANK[currentPlanType] ?? 0) >= (PLAN_RANK['agency'] ?? 3);
 
   const colorMap: Record<string, string> = {
     blue: 'from-blue-500/20 to-blue-600/10 border-blue-500/40',
@@ -360,19 +362,21 @@ export default function SubscriptionPage() {
                 <button
                   onClick={handlePortal}
                   disabled={portalLoading}
-                  className="flex items-center gap-2 dark:bg-zinc-800 bg-gray-100 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border dark:border-zinc-700 border-gray-200"
+                  className="flex items-center gap-2 dark:bg-zinc-800 bg-gray-100 hover:bg-gray-200 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border dark:border-zinc-700 border-gray-200"
                 >
                   {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
                   Zahlung & Rechnungen
                   <ExternalLink className="w-3.5 h-3.5 opacity-50" />
                 </button>
-                <button
-                  onClick={() => setShowPlans(s => !s)}
-                  className="flex items-center gap-2 bg-[var(--lime)] hover:bg-[var(--lime-bright)] px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <Zap className="w-4 h-4" />
-                  Plan upgraden
-                </button>
+                {!isTopTier && (
+                  <button
+                    onClick={() => setShowPlans(s => !s)}
+                    className="flex items-center gap-2 bg-[var(--lime)] hover:bg-[var(--lime-bright)] px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Plan upgraden
+                  </button>
+                )}
               </>
             ) : (
               <button
@@ -471,7 +475,7 @@ export default function SubscriptionPage() {
             </div>
 
             {sub?.has_subscription && (PLAN_RANK[currentPlanType] ?? 0) > 0 && (
-              <div className="mt-4 p-3 bg-zinc-800/60 border border-zinc-700/50 rounded-lg flex items-start gap-2.5 text-xs dark:text-zinc-400 text-gray-600">
+              <div className="mt-4 p-3 bg-gray-100/60 dark:bg-zinc-800/60 border border-gray-200/50 dark:border-zinc-700/50 rounded-lg flex items-start gap-2.5 text-xs dark:text-zinc-400 text-gray-600">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 dark:text-zinc-500 text-gray-500" />
                 <span>
                   Downgrade auf einen niedrigeren Plan? Nutze den{' '}

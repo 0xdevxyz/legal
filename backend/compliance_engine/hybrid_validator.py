@@ -7,16 +7,54 @@ Strategie:
 - 10% der Fälle: KI-Analyse bei Unsicherheit (~2s)
 """
 
-import anthropic
+import aiohttp
 import os
+import re
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
-from .checks.deep_content_analyzer import DeepContentAnalyzer, ContentValidation, ContentQuality
+from bs4 import BeautifulSoup
+
+from .checks.deep_content_analyzer import DeepContentAnalyzer, ContentValidation
 
 logger = logging.getLogger(__name__)
+
+# KI läuft über OpenRouter (wie ai_review_engine / legal_text_generator).
+# Vorher: direkter anthropic.Anthropic-Client mit ANTHROPIC_API_KEY — der Key
+# war im Deployment nie gesetzt, "KI für Grenzfälle" lief daher nie.
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+VALIDATOR_MODEL = os.getenv("COMPLYO_VALIDATOR_MODEL", "anthropic/claude-haiku-4.5")
+
+# Prometheus-Zähler für OpenRouter-Aufrufe (fail-open ohne metrics-Modul)
+try:
+    from metrics import openrouter_requests_total as _openrouter_counter
+except Exception:
+    _openrouter_counter = None
+
+
+_HTML_MARKER = re.compile(r"<\s*(html|body|div|p|section|address|main|span|br|table)\b", re.I)
+
+
+def zu_fliesstext(inhalt: str) -> str:
+    """
+    Gibt Fliesstext zurueck, auch wenn der Aufrufer rohes HTML uebergeben hat.
+
+    Der Parameter heisst ueberall `text_content`, die Check-Module reichten
+    aber die HTML-Antwort der Impressums-/Datenschutzseite durch. Auf HTML
+    scheitern die Muster: "Musterstrasse 123" und "10115 Berlin" stehen dort in
+    getrennten <p>-Elementen, kein Adressmuster kann darueber hinweg greifen.
+    Deshalb wird hier normalisiert statt an zwei Aufrufstellen.
+    """
+    if not inhalt:
+        return ""
+    if "<" not in inhalt or not _HTML_MARKER.search(inhalt):
+        return inhalt
+    suppe = BeautifulSoup(inhalt, "html.parser")
+    for tag in suppe(["script", "style", "noscript", "template", "svg"]):
+        tag.decompose()
+    return suppe.get_text(separator=" ", strip=True)
 
 
 class ValidationMethod(Enum):
@@ -49,14 +87,13 @@ class HybridValidator:
         """Initialisiert Validator"""
         self.analyzer = DeepContentAnalyzer()
         
-        # KI-Client (Claude)
-        self.ai_client = None
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if api_key:
-            self.ai_client = anthropic.Anthropic(api_key=api_key)
-            logger.info("✅ Hybrid Validator mit KI-Support initialisiert")
+        # KI via OpenRouter (Claude Haiku) — Key ist im Deployment gesetzt
+        self.api_key = os.getenv("OPENROUTER_API_KEY", "")
+        self.model = VALIDATOR_MODEL
+        if self.api_key:
+            logger.info(f"✅ Hybrid Validator mit KI-Support initialisiert (OpenRouter, {self.model})")
         else:
-            logger.warning("⚠️ ANTHROPIC_API_KEY nicht gesetzt - nur Pattern-Matching verfügbar")
+            logger.warning("⚠️ OPENROUTER_API_KEY nicht gesetzt - nur Pattern-Matching verfügbar")
         
         # Thresholds für KI-Trigger
         self.uncertain_threshold = 0.6  # < 0.6 Confidence → KI-Check
@@ -110,8 +147,8 @@ class HybridValidator:
         
         elif validation.confidence < self.uncertain_threshold:
             # ❓ UNSICHER: KI-Check nötig
-            
-            if not self.ai_client:
+
+            if not self.api_key:
                 # Kein KI verfügbar → Pattern-Result verwenden (mit Warnung)
                 processing_time = int((time.time() - start_time) * 1000)
                 
@@ -196,31 +233,47 @@ class HybridValidator:
         )
         
         try:
-            # Claude API Call
-            response = self.ai_client.messages.create(
-                model="claude-3-5-sonnet-20241022",
-                max_tokens=500,
-                temperature=0,  # Deterministisch
-                messages=[{
-                    "role": "user",
-                    "content": prompt
-                }]
-            )
-            
+            # OpenRouter API Call (async, HTTP-Muster wie ai_review_engine._call_ai)
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    OPENROUTER_URL,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://complyo.de",
+                        "X-Title": "Complyo Hybrid Validator",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "max_tokens": 500,
+                        "temperature": 0,  # Deterministisch
+                    },
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as resp:
+                    if resp.status != 200:
+                        if _openrouter_counter:
+                            _openrouter_counter.labels(status="error").inc()
+                        raise RuntimeError(f"OpenRouter Status {resp.status}")
+                    data = await resp.json()
+
+            if _openrouter_counter:
+                _openrouter_counter.labels(status="success").inc()
+
             # Parse Response
-            ai_response = response.content[0].text
-            
+            ai_response = data["choices"][0]["message"]["content"]
+
             # Extrahiere strukturierte Daten
             result = self._parse_ai_response(ai_response, pattern_result)
-            
+
             logger.info(f"✅ KI-Validierung für {field_name}: {result['found']} (Confidence: {result['confidence']:.2f})")
-            
+
             return result
-        
+
         except Exception as e:
             logger.error(f"❌ KI-Validierung fehlgeschlagen: {e}")
-            
-            # Fallback zu Pattern-Result
+
+            # Fallback zu Pattern-Result (fail-open, wie zuvor)
             return {
                 "found": pattern_result.found,
                 "confidence": pattern_result.confidence * 0.7,  # Reduzierte Confidence
@@ -228,6 +281,58 @@ class HybridValidator:
                 "reasoning": f"KI-Error: {str(e)}"
             }
     
+    # Stichwoerter, an denen die zustaendige Passage im Text erkannt wird.
+    _FELD_STICHWOERTER = {
+        "firmenname": ["firma", "unternehmen", "diensteanbieter", "verantwortlich für den inhalt", "gmbh", "ug", " ag ", "e.k."],
+        "adresse": ["anschrift", "adresse", "sitz", "straße", "str.", "postanschrift"],
+        "plz_ort": ["straße", "str.", "deutschland", "anschrift"],
+        "email": ["e-mail", "email", "mail:", "kontakt"],
+        "telefon": ["telefon", "tel.", "tel:", "fon", "phone", "kontakt"],
+        "handelsregister": ["handelsregister", "registergericht", "amtsgericht", "hrb", "hra"],
+        "ust_id": ["umsatzsteuer", "ust-id", "ust.-id", "vat", "steuernummer"],
+        "geschaeftsfuehrer": ["geschäftsführer", "geschäftsführung", "vertreten durch", "inhaber", "vorstand"],
+        "verantwortlicher": ["verantwortlich", "verantwortliche stelle", "controller"],
+        "zwecke": ["zweck", "zwecke", "wofür", "verarbeiten wir"],
+        "rechtsgrundlage": ["rechtsgrundlage", "art. 6", "artikel 6", "berechtigtes interesse"],
+        "speicherdauer": ["speicherdauer", "aufbewahrung", "löschung", "speichern wir"],
+        "betroffenenrechte": ["ihre rechte", "betroffenenrechte", "auskunft", "berichtigung"],
+        "beschwerderecht": ["beschwerde", "aufsichtsbehörde", "datenschutzbehörde"],
+        "datenschutzbeauftragter": ["datenschutzbeauftragter", "datenschutzbeauftragte"],
+        "drittland": ["drittland", "außerhalb der eu", "usa"],
+    }
+
+    _AUSSCHNITT_ZEICHEN = 3000
+
+    def _relevanter_ausschnitt(
+        self,
+        field_name: str,
+        text_content: str,
+        pattern_result: ContentValidation,
+    ) -> str:
+        """
+        Schneidet den Textbereich heraus, in dem die gesuchte Angabe stehen
+        muesste. Ankerpunkt ist der Mustertreffer, sonst das erste passende
+        Stichwort; ohne beides bleibt es beim Textanfang.
+        """
+        if len(text_content) <= self._AUSSCHNITT_ZEICHEN:
+            return text_content
+
+        anker = -1
+        if pattern_result and pattern_result.extracted_value:
+            anker = text_content.find(pattern_result.extracted_value)
+        if anker == -1:
+            unten = text_content.lower()
+            for stichwort in self._FELD_STICHWOERTER.get(field_name, []):
+                anker = unten.find(stichwort)
+                if anker != -1:
+                    break
+        if anker == -1:
+            return text_content[: self._AUSSCHNITT_ZEICHEN]
+
+        halb = self._AUSSCHNITT_ZEICHEN // 2
+        start = max(0, anker - halb)
+        return text_content[start : start + self._AUSSCHNITT_ZEICHEN]
+
     def _create_validation_prompt(
         self,
         field_name: str,
@@ -251,8 +356,11 @@ class HybridValidator:
         
         description = field_descriptions.get(field_name, f"Das Feld '{field_name}'")
         
-        # Limitiere Text auf relevante Teile (max 3000 Zeichen)
-        text_sample = text_content[:3000] if len(text_content) > 3000 else text_content
+        # Ausschnitt um die relevante Passage. Frueher: die ersten 3000 Zeichen —
+        # bei einer HTML-Seite war das der <head> mit Font-Preloads, die
+        # gesuchte Angabe stand weiter unten und die KI antwortete
+        # folgerichtig "nicht vorhanden".
+        text_sample = self._relevanter_ausschnitt(field_name, text_content, pattern_result)
         
         page_type = context.get("page_type", "unknown") if context else "unknown"
         
@@ -368,7 +476,11 @@ Antworte NUR im angegebenen Format, keine zusätzlichen Erläuterungen."""
             Dict mit Validierungs-Ergebnissen
         """
         logger.info(f"🔍 Hybrid-Validierung: {page_type} ({url})")
-        
+
+        # Aufrufer reichen teils die rohe HTML-Antwort durch — die Muster
+        # brauchen Fliesstext, sonst trennen Tags zusammengehoerige Angaben.
+        text_content = zu_fliesstext(text_content)
+
         # Wähle Pattern-Set
         if page_type == "impressum":
             patterns = self.analyzer.impressum_patterns

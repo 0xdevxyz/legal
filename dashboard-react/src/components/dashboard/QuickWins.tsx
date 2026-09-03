@@ -65,12 +65,12 @@ export default function QuickWins({ issues = [], onNavigateToPillar }: QuickWins
   const totalMinutes = quickWins.reduce((sum, w) => sum + w.estimated_minutes, 0);
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50 mb-4">
+    <div className="flex items-center gap-3 px-4 py-3 dark:bg-zinc-800/50 bg-gray-50 rounded-xl border dark:border-zinc-700/50 border-gray-200 mb-4">
       <Clock className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-      <span className="text-sm text-zinc-300">
+      <span className="text-sm text-gray-700 dark:text-zinc-300">
         <span className="text-yellow-400 font-semibold">{quickWins.length} schnell behebbare Problem{quickWins.length !== 1 ? 'e' : ''}</span>
         {' — '}Geschätzter Aufwand:
-        <span className="text-white font-semibold ml-1">
+        <span className="text-gray-900 dark:text-white font-semibold ml-1">
           {totalMinutes < 60
             ? `ca. ${totalMinutes} Minuten`
             : `ca. ${Math.round(totalMinutes / 60 * 10) / 10} Stunden`}

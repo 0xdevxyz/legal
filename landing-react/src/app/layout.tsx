@@ -2,6 +2,7 @@ import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Instrument_Sans } from 'next/font/google'
 import Script from 'next/script'
+import Seitengeruest from '@/components/Seitengeruest'
 
 const dmSans = DM_Sans({
   subsets: ['latin'],
@@ -16,16 +17,16 @@ const instrumentSans = Instrument_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'Complyo - Website Compliance & Rechtssicherheit',
-  description: 'Von nicht-konform zu rechtssicher in 24 Stunden. DSGVO, TTDSG, Barrierefreiheit - KI-gestuetzte Compliance-Loesung.',
-  keywords: 'DSGVO, TTDSG, Website Compliance, Rechtssicherheit, Barrierefreiheit, Cookie Banner',
+  title: 'Complyo - Website-Compliance: pruefen, reparieren, nachweisen',
+  description: 'Scan, KI-Reparatur und Pruefnachweis fuer DSGVO, TDDDG und Barrierefreiheit. Andere melden nur Befunde, complyo behebt sie.',
+  keywords: 'DSGVO, TDDDG, Website Compliance, BFSG, Barrierefreiheit, Cookie Banner',
   authors: [{ name: 'Complyo Team' }],
   robots: 'index, follow',
-  metadataBase: new URL('https://complyo.tech'),
+  metadataBase: new URL('https://complyo.de'),
   openGraph: {
-    title: 'Complyo - Website Compliance & Rechtssicherheit',
-    description: 'Von nicht-konform zu rechtssicher in 24 Stunden. DSGVO, TTDSG, Barrierefreiheit - KI-gestuetzte Compliance-Loesung fuer Ihr Unternehmen.',
-    url: 'https://complyo.tech',
+    title: 'Complyo - Website-Compliance: pruefen, reparieren, nachweisen',
+    description: 'Scan, KI-Reparatur und Pruefnachweis fuer DSGVO, TDDDG und Barrierefreiheit. Andere melden nur Befunde, complyo behebt sie.',
+    url: 'https://complyo.de',
     siteName: 'Complyo',
     locale: 'de_DE',
     type: 'website',
@@ -33,8 +34,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary',
-    title: 'Complyo - Website Compliance & Rechtssicherheit',
-    description: 'DSGVO, TTDSG & Barrierefreiheit - KI-gestuetzte Compliance-Loesung.',
+    title: 'Complyo - Website-Compliance: pruefen, reparieren, nachweisen',
+    description: 'DSGVO, TDDDG und Barrierefreiheit - scannen, reparieren, nachweisen.',
     images: ['/logo-dark.png'],
   },
   alternates: {
@@ -62,18 +63,33 @@ export default function RootLayout({
         <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
       </head>
       <body className={`${dmSans.className} antialiased`}>
+        {/* Erster fokussierbarer Punkt der Seite: ohne ihn muss sich jeder
+            Tastaturnutzer auf jeder Seite durch die gesamte Navigation
+            arbeiten (WCAG 2.4.1). Sichtbar nur bei Fokus. */}
+        <a
+          href="#inhalt"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-blue-700 focus:shadow-lg focus:outline focus:outline-2 focus:outline-blue-600"
+        >
+          Zum Inhalt springen
+        </a>
         {/* Cookie-Banner Script - lädt Content Blocker + Banner in einem Bundle */}
         <Script
           src="https://api.complyo.de/api/widgets/cookie-compliance.js"
-          data-site-id="complyo-tech"
-          data-complyo-site-id="complyo-tech"
+          data-site-id="complyo-de"
+          data-complyo-site-id="complyo-de"
           strategy="afterInteractive"
         />
         
-        {children}
+        <Seitengeruest>{children}</Seitengeruest>
+        {/* data-site-id MUSS die stabile Site-ID sein (derive_site_id), nicht
+            eine Scan-Kennung. Hier stand "scan-91778ad450e1": das Manifest
+            antwortete darauf mit "200, nichts zu tun", das Widget wendete brav
+            nichts an, und ausgerechnet die eigene Website bekam nie eine der
+            freigegebenen Reparaturen. Seit das Manifest ein Feld `bekannt`
+            fuehrt, warnt das Widget in der Konsole, wenn das hier falsch ist. */}
         <Script
           src="https://api.complyo.de/api/widgets/accessibility.js?version=6"
-          data-site-id="scan-91778ad450e1"
+          data-site-id="complyo-de"
           data-auto-fix="true"
           data-show-toolbar="true"
           strategy="afterInteractive"

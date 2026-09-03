@@ -7,7 +7,6 @@ import json
 import os
 import httpx
 from typing import Dict, List, Optional, Any
-from datetime import datetime
 from pydantic import BaseModel
 
 class AISystem(BaseModel):
@@ -586,7 +585,7 @@ WICHTIG:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://complyo.tech",
+            "HTTP-Referer": "https://complyo.de",
             "X-Title": "Complyo AI Act Analyzer"
         }
         

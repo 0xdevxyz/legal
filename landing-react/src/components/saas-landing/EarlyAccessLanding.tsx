@@ -1,19 +1,17 @@
 'use client';
 import React from 'react';
-import NavBar from './NavBar';
 import HeroSection from './HeroSection';
 import WebsiteScanner from '../landing/WebsiteScanner';
-import JoinEarlySection from './JoinEarlySection';
-import FooterSection from './FooterSection';
+import PricingSection from './PricingSection';
 
 export default function EarlyAccessLanding() {
   return (
-    <main className="font-sans antialiased bg-white">
-      <NavBar />
+    // Navigation und Fusszeile kommen aus dem Wurzel-Layout (Seitengeruest),
+    // damit jede Seite dieselben Landmarks hat. Hier bleibt der Hauptinhalt.
+    <main id="inhalt" tabIndex={-1} className="font-sans antialiased bg-white">
       <HeroSection />
       <WebsiteScanner />
-      <JoinEarlySection />
-      <FooterSection />
+      <PricingSection />
     </main>
   );
 }

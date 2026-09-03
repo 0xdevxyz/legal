@@ -29,15 +29,16 @@ export function SiteSwitcher() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Nur für Agentur-User sichtbar
-  if (user?.plan_type !== 'agency') return null;
+  // Nur für Agentur-/Expert-User sichtbar
+  const canManageSites = user?.plan_type === 'agency' || user?.plan_type === 'expert';
+  if (!canManageSites) return null;
 
   const displayUrl = activeSite
     ? activeSite.url.replace(/^https?:\/\//, '').replace(/\/$/, '')
     : '—';
 
-  // Kanonisch aus dem Plan: 25 nur im Agentur-Modus, sonst 1 Seite. (Keine 3-Seiten-Option.)
-  const planLimit = user?.plan_type === 'agency' ? 25 : 1;
+  // Kanonisch aus dem Plan: 25 Seiten im Agentur-/Expert-Modus, sonst 1 Seite.
+  const planLimit = canManageSites ? 25 : 1;
   const atLimit = sites.length >= planLimit;
 
   const handleAdd = async () => {
@@ -62,7 +63,7 @@ export function SiteSwitcher() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-xl glass-card text-sm text-gray-400">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl glass-card text-sm text-gray-600 dark:text-gray-400">
         <Loader2 size={14} className="animate-spin" />
         <span>Lädt…</span>
       </div>
@@ -88,7 +89,7 @@ export function SiteSwitcher() {
           {/* Site List */}
           <div className="max-h-56 overflow-y-auto">
             {sites.length === 0 && (
-              <p className="px-4 py-3 text-sm text-gray-400">Noch keine Website hinzugefügt.</p>
+              <p className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">Noch keine Website hinzugefügt.</p>
             )}
             {sites.map((site) => {
               const label = site.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -99,7 +100,7 @@ export function SiteSwitcher() {
                   onClick={() => { setActiveSite(site); setOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-left transition-colors duration-150 hover:bg-white/5 ${isActive ? 'bg-purple-500/10' : ''}`}
                 >
-                  <Globe size={13} className="text-gray-400 shrink-0" />
+                  <Globe size={13} className="text-gray-600 dark:text-gray-400 shrink-0" />
                   <span className="truncate flex-1 text-gray-200">{label}</span>
                   {isActive && <Check size={13} className="text-purple-400 shrink-0" />}
                   {site.last_score != null && (
@@ -148,7 +149,7 @@ export function SiteSwitcher() {
                   </button>
                   <button
                     onClick={() => { setAdding(false); setError(''); }}
-                    className="px-3 py-1.5 text-xs rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 transition-colors"
+                    className="px-3 py-1.5 text-xs rounded-lg bg-white/5 hover:bg-white/10 text-gray-600 dark:text-gray-400 transition-colors"
                   >
                     Abbrechen
                   </button>

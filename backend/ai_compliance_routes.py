@@ -2,20 +2,21 @@
 AI Compliance Routes - EU AI Act API Endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from datetime import datetime, date, timedelta
 import uuid
 import io
+import logging
 
-from auth_service import AuthService
-from ai_act_analyzer import ai_act_analyzer, AISystem, RiskClassification, ComplianceResult
-from ai_compliance_notification_service import ai_compliance_notification_service
+from ai_act_analyzer import ai_act_analyzer, AISystem
 from file_storage_service import file_storage
 from database_service import db_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/ai", tags=["AI Compliance"])
 security = HTTPBearer()
@@ -75,11 +76,12 @@ class ScanResponse(BaseModel):
 
 # ==================== AI SYSTEMS MANAGEMENT ====================
 
-async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Get current user ID from JWT token"""
-    from auth_routes import get_current_user
-    user = await get_current_user(credentials)
-    return user["id"]
+from dependencies import get_current_user as _canonical_user
+from dependencies import rate_limit
+
+async def get_current_user_id(current_user: dict = Depends(_canonical_user)) -> int:
+    """User-ID über die kanonische Auth-Dependency (Phase 2 Auth-Konsolidierung)"""
+    return current_user["id"]
 
 @router.post("/systems", response_model=AISystemResponse)
 async def create_ai_system(
@@ -578,7 +580,6 @@ async def get_system_documentation(
     # Get required documentation based on risk category
     required_docs = ai_act_analyzer.get_required_documentation(system['risk_category'] or 'minimal')
     
-    import json
     return {
         "required": required_docs,
         "existing": [
@@ -652,7 +653,7 @@ async def get_ai_compliance_stats(
 class GenerateDocRequest(BaseModel):
     document_type: str = Field(..., description="Type: risk_assessment, technical_documentation, conformity_declaration")
 
-@router.post("/systems/{system_id}/documentation/generate")
+@router.post("/systems/{system_id}/documentation/generate", dependencies=[Depends(rate_limit("ai_doc_generate", 5, 60))])
 async def generate_documentation(
     system_id: str,
     request: GenerateDocRequest,
@@ -762,9 +763,10 @@ async def generate_documentation(
         }
         
     except Exception as e:
+        logger.exception("Dokumentgenerierung fehlgeschlagen")
         raise HTTPException(
             status_code=500,
-            detail=f"Dokumentgenerierung fehlgeschlagen: {str(e)}"
+            detail="Dokumentgenerierung fehlgeschlagen"
         )
 
 @router.get("/documentation/{doc_id}/download")
@@ -823,9 +825,10 @@ async def download_documentation(
                 }
             )
         except Exception as e:
+            logger.exception("PDF-Generierung fehlgeschlagen. Versuchen Sie HTML-Export.")
             raise HTTPException(
                 status_code=500,
-                detail=f"PDF-Generierung fehlgeschlagen: {str(e)}. Versuchen Sie HTML-Export."
+                detail="PDF-Generierung fehlgeschlagen. Versuchen Sie HTML-Export."
             )
     else:
         return StreamingResponse(
@@ -974,9 +977,10 @@ async def upload_documentation(
         }
         
     except Exception as e:
+        logger.exception("Upload fehlgeschlagen")
         raise HTTPException(
             status_code=500,
-            detail=f"Upload fehlgeschlagen: {str(e)}"
+            detail="Upload fehlgeschlagen"
         )
 
 @router.get("/documentation/file/{file_path:path}")

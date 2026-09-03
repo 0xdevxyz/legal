@@ -3,6 +3,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AlertCircle, Loader2, CheckCircle2, AlertTriangle, Download, Plus } from 'lucide-react';
 import Link from 'next/link';
+import axios from 'axios';
+import { apiClient } from '@/lib/api-client';
+
+function errorDetail(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err)) {
+    const detail = err.response?.data?.detail;
+    if (typeof detail === 'string') return detail;
+    if (err.message) return err.message;
+  }
+  return err instanceof Error ? err.message : fallback;
+}
 
 interface Service {
   name: string;
@@ -54,8 +65,26 @@ export default function DeepCookieScannerPage() {
   const [currentScan, setCurrentScan] = useState<ScanResult | null>(null);
   const [exportData, setExportData] = useState<ExportData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [usage, setUsage] = useState({ scans_used: 0, scans_limit: 5 });
+  const [usage, setUsage] = useState({ scans_used: 0, scans_limit: 1 });
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+  const [isApplying, setIsApplying] = useState(false);
+  const [applyResult, setApplyResult] = useState<string | null>(null);
+
+  const handleApplyToBanner = async (scanId: number) => {
+    setIsApplying(true);
+    setApplyResult(null);
+    try {
+      const res = await apiClient.post<{ applied: number; total_services: number; message: string }>(
+        `/api/v2/deep-cookie-scan/${scanId}/apply`,
+        {}
+      );
+      setApplyResult(res.message || `${res.applied} Dienst(e) übernommen.`);
+    } catch (err) {
+      setApplyResult(errorDetail(err, 'Übernahme in den Banner fehlgeschlagen'));
+    } finally {
+      setIsApplying(false);
+    }
+  };
 
   const handleStartScan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,30 +97,24 @@ export default function DeepCookieScannerPage() {
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/v2/deep-cookie-scan/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: inputUrl }),
-      });
+      const data = await apiClient.post<{
+        scan_id: number;
+        message?: string;
+        usage: { scans_used: number; scans_limit: number };
+      }>('/api/v2/deep-cookie-scan/start', { url: inputUrl });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to start scan');
-      }
-
-      const data = await response.json();
       setCurrentScan({
         scan_id: data.scan_id,
         status: 'pending',
         url: data.message || inputUrl,
         progress_percent: 0,
       });
-      setUsage(data.usage);
+      if (data.usage) setUsage(data.usage);
       setInputUrl('');
 
       pollScanStatus(data.scan_id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(errorDetail(err, 'Failed to start scan'));
       setIsLoading(false);
     }
   };
@@ -99,10 +122,7 @@ export default function DeepCookieScannerPage() {
   const pollScanStatus = useCallback((scanId: number) => {
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`/api/v2/deep-cookie-scan/${scanId}`);
-        if (!response.ok) throw new Error('Failed to fetch scan status');
-
-        const data = await response.json();
+        const data = await apiClient.get<ScanResult>(`/api/v2/deep-cookie-scan/${scanId}`);
         setCurrentScan(data);
 
         if (data.status === 'completed') {
@@ -125,9 +145,7 @@ export default function DeepCookieScannerPage() {
 
   const fetchExportData = async (scanId: number) => {
     try {
-      const response = await fetch(`/api/v2/deep-cookie-scan/${scanId}/export`);
-      if (!response.ok) throw new Error('Failed to fetch export data');
-      const data = await response.json();
+      const data = await apiClient.get<ExportData>(`/api/v2/deep-cookie-scan/${scanId}/export`);
       setExportData(data);
     } catch (err) {
       console.error('Export fetch error:', err);
@@ -140,32 +158,70 @@ export default function DeepCookieScannerPage() {
     };
   }, [pollInterval]);
 
+  // Plan-abhängiges Kontingent schon vor dem ersten Scan laden
+  useEffect(() => {
+    apiClient
+      .get<{ scans_used: number; scans_limit: number }>('/api/v2/deep-cookie-scan/usage')
+      .then((data) => {
+        if (data) setUsage({ scans_used: data.scans_used, scans_limit: data.scans_limit });
+      })
+      .catch(() => {
+        /* Anzeige bleibt beim Default — kein blockierender Fehler */
+      });
+  }, []);
+
   return (
     <div className="px-4 sm:px-6 py-6">
       <div className="max-w-4xl mx-auto px-4">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold dark:text-white text-gray-900 mb-2">Deep Cookie Scanner</h1>
+          <h1 className="text-4xl font-bold dark:text-white text-gray-900 mb-2">Cookie-Inventar erstellen</h1>
           <p className="dark:text-zinc-400 text-gray-600">
-            Scan your website for all cookies, tracking pixels, and analytics services
+            Ermittelt, welche Dienste Ihre Website tatsächlich lädt — die Grundlage für Ihren Cookie-Banner.
           </p>
         </div>
 
-        <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4 mb-6">
+        {/* Warum das ein eigener Lauf ist: der Compliance-Scan prueft, OB vor
+            dem Setzen von Cookies eingewilligt wird. Dieser Lauf beantwortet
+            eine andere Frage — WELCHE Dienste im Banner stehen muessen — und
+            braucht dafuer einen echten Browser mit Scroll und Wartezeit
+            (~3 Minuten). Deshalb laeuft er auf Abruf und nicht bei jedem Scan mit. */}
+        <div className="mb-6 rounded-xl border border-[#25bac8]/30 bg-[#25bac8]/5 p-4">
+          <p className="text-sm dark:text-zinc-300 text-gray-700 leading-relaxed">
+            <strong className="dark:text-white text-gray-900">Wofür ist das da?</strong> Der normale
+            Compliance-Scan prüft, <em>ob</em> Ihre Seite vor dem Setzen von Cookies fragt.
+            Dieser Lauf beantwortet die andere Hälfte: <em>welche</em> Dienste überhaupt laden —
+            mit Cookie-Namen, Anbieter und Kategorie. Das Ergebnis übernehmen Sie mit einem Klick
+            in Ihren Cookie-Banner, statt die Liste von Hand zu pflegen.
+          </p>
+          <p className="text-sm dark:text-zinc-400 text-gray-600 mt-2 leading-relaxed">
+            Getrennt läuft er, weil er einen echten Browser öffnet, scrollt und auf
+            nachgeladene Tracker wartet — das dauert rund 3 Minuten und ist deshalb kontingentiert.
+          </p>
+          <Link
+            href="/cookie-compliance"
+            className="inline-flex items-center gap-1.5 mt-3 text-sm font-semibold text-[#25bac8] hover:underline"
+          >
+            Zum Cookie-Banner
+            <Plus className="w-3.5 h-3.5 rotate-90" />
+          </Link>
+        </div>
+
+        <div className="dark:bg-zinc-800/50 bg-gray-50 border dark:border-zinc-700/50 border-gray-200 rounded-lg p-4 mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm dark:text-zinc-400 text-gray-600">Scans this month</p>
+              <p className="text-sm dark:text-zinc-400 text-gray-600">Scans diesen Monat</p>
               <p className="text-2xl font-bold dark:text-white text-gray-900">
                 {usage.scans_used} / {usage.scans_limit}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-sm dark:text-zinc-400 text-gray-600">Remaining</p>
+              <p className="text-sm dark:text-zinc-400 text-gray-600">Verbleibend</p>
               <p className="text-2xl font-bold text-blue-400">
                 {Math.max(0, usage.scans_limit - usage.scans_used)}
               </p>
             </div>
           </div>
-          <div className="mt-3 bg-zinc-700/50 rounded h-2">
+          <div className="mt-3 dark:bg-zinc-700/50 bg-gray-100 rounded h-2">
             <div
               className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded transition-all"
               style={{ width: `${(usage.scans_used / usage.scans_limit) * 100}%` }}
@@ -188,29 +244,25 @@ export default function DeepCookieScannerPage() {
               value={inputUrl}
               onChange={(e) => setInputUrl(e.target.value)}
               disabled={isLoading}
-              className="flex-1 px-4 py-3 bg-zinc-700/50 border border-zinc-600/50 rounded-lg dark:text-white text-gray-900 placeholder-zinc-500
-                         focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20
-                         disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-3 dark:bg-zinc-700/50 bg-gray-100 border dark:border-zinc-600/50 border-gray-300 rounded-lg dark:text-white text-gray-900 placeholder-zinc-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <button
               type="submit"
               disabled={isLoading || usage.scans_used >= usage.scans_limit}
-              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 dark:text-white text-gray-900 rounded-lg font-semibold
-                         hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed
-                         transition flex items-center gap-2"
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 dark:text-white text-gray-900 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-2"
             >
               {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
               Scan starten
             </button>
           </div>
           <p className="text-sm dark:text-zinc-500 text-gray-500 mt-2">
-            Scan takes ~3 minutes. We detect all cookies and classify them by service.
+            Der Scan dauert etwa 3 Minuten. Wir erfassen alle Cookies und ordnen sie ihrem Dienst zu.
           </p>
         </form>
 
         {currentScan && (
           <div className="space-y-6">
-            <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-6">
+            <div className="dark:bg-zinc-800/50 bg-gray-50 border dark:border-zinc-700/50 border-gray-200 rounded-lg p-6">
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <p className="text-sm dark:text-zinc-400 text-gray-600">Scanning: {currentScan.url}</p>
@@ -236,7 +288,7 @@ export default function DeepCookieScannerPage() {
 
               {(currentScan.status === 'pending' || currentScan.status === 'running') && (
                 <div className="mb-4">
-                  <div className="bg-zinc-700/50 rounded h-2">
+                  <div className="dark:bg-zinc-700/50 bg-gray-100 rounded h-2">
                     <div
                       className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded transition-all"
                       style={{ width: `${currentScan.progress_percent || 0}%` }}
@@ -256,15 +308,15 @@ export default function DeepCookieScannerPage() {
             {currentScan.status === 'completed' && currentScan.total_cookies !== undefined && (
               <>
                 <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
+                  <div className="dark:bg-zinc-800/50 bg-gray-50 border dark:border-zinc-700/50 border-gray-200 rounded-lg p-4">
                     <p className="text-sm dark:text-zinc-400 text-gray-600">Total Cookies</p>
                     <p className="text-3xl font-bold dark:text-white text-gray-900 mt-2">{currentScan.total_cookies}</p>
                   </div>
-                  <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
-                    <p className="text-sm dark:text-zinc-400 text-gray-600">Services Detected</p>
+                  <div className="dark:bg-zinc-800/50 bg-gray-50 border dark:border-zinc-700/50 border-gray-200 rounded-lg p-4">
+                    <p className="text-sm dark:text-zinc-400 text-gray-600">Erkannte Dienste</p>
                     <p className="text-3xl font-bold text-purple-400 mt-2">{currentScan.unique_services}</p>
                   </div>
-                  <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
+                  <div className="dark:bg-zinc-800/50 bg-gray-50 border dark:border-zinc-700/50 border-gray-200 rounded-lg p-4">
                     <p className="text-sm dark:text-zinc-400 text-gray-600">Tracking Requests</p>
                     <p className="text-3xl font-bold text-blue-400 mt-2">{currentScan.total_requests}</p>
                   </div>
@@ -306,13 +358,13 @@ export default function DeepCookieScannerPage() {
                 )}
 
                 {exportData && (
-                  <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-6">
-                    <h2 className="text-xl font-bold dark:text-white text-gray-900 mb-4">Detected Services</h2>
+                  <div className="dark:bg-zinc-800/50 bg-gray-50 border dark:border-zinc-700/50 border-gray-200 rounded-lg p-6">
+                    <h2 className="text-xl font-bold dark:text-white text-gray-900 mb-4">Erkannte Dienste</h2>
                     <div className="space-y-3">
                       {exportData.services.map((service, idx) => (
                         <div
                           key={idx}
-                          className="flex items-start justify-between p-4 bg-zinc-700/50 rounded-lg border border-zinc-600/30 hover:border-zinc-600/50 transition"
+                          className="flex items-start justify-between p-4 dark:bg-zinc-700/50 bg-gray-100 rounded-lg border border-zinc-600/30 hover:border-zinc-600/50 transition"
                         >
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
@@ -353,8 +405,7 @@ export default function DeepCookieScannerPage() {
                           </div>
                           <Link
                             href={`/dashboard/cookie-banner?import_scan=${currentScan.scan_id}&service=${encodeURIComponent(service.name)}`}
-                            className="ml-4 px-4 py-2 bg-green-600/20 text-green-400 rounded font-semibold hover:bg-green-600/30
-                                     transition flex items-center gap-2 flex-shrink-0"
+                            className="ml-4 px-4 py-2 bg-green-600/20 text-green-400 rounded font-semibold hover:bg-green-600/30 transition flex items-center gap-2 flex-shrink-0"
                           >
                             <Plus className="w-4 h-4" />
                             Hinzufügen
@@ -363,6 +414,18 @@ export default function DeepCookieScannerPage() {
                       ))}
                     </div>
                   </div>
+                )}
+
+                <button
+                  onClick={() => handleApplyToBanner(currentScan.scan_id)}
+                  disabled={isApplying}
+                  className="w-full mb-3 px-4 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  <Plus className="w-4 h-4" />
+                  {isApplying ? 'Übernehme…' : 'Erkannte Dienste in meinen Cookie-Banner übernehmen'}
+                </button>
+                {applyResult && (
+                  <p className="mb-3 text-sm text-green-400 text-center">{applyResult}</p>
                 )}
 
                 <div className="flex gap-3">
@@ -377,8 +440,7 @@ export default function DeepCookieScannerPage() {
                       a.click();
                       window.URL.revokeObjectURL(url);
                     }}
-                    className="flex-1 px-4 py-3 bg-zinc-700/50 border border-zinc-600/50 dark:text-white text-gray-900 rounded-lg
-                             font-semibold hover:bg-zinc-600/50 transition flex items-center justify-center gap-2"
+                    className="flex-1 px-4 py-3 dark:bg-zinc-700/50 bg-gray-100 border dark:border-zinc-600/50 border-gray-300 dark:text-white text-gray-900 rounded-lg font-semibold hover:bg-zinc-600/50 transition flex items-center justify-center gap-2"
                   >
                     <Download className="w-4 h-4" />
                     Export JSON
@@ -388,8 +450,7 @@ export default function DeepCookieScannerPage() {
                       setCurrentScan(null);
                       setExportData(null);
                     }}
-                    className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 dark:text-white text-gray-900 rounded-lg
-                             font-semibold hover:from-blue-700 hover:to-purple-700 transition"
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 dark:text-white text-gray-900 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition"
                   >
                     Neuen Scan starten
                   </button>

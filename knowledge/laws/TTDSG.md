@@ -1,14 +1,14 @@
 ---
-title: Telekommunikations-Telemedien-Datenschutz-Gesetz (TTDSG)
+title: Telekommunikation-Digitale-Dienste-Datenschutz-Gesetz (TDDDG, bis 05/2024 TTDSG)
 date: 2026-05-15
 category: law
-law_areas: [TTDSG]
+law_areas: [TDDDG, TTDSG]
 relevance_score: 1.0
 impact: high
-source_url: "https://www.gesetze-im-internet.de/ttdsg/"
+source_url: "https://www.gesetze-im-internet.de/tddg/"
 source_type: web
 affected_checks: [cookie_check, datenschutz_check]
-tags: [TTDSG, Cookie, Einwilligung, Tracking, ePrivacy]
+tags: [TDDDG, TTDSG, Cookie, Einwilligung, Tracking, ePrivacy]
 obsidian_links: ["[[DSGVO]]", "[[AGB-Recht]]"]
 status: active
 embedding_hash: ""

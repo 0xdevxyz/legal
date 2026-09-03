@@ -1,23 +1,23 @@
 """
 Deep Cookie Scanner Engine
-Comprehensive cookie and tracking detection via Puppeteer + Headless Chrome
+Comprehensive cookie and tracking detection via Playwright + Headless Chromium.
 
-Architecture:
-1. Intercepts all HTTP responses (cookie headers)
-2. Overrides document.cookie getter/setter to log all cookie operations
-3. Injects JS to capture localStorage/sessionStorage
-4. Simulates user interactions (scroll, hover, click) to trigger lazy tracking
-5. Identifies services via URL pattern matching
-6. Returns structured results with per-service breakdown
+Architektur:
+1. Startet Headless-Chromium, navigiert zur Ziel-URL (wait_until=networkidle)
+2. Erfasst alle ausgehenden Requests (Script/XHR/Img/Font/...)
+3. Liest die real gesetzten Cookies aus dem Browser-Context
+4. Erfasst localStorage/sessionStorage
+5. Simuliert Nutzer-Interaktion (Scroll) für lazy-geladene Tracker
+6. Identifiziert Dienste über den cookie_services-Katalog (Domains + Cookie-Namen)
+   → echter Dienstname, Anbieter, Kategorie und service_key statt Heuristik-Rauschen
 """
 
 from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Optional, Set, Any
+from typing import Dict, List, Optional, Set
 import asyncio
-import json
 import re
 from datetime import datetime
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 import logging
 
 logger = logging.getLogger(__name__)
@@ -28,9 +28,6 @@ try:
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
     logger.warning("Playwright nicht verfügbar — DeepCookieScanner kann nicht scannen.")
-
-# Note: Would use pyppeteer or async-driver in production
-# For MVP, showing the architecture
 
 
 @dataclass
@@ -43,6 +40,7 @@ class Cookie:
     sameSite: str = "Lax"
     expires: Optional[str] = None
     service: Optional[str] = None
+    service_key: Optional[str] = None
     category: str = "uncategorized"  # necessary, functional, analytics, marketing
 
 
@@ -67,76 +65,90 @@ class ScanResult:
     unique_services: int = 0
     total_requests: int = 0
     services_detected: List[str] = field(default_factory=list)
+    service_keys: List[str] = field(default_factory=list)
     scan_duration_seconds: int = 0
+    error: Optional[str] = None
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
-# Service Identification Patterns
-SERVICE_PATTERNS = {
-    "Google Analytics": [
-        r"google-analytics\.com",
-        r"ga\.js",
-        r"_gid",
-        r"_ga_",
-    ],
-    "Google Ads": [
-        r"google\.com/ads",
-        r"doubleclick\.net",
-        r"_gac_",
-    ],
-    "Facebook": [
-        r"facebook\.com",
-        r"facebook\.net",
-        r"fbcdn\.net",
-        r"_fbp",
-    ],
-    "Hotjar": [
-        r"hotjar\.com",
-        r"_hjid",
-    ],
-    "Matomo": [
-        r"matomo\.js",
-        r"piwik",
-        r"_pk_",
-    ],
-    "LinkedIn": [
-        r"linkedin\.com",
-        r"licdn\.com",
-        r"_li_",
-    ],
-    "Intercom": [
-        r"intercom\.io",
-        r"intercom-analytics",
-    ],
-    "Typekit": [
-        r"typekit\.net",
-        r"fonts\.com",
-    ],
-    "Cloudflare": [
-        r"cloudflare\.com",
-        r"__cfruid",
-    ],
-    "Stripe": [
-        r"stripe\.com",
-        r"__stripe",
-    ],
-}
+def _cookie_pattern_match(name: str, pattern: str) -> bool:
+    """Cookie-Name gegen Katalog-Pattern (unterstützt Präfix/Suffix-Wildcard `*`)."""
+    if not name or not pattern:
+        return False
+    p = pattern.strip()
+    if p.endswith("*"):
+        return name.startswith(p[:-1])
+    if p.startswith("*"):
+        return name.endswith(p[1:])
+    return name == p
+
+
+class CatalogMatcher:
+    """
+    Matcht erkannte Request-URLs und Cookie-Namen gegen den cookie_services-Katalog.
+    Erwartet Service-Dicts: {service_key, name, category, provider, domains[], cookie_patterns[]}.
+    """
+
+    def __init__(self, services: Optional[List[dict]] = None):
+        self.services = services or []
+
+    def match_url(self, url: str) -> Optional[dict]:
+        if not url:
+            return None
+        u = url.lower()
+        for svc in self.services:
+            for dom in svc.get("domains", []):
+                # Nur echte Domains (mit Punkt) — verhindert, dass generische
+                # Tokens wie "custom" jede URL fälschlich matchen.
+                if dom and "." in dom and dom.lower() in u:
+                    return svc
+        return None
+
+    def match_cookie(self, name: str) -> Optional[dict]:
+        if not name:
+            return None
+        for svc in self.services:
+            for pat in svc.get("cookie_patterns", []):
+                if _cookie_pattern_match(name, pat):
+                    return svc
+        return None
+
+
+# Label für Cookies/Requests, die keinem Katalog-Dienst zugeordnet werden konnten
+# (typisch: First-Party-Session/CSRF). Bewusst KEIN domain.capitalize()-Rauschen.
+UNMATCHED_LABEL = "Sonstige / First-Party"
 
 
 class DeepCookieScanner:
     """
-    Main scanner engine for comprehensive cookie detection
+    Hauptscanner-Engine für umfassende Cookie-/Tracking-Erkennung.
+    Optional wird ein cookie_services-Katalog (CatalogMatcher-Format) übergeben;
+    ohne Katalog werden Dienste nicht klassifiziert.
     """
 
-    def __init__(self, scan_id: int, url: str, headless_browser=None):
+    def __init__(self, scan_id: int, url: str, catalog: Optional[List[dict]] = None, headless_browser=None):
         self.scan_id = scan_id
         self.url = url
         self.browser = headless_browser
+        self.matcher = CatalogMatcher(catalog or [])
         self.cookies: List[Cookie] = []
         self.requests: List[Request] = []
         self.storage: Dict[str, Dict] = {"localStorage": {}, "sessionStorage": {}}
-        self.services_detected: Set[str] = set()
+        # service_key -> {service_key, name, category, provider}
+        self.detected_services: Dict[str, dict] = {}
         self.start_time = None
+
+    def _register_service(self, svc: dict) -> None:
+        key = svc.get("service_key") or svc.get("name")
+        if not key:
+            return
+        if key not in self.detected_services:
+            self.detected_services[key] = {
+                "service_key": svc.get("service_key"),
+                "name": svc.get("name"),
+                "category": svc.get("category") or "functional",
+                "provider": svc.get("provider") or "",
+            }
 
     async def scan(self) -> ScanResult:
         """
@@ -146,9 +158,7 @@ class DeepCookieScanner:
         self.start_time = datetime.utcnow()
 
         if not PLAYWRIGHT_AVAILABLE:
-            result = ScanResult(scan_id=self.scan_id, url=self.url)
-            result.error = "Playwright nicht verfügbar"
-            return result
+            return ScanResult(scan_id=self.scan_id, url=self.url, error="Playwright nicht verfügbar")
 
         url = self.url if self.url.startswith(("http://", "https://")) else f"https://{self.url}"
 
@@ -172,7 +182,16 @@ class DeepCookieScanner:
 
                 # Navigieren (löst initiale Skripte/Tracker aus)
                 try:
-                    await page.goto(url, wait_until="networkidle", timeout=30000)
+                    # DOM-ready statt networkidle: Seiten mit Polling/Chat-Widgets erreichen
+                    # nie Netzwerkruhe und liefen hier bei jedem Scan in den vollen Timeout.
+                    # Netzwerkruhe bekommt danach eine begrenzte Chance — Tracker/Inhalte,
+                    # die bis dahin nicht geladen sind, sieht der Scan eben nicht.
+                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    try:
+                        # Tracker brauchen einen Moment zum Feuern — aber begrenzt.
+                        await page.wait_for_load_state("networkidle", timeout=10000)
+                    except Exception:
+                        pass
                 except Exception as e:
                     logger.warning(f"Navigation langsam/teilweise für {url}: {e}")
 
@@ -182,19 +201,27 @@ class DeepCookieScanner:
                 # Cookies aus dem Browser-Context (echte gesetzte Cookies)
                 try:
                     for c in await context.cookies():
+                        name = c.get("name", "")
+                        domain = c.get("domain", "")
+                        # Dienst-Zuordnung: zuerst über den Cookie-Namen (präzise),
+                        # sonst über die Cookie-Domain.
+                        svc = self.matcher.match_cookie(name) \
+                            or self.matcher.match_url("https://" + domain.lstrip("."))
                         cookie = Cookie(
-                            name=c.get("name", ""),
-                            domain=c.get("domain", ""),
+                            name=name,
+                            domain=domain,
                             path=c.get("path", "/"),
                             secure=c.get("secure", False),
                             httpOnly=c.get("httpOnly", False),
                             sameSite=c.get("sameSite", "Lax"),
                             expires=str(c.get("expires", "")),
-                            service=self._identify_service("https://" + c.get("domain", "").lstrip(".")),
+                            service=(svc.get("name") if svc else None),
+                            service_key=(svc.get("service_key") if svc else None),
+                            category=(svc.get("category") if svc else "uncategorized"),
                         )
                         self.cookies.append(cookie)
-                        if cookie.service:
-                            self.services_detected.add(cookie.service)
+                        if svc:
+                            self._register_service(svc)
                 except Exception as e:
                     logger.warning(f"Cookie-Erfassung fehlgeschlagen: {e}")
 
@@ -216,132 +243,27 @@ class DeepCookieScanner:
 
         except Exception as e:
             logger.error(f"Deep-Scan fehlgeschlagen für {url}: {e}")
-            result = ScanResult(
+            return ScanResult(
                 scan_id=self.scan_id,
                 url=self.url,
                 scan_duration_seconds=int((datetime.utcnow() - self.start_time).total_seconds()),
+                error=str(e),
             )
-            result.error = str(e)
-            return result
 
     def _on_request(self, request):
-        """Sync-Handler für page.on('request') — erfasst jeden Request."""
+        """Sync-Handler für page.on('request') — erfasst jeden Request + Dienst."""
         try:
-            service = self._identify_service(request.url)
+            svc = self.matcher.match_url(request.url)
             self.requests.append(Request(
                 url=request.url,
                 method=request.method,
                 type=request.resource_type,
-                service=service,
+                service=(svc.get("name") if svc else None),
             ))
-            if service:
-                self.services_detected.add(service)
+            if svc:
+                self._register_service(svc)
         except Exception:
             pass
-
-    async def _intercept_response(self, response):
-        """
-        Intercept HTTP responses to extract Set-Cookie headers
-        """
-        # Get Set-Cookie headers from response
-        set_cookie_headers = response.headers.get("set-cookie", [])
-        
-        for cookie_str in set_cookie_headers:
-            cookie = self._parse_set_cookie(cookie_str)
-            if cookie:
-                cookie.service = self._identify_service(response.url)
-                self.cookies.append(cookie)
-                self.services_detected.add(cookie.service)
-
-    async def _intercept_request(self, request):
-        """
-        Intercept network requests to identify trackers/analytics
-        """
-        req = Request(
-            url=request.url,
-            method=request.method,
-            type=self._get_request_type(request),
-            service=self._identify_service(request.url),
-            payload_size=len(request.postData or b""),
-        )
-        self.requests.append(req)
-        
-        if req.service:
-            self.services_detected.add(req.service)
-
-    def _parse_set_cookie(self, cookie_str: str) -> Optional[Cookie]:
-        """
-        Parse Set-Cookie header into Cookie object
-        Format: name=value; Domain=...; Path=...; Secure; HttpOnly; SameSite=...
-        """
-        try:
-            parts = cookie_str.split(";")
-            name_val = parts[0].strip().split("=", 1)
-            
-            if len(name_val) != 2:
-                return None
-            
-            cookie = Cookie(name=name_val[0].strip(), domain="")
-            
-            for part in parts[1:]:
-                key_val = part.strip().split("=", 1)
-                key = key_val[0].strip().lower()
-                val = key_val[1].strip() if len(key_val) > 1 else ""
-                
-                if key == "domain":
-                    cookie.domain = val
-                elif key == "path":
-                    cookie.path = val
-                elif key == "secure":
-                    cookie.secure = True
-                elif key == "httponly":
-                    cookie.httpOnly = True
-                elif key == "samesite":
-                    cookie.sameSite = val
-                elif key == "expires":
-                    cookie.expires = val
-            
-            return cookie
-        except Exception:
-            return None
-
-    def _inject_storage_logger(self) -> str:
-        """
-        Generate JavaScript to inject into page to capture storage operations
-        Overrides localStorage/sessionStorage setters
-        """
-        return """
-        (function() {
-            const originalSetItem = Storage.prototype.setItem;
-            const storageEvents = [];
-            
-            Storage.prototype.setItem = function(key, value) {
-                storageEvents.push({
-                    type: this === localStorage ? 'localStorage' : 'sessionStorage',
-                    key: key,
-                    value: value,
-                    timestamp: new Date().toISOString()
-                });
-                return originalSetItem.call(this, key, value);
-            };
-            
-            window.__capturedStorage = storageEvents;
-            
-            // Also capture all current storage
-            window.__allLocalStorage = {};
-            window.__allSessionStorage = {};
-            
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                window.__allLocalStorage[key] = localStorage.getItem(key);
-            }
-            
-            for (let i = 0; i < sessionStorage.length; i++) {
-                const key = sessionStorage.key(i);
-                window.__allSessionStorage[key] = sessionStorage.getItem(key);
-            }
-        })();
-        """
 
     async def _simulate_user_interaction(self, page):
         """
@@ -358,31 +280,37 @@ class DeepCookieScanner:
 
     async def _compile_results(self) -> ScanResult:
         """
-        Compile all intercepted data into structured ScanResult
+        Verdichtet alle erfassten Daten in eine strukturierte ScanResult.
+        categorized ist nach Dienstname gruppiert und trägt service_key/category/provider
+        für die 1-Klick-Übernahme in die Banner-Config.
         """
-        # Categorize cookies by service
-        categorized = {}
+        by_name = {m["name"]: m for m in self.detected_services.values() if m.get("name")}
+        categorized: Dict[str, Dict] = {}
+
+        def bucket(name: str) -> Dict:
+            if name not in categorized:
+                meta = by_name.get(name, {})
+                categorized[name] = {
+                    "service_key": meta.get("service_key"),
+                    "category": meta.get("category"),
+                    "provider": meta.get("provider"),
+                    "cookies": [],
+                    "requests": [],
+                    "storage": {},
+                }
+            return categorized[name]
+
         for cookie in self.cookies:
-            service = cookie.service or "Unknown"
-            if service not in categorized:
-                categorized[service] = {
-                    "cookies": [],
-                    "requests": [],
-                    "storage": {}
-                }
-            categorized[service]["cookies"].append(asdict(cookie))
-        
-        # Categorize requests by service
+            bucket(cookie.service or UNMATCHED_LABEL)["cookies"].append(asdict(cookie))
+
+        # Nur dienst-zugeordnete Requests einsortieren — kein First-Party-Rauschen.
         for request in self.requests:
-            service = request.service or "Unknown"
-            if service not in categorized:
-                categorized[service] = {
-                    "cookies": [],
-                    "requests": [],
-                    "storage": {}
-                }
-            categorized[service]["requests"].append(asdict(request))
-        
+            if request.service:
+                bucket(request.service)["requests"].append(asdict(request))
+
+        service_keys = sorted({m["service_key"] for m in self.detected_services.values() if m.get("service_key")})
+        services_detected = sorted({m["name"] for m in self.detected_services.values() if m.get("name")})
+
         return ScanResult(
             scan_id=self.scan_id,
             url=self.url,
@@ -391,48 +319,9 @@ class DeepCookieScanner:
             storage=self.storage,
             categorized=categorized,
             total_cookies=len(self.cookies),
-            unique_services=len(self.services_detected),
+            unique_services=len(self.detected_services),
             total_requests=len(self.requests),
-            services_detected=sorted(list(self.services_detected)),
+            services_detected=services_detected,
+            service_keys=service_keys,
             scan_duration_seconds=int((datetime.utcnow() - self.start_time).total_seconds()),
         )
-
-    def _identify_service(self, url: str) -> Optional[str]:
-        """
-        Identify service/vendor from URL using pattern matching
-        """
-        url_lower = url.lower()
-        
-        for service, patterns in SERVICE_PATTERNS.items():
-            for pattern in patterns:
-                if re.search(pattern, url_lower):
-                    return service
-        
-        # Check domain for brand name
-        domain = urlparse(url).netloc.lower()
-        domain_parts = domain.split(".")
-        
-        if domain_parts:
-            main_domain = domain_parts[-2]  # Get main domain (e.g., "google" from "analytics.google.com")
-            # This is a simple heuristic; real implementation would need better logic
-            return main_domain.capitalize()
-        
-        return None
-
-    def _get_request_type(self, request) -> str:
-        """
-        Determine request type from request object
-        """
-        # In production, inspect request.resourceType or Content-Type header
-        url_lower = request.url.lower()
-        
-        if ".js" in url_lower:
-            return "script"
-        elif ".css" in url_lower:
-            return "stylesheet"
-        elif any(img in url_lower for img in [".png", ".jpg", ".gif", ".webp"]):
-            return "image"
-        elif "api" in url_lower or "endpoint" in url_lower:
-            return "xhr"
-        else:
-            return "other"

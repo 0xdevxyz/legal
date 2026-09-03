@@ -2,12 +2,12 @@
 <extension type="plugin" group="system" method="upgrade">
     <name>plg_system_complyo</name>
     <author>Complyo</author>
-    <authorEmail>support@complyo.tech</authorEmail>
-    <authorUrl>https://complyo.tech</authorUrl>
+    <authorEmail>support@complyo.de</authorEmail>
+    <authorUrl>https://complyo.de</authorUrl>
     <creationDate>2026-04</creationDate>
     <copyright>Copyright (C) 2026 Complyo. All rights reserved.</copyright>
     <license>GPL-2.0-or-later</license>
-    <version>2.0.0</version>
+    <version>2.1.0</version>
     <description>PLG_SYSTEM_COMPLYO_DESCRIPTION</description>
 
     <files>
