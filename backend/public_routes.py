@@ -2098,22 +2098,22 @@ async def scan_platz():
         _scan_plaetze.release()
 
 
-@public_router.post("/analyze-preview", response_model=Dict[str, Any],
-                    dependencies=[Depends(rate_limit("analyze_preview", 3, 60)),
-                                  Depends(scan_platz)])
-async def analyze_website_preview(request: AnalyzeRequest, http_request: Request):
-    """
-    Preview-Analyse für Landing Page (ohne Details)
-    
-    Zeigt nur:
-    - Compliance Score
-    - Risiko-Kategorien (mit/ohne Probleme)
-    - Gesamt-Risiko-Range
-    
-    Keine detaillierten Issue-Beschreibungen → Paywall
+async def fuehre_preview_scan_aus(url: str) -> Dict[str, Any]:
+    """Fuehrt den Preview-Scan aus und gibt die Antwort als dict zurueck.
+
+    Herausgezogen am 04.09.2026 aus analyze_website_preview: der
+    Hintergrundarbeiter (scan_arbeiter.py) und der synchrone Endpunkt muessen
+    exakt denselben Scan fahren. Zwei Kopien derselben Logik laufen frueher
+    oder spaeter auseinander, und dann liefert dieselbe Website je nach Weg
+    ein anderes Ergebnis. Dieselbe Fehlerklasse gab es hier schon zweimal:
+    zwei Rechenwege fuers Risiko (Backend und Landing) und zwei Adressen
+    fuers Widget.
+
+    Wirft nicht. Scannerfehler kommen als dict mit success=False zurueck,
+    damit der Arbeiter sie ablegen kann, ohne HTTP zu kennen.
     """
     try:
-        url = str(request.url)
+        # url kommt jetzt als Parameter herein, nicht aus dem Request.
         
         logger.info(f"Preview analysis request for: {url}")
         
@@ -2181,14 +2181,129 @@ async def analyze_website_preview(request: AnalyzeRequest, http_request: Request
             # Kein Mock mehr — siehe oben.
             return _preview_scan_fehler(url)
         
-    except HTTPException:
-        raise
     except Exception as e:
+        # Bewusst kein HTTPException mehr: diese Funktion laeuft auch im
+        # Hintergrundarbeiter, der kein HTTP kennt. Der Endpunkt macht aus
+        # success=False weiterhin eine saubere Antwort, der Arbeiter legt den
+        # Fehlschlag in der Auftragsablage ab.
         logger.error(f"Error in preview analysis: {e}", exc_info=True)
+        return _preview_scan_fehler(url, "Bei der Prüfung ist ein Fehler aufgetreten.")
+
+
+@public_router.post("/analyze-preview", response_model=Dict[str, Any],
+                    dependencies=[Depends(rate_limit("analyze_preview", 3, 60)),
+                                  Depends(scan_platz)])
+async def analyze_website_preview(request: AnalyzeRequest, http_request: Request):
+    """Preview-Analyse für Landing Page (ohne Details).
+
+    Der Scan selbst steht in fuehre_preview_scan_aus() - dieselbe Funktion
+    benutzt der Hintergrundarbeiter.
+    """
+    return await fuehre_preview_scan_aus(str(request.url))
+
+
+# ---------------------------------------------------------------------------
+# Entkoppelter Scan: annehmen, Kennung geben, spaeter abholen
+# ---------------------------------------------------------------------------
+#
+# Bewusst als EIGENES Endpunktpaar neben /analyze-preview, nicht als Umschaltung
+# desselben Pfads. Der synchrone Weg bleibt Zeichen fuer Zeichen, wie er war,
+# solange die Landing ihn nutzt — eine Verhaltensaenderung an einem Endpunkt,
+# den ein ausgeliefertes Frontend aufruft, faellt erst beim Kunden auf.
+#
+# Der Grund fuer die Entkopplung, gemessen am 03.09.2026: der Speicher waechst
+# nicht nur mit den laufenden Browsern, sondern mit den WARTENDEN Anfragen. Bei
+# 22 gleichzeitigen lieferten vier Scans 14 statt 13 Befunde — dasselbe Ziel,
+# anderes Ergebnis, je nach Serverlast. Dazu die harte Wand
+# `proxy_read_timeout 120s` auf api.complyo.de.
+#
+# Hier gilt deshalb KEINE Aufnahmeschranke: die Anfrage ist nach Millisekunden
+# wieder weg, sie haelt nichts. Begrenzt wird stattdessen die Warteschlange
+# des Arbeiters.
+
+
+class AuftragAntwort(BaseModel):
+    kennung: str
+    zustand: str
+    fortschritt_pfad: str
+
+
+@public_router.post("/analyze-auftrag", status_code=202,
+                    dependencies=[Depends(rate_limit("analyze_preview", 3, 60))])
+async def scan_auftrag_annehmen(request: AnalyzeRequest) -> Dict[str, Any]:
+    """Nimmt eine Pruefung an und antwortet sofort mit einer Kennung."""
+    from compliance_engine import scan_arbeiter, scan_auftraege
+
+    url = str(request.url)
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+
+    # Ohne Redis gibt es keine Ablage — dann ist der entkoppelte Weg nicht
+    # benutzbar. 503 statt eines stillen Rueckfalls: der Aufrufer soll wissen,
+    # dass er den synchronen Weg nehmen muss, statt auf ein Ergebnis zu warten,
+    # das nie abholbar wird.
+    if not await scan_auftraege.verfuegbar():
         raise HTTPException(
-            status_code=500,
-            detail="Fehler bei der Preview-Analyse"
+            status_code=503,
+            detail="Der entkoppelte Prüfweg ist gerade nicht verfügbar.",
+            headers={"Retry-After": "30"},
         )
+
+    kennung = await scan_auftraege.anlegen(url)
+    if not kennung:
+        raise HTTPException(status_code=503, detail="Auftrag konnte nicht angelegt werden.")
+
+    if not await scan_arbeiter.einreihen(kennung, url):
+        # Schlange voll oder Arbeiter nicht gestartet. Der Auftrag darf dann
+        # nicht auf `wartend` stehenbleiben — sonst fragt der Kunde ewig nach.
+        await scan_auftraege.markiere_fehlgeschlagen(
+            kennung, "Es warten gerade zu viele Prüfungen. Bitte später erneut versuchen."
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Es warten gerade zu viele Prüfungen. Bitte in einer Minute erneut versuchen.",
+            headers={"Retry-After": "60"},
+        )
+
+    logger.info(f"Scan-Auftrag {kennung} angenommen: {url}")
+    return {
+        "kennung": kennung,
+        "zustand": scan_auftraege.WARTEND,
+        "fortschritt_pfad": f"/api/v2/analyze-progress/{kennung}",
+        "ergebnis_pfad": f"/api/analyze-auftrag/{kennung}",
+    }
+
+
+@public_router.get("/analyze-auftrag/{kennung}")
+async def scan_auftrag_abholen(kennung: str) -> Dict[str, Any]:
+    """Zustand oder Ergebnis einer Pruefung.
+
+    Antwortet immer mit 200 und einem Zustand, solange die Kennung bekannt ist —
+    auch im Fehlerfall. Ein 4xx/5xx wuerde die abholende Seite zwingen, zwischen
+    "noch nicht fertig" und "kaputt" zu unterscheiden, und genau daran ist der
+    Betriebswaechter schon einmal blind geworden.
+    """
+    from compliance_engine import scan_auftraege
+
+    auftrag = await scan_auftraege.hole(kennung)
+    if auftrag is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Diese Prüfung ist unbekannt oder abgelaufen.",
+        )
+
+    antwort: Dict[str, Any] = {
+        "kennung": kennung,
+        "zustand": auftrag.get("zustand"),
+        "fertig": scan_auftraege.ist_endzustand(auftrag.get("zustand")),
+        "url": auftrag.get("url"),
+    }
+    if auftrag.get("zustand") == scan_auftraege.FERTIG:
+        antwort["ergebnis"] = auftrag.get("ergebnis")
+    if auftrag.get("zustand") == scan_auftraege.FEHLGESCHLAGEN:
+        antwort["fehler"] = auftrag.get("fehler")
+    return antwort
+
 
 async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict[str, Any]]:
     """Aggregiert Issues nach den 4 Hauptsäulen + weitere Kategorien"""

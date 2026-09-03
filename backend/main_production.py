@@ -899,6 +899,18 @@ async def startup_event():
 
     print("✅ All routers initialized successfully")
 
+    # Scan-Arbeiter fuer entkoppelte Pruefungen.
+    #
+    # Ohne ihn nimmt /api/analyze-preview weiterhin nur synchron an — das ist
+    # kein Fehlerfall, sondern der Rueckfall. Der Endpunkt fragt selbst nach,
+    # ob entkoppelt gearbeitet werden kann, und entscheidet danach.
+    try:
+        from compliance_engine import scan_arbeiter
+        await scan_arbeiter.starte()
+        logger.info("✅ Scan-Arbeiter bereit")
+    except Exception as e:
+        logger.error(f"Scan-Arbeiter konnte nicht starten: {e}")
+
     # MCP Server – KI-Agenten-Integration (fastapi-mcp)
     from mcp_server import setup_mcp
     setup_mcp(app)
@@ -906,6 +918,16 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    # Scan-Arbeiter zuerst: er legt offene Auftraege ehrlich als gescheitert
+    # ab. Ohne das stehen sie nach dem Neustart fuer immer auf `wartend` oder
+    # `laeuft`, und die Anzeige beim Kunden dreht sich endlos.
+    try:
+        from compliance_engine import scan_arbeiter
+        await scan_arbeiter.beende()
+        print("✅ Scan-Arbeiter beendet")
+    except Exception as e:
+        print(f"⚠️ Scan-Arbeiter-Stopp fehlgeschlagen: {e}")
+
     # Stop Background Worker
     try:
         await stop_background_worker()
