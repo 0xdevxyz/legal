@@ -17,7 +17,7 @@
 (function() {
   'use strict';
   
-  const WIDGET_VERSION = '6.0.0';
+  const WIDGET_VERSION = '1.0.0';
   const _currentScript = document.currentScript || (function() {
     const scripts = document.getElementsByTagName('script');
     return scripts[scripts.length - 1];
