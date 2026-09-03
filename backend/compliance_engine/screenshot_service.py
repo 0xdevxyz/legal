@@ -20,22 +20,58 @@ class ScreenshotService:
     
     def __init__(self):
         self.browser: Optional[Browser] = None
+        # Muss aufbewahrt werden, sonst laesst sich der Treiber nicht beenden.
+        self._playwright = None
         self.max_images = 50  # Limit für Performance
-        
+
     async def __aenter__(self):
         """Context Manager Entry - initialisiert Browser"""
-        playwright = await async_playwright().start()
-        self.browser = await playwright.chromium.launch(
+        self._playwright = await async_playwright().start()
+        self.browser = await self._playwright.chromium.launch(
             headless=True,
             args=['--no-sandbox', '--disable-setuid-sandbox']
         )
         return self
-        
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Context Manager Exit - schließt Browser"""
-        if self.browser:
-            await self.browser.close()
-    
+        """Context Manager Exit - Browser UND Playwright-Treiber beenden.
+
+        Bis 03.09.2026 wurde hier nur der Browser geschlossen. Das Objekt aus
+        `async_playwright().start()` lag in einer lokalen Variablen von
+        __aenter__ und war danach nicht mehr erreichbar - `.stop()` konnte
+        also gar nicht aufgerufen werden. Zurueck blieb je Aufruf ein
+        Playwright-Treiberprozess (node, ~60 MB), der bis zum Neustart des
+        Containers weiterlief.
+
+        Der Dienst wird bei JEDEM Barrierefreiheits-Scan benutzt
+        (barrierefreiheit_check.py). Gemessen am 03.09.: nach acht Stunden
+        Betrieb elf solcher Prozesse, Grundverbrauch des Backends von 142 MiB
+        auf 545 MiB gewachsen - bei einem Limit von 1 GiB. Das erklaert die
+        OOM-Kills bei geringer Last und den Ausfall ab acht gleichzeitigen
+        Scans: nicht die Gleichzeitigkeit war zu hoch, der Grundverbrauch war
+        es. Nach etwa einem Dutzend Scans steht der Container am Anschlag,
+        unabhaengig davon, wie wenige davon gleichzeitig liefen.
+
+        Beide Schritte einzeln abgesichert: schlaegt das Schliessen des
+        Browsers fehl, muss der Treiber trotzdem beendet werden - sonst
+        entsteht genau das Leck wieder, das hier behoben wird.
+        """
+        try:
+            if self.browser:
+                await self.browser.close()
+        except Exception as e:
+            logger.warning(f"Browser liess sich nicht schliessen: {e}")
+        finally:
+            self.browser = None
+
+        try:
+            if self._playwright:
+                await self._playwright.stop()
+        except Exception as e:
+            logger.warning(f"Playwright-Treiber liess sich nicht beenden: {e}")
+        finally:
+            self._playwright = None
+
     async def capture_images(self, url: str) -> List[Dict[str, Any]]:
         """
         Crawlt Seite mit Playwright und erstellt Screenshots
