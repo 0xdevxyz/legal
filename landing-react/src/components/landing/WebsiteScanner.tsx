@@ -13,7 +13,7 @@ export default function WebsiteScanner() {
   const [isScanning, setIsScanning] = useState(false);
   // Hochzaehlen, sobald sich die Form von scanData aendert - sonst zeigt ein
   // alter Eintrag aus dem localStorage stillschweigend falsche Werte an.
-  const SCAN_SCHEMA = 2;
+  const SCAN_SCHEMA = 3;
 
   const [scanResult, setScanResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
