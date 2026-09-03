@@ -201,7 +201,7 @@ async def serve_accessibility_widget(request: Request, version: str = "6"):
         # (Vorher: max-age=86400 → bis zu 24h alter Stand beim Kunden.)
         'Cache-Control': 'no-cache, must-revalidate',
         'Access-Control-Allow-Origin': '*',
-        'X-Complyo-Widget-Version': '6.1.0',
+        'X-Complyo-Widget-Version': '1.0.0',
         'ETag': etag,
         'Vary': 'Accept-Encoding',
     }
