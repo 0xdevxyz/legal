@@ -74,7 +74,6 @@ from ai_fix_engine.smart_fix_generator import SmartFixGenerator
 from background_worker import start_background_worker, stop_background_worker
 from fastapi.responses import StreamingResponse
 import io
-from payment.stripe_service import StripeService
 import stripe
 
 # Import API Routers
@@ -90,7 +89,6 @@ from website_routes import router as website_router
 from dashboard_routes import dashboard_router
 import auth_routes  # Auth routes with AuthService
 from auth_service import AuthService
-import payment_routes  # Payment routes with Stripe
 import website_routes  # Website management routes
 import stripe_routes  # NEW: Freemium Stripe integration
 import user_routes  # User profile & domain locks
@@ -443,7 +441,6 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
 
 # Stripe
-stripe_service = None
 
 # Pydantic Models
 class LoginRequest(BaseModel):
@@ -559,8 +556,6 @@ async def startup_event():
     workflow_integration_instance = init_workflow_integration(db_pool)
     
     # Initialize Stripe service
-    global stripe_service
-    stripe_service = StripeService(db_pool)
     
     # Initialize News service
     global news_service
@@ -666,11 +661,6 @@ async def startup_event():
     else:
         print("⚠️ Firebase Admin SDK not initialized")
     
-    # Set global references in payment_routes
-    payment_routes.stripe_service = stripe_service
-    payment_routes.db_pool = db_pool
-    payment_routes.auth_service = auth_service
-
     # Set global references in website_routes
     website_routes.db_pool = db_pool
     website_routes.auth_service = auth_service
@@ -710,7 +700,8 @@ async def startup_event():
     app.include_router(website_router)  # Website management router
     app.include_router(dashboard_router)  # Dashboard metrics router
     app.include_router(auth_routes.router)  # Auth router enabled
-    app.include_router(payment_routes.router)  # Payment router enabled
+    # payment_routes (/api/payment/*) ist am 03.09.2026 entfernt worden -
+    # dritter Bezahl-Router ohne Aufrufer, mit drittem Webhook-Pfad.
     app.include_router(stripe_routes.router)  # NEW: Freemium Stripe routes
     app.include_router(user_routes.router)  # User profile & domain locks
     app.include_router(legal_text_router)  # Interner Rechtstexte-Generator (ersetzt eRecht24)
@@ -2080,97 +2071,24 @@ async def export_audit_log(
         raise HTTPException(status_code=500, detail="Interner Fehler")
 
 
-# ========== PAYMENT ENDPOINTS ==========
-
-@app.post("/api/v2/payments/create-checkout-session")
-async def create_checkout_session(
-    request: CreateCheckoutSessionRequest,
-    current_user: dict = Depends(get_current_user)
-):
-    try:
-        async with db_pool.acquire() as connection:
-            user = await connection.fetchrow(
-                "SELECT email, full_name FROM users WHERE id = $1",
-                current_user["id"]
-            )
-        
-        result = await stripe_service.create_checkout_session(
-            user_id=current_user["id"],
-            price_id=request.price_id,
-            success_url=request.success_url,
-            cancel_url=request.cancel_url,
-            email=user['email'],
-            name=user.get('full_name') or user.get('name', 'Unknown')
-        )
-        return {"success": True, "data": result}
-    except Exception as e:
-        logger.exception("Failed to create checkout session")
-        raise HTTPException(status_code=500, detail="Failed to create checkout session")
-
-@app.post("/api/v2/payments/create-portal-session")
-async def create_portal_session(current_user: dict = Depends(get_current_user)):
-    try:
-        result = await stripe_service.create_portal_session(
-            user_id=current_user["id"],
-            return_url="https://complyo.ai/dashboard"  # Adjust this URL as needed
-        )
-        return {"success": True, "data": result}
-    except Exception as e:
-        logger.exception("Failed to create portal session")
-        raise HTTPException(status_code=500, detail="Failed to create portal session")
-
-@app.get("/api/v2/payments/subscription-status")
-async def get_subscription_status(current_user: dict = Depends(get_current_user)):
-    try:
-        status = await stripe_service.get_subscription_status(current_user["id"])
-        return {"success": True, "data": status}
-    except Exception as e:
-        logger.exception("Failed to get subscription status")
-        raise HTTPException(status_code=500, detail="Failed to get subscription status")
-
-@app.get("/api/v2/payments/history")
-async def get_payment_history(current_user: dict = Depends(get_current_user)):
-    try:
-        history = await stripe_service.get_payment_history(current_user["id"])
-        return {"success": True, "data": history}
-    except Exception as e:
-        logger.exception("Failed to get payment history")
-        raise HTTPException(status_code=500, detail="Failed to get payment history")
-
-@app.get("/api/v2/payments/plans")
-async def get_available_plans():
-    try:
-        plans = await stripe_service.get_available_plans()
-        return {"success": True, "data": plans}
-    except Exception as e:
-        logger.exception("Failed to get available plans")
-        raise HTTPException(status_code=500, detail="Failed to get available plans")
-
-@app.post("/api/v2/payments/webhook")
-async def stripe_webhook(request: Request):
-    payload = await request.body()
-    sig_header = request.headers.get("Stripe-Signature")
-
-    try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, stripe_service.STRIPE_WEBHOOK_SECRET
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail="Invalid payload")
-    except stripe.error.SignatureVerificationError as e:
-        raise HTTPException(status_code=400, detail="Invalid signature")
-
-    if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
-        await stripe_service.handle_checkout_completed(session)
-    elif event["type"] == "customer.subscription.updated":
-        subscription = event["data"]["object"]
-        await stripe_service.handle_subscription_updated(subscription)
-    elif event["type"] == "invoice.paid":
-        invoice = event["data"]["object"]
-        await stripe_service.handle_invoice_paid(invoice)
-
-    return {"success": True}
+# Der Block /api/v2/payments/* stand hier bis 03.09.2026: sechs Routen auf
+# payment/stripe_service.py, einer abgeloesten Bezahl-Implementierung.
+#
+# Kein Frontend rief sie auf, und sie liefen ohnehin in 500 - stripe_service
+# fragt Tabellen und Spalten ab, die es nie gab (payment_history,
+# plan_setup_fees, subscriptions.plan_id, current_period_end, cancel_at).
+# Der lebende Bezahlweg ist stripe_routes.py unter /api/stripe/*; der
+# benutzt StripeService an keiner Stelle.
+#
+# Stehengelassen wurden sie beim Audit am 31.08. mit der Begruendung, im
+# selben Block haenge ein Webhook. Genau der ist der Grund, sie zu
+# entfernen: /api/v2/payments/webhook sah aus wie ein gueltiges Ziel fuer
+# den Stripe-Eintrag, der vor dem Live-Gang noch gemacht werden muss.
+# Wer ihn dort eingetragen haette, dessen erste bezahlte Rechnung waere in
+# handle_invoice_paid auf einen Schreibzugriff in eine Zahlungshistorie
+# gelaufen, die es als Tabelle nie gab. Der Kunde haette bezahlt, complyo
+# haette es nie erfahren. Jetzt antwortet die falsche Adresse mit 404 statt
+# halb zu funktionieren. Richtig ist /api/stripe/webhook.
 
 
 if __name__ == "__main__":

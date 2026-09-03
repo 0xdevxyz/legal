@@ -316,7 +316,6 @@ async def require_admin(
 
 # Import services lazily to avoid circular imports
 _auth_service = None
-_stripe_service = None
 _news_service = None
 
 async def get_auth_service():
@@ -334,15 +333,6 @@ async def get_auth_service():
         db = await get_db()
         _auth_service = AuthService(db)
     return _auth_service
-
-async def get_stripe_service():
-    """Dependency: Get StripeService instance."""
-    global _stripe_service
-    if _stripe_service is None:
-        from payment.stripe_service import StripeService
-        db = await get_db()
-        _stripe_service = StripeService(db)
-    return _stripe_service
 
 async def get_news_service():
     """Dependency: Get NewsService instance."""

@@ -49,16 +49,38 @@ def _schema_tabellen() -> set:
     return namen
 
 
+def _quelldateien() -> list:
+    """Alle Anwendungsdateien - rekursiv.
+
+    Bis zum 03.09.2026 stand hier glob("backend/*.py"), also nur die oberste
+    Ebene: 87 von 201 Dateien. Alles unter cronjobs/, compliance_engine/,
+    payment/, ai_fix_engine/ und knowledge/ war fuer diesen Waechter unsichtbar
+    - und genau dort sassen saemtliche stillen Schema-Ausfaelle der letzten
+    Wochen: scan_issues (knowledge/pattern_extractor.py),
+    knowledge_rule_review_queue (cronjobs/knowledge_updater.py), die
+    Zahlungstabellen unter payment/. Der Test war gruen, waehrend im Cron-Log
+    woechentlich "relation does not exist" stand.
+
+    alembic/ und tests/ bleiben aussen vor: dort steht SQL, das das Schema
+    beschreibt oder erfindet, nicht Code, der es benutzt.
+    """
+    alle = glob.glob(os.path.join(BACKEND, "**", "*.py"), recursive=True)
+    return [
+        p for p in alle
+        if f"{os.sep}alembic{os.sep}" not in p and f"{os.sep}tests{os.sep}" not in p
+    ]
+
+
 def _referenzierte_tabellen() -> dict:
     """Tabellen, die der Anwendungscode schreibt/liest → {tabelle: beispieldatei}."""
     treffer = {}
     muster = re.compile(r"\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|FROM|JOIN)\s+[\"']?(\w+)", re.I)
-    for pfad in glob.glob(os.path.join(BACKEND, "*.py")):
+    for pfad in _quelldateien():
         with open(pfad, encoding="utf-8") as fh:
             text = fh.read()
         for m in muster.finditer(text):
             name = m.group(1).lower()
-            treffer.setdefault(name, os.path.basename(pfad))
+            treffer.setdefault(name, os.path.relpath(pfad, BACKEND))
     return treffer
 
 
@@ -91,7 +113,7 @@ def test_alle_referenzierten_tabellen_im_schema():
 
 def _wird_geschrieben(tabelle: str) -> bool:
     muster = re.compile(rf"\bINSERT\s+INTO\s+[\"']?{re.escape(tabelle)}\b", re.I)
-    for pfad in glob.glob(os.path.join(BACKEND, "*.py")):
+    for pfad in _quelldateien():
         with open(pfad, encoding="utf-8") as fh:
             if muster.search(fh.read()):
                 return True
