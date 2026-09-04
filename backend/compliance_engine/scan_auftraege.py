@@ -111,7 +111,7 @@ async def anlegen(
     if zusatz:
         auftrag.update(zusatz)
     try:
-        await r.set(PRAEFIX + kennung, json.dumps(auftrag), ex=TTL_SEKUNDEN)
+        await r.set(PRAEFIX + kennung, json.dumps(auftrag, default=str), ex=TTL_SEKUNDEN)
     except Exception as e:
         logger.warning(f"Auftrag {kennung} nicht ablegbar: {e}")
         return None
@@ -164,7 +164,7 @@ async def _schreibe(kennung: str, aenderung: Dict[str, Any]) -> bool:
             return False
         auftrag = json.loads(roh)
         auftrag.update(aenderung)
-        await r.set(PRAEFIX + kennung, json.dumps(auftrag), ex=TTL_SEKUNDEN)
+        await r.set(PRAEFIX + kennung, json.dumps(auftrag, default=str), ex=TTL_SEKUNDEN)
         return True
     except Exception as e:
         logger.warning(f"Auftrag {kennung} nicht schreibbar: {e}")
