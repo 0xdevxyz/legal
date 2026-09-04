@@ -578,3 +578,35 @@ async def reject_fix(
     except Exception as e:
         logger.error(f"reject_fix error for {fix_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fehler beim Ablehnen des Fixes")
+
+
+# ---------------------------------------------------------------------------
+# Lernstand
+# ---------------------------------------------------------------------------
+
+
+@admin_router.get("/lernstand")
+async def lernstand(
+    tage: int = 90,
+    admin: dict = Depends(require_admin),
+):
+    """Was hat complyo aus den Entscheidungen der Kunden gelernt?
+
+    Je Befundtyp: Vorschlaege, Zustimmungen, Ablehnungen, Annahmequote und die
+    haeufigsten Ablehnungsgruende.
+
+    Drei Angaben sind wichtiger als die Zahlen selbst:
+
+    - `aussagekraeftig` / `belege_reichen`: unter 30 Entscheidungen ist eine
+      Quote Rauschen. Steht das nicht dabei, wird aus drei Zustimmungen eine
+      100-Prozent-Quote.
+    - `gruende_erfassbar`: Ablehnungsgruende gibt es heute nur bei Alt-Texten.
+      Ohne diesen Vermerk saehe eine Ablehnungsquote ohne Gruende aus wie
+      "niemand hatte einen Grund" statt wie "hier kann keiner erfasst werden".
+    - `konfidenz_angenommen` neben `konfidenz_abgelehnt`: trennen die beiden
+      Werte nicht, taugt die Konfidenz nicht als Vorfilter.
+    """
+    if tage < 1 or tage > 3650:
+        raise HTTPException(status_code=400, detail="tage muss zwischen 1 und 3650 liegen")
+    from lernstand import erhebe_lernstand
+    return await erhebe_lernstand(db_service.pool, tage=tage)
