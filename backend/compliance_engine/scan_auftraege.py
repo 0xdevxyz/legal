@@ -39,6 +39,12 @@ LAUFZEIT_GRENZE_SEKUNDEN = 600
 
 PRAEFIX = "scan:auftrag:"
 
+# Welcher Scan hinter dem Auftrag steckt. Der Arbeiter entscheidet danach,
+# welche Funktion er ruft — der oeffentliche Vorschau-Scan und der
+# angemeldete Vollscan sind verschiedene Wege mit verschiedenen Budgets.
+ART_PREVIEW = "preview"
+ART_V2 = "v2"
+
 WARTEND = "wartend"
 LAEUFT = "laeuft"
 FERTIG = "fertig"
@@ -70,8 +76,25 @@ async def verfuegbar() -> bool:
     return await _redis() is not None
 
 
-async def anlegen(url: str, kennung: Optional[str] = None) -> Optional[str]:
-    """Legt einen Auftrag im Zustand `wartend` an. None, wenn Redis fehlt."""
+async def anlegen(
+    url: str,
+    kennung: Optional[str] = None,
+    user_id: Optional[str] = None,
+    art: str = ART_PREVIEW,
+    zusatz: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    """Legt einen Auftrag im Zustand `wartend` an. None, wenn Redis fehlt.
+
+    `user_id` bindet den Auftrag an ein Konto. Der oeffentliche Vorschau-Scan
+    hat keinen Besitzer (None) — sein Ergebnis ist ohnehin oeffentlich. Der
+    angemeldete Vollscan hat einen, und der Abholweg prueft ihn: die Kennung
+    ist zwar 128 Bit lang und praktisch nicht zu raten, aber "praktisch nicht
+    zu raten" ist keine Zugriffskontrolle.
+
+    `zusatz` nimmt auf, was der Arbeiter spaeter braucht und im Auftrag stehen
+    muss, weil er den Anfragekontext nicht mehr hat — beim v2-Scan etwa das
+    Seitenbudget aus dem Tarif.
+    """
     r = await _redis()
     if r is None:
         return None
@@ -81,8 +104,12 @@ async def anlegen(url: str, kennung: Optional[str] = None) -> Optional[str]:
         "kennung": kennung,
         "url": url,
         "zustand": WARTEND,
+        "art": art,
+        "user_id": str(user_id) if user_id is not None else None,
         "erstellt": time.time(),
     }
+    if zusatz:
+        auftrag.update(zusatz)
     try:
         await r.set(PRAEFIX + kennung, json.dumps(auftrag), ex=TTL_SEKUNDEN)
     except Exception as e:
@@ -162,6 +189,19 @@ async def markiere_fehlgeschlagen(kennung: str, fehler: str) -> bool:
         "fehler": fehler,
         "beendet": time.time(),
     })
+
+
+def gehoert_zu(auftrag: Dict[str, Any], user_id: Optional[str]) -> bool:
+    """Darf dieses Konto den Auftrag sehen?
+
+    Auftraege ohne Besitzer (der oeffentliche Vorschau-Scan) sind fuer jeden
+    abholbar, der die Kennung hat — ihr Ergebnis ist eine oeffentliche
+    Website-Bewertung. Auftraege MIT Besitzer gehoeren genau diesem Konto.
+    """
+    besitzer = auftrag.get("user_id")
+    if besitzer is None:
+        return True
+    return besitzer == str(user_id) if user_id is not None else False
 
 
 def ist_endzustand(zustand: Optional[str]) -> bool:

@@ -54,29 +54,55 @@ def wartend_anzahl() -> int:
     return _warteschlange.qsize() if _warteschlange else 0
 
 
-async def einreihen(kennung: str, url: str) -> bool:
-    """Auftrag in die Schlange stellen. False, wenn sie voll ist."""
+async def einreihen(kennung: str, url: str, art: str = sa.ART_PREVIEW) -> bool:
+    """Auftrag in die Schlange stellen. False, wenn sie voll ist.
+
+    `art` entscheidet, welchen Scan der Arbeiter faehrt. Sie steht auch im
+    Auftrag selbst — mitgegeben wird sie hier, damit die Schlange ohne einen
+    zusaetzlichen Redis-Zugriff auskommt.
+    """
     if _warteschlange is None:
         logger.warning("Arbeiter laeuft nicht — Auftrag nicht einreihbar")
         return False
     try:
-        _warteschlange.put_nowait((kennung, url))
+        _warteschlange.put_nowait((kennung, url, art))
         return True
     except asyncio.QueueFull:
         logger.warning(f"Warteschlange voll ({WARTESCHLANGE_MAX}) — {kennung} abgelehnt")
         return False
 
 
-async def _eine_runde(kennung: str, url: str) -> None:
+async def _scan_fuer(art: str, kennung: str, url: str):
+    """Waehlt den Scan nach der Auftragsart.
+
+    Spaet importiert: public_routes und main_production ziehen sich beim
+    Import gegenseitig mit, ein Import auf Modulebene erzeugte einen
+    Ringschluss.
+    """
+    if art == sa.ART_V2:
+        # Der angemeldete Vollscan braucht Angaben, die nur bei der Annahme
+        # bekannt waren — Seitenbudget aus dem Tarif und das Konto, unter dem
+        # der Verlauf gespeichert wird. Sie stehen im Auftrag.
+        auftrag = await sa.hole(kennung) or {}
+        from main_production import fuehre_v2_scan_aus
+        return await fuehre_v2_scan_aus(
+            url=url,
+            seitenbudget=int(auftrag.get("seitenbudget") or 5),
+            current_user=auftrag.get("nutzer") or {},
+            scan_token_eingang=kennung,
+            legal_update_id=auftrag.get("legal_update_id"),
+        )
+
+    from public_routes import fuehre_preview_scan_aus
+    return await fuehre_preview_scan_aus(url)
+
+
+async def _eine_runde(kennung: str, url: str, art: str = sa.ART_PREVIEW) -> None:
     """Ein Auftrag von Anfang bis Ende. Wirft nie."""
     _in_arbeit.add(kennung)
     try:
         await sa.markiere_laufend(kennung)
-        # Spaet importiert: public_routes zieht beim Import halb main_production
-        # mit, ein Import auf Modulebene wuerde einen Ringschluss erzeugen.
-        from public_routes import fuehre_preview_scan_aus
-
-        ergebnis = await fuehre_preview_scan_aus(url)
+        ergebnis = await _scan_fuer(art, kennung, url)
 
         # fuehre_preview_scan_aus wirft nicht, sondern meldet Fehler im dict.
         # Ein Ergebnis mit success=False ist ein Fehlschlag, auch wenn technisch
@@ -103,9 +129,9 @@ async def _eine_runde(kennung: str, url: str) -> None:
 async def _schleife(nummer: int) -> None:
     logger.info(f"Scan-Arbeiter {nummer} bereit")
     while True:
-        kennung, url = await _warteschlange.get()
+        kennung, url, art = await _warteschlange.get()
         try:
-            await _eine_runde(kennung, url)
+            await _eine_runde(kennung, url, art)
         finally:
             _warteschlange.task_done()
 
@@ -138,7 +164,7 @@ async def beende() -> None:
     offen = []
     while _warteschlange and not _warteschlange.empty():
         try:
-            kennung, _ = _warteschlange.get_nowait()
+            kennung = _warteschlange.get_nowait()[0]
             offen.append(kennung)
         except asyncio.QueueEmpty:
             break
