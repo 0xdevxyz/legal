@@ -29,15 +29,19 @@ class Zeile(dict):
 class FakeConn:
     """Liefert je Tabelle vorbereitete Zeilen."""
 
-    def __init__(self, je_tabelle=None, gruende=None, regeln=None):
+    def __init__(self, je_tabelle=None, gruende=None, regeln=None, kontrast=None):
         self.je_tabelle = je_tabelle or {}
         self.gruende = gruende or []
+        # Zeilen fuer die Kontrast-Abfrage (SELECT payload, created_at).
+        self.kontrast = kontrast or []
         self.regeln = regeln or Zeile(
             erzeugt=0, aktiv=0, abgeschaltet=0, wartet=0, mit_grund=0)
         self.abfragen = []
 
     async def fetch(self, sql, *params):
         self.abfragen.append(sql)
+        if "SELECT payload" in sql:
+            return self.kontrast
         if "status = 'rejected'" in sql and "GROUP BY 1 ORDER BY 2 DESC" in sql:
             return self.gruende
         for tabelle, zeilen in self.je_tabelle.items():
@@ -121,7 +125,6 @@ class TestEhrlichkeitsvermerke:
         """
         conn = FakeConn({"accessibility_document_fixes": [
             zeile(typ="skip-link", vor=6, an=6),
-            zeile(typ="kontrast-css", vor=6, an=1, offen=5),
         ]})
         d = await ls.erhebe_lernstand(FakePool(conn))
         nach_typ = {e["befundtyp"]: e for e in d["befundtypen"]}
@@ -131,8 +134,6 @@ class TestEhrlichkeitsvermerke:
         # ... und taucht deshalb NICHT unter "Grund fehlt" auf: dort waere er
         # eine Aufgabe, die niemand erledigen sollte.
         assert "dokument:skip-link" not in d["ohne_grunderfassung"]
-
-        assert nach_typ["dokument:kontrast-css"]["entscheidbar"] is True
 
     async def test_konfidenz_wird_getrennt_ausgewiesen(self):
         """Nur nebeneinander sieht man, ob sie ueberhaupt trennt."""
@@ -217,3 +218,64 @@ class TestPruefregeln:
         assert r["abgeschaltet"] == 124
         assert r["annahmequote"] == 0.22
         assert r["abschaltungen_mit_grund"] == 0
+
+
+@pytest.mark.asyncio
+class TestKontraste:
+    """Kontraste zaehlen je Farbpaar, nicht je Website.
+
+    `accessibility_document_fixes` haelt EINE Zeile je Website; darin steckt
+    eine Liste von Farbpaaren im JSONB-Payload, und entschieden wird je Paar.
+    Die Tabellenabfrage zaehlte deshalb Websites — eine Website mit zwoelf
+    Farbpaaren, von denen zwei abgelehnt wurden, erschien als eine einzige
+    Zeile mit Status 'pending'.
+    """
+
+    def _payload(self, *freigaben):
+        eintraege = []
+        for f in freigaben:
+            e = {"freigabe": f[0]}
+            if len(f) > 1 and f[1]:
+                e["ablehngrund"] = f[1]
+            eintraege.append(e)
+        return Zeile(payload={"entscheidungen": eintraege},
+                     created_at=dt.datetime(2026, 9, 4))
+
+    async def test_farbpaare_werden_gezaehlt_nicht_zeilen(self):
+        conn = FakeConn(kontrast=[
+            self._payload(("approved",), ("approved",), ("rejected", "Passt nicht zur Marke")),
+            self._payload(("pending",), ("approved",)),
+        ])
+        d = await ls.erhebe_lernstand(FakePool(conn))
+        k = next(e for e in d["befundtypen"] if e["befundtyp"] == ls.KONTRAST_TYP)
+        assert k["vorgeschlagen"] == 5    # nicht 2 Zeilen
+        assert k["angenommen"] == 3
+        assert k["abgelehnt"] == 1
+        assert k["offen"] == 1
+
+    async def test_grund_aus_dem_eintrag(self):
+        """Der Grund steckt im Payload, nicht in einer Spalte — wer nur nach
+        der Spalte sucht, meldet faelschlich 'nicht erfassbar'."""
+        conn = FakeConn(kontrast=[
+            self._payload(("rejected", "Passt nicht zur Marke"),
+                          ("rejected", "Passt nicht zur Marke"),
+                          ("rejected", "Kontrast reicht trotzdem nicht")),
+        ])
+        d = await ls.erhebe_lernstand(FakePool(conn))
+        k = next(e for e in d["befundtypen"] if e["befundtyp"] == ls.KONTRAST_TYP)
+        assert k["gruende_erfassbar"] is True
+        assert k["ablehngruende"][0] == {"grund": "Passt nicht zur Marke", "anzahl": 2}
+
+    async def test_ohne_zeilen_kein_eintrag(self):
+        d = await ls.erhebe_lernstand(FakePool(FakeConn()))
+        assert not [e for e in d["befundtypen"] if e["befundtyp"] == ls.KONTRAST_TYP]
+
+    async def test_payload_als_zeichenkette_wird_gelesen(self):
+        """asyncpg liefert JSONB je nach Codec als dict oder als Text."""
+        import json
+        conn = FakeConn(kontrast=[Zeile(
+            payload=json.dumps({"entscheidungen": [{"freigabe": "approved"}]}),
+            created_at=dt.datetime(2026, 9, 4))])
+        d = await ls.erhebe_lernstand(FakePool(conn))
+        k = next(e for e in d["befundtypen"] if e["befundtyp"] == ls.KONTRAST_TYP)
+        assert k["angenommen"] == 1
