@@ -205,19 +205,35 @@ async def erhebe_lernstand(db_pool, tage: int = 90) -> Dict[str, Any]:
     befunde.sort(key=lambda e: e["vorgeschlagen"], reverse=True)
 
     entschieden_gesamt = sum(e["angenommen"] + e["abgelehnt"] for e in befunde)
+    mit_belegen = [e["befundtyp"] for e in befunde if e["belege_reichen"]]
     ohne_grunderfassung = sorted(
         {e["befundtyp"] for e in befunde if not e["gruende_erfassbar"]}
     )
+    ablehnungen_gesamt = sum(e["abgelehnt"] for e in befunde)
 
     return {
         "zeitraum_tage": tage,
         "befundtypen": befunde,
         "pruefregeln": regeln,
         "entscheidungen_gesamt": entschieden_gesamt,
+        "ablehnungen_gesamt": ablehnungen_gesamt,
         "belege_mindestens": BELEGE_MINDESTENS,
-        # Ehrlichkeitsvermerk: solange das hier steht, ist der Lernstand kein
-        # Lernstand, sondern eine Momentaufnahme ohne Aussagekraft.
-        "aussagekraeftig": entschieden_gesamt >= BELEGE_MINDESTENS,
+        "typen_mit_belegen": mit_belegen,
+        # Aussagekraeftig ist der Lernstand erst, wenn WENIGSTENS EIN Befundtyp
+        # fuer sich genug Entscheidungen hat.
+        #
+        # Vorher stand hier `entschieden_gesamt >= BELEGE_MINDESTENS`. Beim
+        # ersten Lauf gegen echte Daten meldete die Auswertung damit
+        # "aussagekraeftig: True" bei 42 Entscheidungen — waehrend jede einzelne
+        # Zeile "Belege reichen nicht" sagte, weil keine Art fuer sich auch nur
+        # 24 erreichte. Eine Quote entsteht je Befundtyp, nicht ueber alle
+        # zusammen; 30 Entscheidungen aus sechs verschiedenen Verfahren sagen
+        # ueber keines davon etwas.
+        "aussagekraeftig": bool(mit_belegen),
+        # Zweiter Vorbehalt: ohne eine einzige Ablehnung ist jede Quote 100 %,
+        # und daraus laesst sich nichts lernen. Erst die Ablehnung sagt, WO ein
+        # Verfahren danebenliegt.
+        "ablehnungen_vorhanden": ablehnungen_gesamt > 0,
         "ohne_grunderfassung": ohne_grunderfassung,
         "fehler": fehler,
     }
