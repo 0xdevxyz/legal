@@ -88,7 +88,9 @@ async def _scan_fuer(art: str, kennung: str, url: str):
         return await fuehre_v2_scan_aus(
             url=url,
             seitenbudget=int(auftrag.get("seitenbudget") or 5),
-            current_user=auftrag.get("nutzer") or {},
+            # fuehre_v2_scan_aus liest daraus nur `id`/`user_id`.
+            current_user={"id": auftrag.get("nutzer_id"),
+                          "user_id": auftrag.get("nutzer_id")},
             scan_token_eingang=kennung,
             legal_update_id=auftrag.get("legal_update_id"),
         )

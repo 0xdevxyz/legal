@@ -1559,7 +1559,13 @@ async def v2_scan_auftrag_annehmen(
         art=scan_auftraege.ART_V2,
         zusatz={
             "seitenbudget": _seitenbudget(current_user),
-            "nutzer": current_user,
+            # Nur die Kennnummer, nicht das ganze Nutzerobjekt: das traegt ein
+            # datetime (created_at) und ist damit nicht als JSON ablegbar. Der
+            # erste Live-Versuch scheiterte genau daran — "Object of type
+            # datetime is not JSON serializable", und der Kunde sah ein 503
+            # ohne jeden Hinweis. Der Scan braucht ohnehin nur die Nummer, um
+            # den Verlauf unter dem richtigen Konto zu speichern.
+            "nutzer_id": str(nutzer_id) if nutzer_id is not None else None,
             "legal_update_id": getattr(request, "legal_update_id", None),
         },
     )
