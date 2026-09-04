@@ -60,6 +60,10 @@ class ApproveLinkRequest(BaseModel):
     fix_id: int          # SERIAL id aus accessibility_link_fixes
     approved: bool
     custom_label: Optional[str] = None
+    # Siehe ApproveAltTextRequest: ohne Grund bleibt eine Ablehnung ein
+    # Datenpunkt ohne Aussage. Der Lernstand (GET /api/admin/lernstand) wies
+    # Linktexte am 04.09. als "Gruende nicht erfassbar" aus.
+    rejected_reason: Optional[str] = None
 
 
 class RescanRequest(BaseModel):
@@ -253,6 +257,7 @@ async def approve_link(
         try:
             ok = await saver.set_link_status(
                 fix_id=request.fix_id, status=new_status,
+                rejected_reason=request.rejected_reason,
                 custom_label=request.custom_label, erlaubte_sites=erlaubte
             )
         except PermissionError:
@@ -273,6 +278,10 @@ class KontrastFreigabeRequest(BaseModel):
     index: int
     approved: bool
     eigene_farbe: Optional[str] = None
+    # Bei Farben ist der Grund besonders aufschlussreich: "passt nicht zur
+    # Marke" ist etwas anderes als "Kontrast trotzdem zu schwach", und nur das
+    # zweite ist ein Fehler des Verfahrens.
+    ablehngrund: Optional[str] = None
 
 
 @router.post("/approve-kontrast")
@@ -298,6 +307,7 @@ async def approve_kontrast(
             ergebnis = await saver.set_kontrast_freigabe(
                 site_id=request.site_id,
                 index=request.index,
+                ablehngrund=request.ablehngrund,
                 status='approved' if request.approved else 'rejected',
                 eigene_farbe=request.eigene_farbe,
                 erlaubte_sites=erlaubte,

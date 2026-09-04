@@ -99,9 +99,8 @@ class TestEhrlichkeitsvermerke:
         assert d["befundtypen"][0]["belege_reichen"] is True
         assert d["aussagekraeftig"] is True
 
-    async def test_fehlende_grunderfassung_wird_ausgewiesen(self):
-        """Der wichtigste Vermerk: bei Link- und Dokumentfixes gibt es die
-        Spalte nicht."""
+    async def test_verkabelte_wege_koennen_gruende_erfassen(self):
+        """Alt-Texte und Linktexte sind seit 04.09. beide verdrahtet."""
         conn = FakeConn({
             "accessibility_alt_text_fixes": [zeile(vor=10, an=8, ab=2)],
             "accessibility_link_fixes": [zeile(vor=5, an=4, ab=1)],
@@ -109,8 +108,31 @@ class TestEhrlichkeitsvermerke:
         d = await ls.erhebe_lernstand(FakePool(conn))
         nach_typ = {e["befundtyp"]: e for e in d["befundtypen"]}
         assert nach_typ["bild-ohne-alt-text"]["gruende_erfassbar"] is True
-        assert nach_typ["linktext-ohne-bedeutung"]["gruende_erfassbar"] is False
-        assert "linktext-ohne-bedeutung" in d["ohne_grunderfassung"]
+        assert nach_typ["linktext-ohne-bedeutung"]["gruende_erfassbar"] is True
+        assert d["ohne_grunderfassung"] == []
+
+    async def test_ohne_entscheidung_ist_etwas_anderes_als_ohne_grund(self):
+        """Zwei verschiedene Luecken, die nicht verwechselt werden duerfen.
+
+        skip-link & Co. werden beim Anlegen direkt auf `approved` gesetzt — es
+        fragt nie jemand. Eine Ablehnungsquote von 0 % heisst dort nicht
+        "niemand lehnt ab", sondern "niemand wird gefragt". Eine Grundspalte
+        waere eine Spalte ohne Schreiber.
+        """
+        conn = FakeConn({"accessibility_document_fixes": [
+            zeile(typ="skip-link", vor=6, an=6),
+            zeile(typ="kontrast-css", vor=6, an=1, offen=5),
+        ]})
+        d = await ls.erhebe_lernstand(FakePool(conn))
+        nach_typ = {e["befundtyp"]: e for e in d["befundtypen"]}
+
+        assert nach_typ["dokument:skip-link"]["entscheidbar"] is False
+        assert "dokument:skip-link" in d["ohne_entscheidung"]
+        # ... und taucht deshalb NICHT unter "Grund fehlt" auf: dort waere er
+        # eine Aufgabe, die niemand erledigen sollte.
+        assert "dokument:skip-link" not in d["ohne_grunderfassung"]
+
+        assert nach_typ["dokument:kontrast-css"]["entscheidbar"] is True
 
     async def test_konfidenz_wird_getrennt_ausgewiesen(self):
         """Nur nebeneinander sieht man, ob sie ueberhaupt trennt."""

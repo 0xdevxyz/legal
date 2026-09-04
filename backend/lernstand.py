@@ -35,6 +35,25 @@ BELEGE_MINDESTENS = 30
 GRUENDE_ANZAHL = 5
 
 
+# Dokumentfix-Arten, die beim Anlegen direkt auf `approved` gesetzt werden.
+#
+# Es fragt dort nie jemand: keine Oberflaeche, keine Freigaberoute. Eine
+# Ablehnungsquote von 0 % bedeutet fuer sie nicht "niemand lehnt ab", sondern
+# "niemand wird gefragt" — ein Unterschied, der ohne diesen Vermerk nicht
+# sichtbar waere. Und eine Grundspalte fuer sie waere eine Spalte ohne
+# Schreiber, derselbe Fehler wie bei fix_acceptance_metrics, nur
+# spiegelverkehrt.
+#
+# Ob das so bleiben soll, ist eine Produktfrage, keine technische: sie
+# entscheidet, ob complyo bei Struktur- und Skip-Link-Reparaturen ueberhaupt
+# je erfaehrt, dass eine danebenlag.
+OHNE_ENTSCHEIDUNG = {
+    "dokument:skip-link",
+    "dokument:landmark-main",
+    "dokument:struktur",
+    "dokument:css-rule",
+}
+
 # Die drei Fix-Tabellen. `typ_spalte` ist None, wenn die Tabelle selbst der
 # Befundtyp ist — bei Dokumentfixes steckt der Typ dagegen in einer Spalte.
 QUELLEN = [
@@ -48,7 +67,7 @@ QUELLEN = [
         "tabelle": "accessibility_link_fixes",
         "befundtyp": "linktext-ohne-bedeutung",
         "typ_spalte": None,
-        "grund_spalte": None,
+        "grund_spalte": "rejected_reason",
     },
     {
         "tabelle": "accessibility_document_fixes",
@@ -121,7 +140,11 @@ async def _eine_quelle(conn, quelle: Dict[str, Any], tage: int) -> List[Dict[str
                 round(float(r["konfidenz_abgelehnt"]), 3)
                 if r["konfidenz_abgelehnt"] is not None else None
             ),
-            "gruende_erfassbar": quelle["grund_spalte"] is not None,
+            "entscheidbar": befundtyp not in OHNE_ENTSCHEIDUNG,
+            "gruende_erfassbar": (
+                quelle["grund_spalte"] is not None
+                and befundtyp not in OHNE_ENTSCHEIDUNG
+            ),
             "ablehngruende": [],
         }
         eintrag["belege_reichen"] = (
@@ -206,8 +229,14 @@ async def erhebe_lernstand(db_pool, tage: int = 90) -> Dict[str, Any]:
 
     entschieden_gesamt = sum(e["angenommen"] + e["abgelehnt"] for e in befunde)
     mit_belegen = [e["befundtyp"] for e in befunde if e["belege_reichen"]]
+    # Zwei verschiedene Luecken, bewusst getrennt: "hier fragt nie jemand" ist
+    # eine Produktentscheidung, "hier fehlt die Spalte" ist Arbeit.
+    ohne_entscheidung = sorted(
+        {e["befundtyp"] for e in befunde if not e["entscheidbar"]}
+    )
     ohne_grunderfassung = sorted(
-        {e["befundtyp"] for e in befunde if not e["gruende_erfassbar"]}
+        {e["befundtyp"] for e in befunde
+         if e["entscheidbar"] and not e["gruende_erfassbar"]}
     )
     ablehnungen_gesamt = sum(e["abgelehnt"] for e in befunde)
 
@@ -234,6 +263,7 @@ async def erhebe_lernstand(db_pool, tage: int = 90) -> Dict[str, Any]:
         # und daraus laesst sich nichts lernen. Erst die Ablehnung sagt, WO ein
         # Verfahren danebenliegt.
         "ablehnungen_vorhanden": ablehnungen_gesamt > 0,
+        "ohne_entscheidung": ohne_entscheidung,
         "ohne_grunderfassung": ohne_grunderfassung,
         "fehler": fehler,
     }

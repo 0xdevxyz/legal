@@ -106,6 +106,18 @@ const DOC_LABEL: Record<string, string> = {
 // 42 Entscheidungen in der Datenbank, davon 42 Zustimmungen. Aus lauter
 // Zustimmung lernt niemand etwas — erst die Ablehnung sagt, wo ein Verfahren
 // danebenliegt.
+// Eigene Gründe je Befundtyp: ein Linktext scheitert an anderem als ein
+// Alt-Text. „Zu allgemein" passt bei beiden, „Bildinhalt falsch beschrieben"
+// nur beim einen — eine gemeinsame Liste hätte bei jedem Typ die Hälfte der
+// Auswahl unbrauchbar gemacht.
+const LINK_ABLEHNGRUENDE = [
+  'Beschreibt das Ziel falsch',
+  'Zu allgemein, sagt nichts aus',
+  'Zu lang',
+  'Bestehender Text war besser',
+  'Anderer Grund',
+] as const;
+
 const ABLEHNGRUENDE = [
   'Bildinhalt falsch beschrieben',
   'Zu allgemein, sagt nichts aus',
@@ -160,14 +172,16 @@ export default function AccessibilityWorklist() {
     }
   };
 
-  const decideLink = async (item: LinkItem, approved: boolean) => {
+  const decideLink = async (item: LinkItem, approved: boolean, grund?: string) => {
     setBusy(`link-${item.id}`);
     try {
       await apiClient.post('/api/accessibility/approve-link', {
         fix_id: item.id,
         approved,
         custom_label: edits[`link-${item.id}`] ?? undefined,
+        rejected_reason: approved ? undefined : grund,
       });
+      setGrundFuer(null);
       await load();
     } finally {
       setBusy(null);
@@ -338,12 +352,37 @@ export default function AccessibilityWorklist() {
                       className="px-3 py-1.5 text-xs text-white bg-green-600 hover:bg-green-500 disabled:opacity-40 rounded-lg flex items-center gap-1">
                       <CheckCircle className="w-3.5 h-3.5" /> Freigeben
                     </button>
-                    <button onClick={() => decideLink(item, false)} disabled={busy === `link-${item.id}`}
+                    <button onClick={() => setGrundFuer(`link-${item.id}`)} disabled={busy === `link-${item.id}`}
                       className="px-3 py-1.5 text-xs text-white bg-red-600/80 hover:bg-red-500 disabled:opacity-40 rounded-lg flex items-center gap-1">
                       <XCircle className="w-3.5 h-3.5" /> Ablehnen
                     </button>
                   </div>
                 </div>
+                {grundFuer === `link-${item.id}` && (
+                  <div className="mt-3 pt-3 border-t border-zinc-700/50">
+                    <p className="text-xs text-zinc-400 mb-2">
+                      Woran liegt es? Die Angabe verbessert die nächsten Vorschläge.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {LINK_ABLEHNGRUENDE.map((grund) => (
+                        <button
+                          key={grund}
+                          onClick={() => decideLink(item, false, grund)}
+                          disabled={busy === `link-${item.id}`}
+                          className="px-2.5 py-1 text-xs rounded-lg border border-zinc-600 text-zinc-300 hover:bg-zinc-700 disabled:opacity-40"
+                        >
+                          {grund}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setGrundFuer(null)}
+                        className="px-2.5 py-1 text-xs text-zinc-500 hover:text-zinc-300"
+                      >
+                        Abbrechen
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -94,6 +94,21 @@ const Probe: React.FC<{ vorn: string; hinten: string; label: string; warnt?: boo
   </div>
 );
 
+// Bei Farben ist der Grund fachlich besonders aufschlussreich.
+//
+// „Passt nicht zur Marke" heißt: das Verfahren hat richtig gerechnet, der
+// Betreiber will nur einen anderen Ton — daraus lernt der Vorschlag nichts.
+// „Kontrast reicht trotzdem nicht" heißt dagegen, dass die Rechnung selbst
+// danebenlag. Ohne diese Unterscheidung stünden beide als „abgelehnt" da und
+// die Quote wäre irreführend.
+const KONTRAST_ABLEHNGRUENDE = [
+  'Passt nicht zur Marke',
+  'Kontrast reicht trotzdem nicht',
+  'Falsche Stelle getroffen',
+  'Farbe wird woanders gebraucht',
+  'Anderer Grund',
+] as const;
+
 const KontrastFreigabe: React.FC<{
   siteId: string;
   entscheidungen: KontrastEntscheidung[];
@@ -103,9 +118,11 @@ const KontrastFreigabe: React.FC<{
   const [fehler, setFehler] = useState<Record<number, string>>({});
   const [eigene, setEigene] = useState<Record<number, string>>({});
   const [offenerEditor, setOffenerEditor] = useState<number | null>(null);
+  // Welche Zeile gerade nach einem Ablehnungsgrund fragt
+  const [grundFuer, setGrundFuer] = useState<number | null>(null);
 
   const entscheiden = useCallback(
-    async (index: number, approved: boolean) => {
+    async (index: number, approved: boolean, grund?: string) => {
       setLaeuft(index);
       setFehler((f) => ({ ...f, [index]: '' }));
       try {
@@ -114,8 +131,10 @@ const KontrastFreigabe: React.FC<{
           index,
           approved,
           eigene_farbe: approved ? eigene[index] || null : null,
+          ablehngrund: approved ? undefined : grund,
         });
         setOffenerEditor(null);
+        setGrundFuer(null);
         onGeaendert();
       } catch (e: unknown) {
         const detail = (e as { response?: { data?: { detail?: string } } })
@@ -241,7 +260,7 @@ const KontrastFreigabe: React.FC<{
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => entscheiden(e.index, false)}
+                      onClick={() => setGrundFuer(e.index)}
                       disabled={laeuft !== null}
                       className="p-2 rounded-lg dark:hover:bg-zinc-800 hover:bg-gray-100 dark:text-zinc-400 text-gray-500 disabled:opacity-40"
                       aria-label="Ablehnen"
@@ -258,6 +277,31 @@ const KontrastFreigabe: React.FC<{
                         : <Check className="w-3.5 h-3.5" />}
                       Freigeben
                     </button>
+                  </div>
+                )}
+                {grundFuer === e.index && (
+                  <div className="mt-3 pt-3 border-t dark:border-zinc-700/50 border-gray-200">
+                    <p className="text-xs dark:text-zinc-400 text-gray-600 mb-2">
+                      Woran liegt es? Die Angabe verbessert die nächsten Vorschläge.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {KONTRAST_ABLEHNGRUENDE.map((grund) => (
+                        <button
+                          key={grund}
+                          onClick={() => entscheiden(e.index, false, grund)}
+                          disabled={laeuft !== null}
+                          className="px-2.5 py-1 text-xs rounded-lg border dark:border-zinc-600 border-gray-300 dark:text-zinc-300 text-gray-700 dark:hover:bg-zinc-700 hover:bg-gray-100 disabled:opacity-40"
+                        >
+                          {grund}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setGrundFuer(null)}
+                        className="px-2.5 py-1 text-xs dark:text-zinc-500 text-gray-500 dark:hover:text-zinc-300 hover:text-gray-700"
+                      >
+                        Abbrechen
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
