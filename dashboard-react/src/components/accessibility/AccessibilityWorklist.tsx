@@ -94,6 +94,28 @@ const DOC_LABEL: Record<string, string> = {
   'css-rule': 'Fokus-/Kontrast-CSS',
 };
 
+// Feste Ablehnungsgründe statt Freitext.
+//
+// Der Generator (ai_alt_text_generator.py) legt dem Modell Ablehnungsgründe
+// vor, wenn es den nächsten Vorschlag macht. Freitext allein ließe sich nicht
+// zusammenzählen: aus fünfzig verschiedenen Formulierungen für dasselbe
+// Problem wird kein Muster. Feste Gründe sind auswertbar, das Zusatzfeld
+// fängt den Rest.
+//
+// Bis 04.09.2026 fragte die Oberfläche gar nicht nach einem Grund. Ergebnis:
+// 42 Entscheidungen in der Datenbank, davon 42 Zustimmungen. Aus lauter
+// Zustimmung lernt niemand etwas — erst die Ablehnung sagt, wo ein Verfahren
+// danebenliegt.
+const ABLEHNGRUENDE = [
+  'Bildinhalt falsch beschrieben',
+  'Zu allgemein, sagt nichts aus',
+  'Zu lang',
+  'Bild ist reine Dekoration',
+  'Firmen- oder Produktname fehlt',
+  'Anderer Grund',
+] as const;
+
+
 export default function AccessibilityWorklist() {
   const { activeSite } = useActiveSite();
   const siteId = activeSite ? generateSiteId(activeSite.url) : '';
@@ -102,6 +124,8 @@ export default function AccessibilityWorklist() {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
+  // Welche Zeile fragt gerade nach einem Ablehnungsgrund
+  const [grundFuer, setGrundFuer] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!siteId) return;
@@ -118,14 +142,18 @@ export default function AccessibilityWorklist() {
 
   useEffect(() => { load(); }, [load]);
 
-  const decideAlt = async (item: AltItem, approved: boolean) => {
+  const decideAlt = async (item: AltItem, approved: boolean, grund?: string) => {
     setBusy(`alt-${item.id}`);
     try {
       await apiClient.post('/api/accessibility/approve-alt-text', {
         fix_id: item.id,
         approved,
         custom_alt: edits[`alt-${item.id}`] ?? undefined,
+        // Nur bei Ablehnung: der Grund wandert in rejected_reason und von dort
+        // in den nächsten Prompt des Generators.
+        rejected_reason: approved ? undefined : grund,
       });
+      setGrundFuer(null);
       await load();
     } finally {
       setBusy(null);
@@ -225,12 +253,37 @@ export default function AccessibilityWorklist() {
                       className="px-3 py-1.5 text-xs text-white bg-green-600 hover:bg-green-500 disabled:opacity-40 rounded-lg flex items-center gap-1">
                       <CheckCircle className="w-3.5 h-3.5" /> Freigeben
                     </button>
-                    <button onClick={() => decideAlt(item, false)} disabled={busy === `alt-${item.id}`}
+                    <button onClick={() => setGrundFuer(`alt-${item.id}`)} disabled={busy === `alt-${item.id}`}
                       className="px-3 py-1.5 text-xs text-white bg-red-600/80 hover:bg-red-500 disabled:opacity-40 rounded-lg flex items-center gap-1">
                       <XCircle className="w-3.5 h-3.5" /> Ablehnen
                     </button>
                   </div>
                 </div>
+                {grundFuer === `alt-${item.id}` && (
+                  <div className="mt-3 pt-3 border-t border-zinc-700/50">
+                    <p className="text-xs text-zinc-400 mb-2">
+                      Woran liegt es? Die Angabe verbessert die nächsten Vorschläge.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {ABLEHNGRUENDE.map((grund) => (
+                        <button
+                          key={grund}
+                          onClick={() => decideAlt(item, false, grund)}
+                          disabled={busy === `alt-${item.id}`}
+                          className="px-2.5 py-1 text-xs rounded-lg border border-zinc-600 text-zinc-300 hover:bg-zinc-700 disabled:opacity-40"
+                        >
+                          {grund}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setGrundFuer(null)}
+                        className="px-2.5 py-1 text-xs text-zinc-500 hover:text-zinc-300"
+                      >
+                        Abbrechen
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

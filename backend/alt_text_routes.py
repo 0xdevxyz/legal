@@ -47,6 +47,13 @@ class ApproveAltTextRequest(BaseModel):
     fix_id: int          # SERIAL id aus accessibility_alt_text_fixes
     approved: bool
     custom_alt: Optional[str] = None
+    # Der Grund einer Ablehnung. Ohne ihn lernt der Generator nichts:
+    # ai_alt_text_generator.py legt dem Modell freigegebene Beispiele UND
+    # Ablehnungsgruende vor, filtert dabei aber auf
+    # `rejected_reason IS NOT NULL`. Bis 04.09.2026 nahm dieser Endpunkt gar
+    # keinen Grund entgegen — Ergebnis: 42 Entscheidungen, davon 42
+    # Zustimmungen, 0 Ablehnungsgruende, und ein Lernkreislauf ohne Stoff.
+    rejected_reason: Optional[str] = None
 
 
 class ApproveLinkRequest(BaseModel):
@@ -197,7 +204,8 @@ async def approve_alt_text(
         try:
             ok = await saver.set_status(
                 fix_id=request.fix_id, status=new_status,
-                custom_alt=request.custom_alt, erlaubte_sites=erlaubte
+                custom_alt=request.custom_alt, erlaubte_sites=erlaubte,
+                rejected_reason=request.rejected_reason
             )
         except PermissionError:
             raise HTTPException(status_code=403, detail="Not authorized")
