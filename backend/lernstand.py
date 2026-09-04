@@ -119,6 +119,11 @@ async def _eine_quelle(conn, quelle: Dict[str, Any], tage: int) -> List[Dict[str
     ergebnis = []
     for r in rows:
         befundtyp = quelle["befundtyp"] or f"dokument:{r['typ']}"
+        # kontrast-css wird gesondert erhoben: die Zeilen zaehlen Websites,
+        # die Entscheidungen stecken im JSONB-Payload. Siehe
+        # _kontrast_entscheidungen().
+        if befundtyp == KONTRAST_TYP:
+            continue
         eintrag = {
             "befundtyp": befundtyp,
             "quelle": tabelle,
@@ -173,6 +178,84 @@ async def _eine_quelle(conn, quelle: Dict[str, Any], tage: int) -> List[Dict[str
     return ergebnis
 
 
+KONTRAST_TYP = "dokument:kontrast-css"
+
+
+async def _kontrast_entscheidungen(conn, tage: int) -> Optional[Dict[str, Any]]:
+    """Kontraste zaehlen je Farbpaar, nicht je Website.
+
+    `accessibility_document_fixes` haelt genau EINE Zeile je Website fuer
+    fix_type='kontrast-css'; darin steckt im JSONB-Payload eine Liste von
+    Farbpaaren, und freigegeben oder abgelehnt wird je Paar. Die
+    Tabellenabfrage zaehlte deshalb Websites und nicht Entscheidungen — eine
+    Website mit zwoelf Farbpaaren, von denen zwei abgelehnt wurden, erschien
+    als eine einzige Zeile mit Status 'pending'.
+
+    Der Ablehnungsgrund steht aus demselben Grund im Eintrag und nicht in einer
+    Tabellenspalte. Wer nur nach der Spalte sucht, meldet "Gruende nicht
+    erfassbar", obwohl sie erfasst werden.
+    """
+    rows = await conn.fetch(
+        """
+        SELECT payload, created_at
+        FROM accessibility_document_fixes
+        WHERE fix_type = 'kontrast-css'
+          AND created_at > NOW() - ($1 || ' days')::interval
+        """,
+        str(tage),
+    )
+    if not rows:
+        return None
+
+    import json as _json
+    vor = an = ab = offen = 0
+    gruende: Dict[str, int] = {}
+    zuletzt = None
+
+    for r in rows:
+        payload = r["payload"]
+        if isinstance(payload, str):
+            try:
+                payload = _json.loads(payload)
+            except Exception:
+                continue
+        for eintrag in (payload or {}).get("entscheidungen") or []:
+            vor += 1
+            freigabe = eintrag.get("freigabe")
+            if freigabe == "approved":
+                an += 1
+            elif freigabe == "rejected":
+                ab += 1
+                grund = (eintrag.get("ablehngrund") or "").strip()
+                if grund:
+                    gruende[grund] = gruende.get(grund, 0) + 1
+            else:
+                offen += 1
+        if r["created_at"] and (zuletzt is None or r["created_at"] > zuletzt):
+            zuletzt = r["created_at"]
+
+    beliebteste = sorted(gruende.items(), key=lambda kv: kv[1], reverse=True)
+    return {
+        "befundtyp": KONTRAST_TYP,
+        "quelle": "accessibility_document_fixes (payload)",
+        "vorgeschlagen": vor,
+        "angenommen": an,
+        "abgelehnt": ab,
+        "offen": offen,
+        "ausgeliefert": 0,
+        "annahmequote": _quote(an, ab),
+        "zuletzt": zuletzt.isoformat() if zuletzt else None,
+        # Kontrastvorschlaege tragen keine eigene Konfidenz je Farbpaar.
+        "konfidenz_angenommen": None,
+        "konfidenz_abgelehnt": None,
+        "entscheidbar": True,
+        "gruende_erfassbar": True,
+        "ablehngruende": [{"grund": g, "anzahl": n}
+                          for g, n in beliebteste[:GRUENDE_ANZAHL]],
+        "belege_reichen": (an + ab) >= BELEGE_MINDESTENS,
+    }
+
+
 async def _pruefregeln(conn, tage: int) -> Dict[str, Any]:
     """Die automatisch erzeugten Prüfregeln — der zweite Lernweg.
 
@@ -217,6 +300,14 @@ async def erhebe_lernstand(db_pool, tage: int = 90) -> Dict[str, Any]:
             except Exception as e:
                 logger.warning(f"Lernstand: {quelle['tabelle']} nicht lesbar: {e}")
                 fehler.append(f"{quelle['tabelle']}: {type(e).__name__}")
+
+        try:
+            kontrast = await _kontrast_entscheidungen(conn, tage)
+            if kontrast:
+                befunde.append(kontrast)
+        except Exception as e:
+            logger.warning(f"Lernstand: Kontrastentscheidungen nicht lesbar: {e}")
+            fehler.append(f"kontrast-css: {type(e).__name__}")
 
         try:
             regeln = await _pruefregeln(conn, tage)
