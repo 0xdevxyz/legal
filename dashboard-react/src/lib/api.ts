@@ -74,7 +74,71 @@ export const ensureCsrfCookie = async (): Promise<void> => {
 };
 
 // ✅ Website Analysis API Call
+// Wie oft und wie lange nach dem Ergebnis eines Vollscans gefragt wird.
+//
+// Serverseitig darf er bis zu 265 s laufen; unter Last kommt Wartezeit in der
+// Schlange dazu. Die Obergrenze liegt bewusst darueber: lieber ein paar
+// Sekunden zu lange warten als einem Kunden zu sagen, seine Website sei nicht
+// pruefbar, waehrend das Ergebnis gleich eintrifft.
+const V2_ABHOL_ABSTAND_MS = 3000;
+const V2_ABHOL_MAX_MS = 420000;
+
+/** Auftrag abgeben und Ergebnis abholen. Wirft, wenn der Scan scheitert. */
+async function holeV2Ergebnis(kennung: string): Promise<ComplianceAnalysis> {
+  const beginn = Date.now();
+  while (Date.now() - beginn < V2_ABHOL_MAX_MS) {
+    const antwort = await apiClient.get<any>(
+      `/api/v2/analyze-auftrag/${kennung}`, { timeout: 20000 },
+    );
+    const daten = antwort.data || {};
+
+    if (daten.zustand === 'fertig') {
+      return daten.ergebnis as ComplianceAnalysis;
+    }
+    // `fertig: true` heisst "hoer auf zu fragen", nicht "hat geklappt".
+    if (daten.zustand === 'fehlgeschlagen') {
+      throw new Error(daten.fehler || 'Die Prüfung ist fehlgeschlagen.');
+    }
+    await new Promise((r) => setTimeout(r, V2_ABHOL_ABSTAND_MS));
+  }
+  throw new Error(
+    'Die Prüfung dauert ungewöhnlich lange. Bitte versuchen Sie es später erneut.',
+  );
+}
+
 export const analyzeWebsite = async (url: string, legalUpdateId?: number, scanToken?: string): Promise<ComplianceAnalysis> => {
+ // Entkoppelter Weg zuerst: Auftrag abgeben, Kennung bekommen, Ergebnis
+ // abholen. Die Annahme dauert Millisekunden statt der bis zu 265 s eines
+ // Vollscans.
+ //
+ // Warum das mehr ist als Kosmetik (gemessen 03./04.09.2026): solange die
+ // Anfrage offen stand, wuchs der Speicher des Backends mit der Zahl der
+ // WARTENDEN Anfragen, nicht nur mit den laufenden Browsern. Bei 22
+ // gleichzeitigen Scans lieferten vier davon ein anderes Ergebnis als
+ // dieselbe Seite ohne Last.
+ //
+ // Die Kennung ist zugleich das Fortschritts-Token: ScanProgressPanel fragt
+ // /api/v2/analyze-progress/{token} ab und laeuft unveraendert weiter.
+ try {
+   const auftragPayload: Record<string, any> = { url: validateAndNormalizeUrl(url) };
+   if (legalUpdateId !== undefined) {
+     auftragPayload.legal_update_id = legalUpdateId;
+   }
+   const auftrag = await apiClient.post<{ kennung: string }>(
+     '/api/v2/analyze-auftrag', auftragPayload, { timeout: 20000 },
+   );
+   const kennung = auftrag.data?.kennung;
+   if (kennung) {
+     return await holeV2Ergebnis(kennung);
+   }
+ } catch (e: any) {
+   // 503 = entkoppelter Weg gerade nicht verfuegbar (etwa Redis weg). Dann
+   // waere es absurd, gar keinen Scan anzubieten, obwohl der Scanner laeuft.
+   // Der synchrone Weg darunter uebernimmt — samt seiner ausfuehrlichen
+   // Fehleruebersetzung, die hier bewusst nicht dupliziert wird.
+   console.warn('Entkoppelter Vollscan nicht moeglich, nehme den synchronen Weg:', e?.message);
+ }
+
  try {
    const normalizedUrl = validateAndNormalizeUrl(url);
    const payload: Record<string, any> = { url: normalizedUrl };
