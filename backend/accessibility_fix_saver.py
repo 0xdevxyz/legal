@@ -656,6 +656,7 @@ class AccessibilityFixSaver:
         self,
         fix_id: int,
         status: str,
+        rejected_reason: Optional[str] = None,
         custom_label: Optional[str] = None,
         erlaubte_sites: Optional[set] = None
     ) -> bool:
@@ -668,19 +669,25 @@ class AccessibilityFixSaver:
                 return False
             _pruefe_site_zugehoerigkeit(row, erlaubte_sites)
             approved_at = "NOW()" if status == 'approved' else "approved_at"
+            # Wie bei den Alt-Texten: der Grund gehoert nur zur Ablehnung. Wer
+            # erst ablehnt und dann doch freigibt, wuerde sonst eine alte
+            # Begruendung an einem freigegebenen Fix hinterlassen.
+            grund = rejected_reason if status == 'rejected' else None
             if custom_label is not None:
                 await conn.execute(
                     f"""UPDATE accessibility_link_fixes
-                        SET status=$1, suggested_label=$2, approved_at={approved_at}, updated_at=NOW()
-                        WHERE id=$3""",
-                    status, custom_label, fix_id
+                        SET status=$1, suggested_label=$2, approved_at={approved_at},
+                            rejected_reason=$3, updated_at=NOW()
+                        WHERE id=$4""",
+                    status, custom_label, grund, fix_id
                 )
             else:
                 await conn.execute(
                     f"""UPDATE accessibility_link_fixes
-                        SET status=$1, approved_at={approved_at}, updated_at=NOW()
-                        WHERE id=$2""",
-                    status, fix_id
+                        SET status=$1, approved_at={approved_at},
+                            rejected_reason=$2, updated_at=NOW()
+                        WHERE id=$3""",
+                    status, grund, fix_id
                 )
             return True
 
@@ -691,6 +698,7 @@ class AccessibilityFixSaver:
         status: str,
         eigene_farbe: Optional[str] = None,
         erlaubte_sites: Optional[set] = None,
+        ablehngrund: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Gibt EINE Farbentscheidung frei oder lehnt sie ab.
@@ -763,6 +771,13 @@ class AccessibilityFixSaver:
                 eintrag["quelle_farbe"] = "vom Betreiber gewählt"
 
             eintrag["freigabe"] = status
+            # Der Grund gehoert in den EINTRAG, nicht in eine Tabellenspalte:
+            # eine Zeile haelt mehrere Farbpaare, und abgelehnt wird je Paar.
+            # Bei einer Freigabe wird ein alter Grund entfernt.
+            if status == "rejected" and ablehngrund:
+                eintrag["ablehngrund"] = ablehngrund
+            else:
+                eintrag.pop("ablehngrund", None)
 
             # Nur Zugestimmtes wird ausgeliefert.
             freigegeben = [e for e in entscheidungen if e.get("freigabe") == "approved"]
