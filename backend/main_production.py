@@ -1289,10 +1289,29 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
             detail="Quick-Scan fehlgeschlagen"
         )
 
-@app.post("/api/v2/analyze", dependencies=[Depends(rate_limit("analyze_full", 3, 60))])
-async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depends(get_current_user)):
-    """
-    Performs a real, in-depth compliance scan of a website.
+async def fuehre_v2_scan_aus(
+    url: str,
+    seitenbudget: int,
+    current_user: dict,
+    scan_token_eingang: Optional[str] = None,
+    legal_update_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Fuehrt den angemeldeten Vollscan aus und gibt die Antwort als dict zurueck.
+
+    Herausgezogen am 04.09.2026 aus analyze_website_v2, aus demselben Grund wie
+    zuvor beim Vorschau-Scan: der Hintergrundarbeiter und der synchrone
+    Endpunkt muessen exakt denselben Scan fahren. Zwei Kopien derselben Logik
+    laufen frueher oder spaeter auseinander, und dann liefert dieselbe Website
+    je nach Weg ein anderes Ergebnis.
+
+    `seitenbudget` kommt als Parameter herein und nicht aus dem Tarif des
+    angemeldeten Nutzers: der Arbeiter hat keinen Anfragekontext mehr. Es wird
+    bei der Annahme berechnet und im Auftrag hinterlegt — damit gilt das
+    Budget, das zum Zeitpunkt der Beauftragung galt, auch wenn der Tarif sich
+    waehrend der Wartezeit aendert.
+
+    Wirft nicht. Fehler kommen als dict mit success=False zurueck, damit der
+    Arbeiter sie ablegen kann, ohne HTTP zu kennen.
     """
     try:
         # Vollwertiger Scanpfad (Audit 11.08.): vorher Single-Page ohne jede
@@ -1300,7 +1319,7 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
         # am /api/analyze-Endpunkt, den kein Frontend aufruft.
         from public_routes import _seitenbudget
         from compliance_engine import scan_progress as _fortschritt
-        scan_token = request.scan_token
+        scan_token = scan_token_eingang
         if scan_token and _fortschritt.token_gueltig(scan_token):
             _fortschritt.starte(scan_token)
         else:
@@ -1315,8 +1334,8 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
         async with ComplianceScanner() as scanner:
             scan_result = await asyncio.wait_for(
                 scanner.scan_website_multipage(
-                    request.url,
-                    max_seiten=_seitenbudget(current_user),
+                    url,
+                    max_seiten=seitenbudget,
                     progress_token=scan_token,
                     zeitbudget=SCANNER_FRIST,
                 ),
@@ -1339,7 +1358,7 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
                     scan_result["issues"] = await run_ai_review_pass(
                         issues=_issues,
                         scan_result={
-                            "url": scan_result.get("url", request.url),
+                            "url": scan_result.get("url", url),
                             "tech_stack": scan_result.get("tech_stack", {}),
                             "tracking_services": scan_result.get("tracking_services", []),
                             "detected_cookies": scan_result.get("detected_cookies", []),
@@ -1376,7 +1395,7 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
                 scan_result["warning_issues"],
                 scan_result["total_issues"],
                 json.dumps(scan_result, default=str),
-                request.legal_update_id
+                legal_update_id
             )
             user_id_int = user_id_value
             new_scan = await connection.fetchrow("SELECT id, scan_id FROM scan_history WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", user_id_int)
@@ -1439,7 +1458,7 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
                     scan_id=new_scan['scan_id'],
                     user_id=str(user_id_value),
                     scan_data={'issues': scan_result.get("issues") or []},
-                    site_url=scan_result.get("url", request.url),
+                    site_url=scan_result.get("url", url),
                 )
                 if _pp.get('success'):
                     logger.info(f"Post-Processing (v2): {_pp.get('message')}")
@@ -1456,20 +1475,163 @@ async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depen
             "data": {**scan_result, "scan_id": new_scan['scan_id']}
         }
 
-    except HTTPException:
-        raise
     except asyncio.TimeoutError:
-        logger.error(f"Analysis v2 timeout for url={request.url}")
+        # Bewusst kein HTTPException: diese Funktion laeuft auch im
+        # Hintergrundarbeiter, der kein HTTP kennt. Der Endpunkt macht aus
+        # success=False weiterhin eine saubere Antwort, der Arbeiter legt den
+        # Fehlschlag in der Auftragsablage ab.
+        logger.error(f"Analysis v2 timeout for url={url}")
+        return {"success": False,
+                "message": "Scan-Timeout: Die Website hat nicht rechtzeitig geantwortet."}
+    except HTTPException as he:
+        # Der Scanner meldet fachliche Fehler noch als HTTPException (400 bei
+        # scan_result["error"]). Fuer den Arbeiter wird daraus eine Nachricht.
+        logger.warning(f"Analysis v2 abgebrochen fuer url={url}: {he.detail}")
+        return {"success": False, "message": str(he.detail)}
+    except Exception:
+        logger.exception(f"Analysis v2 error for url={url}")
+        return {"success": False, "message": "Analyse fehlgeschlagen"}
+
+
+@app.post("/api/v2/analyze", dependencies=[Depends(rate_limit("analyze_full", 3, 60))])
+async def analyze_website_v2(request: AnalyzeRequest, current_user: dict = Depends(get_current_user)):
+    """Vollwertiger Compliance-Scan, synchron.
+
+    Der Scan selbst steht in fuehre_v2_scan_aus() — dieselbe Funktion benutzt
+    der Hintergrundarbeiter ueber /api/v2/analyze-auftrag.
+    """
+    from public_routes import _seitenbudget
+    ergebnis = await fuehre_v2_scan_aus(
+        url=request.url,
+        seitenbudget=_seitenbudget(current_user),
+        current_user=current_user,
+        scan_token_eingang=getattr(request, "scan_token", None),
+        legal_update_id=getattr(request, "legal_update_id", None),
+    )
+    if not ergebnis.get("success"):
+        raise HTTPException(status_code=400, detail=ergebnis.get("message", "Analyse fehlgeschlagen"))
+    return ergebnis
+
+
+# ---------------------------------------------------------------------------
+# Entkoppelter Vollscan fuer angemeldete Konten
+# ---------------------------------------------------------------------------
+#
+# Bewusst als eigenes Endpunktpaar neben /api/v2/analyze, nicht als
+# Umschaltung: das Dashboard ruft den synchronen Weg heute ueberall auf, und
+# eine Verhaltensaenderung an einem Endpunkt, den ein ausgeliefertes Frontend
+# benutzt, faellt erst beim Kunden auf.
+#
+# Der Grund fuer die Entkopplung ist derselbe wie beim oeffentlichen Weg am
+# 03.09.: der Speicher waechst mit den WARTENDEN Anfragen, nicht nur mit den
+# laufenden Browsern. Hier kommt erschwerend dazu, dass ein v2-Scan bis zu
+# 265 s laufen darf — eine Verbindung, die so lange offen steht, ist die
+# teuerste Sorte Wartender.
+
+
+@app.post("/api/v2/analyze-auftrag", status_code=202,
+          dependencies=[Depends(rate_limit("analyze_full", 3, 60))])
+async def v2_scan_auftrag_annehmen(
+    request: AnalyzeRequest,
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Nimmt einen Vollscan an und antwortet sofort mit einer Kennung."""
+    from compliance_engine import scan_arbeiter, scan_auftraege
+    from compliance_engine import scan_progress as _fortschritt
+    from public_routes import _seitenbudget
+
+    if not await scan_auftraege.verfuegbar():
         raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Scan-Timeout: Die Website hat nicht rechtzeitig geantwortet."
+            status_code=503,
+            detail="Der entkoppelte Prüfweg ist gerade nicht verfügbar.",
+            headers={"Retry-After": "30"},
         )
-    except Exception as e:
-        logger.exception(f"Analysis v2 error for url={getattr(request, 'url', 'unknown')}")
+
+    nutzer_id = current_user.get("user_id") or current_user.get("id")
+
+    # Seitenbudget JETZT bestimmen und im Auftrag festhalten: der Arbeiter hat
+    # spaeter keinen Anfragekontext mehr, und es soll das Budget gelten, das
+    # bei der Beauftragung galt — nicht eines, das sich waehrend der Wartezeit
+    # durch einen Tarifwechsel geaendert hat.
+    kennung = await scan_auftraege.anlegen(
+        url=request.url,
+        user_id=nutzer_id,
+        art=scan_auftraege.ART_V2,
+        zusatz={
+            "seitenbudget": _seitenbudget(current_user),
+            "nutzer": current_user,
+            "legal_update_id": getattr(request, "legal_update_id", None),
+        },
+    )
+    if not kennung:
+        raise HTTPException(status_code=503, detail="Auftrag konnte nicht angelegt werden.")
+
+    # Die Kennung ist zugleich das Fortschritts-Token. Damit meldet der Scanner
+    # seinen Fortschritt unter derselben Nummer, unter der das Ergebnis abgeholt
+    # wird — das Dashboard braucht keine zweite.
+    if _fortschritt.token_gueltig(kennung):
+        _fortschritt.starte(kennung)
+
+    if not await scan_arbeiter.einreihen(kennung, request.url, scan_auftraege.ART_V2):
+        await scan_auftraege.markiere_fehlgeschlagen(
+            kennung, "Es warten gerade zu viele Prüfungen. Bitte später erneut versuchen."
+        )
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Analyse fehlgeschlagen"
+            status_code=503,
+            detail="Es warten gerade zu viele Prüfungen. Bitte in einer Minute erneut versuchen.",
+            headers={"Retry-After": "60"},
         )
+
+    logger.info(f"v2-Scan-Auftrag {kennung} angenommen: {request.url}")
+    return {
+        "kennung": kennung,
+        "zustand": scan_auftraege.WARTEND,
+        "fortschritt_pfad": f"/api/v2/analyze-progress/{kennung}",
+        "ergebnis_pfad": f"/api/v2/analyze-auftrag/{kennung}",
+    }
+
+
+@app.get("/api/v2/analyze-auftrag/{kennung}")
+async def v2_scan_auftrag_abholen(
+    kennung: str,
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Zustand oder Ergebnis eines Vollscans.
+
+    Antwortet mit 200 und einem Zustand, solange die Kennung dem Konto gehoert —
+    auch im Fehlerfall. Ein 4xx wuerde die abholende Seite zwingen, zwischen
+    "noch nicht fertig" und "kaputt" zu unterscheiden.
+
+    Die Besitzpruefung ist keine Formalie: die Kennung ist zwar 128 Bit lang
+    und praktisch nicht zu raten, aber "praktisch nicht zu raten" ist keine
+    Zugriffskontrolle. Ein fremder Auftrag ist 404, nicht 403 — sonst
+    verraet die Antwort, dass es ihn gibt.
+    """
+    from compliance_engine import scan_auftraege
+
+    auftrag = await scan_auftraege.hole(kennung)
+    nutzer_id = current_user.get("user_id") or current_user.get("id")
+    if auftrag is None or not scan_auftraege.gehoert_zu(auftrag, nutzer_id):
+        raise HTTPException(
+            status_code=404,
+            detail="Diese Prüfung ist unbekannt oder abgelaufen.",
+        )
+
+    antwort: Dict[str, Any] = {
+        "kennung": kennung,
+        "zustand": auftrag.get("zustand"),
+        "fertig": scan_auftraege.ist_endzustand(auftrag.get("zustand")),
+        "url": auftrag.get("url"),
+    }
+    if auftrag.get("zustand") == scan_auftraege.FERTIG:
+        # Der v2-Scan liefert {success, data} — das Dashboard erwartet den
+        # Inhalt von `data`, genau wie beim synchronen Weg.
+        ergebnis = auftrag.get("ergebnis") or {}
+        antwort["ergebnis"] = ergebnis.get("data", ergebnis)
+    if auftrag.get("zustand") == scan_auftraege.FEHLGESCHLAGEN:
+        antwort["fehler"] = auftrag.get("fehler")
+    return antwort
+
 
 @app.post("/api/v2/ai-fix")
 async def generate_ai_fixes(request: AIFixRequest, current_user: dict = Depends(get_current_user)):

@@ -32,6 +32,12 @@ EXEMPT_PATHS: Set[str] = {
     # Middleware davor.
     "/api/analyze-auftrag",
     "/api/v2/analyze",
+    # Entkoppelter Vollscan (04.09.2026). Gleiche Begruendung wie beim
+    # oeffentlichen Weg: das Dashboard ruft ihn wie /api/v2/analyze, und
+    # der Double-Submit-Check kann dort nicht aufgehen. Beim oeffentlichen
+    # Pendant ist genau das uebersehen worden — 13 gruene Tests, und der
+    # erste Live-Aufruf antwortete "CSRF token missing or invalid".
+    "/api/v2/analyze-auftrag",
     "/api/v2/analyze/quick",
     "/api/v2/analyze/complete",
     # Public widget telemetry endpoints — called cross-origin from customer
