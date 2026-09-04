@@ -282,7 +282,8 @@ class AccessibilityFixSaver:
         fix_id: int,
         status: str,
         custom_alt: Optional[str] = None,
-        erlaubte_sites: Optional[set] = None
+        erlaubte_sites: Optional[set] = None,
+        rejected_reason: Optional[str] = None
     ) -> bool:
         """
         Setzt den Status eines Fixes (approve/reject/deploy).
@@ -292,6 +293,20 @@ class AccessibilityFixSaver:
         Zeile — siehe _pruefe_site_zugehoerigkeit().
         status ∈ ('pending','approved','rejected','deployed').
         Gibt True zurück, wenn eine Zeile aktualisiert wurde.
+
+        **`rejected_reason` ist der Grund, warum es diese Methode gibt.**
+        `ai_alt_text_generator.py` liest freigegebene Beispiele UND
+        Ablehnungsgruende aus dieser Tabelle und legt sie dem Modell vor —
+        die Spalte existiert seit Wochen, der Leseweg auch. Geschrieben hat
+        sie nie jemand: der Endpunkt nahm gar keinen Grund entgegen.
+
+        Ergebnis (gemessen 04.09.2026): 42 Entscheidungen in der Datenbank,
+        davon 42 Zustimmungen und 0 Ablehnungen — und die Abfrage des
+        Generators filtert auf `rejected_reason IS NOT NULL`. Der Lernkreislauf
+        war vollstaendig gebaut und bekam nie Stoff.
+
+        Aus Zustimmungen allein laesst sich nichts lernen. Erst die Ablehnung
+        mit Begruendung sagt, WO ein Verfahren danebenliegt.
         """
         async with self.db_pool.acquire() as conn:
             row = await conn.fetchrow(
@@ -303,23 +318,30 @@ class AccessibilityFixSaver:
             _pruefe_site_zugehoerigkeit(row, erlaubte_sites)
 
             approved_at = "NOW()" if status == 'approved' else "approved_at"
+            # Der Grund gehoert nur zur Ablehnung. Bei einer spaeteren Freigabe
+            # wird er geloescht, sonst steht an einem freigegebenen Fix noch die
+            # alte Begruendung und verfaelscht die Auswertung.
+            grund = rejected_reason if status == 'rejected' else None
+
             if custom_alt is not None:
                 await conn.execute(
                     f"""
                     UPDATE accessibility_alt_text_fixes
-                    SET status = $1, suggested_alt = $2, approved_at = {approved_at}, updated_at = NOW()
-                    WHERE id = $3
+                    SET status = $1, suggested_alt = $2, approved_at = {approved_at},
+                        rejected_reason = $3, updated_at = NOW()
+                    WHERE id = $4
                     """,
-                    status, custom_alt, fix_id
+                    status, custom_alt, grund, fix_id
                 )
             else:
                 await conn.execute(
                     f"""
                     UPDATE accessibility_alt_text_fixes
-                    SET status = $1, approved_at = {approved_at}, updated_at = NOW()
-                    WHERE id = $2
+                    SET status = $1, approved_at = {approved_at},
+                        rejected_reason = $2, updated_at = NOW()
+                    WHERE id = $3
                     """,
-                    status, fix_id
+                    status, grund, fix_id
                 )
             return True
 
