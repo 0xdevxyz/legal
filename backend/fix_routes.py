@@ -38,10 +38,6 @@ class ExportRequest(BaseModel):
     fix_id: int
     export_format: str = 'html'  # 'html', 'pdf', 'txt'
 
-class FixOutcomeRequest(BaseModel):
-    decision: str
-    rejection_reason: Optional[str] = None
-
 @fix_router.post("/generate", response_model=_FixGenerateResponse)
 @limiter.limit("10/hour")  # AI Plan: 10 Fix-Generierungen pro Stunde
 async def generate_fix(
@@ -552,122 +548,21 @@ async def health_check():
 # verschluesselte Tokens, echte Branch+Patch+PR-Mechanik).
 
 
-@fix_router.post("/{fix_id}/outcome", response_model=Dict[str, Any])
-async def record_fix_outcome(
-    fix_id: int,
-    outcome_request: FixOutcomeRequest,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Speichert die Nutzerentscheidung zu einem generierten Fix.
-    """
-    try:
-        if outcome_request.decision not in ["accepted", "rejected", "ignored"]:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "invalid_decision",
-                    "message": "decision muss accepted, rejected oder ignored sein."
-                }
-            )
-
-        if not db_pool:
-            logger.error("Database pool not initialized!")
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": "service_unavailable",
-                    "message": "Datenbankverbindung ist nicht verfügbar. Bitte kontaktieren Sie den Support."
-                }
-            )
-
-        user_id = int(current_user['id'])
-
-        async with db_pool.acquire() as conn:
-            fix_record = await conn.fetchrow(
-                """
-                SELECT
-                    id,
-                    issue_category,
-                    fix_type,
-                    generated_at
-                FROM generated_fixes
-                WHERE id = $1 AND user_id = $2
-                """,
-                fix_id,
-                user_id
-            )
-
-            if not fix_record:
-                raise HTTPException(
-                    status_code=404,
-                    detail={
-                        "error": "fix_not_found",
-                        "message": f"Fix mit ID {fix_id} nicht gefunden oder gehört nicht zu diesem User."
-                    }
-                )
-
-            metric = await conn.fetchrow(
-                """
-                INSERT INTO fix_acceptance_metrics (
-                    fix_job_id,
-                    fix_type,
-                    handler_used,
-                    generated_at,
-                    presented_to_user_at,
-                    user_decision,
-                    decision_at,
-                    time_to_decision_seconds,
-                    rejection_reason
-                )
-                VALUES (
-                    $1::uuid,
-                    $2,
-                    $3,
-                    $4,
-                    $4,
-                    $5,
-                    NOW(),
-                    EXTRACT(EPOCH FROM (NOW() - $4))::INT,
-                    $6
-                )
-                RETURNING id, user_decision, decision_at
-                """,
-                None,
-                fix_record['fix_type'] or fix_record['issue_category'] or 'unknown',
-                fix_record['issue_category'],
-                fix_record['generated_at'],
-                outcome_request.decision,
-                outcome_request.rejection_reason
-            )
-
-        logger.info(f"✅ Fix outcome recorded: user_id={user_id}, fix_id={fix_id}, decision={outcome_request.decision}")
-
-        return {
-            "success": True,
-            "metric_id": str(metric['id']),
-            "fix_id": fix_id,
-            "decision": metric['user_decision'],
-            "decision_at": metric['decision_at'].isoformat() if metric['decision_at'] else None
-        }
-
-    except HTTPException:
-        raise
-    except asyncpg.PostgresError as db_error:
-        logger.error(f"❌ Database error in record_fix_outcome: {db_error}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "database_error",
-                "message": "Datenbankfehler. Bitte versuchen Sie es später erneut."
-            }
-        )
-    except Exception as e:
-        logger.error(f"❌ Unexpected error in record_fix_outcome endpoint: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": "Ein unerwarteter Fehler ist aufgetreten. Bitte kontaktieren Sie den Support."
-            }
-        )
+# Entfernt 2026-09-04: POST /{fix_id}/outcome und die Tabelle
+# fix_acceptance_metrics.
+#
+# Die Route schrieb Annahme- und Ablehnungsquoten fuer erzeugte Fixes mit.
+# Sie war registriert, erreichbar und funktionsfaehig — und wurde nie
+# aufgerufen: kein Frontend, kein Backend, kein Cronjob. Die Tabelle stand
+# seit Juli 2026 auf null Zeilen.
+#
+# Nicht angetastet wurde generated_fixes: der Weg /generate, /export,
+# /history, /limits ist verdrahtet und wird vom Dashboard benutzt. Die
+# Tabelle ist leer, weil noch niemand einen Fix erzeugt hat, nicht weil
+# der Weg tot waere.
+#
+# Falls dieser Ablauf spaeter eine Freigabe bekommt, gehoert die Messung
+# dorthin, wo die ENTSCHEIDUNG faellt — serverseitig in den Freigabeweg,
+# so wie es fuer die Alt-Texte am 04.09. gebaut wurde. Ein Endpunkt, den
+# der Client von sich aus rufen muss, wird vergessen. Genau so ist dieser
+# hier entstanden.
