@@ -43,6 +43,7 @@ interface LinkItem {
 }
 
 interface DocItem {
+  id: number;
   fix_type: string;
   payload: Record<string, unknown>;
   wcag_criterion?: string;
@@ -71,7 +72,7 @@ interface Worklist {
   success: boolean;
   alt_texts: { pending: AltItem[]; approved: AltItem[]; approved_count: number; pending_count: number };
   link_fixes: { pending: LinkItem[]; approved: LinkItem[]; approved_count: number; pending_count: number };
-  document_fixes: { items: DocItem[]; count: number };
+  document_fixes: { items: DocItem[]; count: number; pending: DocItem[]; pending_count: number };
   totals: { needs_review: number; live: number };
   pr_deliverable?: PrDeliverable;
   kontrast?: KontrastBlock;
@@ -81,7 +82,7 @@ const EMPTY: Worklist = {
   success: true,
   alt_texts: { pending: [], approved: [], approved_count: 0, pending_count: 0 },
   link_fixes: { pending: [], approved: [], approved_count: 0, pending_count: 0 },
-  document_fixes: { items: [], count: 0 },
+  document_fixes: { items: [], count: 0, pending: [], pending_count: 0 },
   totals: { needs_review: 0, live: 0 },
   pr_deliverable: { deliverable: 0, manifest_only: 0 },
   kontrast: { entscheidungen: [], offen: 0, freigegeben: 0, stellen_offen: 0 },
@@ -110,6 +111,19 @@ const DOC_LABEL: Record<string, string> = {
 // Alt-Text. „Zu allgemein" passt bei beiden, „Bildinhalt falsch beschrieben"
 // nur beim einen — eine gemeinsame Liste hätte bei jedem Typ die Hälfte der
 // Auswahl unbrauchbar gemacht.
+// Struktur- und Skip-Link-Reparaturen greifen ins Seitengerüst ein. Der
+// Unterschied zwischen „an der falschen Stelle" und „brauchen wir nicht" ist
+// dabei entscheidend: das erste ist ein Fehler des Verfahrens, das zweite eine
+// Eigenheit der Website. Ohne die Unterscheidung stünde beides als „abgelehnt"
+// da und die Quote wäre irreführend.
+const DOK_ABLEHNGRUENDE = [
+  'An der falschen Stelle eingefügt',
+  'Ist schon vorhanden',
+  'Bricht das Layout',
+  'Brauchen wir auf dieser Seite nicht',
+  'Anderer Grund',
+] as const;
+
 const LINK_ABLEHNGRUENDE = [
   'Beschreibt das Ziel falsch',
   'Zu allgemein, sagt nichts aus',
@@ -179,6 +193,21 @@ export default function AccessibilityWorklist() {
         fix_id: item.id,
         approved,
         custom_label: edits[`link-${item.id}`] ?? undefined,
+        rejected_reason: approved ? undefined : grund,
+      });
+      setGrundFuer(null);
+      await load();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const decideDok = async (item: DocItem, approved: boolean, grund?: string) => {
+    setBusy(`dok-${item.id}`);
+    try {
+      await apiClient.post('/api/accessibility/approve-dokument', {
+        fix_id: item.id,
+        approved,
         rejected_reason: approved ? undefined : grund,
       });
       setGrundFuer(null);
@@ -416,12 +445,67 @@ export default function AccessibilityWorklist() {
         />
       )}
 
-      {/* Dokumentweite Fixes (read-only, auto-sicher) */}
+      {/* Dokumentweite Fixes.
+          Bis 04.09.2026 gingen sie ohne Rückfrage live und standen hier nur
+          als „auto-sicher" da. Damit erfuhr complyo nie, dass eine
+          Strukturreparatur danebenlag — im Lernstand erschienen sie mit
+          100 % Zustimmung, weil niemand gefragt wurde. */}
       <section>
         <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-200 mb-3">
           <FileCheck2 className="w-4 h-4 text-green-400" /> Dokumentweite Fixes
-          <span className="text-zinc-500 font-normal">(auto-sicher · {data.document_fixes.count} live)</span>
+          <span className="text-zinc-500 font-normal">
+            ({data.document_fixes.pending_count} offen · {data.document_fixes.count} live)
+          </span>
         </h2>
+        {data.document_fixes.pending.length > 0 && (
+          <div className="space-y-3 mb-3">
+            {data.document_fixes.pending.map((d) => (
+              <div key={`dok-${d.id}`} className="bg-white/60 dark:bg-zinc-900/60 border border-amber-500/30 rounded-xl p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm text-zinc-200">{DOC_LABEL[d.fix_type] ?? d.fix_type}</div>
+                    {d.wcag_criterion && <div className="text-xs text-zinc-500">WCAG {d.wcag_criterion}</div>}
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button onClick={() => decideDok(d, true)} disabled={busy === `dok-${d.id}`}
+                      className="px-3 py-1.5 text-xs text-white bg-green-600 hover:bg-green-500 disabled:opacity-40 rounded-lg flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5" /> Freigeben
+                    </button>
+                    <button onClick={() => setGrundFuer(`dok-${d.id}`)} disabled={busy === `dok-${d.id}`}
+                      className="px-3 py-1.5 text-xs text-white bg-red-600/80 hover:bg-red-500 disabled:opacity-40 rounded-lg flex items-center gap-1">
+                      <XCircle className="w-3.5 h-3.5" /> Ablehnen
+                    </button>
+                  </div>
+                </div>
+                {grundFuer === `dok-${d.id}` && (
+                  <div className="mt-3 pt-3 border-t border-zinc-700/50">
+                    <p className="text-xs text-zinc-400 mb-2">
+                      Woran liegt es? Die Angabe verbessert die nächsten Vorschläge.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {DOK_ABLEHNGRUENDE.map((grund) => (
+                        <button
+                          key={grund}
+                          onClick={() => decideDok(d, false, grund)}
+                          disabled={busy === `dok-${d.id}`}
+                          className="px-2.5 py-1 text-xs rounded-lg border border-zinc-600 text-zinc-300 hover:bg-zinc-700 disabled:opacity-40"
+                        >
+                          {grund}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setGrundFuer(null)}
+                        className="px-2.5 py-1 text-xs text-zinc-500 hover:text-zinc-300"
+                      >
+                        Abbrechen
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         {data.document_fixes.items.length === 0 ? (
           <p className="text-xs text-zinc-500">Keine dokumentweiten Fixes.</p>
         ) : (

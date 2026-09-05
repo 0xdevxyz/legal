@@ -115,16 +115,23 @@ class TestEhrlichkeitsvermerke:
         assert nach_typ["linktext-ohne-bedeutung"]["gruende_erfassbar"] is True
         assert d["ohne_grunderfassung"] == []
 
-    async def test_ohne_entscheidung_ist_etwas_anderes_als_ohne_grund(self):
+    async def test_ohne_entscheidung_ist_etwas_anderes_als_ohne_grund(self, monkeypatch):
         """Zwei verschiedene Luecken, die nicht verwechselt werden duerfen.
 
-        skip-link & Co. werden beim Anlegen direkt auf `approved` gesetzt — es
-        fragt nie jemand. Eine Ablehnungsquote von 0 % heisst dort nicht
+        Ein Fixtyp, der beim Anlegen direkt auf `approved` gesetzt wird, hat
+        keine Entscheidung: eine Ablehnungsquote von 0 % heisst dort nicht
         "niemand lehnt ab", sondern "niemand wird gefragt". Eine Grundspalte
-        waere eine Spalte ohne Schreiber.
+        waere fuer ihn eine Spalte ohne Schreiber.
+
+        Geprueft wird die MECHANIK, nicht die Tagesliste. Seit 04.09.2026 ist
+        OHNE_ENTSCHEIDUNG leer, weil alle Dokumentarten zur Freigabe kommen —
+        aber sobald wieder ein Typ ohne Rueckfrage angewandt wird, muss der
+        Lernstand ihn so ausweisen.
         """
+        monkeypatch.setattr(ls, "OHNE_ENTSCHEIDUNG", {"dokument:skip-link"})
         conn = FakeConn({"accessibility_document_fixes": [
             zeile(typ="skip-link", vor=6, an=6),
+            zeile(typ="struktur", vor=4, an=4),
         ]})
         d = await ls.erhebe_lernstand(FakePool(conn))
         nach_typ = {e["befundtyp"]: e for e in d["befundtypen"]}
@@ -134,6 +141,15 @@ class TestEhrlichkeitsvermerke:
         # ... und taucht deshalb NICHT unter "Grund fehlt" auf: dort waere er
         # eine Aufgabe, die niemand erledigen sollte.
         assert "dokument:skip-link" not in d["ohne_grunderfassung"]
+
+        # Gegenprobe: der andere Typ ist entscheidbar und kann Gruende erfassen.
+        assert nach_typ["dokument:struktur"]["entscheidbar"] is True
+        assert nach_typ["dokument:struktur"]["gruende_erfassbar"] is True
+
+    async def test_heute_ist_jede_dokumentart_entscheidbar(self):
+        """Der Stand nach der Produktentscheidung vom 04.09.: mehr sinnvolle
+        Freigabeklicks statt stiller Automatik."""
+        assert ls.OHNE_ENTSCHEIDUNG == set()
 
     async def test_konfidenz_wird_getrennt_ausgewiesen(self):
         """Nur nebeneinander sieht man, ob sie ueberhaupt trennt."""
