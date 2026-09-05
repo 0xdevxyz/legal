@@ -386,7 +386,7 @@ class AccessibilityFixSaver:
         scan_id: str,
         user_id: str,
         fixes: List[Dict[str, Any]],
-        status: str = 'approved'
+        status: str = 'pending'
     ) -> int:
         """
         Speichert auto-sichere, dokumentweite Fixes (Stufe 1).
@@ -401,6 +401,23 @@ class AccessibilityFixSaver:
 
         Returns:
             Anzahl gespeicherter/aktualisierter Fixes.
+
+        **Der Vorgabestatus ist seit 04.09.2026 `pending`, vorher `approved`.**
+
+        skip-link, landmark-main, struktur und css-rule gingen bis dahin ohne
+        Rueckfrage live. Der Lernstand wies sie deshalb mit 100 % Zustimmung
+        aus — nicht weil sie gut waren, sondern weil niemand gefragt wurde.
+        complyo erfuhr nie, dass eine Strukturreparatur danebenlag.
+
+        Zwei Dinge machen die Umstellung ungefaehrlich:
+
+        - **Bestehende Freigaben ueberleben.** Das ON CONFLICT unten haelt einen
+          einmal erteilten `approved`-Status fest. Die heute live stehenden
+          Reparaturen verschwinden nicht von den Kundenseiten.
+        - **Es gibt jetzt einen Weg, sie freizugeben** (/api/accessibility/
+          approve-dokument und der Abschnitt in der Worklist). Ohne den waere
+          diese Aenderung fatal: neue Reparaturen wuerden sich als `pending`
+          stapeln und nie wirken.
         """
         if not fixes:
             return 0
@@ -505,7 +522,7 @@ class AccessibilityFixSaver:
         import json as _json
         async with self.db_pool.acquire() as conn:
             query = """
-                SELECT fix_type, payload, wcag_criterion, confidence, source, status, page_url
+                SELECT id, fix_type, payload, wcag_criterion, confidence, source, status, page_url
                 FROM accessibility_document_fixes
                 WHERE site_id = $1
             """
@@ -525,6 +542,10 @@ class AccessibilityFixSaver:
                     except Exception:
                         payload = {}
                 result.append({
+                    # Die Oberflaeche braucht die id, um freizugeben — bis
+                    # 04.09.2026 gab es dort keine Entscheidung, deshalb
+                    # fehlte sie.
+                    "id": r['id'],
                     "fix_type": r['fix_type'],
                     "payload": payload or {},
                     "wcag_criterion": r['wcag_criterion'],
@@ -689,6 +710,62 @@ class AccessibilityFixSaver:
                         WHERE id=$3""",
                     status, grund, fix_id
                 )
+            return True
+
+    async def set_dokument_status(
+        self,
+        fix_id: int,
+        status: str,
+        erlaubte_sites: Optional[set] = None,
+        rejected_reason: Optional[str] = None,
+    ) -> bool:
+        """Setzt den Status eines dokumentweiten Fixes.
+
+        Bis zum 04.09.2026 gab es diese Methode nicht: skip-link,
+        landmark-main, struktur und css-rule gingen beim Anlegen direkt als
+        `approved` live, ohne dass jemand gefragt wurde. Der Lernstand wies sie
+        als "nicht entscheidbar" aus — eine Ablehnungsquote von 0 % bedeutete
+        dort nicht "niemand lehnt ab", sondern "niemand wird gefragt".
+
+        Damit erfuhr complyo nie, dass eine Strukturreparatur danebenlag.
+
+        kontrast-css laeuft weiter ueber set_kontrast_freigabe(): dort steckt
+        die Entscheidung je Farbpaar im Payload, nicht im Zeilenstatus.
+        """
+        if status not in ("approved", "rejected", "pending"):
+            return False
+
+        async with self.db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT id, user_id, site_id, fix_type "
+                "FROM accessibility_document_fixes WHERE id = $1",
+                fix_id,
+            )
+            if not row:
+                return False
+            if row["fix_type"] == "kontrast-css":
+                # Sonst wuerde eine Zeilenfreigabe alle Farbpaare auf einmal
+                # entscheiden — genau das, was set_kontrast_freigabe vermeidet.
+                logger.warning(
+                    "set_dokument_status auf kontrast-css abgelehnt; "
+                    "dafuer ist set_kontrast_freigabe zustaendig"
+                )
+                return False
+            _pruefe_site_zugehoerigkeit(row, erlaubte_sites)
+
+            approved_at = "NOW()" if status == "approved" else "approved_at"
+            # Wie bei Alt-Texten und Linktexten: der Grund gehoert nur zur
+            # Ablehnung, sonst bleibt er an einem freigegebenen Fix stehen.
+            grund = rejected_reason if status == "rejected" else None
+            await conn.execute(
+                f"""
+                UPDATE accessibility_document_fixes
+                SET status = $1, approved_at = {approved_at},
+                    rejected_reason = $2, updated_at = NOW()
+                WHERE id = $3
+                """,
+                status, grund, fix_id,
+            )
             return True
 
     async def set_kontrast_freigabe(

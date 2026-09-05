@@ -47,12 +47,18 @@ GRUENDE_ANZAHL = 5
 # Ob das so bleiben soll, ist eine Produktfrage, keine technische: sie
 # entscheidet, ob complyo bei Struktur- und Skip-Link-Reparaturen ueberhaupt
 # je erfaehrt, dass eine danebenlag.
-OHNE_ENTSCHEIDUNG = {
-    "dokument:skip-link",
-    "dokument:landmark-main",
-    "dokument:struktur",
-    "dokument:css-rule",
-}
+# Seit 04.09.2026 leer: alle Dokumentfix-Arten kommen zur Freigabe.
+#
+# Vorher standen hier skip-link, landmark-main, struktur und css-rule. Sie
+# wurden beim Anlegen direkt auf `approved` gesetzt, es fragte nie jemand, und
+# der Lernstand wies sie mit 100 % Zustimmung aus — nicht weil sie gut waren,
+# sondern weil niemand gefragt wurde.
+#
+# Die Liste bleibt als Mechanik bestehen: taucht kuenftig wieder ein Fixtyp
+# auf, der ohne Rueckfrage angewandt wird, gehoert er hier hinein. Eine
+# Ablehnungsquote von 0 % bedeutet dann "niemand wird gefragt" und nicht
+# "niemand lehnt ab" — ein Unterschied, den sonst niemand sieht.
+OHNE_ENTSCHEIDUNG: set = set()
 
 # Die drei Fix-Tabellen. `typ_spalte` ist None, wenn die Tabelle selbst der
 # Befundtyp ist — bei Dokumentfixes steckt der Typ dagegen in einer Spalte.
@@ -73,7 +79,7 @@ QUELLEN = [
         "tabelle": "accessibility_document_fixes",
         "befundtyp": None,
         "typ_spalte": "fix_type",
-        "grund_spalte": None,
+        "grund_spalte": "rejected_reason",
     },
 ]
 

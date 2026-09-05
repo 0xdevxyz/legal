@@ -272,6 +272,17 @@ async def approve_link(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class ApproveDokumentRequest(BaseModel):
+    """Freigabe eines dokumentweiten Fixes (skip-link, landmark, struktur, css)."""
+    fix_id: int
+    approved: bool
+    # Siehe ApproveAltTextRequest. Bei Strukturreparaturen ist der Grund
+    # besonders wichtig: sie greifen ins Seitengeruest ein, und "an der
+    # falschen Stelle" ist ein Fehler des Verfahrens, "brauchen wir nicht" ist
+    # keiner.
+    rejected_reason: Optional[str] = None
+
+
 class KontrastFreigabeRequest(BaseModel):
     """Freigabe EINER Farbentscheidung."""
     site_id: str
@@ -282,6 +293,47 @@ class KontrastFreigabeRequest(BaseModel):
     # Marke" ist etwas anderes als "Kontrast trotzdem zu schwach", und nur das
     # zweite ist ein Fehler des Verfahrens.
     ablehngrund: Optional[str] = None
+
+
+@router.post("/approve-dokument")
+async def approve_dokument(
+    request: ApproveDokumentRequest,
+    current_user: Dict[str, Any] = Depends(get_required_user)
+):
+    """Gibt einen dokumentweiten Fix frei oder lehnt ihn ab.
+
+    Bis zum 04.09.2026 gab es diese Route nicht: skip-link, landmark-main,
+    struktur und css-rule gingen beim Anlegen direkt live. Der Lernstand wies
+    sie als "nicht entscheidbar" aus — und complyo erfuhr nie, dass eine
+    Strukturreparatur danebenlag.
+
+    kontrast-css gehoert nicht hierher: dort entscheidet der Betreiber je
+    Farbpaar ueber /approve-kontrast.
+    """
+    try:
+        erlaubte = await get_user_site_ids(
+            current_user.get("user_id") or current_user.get("id"))
+        saver = AccessibilityFixSaver(db_pool)
+        new_status = 'approved' if request.approved else 'rejected'
+        try:
+            ok = await saver.set_dokument_status(
+                fix_id=request.fix_id, status=new_status,
+                erlaubte_sites=erlaubte,
+                rejected_reason=request.rejected_reason,
+            )
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if not ok:
+            raise HTTPException(
+                status_code=404,
+                detail="Fix nicht gefunden oder nicht über diesen Weg entscheidbar",
+            )
+        return {"success": True, "fix_id": request.fix_id, "status": new_status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"approve_dokument fehlgeschlagen: {e}")
+        raise HTTPException(status_code=500, detail="Freigabe fehlgeschlagen")
 
 
 @router.post("/approve-kontrast")
@@ -349,6 +401,13 @@ async def accessibility_worklist(
         link_pending = await saver.get_link_fixes_for_site(site_id, status='pending')
         link_approved = await saver.get_link_fixes_for_site(site_id, status='approved')
         doc_fixes = await saver.get_document_fixes_for_site(site_id, status='approved')
+        # Offene dokumentweite Fixes brauchen eine Entscheidung. Vorher gab es
+        # sie nicht: alles ging automatisch live.
+        doc_pending = [
+            d for d in await saver.get_document_fixes_for_site(site_id, status='pending')
+            # kontrast-css hat einen eigenen Freigabeweg je Farbpaar.
+            if d.get("fix_type") != "kontrast-css"
+        ]
         # Farbentscheidungen ohne Status-Filter: die Worklist muss gerade das
         # Offene zeigen, sonst gaebe es nichts freizugeben.
         kontrast = await saver.get_kontrast_entscheidungen(site_id)
@@ -380,8 +439,10 @@ async def accessibility_worklist(
                 "pending_count": len(link_pending),
             },
             "document_fixes": {
-                "items": doc_fixes,          # auto-approved, read-only
+                "items": doc_fixes,
                 "count": len(doc_fixes),
+                "pending": doc_pending,
+                "pending_count": len(doc_pending),
             },
             "kontrast": {
                 "entscheidungen": kontrast,
@@ -396,6 +457,7 @@ async def accessibility_worklist(
             },
             "totals": {
                 "needs_review": (len(alt_pending) + len(link_pending)
+                                 + len(doc_pending)
                                  + len([e for e in kontrast
                                         if e.get("freigabe") == "pending"])),
                 "live": len(alt_approved) + len(link_approved) + len(doc_fixes),
