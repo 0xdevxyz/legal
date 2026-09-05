@@ -89,6 +89,23 @@ function TextRow({ label, value }: { label: string; value: string | null }) {
   );
 }
 
+// Feste Gründe fürs Verwerfen einer Prüfregel.
+//
+// Freitext allein ließ sich nicht zusammenzählen — aus fünfzig Formulierungen
+// für dasselbe Problem wird kein Muster. Von 159 automatisch erzeugten Checks
+// sind 124 verworfen; ohne feste Gründe weiß niemand, woran es lag.
+//
+// Die Liste folgt den tatsächlichen Fehlerbildern, etwa dem Kurz-Stichwort
+// „ki", das im August „Kindermobiliar" traf.
+const REGEL_ABLEHNGRUENDE = [
+  'Trifft zu oft daneben',
+  'Rechtlich nicht haltbar',
+  'Doppelt zu einer bestehenden Regel',
+  'Gilt noch nicht',
+  'Für unsere Zielgruppe unerheblich',
+  'Anderer Grund',
+] as const;
+
 export default function CheckReviewPage() {
   const [queue, setQueue] = useState<PendingResponse | null>(null);
   const [selected, setSelected] = useState<CheckItem | null>(null);
@@ -98,6 +115,8 @@ export default function CheckReviewPage() {
   // (POST /checks/{id}/dismiss, Body {reason}) und dort in generation_notes
   // persistiert.
   const [dismissReason, setDismissReason] = useState("");
+  // Der feste, auswertbare Teil der Begründung.
+  const [dismissGrund, setDismissGrund] = useState<string | null>(null);
 
   const fetchQueue = useCallback(async () => {
     setLoading(true);
@@ -128,8 +147,13 @@ export default function CheckReviewPage() {
       // /dismiss nimmt eine optionale Begruendung entgegen und haengt sie
       // backendseitig an generation_notes an.
       const body =
-        action === "dismiss" && dismissReason.trim()
-          ? { reason: dismissReason.trim() }
+        action === "dismiss" && (dismissReason.trim() || dismissGrund)
+          ? {
+              reason: dismissReason.trim() || undefined,
+              // Der feste Grund landet in einer eigenen Spalte und ist damit
+              // auswertbar; der Freitext bleibt im Prüfpfad.
+              grund: dismissGrund || undefined,
+            }
           : undefined;
       await api.post(`/api/legal-changes/checks/${checkId}/${action}`, body);
       setActionMsg({
@@ -141,6 +165,7 @@ export default function CheckReviewPage() {
       });
       setSelected(null);
       setDismissReason("");
+      setDismissGrund(null);
       await fetchQueue();
     } catch (e: unknown) {
       setActionMsg({ type: "err", text: fehlertext(e) });
@@ -207,6 +232,7 @@ export default function CheckReviewPage() {
                   onClick={() => {
                     setSelected(item);
                     setDismissReason("");
+                    setDismissGrund(null);
                   }}
                   className={`px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
                     selected?.id === item.id
@@ -295,11 +321,31 @@ export default function CheckReviewPage() {
                   </button>
 
                   <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+                      Woran liegt es?
+                    </label>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {REGEL_ABLEHNGRUENDE.map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setDismissGrund(dismissGrund === g ? null : g)}
+                          className={
+                            "px-2.5 py-1 text-xs rounded-lg border transition-colors " +
+                            (dismissGrund === g
+                              ? "border-red-500 bg-red-500/10 text-red-600 dark:text-red-400"
+                              : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800")
+                          }
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
                     <label
                       htmlFor="dismiss-reason"
                       className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1"
                     >
-                      Begründung fürs Verwerfen (optional)
+                      Ergänzung (optional)
                     </label>
                     <textarea
                       id="dismiss-reason"

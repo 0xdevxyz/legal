@@ -721,9 +721,31 @@ async def activate_compliance_check(
     return {"success": True, "slug": slug, "status": "active"}
 
 
+# Feste Ablehnungsgruende fuer verworfene Pruefregeln.
+#
+# Freitext allein liess sich nicht zusammenzaehlen: aus fuenfzig
+# Formulierungen fuer dasselbe Problem wird kein Muster. Die Liste ist an den
+# tatsaechlichen Fehlerbildern entlang gebaut — etwa dem Kurz-Stichwort "ki",
+# das im August "Kindermobiliar" traf und ein Phantomrisiko von 15.000 EUR
+# erzeugte.
+ABLEHNGRUENDE_REGEL = [
+    "Trifft zu oft daneben",
+    "Rechtlich nicht haltbar",
+    "Doppelt zu einer bestehenden Regel",
+    "Gilt noch nicht",
+    "Fuer unsere Zielgruppe unerheblich",
+    "Anderer Grund",
+]
+
+
 class DismissCheckRequest(BaseModel):
-    """Optionale Ablehnungs-Begründung für /checks/{id}/dismiss."""
+    """Begründung für /checks/{id}/dismiss.
+
+    `grund` ist der feste, auswertbare Teil; `reason` bleibt der Freitext, der
+    Nuancen traegt, die eine Auswahlliste nicht abbildet.
+    """
     reason: Optional[str] = None
+    grund: Optional[str] = None
 
 
 @router.post("/checks/{check_id}/dismiss")
@@ -746,6 +768,7 @@ async def dismiss_compliance_check(
             """
             UPDATE compliance_checks
             SET status = 'disabled',
+                dismissal_reason = $4,
                 reviewed_by = $2,
                 reviewed_at = NOW(),
                 updated_at = NOW(),
@@ -760,6 +783,7 @@ async def dismiss_compliance_check(
             check_id,
             str(admin.get("email") or admin.get("id") or "admin"),
             reason,
+            (body.grund or None) if body else None,
         )
     if not slug:
         raise HTTPException(status_code=404, detail="Check nicht gefunden")

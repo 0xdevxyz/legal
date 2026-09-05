@@ -282,6 +282,20 @@ async def _pruefregeln(conn, tage: int) -> Dict[str, Any]:
     )
     erzeugt = r["erzeugt"] or 0
     entschieden = (r["aktiv"] or 0) + (r["abgeschaltet"] or 0)
+
+    # Gruende der verworfenen Regeln — seit 05.09.2026 als feste Auswahl in
+    # einer eigenen Spalte. Der aeltere Freitext in generation_notes bleibt
+    # bestehen, laesst sich aber nicht zusammenzaehlen.
+    gruende = await conn.fetch(
+        """
+        SELECT dismissal_reason AS grund, count(*) AS anzahl
+        FROM compliance_checks
+        WHERE status = 'disabled'
+          AND dismissal_reason IS NOT NULL AND dismissal_reason <> ''
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 5
+        """
+    )
+
     return {
         "erzeugt": erzeugt,
         "aktiv": r["aktiv"],
@@ -289,6 +303,8 @@ async def _pruefregeln(conn, tage: int) -> Dict[str, Any]:
         "wartet_auf_freigabe": r["wartet"],
         "annahmequote": _quote(r["aktiv"] or 0, r["abgeschaltet"] or 0),
         "abschaltungen_mit_grund": r["mit_grund"],
+        "ablehngruende": [{"grund": g["grund"], "anzahl": g["anzahl"]}
+                          for g in gruende],
         "belege_reichen": entschieden >= BELEGE_MINDESTENS,
     }
 
