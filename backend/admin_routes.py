@@ -4,7 +4,7 @@ Provides comprehensive admin interface for GDPR-compliant lead management
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from typing import Optional
+from typing import Any, Dict, Optional
 from datetime import datetime
 import logging
 from database_service import db_service
@@ -610,3 +610,95 @@ async def lernstand(
         raise HTTPException(status_code=400, detail="tage muss zwischen 1 und 3650 liegen")
     from lernstand import erhebe_lernstand
     return await erhebe_lernstand(db_service.pool, tage=tage)
+
+
+# ---------------------------------------------------------------------------
+# Selbstauskunft ueber den Speicher
+# ---------------------------------------------------------------------------
+
+
+@admin_router.get("/speicher")
+async def speicherauskunft(admin: dict = Depends(require_admin)):
+    """Was haelt der laufende Prozess im Speicher?
+
+    Angelegt am 05.09.2026 fuer eine offene Frage: der Grundverbrauch des
+    Backends waechst zwischen Neustarts von rund 140 auf 290 MiB. Playwright
+    ist es nicht mehr (das Leck ist seit dem 03.09. geschlossen, node-Prozesse
+    bleiben bei 0), also Python-Heap oder Caches.
+
+    **Von aussen ist das nicht messbar.** `docker exec python3 -c ...` startet
+    einen NEUEN Interpreter und zeigt dessen leeren Heap — nicht den des
+    Servers. Genau dieser Irrtum hat den ersten Messversuch wertlos gemacht.
+    Deshalb fragt diese Route den Prozess von innen.
+
+    Sie ist bewusst schlank: keine Objektgraphen, kein tracemalloc. Was hier
+    steht, reicht, um die Frage "waechst ein bekannter Cache oder der Heap
+    allgemein?" zu beantworten — und mehr Werkzeug einzubauen, bevor die Frage
+    gestellt ist, waere Vorratshaltung.
+    """
+    import gc
+    import collections
+    import resource
+
+    gc.collect()
+    objekte = gc.get_objects()
+    nach_typ = collections.Counter(type(o).__name__ for o in objekte)
+
+    # Nur die Caches, die es wirklich gibt — nachgesehen, nicht geraten.
+    caches: Dict[str, Any] = {}
+
+    try:
+        from compliance_engine import scan_progress as _sp
+        caches["scan_progress"] = {
+            "eintraege": len(_sp._stand),
+            "ttl_sekunden": _sp._TTL_SEKUNDEN,
+        }
+    except Exception as e:
+        caches["scan_progress"] = f"nicht lesbar: {type(e).__name__}"
+
+    try:
+        import main_production as _mp
+        rk = getattr(_mp, "risk_calculator", None)
+        caches["risk_calculator"] = (
+            {"eintraege": len(rk._cache), "ttl_sekunden": rk.cache_ttl}
+            if rk is not None else "nicht initialisiert"
+        )
+    except Exception as e:
+        caches["risk_calculator"] = f"nicht lesbar: {type(e).__name__}"
+
+    try:
+        import lead_routes as _lr
+        caches["mx_pruefung"] = {"eintraege": len(_lr._mx_cache)}
+    except Exception as e:
+        caches["mx_pruefung"] = f"nicht lesbar: {type(e).__name__}"
+
+    try:
+        from compliance_engine import scan_arbeiter as _sa
+        caches["scan_warteschlange"] = {
+            "wartend": _sa.wartend_anzahl(),
+            "in_arbeit": len(_sa._in_arbeit),
+        }
+    except Exception as e:
+        caches["scan_warteschlange"] = f"nicht lesbar: {type(e).__name__}"
+
+    # Die groessten Sammlungen im Heap — dort wuerde ein wachsender Cache
+    # auffallen, den niemand auf dem Zettel hat.
+    gross = []
+    for o in objekte:
+        try:
+            if isinstance(o, (dict, list, set)) and len(o) > 1000:
+                gross.append({"typ": type(o).__name__, "eintraege": len(o)})
+        except Exception:
+            continue
+    gross.sort(key=lambda g: g["eintraege"], reverse=True)
+
+    return {
+        "rss_mib": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1),
+        "objekte_gesamt": len(objekte),
+        "haeufigste_typen": [
+            {"typ": t, "anzahl": n} for t, n in nach_typ.most_common(15)
+        ],
+        "grosse_sammlungen": gross[:10],
+        "caches": caches,
+        "gc_stand": gc.get_stats(),
+    }
