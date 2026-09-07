@@ -41,7 +41,7 @@ EARLY_ACCESS_PLAETZE = int(os.getenv("EARLY_ACCESS_PLAETZE", "100"))
 
 # Fassung des Angebots, das auf der Kampagnenseite steht. Wird je Anmeldung
 # mitgeschrieben, damit spaeter belegbar ist, was wem zugesagt wurde.
-EARLY_ACCESS_ANGEBOT = os.getenv("EARLY_ACCESS_ANGEBOT", "ea100-35eur-12m")
+EARLY_ACCESS_ANGEBOT = os.getenv("EARLY_ACCESS_ANGEBOT", "ea100-49eur-12m")
 
 logger = logging.getLogger(__name__)
 

@@ -59,16 +59,25 @@ STRIPE_WEBHOOK_SECRET = _webhook_secret
 # pro:            49€/Monat, 490€/Jahr — 1 Domain, alle 4 Säulen
 # agency:         299€/Monat, 2.990€/Jahr — 25 Domains
 # single:         19€/Monat — 1 Säule nach Wahl
+# Preisrunde vom 07.09.2026 ("Weg B", wertbasiert): Pro 49->89, Agentur
+# 299->599, Monitoring 19->39, Einzelsaeule 19->29. Die alten Price-IDs stehen
+# auskommentiert in der .env; zahlende Bestandskunden gab es zu dem Zeitpunkt
+# keine, deshalb war kein Bestandsschutz noetig.
 STRIPE_PRICES = {
-    "pro_monthly":     os.getenv("STRIPE_PRICE_PRO_MONTHLY", None),      # 49€/Monat
-    "pro_yearly":      os.getenv("STRIPE_PRICE_PRO_YEARLY", None),       # 490€/Jahr
-    "agency_monthly":  os.getenv("STRIPE_PRICE_AGENCY_MONTHLY", None),   # 299€/Monat
-    "agency_yearly":   os.getenv("STRIPE_PRICE_AGENCY_YEARLY", None),    # 2.990€/Jahr
-    "single_monthly":  os.getenv("STRIPE_PRICE_SINGLE_MODULE", None),    # 19€/Monat
-    "monitor_monthly": os.getenv("STRIPE_PRICE_MONITOR_MONTHLY", None),  # 19€/Monat
-    "monitor_yearly":  os.getenv("STRIPE_PRICE_MONITOR_YEARLY", None),   # 190€/Jahr
+    "pro_monthly":     os.getenv("STRIPE_PRICE_PRO_MONTHLY", None),      # 89€/Monat
+    "pro_yearly":      os.getenv("STRIPE_PRICE_PRO_YEARLY", None),       # 890€/Jahr
+    # Early Access: die ersten 100 Konten zahlen 49€ statt 89€, zwoelf Monate.
+    # Faellt auf den regulaeren Pro-Preis zurueck, wenn nichts konfiguriert ist —
+    # lieber der volle Preis als ein Checkout, der 500 wirft.
+    "pro_early_monthly": os.getenv("STRIPE_PRICE_PRO_EARLY_MONTHLY")
+        or os.getenv("STRIPE_PRICE_PRO_MONTHLY", None),                  # 49€/Monat
+    "agency_monthly":  os.getenv("STRIPE_PRICE_AGENCY_MONTHLY", None),   # 599€/Monat
+    "agency_yearly":   os.getenv("STRIPE_PRICE_AGENCY_YEARLY", None),    # 5.990€/Jahr
+    "single_monthly":  os.getenv("STRIPE_PRICE_SINGLE_MODULE", None),    # 29€/Monat
+    "monitor_monthly": os.getenv("STRIPE_PRICE_MONITOR_MONTHLY", None),  # 39€/Monat
+    "monitor_yearly":  os.getenv("STRIPE_PRICE_MONITOR_YEARLY", None),   # 390€/Jahr
     # ── Agency Add-ons (greifen, wenn die 25 Projekte voll sind) ──────────────
-    # agency_extra: +1 Website, 19€/Monat (nutzt den Single-Preis als Fallback)
+    # agency_extra: +1 Website, 29€/Monat (nutzt den Single-Preis als Fallback)
     "agency_extra_monthly": os.getenv("STRIPE_PRICE_AGENCY_EXTRA_SITE")
         or os.getenv("STRIPE_PRICE_SINGLE_MODULE", None),
     # agency2: weitere 25 Websites (fällt auf den regulären Agency-Preis zurück)
@@ -322,6 +331,17 @@ async def create_checkout_session(
             )
 
         price_key = f"{request.plan}_{request.billing_period}"
+
+        # Early Access: die ersten 100 bestaetigten Wartelisten-Plaetze zahlen
+        # Pro fuer 49 statt 89, zwoelf Monate. Der Anspruch haengt am
+        # bestaetigten Platz (platz_nr), nicht an der blossen Anmeldung — sonst
+        # koennte sich jeder den Preis durch einen Listeneintrag nehmen.
+        # Gilt nur monatlich: fuer den Jahrespreis gibt es kein Early-Access-Produkt.
+        if request.plan == "pro" and request.billing_period == "monthly":
+            if await _hat_early_access_platz(user_email):
+                price_key = "pro_early_monthly"
+                logger.info(f"Early-Access-Preis fuer {user_email} angewandt")
+
         price_id = STRIPE_PRICES.get(price_key)
         
         if not price_id:
@@ -556,16 +576,46 @@ async def get_payment_history(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def _hat_early_access_platz(email: str) -> bool:
+    """Haelt diese Adresse einen der Early-Access-Plaetze?
+
+    Zaehlt nur der bestaetigte Platz: `platz_nr` wird beim Klick im
+    Bestaetigungslink aus einer Sequenz vergeben, eine blosse Anmeldung reicht
+    nicht. Die Grenze kommt aus derselben Umgebungsvariable wie der Zaehler auf
+    der Kampagnenseite, damit Anzeige und Kaufweg nicht auseinanderlaufen.
+
+    Fail-closed: Bei einem Fehler gilt der regulaere Preis. Ein zu Unrecht
+    voller Preis laesst sich erstatten, ein zu Unrecht gewaehrter Dauerrabatt
+    nicht ohne Gespraech zuruecknehmen.
+    """
+    plaetze = int(os.getenv("EARLY_ACCESS_PLAETZE", "100"))
+    try:
+        await _ensure_db()
+        async with db_service.pool.acquire() as conn:
+            platz = await conn.fetchval(
+                """
+                SELECT platz_nr FROM waitlist_leads
+                WHERE lower(email) = lower($1) AND platz_nr IS NOT NULL
+                ORDER BY platz_nr ASC LIMIT 1
+                """,
+                email,
+            )
+        return platz is not None and int(platz) <= plaetze
+    except Exception as e:
+        logger.warning(f"Early-Access-Pruefung fehlgeschlagen fuer {email}: {e}")
+        return False
+
+
 @router.get("/plans")
 async def get_plans():
     return {
         "plans": [
             {"id": "free", "name": "Free", "price_monthly": 0, "price_yearly": 0, "websites_max": 1, "fixes_limit": 1},
-            {"id": "monitor", "name": "Monitoring", "price_monthly": 19, "price_yearly": 190, "websites_max": 10, "fixes_limit": 0,
+            {"id": "monitor", "name": "Monitoring", "price_monthly": 39, "price_yearly": 390, "websites_max": 10, "fixes_limit": 0,
              "price_id_monthly": STRIPE_PRICES.get("monitor_monthly"), "price_id_yearly": STRIPE_PRICES.get("monitor_yearly")},
-            {"id": "pro", "name": "Pro", "price_monthly": 49, "price_yearly": 490, "websites_max": 1, "fixes_limit": 999999,
+            {"id": "pro", "name": "Pro", "price_monthly": 89, "price_yearly": 890, "websites_max": 1, "fixes_limit": 999999,
              "price_id_monthly": STRIPE_PRICES.get("pro_monthly"), "price_id_yearly": STRIPE_PRICES.get("pro_yearly")},
-            {"id": "agency", "name": "Agency", "price_monthly": 299, "price_yearly": 2990, "websites_max": 25, "fixes_limit": 999999,
+            {"id": "agency", "name": "Agency", "price_monthly": 599, "price_yearly": 5990, "websites_max": 25, "fixes_limit": 999999,
              "price_id_monthly": STRIPE_PRICES.get("agency_monthly"), "price_id_yearly": STRIPE_PRICES.get("agency_yearly")},
         ]
     }

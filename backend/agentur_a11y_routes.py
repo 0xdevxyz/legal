@@ -3,8 +3,8 @@ Barrierefreiheit über ein ganzes Website-Portfolio.
 
 Warum es das braucht
 --------------------
-Der Agentur-Tarif kostet 299 €, der Einzeltarif 49 €. Bei zwanzig Kundenseiten
-sind das 980 € gegen 299 € — der Preis trägt sich nur, wenn die Arbeit auch wie
+Der Agentur-Tarif kostet 599 €, der Einzeltarif 89 €. Bei zwanzig Kundenseiten
+sind das 1.780 € gegen 599 € — der Preis trägt sich nur, wenn die Arbeit auch wie
 EIN Vorgang läuft und nicht wie zwanzig. Für Barrierefreiheit gab es bisher
 keinen einzigen portfolioweiten Griff: zwanzig Websites hießen zwanzig Wechsel
 der aktiven Site, zwanzig Worklists, zwanzig Mal dieselbe Frage.

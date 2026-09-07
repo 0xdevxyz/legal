@@ -4,7 +4,7 @@
  * Barrierefreiheit über das ganze Portfolio.
  *
  * Das ist die Seite, an der der Agentur-Tarif hängt. Zwanzig Kundenseiten
- * kosten einzeln 20 × 49 € = 980 €; der Agentur-Tarif 299 €. Diese Rechnung
+ * kosten einzeln 20 × 89 € = 1.780 €; der Agentur-Tarif 599 €. Diese Rechnung
  * geht nur auf, wenn die Arbeit auch wie EIN Vorgang läuft — bisher hieß sie
  * zwanzig Mal aktive Website wechseln, zwanzig Worklists öffnen, zwanzig Mal
  * dieselbe Frage.

@@ -27,10 +27,10 @@ const MODULES = [
 
 const TARIFE = [
     { id: 'free', name: 'Free', price: '0 €', hint: '1 Fix' },
-    { id: 'single', name: 'Einzelsäule', price: '19 €/Monat', hint: 'je Säule' },
-    { id: 'pro', name: 'Pro', price: '49 €/Monat', hint: '1 Domain', popular: true },
-    { id: 'agency', name: 'Agentur', price: '299 €/Monat', hint: '25 Projekte' },
-    { id: 'monitor', name: 'Monitoring', price: '19 €/Monat', hint: 'bis 10 Websites' },
+    { id: 'single', name: 'Einzelsäule', price: '29 €/Monat', hint: 'je Säule' },
+    { id: 'pro', name: 'Pro', price: '89 €/Monat', hint: '1 Domain', popular: true },
+    { id: 'agency', name: 'Agentur', price: '599 €/Monat', hint: '25 Projekte' },
+    { id: 'monitor', name: 'Monitoring', price: '39 €/Monat', hint: 'bis 10 Websites' },
 ];
 
 // Nur diese Kennungen darf ?plan= setzen. Vorher wurde der Parameter roh
@@ -333,7 +333,7 @@ function RegisterForm() {
                     {plan === 'single' && (
                         <fieldset className="mb-6">
                             <legend className="block text-xs font-medium mb-2.5" style={{ color: 'rgba(148,163,184,0.7)' }}>
-                                Säulen wählen <span style={{ color: 'rgba(100,116,139,0.6)' }}>(19 € je Säule/Monat)</span>
+                                Säulen wählen <span style={{ color: 'rgba(100,116,139,0.6)' }}>(29 € je Säule/Monat)</span>
                             </legend>
                             <div className="grid grid-cols-2 gap-2">
                                 {MODULES.map((module) => {

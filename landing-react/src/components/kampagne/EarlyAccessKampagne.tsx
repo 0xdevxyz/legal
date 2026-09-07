@@ -12,8 +12,8 @@ import PlatzZaehler from './PlatzZaehler';
 // beides dieselbe Kennung schreiben, liesse sich hinterher nicht mehr trennen,
 // was die bezahlten Anzeigen gebracht haben und was ohnehin gekommen waere.
 const PLAETZE = 100;
-const PREIS_EARLY = '35 €';
-const PREIS_REGULAER = '49 €';
+const PREIS_EARLY = '49 €';
+const PREIS_REGULAER = '89 €';
 
 const SAEULEN = [
   {

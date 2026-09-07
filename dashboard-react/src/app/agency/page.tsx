@@ -294,7 +294,7 @@ function ProjectsCard() {
                 Eine weitere Website hinzufügen.
               </p>
               <p className="my-3 dark:text-white text-gray-900 font-bold text-2xl">
-                19 €<span className="dark:text-zinc-400 text-gray-600 text-sm font-normal">/Monat</span>
+                29 €<span className="dark:text-zinc-400 text-gray-600 text-sm font-normal">/Monat</span>
               </p>
               <button
                 onClick={() => startCheckout('agency_extra')}
@@ -316,7 +316,7 @@ function ProjectsCard() {
                 Weitere 25 Websites auf einmal.
               </p>
               <p className="my-3 dark:text-white text-gray-900 font-bold text-2xl">
-                299 €<span className="dark:text-zinc-400 text-gray-600 text-sm font-normal">/Monat</span>
+                599 €<span className="dark:text-zinc-400 text-gray-600 text-sm font-normal">/Monat</span>
               </p>
               <button
                 onClick={() => startCheckout('agency2')}
@@ -476,7 +476,7 @@ export default function AgencyPage() {
               und nutzen Sie White-Label-Funktionen mit dem Agency Plan.
             </p>
             <p className="mt-2 dark:text-white text-gray-900 font-bold text-xl">
-              299 €<span className="dark:text-zinc-400 text-gray-600 text-sm font-normal">/Monat</span>
+              599 €<span className="dark:text-zinc-400 text-gray-600 text-sm font-normal">/Monat</span>
               <span className="ml-3 dark:text-zinc-400 text-gray-600 text-sm font-normal">oder 2.990 €/Jahr</span>
             </p>
             <ul className="mt-3 space-y-1">

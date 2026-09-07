@@ -345,7 +345,7 @@ datenschutz@complyo.de • https://complyo.de/datenschutz
             <h4 style="margin-top: 0; color: #856404;">⚡ Nächste Schritte</h4>
             <p style="margin-bottom: 0; font-size: 14px;">
                 Für eine detaillierte Lösungsstrategie und automatische Umsetzung
-                empfehlen wir Ihnen unsere Tarife Single (19€/Monat) oder Pro (49€/Monat).
+                empfehlen wir Ihnen unsere Tarife Single (29€/Monat) oder Pro (89€/Monat).
             </p>
         </div>
 
@@ -408,7 +408,7 @@ Ihre Website-Analyse ist abgeschlossen! Hier sind die wichtigsten Ergebnisse:
 
 ⚡ NÄCHSTE SCHRITTE:
 Für eine detaillierte Lösungsstrategie und automatische Umsetzung
-empfehlen wir Ihnen unsere Tarife Single (19€/Monat) oder Pro (49€/Monat).
+empfehlen wir Ihnen unsere Tarife Single (29€/Monat) oder Pro (89€/Monat).
 
 🚀 Jetzt optimieren: {self.frontend_url}/#pricing
 
