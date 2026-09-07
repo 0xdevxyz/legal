@@ -6,7 +6,7 @@
  * Vereinheitlichte Review-Ansicht über alle Fix-Typen des Fix-Manifests:
  *  - Alt-Texte (WCAG 1.1.1, HITL: Review nötig)
  *  - Link-Zweck (WCAG 2.4.4, HITL: Review nötig)
- *  - Dokumentweite Fixes (lang/skip-link/landmark/css, auto-sicher, read-only)
+ *  - Dokumentweite Fixes (lang/skip-link/landmark/css)
  *
  * Nur freigegebene Fixes werden vom Manifest an die Channels (WP/HTML/SPA) ausgeliefert.
  * Datenquelle: GET /api/accessibility/worklist?site_id=… (ein Call bedient die Seite).
@@ -48,6 +48,10 @@ interface DocItem {
   payload: Record<string, unknown>;
   wcag_criterion?: string;
   confidence: number;
+  // 'mensch' = jemand hat entschieden. 'automatik' oder leer = läuft live,
+  // aber niemand hat es je beurteilt. Genau diese laufen seit Wochen auf
+  // Kundenseiten, und genau sie verfälschen jede Annahmequote.
+  entscheidung_quelle?: string | null;
 }
 
 /**
@@ -93,6 +97,7 @@ const DOC_LABEL: Record<string, string> = {
   'skip-link': 'Skip-Link „Zum Inhalt springen“',
   'landmark-main': 'Hauptinhalts-Landmark (main)',
   'css-rule': 'Fokus-/Kontrast-CSS',
+  'struktur': 'Überschriften-Struktur',
 };
 
 // Feste Ablehnungsgründe statt Freitext.
@@ -232,6 +237,16 @@ export default function AccessibilityWorklist() {
       setBusy(null);
     }
   };
+
+  // Freigegeben ist nicht gleich beurteilt. Wer hier nicht trennt, zeigt
+  // eine Reparatur, die nie jemand gesehen hat, als bestätigt an — und der
+  // Lernstand zaehlt sie als Zustimmung.
+  const unbestaetigt = data.document_fixes.items.filter(
+    (d) => d.entscheidung_quelle !== 'mensch' && d.fix_type !== 'kontrast-css'
+  );
+  const bestaetigt = data.document_fixes.items.filter(
+    (d) => !unbestaetigt.includes(d)
+  );
 
   if (!activeSite) {
     return (
@@ -454,7 +469,8 @@ export default function AccessibilityWorklist() {
         <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-200 mb-3">
           <FileCheck2 className="w-4 h-4 text-green-400" /> Dokumentweite Fixes
           <span className="text-zinc-500 font-normal">
-            ({data.document_fixes.pending_count} offen · {data.document_fixes.count} live)
+            ({data.document_fixes.pending_count} offen · {data.document_fixes.count} live
+            {unbestaetigt.length > 0 && `, davon ${unbestaetigt.length} unbestätigt`})
           </span>
         </h2>
         {data.document_fixes.pending.length > 0 && (
@@ -506,11 +522,75 @@ export default function AccessibilityWorklist() {
             ))}
           </div>
         )}
+        {/* Läuft live, hat aber nie jemand beurteilt.
+
+            Bis zum 05.09.2026 gingen diese Reparaturen beim Anlegen direkt
+            auf 'approved'. Sie stehen seither auf echten Kundenseiten, und in
+            der Auswertung sahen sie aus wie einstimmige Zustimmung — dabei
+            wurde nie gefragt. Deshalb werden sie hier nicht stillschweigend
+            zu den bestätigten gelegt, sondern einmal vorgelegt. */}
+        {unbestaetigt.length > 0 && (
+          <div className="space-y-3 mb-3">
+            <p className="text-xs text-amber-300/90">
+              Diese {unbestaetigt.length} Reparatur{unbestaetigt.length === 1 ? '' : 'en'} laufen
+              bereits auf Ihrer Website, wurden aber nie bestätigt. Eine kurze Durchsicht
+              genügt: „Passt so" ändert nichts, „War falsch" nimmt die Reparatur beim
+              nächsten Abruf von der Seite.
+            </p>
+            {unbestaetigt.map((d) => (
+              <div key={`dok-alt-${d.id}`} className="bg-white/60 dark:bg-zinc-900/60 border border-amber-500/30 rounded-xl p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm text-zinc-200">{DOC_LABEL[d.fix_type] ?? d.fix_type}</div>
+                    <div className="text-xs text-amber-400/80">läuft live, nie bestätigt</div>
+                    {d.wcag_criterion && <div className="text-xs text-zinc-500">WCAG {d.wcag_criterion}</div>}
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button onClick={() => decideDok(d, true)} disabled={busy === `dok-${d.id}`}
+                      className="px-3 py-1.5 text-xs text-white bg-green-600 hover:bg-green-500 disabled:opacity-40 rounded-lg flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5" /> Passt so
+                    </button>
+                    <button onClick={() => setGrundFuer(`dok-${d.id}`)} disabled={busy === `dok-${d.id}`}
+                      className="px-3 py-1.5 text-xs text-white bg-red-600/80 hover:bg-red-500 disabled:opacity-40 rounded-lg flex items-center gap-1">
+                      <XCircle className="w-3.5 h-3.5" /> War falsch
+                    </button>
+                  </div>
+                </div>
+                {grundFuer === `dok-${d.id}` && (
+                  <div className="mt-3 pt-3 border-t border-zinc-700/50">
+                    <p className="text-xs text-zinc-400 mb-2">
+                      Woran liegt es? Die Reparatur verschwindet beim nächsten Abruf von
+                      Ihrer Website.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {DOK_ABLEHNGRUENDE.map((grund) => (
+                        <button
+                          key={grund}
+                          onClick={() => decideDok(d, false, grund)}
+                          disabled={busy === `dok-${d.id}`}
+                          className="px-2.5 py-1 text-xs rounded-lg border border-zinc-600 text-zinc-300 hover:bg-zinc-700 disabled:opacity-40"
+                        >
+                          {grund}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setGrundFuer(null)}
+                        className="px-2.5 py-1 text-xs text-zinc-500 hover:text-zinc-300"
+                      >
+                        Abbrechen
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         {data.document_fixes.items.length === 0 ? (
           <p className="text-xs text-zinc-500">Keine dokumentweiten Fixes.</p>
-        ) : (
+        ) : bestaetigt.length > 0 ? (
           <div className="grid sm:grid-cols-2 gap-3">
-            {data.document_fixes.items.map((d) => (
+            {bestaetigt.map((d) => (
               <div key={d.fix_type} className="bg-white/60 dark:bg-zinc-900/60 border border-green-500/20 rounded-xl p-3 flex items-center justify-between">
                 <div>
                   <div className="text-sm text-zinc-200">{DOC_LABEL[d.fix_type] ?? d.fix_type}</div>
@@ -520,7 +600,7 @@ export default function AccessibilityWorklist() {
               </div>
             ))}
           </div>
-        )}
+        ) : null}
       </section>
 
       {/* Ein-Klick-Auslieferung: freigegebene Fixes als PR ins Kundenrepo.

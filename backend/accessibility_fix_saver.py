@@ -436,8 +436,15 @@ class AccessibilityFixSaver:
                             INSERT INTO accessibility_document_fixes (
                                 site_id, scan_id, user_id, page_url,
                                 fix_type, payload, wcag_criterion, confidence,
-                                source, status, approved_at, created_at, updated_at
+                                source, status, entscheidung_quelle,
+                                approved_at, created_at, updated_at
                             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::varchar,
+                                      -- Wer hier ohne Rueckfrage auf 'approved'
+                                      -- geht, vermerkt das. Sonst zaehlt der
+                                      -- Lernstand eine Zustimmung, die niemand
+                                      -- gegeben hat.
+                                      CASE WHEN $10::varchar = 'approved'
+                                           THEN 'automatik' ELSE NULL END,
                                       CASE WHEN $10::varchar = 'approved' THEN NOW() ELSE NULL END,
                                       NOW(), NOW())
                             ON CONFLICT (site_id, fix_type)
@@ -486,6 +493,17 @@ class AccessibilityFixSaver:
                                       OR EXCLUDED.status = 'approved'
                                     THEN COALESCE(accessibility_document_fixes.approved_at, NOW())
                                     ELSE NULL END,
+                                -- Ein erteiltes Urteil ueberlebt den naechsten
+                                -- Scan. Ohne diese Zeile schriebe er
+                                -- 'automatik' darueber, und der einzige Beleg
+                                -- dafuer, dass jemand hingesehen hat, waere
+                                -- weg — derselbe Fehler wie beim Status, nur
+                                -- eine Spalte weiter.
+                                entscheidung_quelle = CASE
+                                    WHEN accessibility_document_fixes.entscheidung_quelle = 'mensch'
+                                    THEN 'mensch'
+                                    ELSE EXCLUDED.entscheidung_quelle
+                                END,
                                 updated_at = NOW()
                             """,
                             site_id,
@@ -522,7 +540,8 @@ class AccessibilityFixSaver:
         import json as _json
         async with self.db_pool.acquire() as conn:
             query = """
-                SELECT id, fix_type, payload, wcag_criterion, confidence, source, status, page_url
+                SELECT id, fix_type, payload, wcag_criterion, confidence,
+                       source, status, page_url, entscheidung_quelle
                 FROM accessibility_document_fixes
                 WHERE site_id = $1
             """
@@ -553,6 +572,9 @@ class AccessibilityFixSaver:
                     "source": r['source'],
                     "status": r['status'],
                     "page_url": r['page_url'],
+                    # 'automatik' heisst: laeuft live, hat aber nie jemand
+                    # bestaetigt. Die Oberflaeche fragt genau danach.
+                    "entscheidung_quelle": r['entscheidung_quelle'],
                 })
             logger.info(f"📦 Loaded {len(result)} document fixes for site_id={site_id}")
             return result
@@ -761,7 +783,11 @@ class AccessibilityFixSaver:
                 f"""
                 UPDATE accessibility_document_fixes
                 SET status = $1, approved_at = {approved_at},
-                    rejected_reason = $2, updated_at = NOW()
+                    rejected_reason = $2,
+                    -- Der Unterschied, um den es geht: hier hat jemand
+                    -- hingesehen. Nur solche Entscheidungen sind Belege.
+                    entscheidung_quelle = 'mensch',
+                    updated_at = NOW()
                 WHERE id = $3
                 """,
                 status, grund, fix_id,
