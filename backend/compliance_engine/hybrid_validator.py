@@ -18,6 +18,7 @@ from enum import Enum
 from bs4 import BeautifulSoup
 
 from .checks.deep_content_analyzer import DeepContentAnalyzer, ContentValidation
+from . import ai_budget
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +282,17 @@ class HybridValidator:
                 "reasoning": f"KI-Error: {str(e)}"
             }
     
+    # Field-spezifische Beschreibungen fuer den Prompt (Einzel- und Batch-Call).
+    _FELD_BESCHREIBUNGEN = {
+        "firmenname": "Vollständiger Firmenname oder Name des Unternehmens (oft mit Rechtsform wie GmbH, AG, etc.)",
+        "adresse": "Vollständige Postanschrift mit Straße, Hausnummer, PLZ und Ort",
+        "email": "E-Mail-Adresse für Kontaktaufnahme",
+        "telefon": "Telefonnummer für Kontaktaufnahme",
+        "verantwortlicher": "Name des Verantwortlichen im Sinne der DSGVO",
+        "zwecke": "Zwecke der Datenverarbeitung (wofür werden Daten genutzt)",
+        "rechtsgrundlage": "Rechtsgrundlage für die Datenverarbeitung (z.B. Art. 6 DSGVO)",
+    }
+
     # Stichwoerter, an denen die zustaendige Passage im Text erkannt wird.
     _FELD_STICHWOERTER = {
         "firmenname": ["firma", "unternehmen", "diensteanbieter", "verantwortlich für den inhalt", "gmbh", "ug", " ag ", "e.k."],
@@ -342,19 +354,8 @@ class HybridValidator:
         context: Optional[Dict[str, Any]] = None
     ) -> str:
         """Erstellt Prompt für KI-Validierung"""
-        
-        # Field-spezifische Beschreibungen
-        field_descriptions = {
-            "firmenname": "Vollständiger Firmenname oder Name des Unternehmens (oft mit Rechtsform wie GmbH, AG, etc.)",
-            "adresse": "Vollständige Postanschrift mit Straße, Hausnummer, PLZ und Ort",
-            "email": "E-Mail-Adresse für Kontaktaufnahme",
-            "telefon": "Telefonnummer für Kontaktaufnahme",
-            "verantwortlicher": "Name des Verantwortlichen im Sinne der DSGVO",
-            "zwecke": "Zwecke der Datenverarbeitung (wofür werden Daten genutzt)",
-            "rechtsgrundlage": "Rechtsgrundlage für die Datenverarbeitung (z.B. Art. 6 DSGVO)",
-        }
-        
-        description = field_descriptions.get(field_name, f"Das Feld '{field_name}'")
+
+        description = self._FELD_BESCHREIBUNGEN.get(field_name, f"Das Feld '{field_name}'")
         
         # Ausschnitt um die relevante Passage. Frueher: die ersten 3000 Zeichen —
         # bei einer HTML-Seite war das der <head> mit Font-Preloads, die
@@ -458,20 +459,177 @@ Antworte NUR im angegebenen Format, keine zusätzlichen Erläuterungen."""
                 "reasoning": f"Parse error: {str(e)}"
             }
     
+    async def _ai_validate_fields_batch(
+        self,
+        unsichere_felder: Dict[str, ContentValidation],
+        text_content: str,
+        page_type: str,
+        user_id: Optional[str],
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        EIN OpenRouter-Call fuer ALLE unsicheren Felder einer Seite.
+
+        Vorher rief validate_page pro unsicherem Feld einen eigenen
+        _ai_validate_field-Call auf — bei einer Seite mit vielen Grenzfaellen
+        bis zu 16 einzelne Requests, jeder mit vollem Prompt-Overhead. Das war
+        der Kern des Vorfalls vom 04.09.2026. Ein gebuendelter Call mit einem
+        Prompt fuer alle Felder ersetzt das 1:1 funktional, kostet aber nur
+        noch einen Bruchteil.
+
+        Bei Fehler: leeres Dict, Aufrufer faellt pro Feld aufs Pattern-Ergebnis
+        zurueck (gleiches Fail-open wie beim bisherigen Einzel-Call).
+        """
+        prompt = self._create_batch_validation_prompt(unsichere_felder, text_content, page_type)
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    OPENROUTER_URL,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://complyo.de",
+                        "X-Title": "Complyo Hybrid Validator",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "max_tokens": min(4000, 200 * len(unsichere_felder) + 150),
+                        "temperature": 0,
+                    },
+                    timeout=aiohttp.ClientTimeout(total=25),
+                ) as resp:
+                    if resp.status != 200:
+                        if _openrouter_counter:
+                            _openrouter_counter.labels(status="error").inc()
+                        logger.error(f"❌ Batch-KI-Validierung fehlgeschlagen: OpenRouter Status {resp.status}")
+                        return {}
+                    data = await resp.json()
+
+            if _openrouter_counter:
+                _openrouter_counter.labels(status="success").inc()
+
+            usage = data.get("usage") or {}
+            kosten = ai_budget.kosten_eur(
+                self.model,
+                usage.get("prompt_tokens", 0),
+                usage.get("completion_tokens", 0),
+            )
+            await ai_budget.kosten_buchen(user_id, kosten)
+
+            ai_response = data["choices"][0]["message"]["content"]
+            ergebnisse = self._parse_batch_ai_response(ai_response, unsichere_felder)
+
+            logger.info(
+                f"✅ Batch-KI-Validierung: {len(ergebnisse)}/{len(unsichere_felder)} Felder "
+                f"in einem Call ({kosten:.4f} EUR)"
+            )
+            return ergebnisse
+
+        except Exception as e:
+            logger.error(f"❌ Batch-KI-Validierung fehlgeschlagen: {e}")
+            return {}
+
+    def _create_batch_validation_prompt(
+        self,
+        unsichere_felder: Dict[str, ContentValidation],
+        text_content: str,
+        page_type: str,
+    ) -> str:
+        """Ein Prompt fuer mehrere Felder statt einem Prompt je Feld.
+
+        Der Textauszug wird einmal fuer alle Felder gemeinsam genommen (statt
+        je Feld um den eigenen Treffer herum ausgeschnitten) — bei den ueblichen
+        Impressum-/Datenschutz-Seitenlaengen deckt das alle Felder ab und
+        bleibt trotzdem deutlich guenstiger als N einzelne 3000-Zeichen-Ausschnitte.
+        """
+        text_sample = text_content[: self._AUSSCHNITT_ZEICHEN * 2]
+
+        felder_block = []
+        antwort_bloecke = []
+        for i, (field_name, pattern_result) in enumerate(unsichere_felder.items(), start=1):
+            description = self._FELD_BESCHREIBUNGEN.get(field_name, f"Das Feld '{field_name}'")
+            felder_block.append(
+                f"{i}. FELD: {field_name}\n"
+                f"   Beschreibung: {description}\n"
+                f"   Pattern-Ergebnis: gefunden={pattern_result.found}, "
+                f"confidence={pattern_result.confidence:.2f}, "
+                f"wert={pattern_result.extracted_value or 'None'}"
+            )
+            antwort_bloecke.append(
+                f"### {i}\nFOUND: yes|no\nVALUE: [extrahierter Wert oder \"none\"]\n"
+                f"CONFIDENCE: [0.0-1.0]\nREASONING: [kurze Begründung]"
+            )
+
+        felder_text = "\n\n".join(felder_block)
+        antwort_text = "\n\n".join(antwort_bloecke)
+
+        return f"""Du bist ein Compliance-Experte für deutsche Websites.
+
+**Aufgabe:** Prüfe im folgenden Text-Auszug ALLE unten aufgeführten Felder — jedes für sich — und antworte für JEDES Feld in einem eigenen, nummerierten Block.
+
+**Kontext:** {page_type.upper()}-Seite
+
+**Text-Auszug:**
+```
+{text_sample}
+```
+
+**Zu prüfende Felder:**
+
+{felder_text}
+
+**Antwortformat — GENAU EIN Block pro Feld, in der Reihenfolge oben, mit der Nummer als Überschrift:**
+
+{antwort_text}
+
+Antworte NUR mit den nummerierten Blöcken, keine zusätzlichen Erläuterungen."""
+
+    def _parse_batch_ai_response(
+        self,
+        ai_response: str,
+        unsichere_felder: Dict[str, ContentValidation],
+    ) -> Dict[str, Dict[str, Any]]:
+        """Zerlegt die Batch-Antwort an den '### N'-Markern und parst jeden
+        Block mit derselben Logik wie eine Einzelantwort."""
+        feld_reihenfolge = list(unsichere_felder.keys())
+        ergebnisse: Dict[str, Dict[str, Any]] = {}
+
+        teile = re.split(r'^###\s*(\d+)\s*$', ai_response, flags=re.MULTILINE)
+        # re.split mit Fangruppe: [vor_erstem, num1, block1, num2, block2, ...]
+        for i in range(1, len(teile) - 1, 2):
+            try:
+                index = int(teile[i]) - 1
+            except ValueError:
+                continue
+            if index < 0 or index >= len(feld_reihenfolge):
+                continue
+            field_name = feld_reihenfolge[index]
+            ergebnisse[field_name] = self._parse_ai_response(
+                teile[i + 1], unsichere_felder[field_name]
+            )
+
+        return ergebnisse
+
     async def validate_page(
         self,
         page_type: str,
         text_content: str,
-        url: str
+        url: str,
+        user_id: Optional[str] = None,
+        plan_type: str = "free",
     ) -> Dict[str, Any]:
         """
         Validiert gesamte Seite (Impressum oder Datenschutz)
-        
+
         Args:
             page_type: "impressum" oder "datenschutz"
             text_content: Text-Content der Seite
             url: URL der Seite
-        
+            user_id: Konto, dem der Scan gehoert (fuer das KI-Monatsbudget;
+                None beim oeffentlichen Vorschau-Scan)
+            plan_type: Tarif des Kontos (bestimmt das Budget, siehe ai_budget)
+
         Returns:
             Dict mit Validierungs-Ergebnissen
         """
@@ -488,23 +646,81 @@ Antworte NUR im angegebenen Format, keine zusätzlichen Erläuterungen."""
             patterns = self.analyzer.datenschutz_patterns
         else:
             raise ValueError(f"Unbekannter Page-Type: {page_type}")
-        
-        # Validiere alle Felder
-        results = []
-        ai_calls = 0
-        
+
+        # STUFE 1: Pattern-Matching fuer alle Felder — schnell, kostenlos.
+        # Teilt die Felder in sicher (Pattern reicht), Grenzfall (Pattern OK,
+        # keine KI noetig) und unsicher (KI-Kandidat) auf.
+        results_by_field: Dict[str, HybridValidationResult] = {}
+        unsichere_felder: Dict[str, ContentValidation] = {}
+
         for field_name, field_config in patterns.items():
-            result = await self.validate_field(
-                field_name,
-                field_config,
-                text_content,
-                context={"page_type": page_type, "url": url}
-            )
-            results.append(result)
-            
-            if result.method_used == ValidationMethod.AI_ASSISTED:
-                ai_calls += 1
-        
+            validation = self.analyzer._validate_field(field_name, field_config, text_content, None)
+
+            if validation.confidence >= self.confident_threshold:
+                results_by_field[field_name] = HybridValidationResult(
+                    field_name=field_name, found=validation.found,
+                    confidence=validation.confidence, value=validation.extracted_value,
+                    method_used=ValidationMethod.PATTERN_ONLY,
+                )
+            elif validation.confidence < self.uncertain_threshold:
+                unsichere_felder[field_name] = validation
+            else:
+                results_by_field[field_name] = HybridValidationResult(
+                    field_name=field_name, found=validation.found,
+                    confidence=validation.confidence, value=validation.extracted_value,
+                    method_used=ValidationMethod.HYBRID,
+                )
+
+        # STUFE 2: EIN gebuendelter KI-Call fuer ALLE unsicheren Felder dieser
+        # Seite statt bis zu 16 Einzelcalls — siehe _ai_validate_fields_batch.
+        if unsichere_felder:
+            if not self.api_key:
+                logger.warning(f"⚠️ {len(unsichere_felder)} Felder unsicher, aber keine KI verfügbar")
+                for field_name, validation in unsichere_felder.items():
+                    results_by_field[field_name] = HybridValidationResult(
+                        field_name=field_name, found=validation.found,
+                        confidence=validation.confidence * 0.8, value=validation.extracted_value,
+                        method_used=ValidationMethod.PATTERN_ONLY,
+                    )
+            else:
+                budget_ok = await ai_budget.budget_frei(user_id, plan_type)
+                if not budget_ok:
+                    logger.warning(
+                        f"⚠️ KI-Budget erschöpft — {len(unsichere_felder)} unsichere Felder "
+                        f"bleiben bei Pattern-Ergebnis ({page_type}, {url})"
+                    )
+                    for field_name, validation in unsichere_felder.items():
+                        results_by_field[field_name] = HybridValidationResult(
+                            field_name=field_name, found=validation.found,
+                            confidence=validation.confidence * 0.8, value=validation.extracted_value,
+                            method_used=ValidationMethod.PATTERN_ONLY,
+                        )
+                else:
+                    logger.info(f"🤖 Batch-KI-Check für {len(unsichere_felder)} unsichere Felder ({page_type})")
+                    ai_ergebnisse = await self._ai_validate_fields_batch(
+                        unsichere_felder, text_content, page_type, user_id
+                    )
+                    for field_name, validation in unsichere_felder.items():
+                        ai_result = ai_ergebnisse.get(field_name)
+                        if ai_result is None:
+                            # Feld fehlte in der Antwort (Parse-Luecke o.ae.) → Pattern-Fallback.
+                            results_by_field[field_name] = HybridValidationResult(
+                                field_name=field_name, found=validation.found,
+                                confidence=validation.confidence * 0.7, value=validation.extracted_value,
+                                method_used=ValidationMethod.PATTERN_ONLY,
+                            )
+                        else:
+                            results_by_field[field_name] = HybridValidationResult(
+                                field_name=field_name, found=ai_result["found"],
+                                confidence=ai_result["confidence"], value=ai_result["value"],
+                                method_used=ValidationMethod.AI_ASSISTED,
+                                ai_reasoning=ai_result.get("reasoning"),
+                            )
+
+        # Urspruengliche Feldreihenfolge wiederherstellen
+        results = [results_by_field[fn] for fn in patterns.keys()]
+        ai_calls = sum(1 for r in results if r.method_used == ValidationMethod.AI_ASSISTED)
+
         # Statistiken
         total_fields = len(results)
         found_fields = sum(1 for r in results if r.found)

@@ -9,11 +9,15 @@ Claude Haiku (Vision). Per ENV überschreibbar via COMPLYO_ALT_TEXT_MODEL.
 
 import os
 import base64
+import hashlib
+import json
 import logging
 from typing import Optional, Dict, Any, List
 from urllib.parse import urlparse
 import aiohttp
 import asyncio
+
+from . import ai_budget
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +25,53 @@ logger = logging.getLogger(__name__)
 OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 DEFAULT_ALT_TEXT_MODEL = 'anthropic/claude-haiku-4.5'  # Claude Vision, kosteneffizient für Massen-Alt-Texte
 
+# Vorfall 04.09.2026: dasselbe Logo/Header-Bild taucht auf jeder Unterseite
+# auf, wurde aber bei jedem Vorkommen neu (und bezahlt) an Claude Vision
+# geschickt. Ein Cache über die Bild-URL macht aus N identischen Calls einen —
+# auch ueber Scans und Tage hinweg, nicht nur innerhalb eines Laufs.
+_CACHE_PRAEFIX = "ki:alttext-cache:"
+_CACHE_TTL_SEKUNDEN = 30 * 86400
+
 # Prometheus-Zähler für OpenRouter-Aufrufe (fail-open ohne metrics-Modul)
 try:
     from metrics import openrouter_requests_total as _openrouter_counter
 except Exception:
     _openrouter_counter = None
+
+
+async def _redis():
+    try:
+        from dependencies import get_redis
+        return await get_redis()
+    except Exception as e:
+        logger.warning(f"Alt-Text-Cache: Redis nicht erreichbar ({e})")
+        return None
+
+
+def _cache_schluessel(image_url: str) -> str:
+    return _CACHE_PRAEFIX + hashlib.sha256(image_url.encode("utf-8")).hexdigest()
+
+
+async def _cache_lesen(image_url: str) -> Optional[Dict[str, Any]]:
+    r = await _redis()
+    if r is None:
+        return None
+    try:
+        roh = await r.get(_cache_schluessel(image_url))
+        return json.loads(roh) if roh else None
+    except Exception as e:
+        logger.warning(f"Alt-Text-Cache: Lesen fehlgeschlagen ({e})")
+        return None
+
+
+async def _cache_schreiben(image_url: str, ergebnis: Dict[str, Any]) -> None:
+    r = await _redis()
+    if r is None:
+        return
+    try:
+        await r.set(_cache_schluessel(image_url), json.dumps(ergebnis), ex=_CACHE_TTL_SEKUNDEN)
+    except Exception as e:
+        logger.warning(f"Alt-Text-Cache: Schreiben fehlgeschlagen ({e})")
 
 
 class AIAltTextGenerator:
@@ -157,7 +203,9 @@ class AIAltTextGenerator:
         image_url: str,
         context: Optional[str] = None,
         language: str = 'de',
-        site_id: Optional[str] = None
+        site_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        plan_type: str = "free",
     ) -> Dict[str, Any]:
         """
         Generiert Alt-Text für Bild von URL
@@ -169,6 +217,8 @@ class AIAltTextGenerator:
             site_id: Optionale Site-ID für die Lernschleife (Few-Shots aus
                      Freigaben; falls None, wird die Site über den Host der
                      Bild-URL zugeordnet)
+            user_id: Konto, dem der Scan gehoert (fuer das KI-Monatsbudget)
+            plan_type: Tarif des Kontos (bestimmt das Budget, siehe ai_budget)
 
         Returns:
             Dict mit 'alt_text', 'confidence' und 'reasoning'
@@ -176,6 +226,13 @@ class AIAltTextGenerator:
         if not self.api_key:
             logger.warning("No OpenRouter API key configured, falling back to basic generation")
             return self._fallback_response()
+
+        # Dasselbe Bild (Logo, Header, Icon) taucht oft auf jeder Unterseite
+        # auf. Cache-Treffer spart den kompletten Call inkl. Bild-Download.
+        cached = await _cache_lesen(image_url)
+        if cached is not None:
+            logger.info(f"🗃️ Alt-Text aus Cache: {image_url}")
+            return cached
 
         # Lernschleife: freigegebene Alt-Texte + Ablehnungsgründe der Site
         # als Beispiele in den Prompt aufnehmen (fail-open)
@@ -193,9 +250,15 @@ class AIAltTextGenerator:
             logger.warning(f"Bild konnte nicht geladen werden: {image_url}")
             return self._fallback_response()
 
-        return await self.generate_alt_text_from_base64(
-            data_url, context, language, learning_examples=learning_examples
+        ergebnis = await self.generate_alt_text_from_base64(
+            data_url, context, language, learning_examples=learning_examples,
+            user_id=user_id, plan_type=plan_type,
         )
+
+        if ergebnis.get("source") == "claude_vision":
+            await _cache_schreiben(image_url, ergebnis)
+
+        return ergebnis
 
     async def _download_as_data_url(self, image_url: str) -> Optional[str]:
         """Lädt ein Bild herunter und gibt eine base64-Data-URL zurück (oder None)."""
@@ -238,7 +301,9 @@ class AIAltTextGenerator:
         context: Optional[str] = None,
         language: str = 'de',
         site_id: Optional[str] = None,
-        learning_examples: Optional[Dict[str, List[str]]] = None
+        learning_examples: Optional[Dict[str, List[str]]] = None,
+        user_id: Optional[str] = None,
+        plan_type: str = "free",
     ) -> Dict[str, Any]:
         """
         Generiert Alt-Text für Bild von Base64-String
@@ -250,11 +315,19 @@ class AIAltTextGenerator:
             site_id: Optionale Site-ID für die Lernschleife
             learning_examples: Bereits geladene Lernbeispiele (intern, spart
                                doppelte DB-Zugriffe aus generate_alt_text)
+            user_id: Konto, dem der Scan gehoert (fuer das KI-Monatsbudget)
+            plan_type: Tarif des Kontos (bestimmt das Budget, siehe ai_budget)
 
         Returns:
             Dict mit Alt-Text-Informationen
         """
         if not self.api_key:
+            return self._fallback_response()
+
+        # Harter Stopp: kein Call ueber das Budget hinaus. Fail-open-Fallback
+        # (Kontext-Heuristik) existiert bereits am Aufrufer.
+        if not await ai_budget.budget_frei(user_id, plan_type):
+            logger.warning("⚠️ KI-Budget erschöpft — Alt-Text-Generierung übersprungen")
             return self._fallback_response()
 
         try:
@@ -309,6 +382,15 @@ class AIAltTextGenerator:
                     if _openrouter_counter:
                         _openrouter_counter.labels(status="success").inc()
                     data = await response.json()
+
+                    usage = data.get('usage') or {}
+                    kosten = ai_budget.kosten_eur(
+                        self.model,
+                        usage.get('prompt_tokens', 0),
+                        usage.get('completion_tokens', 0),
+                    )
+                    await ai_budget.kosten_buchen(user_id, kosten)
+
                     alt_text = data['choices'][0]['message']['content'].strip()
                     alt_text = self._clean_alt_text(alt_text)
 
@@ -350,14 +432,18 @@ class AIAltTextGenerator:
                         img_data['url'],
                         img_data.get('context'),
                         img_data.get('language', 'de'),
-                        site_id=img_data.get('site_id')
+                        site_id=img_data.get('site_id'),
+                        user_id=img_data.get('user_id'),
+                        plan_type=img_data.get('plan_type', 'free'),
                     )
                 elif 'base64' in img_data:
                     return await self.generate_alt_text_from_base64(
                         img_data['base64'],
                         img_data.get('context'),
                         img_data.get('language', 'de'),
-                        site_id=img_data.get('site_id')
+                        site_id=img_data.get('site_id'),
+                        user_id=img_data.get('user_id'),
+                        plan_type=img_data.get('plan_type', 'free'),
                     )
                 else:
                     return self._fallback_response()

@@ -11,7 +11,7 @@ from accessibility_post_scan_processor import AccessibilityPostScanProcessor
 
 @pytest.mark.asyncio
 async def test_alt_text_uses_claude_vision(monkeypatch):
-    async def fake(self, image_url, context="", language="de"):
+    async def fake(self, image_url, context="", language="de", **kwargs):
         return {"alt_text": "Rote Katze auf blauem Sofa", "confidence": 0.95, "source": "claude_vision"}
 
     monkeypatch.setattr(altgen.AIAltTextGenerator, "generate_alt_text", fake)
@@ -28,7 +28,7 @@ async def test_alt_text_uses_claude_vision(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_alt_text_falls_back_when_vision_unavailable(monkeypatch):
-    async def fake(self, image_url, context="", language="de"):
+    async def fake(self, image_url, context="", language="de", **kwargs):
         return {"alt_text": "Bild", "confidence": 0.2, "source": "fallback"}
 
     monkeypatch.setattr(altgen.AIAltTextGenerator, "generate_alt_text", fake)
@@ -56,7 +56,7 @@ async def test_befund_ohne_bildadresse_erzeugt_keinen_vorschlag(monkeypatch):
     """
     calls = {"n": 0}
 
-    async def fake(self, image_url, context="", language="de"):
+    async def fake(self, image_url, context="", language="de", **kwargs):
         calls["n"] += 1
         return {"alt_text": "x", "confidence": 0.9, "source": "claude_vision"}
 
@@ -79,7 +79,7 @@ async def test_adresse_aus_dem_markup_rettet_den_befund(monkeypatch):
     """
     calls = {"n": 0}
 
-    async def fake(self, image_url, context="", language="de"):
+    async def fake(self, image_url, context="", language="de", **kwargs):
         calls["n"] += 1
         return {"alt_text": "Gelber Sattelzug", "confidence": 0.9,
                 "source": "claude_vision"}
