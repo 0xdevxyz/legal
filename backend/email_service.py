@@ -764,29 +764,104 @@ Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
                 fusszeile = (
                     "Double-Opt-In ausstehend – Bestätigungsmail wurde an den Nutzer gesendet."
                 )
+            # Die Mail traegt genau eine Nachricht, und die gehoert gross
+            # nach oben: bei einer neuen Anmeldung die Adresse, bei einer
+            # Bestaetigung die Platznummer. Alles andere sind Nebenangaben.
+            #
+            # Vorher stand ueber allem ein blauer Balken mit dem Wort
+            # "complyo – Neue Waitlist-Anmeldung", darunter eine graue Tabelle
+            # mit sechs gleich gewichteten Zeilen. Es war nichts falsch daran,
+            # aber man musste lesen, um zu erfahren, was passiert ist.
+            #
+            # Aufbau bewusst mit Tabellen und Inline-Stilen: Outlook rendert
+            # weder flex noch grid, und externe Schriften laedt kein
+            # Mailprogramm zuverlaessig.
+            if bestaetigt and platz_nr:
+                augenmerk = "Warteliste"
+                schlagzeile = f"Platz {platz_nr}"
+                unterzeile = email
+            elif bestaetigt:
+                augenmerk = "Warteliste"
+                schlagzeile = "Bestätigt"
+                unterzeile = email
+            else:
+                augenmerk = "Neue Anmeldung"
+                schlagzeile = email
+                unterzeile = ""
+
+            def _zeile(bezeichnung: str, wert: str) -> str:
+                return (
+                    '<tr>'
+                    '<td style="padding:0 0 14px;color:#7f92a3;font-size:14px;'
+                    'width:132px;vertical-align:top;">' + bezeichnung + '</td>'
+                    '<td style="padding:0 0 14px;color:#22384a;font-size:14px;">'
+                    + wert + '</td>'
+                    '</tr>'
+                )
+
+            angaben = (
+                _zeile("E-Mail", email)
+                + _zeile("Name", display_name)
+                + _zeile("Telefon", display_phone)
+                + _zeile("Quelle", source)
+                + _zeile("Herkunft", herkunft or "(direkt)")
+                + _zeile("Angebot", angebot or "(keines)")
+            )
+
+            schrift = ("-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,"
+                       "Helvetica,Arial,sans-serif")
+
+            unterzeile_html = (
+                f'<div style="margin:10px 0 0;color:#5d7285;font-size:16px;">'
+                f'{unterzeile}</div>' if unterzeile else ""
+            )
+
             html_body = f"""<!DOCTYPE html>
 <html lang="de">
-<head><meta charset="utf-8"><title>Neue Waitlist-Anmeldung</title></head>
-<body style="font-family:Arial,sans-serif;color:#333;max-width:500px;margin:0 auto;padding:20px;">
-  <div style="background:#2563eb;color:white;padding:16px 20px;border-radius:10px 10px 0 0;">
-    <strong>{kopfzeile}</strong>
-  </div>
-  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;padding:20px;border-radius:0 0 10px 10px;">
-    <table style="width:100%;border-collapse:collapse;font-size:14px;">
-      <tr><td style="padding:6px 0;color:#64748b;width:110px;">E-Mail</td><td style="padding:6px 0;font-weight:bold;">{email}</td></tr>
-      <tr><td style="padding:6px 0;color:#64748b;">Name</td><td style="padding:6px 0;">{display_name}</td></tr>
-      <tr><td style="padding:6px 0;color:#64748b;">Telefon</td><td style="padding:6px 0;">{display_phone}</td></tr>
-      <tr><td style="padding:6px 0;color:#64748b;">Quelle</td><td style="padding:6px 0;">{source}</td></tr>
-      <tr><td style="padding:6px 0;color:#64748b;">Herkunft</td><td style="padding:6px 0;">{herkunft or "(direkt)"}</td></tr>
-      <tr><td style="padding:6px 0;color:#64748b;">Angebot</td><td style="padding:6px 0;">{angebot or "(keines)"}</td></tr>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>{kopfzeile}</title></head>
+<body style="margin:0;padding:0;background:#eef4fa;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="background:#eef4fa;padding:32px 16px;">
+  <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+           style="width:100%;max-width:600px;">
+
+      <tr><td style="padding:0 0 20px;font-family:{schrift};font-size:13px;
+                     color:#8ea2b4;text-align:center;letter-spacing:.04em;">
+        complyo
+      </td></tr>
+
+      <tr><td style="background:#ffffff;border-radius:14px;padding:40px 40px 36px;
+                     font-family:{schrift};">
+        <div style="color:#8ea2b4;font-size:14px;">{augenmerk}</div>
+        <div style="margin:14px 0 0;color:#1f3d55;font-size:34px;line-height:1.2;
+                    font-weight:700;word-break:break-word;">{schlagzeile}</div>
+        {unterzeile_html}
+      </td></tr>
+
+      <tr><td style="height:16px;line-height:16px;font-size:0;">&nbsp;</td></tr>
+
+      <tr><td style="background:#ffffff;border-radius:14px;padding:32px 40px 22px;
+                     font-family:{schrift};">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          {angaben}
+        </table>
+      </td></tr>
+
+      <tr><td style="padding:22px 40px 0;font-family:{schrift};font-size:13px;
+                     line-height:1.6;color:#8ea2b4;">
+        {fusszeile}
+      </td></tr>
+
     </table>
-    <p style="font-size:12px;color:#94a3b8;margin-top:16px;">
-      {fusszeile}
-    </p>
-  </div>
+  </td></tr>
+</table>
 </body>
 </html>"""
-            text_body = f"""{kopfzeile}
+            text_body = f"""{augenmerk}
+
+{schlagzeile}{chr(10) + unterzeile if unterzeile else ""}
 
 E-Mail:   {email}
 Name:     {display_name}
