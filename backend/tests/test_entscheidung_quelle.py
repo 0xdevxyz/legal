@@ -43,14 +43,23 @@ def _lies(*teile):
 # ---------------------------------------------------------------------------
 
 MIGRATION = os.path.join(
-    BACKEND, 'alembic', 'versions', '20260905_0024_entscheidung_quelle.py')
+    BACKEND, 'alembic', 'versions', '20260907_0024b_entscheidung_quelle.py')
 
 
 class TestMigration:
-    def test_migration_existiert_und_haengt_an_0023(self):
+    def test_migration_haengt_an_0023_und_nicht_an_der_schwester(self):
+        """Bewusst ein Zweig hinter 0023.
+
+        Parallel entstand am 07.09. eine zweite 0024, die auf der
+        Produktionsdatenbank steht, aber in keinem Commit liegt. Eine
+        Abhaengigkeit darauf wuerde jede frische Auscheckung brechen — die
+        Kette risse an einer Revision, die es in der Versionsverwaltung nicht
+        gibt.
+        """
         s = _lies(MIGRATION)
         assert 'revision: str = "0024_entscheidung_quelle"' in s
         assert 'down_revision: Union[str, None] = "0023_ablehngrund_pruefregeln"' in s
+        assert "0024_gen_docs_version" not in s.split('"""')[2]
 
     def test_nachtrag_nur_vor_der_freischaltung_der_freigaberoute(self):
         """Alles nach dem 05.09. bleibt NULL.

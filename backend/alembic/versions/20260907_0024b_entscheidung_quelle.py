@@ -31,9 +31,23 @@ Statusangabe — ein Skript, eine spaetere Route, ein Handgriff in psql — waer
 still wieder auf Auto-Freigabe gelaufen. Ein Vorgabewert, der der
 Produktentscheidung widerspricht, ist eine Falle, die irgendwann zuschnappt.
 
+**Diese Revision ist ein zweiter Zweig hinter 0023, kein Nachfolger von
+0024_gen_docs_version.** Am 07.09. wurde parallel eine zweite Revision mit der
+Nummer 0024 angelegt und auf die Produktionsdatenbank angewandt — sie liegt
+dort aber bis heute als unversionierte Datei, in keinem Commit. Eine
+Abhaengigkeit auf eine Revision zu setzen, die es in der Versionsverwaltung
+nicht gibt, wuerde jede frische Auscheckung unbrauchbar machen: die Kette
+braeche an einer Stelle, die niemand nachvollziehen kann.
+
+Als Zweig geht beides: `alembic upgrade heads` wendet beide an, und sobald die
+Schwesterrevision eingecheckt ist, fuehrt eine Merge-Revision die Koepfe
+zusammen. Bis dahin schlaegt `alembic upgrade head` (Einzahl) fehl und
+verlangt ein Ziel — unschoen, aber ehrlich: es gibt gerade wirklich zwei
+Koepfe.
+
 Revision ID: 0024_entscheidung_quelle
 Revises: 0023_ablehngrund_pruefregeln
-Create Date: 2026-09-05
+Create Date: 2026-09-07
 """
 from typing import Sequence, Union
 
