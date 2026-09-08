@@ -38,7 +38,7 @@ export default function NavBar() {
               <a
                 key={link.href}
                 href={link.href}
-                className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
+                className="text-sm font-medium text-gray-600 hover:text-akzent-700 transition-colors"
               >
                 {link.label}
               </a>
@@ -52,7 +52,7 @@ export default function NavBar() {
           <div className="hidden lg:flex items-center gap-4">
             <a
               href="/#anmeldung"
-              className="text-sm bg-blue-700 hover:bg-blue-800 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+              className="text-sm bg-akzent-800 hover:bg-akzent-900 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
             >
               Platz sichern
             </a>
@@ -80,7 +80,7 @@ export default function NavBar() {
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
-                className="block px-2 py-2 text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
+                className="block px-2 py-2 text-sm font-medium text-gray-600 hover:text-akzent-700 transition-colors"
               >
                 {link.label}
               </a>
@@ -89,7 +89,7 @@ export default function NavBar() {
               <a
                 href="/#anmeldung"
                 onClick={() => setOpen(false)}
-                className="block text-sm text-center bg-blue-600 text-white font-semibold rounded-lg px-4 py-2.5"
+                className="block text-sm text-center bg-akzent-800 text-white font-semibold rounded-lg px-4 py-2.5"
               >
                 Platz sichern
               </a>

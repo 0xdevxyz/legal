@@ -96,7 +96,7 @@ export default function Erklaervideo() {
           hoeren koennen oder wollen (WCAG 1.2.3). Zugeklappt, damit
           sie den Hero nicht auseinanderzieht. */}
       <details className="border-t border-gray-100 px-5 py-3 text-left">
-        <summary className="cursor-pointer text-xs font-semibold text-gray-700 hover:text-blue-700">
+        <summary className="cursor-pointer text-xs font-semibold text-gray-700 hover:text-akzent-800">
           Transkript des Videos anzeigen
         </summary>
         <div className="mt-3 space-y-2 text-xs leading-relaxed text-gray-600">

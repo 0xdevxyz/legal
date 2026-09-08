@@ -68,7 +68,7 @@ export default function RootLayout({
             arbeiten (WCAG 2.4.1). Sichtbar nur bei Fokus. */}
         <a
           href="#inhalt"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-blue-700 focus:shadow-lg focus:outline focus:outline-2 focus:outline-blue-600"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-akzent-800 focus:shadow-lg focus:outline focus:outline-2 focus:outline-akzent-700"
         >
           Zum Inhalt springen
         </a>

@@ -16,7 +16,7 @@ export default function FooterSection() {
             </p>
             <a
               href="/#anmeldung"
-              className="inline-flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 bg-akzent-400 hover:bg-akzent-200 text-gray-900 text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
             >
               Platz sichern
             </a>

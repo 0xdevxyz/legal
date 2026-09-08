@@ -4,10 +4,14 @@
  */
 
 :root {
-  /* Brand Colors */
-  --primary: #2563eb;
-  --primary-dark: #1d4ed8;
-  --primary-light: #3b82f6;
+  /* Brand Colors
+     Akzent aus dem Logo (#00FFF7). --primary traegt weisse Schrift und ist
+     deshalb die dunkle Stufe des Farbtons (4,80:1 auf Weiss); die reine
+     Logofarbe steht als --primary-light und ist nur fuer Flaechen ohne
+     Text gedacht. */
+  --primary: #00807b;
+  --primary-dark: #00706c;
+  --primary-light: #00fff7;
   
   --secondary: #8b5cf6;
   --secondary-dark: #7c3aed;

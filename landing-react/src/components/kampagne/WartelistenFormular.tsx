@@ -225,13 +225,13 @@ export default function WartelistenFormular({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="deine@firma.de"
-            className="w-full px-4 py-3.5 rounded-xl border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+            className="w-full px-4 py-3.5 rounded-xl border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-akzent-700 focus:border-akzent-700"
           />
         </div>
         <button
           type="submit"
           disabled={formState === 'loading'}
-          className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed text-white font-semibold px-6 py-3.5 rounded-xl transition-colors whitespace-nowrap"
+          className="inline-flex items-center justify-center gap-2 bg-akzent-700 hover:bg-akzent-800 disabled:opacity-70 disabled:cursor-not-allowed text-white font-semibold px-6 py-3.5 rounded-xl transition-colors whitespace-nowrap"
         >
           {formState === 'loading' ? (
             <>
@@ -257,13 +257,13 @@ export default function WartelistenFormular({
           type="checkbox"
           checked={consent}
           onChange={(e) => { setConsent(e.target.checked); setConsentError(false); }}
-          className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600"
+          className="mt-0.5 w-4 h-4 rounded border-gray-300 text-akzent-700 focus:ring-akzent-700"
         />
         <span>
           Ich möchte zum Start benachrichtigt werden und bin damit einverstanden, dass complyo
           meine E-Mail-Adresse dafür speichert. Widerruf jederzeit über den Abmeldelink in jeder
           Mail. Näheres in der{' '}
-          <a href="/datenschutz" className="text-blue-600 underline hover:text-blue-700">
+          <a href="/datenschutz" className="text-akzent-700 underline hover:text-akzent-800">
             Datenschutzerklärung
           </a>
           .
