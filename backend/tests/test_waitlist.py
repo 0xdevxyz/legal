@@ -32,10 +32,17 @@ def form_token(vor_sekunden: int = 10) -> str:
     """
     import hashlib
     import hmac as _hmac
+    import secrets
     import lead_routes
 
+    # Der Zufallsteil muss echter Zufall sein, so wie ihn
+    # formular_token_erzeugen es setzt. Stand hier die feste Zeichenkette
+    # "testzufall", waren zwei Token aus derselben Sekunde Byte fuer Byte
+    # gleich, und die Sperrliste verwarf das zweite zu Recht als
+    # Wiedervorlage. Genau daran hingen drei Fehlschlaege, die je nach
+    # Reihenfolge durch die Datei wanderten.
     ausgestellt = int(datetime.now(timezone.utc).timestamp()) - vor_sekunden
-    rumpf = f"{lead_routes._TOKEN_VERSION}.{ausgestellt}.testzufall"
+    rumpf = f"{lead_routes._TOKEN_VERSION}.{ausgestellt}.{secrets.token_urlsafe(9)}"
     signatur = _hmac.new(
         os.environ["JWT_SECRET"].encode(), rumpf.encode(), hashlib.sha256
     ).hexdigest()[:32]
@@ -52,18 +59,31 @@ def _form_ts(vor_sekunden: float = 10) -> int:
     return int((datetime.now(timezone.utc).timestamp() - vor_sekunden) * 1000)
 
 
-VALID_PAYLOAD = {
-    "email": "test@example.de",
-    "name": "Max Mustermann",
-    "phone": "+49 123 456789",
-    "consent": True,
-    "website": "",
-    "source": "early-access",
-    # form_ts ist die Altlast: der Endpunkt wertet es nicht mehr aus, weil der
-    # Client es beliebig setzen konnte. Massgeblich ist form_token.
-    "form_ts": _form_ts(),
-    "form_token": form_token(),
-}
+def gueltige_daten() -> dict:
+    """Eine vollstaendige Anmeldung, mit frischem Token bei jedem Aufruf.
+
+    Frueher stand hier die Modul-Konstante VALID_PAYLOAD, deren form_token
+    einmal beim Import ausgestellt wurde. Alle Tests der Datei legten damit
+    dasselbe Token vor. Der erste Test, der den Endpunkt erreichte, verbrauchte
+    es; jeder weitere Test bekam 204 "Formular-Token bereits verwendet" statt
+    der erwarteten Antwort. Welche drei Tests das traf, entschied allein die
+    Ausfuehrungsreihenfolge.
+
+    Ein Token ist einmalig, also gehoert es nicht in eine Konstante.
+    """
+    return {
+        "email": "test@example.de",
+        "name": "Max Mustermann",
+        "phone": "+49 123 456789",
+        "consent": True,
+        "website": "",
+        "source": "early-access",
+        # form_ts ist die Altlast: der Endpunkt wertet es nicht mehr aus, weil
+        # der Client es beliebig setzen konnte. Massgeblich ist form_token.
+        "form_ts": _form_ts(),
+        "form_token": form_token(),
+    }
+
 
 CONFIRM_TOKEN = "valid_token_abc123"
 
@@ -110,6 +130,49 @@ def reset_rate_limit():
     lead_routes._rate_limit_store.clear()
 
 
+class SperrlisteImSpeicher:
+    """Redis-Ersatz, der genau so viel kann, wie _token_entwerten braucht.
+
+    Nur SET mit nx und ex. Die Logik des Produktionscodes, also Schluessel
+    bilden, SET NX auswerten und einen Ausfall fail-open behandeln, bleibt
+    dabei unter Test; ausgetauscht ist allein der Speicher dahinter.
+    """
+
+    def __init__(self):
+        self.schluessel = {}
+
+    async def set(self, schluessel, wert, ex=None, nx=False):
+        if nx and schluessel in self.schluessel:
+            return None
+        self.schluessel[schluessel] = wert
+        return True
+
+
+@pytest.fixture(autouse=True)
+def token_sperrliste():
+    """Jeder Test bekommt eine leere Token-Sperrliste.
+
+    Ohne das lief die Sperrliste gegen das echte Redis des Containers. Deren
+    Schluessel halten sechs Stunden (_MAX_FORM_AGE_SECONDS) und ueberleben
+    damit nicht nur den einzelnen Test, sondern den ganzen Testlauf: ein Token,
+    das ein Test verbrannt hat, war fuer jeden spaeteren Lauf gesperrt. Ein
+    Einzeltest lief deshalb genau einmal gruen und danach rot.
+
+    Der Ersatz haelt die Sperre je Test. Die Einmaligkeit wird also weiterhin
+    scharf geprueft (siehe TestTokenEinmalig), nur eben nicht ueber
+    Testgrenzen hinweg.
+    """
+    import lead_routes
+
+    sperrliste = SperrlisteImSpeicher()
+
+    async def _hole_redis():
+        return sperrliste
+
+    with patch.object(lead_routes, "get_redis", _hole_redis):
+        yield sperrliste
+
+
 class TestWaitlistJoin:
     @patch("lead_routes.email_service")
     @patch("lead_routes.db_service")
@@ -117,7 +180,7 @@ class TestWaitlistJoin:
         conn = verbindung(mock_db, fetchrow=[None])
         mock_email.send_waitlist_confirmation = MagicMock(return_value=True)
 
-        response = client.post("/api/leads/waitlist", json=VALID_PAYLOAD)
+        response = client.post("/api/leads/waitlist", json=gueltige_daten())
 
         assert response.status_code == 200
         conn.execute.assert_awaited_once()
@@ -127,19 +190,19 @@ class TestWaitlistJoin:
 
     @patch("lead_routes.db_service")
     def test_consent_false_returns_422(self, mock_db, client):
-        payload = {**VALID_PAYLOAD, "consent": False}
+        payload = {**gueltige_daten(), "consent": False}
         response = client.post("/api/leads/waitlist", json=payload)
         assert response.status_code == 422
 
     def test_honeypot_filled_returns_204(self, client):
-        payload = {**VALID_PAYLOAD, "website": "http://spam.bot"}
+        payload = {**gueltige_daten(), "website": "http://spam.bot"}
         response = client.post("/api/leads/waitlist", json=payload)
         assert response.status_code == 204
 
     @patch("lead_routes.db_service")
     def test_ohne_form_token_kein_eintrag(self, mock_db, client):
         """Wer direkt auf den Endpunkt POSTet, hat sich kein Token abgeholt."""
-        payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "form_token"}
+        payload = {k: v for k, v in gueltige_daten().items() if k != "form_token"}
         response = client.post("/api/leads/waitlist", json=payload)
         assert response.status_code == 204
         mock_db.get_connection.assert_not_called()
@@ -155,7 +218,7 @@ class TestWaitlistJoin:
         """
         gefaelscht = f"v1.{int(datetime.now(timezone.utc).timestamp()) - 10}.xx.{'a' * 32}"
         response = client.post(
-            "/api/leads/waitlist", json={**VALID_PAYLOAD, "form_token": gefaelscht}
+            "/api/leads/waitlist", json={**gueltige_daten(), "form_token": gefaelscht}
         )
         assert response.status_code == 204
         mock_db.get_connection.assert_not_called()
@@ -165,7 +228,7 @@ class TestWaitlistJoin:
         """Frisch ausgestelltes Token: kein Mensch tippt in unter vier Sekunden."""
         response = client.post(
             "/api/leads/waitlist",
-            json={**VALID_PAYLOAD, "form_token": form_token(vor_sekunden=1)},
+            json={**gueltige_daten(), "form_token": form_token(vor_sekunden=1)},
         )
         assert response.status_code == 204
         mock_db.get_connection.assert_not_called()
@@ -175,7 +238,7 @@ class TestWaitlistJoin:
         """Älter als 6 Stunden — vermutlich ein wiederverwendetes Formular."""
         response = client.post(
             "/api/leads/waitlist",
-            json={**VALID_PAYLOAD, "form_token": form_token(vor_sekunden=7 * 3600)},
+            json={**gueltige_daten(), "form_token": form_token(vor_sekunden=7 * 3600)},
         )
         assert response.status_code == 204
         mock_db.get_connection.assert_not_called()
@@ -188,7 +251,7 @@ class TestWaitlistJoin:
         Token einfach weglassen und stattdessen den selbstgesetzten Zeitstempel
         schicken — die Umstellung waere wirkungslos.
         """
-        payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "form_token"}
+        payload = {k: v for k, v in gueltige_daten().items() if k != "form_token"}
         payload["form_ts"] = _form_ts(vor_sekunden=30)
         response = client.post("/api/leads/waitlist", json=payload)
         assert response.status_code == 204
@@ -200,7 +263,7 @@ class TestWaitlistJoin:
         import lead_routes
 
         monkeypatch.setattr(lead_routes, "TURNSTILE_SECRET", "geheim")
-        payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "turnstile_token"}
+        payload = {k: v for k, v in gueltige_daten().items() if k != "turnstile_token"}
         response = client.post("/api/leads/waitlist", json=payload)
         assert response.status_code == 204
         mock_db.get_connection.assert_not_called()
@@ -209,7 +272,7 @@ class TestWaitlistJoin:
     def test_duplicate_email_returns_already_registered(self, mock_db, client):
         verbindung(mock_db, fetchrow=[{"id": "existing-id", "confirmed_at": None}])
 
-        response = client.post("/api/leads/waitlist", json=VALID_PAYLOAD)
+        response = client.post("/api/leads/waitlist", json=gueltige_daten())
 
         assert response.status_code == 200
         data = response.json()
@@ -221,30 +284,79 @@ class TestWaitlistJoin:
         verbindung(mock_db, fetchrow=[None] * 10)
         mock_email.send_waitlist_confirmation = MagicMock(return_value=True)
 
-        for _ in range(3):
+        # 200, nicht "200 oder 204": das Rate-Limit greift erst nach Honeypot,
+        # Token und Turnstile. Wer hier 204 durchgehen laesst, prueft nichts
+        # mehr: drei stumm verworfene Anfragen verbrauchen kein Budget, und
+        # die vierte kaeme dann nur zufaellig auf 429. Genau so hat dieser
+        # Test seinen Fehlschlag lange als Rate-Limit-Problem getarnt.
+        for nummer in range(1, 4):
             r = client.post(
                 "/api/leads/waitlist",
-                json={**VALID_PAYLOAD, "form_token": form_token()},
+                json={**gueltige_daten(), "form_token": form_token()},
             )
-            assert r.status_code in (200, 204)
+            assert r.status_code == 200, (
+                f"Anmeldung {nummer} kam nicht durch (HTTP {r.status_code}): "
+                f"das Rate-Limit-Budget wurde gar nicht verbraucht"
+            )
 
         fourth = client.post(
             "/api/leads/waitlist",
-            json={**VALID_PAYLOAD, "form_token": form_token()},
+            json={**gueltige_daten(), "form_token": form_token()},
         )
         assert fourth.status_code == 429
 
     @patch("lead_routes.db_service")
     def test_invalid_email_returns_422(self, mock_db, client):
-        payload = {**VALID_PAYLOAD, "email": "not-an-email"}
+        payload = {**gueltige_daten(), "email": "not-an-email"}
         response = client.post("/api/leads/waitlist", json=payload)
         assert response.status_code == 422
 
     @patch("lead_routes.db_service")
     def test_invalid_phone_returns_422(self, mock_db, client):
-        payload = {**VALID_PAYLOAD, "phone": "<script>alert(1)</script>"}
+        payload = {**gueltige_daten(), "phone": "<script>alert(1)</script>"}
         response = client.post("/api/leads/waitlist", json=payload)
         assert response.status_code == 422
+
+
+class TestTokenEinmalig:
+    """Ein Formular-Token darf genau eine Anmeldung tragen.
+
+    Diese Zusage war Produktionsverhalten ohne Test, und genau sie hat die
+    Testdatei reihenfolgeabhaengig gemacht, ohne dass es jemandem auffiel.
+    Seit die Sperrliste je Test isoliert ist, muss sie hier belegt werden,
+    sonst wuerde die Isolation eine echte Schutzwirkung verdecken.
+    """
+
+    @patch("lead_routes.email_service")
+    @patch("lead_routes.db_service")
+    def test_zweite_vorlage_wird_verworfen(self, mock_db, mock_email, client):
+        verbindung(mock_db, fetchrow=[None] * 4)
+        mock_email.send_waitlist_confirmation = MagicMock(return_value=True)
+
+        daten = gueltige_daten()
+
+        erste = client.post("/api/leads/waitlist", json=daten)
+        assert erste.status_code == 200
+
+        zweite = client.post("/api/leads/waitlist", json=daten)
+        assert zweite.status_code == 204, "wiedervorgelegtes Token wurde angenommen"
+
+    @patch("lead_routes.email_service")
+    @patch("lead_routes.db_service")
+    def test_ausfall_der_sperrliste_blockiert_keine_anmeldung(
+        self, mock_db, mock_email, client, token_sperrliste
+    ):
+        """Fail-open: eine kaputte Sperrliste darf keine Anmeldung fressen."""
+        verbindung(mock_db, fetchrow=[None] * 4)
+        mock_email.send_waitlist_confirmation = MagicMock(return_value=True)
+
+        async def _faellt_aus(*a, **k):
+            raise ConnectionError("Redis weg")
+
+        token_sperrliste.set = _faellt_aus
+
+        antwort = client.post("/api/leads/waitlist", json=gueltige_daten())
+        assert antwort.status_code == 200
 
 
 class TestWaitlistConfirm:
@@ -333,7 +445,7 @@ class TestHerkunft:
         mock_email.send_waitlist_confirmation = MagicMock(return_value=True)
 
         payload = {
-            **VALID_PAYLOAD,
+            **gueltige_daten(),
             "campaign": "ea100-bfsg",
             "utm_source": "google",
             "utm_medium": "cpc",
@@ -357,7 +469,7 @@ class TestHerkunft:
         conn = verbindung(mock_db, fetchrow=[None])
         mock_email.send_waitlist_confirmation = MagicMock(return_value=True)
 
-        response = client.post("/api/leads/waitlist", json=VALID_PAYLOAD)
+        response = client.post("/api/leads/waitlist", json=gueltige_daten())
 
         assert response.status_code == 200
         args = conn.execute.await_args.args
@@ -670,7 +782,7 @@ class TestZustellbarkeit:
         response = client.post(
             "/api/leads/waitlist",
             json={
-                **VALID_PAYLOAD,
+                **gueltige_daten(),
                 "email": "wer@diese-domain-existiert-ganz-sicher-nicht-4711.de",
                 "form_token": form_token(),
             },
