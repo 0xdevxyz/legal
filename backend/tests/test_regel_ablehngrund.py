@@ -82,6 +82,18 @@ class TestAuswertung:
         assert "dismissal_reason IS NOT NULL AND dismissal_reason <> ''" in s
 
 
+# Diese Klasse liest Frontend-Quelltext, der im Repo neben backend/ liegt. Im
+# Backend-Container ist nur backend/ nach /app kopiert, dort gibt es ihn nicht —
+# das ist kein Fehlschlag, sondern eine andere Umgebung. CI checkt das ganze
+# Repo aus und fuehrt die Klasse aus.
+_FRONTEND_QUELLEN = os.path.join(BACKEND, "..", "dashboard-react")
+ohne_frontend = pytest.mark.skipif(
+    not os.path.isdir(_FRONTEND_QUELLEN),
+    reason="Frontend-Quelltext liegt nicht neben backend/ (z. B. im Container) — laeuft in CI",
+)
+
+
+@ohne_frontend
 class TestOberflaeche:
     def _seite(self):
         pfad = os.path.join(BACKEND, "..", "dashboard-react", "src", "app",

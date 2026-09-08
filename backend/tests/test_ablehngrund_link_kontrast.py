@@ -111,6 +111,18 @@ class TestModelle:
             site_id="s1", index=0, approved=True).ablehngrund is None
 
 
+# Diese Klasse liest Frontend-Quelltext, der im Repo neben backend/ liegt. Im
+# Backend-Container ist nur backend/ nach /app kopiert, dort gibt es ihn nicht —
+# das ist kein Fehlschlag, sondern eine andere Umgebung. CI checkt das ganze
+# Repo aus und fuehrt die Klasse aus.
+_FRONTEND_QUELLEN = os.path.join(os.path.dirname(__file__), "..", "..", "dashboard-react")
+ohne_frontend = pytest.mark.skipif(
+    not os.path.isdir(_FRONTEND_QUELLEN),
+    reason="Frontend-Quelltext liegt nicht neben backend/ (z. B. im Container) — laeuft in CI",
+)
+
+
+@ohne_frontend
 class TestOberflaeche:
     """Der Grund muss auch gefragt werden, sonst bleibt die Spalte leer —
     genau der Fehler, der den Lernkreislauf sechs Wochen leer laufen liess."""

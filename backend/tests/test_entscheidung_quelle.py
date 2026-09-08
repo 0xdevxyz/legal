@@ -288,6 +288,18 @@ WORKLIST = os.path.join(
     'AccessibilityWorklist.tsx')
 
 
+# Diese Klasse liest Frontend-Quelltext, der im Repo neben backend/ liegt. Im
+# Backend-Container ist nur backend/ nach /app kopiert, dort gibt es ihn nicht —
+# das ist kein Fehlschlag, sondern eine andere Umgebung. CI checkt das ganze
+# Repo aus und fuehrt die Klasse aus.
+_FRONTEND_QUELLEN = os.path.join(WURZEL, 'dashboard-react')
+ohne_frontend = pytest.mark.skipif(
+    not os.path.isdir(_FRONTEND_QUELLEN),
+    reason="Frontend-Quelltext liegt nicht neben backend/ (z. B. im Container) — laeuft in CI",
+)
+
+
+@ohne_frontend
 class TestOberflaeche:
     def test_unbestaetigte_werden_getrennt_gezeigt(self):
         s = _lies(WORKLIST)
