@@ -52,7 +52,7 @@ const EmailVerificationContent: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-akzent-400 mx-auto mb-4"></div>
           <div className="text-white text-lg font-semibold">Verifiziere E-Mail...</div>
           <div className="text-gray-400 text-sm mt-2">Bitte warten Sie einen Moment</div>
         </div>
@@ -66,7 +66,7 @@ const EmailVerificationContent: React.FC = () => {
         {verificationResult?.success ? (
           // Success State
           <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-8 text-center">
-            <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-akzent-400 rounded-full flex items-center justify-center mx-auto mb-6">
               <Check className="w-8 h-8 text-white" />
             </div>
             
@@ -97,7 +97,7 @@ const EmailVerificationContent: React.FC = () => {
             <div className="mt-6">
               <button 
                 onClick={() => window.close()}
-                className="w-full bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity text-white"
+                className="w-full bg-akzent-400 hover:bg-akzent-500 px-6 py-3 rounded-lg font-semibold transition-colors text-gray-900"
               >
                 Fenster schließen
               </button>
@@ -130,7 +130,7 @@ const EmailVerificationContent: React.FC = () => {
             <div className="space-y-3">
               <button 
                 onClick={() => window.location.reload()}
-                className="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-colors text-white"
+                className="w-full flex items-center justify-center space-x-2 bg-akzent-400 hover:bg-akzent-500 px-6 py-3 rounded-lg font-semibold transition-colors text-gray-900"
               >
                 <RefreshCw className="w-4 h-4" />
                 <span>Erneut versuchen</span>
@@ -138,7 +138,7 @@ const EmailVerificationContent: React.FC = () => {
               
               <p className="text-xs text-gray-400">
                 Bei anhaltenden Problemen kontaktieren Sie uns unter: 
-                <a href="mailto:support@complyo.de" className="text-blue-400 hover:underline">
+                <a href="mailto:support@complyo.de" className="text-akzent-400 hover:underline">
                   support@complyo.de
                 </a>
               </p>
@@ -155,7 +155,7 @@ const EmailVerificationPage: React.FC = () => {
     <Suspense fallback={
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-akzent-400 mx-auto mb-4"></div>
           <div className="text-white text-lg font-semibold">Lade Verifizierungsseite...</div>
         </div>
       </div>

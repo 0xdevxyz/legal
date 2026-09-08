@@ -27,7 +27,7 @@ export default function GDPRDataManagement() {
   );
 
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-akzent-50 via-white to-purple-50">
       <div className="container mx-auto px-4 py-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -54,7 +54,7 @@ export default function GDPRDataManagement() {
               className="bg-white rounded-xl shadow-lg p-8"
             >
               <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div className="w-16 h-16 bg-akzent-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">🔐</span>
                 </div>
                 <h2 className="text-2xl font-semibold text-gray-900 mb-2">
@@ -75,8 +75,8 @@ export default function GDPRDataManagement() {
                   </ol>
                 </div>
 
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <p className="text-sm text-blue-800">
+                <div className="bg-akzent-50 p-4 rounded-lg border border-akzent-200">
+                  <p className="text-sm text-akzent-900">
                     <strong>ℹ️ Hinweis:</strong> Löschanträge laufen zweistufig — nach
                     dem Antrag erhalten Sie eine Eingangs- und nach Ausführung eine
                     Löschbestätigung per E-Mail.
@@ -86,7 +86,7 @@ export default function GDPRDataManagement() {
 
               <a
                 href="https://app.complyo.de/settings"
-                className="block w-full text-center bg-blue-700 hover:bg-blue-800 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+                className="block w-full text-center bg-akzent-400 hover:bg-akzent-500 text-gray-900 font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
               >
                 🔐 Zu den Dashboard-Einstellungen
               </a>
@@ -178,7 +178,7 @@ export default function GDPRDataManagement() {
               </div>
 
               <div className="text-center">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <div className="w-12 h-12 bg-akzent-100 rounded-full flex items-center justify-center mx-auto mb-3">
                   <span className="text-xl">📥</span>
                 </div>
                 <h4 className="font-semibold text-gray-900 mb-2">Portabilität</h4>
@@ -190,7 +190,7 @@ export default function GDPRDataManagement() {
               <p className="text-gray-600">
                 Aufbewahrungsfrist: 24 Monate ab Erhebung. Bei Fragen zu Ihren
                 Datenschutzrechten wenden Sie sich an:
-                <a href="mailto:datenschutz@complyo.de" className="text-blue-600 underline ml-1">
+                <a href="mailto:datenschutz@complyo.de" className="text-akzent-700 underline ml-1">
                   datenschutz@complyo.de
                 </a>
               </p>

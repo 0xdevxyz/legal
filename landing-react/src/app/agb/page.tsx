@@ -21,7 +21,7 @@ import AnbieterUnvollstaendig from '@/components/legal/AnbieterUnvollstaendig';
 
 export default function AGBPage() {
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -30,7 +30,7 @@ export default function AGBPage() {
         >
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-8 transition-colors"
+            className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Startseite
@@ -40,7 +40,7 @@ export default function AGBPage() {
 
           <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
             <div className="flex items-center gap-3 mb-4">
-              <FileText className="w-8 h-8 text-blue-600" />
+              <FileText className="w-8 h-8 text-akzent-700" />
               <h1 className="text-4xl font-bold text-gray-900">Allgemeine Geschäftsbedingungen</h1>
             </div>
             <p className="text-gray-600">Stand: 1. September 2026</p>
@@ -294,11 +294,11 @@ export default function AGBPage() {
             </section>
           </div>
 
-          <div className="mt-8 bg-blue-50 rounded-xl p-6">
+          <div className="mt-8 bg-akzent-50 rounded-xl p-6">
             <h3 className="font-semibold text-gray-900 mb-3">Fragen zu den AGB?</h3>
             <p className="text-gray-700 text-sm">
               <strong>E-Mail:</strong>{' '}
-              <a href={'mailto:' + ANBIETER.email} className="text-blue-600 underline">
+              <a href={'mailto:' + ANBIETER.email} className="text-akzent-700 underline">
                 {ANBIETER.email}
               </a>
             </p>
@@ -306,10 +306,10 @@ export default function AGBPage() {
 
           <div className="mt-8 text-center text-sm text-gray-600">
             <div className="flex justify-center gap-6">
-              <Link href="/impressum" className="hover:text-blue-600 transition-colors">
+              <Link href="/impressum" className="hover:text-akzent-700 transition-colors">
                 Impressum
               </Link>
-              <Link href="/datenschutz" className="hover:text-blue-600 transition-colors">
+              <Link href="/datenschutz" className="hover:text-akzent-700 transition-colors">
                 Datenschutz
               </Link>
             </div>

@@ -74,7 +74,7 @@ export default function ArticlePage({
   ];
 
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -83,7 +83,7 @@ export default function ArticlePage({
       <div className="container mx-auto px-4 py-12 max-w-3xl">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-8 transition-colors"
+          className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Zurück zur Startseite
@@ -107,7 +107,7 @@ export default function ArticlePage({
             <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-3">
               Inhalt
             </h2>
-            <ol className="space-y-1.5 list-decimal list-inside text-blue-600">
+            <ol className="space-y-1.5 list-decimal list-inside text-akzent-700">
               {sections.map((s) => (
                 <li key={s.heading}>
                   <a href={`#${anchor(s.heading)}`} className="hover:underline">
@@ -148,12 +148,12 @@ export default function ArticlePage({
               </section>
             ))}
 
-            <section className="bg-blue-600 rounded-xl shadow-lg p-8 text-white">
+            <section className="bg-akzent-400 rounded-xl shadow-lg p-8 text-gray-900">
               <h2 className="text-2xl font-bold mb-3">{cta.heading}</h2>
-              <p className="mb-6 text-blue-50 leading-relaxed">{cta.text}</p>
+              <p className="mb-6 text-gray-800 leading-relaxed">{cta.text}</p>
               <Link
                 href={cta.href}
-                className="inline-flex items-center gap-2 bg-white text-blue-700 font-semibold px-6 py-3 rounded-lg hover:bg-blue-50 transition-colors"
+                className="inline-flex items-center gap-2 bg-gray-900 text-white font-semibold px-6 py-3 rounded-lg hover:bg-gray-800 transition-colors"
               >
                 {cta.label}
                 <ArrowRight className="w-4 h-4" />
@@ -178,7 +178,7 @@ export default function ArticlePage({
                 <ul className="space-y-2">
                   {related.map(({ href, label }) => (
                     <li key={href}>
-                      <Link href={href} className="text-blue-600 hover:text-blue-700 hover:underline">
+                      <Link href={href} className="text-akzent-700 hover:text-akzent-800 hover:underline">
                         {label}
                       </Link>
                     </li>

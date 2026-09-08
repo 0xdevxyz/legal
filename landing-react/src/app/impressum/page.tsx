@@ -19,7 +19,7 @@ export default function ImpressumPage() {
   const anschrift = ANBIETER.plz + ' ' + ANBIETER.ort;
 
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -28,7 +28,7 @@ export default function ImpressumPage() {
         >
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-8 transition-colors"
+            className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Startseite
@@ -45,7 +45,7 @@ export default function ImpressumPage() {
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Anbieter</h2>
               <div className="flex items-start gap-3 text-gray-700">
-                <MapPin className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
+                <MapPin className="w-5 h-5 text-akzent-700 mt-1 flex-shrink-0" />
                 <div>
                   <p className="font-semibold">{ANBIETER.name || 'Name fehlt'}</p>
                   <p className="text-gray-600">{ANBIETER.geschaeftsbezeichnung}</p>
@@ -63,15 +63,15 @@ export default function ImpressumPage() {
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Kontakt</h2>
               <div className="space-y-3 text-gray-700">
                 <div className="flex items-center gap-3">
-                  <Mail className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                  <a href={'mailto:' + ANBIETER.email} className="hover:text-blue-600 transition-colors">
+                  <Mail className="w-5 h-5 text-akzent-700 flex-shrink-0" />
+                  <a href={'mailto:' + ANBIETER.email} className="hover:text-akzent-700 transition-colors">
                     {ANBIETER.email}
                   </a>
                 </div>
                 {ANBIETER.telefon && (
                   <div className="flex items-center gap-3">
-                    <Phone className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                    <a href={'tel:' + ANBIETER.telefon.replace(/[^+0-9]/g, '')} className="hover:text-blue-600 transition-colors">
+                    <Phone className="w-5 h-5 text-akzent-700 flex-shrink-0" />
+                    <a href={'tel:' + ANBIETER.telefon.replace(/[^+0-9]/g, '')} className="hover:text-akzent-700 transition-colors">
                       {ANBIETER.telefon}
                     </a>
                   </div>
@@ -82,7 +82,7 @@ export default function ImpressumPage() {
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Umsatzsteuer</h2>
               <div className="flex items-start gap-3 text-gray-700">
-                <Receipt className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
+                <Receipt className="w-5 h-5 text-akzent-700 mt-1 flex-shrink-0" />
                 <p>
                   Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG:{' '}
                   <span className="font-medium">{ANBIETER.ustIdNr || 'fehlt'}</span>
@@ -95,7 +95,7 @@ export default function ImpressumPage() {
                 Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV
               </h2>
               <div className="flex items-start gap-3 text-gray-700">
-                <User className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
+                <User className="w-5 h-5 text-akzent-700 mt-1 flex-shrink-0" />
                 <div>
                   <p>{ANBIETER.name || 'Name fehlt'}</p>
                   <p>{ANBIETER.strasse}</p>
@@ -104,7 +104,7 @@ export default function ImpressumPage() {
               </div>
               <p className="text-sm text-gray-500 mt-4">
                 Gilt für die redaktionellen Beiträge im{' '}
-                <Link href="/ratgeber" className="text-blue-600 hover:underline">Ratgeber</Link>.
+                <Link href="/ratgeber" className="text-akzent-700 hover:underline">Ratgeber</Link>.
               </p>
             </section>
 
@@ -121,8 +121,8 @@ export default function ImpressumPage() {
 
           <div className="mt-8 text-center text-sm text-gray-600">
             <div className="flex justify-center gap-6">
-              <Link href="/agb" className="hover:text-blue-600 transition-colors">AGB</Link>
-              <Link href="/datenschutz" className="hover:text-blue-600 transition-colors">Datenschutz</Link>
+              <Link href="/agb" className="hover:text-akzent-700 transition-colors">AGB</Link>
+              <Link href="/datenschutz" className="hover:text-akzent-700 transition-colors">Datenschutz</Link>
             </div>
           </div>
         </motion.div>

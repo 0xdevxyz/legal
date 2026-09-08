@@ -87,7 +87,7 @@ const RECHTE = [
 
 export default function DatenschutzPage() {
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -96,7 +96,7 @@ export default function DatenschutzPage() {
         >
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-8 transition-colors"
+            className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Startseite
@@ -106,7 +106,7 @@ export default function DatenschutzPage() {
 
           <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
             <div className="flex items-center gap-3 mb-4">
-              <Shield className="w-8 h-8 text-blue-600" />
+              <Shield className="w-8 h-8 text-akzent-700" />
               <h1 className="text-4xl font-bold text-gray-900">Datenschutzerklärung</h1>
             </div>
             <p className="text-gray-600">
@@ -149,7 +149,7 @@ export default function DatenschutzPage() {
                       Telefon:{' '}
                       <a
                         href={'tel:' + ANBIETER.telefon.replace(/[^+0-9]/g, '')}
-                        className="text-blue-600 underline"
+                        className="text-akzent-700 underline"
                       >
                         {ANBIETER.telefon}
                       </a>
@@ -157,7 +157,7 @@ export default function DatenschutzPage() {
                   )}
                   <p className={ANBIETER.telefon ? '' : 'mt-3'}>
                     E-Mail:{' '}
-                    <a href={'mailto:' + ANBIETER.datenschutzEmail} className="text-blue-600 underline">
+                    <a href={'mailto:' + ANBIETER.datenschutzEmail} className="text-akzent-700 underline">
                       {ANBIETER.datenschutzEmail}
                     </a>
                   </p>
@@ -175,7 +175,7 @@ export default function DatenschutzPage() {
               </h2>
               <div className="space-y-6 text-gray-700 text-sm leading-relaxed">
                 {VERARBEITUNGEN.map((v) => (
-                  <div key={v.titel} className="border-l-4 border-blue-100 pl-4">
+                  <div key={v.titel} className="border-l-4 border-akzent-400 pl-4">
                     <h3 className="font-semibold text-gray-900 mb-2">{v.titel}</h3>
                     <dl className="space-y-1">
                       <div>
@@ -199,7 +199,7 @@ export default function DatenschutzPage() {
                 ))}
                 <p>
                   Welche Cookies im Einzelnen gesetzt werden, steht in der{' '}
-                  <Link href="/cookie-richtlinie" className="text-blue-600 underline">
+                  <Link href="/cookie-richtlinie" className="text-akzent-700 underline">
                     Cookie-Richtlinie
                   </Link>
                   . Ihre Einwilligung können Sie dort jederzeit ändern oder widerrufen.
@@ -237,11 +237,11 @@ export default function DatenschutzPage() {
                 </ul>
                 <p>
                   Zur Ausübung genügt eine formlose Nachricht an{' '}
-                  <a href={'mailto:' + ANBIETER.datenschutzEmail} className="text-blue-600 underline">
+                  <a href={'mailto:' + ANBIETER.datenschutzEmail} className="text-akzent-700 underline">
                     {ANBIETER.datenschutzEmail}
                   </a>
                   . Auskunft, Export und Löschung Ihrer Kontodaten können Sie außerdem selbst über die{' '}
-                  <Link href="/gdpr" className="text-blue-600 underline">
+                  <Link href="/gdpr" className="text-akzent-700 underline">
                     DSGVO-Datenverwaltung
                   </Link>{' '}
                   auslösen.
@@ -267,7 +267,7 @@ export default function DatenschutzPage() {
                     href="https://www.datenschutzkonferenz-online.de/datenschutzaufsichtsbehoerden.html"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-600 underline"
+                    className="text-akzent-700 underline"
                   >
                     datenschutzkonferenz-online.de
                   </a>
@@ -289,11 +289,11 @@ export default function DatenschutzPage() {
             </section>
           </div>
 
-          <div className="mt-8 bg-blue-50 rounded-xl p-6 text-center">
+          <div className="mt-8 bg-akzent-50 rounded-xl p-6 text-center">
             <p className="text-gray-700 text-sm mb-3">Möchten Sie Ihre Daten verwalten oder löschen?</p>
             <Link
               href="/gdpr"
-              className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold transition-colors"
+              className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 font-semibold transition-colors"
             >
               <Shield className="w-5 h-5" />
               Zur DSGVO-Datenverwaltung
@@ -302,13 +302,13 @@ export default function DatenschutzPage() {
 
           <div className="mt-8 text-center text-sm text-gray-600">
             <div className="flex justify-center gap-6">
-              <Link href="/impressum" className="hover:text-blue-600 transition-colors">
+              <Link href="/impressum" className="hover:text-akzent-700 transition-colors">
                 Impressum
               </Link>
-              <Link href="/cookie-richtlinie" className="hover:text-blue-600 transition-colors">
+              <Link href="/cookie-richtlinie" className="hover:text-akzent-700 transition-colors">
                 Cookie-Richtlinie
               </Link>
-              <Link href="/agb" className="hover:text-blue-600 transition-colors">
+              <Link href="/agb" className="hover:text-akzent-700 transition-colors">
                 AGB
               </Link>
             </div>

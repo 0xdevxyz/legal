@@ -7,7 +7,7 @@ import { ArrowLeft, Cookie, Mail, Settings } from 'lucide-react';
 
 export default function CookieRichtliniePage() {
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -16,7 +16,7 @@ export default function CookieRichtliniePage() {
         >
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-8 transition-colors"
+            className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Startseite
@@ -179,8 +179,8 @@ export default function CookieRichtliniePage() {
                   Sie dazu die gespeicherte Einwilligung (z. B. durch Leeren der Website-Daten in Ihrem Browser);
                   beim nächsten Besuch erscheint das Cookie-Banner erneut und Sie können Ihre Auswahl anpassen.
                 </p>
-                <div className="bg-blue-50 p-4 rounded-lg flex items-start gap-3">
-                  <Settings className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="bg-akzent-50 p-4 rounded-lg flex items-start gap-3">
+                  <Settings className="w-5 h-5 text-akzent-700 mt-0.5 flex-shrink-0" />
                   <p>
                     Zusätzlich können Sie in den Einstellungen Ihres Browsers das Speichern von Cookies generell
                     einschränken oder blockieren. Bitte beachten Sie, dass dann möglicherweise nicht alle Funktionen
@@ -198,13 +198,13 @@ export default function CookieRichtliniePage() {
                   (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18), Datenübertragbarkeit
                   (Art. 20) sowie das Widerspruchsrecht (Art. 21) und der Widerruf einer erteilten Einwilligung
                   (Art. 7 Abs. 3). Weitere Informationen finden Sie in unserer{' '}
-                  <Link href="/datenschutz" className="text-blue-600 underline">Datenschutzerklärung</Link>.
+                  <Link href="/datenschutz" className="text-akzent-700 underline">Datenschutzerklärung</Link>.
                 </p>
-                <div className="bg-blue-50 p-4 rounded-lg flex items-center gap-3">
-                  <Mail className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                <div className="bg-akzent-50 p-4 rounded-lg flex items-center gap-3">
+                  <Mail className="w-5 h-5 text-akzent-700 flex-shrink-0" />
                   <p>
                     <strong>Kontakt:</strong>{' '}
-                    <a href="mailto:datenschutz@complyo.de" className="text-blue-600 underline">
+                    <a href="mailto:datenschutz@complyo.de" className="text-akzent-700 underline">
                       datenschutz@complyo.de
                     </a>
                   </p>
@@ -215,13 +215,13 @@ export default function CookieRichtliniePage() {
 
           <div className="mt-8 text-center text-sm text-gray-600">
             <div className="flex justify-center gap-6">
-              <Link href="/datenschutz" className="hover:text-blue-600 transition-colors">
+              <Link href="/datenschutz" className="hover:text-akzent-700 transition-colors">
                 Datenschutz
               </Link>
-              <Link href="/impressum" className="hover:text-blue-600 transition-colors">
+              <Link href="/impressum" className="hover:text-akzent-700 transition-colors">
                 Impressum
               </Link>
-              <Link href="/agb" className="hover:text-blue-600 transition-colors">
+              <Link href="/agb" className="hover:text-akzent-700 transition-colors">
                 AGB
               </Link>
             </div>

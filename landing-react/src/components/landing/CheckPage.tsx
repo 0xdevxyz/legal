@@ -43,7 +43,7 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
   };
 
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
@@ -52,7 +52,7 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
       <div className="container mx-auto px-4 py-12 max-w-4xl">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-8 transition-colors"
+          className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Zurück zur Startseite
@@ -73,13 +73,13 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
 
           <div className="mt-6 flex flex-wrap gap-4 text-sm text-gray-600">
             <span className="inline-flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-blue-600" /> Ergebnis in unter einer Minute
+              <Clock className="w-4 h-4 text-akzent-700" /> Ergebnis in unter einer Minute
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Lock className="w-4 h-4 text-blue-600" /> Keine Anmeldung nötig
+              <Lock className="w-4 h-4 text-akzent-700" /> Keine Anmeldung nötig
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-blue-600" /> Kostenlos
+              <ShieldCheck className="w-4 h-4 text-akzent-700" /> Kostenlos
             </span>
           </div>
         </div>
@@ -118,7 +118,7 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
               <ul className="space-y-2">
                 {related.map(({ href, label }) => (
                   <li key={href}>
-                    <Link href={href} className="text-blue-600 hover:text-blue-700 hover:underline">
+                    <Link href={href} className="text-akzent-700 hover:text-akzent-800 hover:underline">
                       {label}
                     </Link>
                   </li>
