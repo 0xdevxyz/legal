@@ -318,7 +318,9 @@ export default function WebsiteScanner() {
     return 'text-red-600 bg-red-100';
   };
 
-  const getRiskLevel = (score: number) => {
+  const getRiskLevel = (score: number, befunde?: number) => {
+    // Null Befunde ist ein eigener Zustand, kein "geringes" Risiko.
+    if (befunde === 0) return { label: 'Kein erkennbares', color: 'green' };
     if (score >= 80) return { label: 'Gering', color: 'green' };
     if (score >= 60) return { label: 'Mittel', color: 'yellow' };
     return { label: 'HOCH', color: 'red' };
@@ -498,16 +500,16 @@ export default function WebsiteScanner() {
                     <div>
                       <div className="text-lg font-semibold text-gray-700">Compliance-Score</div>
                       <div className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold ${
-                        getRiskLevel(scanResult.overallScore).color === 'red' 
+                        getRiskLevel(scanResult.overallScore, scanResult.befundeGesamt).color === 'red' 
                           ? 'bg-red-100 text-red-700' 
-                          : getRiskLevel(scanResult.overallScore).color === 'yellow'
+                          : getRiskLevel(scanResult.overallScore, scanResult.befundeGesamt).color === 'yellow'
                           ? 'bg-yellow-100 text-yellow-700'
                           : 'bg-green-100 text-green-700'
                       }`}>
-                        {getRiskLevel(scanResult.overallScore).label === 'HOCH' && (
+                        {getRiskLevel(scanResult.overallScore, scanResult.befundeGesamt).label === 'HOCH' && (
                           <AlertTriangle className="w-4 h-4" />
                         )}
-                        {getRiskLevel(scanResult.overallScore).label} Risiko
+                        {getRiskLevel(scanResult.overallScore, scanResult.befundeGesamt).label} Risiko
                       </div>
                     </div>
                   </div>
@@ -649,10 +651,14 @@ export default function WebsiteScanner() {
             {/* CTA */}
             <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-center text-white">
               <h3 className="text-2xl font-bold mb-4">
-                Bereit, die gefundenen Probleme zu lösen?
+                {(scanResult.befundeGesamt ?? 0) === 0
+                  ? 'Sauber. Und morgen?'
+                  : 'Bereit, die gefundenen Probleme zu lösen?'}
               </h3>
               <p className="text-lg mb-6 opacity-90">
-                Complyo zeigt dir konkrete Lösungsvorschläge für alle gefundenen Issues – verständlich erklärt, direkt umsetzbar.
+                {(scanResult.befundeGesamt ?? 0) === 0
+                  ? 'Dieser Befund gilt für heute. Complyo prüft die Seite laufend weiter und meldet sich, wenn eine Änderung an der Website oder an der Rechtslage etwas daran ändert.'
+                  : 'Complyo zeigt dir konkrete Lösungsvorschläge für alle gefundenen Issues – verständlich erklärt, direkt umsetzbar.'}
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <a
@@ -660,7 +666,9 @@ export default function WebsiteScanner() {
                   className="px-8 py-4 bg-white text-blue-600 font-semibold rounded-xl hover:shadow-2xl transition-all transform hover:scale-105 inline-flex items-center justify-center gap-2"
                 >
                   <TrendingUp className="w-5 h-5" />
-                  Kostenlos registrieren und Fix starten
+                  {(scanResult.befundeGesamt ?? 0) === 0
+                    ? 'Kostenlos registrieren und Befund festhalten'
+                    : 'Kostenlos registrieren und Fix starten'}
                 </a>
                 <button
                   onClick={() => { setScanResult(null); setUrl(''); localStorage.removeItem('last_scan_data'); }}
