@@ -85,7 +85,7 @@ export default function EarlyAccessKampagne({
 
       {/* ---------------------------------------------------------------- */}
       <section className="relative pt-16 pb-14 overflow-hidden">
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-bl from-akzent-100 via-akzent-50 to-transparent rounded-full blur-3xl opacity-70 pointer-events-none" />
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-bl from-akzent-200 via-akzent-50 to-transparent rounded-full blur-3xl opacity-70 pointer-events-none" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
           {bestaetigt === true && (
@@ -125,7 +125,7 @@ export default function EarlyAccessKampagne({
 
           <h1 className="font-heading text-4xl sm:text-5xl font-extrabold text-gray-900 leading-[1.1] mb-5">
             Seit Juni 2025 gilt das BFSG.{' '}
-            <span className="text-akzent-700">Complyo findet die Lücken auf deiner Website – und schließt sie.</span>
+            <span className="akzent-marker">Complyo findet die Lücken auf deiner Website – und schließt sie.</span>
           </h1>
 
           <p className="text-lg text-gray-600 leading-relaxed mb-3">
@@ -164,7 +164,9 @@ export default function EarlyAccessKampagne({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {SAEULEN.map(({ icon: Icon, titel, text }) => (
               <div key={titel} className="bg-white rounded-2xl border border-gray-200 p-6">
-                <Icon className="w-6 h-6 text-akzent-700 mb-3" aria-hidden="true" />
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-akzent-400 mb-3">
+                  <Icon className="w-5 h-5 text-gray-900" aria-hidden="true" />
+                </div>
                 <h3 className="font-bold text-gray-900 mb-1.5">{titel}</h3>
                 <p className="text-sm text-gray-600 leading-relaxed">{text}</p>
               </div>
@@ -177,9 +179,9 @@ export default function EarlyAccessKampagne({
       <section className="py-16">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="rounded-2xl border-2 border-akzent-600 p-8">
-            <div className="inline-flex items-center gap-2 bg-akzent-50 rounded-full px-3 py-1 mb-4">
-              <Gauge className="w-4 h-4 text-akzent-700" aria-hidden="true" />
-              <span className="text-xs font-semibold text-akzent-800 uppercase tracking-wide">
+            <div className="inline-flex items-center gap-2 bg-akzent-400 rounded-full px-3 py-1 mb-4">
+              <Gauge className="w-4 h-4 text-gray-900" aria-hidden="true" />
+              <span className="text-xs font-semibold text-gray-900 uppercase tracking-wide">
                 Nachgemessen, nicht behauptet
               </span>
             </div>
@@ -224,7 +226,9 @@ export default function EarlyAccessKampagne({
       {/* ---------------------------------------------------------------- */}
       <section className="py-16">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <ArrowDown className="w-6 h-6 text-akzent-700 mx-auto mb-4" aria-hidden="true" />
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-akzent-400 mb-4">
+            <ArrowDown className="w-5 h-5 text-gray-900" aria-hidden="true" />
+          </div>
           <h2 className="font-heading text-3xl font-extrabold text-gray-900 mb-3">
             Platz sichern, {PREIS_EARLY} statt {PREIS_REGULAER}
           </h2>

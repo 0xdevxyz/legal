@@ -121,12 +121,12 @@ export default function PricingSection() {
               key={plan.id}
               className={`relative flex flex-col rounded-2xl p-6 transition-shadow ${
                 plan.highlighted
-                  ? 'bg-white border-2 border-akzent-600 shadow-xl'
+                  ? 'bg-white border-2 border-akzent-400 shadow-xl'
                   : 'bg-white border border-gray-200 hover:shadow-md'
               }`}
             >
               {plan.highlighted && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-akzent-800 text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-akzent-400 text-gray-900 text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">
                   Am häufigsten gewählt
                 </div>
               )}
@@ -153,7 +153,7 @@ export default function PricingSection() {
                 href={plan.href}
                 className={`inline-flex items-center justify-center gap-2 w-full font-semibold px-5 py-3 rounded-xl transition-colors ${
                   plan.highlighted
-                    ? 'bg-akzent-800 hover:bg-akzent-900 text-white shadow-md shadow-akzent-100'
+                    ? 'bg-akzent-400 hover:bg-akzent-500 text-gray-900 shadow-md shadow-akzent-100'
                     : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200'
                 }`}
               >

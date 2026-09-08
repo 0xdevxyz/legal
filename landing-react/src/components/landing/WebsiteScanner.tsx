@@ -304,7 +304,7 @@ export default function WebsiteScanner() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold mb-4">
+          <div className="inline-flex items-center gap-2 bg-akzent-400 text-gray-900 px-4 py-2 rounded-full text-sm font-semibold mb-4">
             <Search className="w-4 h-4" />
             Kostenloser Website-Check
           </div>
@@ -312,7 +312,7 @@ export default function WebsiteScanner() {
             Wie rechtskonform ist Ihre Website?
           </h2>
           <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-            Prüfen Sie Ihre Website <span className="font-semibold text-blue-400">kostenlos</span> auf die 4 wichtigsten Compliance-Säulen
+            Prüfen Sie Ihre Website <span className="font-semibold text-akzent-400">kostenlos</span> auf die 4 wichtigsten Compliance-Säulen
           </p>
         </div>
 
@@ -328,13 +328,13 @@ export default function WebsiteScanner() {
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="ihre-website.de"
                 aria-label="Website-URL für kostenlosen Compliance-Check eingeben"
-                className="flex-1 px-6 py-4 rounded-xl border-2 border-gray-600 bg-gray-800 text-white focus:border-blue-500 focus:ring-4 focus:ring-blue-900 outline-none text-lg placeholder-gray-400"
+                className="flex-1 px-6 py-4 rounded-xl border-2 border-gray-600 bg-gray-800 text-white focus:border-akzent-400 focus:ring-4 focus:ring-akzent-800 outline-none text-lg placeholder-gray-400"
                 required
               />
               <button
                 type="submit"
                 disabled={isScanning}
-                className="px-8 py-4 bg-blue-700 hover:bg-blue-800 text-white font-semibold rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 whitespace-nowrap"
+                className="px-8 py-4 bg-akzent-400 hover:bg-akzent-300 text-gray-900 font-semibold rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 {isScanning ? (
                   <>
@@ -389,7 +389,7 @@ export default function WebsiteScanner() {
               return (
                 <div
                   key={pillar.id}
-                  className="bg-gray-800 rounded-xl p-6 border-2 border-gray-700 hover:border-blue-500 hover:shadow-lg transition-all"
+                  className="bg-gray-800 rounded-xl p-6 border-2 border-gray-700 hover:border-akzent-400 hover:shadow-lg transition-all"
                 >
                   <div className={`w-12 h-12 bg-${pillar.color}-900 bg-opacity-50 rounded-lg flex items-center justify-center mb-4`}>
                     <Icon className={`w-6 h-6 text-${pillar.color}-400`} />
@@ -592,7 +592,7 @@ export default function WebsiteScanner() {
             </div>
 
             {/* CTA */}
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-center text-white">
+            <div className="bg-gradient-to-r from-akzent-700 to-akzent-900 rounded-2xl p-8 text-center text-white">
               <h3 className="text-2xl font-bold mb-4">
                 Bereit, die gefundenen Probleme zu lösen?
               </h3>
@@ -602,7 +602,7 @@ export default function WebsiteScanner() {
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <a
                   href={`${process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de'}/register?plan=free`}
-                  className="px-8 py-4 bg-white text-blue-600 font-semibold rounded-xl hover:shadow-2xl transition-all transform hover:scale-105 inline-flex items-center justify-center gap-2"
+                  className="px-8 py-4 bg-white text-akzent-800 font-semibold rounded-xl hover:shadow-2xl transition-all transform hover:scale-105 inline-flex items-center justify-center gap-2"
                 >
                   <TrendingUp className="w-5 h-5" />
                   Kostenlos registrieren und Fix starten

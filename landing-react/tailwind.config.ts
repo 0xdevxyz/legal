@@ -17,16 +17,19 @@ const config: Config = {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         // Akzentfarbe aus dem complyo-Logo: #00FFF7 (HSL 178 100% 50%),
-        // gemessen am Schild in public/logo-dark.png. Die Stufen halten den
-        // Farbton und veraendern nur die Helligkeit.
+        // gemessen am Schild in public/logo-dark.png. Das ist akzent-400 und
+        // die Farbe, die man auf der Seite sieht. Die uebrigen Stufen halten
+        // den Farbton und drehen nur die Helligkeit.
         //
-        // Die reine Logofarbe steht als akzent-400 und bleibt Dekoration:
-        // auf Weiss kommt sie auf 1,26:1 und traegt damit weder Text noch
-        // eine Flaeche mit weisser Schrift. Lesbares nimmt 600 aufwaerts.
-        // Kontraste auf Weiss: 600 = 4,80:1, 700 = 5,94:1, 800 = 8,43:1,
-        // 900 = 12,13:1 — das abgeloeste blue-600 lag bei 5,17:1,
-        // blue-700 bei 7,00:1. Auf Dunkel ist es andersherum: dort traegt
-        // akzent-400 (14,15:1 auf gray-900) mit dunkler Schrift.
+        // Sie traegt als FLAECHE, nicht als Schrift. Auf Weiss kommt sie auf
+        // 1,26:1 — als Textfarbe waere sie unlesbar, als Knopf mit weisser
+        // Schrift ebenso. Mit dunkler Schrift darauf sind es 14,06:1, mehr
+        // als das abgeloeste blue-700 je hatte. Also: Knoepfe, Pillen und
+        // Kacheln in akzent-400 mit gray-900 darauf.
+        //
+        // Wo Farbe zwingend Schrift ist (Fliesstext-Links, Fokusrahmen,
+        // Hakenfelder), bleibt es bei den dunklen Stufen desselben Farbtons:
+        // 600 = 4,80:1, 700 = 5,94:1, 800 = 8,43:1, 900 = 12,13:1 auf Weiss.
         akzent: {
           50: "#EBFFFE",
           100: "#CCFFFD",
