@@ -42,6 +42,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import asyncpg
 from bs4 import BeautifulSoup
 
+# Erst nach dem sys.path-Eintrag oben importierbar: der Cron laeuft als Skript
+# aus cronjobs/, nicht als Teil des Pakets.
+from compliance_engine import ai_budget
+
 _log_handlers = [logging.StreamHandler()]
 try:
     _log_handlers.append(logging.FileHandler("/var/log/complyo-website-monitor.log", mode="a"))
@@ -262,12 +266,14 @@ async def main():
             )
             sites = await conn.fetch(
                 """
-                SELECT id, url, user_id, scan_frequency, notification_enabled,
-                       last_scan_date, last_score, rescan_required, rescan_reason,
-                       content_fingerprint
-                FROM tracked_websites
-                WHERE status = 'active'
-                ORDER BY COALESCE(last_scan_date, '1970-01-01'::timestamp) ASC
+                SELECT tw.id, tw.url, tw.user_id, tw.scan_frequency,
+                       tw.notification_enabled, tw.last_scan_date, tw.last_score,
+                       tw.rescan_required, tw.rescan_reason, tw.content_fingerprint,
+                       COALESCE(u.plan_type, 'free') AS plan_type
+                FROM tracked_websites tw
+                LEFT JOIN users u ON u.id = tw.user_id
+                WHERE tw.status = 'active'
+                ORDER BY COALESCE(tw.last_scan_date, '1970-01-01'::timestamp) ASC
                 """
             )
 
@@ -297,8 +303,12 @@ async def main():
                 return
 
             logger.info(f"   {url}: {grund} → Vollscan")
-            async with semaphor:
-                ergebnis = await _scanne(url, budget=10)
+            # Die KI-Kosten dieses Scans gehoeren dem Konto, dessen Website hier
+            # ueberwacht wird — nicht dem Topf fuer anonyme Vorschau-Scans, in
+            # dem sie bis zum 08.09.2026 gelandet sind.
+            with ai_budget.konto_setzen(site.get("user_id"), site.get("plan_type")):
+                async with semaphor:
+                    ergebnis = await _scanne(url, budget=10)
             if not ergebnis:
                 return
 

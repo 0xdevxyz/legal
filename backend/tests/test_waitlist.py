@@ -583,7 +583,7 @@ class TestMeldungBeiBestaetigung:
                 "id": "lead-id-3", "email": "wer@example.de", "name": "Wer",
                 "phone": None, "source": "landing",
                 "confirm_token_expires_at": future, "confirmed_at": None,
-                "angebot": "ea100-35eur-12m", "landing_path": "/early-access",
+                "angebot": "ea100-49eur-12m", "landing_path": "/early-access",
                 "platz_nr": None, "campaign": "ea100-bfsg",
                 "utm_source": "google", "utm_medium": "cpc",
                 "utm_campaign": None, "utm_content": "anzeige-a",
