@@ -13,7 +13,7 @@ export default function WebsiteScanner() {
   const [isScanning, setIsScanning] = useState(false);
   // Hochzaehlen, sobald sich die Form von scanData aendert - sonst zeigt ein
   // alter Eintrag aus dem localStorage stillschweigend falsche Werte an.
-  const SCAN_SCHEMA = 3;
+  const SCAN_SCHEMA = 4;
 
   const [scanResult, setScanResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -182,13 +182,30 @@ export default function WebsiteScanner() {
 
       const pillarScores: any = {};
 
+      // Die vier Säulen stehen immer da — auch ohne Befund.
+      //
+      // Vorher verschwand jede Säule ohne Befund aus der Anzeige. Eine saubere
+      // Seite zeigte damit ein leeres Ergebnis, und "wir haben geprüft und
+      // nichts gefunden" war von "wir haben nicht geprüft" nicht zu
+      // unterscheiden. Genau dieser Nachweis ist aber das Produkt.
+      const HAUPTSAEULEN = ['barrierefreiheit', 'cookies', 'rechtstexte', 'dsgvo'];
+
       categories.forEach((cat: any) => {
         const key = categoryToSäule[cat.id] ?? cat.id;
-        if (!cat.detected) return; // nicht relevant für diese Website → nicht anzeigen
+        // Nebenbereiche (Shop, Sicherheit, Preise, Wettbewerb) nur, wenn sie
+        // für diese Website überhaupt einschlägig sind.
+        if (!cat.detected && !HAUPTSAEULEN.includes(cat.id)) return;
         const cnt = cat.issues_count ?? 0;
-        const crit = cat.severity === 'critical' ? cnt : 0;
+        // Die Zahl der kritischen Befunde kommt aus dem Backend. Hier stand
+        // "ist der Bereich kritisch, dann sind es alle" — auf complyo.de wurden
+        // so vier Warnungen als vier kritische Befunde angezeigt.
+        const crit = cat.critical_count ?? 0;
+        const hinweise = cat.hinweise_count ?? 0;
         const score = Math.max(0, 100 - (crit * 60 + (cnt - crit) * 15));
-        pillarScores[key] = { score, issues: cnt, critical: crit, detected: true, label: cat.label, id: cat.id };
+        pillarScores[key] = {
+          score, issues: cnt, critical: crit, hinweise,
+          detected: cat.detected, label: cat.label, id: cat.id,
+        };
       });
 
       // Risiko rechnet das Backend, nicht die Landing.
@@ -205,6 +222,11 @@ export default function WebsiteScanner() {
       const kostenRisikoText: string | null = apiData.total_risk_range ?? null;
       const rahmenMax: number = apiData.rahmen_max ?? apiData.risk_rahmen_max ?? 0;
       const bereicheBetroffen: number = apiData.risk_bereiche_betroffen ?? 0;
+      // Befunde und Hinweise sind zweierlei: ein Hinweis wie "Kein
+      // Cookie-Banner erforderlich" ist eine Entwarnung, kein Verstoß.
+      const befundeGesamt: number = apiData.issues_count ?? 0;
+      const kritischeBefunde: number = apiData.critical_count ?? 0;
+      const hinweiseGesamt: number = apiData.hinweise_count ?? 0;
 
       const backendScore = apiData.score ?? apiData.compliance_score ?? Math.round(
         (pillarScores.gdpr.score * 0.45) +
@@ -221,6 +243,9 @@ export default function WebsiteScanner() {
         kostenRisikoText,
         rahmenMax,
         bereicheBetroffen,
+        befundeGesamt,
+        kritischeBefunde,
+        hinweiseGesamt,
         pillars: pillarScores,
         // Phase 7.1 Regulierungs-Radar (Lead-Magnet)
         bfsg: apiData.bfsg_report ?? null,
@@ -499,9 +524,19 @@ export default function WebsiteScanner() {
                   const min = scanResult.kostenRisikoMin ?? 0;
                   const max = scanResult.kostenRisikoMax ?? 0;
                   const rahmen = scanResult.rahmenMax ?? 0;
-                  const score = scanResult.overallScore;
-                  const isGreen = max === 0;
-                  const isRed = score < 60;
+                  // Die Einstufung folgt den Befunden, nicht dem Score.
+                  //
+                  // Hier stand `score < 60` — eine Schwelle, die mit
+                  // Abmahnbarkeit nichts zu tun hat. Eine Seite, deren Punkte
+                  // ausschließlich an Barrierefreiheits-Warnungen hingen,
+                  // bekam damit "Abmahngefahr" aufgedruckt, obwohl das BFSG
+                  // von Marktüberwachungsbehörden durchgesetzt wird und nicht
+                  // per Abmahnung. Umgekehrt wäre ein kritischer Befund bei 61
+                  // Punkten als bloßer "Handlungsbedarf" durchgegangen.
+                  const befunde = scanResult.befundeGesamt ?? 0;
+                  const kritisch = scanResult.kritischeBefunde ?? 0;
+                  const isGreen = befunde === 0 || max === 0;
+                  const isRed = kritisch > 0;
                   const bgClass = isGreen ? 'bg-green-50 border-green-200' : isRed ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200';
                   const textClass = isGreen ? 'text-green-900' : isRed ? 'text-red-900' : 'text-yellow-900';
                   const numClass = isGreen ? 'text-green-600' : isRed ? 'text-red-600' : 'text-yellow-600';
@@ -520,7 +555,12 @@ export default function WebsiteScanner() {
                       {isGreen ? (
                         <>
                           <div className={`text-3xl font-bold ${numClass}`}>0€</div>
-                          <p className={`text-sm mt-1 ${subClass}`}>Kein Handlungsbedarf gefunden</p>
+                          <p className={`text-sm mt-1 ${subClass}`}>
+                            Keine automatisiert erkennbaren Verstöße
+                            {(scanResult.hinweiseGesamt ?? 0) > 0
+                              ? ` — ${scanResult.hinweiseGesamt} Hinweis${scanResult.hinweiseGesamt === 1 ? '' : 'e'} ohne Handlungsbedarf`
+                              : ''}
+                          </p>
                         </>
                       ) : (
                         <>
@@ -577,14 +617,29 @@ export default function WebsiteScanner() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600">Gefundene Issues:</span>
-                        <span className="font-semibold text-gray-900">{pillarData.issues}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600">Kritische Issues:</span>
-                        <span className="font-semibold text-red-600">{pillarData.critical}</span>
-                      </div>
+                      {pillarData.issues === 0 ? (
+                        <div className="flex items-center gap-2 text-sm text-green-700">
+                          <CheckCircle className="w-4 h-4 shrink-0" />
+                          <span>Keine automatisiert erkennbaren Verstöße</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600">Gefundene Verstöße:</span>
+                            <span className="font-semibold text-gray-900">{pillarData.issues}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600">Davon kritisch:</span>
+                            <span className="font-semibold text-red-600">{pillarData.critical}</span>
+                          </div>
+                        </>
+                      )}
+                      {(pillarData.hinweise ?? 0) > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-600">Hinweise (kein Verstoß):</span>
+                          <span className="font-semibold text-gray-500">{pillarData.hinweise}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

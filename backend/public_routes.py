@@ -2168,8 +2168,13 @@ async def fuehre_preview_scan_aus(url: str) -> Dict[str, Any]:
                 "risk_bereiche_betroffen": gesamt["bereiche_betroffen"],
                 "risk_bereiche_kritisch": gesamt["bereiche_kritisch"],
                 "risk_gedeckelt": gesamt["gedeckelt"],
-                "issues_count": len(scan_result.get("issues", [])),
-                "critical_count": sum(1 for cat in risk_categories if cat['severity'] == 'critical' and cat['detected']),
+                # Gezaehlt wird, was ein Verstoss ist. `issues` enthaelt auch
+                # Hinweise und Entwarnungen ("Kein Cookie-Banner erforderlich");
+                # deren Zahl als "Befunde" auszuweisen, hat auf complyo.de aus
+                # vier Befunden dreizehn gemacht.
+                "issues_count": sum(c["issues_count"] for c in risk_categories),
+                "critical_count": sum(c["critical_count"] for c in risk_categories),
+                "hinweise_count": sum(c["hinweise_count"] for c in risk_categories),
                 # Phase 7.1 Lead-Magnet: explizite Regulierungs-Reports
                 "bfsg_report": scan_result.get("bfsg_report"),
                 "ai_act_report": scan_result.get("ai_act_report"),
@@ -2305,81 +2310,146 @@ async def scan_auftrag_abholen(kennung: str) -> Dict[str, Any]:
     return antwort
 
 
+# Issue-Kategorie -> Anzeige-Bereich der Landing.
+#
+# Die Checks vergeben ihre Kategorie selbst; hier wird sie nur einem der acht
+# Anzeige-Bereiche zugeordnet. Bis zum 08.09.2026 stand an dieser Stelle etwas
+# anderes: die Kategorie wurde aus dem BESCHREIBUNGSTEXT des Befundes neu
+# erraten (risk_calculator._categorize_issue). Das ging dreifach schief und
+# traf jede Kundenseite gleichermassen:
+#
+#   * "Kein Cookie-Banner erforderlich" — ein Hinweis mit Risiko 0, der sagt,
+#     dass alles in Ordnung ist — enthaelt das Wort Cookie und wurde als
+#     Cookie-Verstoss mit 1.000-20.000 EUR gezaehlt. Der Scanner zaehlte seine
+#     eigene Entwarnung als Befund.
+#   * "tracking" stand in ZWEI Bereichslisten (cookies und dsgvo); jeder
+#     Tracking-Befund wurde doppelt gezaehlt.
+#   * Befunde, deren Text in keine Liste passte (media_accessibility,
+#     DSA-Themen), verschwanden ganz aus der Anzeige.
+#
+# Auf complyo.de ergaben 13 Befunde so 12 Zaehlungen, davon 2 doppelt und 2
+# unsichtbar — und einen kritischen DSGVO-Bereich, obwohl kein einziger Befund
+# kritisch war.
+_BEREICH_JE_KATEGORIE = {
+    # Barrierefreiheit
+    "barrierefreiheit": "barrierefreiheit", "accessibility": "barrierefreiheit",
+    "kontraste": "barrierefreiheit", "kontrast": "barrierefreiheit",
+    "tastaturbedienung": "barrierefreiheit", "aria": "barrierefreiheit",
+    "alt_text": "barrierefreiheit", "media_accessibility": "barrierefreiheit",
+    "wcag": "barrierefreiheit",
+    # Cookies
+    "cookies": "cookies", "cookie": "cookies", "consent": "cookies",
+    "tcf": "cookies", "ttdsg": "cookies",
+    # DSGVO
+    "datenschutz": "dsgvo", "dsgvo": "dsgvo", "gdpr": "dsgvo",
+    "privacy": "dsgvo", "tracking": "dsgvo", "datenverarbeitung": "dsgvo",
+    "avv": "dsgvo", "social_media": "dsgvo",
+    "ai_act_transparency": "dsgvo", "ki_transparenz": "dsgvo",
+    # Sicherheit
+    "security": "sicherheit", "sicherheit": "sicherheit", "ssl": "sicherheit",
+    # Rechtstexte
+    "impressum": "rechtstexte", "agb": "rechtstexte", "legal": "rechtstexte",
+    "contact": "rechtstexte", "kontakt": "rechtstexte",
+    "urheberrecht": "rechtstexte",
+    # Shop
+    "shop": "shop", "widerrufsbelehrung": "shop", "widerruf": "shop",
+    "kuendigungsbutton": "shop",
+    # Preise
+    "preisangaben": "preise", "preisangabe": "preise", "grundpreis": "preise",
+    "pangv": "preise",
+    # Wettbewerb
+    "uwg": "wettbewerb", "irrefuehrende_werbung": "wettbewerb",
+    "pruefsiegel": "wettbewerb", "schleichwerbung": "wettbewerb",
+}
+
+# Rueckfall fuer Kategorien, die diese Tabelle nicht kennt. Der ScoreCalculator
+# ordnet JEDE Kategorie genau einer der vier Saeulen zu; nichts faellt heraus.
+_BEREICH_JE_SAEULE = {
+    "accessibility": "barrierefreiheit",
+    "cookies": "cookies",
+    "gdpr": "dsgvo",
+    "legal": "rechtstexte",
+}
+
+# Bereich -> Zeile der Risikomatrix (compliance_risk_matrix kennt nur wenige
+# Kategorien; alles Uebrige faellt auf das Standardrisiko zurueck).
+_MATRIXKATEGORIE_JE_BEREICH = {
+    "barrierefreiheit": "barrierefreiheit",
+    "cookies": "cookies",
+    "dsgvo": "datenschutz",
+    "sicherheit": "datenschutz",
+    "rechtstexte": "impressum",
+    "shop": "shop",
+}
+
+
+def _bereich_fuer(kategorie: str) -> str:
+    """Ordnet eine Issue-Kategorie genau einem Anzeige-Bereich zu."""
+    kat = (kategorie or "").strip().lower()
+    if kat in _BEREICH_JE_KATEGORIE:
+        return _BEREICH_JE_KATEGORIE[kat]
+    from compliance_engine.score_calculator import ScoreCalculator
+    return _BEREICH_JE_SAEULE.get(ScoreCalculator.categorize(kat), "rechtstexte")
+
+
 async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict[str, Any]]:
-    """Aggregiert Issues nach den 4 Hauptsäulen + weitere Kategorien"""
-    
-    # Die 4 Hauptsäulen von Complyo
-    main_pillars = {
-        'barrierefreiheit': {
-            'label': 'Barrierefreiheit',
-            'icon': '♿',
-            'categories': ['barrierefreiheit', 'kontraste', 'tastaturbedienung']
-        },
-        'cookies': {
-            'label': 'Cookie Compliance',
-            'icon': '🍪',
-            'categories': ['cookies', 'tracking']
-        },
-        'rechtstexte': {
-            'label': 'Rechtstexte',
-            'icon': '📄',
-            'categories': ['impressum', 'agb', 'contact', 'uwg']
-        },
-        'shop': {
-            'label': 'Shop-Compliance',
-            'icon': '🛒',
-            'categories': ['shop', 'widerrufsbelehrung', 'preisangaben']
-        },
-        'dsgvo': {
-            'label': 'DSGVO',
-            'icon': '🔒',
-            'categories': ['datenschutz', 'tracking', 'datenverarbeitung', 'avv']
-        },
-        'sicherheit': {
-            'label': 'Sicherheit',
-            'icon': '🔐',
-            'categories': ['security']
-        },
+    """Fasst die Befunde zu den Anzeige-Bereichen der Landing zusammen.
+
+    Zwei Regeln, die vorher fehlten:
+
+    1. Die Kategorie und der Schweregrad kommen aus dem Befund selbst. Der
+       Check, der ihn erhoben hat, weiss beides; sie aus dem Beschreibungstext
+       zu erraten hat auf complyo.de aus 4 echten Befunden 13 gemachte gemacht.
+    2. Als Verstoss zaehlt nur, was einer ist. Hinweise (`info`) sind Notizen
+       und Entwarnungen — sie werden getrennt als `hinweise_count` ausgewiesen
+       und treiben weder Zaehlung noch Risiko.
+    """
+    bereiche = {
+        "barrierefreiheit": {"label": "Barrierefreiheit", "icon": "♿"},
+        "cookies":          {"label": "Cookie Compliance", "icon": "🍪"},
+        "rechtstexte":      {"label": "Rechtstexte", "icon": "📄"},
+        "shop":             {"label": "Shop-Compliance", "icon": "🛒"},
+        "dsgvo":            {"label": "DSGVO", "icon": "🔒"},
+        "sicherheit":       {"label": "Sicherheit", "icon": "🔐"},
+        "wettbewerb":       {"label": "Wettbewerbsrecht", "icon": "⚖️"},
+        "preise":           {"label": "Preisangaben", "icon": "💰"},
     }
-    
-    # Weitere Kategorien
-    other_categories = {
-        'wettbewerb': {
-            'label': 'Wettbewerbsrecht',
-            'icon': '⚖️',
-            'categories': ['irrefuehrende_werbung', 'pruefsiegel', 'schleichwerbung']
-        },
-        'preise': {
-            'label': 'Preisangaben',
-            'icon': '💰',
-            'categories': ['preisangaben', 'grundpreis']
-        }
+    gesammelt = {
+        bid: {"befunde": 0, "kritisch": 0, "hinweise": 0, "min": [], "max": []}
+        for bid in bereiche
     }
-    
-    all_pillars = {**main_pillars, **other_categories}
+
+    for issue in issues:
+        if isinstance(issue, str):
+            # Altformat: reiner Text, ohne eigene Kategorie. Dann bleibt nur die
+            # Textsuche — sie ist hier der Rueckfall, nicht mehr der Normalweg.
+            risk_data = await risk_calculator.calculate_issue_risk(issue)
+            bereich = _bereich_fuer(risk_data.get("category", ""))
+            schwere = risk_data.get("severity", "warning")
+            text = issue
+        else:
+            bereich = _bereich_fuer(issue.get("category", ""))
+            schwere = (issue.get("severity") or "warning").lower()
+            text = issue.get("description") or issue.get("title") or ""
+
+        eintrag = gesammelt[bereich]
+        if schwere not in ("critical", "warning"):
+            eintrag["hinweise"] += 1
+            continue
+
+        eintrag["befunde"] += 1
+        if schwere == "critical":
+            eintrag["kritisch"] += 1
+
+        risk_data = await risk_calculator.calculate_issue_risk(
+            text, category=_MATRIXKATEGORIE_JE_BEREICH.get(bereich, bereich)
+        )
+        eintrag["min"].append(risk_data["risk_min"])
+        eintrag["max"].append(risk_data["risk_max"])
+
     result = []
-    
-    # Zähle Issues pro Säule
-    for pillar_id, pillar_data in all_pillars.items():
-        detected_issues = []
-        issue_risks_min = []
-        issue_risks_max = []
-        max_severity = 'info'
-
-        for issue in issues:
-            issue_text = issue if isinstance(issue, str) else issue.get("description", str(issue))
-            risk_data = await risk_calculator.calculate_issue_risk(issue_text)
-
-            if risk_data['category'] in pillar_data['categories']:
-                detected_issues.append(issue_text)
-                issue_risks_min.append(risk_data['risk_min'])
-                issue_risks_max.append(risk_data['risk_max'])
-
-                if risk_data['severity'] == 'critical':
-                    max_severity = 'critical'
-                elif risk_data['severity'] == 'warning' and max_severity != 'critical':
-                    max_severity = 'warning'
-
+    for bid, meta in bereiche.items():
+        e = gesammelt[bid]
         # Risiko-Aggregation: NICHT aufsummieren.
         #
         # Aus 48 Cookie-Verstoessen auf einer Website werden keine 48 Verfahren,
@@ -2391,36 +2461,40 @@ async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict
         # unterlinearen Zuschlag fuer die Anzahl der Fundstellen (viele Verstoesse
         # erhoehen Wahrscheinlichkeit und Bussgeldzumessung, aber nicht linear).
         # Zuschlag gedeckelt bei +50 %.
-        if detected_issues:
-            escalation = 1.0 + min(0.5, 0.05 * (len(detected_issues) - 1))
-            pillar_risk_min = int(max(issue_risks_min) * escalation)
-            pillar_risk_max = int(max(issue_risks_max) * escalation)
+        if e["befunde"]:
+            eskalation = 1.0 + min(0.5, 0.05 * (e["befunde"] - 1))
+            risk_min = int(max(e["min"]) * eskalation)
+            risk_max = int(max(e["max"]) * eskalation)
             # Der gesetzliche Rahmen OHNE Zuschlag. risk_max traegt den
             # Fundstellen-Zuschlag und ist damit eine Schaetzung; der Rahmen ist
-            # eine Tatsache aus der Matrix (Art. 83 DSGVO). Beim ersten Live-Scan
-            # nach der Umstellung stand deshalb "gesetzlicher Rahmen bis 75.000
-            # EUR" auf dem Schirm, obwohl in der Matrix 50.000 steht - eine
-            # gerechnete Zahl als Gesetzesangabe ausgegeben.
-            pillar_rahmen_max = int(max(issue_risks_max))
+            # eine Tatsache aus der Matrix (Art. 83 DSGVO).
+            rahmen_max = int(max(e["max"]))
+            schwere = "critical" if e["kritisch"] else "warning"
         else:
-            pillar_risk_min = 0
-            pillar_risk_max = 0
-            pillar_rahmen_max = 0
-
+            risk_min = risk_max = rahmen_max = 0
+            schwere = "info"
 
         result.append({
-            'id': pillar_id,
-            'label': pillar_data['label'],
-            'icon': pillar_data['icon'],
-            'detected': len(detected_issues) > 0,
-            'severity': max_severity if detected_issues else 'info',
-            'risk_min': pillar_risk_min,
-            'risk_max': pillar_risk_max,
-            'rahmen_max': pillar_rahmen_max,
-            'risk_range': f"{int(pillar_risk_min):,}€ - {int(pillar_risk_max):,}€".replace(',', '.') if detected_issues else None,
-            'issues_count': len(detected_issues)
+            "id": bid,
+            "label": meta["label"],
+            "icon": meta["icon"],
+            "detected": e["befunde"] > 0,
+            "severity": schwere,
+            "risk_min": risk_min,
+            "risk_max": risk_max,
+            "rahmen_max": rahmen_max,
+            "risk_range": (
+                f"{int(risk_min):,}€ - {int(risk_max):,}€".replace(",", ".")
+                if e["befunde"] else None
+            ),
+            "issues_count": e["befunde"],
+            "critical_count": e["kritisch"],
+            # Hinweise sind keine Verstoesse: Entwarnungen ("Kein Cookie-Banner
+            # erforderlich") und Notizen. Sie werden ausgewiesen, aber nicht
+            # als Befund gezaehlt.
+            "hinweise_count": e["hinweise"],
         })
-    
+
     return result
 
 def _preview_scan_fehler(url: str, detail: str | None = None) -> Dict[str, Any]:

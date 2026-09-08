@@ -32,10 +32,12 @@ logger = logging.getLogger(__name__)
 
 from compliance_engine.check_spec_rules import (
     detection_is_weak,
+    gate_entscheidet_nichts,
     gate_keyword_too_short,
     MIN_GATE_KEYWORD_LEN,
     AUTO_CHECK_RISK_CAP as _RISK_CAP,
 )
+from compliance_engine.scan_kontext import erfuellt as _kontext_erfuellt
 
 
 # ---------------------------------------------------------------------------
@@ -333,11 +335,24 @@ def _safe_search(pattern: str, text: str) -> bool:
         return pattern.lower() in text
 
 
-async def run_declarative_checks(url: str, soup: BeautifulSoup, session=None) -> List[Dict[str, Any]]:
+async def run_declarative_checks(
+    url: str,
+    soup: BeautifulSoup,
+    session=None,
+    kontext: Optional[Dict[str, bool]] = None,
+) -> List[Dict[str, Any]]:
     """
     Einstiegspunkt für den Scanner. Lädt aktive deklarative Checks aus der
     Registry, wertet Gate + Detektion aus und liefert Issue-Dicts im selben
     Format wie die hartcodierten Checks.
+
+    `kontext` sind die für diese Seite belegten Tatsachen
+    (compliance_engine.scan_kontext.ermittle). Eine Prüfung, deren
+    `applies_when.requires` darin keine Deckung findet, läuft nicht — die
+    Pflicht, die sie prüft, besteht für diese Seite nicht.
+
+    Ohne Kontext (Altpfad, Test) laufen nur Prüfungen ohne `requires`; bedingte
+    Pflichten werden übersprungen statt auf Verdacht behauptet.
     """
     if declarative_check_registry is None:
         return []
@@ -361,6 +376,30 @@ async def run_declarative_checks(url: str, soup: BeautifulSoup, session=None) ->
                     f"Declarative check '{check.get('slug')}': Gate-Keyword "
                     f"'{kurz}' unter {MIN_GATE_KEYWORD_LEN} Zeichen — skipped"
                 )
+                continue
+            # Gate-Staerke (Regel-SSOT): ein bedingungsloses oder rein
+            # generisches Gate behauptet die Pflicht auf jeder Kundenseite.
+            schwach = gate_entscheidet_nichts(check.get("applies_when") or {})
+            if schwach:
+                logger.warning(
+                    f"Declarative check '{check.get('slug')}': {schwach} — skipped"
+                )
+                continue
+            # Bedingte Pflicht: nur pruefen, wenn ihre Voraussetzung belegt ist.
+            trifft_zu, grund = _kontext_erfuellt(
+                (check.get("applies_when") or {}).get("requires"), kontext
+            )
+            if not trifft_zu:
+                if grund.startswith("unbekannt:"):
+                    logger.warning(
+                        f"Declarative check '{check.get('slug')}': "
+                        f"Voraussetzung {grund} — skipped"
+                    )
+                else:
+                    logger.debug(
+                        f"Declarative check '{check.get('slug')}': Voraussetzung "
+                        f"'{grund}' auf dieser Seite nicht belegt — nicht anwendbar"
+                    )
                 continue
             if not _gate_passes(check.get("applies_when", {}), soup, html_lower):
                 continue

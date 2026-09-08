@@ -82,21 +82,56 @@ B2B_MUSTER = [
 ]
 
 
+def _b2b_im_text(text: str, quelle: str) -> bool:
+    for muster in B2B_MUSTER:
+        if re.search(muster, text):
+            logger.info(f"Reines B2B-Angebot erkannt ({quelle}, Muster: {muster})")
+            return True
+    return False
+
+
 def erkenne_reines_b2b(soup: BeautifulSoup) -> bool:
     """
-    Sagt, ob die Seite Verbraucher ausdruecklich ausschliesst.
+    Sagt, ob die geladene Seite Verbraucher ausdruecklich ausschliesst.
 
     Nur dann entfallen Widerrufsbelehrung (§§ 312g, 355 BGB) und
     Kuendigungsknopf (§ 312k BGB) — beide setzen einen Verbrauchervertrag
     voraus. Fehlt die Klarstellung, wird im Zweifel von Verbrauchergeschaeft
     ausgegangen; das ist die sichere Richtung.
     """
-    text = soup.get_text(separator=' ', strip=True).lower()
-    for muster in B2B_MUSTER:
-        if re.search(muster, text):
-            logger.info(f"Reines B2B-Angebot erkannt (Muster: {muster})")
-            return True
-    return False
+    return _b2b_im_text(soup.get_text(separator=' ', strip=True).lower(), "Seitentext")
+
+
+async def erkenne_reines_b2b_mit_agb(
+    base_url: str, soup: BeautifulSoup, session=None
+) -> bool:
+    """
+    Wie erkenne_reines_b2b, liest aber zusaetzlich die verlinkten AGB.
+
+    Der Ausschluss von Verbrauchern steht praktisch nie auf der Startseite,
+    sondern in Ziffer 1 der AGB — genau so auch bei complyo.de selbst
+    ("Vertragsschluss mit Verbrauchern im Sinne des § 13 BGB ist
+    ausgeschlossen"). Die alte, rein startseitige Erkennung konnte deshalb bei
+    kaum einem echten B2B-Anbieter greifen: der Scan warf jedem
+    B2B-SaaS-Angebot mit Preisliste eine fehlende Widerrufsbelehrung vor, 3.000
+    EUR, Schweregrad kritisch. Am 08.09.2026 war das der einzige kritische
+    Befund im Selbstscan von complyo.de — und der Beleg dagegen stand auf einer
+    Seite, die der Scanner ohnehin abruft.
+    """
+    if erkenne_reines_b2b(soup):
+        return True
+    try:
+        agb_url = await _finde_agb_url(base_url, soup, session)
+        if not agb_url:
+            return False
+        roh = await _fetch_page_text(agb_url, session)
+        if not roh:
+            return False
+        text = BeautifulSoup(roh, 'html.parser').get_text(separator=' ', strip=True).lower()
+        return _b2b_im_text(text, f"AGB {agb_url}")
+    except Exception as e:
+        logger.warning(f"B2B-Pruefung ueber AGB fehlgeschlagen (non-critical): {e}")
+        return False
 
 
 @dataclass
@@ -144,30 +179,33 @@ async def _fetch_page_text(url: str, session=None) -> Optional[str]:
     return None
 
 
-async def _check_agb(base_url: str, soup: BeautifulSoup, session) -> List[ShopIssue]:
-    issues = []
-    parsed = urlparse(base_url)
-    base = f"{parsed.scheme}://{parsed.netloc}"
+_AGB_HREF_KW = ['agb', 'allgemeine-geschaeftsbedingungen', 'terms', 'terms-of-service',
+                'nutzungsbedingungen', 'geschaeftsbedingungen', 'tos', 'gtc', '/legal/terms']
+_AGB_TEXT_KW = ['agb', 'allgemeine geschäftsbedingungen', 'nutzungsbedingungen',
+                'terms of service', 'terms & conditions', 'geschäftsbedingungen']
+_AGB_PFADE = ['/agb', '/allgemeine-geschaeftsbedingungen', '/terms',
+              '/terms-of-service', '/nutzungsbedingungen', '/tos', '/gtc']
 
-    href_kw = ['agb', 'allgemeine-geschaeftsbedingungen', 'terms', 'terms-of-service',
-               'nutzungsbedingungen', 'geschaeftsbedingungen', 'tos', 'gtc', '/legal/terms']
-    text_kw = ['agb', 'allgemeine geschäftsbedingungen', 'nutzungsbedingungen',
-               'terms of service', 'terms & conditions', 'geschäftsbedingungen']
 
-    agb_url = None
+async def _finde_agb_url(base_url: str, soup: BeautifulSoup, session) -> Optional[str]:
+    """Adresse der AGB/Nutzungsbedingungen — erst per Link, dann per Pfadprobe."""
     for a in soup.find_all('a', href=True):
         href = a.get('href', '').lower()
         text = a.get_text(strip=True).lower()
-        if any(k in href for k in href_kw) or any(k in text for k in text_kw):
-            agb_url = urljoin(base_url, a.get('href', ''))
-            break
+        if any(k in href for k in _AGB_HREF_KW) or any(k in text for k in _AGB_TEXT_KW):
+            return urljoin(base_url, a.get('href', ''))
 
-    if not agb_url:
-        for path in ['/agb', '/allgemeine-geschaeftsbedingungen', '/terms',
-                     '/terms-of-service', '/nutzungsbedingungen', '/tos', '/gtc']:
-            if await _url_exists(base + path, session):
-                agb_url = base + path
-                break
+    parsed = urlparse(base_url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+    for path in _AGB_PFADE:
+        if await _url_exists(base + path, session):
+            return base + path
+    return None
+
+
+async def _check_agb(base_url: str, soup: BeautifulSoup, session) -> List[ShopIssue]:
+    issues = []
+    agb_url = await _finde_agb_url(base_url, soup, session)
 
     if not agb_url:
         issues.append(ShopIssue(
@@ -403,7 +441,7 @@ async def check_shop_compliance(url: str, soup: BeautifulSoup, session=None) -> 
     # reine Abo-/SaaS-Dienste ohne Warenkorb — aber nur gegenueber
     # Verbrauchern. Wer Verbraucher ausdruecklich ausschliesst, schuldet
     # beides nicht.
-    if erkenne_reines_b2b(soup):
+    if await erkenne_reines_b2b_mit_agb(url, soup, session):
         issues.append(ShopIssue(
             category='shop',
             severity='info',

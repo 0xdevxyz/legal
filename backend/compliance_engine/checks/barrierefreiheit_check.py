@@ -1068,31 +1068,100 @@ async def _check_semantic_html(soup: BeautifulSoup) -> List[BarrierefreiheitIssu
     
     return issues
 
+# Muster fuer "steht sichtbar nicht im Weg": Elemente, die per Stil aus dem
+# Sichtfeld geschoben sind. Zusammen mit aria-hidden ist das die uebliche
+# Bauweise eines Honeypot-Feldes.
+_AUSSER_SICHT_RE = re.compile(
+    r'(?:left|top)\s*:\s*-\s*\d{3,}|display\s*:\s*none|visibility\s*:\s*hidden',
+    re.I,
+)
+_AUSSER_SICHT_KLASSEN = ('sr-only', 'visually-hidden', 'screen-reader', 'hidden')
+
+
+def _ist_unsichtbar_gestellt(elem) -> bool:
+    """Ist das Element per Stil oder Klasse aus dem Sichtfeld genommen?"""
+    for knoten in [elem] + list(elem.parents):
+        if getattr(knoten, 'get', None) is None:
+            continue
+        stil = knoten.get('style') or ''
+        if stil and _AUSSER_SICHT_RE.search(stil):
+            return True
+        klassen = ' '.join(knoten.get('class') or []).lower()
+        if any(k in klassen for k in _AUSSER_SICHT_KLASSEN):
+            return True
+        # Tailwind schreibt Offsets als Klasse, nicht als Stil: left-[-9999px]
+        if re.search(r'(?:left|top)-\[-\d{3,}px\]', klassen):
+            return True
+    return False
+
+
+def _ist_der_nutzung_entzogen(elem) -> bool:
+    """
+    Ist das Element ohnehin niemandem angeboten?
+
+    tabindex="-1" ist dann kein Mangel, sondern die richtige Ergaenzung: ein
+    Feld, das fuer assistive Technik ausgeblendet ist, gehoert auch nicht in
+    die Tabreihenfolge. Genau so ist ein Honeypot gebaut — ein Formularfeld,
+    das nur Bots ausfuellen sollen (aria-hidden + aus dem Sichtfeld). Bis zum
+    08.09.2026 meldete diese Pruefung solche Felder als "nicht per Tastatur
+    erreichbar"; auf complyo.de selbst waren das beide Befunde der Saeule.
+    """
+    if elem.has_attr('disabled') or elem.has_attr('hidden') or elem.has_attr('inert'):
+        return True
+    if elem.name == 'input' and (elem.get('type') or '').lower() == 'hidden':
+        return True
+    # Ein <a> ohne href ist ohnehin nicht fokussierbar — tabindex="-1" aendert daran nichts.
+    if elem.name == 'a' and not elem.get('href'):
+        return True
+    for knoten in [elem] + list(elem.parents):
+        if getattr(knoten, 'get', None) is not None and knoten.get('aria-hidden') == 'true':
+            return True
+    return _ist_unsichtbar_gestellt(elem)
+
+
+def _kurzform(elem) -> str:
+    """Knappe Fundstelle: Tag plus die Attribute, an denen man es wiederfindet."""
+    teile = [elem.name]
+    for attr in ('id', 'name', 'type'):
+        wert = elem.get(attr)
+        if wert:
+            teile.append(f'{attr}="{wert}"')
+    return '<' + ' '.join(teile) + '>'
+
+
 async def _check_keyboard_navigation(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
     """Prüft Tastaturbedienbarkeit"""
     issues = []
-    
-    # Prüfe interaktive Elemente mit tabindex=-1
-    negative_tabindex = soup.find_all(attrs={'tabindex': '-1'})
-    interactive_with_negative_tabindex = []
-    
-    for elem in negative_tabindex:
-        if elem.name in ['a', 'button', 'input', 'select', 'textarea']:
-            interactive_with_negative_tabindex.append(elem.name)
-    
-    if interactive_with_negative_tabindex:
-        count = len(interactive_with_negative_tabindex)
+
+    # Interaktive Elemente mit tabindex="-1".
+    #
+    # Gemeldet wird nur, was Nutzern auch ANGEBOTEN wird. Ausgeblendete oder
+    # deaktivierte Elemente sind bewusst aus der Tabreihenfolge genommen; das
+    # ist konform und nicht der Mangel, den WCAG 2.1.1 meint.
+    betroffen = [
+        elem for elem in soup.find_all(attrs={'tabindex': '-1'})
+        if elem.name in ('a', 'button', 'input', 'select', 'textarea')
+        and not _ist_der_nutzung_entzogen(elem)
+    ]
+
+    if betroffen:
+        count = len(betroffen)
+        fundstellen = [_kurzform(e) for e in betroffen[:5]]
         issues.append(BarrierefreiheitIssue(
             category='tastaturbedienung',
             severity='warning',
             title=f'{count} Elemente nicht per Tastatur erreichbar',
-            description=f'{count} interaktive Elemente haben tabindex="-1" und sind daher nicht per Tastatur erreichbar.',
+            description=(
+                f'{count} bedienbare Elemente haben tabindex="-1" und sind daher '
+                f'nicht per Tastatur erreichbar: {", ".join(fundstellen)}'
+                + (' u. a.' if count > len(fundstellen) else '')
+            ),
             risk_euro=500,
             recommendation='Entfernen Sie tabindex="-1" von interaktiven Elementen oder setzen Sie tabindex="0".',
             legal_basis='BFSG §12, WCAG 2.1 (Keyboard Accessible)',
             auto_fixable=False
         ))
-    
+
     return issues
 
 async def _check_color_contrast(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
