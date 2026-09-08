@@ -93,7 +93,7 @@ MONTHLY_ADDONS = {
     "priority_support": {
         "name": "Priority Support",
         "tagline": "Erstklassiger Support rund um die Uhr",
-        "price_monthly": 49,
+        "price_monthly": 89,
         "currency": "eur",
         "features": [
             "24/7 Support (auch Wochenende)",

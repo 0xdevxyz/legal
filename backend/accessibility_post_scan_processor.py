@@ -4,6 +4,7 @@ Complyo Accessibility Post-Scan Processor
 Verarbeitet Barrierefreiheits-Issues nach einem Scan und generiert Alt-Texte
 """
 
+import asyncio
 import asyncpg
 import json
 import logging
@@ -37,7 +38,20 @@ class AccessibilityPostScanProcessor:
     def __init__(self, db_pool: asyncpg.Pool):
         self.db_pool = db_pool
         self.fix_saver = AccessibilityFixSaver(db_pool)
-    
+
+    async def _hole_plan_type(self, user_id: str) -> str:
+        """Tarif des Kontos fuer das KI-Budget. 'free' bei jedem Fehler —
+        das engste Budget ist der sichere Default, nicht der teuerste."""
+        try:
+            async with self.db_pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT plan_type FROM users WHERE id = $1", int(user_id)
+                )
+            return (row["plan_type"] if row and row["plan_type"] else "free")
+        except Exception as e:
+            logger.warning(f"Tarif fuer user_id={user_id} nicht ladbar, nutze 'free' ({e})")
+            return "free"
+
     async def process_scan_results(
         self,
         scan_id: str,
@@ -122,11 +136,14 @@ class AccessibilityPostScanProcessor:
                 }
             
             logger.info(f"🖼️ Found {len(alt_text_issues)} alt-text issues")
-            
-            # 3. Generiere AI Alt-Texte
+
+            # 3. Generiere AI Alt-Texte (Budget richtet sich nach dem Tarif des Kontos)
+            plan_type = await self._hole_plan_type(user_id)
             alt_text_fixes = await self._generate_alt_text_fixes(
                 alt_text_issues,
-                site_url
+                site_url,
+                user_id=user_id,
+                plan_type=plan_type,
             )
             
             if not alt_text_fixes:
@@ -585,23 +602,33 @@ class AccessibilityPostScanProcessor:
     async def _generate_alt_text_fixes(
         self,
         alt_text_issues: List[Dict[str, Any]],
-        site_url: str
+        site_url: str,
+        user_id: Optional[str] = None,
+        plan_type: str = "free",
     ) -> List[Dict[str, Any]]:
         """
         Generiert AI Alt-Text-Fixes
-        
-        Nutzt AIAltTextGenerator (Claude Vision). Fällt auf die
-        Kontext-Heuristik zurück, wenn kein API-Key gesetzt ist oder das
-        Bild nicht ladbar/analysierbar ist.
+
+        Nutzt AIAltTextGenerator (Claude Vision, mit Cache und KI-Budget).
+        Fällt auf die Kontext-Heuristik zurück, wenn kein API-Key gesetzt ist,
+        das Budget erschöpft ist oder das Bild nicht ladbar/analysierbar ist.
+
+        Dasselbe Bild (Logo, Header, Icon) taucht typischerweise auf jeder
+        Unterseite eines Mehrseiten-Scans auf. Vorher bekam jedes Vorkommen
+        einen eigenen, sequenziellen Vision-Call — bei einem Vorfall am
+        04.09.2026 einer der Haupttreiber des Verbrauchs. Hier wird zuerst
+        auf die tatsächliche Bild-URL dedupliziert und dann parallel (statt
+        sequenziell) verarbeitet: pro EINZIGARTIGEM Bild höchstens ein Call,
+        unabhängig davon, auf wie vielen Unterseiten es vorkommt.
         """
         from compliance_engine.ai_alt_text_generator import AIAltTextGenerator
         from urllib.parse import urljoin
 
         generator = AIAltTextGenerator()
-        fixes = []
-        
+
+        # Erste Passage: Bild-Infos je Issue auflösen, ohne Netzwerkzugriff.
+        vorbereitet = []
         for idx, issue in enumerate(alt_text_issues):
-            # Extrahiere Bild-Informationen aus Issue
             # Die Bild-Adresse muss aus dem Befund kommen — erfinden lassen
             # sich Dateinamen nicht.
             #
@@ -627,66 +654,111 @@ class AccessibilityPostScanProcessor:
                     "Alt-Text uebersprungen: Befund ohne ermittelbare Bildadresse"
                 )
                 continue
-            
-            # Generiere Filename
+
             filename = image_src.split('/')[-1] if '/' in image_src else image_src
-            
-            # Extrahiere Kontext
             page_url = issue.get('page_url', site_url)
             page_title = issue.get('page_title', '') or \
                         self._extract_page_title_from_url(page_url)
-            
             surrounding_text = issue.get('surrounding_text', '') or \
                              issue.get('context', '') or \
                              ''
-            
             element_html = issue.get('element_html', '') or \
                           issue.get('html', '') or \
                           f'<img src="{image_src}">'
-            
-            # Alt-Text bevorzugt via Claude Vision, sonst Kontext-Heuristik.
             abs_src = urljoin(page_url or site_url, image_src) if image_src else ""
+
+            vorbereitet.append({
+                "image_src": image_src,
+                "filename": filename,
+                "page_url": page_url,
+                "page_title": page_title,
+                "surrounding_text": surrounding_text,
+                "element_html": element_html,
+                "abs_src": abs_src,
+            })
+
+        # Zweite Passage: pro EINZIGARTIGER Bild-URL genau ein Vision-Call,
+        # parallel statt sequenziell.
+        einzigartige_urls = list({
+            v["abs_src"] for v in vorbereitet
+            if v["abs_src"].startswith(("http://", "https://"))
+        })
+
+        semaphore = asyncio.Semaphore(5)
+
+        async def hole_ai_ergebnis(abs_src: str, kontext: str):
+            async with semaphore:
+                try:
+                    return await generator.generate_alt_text(
+                        image_url=abs_src,
+                        context=kontext[:500],
+                        language="de",
+                        user_id=user_id,
+                        plan_type=plan_type,
+                    )
+                except Exception as e:
+                    logger.warning(f"Vision-Alt-Text fehlgeschlagen für {abs_src}: {e}")
+                    return None
+
+        # Kontext fuer den Call: erstes Vorkommen der URL liefert Seitentitel/
+        # Umgebungstext, falls vorhanden — Bild ist dasselbe, Kontext variiert
+        # leicht je Seite, das faellt bei einem gemeinsamen Call kaum ins Gewicht.
+        kontext_je_url = {}
+        for v in vorbereitet:
+            if v["abs_src"] not in kontext_je_url:
+                kontext_je_url[v["abs_src"]] = v["surrounding_text"] or v["page_title"] or ""
+
+        ai_ergebnisse = {}
+        if einzigartige_urls:
+            aufgaben = [hole_ai_ergebnis(url, kontext_je_url.get(url, "")) for url in einzigartige_urls]
+            resultate = await asyncio.gather(*aufgaben)
+            ai_ergebnisse = dict(zip(einzigartige_urls, resultate))
+
+            if len(vorbereitet) > len(einzigartige_urls):
+                logger.info(
+                    f"🖼️ {len(vorbereitet)} Alt-Text-Befunde → {len(einzigartige_urls)} "
+                    f"einzigartige Bilder ({len(vorbereitet) - len(einzigartige_urls)} Call(s) gespart durch Dedup)"
+                )
+
+        # Dritte Passage: Ergebnis je Issue zusammensetzen — Bildinhalt geteilt,
+        # Seiten-Kontext (page_url, surrounding_text) bleibt je Issue erhalten.
+        fixes = []
+        for v in vorbereitet:
             suggested_alt = ""
             alt_source = "heuristic"
             confidence = 0.0
-            if abs_src.startswith(("http://", "https://")):
-                try:
-                    ai_res = await generator.generate_alt_text(
-                        image_url=abs_src,
-                        context=(surrounding_text or page_title or "")[:500],
-                        language="de",
-                    )
-                    if ai_res and ai_res.get("source") == "claude_vision" and ai_res.get("alt_text"):
-                        suggested_alt = ai_res["alt_text"]
-                        confidence = float(ai_res.get("confidence", 0.9))
-                        alt_source = "claude_vision"
-                except Exception as e:
-                    logger.warning(f"Vision-Alt-Text fehlgeschlagen für {abs_src}: {e}")
+
+            ai_res = ai_ergebnisse.get(v["abs_src"])
+            if ai_res and ai_res.get("source") == "claude_vision" and ai_res.get("alt_text"):
+                suggested_alt = ai_res["alt_text"]
+                confidence = float(ai_res.get("confidence", 0.9))
+                alt_source = "claude_vision"
 
             if not suggested_alt:
-                # Fallback: Kontext-Heuristik (kein Bildinhalt gesehen)
+                # Fallback: Kontext-Heuristik (kein Bildinhalt gesehen, oder
+                # Budget/API nicht verfuegbar)
                 suggested_alt = self._generate_simple_alt_text(
-                    filename=filename,
-                    page_title=page_title,
-                    surrounding_text=surrounding_text,
-                    image_src=image_src,
+                    filename=v["filename"],
+                    page_title=v["page_title"],
+                    surrounding_text=v["surrounding_text"],
+                    image_src=v["image_src"],
                 )
                 confidence = self._calculate_confidence(
-                    page_title=page_title,
-                    surrounding_text=surrounding_text,
-                    filename=filename,
+                    page_title=v["page_title"],
+                    surrounding_text=v["surrounding_text"],
+                    filename=v["filename"],
                 )
-            
+
             fixes.append({
-                "page_url": page_url,
-                "image_src": image_src,
-                "image_filename": filename,
+                "page_url": v["page_url"],
+                "image_src": v["image_src"],
+                "image_filename": v["filename"],
                 "suggested_alt": suggested_alt,
                 "confidence": confidence,
                 "alt_text_source": alt_source,
-                "page_title": page_title,
-                "surrounding_text": surrounding_text[:500],  # Limit length
-                "element_html": element_html[:1000]  # Limit length
+                "page_title": v["page_title"],
+                "surrounding_text": v["surrounding_text"][:500],  # Limit length
+                "element_html": v["element_html"][:1000]  # Limit length
             })
         
         return fixes

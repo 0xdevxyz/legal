@@ -36,7 +36,7 @@ const PLANS: Plan[] = [
   {
     id: 'single',
     name: 'Einzelsäule',
-    price: '19 €',
+    price: '29 €',
     period: '/Monat je Säule',
     description: 'Nur das Thema, das gerade drückt.',
     features: [
@@ -51,9 +51,9 @@ const PLANS: Plan[] = [
   {
     id: 'monitor',
     name: 'Monitoring',
-    price: '19 €',
+    price: '39 €',
     period: '/Monat',
-    note: 'oder 190 € im Jahr',
+    note: 'oder 390 € im Jahr',
     description: 'Wachdienst für bis zu 10 Websites.',
     features: [
       'Bis zu 10 Websites im täglichen Wachdienst',
@@ -67,9 +67,9 @@ const PLANS: Plan[] = [
   {
     id: 'pro',
     name: 'Pro',
-    price: '49 €',
+    price: '89 €',
     period: '/Monat',
-    note: 'oder 490 € im Jahr',
+    note: 'oder 890 € im Jahr',
     description: 'Alles frei für eine Domain.',
     features: [
       'Alle vier Säulen ohne Limit',
@@ -84,9 +84,9 @@ const PLANS: Plan[] = [
   {
     id: 'agency',
     name: 'Agentur',
-    price: '299 €',
+    price: '599 €',
     period: '/Monat',
-    note: 'oder 2.990 € im Jahr',
+    note: 'oder 5.990 € im Jahr',
     description: 'Für alle, die fremde Websites betreuen.',
     features: [
       '25 Projekte inklusive',

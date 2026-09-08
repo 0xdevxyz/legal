@@ -216,8 +216,8 @@ async def require_accessibility_module(user: Dict[str, Any]) -> bool:
             detail=("Im Free-Tarif ist Barrierefreiheit als Scan und Vorschau "
                     "enthalten. Reparaturen, Freigaben und die "
                     "Barrierefreiheitserklärung gehören zur Säule "
-                    "„Barrierefreiheit\u201c (19 €/Monat) oder zum Pro-Paket "
-                    "(49 €/Monat, alle vier Säulen für eine Domain). "
+                    "„Barrierefreiheit\u201c (29 €/Monat) oder zum Pro-Paket "
+                    "(89 €/Monat, alle vier Säulen für eine Domain). "
                     "Freischalten unter „Abo & Rechnung\u201c.")
         )
     
