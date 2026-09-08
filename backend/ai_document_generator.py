@@ -9,6 +9,7 @@ import os
 from typing import Dict, Any
 from datetime import datetime
 import logging
+from compliance_engine import ai_budget
 
 logger = logging.getLogger(__name__)
 
@@ -125,10 +126,17 @@ class AIDocumentGenerator:
             logger.error(f"Error generating datenschutz: {e}")
             return self._get_datenschutz_template(company_data)
     
-    async def _call_openrouter(self, prompt: str) -> Dict[str, Any]:
+    async def _call_openrouter(self, prompt: str, user_id=None,
+                               plan_type: str = "free") -> Dict[str, Any]:
         """Ruft OpenRouter API auf"""
         if not self.openrouter_api_key:
             raise Exception("OpenRouter API Key not configured")
+
+        # Sonnet mit bis zu 4000 Token Ausgabe — ohne Deckel der teuerste
+        # Einzelaufruf im Haus.
+        if not await ai_budget.budget_frei(user_id, plan_type,
+                                           voraussichtliche_kosten_eur=0.06):
+            raise Exception("KI-Budget erschoepft - Dokument kann gerade nicht erzeugt werden")
         
         headers = {
             "Authorization": f"Bearer {self.openrouter_api_key}",
@@ -165,6 +173,14 @@ class AIDocumentGenerator:
                     raise Exception(f"OpenRouter API Error: {response.status} - {error_text}")
                 
                 data = await response.json()
+
+                _nutzung = data.get("usage") or {}
+                await ai_budget.kosten_buchen(
+                    user_id,
+                    ai_budget.kosten_eur(self.model,
+                                         _nutzung.get("prompt_tokens", 0),
+                                         _nutzung.get("completion_tokens", 0)),
+                )
                 
                 return {
                     'content': data['choices'][0]['message']['content'],

@@ -23,6 +23,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 from enum import Enum
 from dataclasses import dataclass, asdict, field
+from compliance_engine import ai_budget
 
 logger = logging.getLogger(__name__)
 
@@ -528,10 +529,19 @@ WICHTIG:
             logger.error(f"❌ Parsing fehlgeschlagen: {e}")
             raise
     
-    async def _call_ai_api(self, prompt: str) -> str:
+    async def _call_ai_api(self, prompt: str, konto=None) -> str:
         """
         Ruft die OpenRouter AI API auf
+
+        Ordnet Rechtsnews ein und laeuft ohne Kunden im Ruecken — daher
+        standardmaessig auf den Systemtopf, nicht auf den Vorschau-Topf, der
+        oeffentlichen Scans gehoert.
         """
+        if konto is None:
+            konto = ai_budget.SYSTEM
+        if not await ai_budget.budget_frei(konto, "free",
+                                           voraussichtliche_kosten_eur=0.02):
+            raise Exception("KI-Budget erschoepft - Einordnung wird spaeter nachgeholt")
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -568,6 +578,14 @@ WICHTIG:
             )
             response.raise_for_status()
             data = response.json()
+
+            _nutzung = data.get("usage") or {}
+            await ai_budget.kosten_buchen(
+                konto,
+                ai_budget.kosten_eur(self.model,
+                                     _nutzung.get("prompt_tokens", 0),
+                                     _nutzung.get("completion_tokens", 0)),
+            )
             
             content = data['choices'][0]['message']['content']
             

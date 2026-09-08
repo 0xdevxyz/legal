@@ -46,6 +46,13 @@ STANDARD_BUDGET_EUR = 2.0
 # Gesamtbudget auffressen koennen.
 VORSCHAU_BUDGET_EUR_TAG = float(os.getenv("COMPLYO_AI_VORSCHAU_BUDGET_TAG", "1.0"))
 
+# Systemarbeit ohne Kunden — Rechtsnews einordnen, Hintergrundpflege. Eigener
+# Topf, damit sie nicht den Vorschau-Topf leert, der oeffentlichen Scans
+# gehoert, und damit ein Amoklauf im Hintergrund nicht als Kundenverbrauch
+# durchgeht. Als Konto-Kennung wird die Konstante SYSTEM uebergeben.
+SYSTEM = "__system__"
+SYSTEM_BUDGET_EUR_TAG = float(os.getenv("COMPLYO_AI_SYSTEM_BUDGET_TAG", "2.0"))
+
 # Account-weiter Notausschalter, unabhaengig von einzelner User-Zuordnung.
 # Startwert bewusst knapp gewaehlt (aktueller echter Verbrauch lag bei ca.
 # 0,15 EUR/Tag) - lieber zu oft auf Heuristik zurueckfallen als das Konto
@@ -178,6 +185,17 @@ async def budget_frei(
             )
             return False
 
+        if user_id == SYSTEM:
+            system_key = f"{PRAEFIX}system:{_tag_schluessel()}"
+            verbraucht = float(await r.get(system_key) or 0.0)
+            if verbraucht + voraussichtliche_kosten_eur > SYSTEM_BUDGET_EUR_TAG:
+                logger.warning(
+                    "KI-Budget: Systemtopf erschoepft "
+                    f"({verbraucht:.2f}/{SYSTEM_BUDGET_EUR_TAG:.2f} EUR) - KI blockiert"
+                )
+                return False
+            return True
+
         if user_id is None:
             vorschau_key = f"{PRAEFIX}vorschau:{_tag_schluessel()}"
             verbraucht = float(await r.get(vorschau_key) or 0.0)
@@ -205,7 +223,11 @@ async def kosten_buchen(user_id: Optional[str], kosten_eur_wert: float) -> None:
         global_key = f"{PRAEFIX}global:{_tag_schluessel()}"
         pipe.incrbyfloat(global_key, kosten_eur_wert)
         pipe.expire(global_key, _TTL_TAGE_SEKUNDEN)
-        if user_id is None:
+        if user_id == SYSTEM:
+            system_key = f"{PRAEFIX}system:{_tag_schluessel()}"
+            pipe.incrbyfloat(system_key, kosten_eur_wert)
+            pipe.expire(system_key, _TTL_TAGE_SEKUNDEN)
+        elif user_id is None:
             vorschau_key = f"{PRAEFIX}vorschau:{_tag_schluessel()}"
             pipe.incrbyfloat(vorschau_key, kosten_eur_wert)
             pipe.expire(vorschau_key, _TTL_TAGE_SEKUNDEN)

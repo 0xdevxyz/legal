@@ -6,6 +6,7 @@ Handles scheduled scans and notification processing
 import asyncio
 from datetime import datetime, timedelta
 import logging
+from compliance_engine import ai_budget
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ class AIComplianceWorker:
         query = """
             SELECT ss.*, s.name as system_name, s.description, s.vendor, s.purpose,
                    s.domain, s.risk_category as old_risk, s.compliance_score as old_score,
-                   u.email, u.full_name
+                   u.email, u.full_name, COALESCE(u.plan_type, 'free') AS plan_type
             FROM ai_scheduled_scans ss
             JOIN ai_systems s ON ss.ai_system_id = s.id
             JOIN users u ON ss.user_id = u.id
@@ -69,12 +70,29 @@ class AIComplianceWorker:
                     domain=scan['domain']
                 )
 
-                # classify_risk_category -> RiskClassification (nicht classify_system)
-                classification_model = await ai_act_analyzer.classify_risk_category(ai_system)
-                # check_compliance erwartet die Risikokategorie als str, nicht das Objekt
-                compliance_model = await ai_act_analyzer.check_compliance(
-                    ai_system, classification_model.risk_category
-                )
+                # Zwei Sonnet-Aufrufe je faelliger Pruefung — sie gehoeren dem
+                # Konto, dessen KI-System hier eingestuft wird, nicht dem
+                # Systemtopf.
+                # Defensiv gelesen: die Kostenzuordnung ist ein Nebenzweck und
+                # darf die Einstufung selbst nie zum Absturz bringen, wenn die
+                # Zeile den Tarif mal nicht mitbringt. "free" ist dabei das
+                # engste Budget, also die sichere Annahme.
+                try:
+                    _tarif = scan["plan_type"] or "free"
+                except (KeyError, IndexError):
+                    _tarif = "free"
+                try:
+                    _konto = scan["user_id"]
+                except (KeyError, IndexError):
+                    _konto = None
+
+                with ai_budget.konto_setzen(_konto, _tarif):
+                    # classify_risk_category -> RiskClassification (nicht classify_system)
+                    classification_model = await ai_act_analyzer.classify_risk_category(ai_system)
+                    # check_compliance erwartet die Risikokategorie als str, nicht das Objekt
+                    compliance_model = await ai_act_analyzer.check_compliance(
+                        ai_system, classification_model.risk_category
+                    )
 
                 classification = classification_model.model_dump()
                 compliance = compliance_model.model_dump()

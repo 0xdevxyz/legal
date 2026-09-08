@@ -8,6 +8,7 @@ import os
 import httpx
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
+from compliance_engine import ai_budget
 
 class AISystem(BaseModel):
     """AI System Model"""
@@ -577,10 +578,19 @@ WICHTIG:
         
         return prompt
     
-    async def _call_ai_api(self, prompt: str, model: str = "anthropic/claude-3.5-sonnet") -> str:
+    async def _call_ai_api(self, prompt: str, model: str = "anthropic/claude-3.5-sonnet",
+                           user_id=None, plan_type: str = "free") -> str:
         """
         Call OpenRouter API with Claude
         """
+        # Je geplanter Pruefung eines KI-Systems fallen ZWEI dieser Aufrufe an
+        # (Einstufung + Compliance), und der Hintergrundarbeiter schaut jede
+        # Minute nach faelligen. Das skaliert mit der Kundenzahl, deshalb
+        # gehoert hier ein Deckel hin.
+        if not await ai_budget.budget_frei(user_id, plan_type,
+                                           voraussichtliche_kosten_eur=0.04):
+            raise Exception("KI-Budget erschoepft - Einstufung wird spaeter nachgeholt")
+
         
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -610,6 +620,14 @@ WICHTIG:
             
             response.raise_for_status()
             result = response.json()
+
+            _nutzung = result.get("usage") or {}
+            await ai_budget.kosten_buchen(
+                user_id,
+                ai_budget.kosten_eur(model,
+                                     _nutzung.get("prompt_tokens", 0),
+                                     _nutzung.get("completion_tokens", 0)),
+            )
             
             # Extract response content
             content = result["choices"][0]["message"]["content"]

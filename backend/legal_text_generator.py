@@ -40,6 +40,7 @@ except ImportError:  # pragma: no cover
 from legal_disclaimer import DISCLAIMER_LONG, DISCLAIMER_HTML
 from complyo_privacy_clause import build_complyo_privacy_clause
 from third_country_clause import build_third_country_clause
+from compliance_engine import ai_budget
 
 logger = logging.getLogger(__name__)
 
@@ -655,8 +656,17 @@ class LegalTextGenerator:
             "legal_update_id": legal_update_id,
         }
 
-    async def _call_ai(self, prompt: str) -> str:
+    async def _call_ai(self, prompt: str, user_id=None, plan_type: str = "free") -> str:
         if not self.api_key:
+            return self._fallback_template(prompt)
+
+        # Sonnet 4.5 kostet je Token grob das Dreifache des Scan-Modells und
+        # erzeugt bis zu 4000 Token Ausgabe. Ohne Deckel ist das der teuerste
+        # Weg im Haus. Reicht das Budget nicht, gibt es die Vorlage statt der
+        # KI-Fassung — schlechter, aber nicht falsch.
+        if not await ai_budget.budget_frei(user_id, plan_type,
+                                           voraussichtliche_kosten_eur=0.06):
+            logger.warning("KI-Budget erschoepft — Rechtstext kommt aus der Vorlage")
             return self._fallback_template(prompt)
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -693,6 +703,13 @@ class LegalTextGenerator:
                     logger.error(f"OpenRouter Fehler {resp.status}: {err}")
                     return self._fallback_template(prompt)
                 data = await resp.json()
+                _nutzung = data.get("usage") or {}
+                await ai_budget.kosten_buchen(
+                    user_id,
+                    ai_budget.kosten_eur(self.MODEL,
+                                         _nutzung.get("prompt_tokens", 0),
+                                         _nutzung.get("completion_tokens", 0)),
+                )
                 html = self._strip_markdown_fences(data["choices"][0]["message"]["content"])
                 if not html.startswith("<"):
                     logger.warning(
