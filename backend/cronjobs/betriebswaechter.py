@@ -17,7 +17,11 @@ prüft dieser Wächter:
      (scripts/betriebswaechter.sh) — docker logs/docker ps sind im
      Container nicht erreichbar.
   5. DSGVO-Hygiene: Löschanträge, die > 7 Tage unbestätigt liegen.
-  6. Kernrouten: antworten die Endpunkte, die jeder Kunde anfasst?
+  6. Datensicherung: gibt es einen frischen Abzug, und war er
+     wiederherstellbar? Ergänzt am 07.09.2026 — bis dahin gab es weder
+     Zeitplan noch Prüfung, und eine stillschweigend gescheiterte Sicherung
+     wäre genauso unsichtbar gewesen wie gar keine.
+  7. Kernrouten: antworten die Endpunkte, die jeder Kunde anfasst?
      Ergänzt am 01.09.2026, weil /api/user/profile und
      /api/legal-ai/archive tagelang 500 warfen und der Wächter
      trotzdem stündlich "alles ruhig" meldete: die Seiten werden zu
@@ -62,6 +66,9 @@ CONSENT_MIN_TAGESSCHNITT = 3.0   # erst ab ~3 Consents/Tag ist Stille ein Signal
 WIRKUNG_MIN_AKTIVE_SITES = 2     # erst ab 2 meldenden Sites ist Stille ein Signal
 FEHLERDRUCK_JE_STUNDE = 20       # ERROR-Zeilen/h im Backend-Log
 MONITOR_MAX_ALTER_STUNDEN = 26   # Tageslauf 05:00 + Puffer
+SICHERUNG_MAX_ALTER_STUNDEN = 30  # Tageslauf 02:30 + Puffer
+SICHERUNG_MARKE = Path(os.getenv("WAECHTER_SICHERUNG_MARKE",
+                                 "/data/waechter/datensicherung.json"))
 
 # Kernrouten, stellvertretend für die vier Säulen plus Konto und Bezahlung.
 # Bewusst kurz: der Wächter soll Ausfälle melden, nicht die API testen.
@@ -197,6 +204,60 @@ async def pruefe_datenbank() -> list:
             ))
     finally:
         await conn.close()
+    return befunde
+
+
+def pruefe_datensicherung() -> list:
+    """Liegt ein frischer, geprüfter Abzug vor?
+
+    Die Sicherung schreibt bei JEDEM Ausstieg eine Marke, auch beim
+    Fehlschlag. Damit lassen sich drei Zustände unterscheiden, die von aussen
+    sonst gleich aussehen: sie lief und war gut, sie lief und scheiterte, sie
+    lief gar nicht. Der dritte ist der gefährlichste — genau so verhielten
+    sich der Banner-Ausfall, die Alt-Text-Speicherung und die Vault-Crons.
+
+    `wiederherstellung_geprueft` ist die Angabe, auf die es ankommt. Ein Abzug,
+    der nie zurückgespielt wurde, ist eine Vermutung; die Sicherung spielt ihn
+    deshalb bei jedem Lauf in eine Wegwerf-Datenbank ein und vergleicht die
+    Zeilen. Steht hier "nein", gibt es zwar eine Datei, aber keine Zusage.
+    """
+    if not SICHERUNG_MARKE.exists():
+        return [("sicherung-nie-gelaufen",
+                 f"Keine Marke der Datensicherung unter {SICHERUNG_MARKE}. "
+                 "Entweder läuft der Cron nicht, oder er kam nie bis zum Ende.")]
+
+    try:
+        marke = json.loads(SICHERUNG_MARKE.read_text())
+    except Exception as e:
+        return [("sicherung-marke-unlesbar",
+                 f"Marke der Datensicherung ist nicht lesbar: {e}")]
+
+    befunde = []
+    ergebnis = marke.get("ergebnis")
+    if ergebnis not in ("erfolgreich", "uebersprungen"):
+        befunde.append(("sicherung-fehlgeschlagen",
+                        f"Letzte Datensicherung meldet '{ergebnis}': "
+                        f"{marke.get('meldung', 'ohne Angabe')}"))
+
+    if ergebnis == "erfolgreich" and marke.get("wiederherstellung_geprueft") != "ja":
+        befunde.append(("sicherung-ungeprueft",
+                        "Es gibt einen Abzug, aber die Wiederherstellungsprobe "
+                        "ist nicht durchgelaufen. Eine Sicherung ohne Probe ist "
+                        "eine Vermutung."))
+
+    try:
+        zeitpunkt = datetime.fromisoformat(
+            marke.get("zeitpunkt", "").replace("Z", "+00:00"))
+        alter = (datetime.now(zeitpunkt.tzinfo) - zeitpunkt).total_seconds() / 3600
+        if alter > SICHERUNG_MAX_ALTER_STUNDEN:
+            befunde.append(("sicherung-veraltet",
+                            f"Letzte Datensicherung ist {alter:.0f} h alt "
+                            f"(Grenze {SICHERUNG_MAX_ALTER_STUNDEN} h). "
+                            "Der Cron läuft offenbar nicht mehr."))
+    except (ValueError, TypeError):
+        befunde.append(("sicherung-ohne-zeitpunkt",
+                        "Marke der Datensicherung trägt keinen lesbaren Zeitpunkt."))
+
     return befunde
 
 
@@ -495,6 +556,11 @@ async def main() -> int:
     except Exception as e:
         befunde.append(("routen-pruefung-abgestuerzt",
                         f"Kernrouten-Prüfung fehlgeschlagen: {e}"))
+    try:
+        befunde.extend(pruefe_datensicherung())
+    except Exception as e:
+        befunde.append(("sicherung-pruefung-abgestuerzt",
+                        f"Prüfung der Datensicherung fehlgeschlagen: {e}"))
     befunde.extend(pruefe_host_signale())
 
     if not befunde:

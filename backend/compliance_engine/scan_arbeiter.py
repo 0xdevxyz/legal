@@ -23,6 +23,7 @@ import logging
 import os
 from typing import Optional, Set
 
+from compliance_engine import ai_budget
 from compliance_engine import scan_auftraege as sa
 
 logger = logging.getLogger(__name__)
@@ -85,15 +86,19 @@ async def _scan_fuer(art: str, kennung: str, url: str):
         # der Verlauf gespeichert wird. Sie stehen im Auftrag.
         auftrag = await sa.hole(kennung) or {}
         from main_production import fuehre_v2_scan_aus
-        return await fuehre_v2_scan_aus(
-            url=url,
-            seitenbudget=int(auftrag.get("seitenbudget") or 5),
-            # fuehre_v2_scan_aus liest daraus nur `id`/`user_id`.
-            current_user={"id": auftrag.get("nutzer_id"),
-                          "user_id": auftrag.get("nutzer_id")},
-            scan_token_eingang=kennung,
-            legal_update_id=auftrag.get("legal_update_id"),
-        )
+        # Kosten dieses Scans dem beauftragenden Konto zurechnen. Als
+        # Kontextmanager, weil der Arbeiter ein langlebiger Task ist: ohne
+        # reset() klebte das Konto am naechsten Auftrag.
+        with ai_budget.konto_setzen(auftrag.get("nutzer_id"), auftrag.get("tarif")):
+            return await fuehre_v2_scan_aus(
+                url=url,
+                seitenbudget=int(auftrag.get("seitenbudget") or 5),
+                # fuehre_v2_scan_aus liest daraus nur `id`/`user_id`.
+                current_user={"id": auftrag.get("nutzer_id"),
+                              "user_id": auftrag.get("nutzer_id")},
+                scan_token_eingang=kennung,
+                legal_update_id=auftrag.get("legal_update_id"),
+            )
 
     from public_routes import fuehre_preview_scan_aus
     return await fuehre_preview_scan_aus(url)

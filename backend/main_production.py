@@ -1566,6 +1566,9 @@ async def v2_scan_auftrag_annehmen(
             # ohne jeden Hinweis. Der Scan braucht ohnehin nur die Nummer, um
             # den Verlauf unter dem richtigen Konto zu speichern.
             "nutzer_id": str(nutzer_id) if nutzer_id is not None else None,
+            # Tarif wie das Seitenbudget bei der Beauftragung einfrieren: er
+            # bestimmt das KI-Monatsbudget, dem dieser Scan zugerechnet wird.
+            "tarif": (current_user.get("plan_type") or "free"),
             "legal_update_id": getattr(request, "legal_update_id", None),
         },
     )

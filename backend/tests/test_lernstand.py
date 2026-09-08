@@ -68,8 +68,16 @@ class FakePool:
 
 
 def zeile(typ="x", vor=0, an=0, ab=0, offen=0, ausgeliefert=0,
-          k_an=None, k_ab=None, zuletzt=None):
+          k_an=None, k_ab=None, zuletzt=None, uebernommen=0, unbekannt=0):
+    """Eine Ergebniszeile der Lernstand-Abfrage.
+
+    `uebernommen` und `unbekannt` kamen am 05.09.2026 dazu: `approved` allein
+    sagt nicht mehr, dass jemand zugestimmt hat. Die Vorgabe 0 haelt die
+    aelteren Tests bei ihrer Aussage — dort ist jede Freigabe eine
+    Entscheidung.
+    """
     return Zeile(typ=typ, vorgeschlagen=vor, angenommen=an, abgelehnt=ab,
+                 uebernommen=uebernommen, unbekannt=unbekannt,
                  offen=offen, ausgeliefert=ausgeliefert,
                  konfidenz_angenommen=k_an, konfidenz_abgelehnt=k_ab,
                  zuletzt=zuletzt or dt.datetime(2026, 9, 4))

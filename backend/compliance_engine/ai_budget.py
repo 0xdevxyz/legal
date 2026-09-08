@@ -21,10 +21,11 @@ zulassen (Pattern-/Heuristik-Fallback existiert an jeder Aufrufstelle) als
 blind weiterzuzahlen. Redis-Ausfall blockiert also KI, nicht den Scan selbst.
 """
 
+import contextvars
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,51 @@ PREISE_USD_JE_TOKEN = {
     "moonshotai/kimi-k2.5": {"prompt": 0.0000006, "completion": 0.0000025},
 }
 _TEUERSTER_BEKANNTER_SATZ = {"prompt": 0.000003, "completion": 0.000015}
+
+# Wer den laufenden Scan bezahlt. Wird einmal am Anfang eines Scans gesetzt,
+# damit die Kosten beim richtigen Konto landen, ohne dass user_id durch
+# scanner -> checks -> hybrid_validator durchgereicht werden muss. Ein Scan
+# ohne gesetztes Konto (oeffentliche Vorschau) faellt auf den Anonym-Topf
+# zurueck — das ist gewollt, nicht der Fehlerfall.
+_konto: contextvars.ContextVar[Tuple[Optional[str], str]] = contextvars.ContextVar(
+    "ki_budget_konto", default=(None, "free")
+)
+
+
+class konto_setzen:
+    """Kontext, in dem KI-Kosten einem Konto zugerechnet werden.
+
+    Als Kontextmanager und nicht als schlichtes set(), weil die Scan-Arbeiter
+    langlebige Tasks sind, die einen Auftrag nach dem anderen abarbeiten: ohne
+    reset() wuerde das Konto des vorigen Auftrags am naechsten kleben.
+    """
+
+    def __init__(self, user_id, plan_type: str = "free"):
+        self._wert = (
+            str(user_id) if user_id is not None else None,
+            (plan_type or "free"),
+        )
+        self._token = None
+
+    def __enter__(self):
+        self._token = _konto.set(self._wert)
+        return self
+
+    def __exit__(self, *_):
+        if self._token is not None:
+            _konto.reset(self._token)
+        return False
+
+
+def _konto_aufloesen(user_id, plan_type: str) -> Tuple[Optional[str], str]:
+    """Ausdruecklich uebergebenes Konto schlaegt den Kontext, Kontext schlaegt nichts."""
+    if user_id is not None:
+        return str(user_id), (plan_type or "free")
+    kontext_user, kontext_plan = _konto.get()
+    if kontext_user is not None:
+        return kontext_user, kontext_plan
+    return None, (plan_type or "free")
+
 
 PRAEFIX = "ki:kosten:"
 _TTL_TAGE_SEKUNDEN = 3 * 86400
@@ -116,6 +162,8 @@ async def budget_frei(
     (oder den Vorschau-Tagestopf bei anonymem Scan). Kein Redis erreichbar
     -> kein KI-Call, siehe Modul-Docstring.
     """
+    user_id, plan_type = _konto_aufloesen(user_id, plan_type)
+
     r = await _redis()
     if r is None:
         return False
@@ -148,6 +196,7 @@ async def kosten_buchen(user_id: Optional[str], kosten_eur_wert: float) -> None:
     """Bucht tatsaechliche Kosten nach einem erfolgreichen KI-Call. Wirft nie."""
     if kosten_eur_wert <= 0:
         return
+    user_id, _ = _konto_aufloesen(user_id, "free")
     r = await _redis()
     if r is None:
         return

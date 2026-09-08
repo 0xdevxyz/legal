@@ -20,6 +20,16 @@ statt wie „hier kann keiner erfasst werden". Deshalb trägt jeder Eintrag
 `BELEGE_MINDESTENS` Entscheidungen ist eine Quote Rauschen. Der Wert steht
 bewusst hier und nicht in der Oberfläche: eine Zahl, die nicht trägt, soll
 schon an der Quelle als solche gekennzeichnet sein.
+
+**Eine Freigabe ist nur dann ein Beleg, wenn jemand sie erteilt hat.** Bis zum
+05.09.2026 gingen dokumentweite Fixes ohne Rückfrage live. Achtzehn davon
+stehen bis heute auf `approved`, und aus Sicht einer reinen Statusabfrage sind
+das achtzehn Zustimmungen bei null Ablehnungen — 100 % Annahmequote für ein
+Verfahren, das nie jemand beurteilt hat. Seit Migration 0024 trägt jede Zeile
+ihre Herkunft, und gezählt wird nur, was von `mensch` kommt. Automatisch
+Übernommenes verschwindet dabei nicht, es steht als eigene Zahl daneben: eine
+Reparatur, die seit Wochen unbestätigt live läuft, ist eine Information und
+kein Rundungsfehler.
 """
 
 import logging
@@ -62,24 +72,33 @@ OHNE_ENTSCHEIDUNG: set = set()
 
 # Die drei Fix-Tabellen. `typ_spalte` ist None, wenn die Tabelle selbst der
 # Befundtyp ist — bei Dokumentfixes steckt der Typ dagegen in einer Spalte.
+#
+# `herkunft_spalte` gibt es nur bei Dokumentfixes, und zwar aus einem Grund:
+# nur dort wurden Freigaben je ohne Rückfrage erteilt. Alt- und Linktexte
+# waren immer Stufe 2, jedes `approved` dort ist ein Klick. Die Spalte
+# nachträglich überall anzulegen, hieße eine Frage zu stellen, die es in
+# diesen Tabellen nicht gibt.
 QUELLEN = [
     {
         "tabelle": "accessibility_alt_text_fixes",
         "befundtyp": "bild-ohne-alt-text",
         "typ_spalte": None,
         "grund_spalte": "rejected_reason",
+        "herkunft_spalte": None,
     },
     {
         "tabelle": "accessibility_link_fixes",
         "befundtyp": "linktext-ohne-bedeutung",
         "typ_spalte": None,
         "grund_spalte": "rejected_reason",
+        "herkunft_spalte": None,
     },
     {
         "tabelle": "accessibility_document_fixes",
         "befundtyp": None,
         "typ_spalte": "fix_type",
         "grund_spalte": "rejected_reason",
+        "herkunft_spalte": "entscheidung_quelle",
     },
 ]
 
@@ -101,17 +120,35 @@ async def _eine_quelle(conn, quelle: Dict[str, Any], tage: int) -> List[Dict[str
     """Zahlen einer Tabelle, gegebenenfalls nach Typ aufgeteilt."""
     tabelle = quelle["tabelle"]
     typ_spalte = quelle["typ_spalte"]
+    herkunft = quelle.get("herkunft_spalte")
     gruppierung = typ_spalte or "'x'"
+
+    # Wo es keine Herkunftsspalte gibt, ist jede Freigabe ein Klick gewesen;
+    # dort zaehlt `approved` als Zustimmung und die beiden anderen Toepfe
+    # bleiben leer. Wo es sie gibt, wird streng getrennt: 'mensch' ist ein
+    # Beleg, 'automatik' ist keiner, und NULL ist keins von beidem, sondern
+    # unbekannt. Unbekanntes zu einem der beiden zu schlagen waere bequem und
+    # falsch.
+    if herkunft:
+        zustimmung = f"status = 'approved' AND {herkunft} = 'mensch'"
+        uebernommen = f"status = 'approved' AND {herkunft} = 'automatik'"
+        unbekannt = f"status = 'approved' AND {herkunft} IS NULL"
+    else:
+        zustimmung = "status = 'approved'"
+        uebernommen = "FALSE"
+        unbekannt = "FALSE"
 
     rows = await conn.fetch(
         f"""
         SELECT {gruppierung} AS typ,
                count(*)                                              AS vorgeschlagen,
-               count(*) FILTER (WHERE status = 'approved')           AS angenommen,
+               count(*) FILTER (WHERE {zustimmung})                  AS angenommen,
+               count(*) FILTER (WHERE {uebernommen})                 AS uebernommen,
+               count(*) FILTER (WHERE {unbekannt})                   AS unbekannt,
                count(*) FILTER (WHERE status = 'rejected')           AS abgelehnt,
                count(*) FILTER (WHERE status = 'pending')            AS offen,
                count(*) FILTER (WHERE status = 'deployed')           AS ausgeliefert,
-               avg(confidence) FILTER (WHERE status = 'approved')    AS konfidenz_angenommen,
+               avg(confidence) FILTER (WHERE {zustimmung})           AS konfidenz_angenommen,
                avg(confidence) FILTER (WHERE status = 'rejected')    AS konfidenz_abgelehnt,
                max(created_at)                                       AS zuletzt
         FROM {tabelle}
@@ -134,7 +171,17 @@ async def _eine_quelle(conn, quelle: Dict[str, Any], tage: int) -> List[Dict[str
             "befundtyp": befundtyp,
             "quelle": tabelle,
             "vorgeschlagen": r["vorgeschlagen"],
+            # `angenommen` heisst: jemand hat zugestimmt. Nicht: steht auf
+            # 'approved'. Der Unterschied ist der ganze Zweck der Spalte.
             "angenommen": r["angenommen"],
+            # Laeuft live, hat aber nie jemand bestaetigt. Keine Zustimmung,
+            # trotzdem sichtbar — sonst verschwaende die Umstellung vom
+            # 05.09. achtzehn Reparaturen aus der Auswertung, als haette es
+            # sie nie gegeben.
+            "automatisch_uebernommen": r["uebernommen"],
+            # Freigegeben in dem Zeitfenster, in dem sich Automatik und Klick
+            # nicht mehr auseinanderhalten liessen.
+            "herkunft_unbekannt": r["unbekannt"],
             "abgelehnt": r["abgelehnt"],
             "offen": r["offen"],
             "ausgeliefert": r["ausgeliefert"],
@@ -246,6 +293,11 @@ async def _kontrast_entscheidungen(conn, tage: int) -> Optional[Dict[str, Any]]:
         "quelle": "accessibility_document_fixes (payload)",
         "vorgeschlagen": vor,
         "angenommen": an,
+        # Farbentscheidungen sind nie automatisch erteilt worden: eine Farbe
+        # zu aendern ist Gestaltung, dafuer gab es von Anfang an einen Klick
+        # je Farbpaar.
+        "automatisch_uebernommen": 0,
+        "herkunft_unbekannt": 0,
         "abgelehnt": ab,
         "offen": offen,
         "ausgeliefert": 0,
@@ -352,6 +404,13 @@ async def erhebe_lernstand(db_pool, tage: int = 90) -> Dict[str, Any]:
          if e["entscheidbar"] and not e["gruende_erfassbar"]}
     )
     ablehnungen_gesamt = sum(e["abgelehnt"] for e in befunde)
+    # Reparaturen, die auf Kundenseiten laufen, ohne dass jemand sie beurteilt
+    # hat. Sie sind kein Beleg — aber sie stehen auf echten Websites, und
+    # solange die Zahl nicht null ist, gehoert sie nach oben.
+    unbestaetigt_live = sum(
+        e.get("automatisch_uebernommen", 0) + e.get("herkunft_unbekannt", 0)
+        for e in befunde
+    )
 
     return {
         "zeitraum_tage": tage,
@@ -361,6 +420,10 @@ async def erhebe_lernstand(db_pool, tage: int = 90) -> Dict[str, Any]:
         "ablehnungen_gesamt": ablehnungen_gesamt,
         "belege_mindestens": BELEGE_MINDESTENS,
         "typen_mit_belegen": mit_belegen,
+        # Steht auf Kundenseiten, hat aber niemand beurteilt. Bewusst neben
+        # den Belegen und nicht in ihnen: die Zahl ist eine Aufgabe, kein
+        # Lernergebnis.
+        "unbestaetigt_live": unbestaetigt_live,
         # Aussagekraeftig ist der Lernstand erst, wenn WENIGSTENS EIN Befundtyp
         # fuer sich genug Entscheidungen hat.
         #
