@@ -75,6 +75,12 @@ class HybridValidationResult:
     method_used: ValidationMethod
     ai_reasoning: Optional[str] = None
     processing_time_ms: int = 0
+    # Wahr, wenn das Muster sich NICHT sicher war und keine Zweitmeinung
+    # eingeholt werden konnte (kein Schluessel, Budget gesperrt, Redis weg).
+    # `found` traegt dann die Vermutung des Musters, nicht dessen Feststellung.
+    # Wer daraus einen Befund macht, wirft dem Betrieb etwas vor, das nur
+    # niemand nachgesehen hat.
+    unverifiziert: bool = False
 
 
 class HybridValidator:
@@ -681,6 +687,7 @@ Antworte NUR mit den nummerierten Blöcken, keine zusätzlichen Erläuterungen."
                         field_name=field_name, found=validation.found,
                         confidence=validation.confidence * 0.8, value=validation.extracted_value,
                         method_used=ValidationMethod.PATTERN_ONLY,
+                        unverifiziert=True,
                     )
             else:
                 budget_ok = await ai_budget.budget_frei(user_id, plan_type)
@@ -694,6 +701,7 @@ Antworte NUR mit den nummerierten Blöcken, keine zusätzlichen Erläuterungen."
                             field_name=field_name, found=validation.found,
                             confidence=validation.confidence * 0.8, value=validation.extracted_value,
                             method_used=ValidationMethod.PATTERN_ONLY,
+                            unverifiziert=True,
                         )
                 else:
                     logger.info(f"🤖 Batch-KI-Check für {len(unsichere_felder)} unsichere Felder ({page_type})")
@@ -708,6 +716,7 @@ Antworte NUR mit den nummerierten Blöcken, keine zusätzlichen Erläuterungen."
                                 field_name=field_name, found=validation.found,
                                 confidence=validation.confidence * 0.7, value=validation.extracted_value,
                                 method_used=ValidationMethod.PATTERN_ONLY,
+                                unverifiziert=True,
                             )
                         else:
                             results_by_field[field_name] = HybridValidationResult(
@@ -727,10 +736,24 @@ Antworte NUR mit den nummerierten Blöcken, keine zusätzlichen Erläuterungen."
         avg_confidence = sum(r.confidence for r in results) / total_fields if total_fields > 0 else 0.0
         
         # Berechne Qualität
+        # Vollstaendigkeit nur ueber das, was tatsaechlich geprueft wurde.
+        #
+        # Am 09.09.2026 im Bestandsdurchlauf gemessen: war Redis nicht
+        # erreichbar, sperrte die Budgetpruefung die KI, der Validator fiel auf
+        # das Muster zurueck — und neun von 24 Seiten bekamen daraufhin
+        # "Anschrift fehlt im Impressum", kritisch, 2.000 EUR. Nicht weil die
+        # Anschrift fehlte, sondern weil niemand nachgesehen hatte. Ein nicht
+        # geprueftes Feld darf die Note nicht druecken; sonst haengt das
+        # Ergebnis daran, ob ein fremder Dienst gerade antwortet.
         required_fields = [name for name, cfg in patterns.items() if cfg.get("required", False)]
-        found_required = [r for r in results if r.field_name in required_fields and r.found]
-        
-        completeness = len(found_required) / len(required_fields) if required_fields else 1.0
+        geprueft_required = [
+            r for r in results if r.field_name in required_fields and not r.unverifiziert
+        ]
+        found_required = [r for r in geprueft_required if r.found]
+
+        completeness = (
+            len(found_required) / len(geprueft_required) if geprueft_required else 1.0
+        )
         
         # Gesamtbewertung
         overall_score = (completeness * 0.7) + (avg_confidence * 0.3)
@@ -762,7 +785,8 @@ Antworte NUR mit den nummerierten Blöcken, keine zusätzlichen Erläuterungen."
                     "confidence": r.confidence,
                     "value": r.value,
                     "method": r.method_used.value,
-                    "ai_reasoning": r.ai_reasoning
+                    "ai_reasoning": r.ai_reasoning,
+                    "unverifiziert": r.unverifiziert,
                 }
                 for r in results
             ],

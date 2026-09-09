@@ -247,6 +247,103 @@ async def _check_impressum_url_exists(base_url: str, session=None) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# Rechtsform des BETREIBERS erkennen
+# ---------------------------------------------------------------------------
+# Ein Impressum nennt mehrere Unternehmen: den Betreiber, den Hoster, oft die
+# Agentur, die Bank, den Bildlieferanten. Die Pflichten des § 5 DDG treffen den
+# Betreiber. Bis zum 09.09.2026 suchte die Rechtsform-Erkennung im ROHEN HTML
+# der ganzen Seite, case-insensitiv, nach Zwei-Buchstaben-Kuerzeln.
+#
+# Was dabei herauskam, stand im Bestandsdurchlauf vom 09.09.: eine
+# Zahnarztpraxis bekam "Vorstand/Aufsichtsrat nicht angegeben (AG/SE erkannt)".
+# Ausloeser war der Hosting-Absatz ihres Impressums — "IONOS SE". Das Muster
+# \bse\b traf das SE des Hosters, und der Scanner erklaerte die Praxis zur
+# Societas Europaea. IONOS ist Deutschlands groesster Massenhoster, und dieser
+# Absatz steht in nahezu jedem Impressum.
+#
+# Dieselbe Fehlerklasse wie "ki" -> "Kindermobiliar" im August: ein zu kurzes
+# Kuerzel trifft fremde Woerter. Die Sperre dagegen (MIN_GATE_KEYWORD_LEN)
+# galt bisher nur fuer die deklarativen Pruefungen, nicht fuer die fest
+# verdrahteten.
+#
+# Drei Massnahmen:
+#   1. Nur sichtbarer Text, kein Markup (Klassennamen und Attribute sind keine
+#      Aussage ueber die Rechtsform).
+#   2. Nur der Betreiberblock. Ab dem ersten Drittanbieter-Stichwort
+#      ("Hosting", "Bildnachweis", "Umsetzung", ...) wird abgeschnitten; in
+#      einem deutschen Impressum steht der Betreiber davor.
+#   3. Kuerzel GROSS geschrieben und an einen Namen gebunden. "AG", "SE", "KG"
+#      sind Rechtsformzusaetze hinter einem Firmennamen, nicht Silben.
+
+# Ab hier reden andere: alles danach gehoert nicht mehr zum Betreiber.
+_DRITTE_AB = re.compile(
+    r"(hosting|hoster|anbieter\s+der\s+website|serverstandort|technische\s+umsetzung"
+    r"|bildnachweis|bildquellen|fotos?\s*:|quellenangaben|icons?\s*:"
+    r"|umsetzung|realisierung|webdesign|programmierung|gestaltung\s+der\s+website"
+    r"|haftung\s+f(ü|ue)r\s+(inhalte|links)|urheberrecht|streitschlichtung"
+    r"|bankverbindung|kreditinstitut|powered\s+by)",
+    re.I,
+)
+
+# Rechtsformzusatz hinter einem Namen. Das Kuerzel steht GROSS, davor ein Wort,
+# das wie ein Firmenbestandteil aussieht.
+_NAME_DAVOR = r"(?<=[A-Za-zÄÖÜäöüß0-9.&\-])\s+"
+
+
+def _betreiberteil(text: str) -> str:
+    """Der Teil des Impressums, der vom Betreiber handelt."""
+    m = _DRITTE_AB.search(text)
+    return text[: m.start()] if m else text
+
+
+def erkenne_rechtsform(impressum_html: str) -> "Dict[str, bool]":
+    """Erkennt die Rechtsform des Betreibers aus dem sichtbaren Impressumstext.
+
+    Bewusst konservativ: im Zweifel keine Rechtsform. Eine nicht erkannte
+    Rechtsform fuehrt dazu, dass rechtsformgebundene Pflichten (Handelsregister,
+    Vorstand) NICHT verlangt werden — ein verpasster Fund ist hier billiger als
+    der Vorwurf, ein Zahnarzt habe seinen Aufsichtsrat verschwiegen.
+    """
+    try:
+        text = BeautifulSoup(impressum_html or "", "html.parser").get_text(" ", strip=True)
+    except Exception:
+        text = impressum_html or ""
+    text = " ".join(text.split())
+    betreiber = _betreiberteil(text)
+    tief = betreiber.lower()
+
+    def kuerzel(*formen: str) -> bool:
+        """Grossgeschriebenes Kuerzel, an einen Namen gebunden."""
+        muster = r"|".join(re.escape(f) for f in formen)
+        return bool(re.search(_NAME_DAVOR + r"(?:" + muster + r")(?![\wäöüß])", betreiber))
+
+    def wort(*begriffe: str) -> bool:
+        return any(re.search(r"(?<![\wäöüß])" + b + r"(?![\wäöüß])", tief) for b in begriffe)
+
+    return {
+        "gmbh_ug": kuerzel("GmbH", "gGmbH", "UG") or wort("gmbh", r"ug \(haftungsbeschränkt\)"),
+        "ag_se":   kuerzel("AG", "SE") or wort("aktiengesellschaft", "societas europaea"),
+        "ohg_kg":  kuerzel("OHG", "KG", "e.K.", "eK") or wort("offene handelsgesellschaft",
+                                                                  "kommanditgesellschaft",
+                                                                  "eingetragener kaufmann"),
+        "ev":      kuerzel("e.V.") or wort("eingetragener verein"),
+        "gbr":     kuerzel("GbR") or wort("gesellschaft bürgerlichen rechts",
+                                          "gesellschaft des bürgerlichen rechts"),
+    }
+
+
+def im_handelsregister(formen: "Dict[str, bool]") -> bool:
+    """Traegt diese Rechtsform ueberhaupt einen Handelsregister-Eintrag?
+
+    Freiberufler (Arzt, Anwalt, Heilpraktiker), Einzelunternehmer unterhalb der
+    Kaufmannsschwelle und die GbR stehen nicht im Handelsregister. Von ihnen
+    eine Registernummer zu verlangen, ist keine Luecke im Impressum, sondern
+    ein Fehler in der Pruefung.
+    """
+    return bool(formen.get("gmbh_ug") or formen.get("ag_se") or formen.get("ohg_kg"))
+
+
 async def check_impressum_compliance(url: str, soup: BeautifulSoup, session=None) -> List[Dict[str, Any]]:
     """
     Prüft Impressum-Compliance
@@ -396,24 +493,54 @@ async def check_impressum_compliance(url: str, soup: BeautifulSoup, session=None
                                 "telefon": (1500, "Telefonnummer fehlt im Impressum",
                                             "Es fehlt eine Telefonnummer für Kontaktaufnahme."),
                             }
+                            # Beide Angaben sind BEDINGT geschuldet. Bis zum
+                            # 09.09.2026 stand die Bedingung nur im Befundtext
+                            # ("Falls Ihr Unternehmen...", "Für eingetragene
+                            # Gesellschaften...") und der Befund feuerte
+                            # trotzdem bei jedem. Im Bestandsdurchlauf traf das
+                            # 16 von 24 Seiten beim Handelsregister und 13 von
+                            # 24 bei der USt-IdNr — fast durchweg Freiberufler
+                            # und Einzelunternehmer, die beides nicht haben.
+                            _rechtsformen = erkenne_rechtsform(impressum_html)
                             warning_fields = {
-                                "ust_id": (1000, "USt-IdNr nicht gefunden",
-                                           "Im Impressum wurde keine Umsatzsteuer-Identifikationsnummer gefunden. "
-                                           "Falls Ihr Unternehmen eine USt-IdNr besitzt, ist die Angabe Pflicht (§5 Abs. 1 Nr. 6 DDG)."),
-                                "handelsregister": (1000, "Handelsregister-Angabe nicht gefunden",
-                                                    "Im Impressum wurde kein Handelsregister-Eintrag (Registergericht + Nummer) gefunden. "
-                                                    "Für eingetragene Gesellschaften (GmbH, UG, AG, e.K., OHG, KG) ist die Angabe Pflicht (§5 Abs. 1 Nr. 4 DDG)."),
+                                # § 5 Abs. 1 Nr. 6 DDG: anzugeben, SOFERN
+                                # vorhanden. Ob ein Betrieb eine USt-IdNr
+                                # besitzt, ist von aussen nicht feststellbar —
+                                # also ein Hinweis, keine Beanstandung.
+                                "ust_id": (0, "USt-IdNr nicht gefunden (nur Pflicht, falls vorhanden)",
+                                           "Im Impressum steht keine Umsatzsteuer-Identifikationsnummer. "
+                                           "Das ist nur dann ein Mangel, wenn Ihr Betrieb eine besitzt: "
+                                           "dann ist die Angabe nach § 5 Abs. 1 Nr. 6 DDG Pflicht. "
+                                           "Kleinunternehmer und viele Freiberufler haben keine.",
+                                           "info"),
                             }
+                            if im_handelsregister(_rechtsformen):
+                                warning_fields["handelsregister"] = (
+                                    1000, "Handelsregister-Angabe nicht gefunden",
+                                    "Im Impressum wurde kein Handelsregister-Eintrag (Registergericht + Nummer) "
+                                    "gefunden. Für Ihre erkannte Rechtsform ist die Angabe nach "
+                                    "§ 5 Abs. 1 Nr. 4 DDG Pflicht.",
+                                    "warning")
                             for field_result in analysis["results"]:
                                 fname = field_result["field"]
                                 if field_result["found"]:
+                                    continue
+                                # Ein Feld, das niemand nachgesehen hat, ist kein
+                                # Mangel. Faellt die KI-Zweitmeinung aus (Budget
+                                # gesperrt, Redis weg, kein Schluessel), traegt das
+                                # Ergebnis nur noch die Vermutung des Musters —
+                                # und genau diese Felder waren dem Muster ja
+                                # unsicher. Am 09.09.2026 im Bestandsdurchlauf
+                                # gemessen: neun von 24 Seiten bekamen dadurch
+                                # "Anschrift fehlt im Impressum", kritisch,
+                                # 2.000 EUR, ohne dass etwas fehlte.
+                                if field_result.get("unverifiziert"):
                                     continue
                                 if fname in critical_fields:
                                     risk, title, desc = critical_fields[fname]
                                     severity = "critical"
                                 elif fname in warning_fields:
-                                    risk, title, desc = warning_fields[fname]
-                                    severity = "warning"
+                                    risk, title, desc, severity = warning_fields[fname]
                                 else:
                                     continue
                                 issues.append(asdict(ImpressumIssue(
@@ -428,6 +555,34 @@ async def check_impressum_compliance(url: str, soup: BeautifulSoup, session=None
                                     is_missing=False
                                 )))
                             
+                            # Was nicht geprueft werden konnte, gehoert in den Bericht.
+                            #
+                            # Seit dem 09.09.2026 uebergeht die Schleife oben Felder, deren
+                            # KI-Zweitmeinung ausgefallen ist, statt sie als Mangel zu melden.
+                            # Das allein waere nur die andere Haelfte des Fehlers: der Kunde saehe
+                            # eine bessere Note und wuesste nicht, dass ein Teil ungeprueft blieb.
+                            # "Geprueft und nichts gefunden" und "nicht geprueft" duerfen sich
+                            # nicht gleich lesen.
+                            _ungeprueft = [f["field"] for f in analysis["results"] if f.get("unverifiziert")]
+                            if _ungeprueft:
+                                issues.append(asdict(ImpressumIssue(
+                                    category='impressum',
+                                    severity='info',
+                                    title='Impressum: {} Angabe(n) nicht abschliessend geprueft'.format(len(_ungeprueft)),
+                                    description=(
+                                        'Diese Angaben liessen sich maschinell nicht sicher feststellen und '
+                                        'wurden deshalb weder als vorhanden noch als fehlend gewertet: '
+                                        + ', '.join(_ungeprueft) + '. '
+                                        'Bitte pruefen Sie sie von Hand. Ein spaeterer Scan kann hier zu '
+                                        'einem eindeutigen Ergebnis kommen.'
+                                    ),
+                                    risk_euro=0,
+                                    recommendation='Sehen Sie die genannten Angaben selbst nach.',
+                                    legal_basis='DDG §5',
+                                    auto_fixable=False,
+                                    is_missing=False,
+                                )))
+
                             if analysis["quality"] in ["poor", "insufficient"]:
                                 issues.append(asdict(ImpressumIssue(
                                     category='impressum',
@@ -472,14 +627,16 @@ async def check_impressum_compliance(url: str, soup: BeautifulSoup, session=None
 
     # Rechtsform-spezifische Checks: nur wenn Impressum vorhanden und dessen Inhalt gecrawlt wurde
     if impressum_found and impressum_html is not None:
-        imp_text = impressum_html.lower()
+        # Sichtbarer Text des BETREIBERBLOCKS, nicht das rohe Markup der Seite.
+        imp_text = BeautifulSoup(impressum_html, 'html.parser').get_text(' ', strip=True).lower()
 
-        # Rechtsform erkennen
-        is_gmbh_ug = bool(re.search(r'\b(gmbh|ug\s*\(haftungsbeschränkt\))\b', imp_text, re.I))
-        is_ag_se    = bool(re.search(r'\b(ag\b|aktiengesellschaft|se\b|societas europaea)\b', imp_text, re.I))
-        is_ohg_kg   = bool(re.search(r'\b(ohg|offene handelsgesellschaft|kg\b|kommanditgesellschaft|e\.k\.|eingetragener kaufmann)\b', imp_text, re.I))
-        is_ev       = bool(re.search(r'\b(e\.v\.|eingetragener verein)\b', imp_text, re.I))
-        is_gbr      = bool(re.search(r'\b(gbr|gesellschaft bürgerlichen rechts|gesellschaft des bürgerlichen rechts)\b', imp_text, re.I))
+        # Rechtsform erkennen — siehe erkenne_rechtsform() zur Begruendung.
+        _formen = erkenne_rechtsform(impressum_html)
+        is_gmbh_ug = _formen['gmbh_ug']
+        is_ag_se   = _formen['ag_se']
+        is_ohg_kg  = _formen['ohg_kg']
+        is_ev      = _formen['ev']
+        is_gbr     = _formen['gbr']
 
         has_hr_entry     = bool(re.search(r'\b(hrb|hra|amtsgericht|registergericht|handelsregister)\b', imp_text, re.I))
         has_vr_entry     = bool(re.search(r'\b(vr\s*\d|vereinsregister|amtsgericht)\b', imp_text, re.I))
