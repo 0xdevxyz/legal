@@ -4,6 +4,35 @@ import React, { useState, useEffect } from 'react';
 import { Shield, Cookie, FileText, Eye, AlertTriangle, CheckCircle, Search, TrendingUp, Euro } from 'lucide-react';
 import { complianceApi } from '@/lib/api';
 
+
+/**
+ * Farbpaare der Saeulen-Kacheln, ausgeschrieben.
+ *
+ * Vorher standen hier zusammengesetzte Namen: `bg-${pillar.color}-900`.
+ * Tailwind liest Klassennamen im Quelltext und kennt die Laufzeit nicht —
+ * so ein Name steht nirgends und die Regel wird nicht erzeugt. Dass die
+ * Kacheln trotzdem Farbe hatten, war Zufall: dieselben Klassen kommen in
+ * Admin- und Dashboard-Dateien woertlich vor und landen ueber die im
+ * Stylesheet. Wer dort aufraeumt, haette hier farblose Kacheln.
+ *
+ * dunkel = Kachelreihe auf #111827, hell = Auswertung auf Weiss.
+ */
+const KACHELFARBEN: Record<string, {
+  dunkelFlaeche: string; dunkelIcon: string; hellFlaeche: string; hellIcon: string;
+}> = {
+  akzent: { dunkelFlaeche: 'bg-akzent-900', dunkelIcon: 'text-akzent-400', hellFlaeche: 'bg-akzent-100', hellIcon: 'text-akzent-700' },
+  green:  { dunkelFlaeche: 'bg-green-900',  dunkelIcon: 'text-green-400',  hellFlaeche: 'bg-green-100',  hellIcon: 'text-green-600' },
+  purple: { dunkelFlaeche: 'bg-purple-900', dunkelIcon: 'text-purple-400', hellFlaeche: 'bg-purple-100', hellIcon: 'text-purple-600' },
+  orange: { dunkelFlaeche: 'bg-orange-900', dunkelIcon: 'text-orange-400', hellFlaeche: 'bg-orange-100', hellIcon: 'text-orange-600' },
+  red:    { dunkelFlaeche: 'bg-red-900',    dunkelIcon: 'text-red-400',    hellFlaeche: 'bg-red-100',    hellIcon: 'text-red-600' },
+  yellow: { dunkelFlaeche: 'bg-yellow-900', dunkelIcon: 'text-yellow-400', hellFlaeche: 'bg-yellow-100', hellIcon: 'text-yellow-600' },
+  indigo: { dunkelFlaeche: 'bg-indigo-900', dunkelIcon: 'text-indigo-400', hellFlaeche: 'bg-indigo-100', hellIcon: 'text-indigo-600' },
+  teal:   { dunkelFlaeche: 'bg-teal-900',   dunkelIcon: 'text-teal-400',   hellFlaeche: 'bg-teal-100',   hellIcon: 'text-teal-600' },
+  gray:   { dunkelFlaeche: 'bg-gray-800',   dunkelIcon: 'text-gray-400',   hellFlaeche: 'bg-gray-100',   hellIcon: 'text-gray-600' },
+};
+
+const kachel = (farbe: string) => KACHELFARBEN[farbe] ?? KACHELFARBEN.gray;
+
 /**
  * WebsiteScanner - Hauptfeature auf der Landing Page
  * Ermöglicht Besuchern, ihre Website sofort zu scannen
@@ -47,7 +76,7 @@ export default function WebsiteScanner() {
       id: 'accessibility',
       name: 'Barrierefreiheit',
       icon: Eye,
-      color: 'blue',
+      color: 'akzent',
       description: 'WCAG 2.1 AA Konformität'
     },
     {
@@ -391,8 +420,8 @@ export default function WebsiteScanner() {
                   key={pillar.id}
                   className="bg-gray-800 rounded-xl p-6 border-2 border-gray-700 hover:border-akzent-400 hover:shadow-lg transition-all"
                 >
-                  <div className={`w-12 h-12 bg-${pillar.color}-900 bg-opacity-50 rounded-lg flex items-center justify-center mb-4`}>
-                    <Icon className={`w-6 h-6 text-${pillar.color}-400`} />
+                  <div className={`w-12 h-12 ${kachel(pillar.color).dunkelFlaeche} bg-opacity-50 rounded-lg flex items-center justify-center mb-4`}>
+                    <Icon className={`w-6 h-6 ${kachel(pillar.color).dunkelIcon}`} />
                   </div>
                   <h3 className="text-lg font-bold text-white mb-2">
                     {pillar.name}
@@ -549,7 +578,7 @@ export default function WebsiteScanner() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {Object.entries(scanResult.pillars).map(([key, pillarData]: [string, any]) => {
                 const meta: Record<string, { icon: any; color: string; description: string }> = {
-                  accessibility: { icon: Eye,       color: 'blue',   description: 'WCAG 2.1 AA Konformität' },
+                  accessibility: { icon: Eye,       color: 'akzent', description: 'WCAG 2.1 AA Konformität' },
                   gdpr:          { icon: Shield,     color: 'green',  description: 'Datenschutz-Compliance' },
                   legal:         { icon: FileText,   color: 'purple', description: 'Impressum, AGB, Widerrufsrecht' },
                   cookies:       { icon: Cookie,     color: 'orange', description: 'Cookie-Banner & Consent' },
@@ -564,8 +593,8 @@ export default function WebsiteScanner() {
                   <div key={key} className="bg-white rounded-xl p-6 border-2 border-gray-200">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 bg-${m.color}-100 rounded-lg flex items-center justify-center`}>
-                          <Icon className={`w-5 h-5 text-${m.color}-600`} />
+                        <div className={`w-10 h-10 ${kachel(m.color).hellFlaeche} rounded-lg flex items-center justify-center`}>
+                          <Icon className={`w-5 h-5 ${kachel(m.color).hellIcon}`} />
                         </div>
                         <div>
                           <h4 className="font-bold text-gray-900">{pillarData.label ?? key}</h4>
