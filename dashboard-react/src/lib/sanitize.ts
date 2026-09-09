@@ -13,7 +13,14 @@ const ALLOWED_CONFIG: Config = {
 };
 
 export function sanitizeHtml(dirty: string): string {
-  if (typeof window === 'undefined') return dirty;
+  // Auf dem Server gibt es kein DOM und damit kein DOMPurify. Bis zum
+  // 10.09.2026 wurde der Text dort UNGEPRUEFT zurueckgegeben — beim
+  // Server-Rendern hiesse das: er steht roh im ausgelieferten HTML, und
+  // dort laeuft ein <script> tatsaechlich (anders als bei innerHTML im
+  // Browser). In der Praxis kommen diese Inhalte erst nach dem Laden per
+  // API herein, der Zweig lief also leer. Ein Sicherheitsnetz, das im
+  // Zweifel durchlaesst, ist trotzdem keins.
+  if (typeof window === 'undefined') return '';
   /* eslint-disable-next-line */
   const DOMPurify = require('dompurify');
   return DOMPurify.sanitize(dirty, ALLOWED_CONFIG) as string;

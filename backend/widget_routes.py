@@ -1205,7 +1205,12 @@ async def get_scan_result(
 ):
     """
     Gibt das letzte Scan-Ergebnis für eine Site zurück.
+
+    Zugehoerigkeit vorausgesetzt: das Ergebnis nennt Cookies, Dienste und die
+    eingesetzte Einwilligungsloesung einer Website. Angemeldet allein reichte
+    bis zum 10.09.2026, die Kennung steht im Einbaucode jeder Kundenseite.
     """
+    await require_site_ownership(site_id, current_user)
     row = await db.fetchrow(
         """
         SELECT site_id, url, scanned_at, cookies, services,

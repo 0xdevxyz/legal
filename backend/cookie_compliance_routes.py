@@ -244,6 +244,20 @@ async def require_site_access(
 
     return user, user_id
 
+async def require_site_access_user(site_id: str, user: dict, module: str = 'cookie') -> Any:
+    """Zugehoerigkeitspruefung fuer Routen, die den Nutzer bereits als dict haben.
+
+    Pendant zu `require_site_access`, das die Anmeldedaten selbst aufloest.
+    Beides gibt es, weil die Routen historisch in zwei Stilen geschrieben sind;
+    ein Stil ohne Pruefung ist kein dritter Stil, sondern ein Loch.
+    """
+    user_id = user.get("user_id") or user.get("id")
+    await require_module(user, module)
+    if site_id not in await get_user_site_ids(user_id):
+        logger.warning(f"User {user_id} denied access to site_id '{site_id}'")
+        raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Website")
+    return user_id
+
 # ============================================================================
 # Pydantic Models
 # ============================================================================
@@ -1019,7 +1033,10 @@ async def extract_colors(
 
     Spiegelt das Scraping-Pattern aus website_routes.py (Erstanlage einer Site).
     """
-    # Auth + Modul-Check: nur zahlende Cookie-Kunden dürfen scrapen.
+    # Auth + Modul-Check: nur zahlende Cookie-Kunden dürfen scrapen. Eine
+    # Zugehoerigkeitspruefung gibt es hier bewusst nicht — die Route liest eine
+    # beliebige oeffentliche Adresse aus (Farbvorschlag vor der Erstanlage), es
+    # gibt keine fremden Daten zu erreichen. Der SSRF-Schutz steht unten.
     user = await get_current_user_required(credentials)
     await require_module(user, 'cookie')
 
@@ -1296,13 +1313,14 @@ async def update_config_partial(
         # Modul-Check: User muss Cookie-Modul gebucht haben
         await require_module(user, 'cookie')
         
-        # Prüfe, ob die site_id zur registrierten Website des Users gehört
-        registered_site_id = await get_user_website_site_id(user_id)
-        
-        if registered_site_id and site_id != registered_site_id:
+        # Zugehoerigkeit ueber ALLE Websites des Kontos. Die alte Pruefung
+        # verglich nur mit der primaeren Website und liess durch, wenn gar
+        # keine registriert war (`registered_site_id and ...`) — ein frisches
+        # Konto konnte damit den Banner jeder fremden Site umschreiben.
+        if site_id not in await get_user_site_ids(user_id):
             raise HTTPException(
-                status_code=403, 
-                detail=f"Site {site_id} does not belong to this user"
+                status_code=403,
+                detail="Kein Zugriff auf diese Website"
             )
         # Build dynamic update query
         update_fields = []
@@ -1516,7 +1534,10 @@ async def list_custom_services(
 ):
     """List the site's custom service definitions."""
     user = await get_current_user_required(credentials)
-    await require_module(user, 'cookie')
+    # Zugehoerigkeit, nicht nur Anmeldung: bis zum 10.09.2026 genuegte ein
+    # beliebiges Konto mit gebuchtem Cookie-Modul, um die eigenen Dienste
+    # FREMDER Websites zu lesen, anzulegen, zu aendern und zu loeschen.
+    await require_site_access(site_id, credentials)
     try:
         rows = await db_pool.fetch(
             """
@@ -1551,7 +1572,10 @@ async def create_custom_service(
 ):
     """Create a custom service for a site. service_key is derived from the name."""
     user = await get_current_user_required(credentials)
-    await require_module(user, 'cookie')
+    # Zugehoerigkeit, nicht nur Anmeldung: bis zum 10.09.2026 genuegte ein
+    # beliebiges Konto mit gebuchtem Cookie-Modul, um die eigenen Dienste
+    # FREMDER Websites zu lesen, anzulegen, zu aendern und zu loeschen.
+    await require_site_access(site_id, credentials)
     try:
         user_id = None
         try:
@@ -1602,7 +1626,10 @@ async def update_custom_service(
 ):
     """Update an existing custom service."""
     user = await get_current_user_required(credentials)
-    await require_module(user, 'cookie')
+    # Zugehoerigkeit, nicht nur Anmeldung: bis zum 10.09.2026 genuegte ein
+    # beliebiges Konto mit gebuchtem Cookie-Modul, um die eigenen Dienste
+    # FREMDER Websites zu lesen, anzulegen, zu aendern und zu loeschen.
+    await require_site_access(site_id, credentials)
     try:
         result = await db_pool.execute(
             """
@@ -1634,7 +1661,10 @@ async def delete_custom_service(
 ):
     """Delete a custom service."""
     user = await get_current_user_required(credentials)
-    await require_module(user, 'cookie')
+    # Zugehoerigkeit, nicht nur Anmeldung: bis zum 10.09.2026 genuegte ein
+    # beliebiges Konto mit gebuchtem Cookie-Modul, um die eigenen Dienste
+    # FREMDER Websites zu lesen, anzulegen, zu aendern und zu loeschen.
+    await require_site_access(site_id, credentials)
     try:
         result = await db_pool.execute(
             "DELETE FROM cookie_custom_services WHERE site_id=$1 AND service_key=$2",
@@ -3554,6 +3584,7 @@ async def get_revocation_stats(
     current_user: Dict = Depends(get_current_user_required),
 ):
     """AUDIT-17: Acceptance vs. Revocation Rate der letzten N Tage."""
+    await require_site_access_user(site_id, current_user)
     if not db_pool:
         return {"site_id": site_id, "acceptance_rate": 0.0, "revocation_rate": 0.0, "total": 0, "days": days}
     try:
@@ -3597,6 +3628,7 @@ async def get_service_consent_stats(
     current_user: Dict = Depends(get_current_user_required),
 ):
     """AUDIT-18: Per-Service Consent-Statistiken (welche Services wie oft akzeptiert)."""
+    await require_site_access_user(site_id, current_user)
     if not db_pool:
         return {"site_id": site_id, "services": {}, "days": days}
     try:
