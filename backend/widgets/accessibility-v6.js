@@ -1726,10 +1726,29 @@
           z-index: 999999;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
           /* ===== Clean / neutral palette ===== */
-          --c-accent: #2563eb;
-          --c-accent-hover: #1d4ed8;
-          --c-accent-tint: #eff6ff;
-          --c-accent-border: #bfdbfe;
+          /* Akzent aus dem complyo-Logo (#00FFF7). Er kommt in zwei
+             Rollen vor, deshalb zwei Token statt einem:
+
+             --c-accent ist die SCHRIFT-Rolle. Sie steht auf weissem Panel
+             und muss lesbar sein, deshalb die dunkle Stufe des Farbtons
+             (5,94:1). Die reine Logofarbe waere hier 1,26:1.
+
+             --c-accent-solid ist die FLAECHEN-Rolle: der Knopf unten
+             rechts, Haken, Badges. Dort liegt die reine Logofarbe, und
+             die Schrift darauf wird dunkel (--c-on-accent-solid,
+             14,06:1) — vorher war sie weiss und waere verschwunden.
+
+             --c-accent-border ist der Fokusrahmen. Er war ein blasses
+             Blau mit 1,4:1 gegen Weiss und damit kaum zu sehen; in einem
+             Barrierefreiheits-Widget ist das die falsche Stelle zum
+             Sparen. Jetzt die dunkle Stufe. */
+          --c-accent: #00706c;
+          --c-accent-hover: #005754;
+          --c-accent-tint: #ebfffe;
+          --c-accent-border: #00706c;
+          --c-accent-solid: #00fff7;
+          --c-accent-solid-hover: #00ccc5;
+          --c-on-accent-solid: #111827;
           --c-surface: #ffffff;
           --c-surface-2: #f9fafb;
           --c-border: #e5e7eb;
@@ -1753,10 +1772,10 @@
           width: 48px;
           height: 48px;
           border-radius: 12px;
-          background: var(--c-accent);
-          color: white;
+          background: var(--c-accent-solid);
+          color: var(--c-on-accent-solid);
           border: none;
-          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
+          box-shadow: 0 4px 12px rgba(0, 255, 247, 0.35);
           cursor: pointer;
           display: flex;
           align-items: center;
@@ -1766,9 +1785,9 @@
         }
 
         .complyo-toggle-btn:hover {
-          background: var(--c-accent-hover);
+          background: var(--c-accent-solid-hover);
           transform: translateY(-2px);
-          box-shadow: 0 6px 16px rgba(37, 99, 235, 0.32);
+          box-shadow: 0 6px 16px rgba(0, 255, 247, 0.4);
         }
 
         .complyo-toggle-btn:focus-visible {
@@ -1960,8 +1979,8 @@
           right: 8px;
           width: 18px;
           height: 18px;
-          background: var(--c-accent);
-          color: white;
+          background: var(--c-accent-solid);
+          color: var(--c-on-accent-solid);
           border-radius: 50%;
           display: flex;
           align-items: center;
@@ -2061,10 +2080,10 @@
           left: 0;
           right: 0;
           height: 3px;
-          background: rgba(37, 99, 235, 0.4);
+          background: rgba(0, 255, 247, 0.55);
           pointer-events: none;
           z-index: 999998;
-          box-shadow: 0 0 20px rgba(37, 99, 235, 0.28);
+          box-shadow: 0 0 20px rgba(0, 255, 247, 0.35);
         }
         
         .complyo-page-structure-overlay {
@@ -2145,7 +2164,7 @@
         
         .complyo-tab-btn:hover {
           color: var(--c-accent);
-          background: rgba(37, 99, 235, 0.06);
+          background: var(--c-accent-tint);
         }
         
         .complyo-tab-btn.active {
@@ -2197,8 +2216,8 @@
         .complyo-heading-badge {
           display: inline-block;
           padding: 2px 6px;
-          background: var(--c-accent);
-          color: white;
+          background: var(--c-accent-solid);
+          color: var(--c-on-accent-solid);
           border-radius: 4px;
           font-size: 10px;
           font-weight: 600;
@@ -2367,31 +2386,31 @@
           width: 20px;
           height: 20px;
           border-radius: 50%;
-          background: var(--c-accent);
+          background: var(--c-accent-solid);
           cursor: pointer;
-          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
+          box-shadow: 0 2px 8px rgba(0, 255, 247, 0.35);
           transition: all 0.2s;
         }
         
         .complyo-slider::-webkit-slider-thumb:hover {
           transform: scale(1.2);
-          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+          box-shadow: 0 4px 12px rgba(0, 255, 247, 0.45);
         }
         
         .complyo-slider::-moz-range-thumb {
           width: 20px;
           height: 20px;
           border-radius: 50%;
-          background: var(--c-accent);
+          background: var(--c-accent-solid);
           cursor: pointer;
           border: none;
-          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
+          box-shadow: 0 2px 8px rgba(0, 255, 247, 0.35);
           transition: all 0.2s;
         }
         
         .complyo-slider::-moz-range-thumb:hover {
           transform: scale(1.2);
-          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+          box-shadow: 0 4px 12px rgba(0, 255, 247, 0.45);
         }
         
         .complyo-slider-labels {
@@ -2428,13 +2447,13 @@
         .complyo-align-btn:hover {
           border-color: var(--c-accent);
           color: var(--c-accent);
-          background: rgba(37, 99, 235, 0.06);
+          background: var(--c-accent-tint);
         }
         
         .complyo-align-btn.active {
-          background: var(--c-accent);
+          background: var(--c-accent-solid);
           border-color: var(--c-accent);
-          color: white;
+          color: var(--c-on-accent-solid);
         }
         
         /* Reset Button */
@@ -2474,7 +2493,8 @@
         body.complyo-grayscale .complyo-toggle-btn,
         body.complyo-night-mode .complyo-toggle-btn,
         .complyo-toggle-btn {
-          background: var(--c-accent) !important;
+          background: var(--c-accent-solid) !important;
+          color: var(--c-on-accent-solid) !important;
           opacity: 1 !important;
           visibility: visible !important;
           pointer-events: auto !important;
