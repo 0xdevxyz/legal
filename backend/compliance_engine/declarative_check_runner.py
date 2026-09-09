@@ -35,6 +35,7 @@ from compliance_engine.check_spec_rules import (
     gate_entscheidet_nichts,
     gate_keyword_too_short,
     MIN_GATE_KEYWORD_LEN,
+    SUCHRAEUME,
     AUTO_CHECK_RISK_CAP as _RISK_CAP,
 )
 from compliance_engine.scan_kontext import erfuellt as _kontext_erfuellt
@@ -199,6 +200,103 @@ async def _fetch_text(url: str, session=None) -> Optional[str]:
     return abruf.text() if abruf is not None and abruf.status == 200 else None
 
 
+# ---------------------------------------------------------------------------
+# Suchraum: WO die Pruefung nachsehen darf
+# ---------------------------------------------------------------------------
+# Eine Pruefung behauptet etwas ueber eine Stelle der Website. Bis zum
+# 09.09.2026 durchsuchte jede von ihnen den gesamten Seitenquelltext, egal was
+# ihr Titel sagte. Das ging in beide Richtungen schief, und zwar an derselben
+# Pruefung an einem Tag:
+#
+#   "Das Cookie-Consent-Banner informiert nicht ueber die Gueltigkeitsdauer"
+#   verlangte woertlich "6 Monate" irgendwo auf der Seite. Ein Banner, das
+#   "12 Monate" sagt, fiel durch (Fehlalarm). Nach dem Aufweichen des Musters
+#   traf es den Satz "...16 Jahre alt sind und Ihre Einwilligung..." aus dem
+#   Fliesstext, und die Pruefung sprach frei, ohne je im Banner gewesen zu sein
+#   (Fehl-Freispruch).
+#
+# Beides verschwindet, sobald die Pruefung sagen kann, wo sie nachsieht.
+#
+# Grundsatz wie bei `requires`: laesst sich der Raum auf dieser Seite nicht
+# bestimmen, wird NICHT geprueft. Ein fehlender Suchraum ist kein fehlendes
+# Element — wer keinen Banner hat, verletzt keine Bannerpflicht.
+#
+# Die Namen stehen in der Regel-SSOT (check_spec_rules), weil der Generator sie
+# genauso braucht; aufgeloest werden sie hier.
+
+# Wie die Rechtsseiten gefunden werden. Bewusst knapp und ohne die generischen
+# Faelle, die check_spec_rules als Universalschluessel kennt — hier ist der
+# Link NICHT der Nachweis, sondern nur der Weg zum Suchraum.
+_SEITEN_LINKS = {
+    "agb": (["agb", "allgemeine-geschaeftsbedingungen", "terms", "nutzungsbedingungen",
+             "geschaeftsbedingungen", "tos", "gtc"],
+            ["agb", "allgemeine geschäftsbedingungen", "nutzungsbedingungen",
+             "terms of service", "geschäftsbedingungen"]),
+    "datenschutz": (["datenschutz", "privacy", "dsgvo", "gdpr", "data-protection"],
+                    ["datenschutz", "datenschutzerklärung", "privacy policy"]),
+    "impressum": (["impressum", "imprint", "legal-notice"],
+                  ["impressum", "imprint"]),
+}
+
+
+class Suchraum:
+    """Ein aufgeloester Suchraum: Markup plus Herkunftsangabe fuer den Befund."""
+
+    __slots__ = ("name", "soup", "html_lower", "quelle")
+
+    def __init__(self, name: str, soup: BeautifulSoup, quelle: Optional[str] = None):
+        self.name = name
+        self.soup = soup
+        self.html_lower = str(soup).lower()
+        self.quelle = quelle
+
+
+async def _hole_suchraum(
+    name: str,
+    url: str,
+    soup: BeautifulSoup,
+    html_lower: str,
+    session=None,
+    zwischenspeicher: Optional[Dict[str, Any]] = None,
+) -> Optional[Suchraum]:
+    """Loest einen Suchraum auf. None heisst: auf dieser Seite nicht vorhanden.
+
+    Der Zwischenspeicher gilt fuer EINEN Seitenlauf: mehrere Pruefungen mit
+    demselben Raum holen die Unterseite sonst mehrfach.
+    """
+    if zwischenspeicher is not None and name in zwischenspeicher:
+        return zwischenspeicher[name]
+
+    raum: Optional[Suchraum] = None
+
+    if name == "seite":
+        raum = Suchraum(name, soup, url)
+
+    elif name == "consent_banner":
+        from compliance_engine.checks.cookie_check import _find_consent_container
+        behaelter = _find_consent_container(soup)
+        if behaelter is not None:
+            raum = Suchraum(name, behaelter, url)
+
+    elif name in _SEITEN_LINKS:
+        href_kw, text_kw = _SEITEN_LINKS[name]
+        ziel = None
+        for a in soup.find_all("a", href=True):
+            href = (a.get("href") or "").lower()
+            text = a.get_text(strip=True).lower()
+            if any(k in href for k in href_kw) or any(k == text for k in text_kw):
+                ziel = urljoin(url, a.get("href", ""))
+                break
+        if ziel:
+            roh = await _fetch_text(ziel, session)
+            if roh:
+                raum = Suchraum(name, BeautifulSoup(roh, "html.parser"), ziel)
+
+    if zwischenspeicher is not None:
+        zwischenspeicher[name] = raum
+    return raum
+
+
 async def _detect_required_element(
     detection: Dict[str, Any],
     base_url: str,
@@ -273,6 +371,7 @@ async def _run_single_check(
     soup: BeautifulSoup,
     html_lower: str,
     session=None,
+    raeume: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     detection = check.get("detection", {})
     dtype = detection.get("type", "required_element")
@@ -292,13 +391,45 @@ async def _run_single_check(
         logger.warning(f"Declarative check '{check['slug']}': unsupported detection.type '{dtype}' — skipped")
         return []
 
-    result = await _detect_required_element(detection, url, soup, html_lower, session)
+    # Suchraum bestimmen. Unbekannter Name oder auf dieser Seite nicht
+    # vorhanden: nicht pruefen. Beides ist die sichere Richtung — ein fehlender
+    # Suchraum belegt kein fehlendes Element.
+    raum_name = detection.get("scope") or "seite"
+    if raum_name not in SUCHRAEUME:
+        logger.warning(
+            f"Declarative check '{check['slug']}': unbekannter Suchraum "
+            f"'{raum_name}' — skipped"
+        )
+        return []
+
+    raum = await _hole_suchraum(raum_name, url, soup, html_lower, session, raeume)
+    if raum is None:
+        logger.debug(
+            f"Declarative check '{check['slug']}': Suchraum "
+            f"'{raum_name}' auf dieser Seite nicht vorhanden — nicht anwendbar"
+        )
+        return []
+
+    # Kandidaten-Pfade probt nur der Seitenraum: in einem Bannerausschnitt oder
+    # auf einer Rechtsseite nach /transparenzbericht zu suchen, ergibt keinen Sinn.
+    if raum_name != "seite" and detection.get("url_paths"):
+        detection = {**detection, "url_paths": []}
+
+    result = await _detect_required_element(
+        detection, raum.quelle or url, raum.soup, raum.html_lower, session
+    )
 
     if not result["found"]:
+        beschreibung = check["description"]
+        if raum_name != "seite":
+            # Ohne diese Angabe ist der Befund nicht nachpruefbar: der Leser
+            # weiss sonst nicht, wo der Scanner ueberhaupt nachgesehen hat.
+            beschreibung += f" Geprüft wurde {SUCHRAEUME[raum_name]}"
+            beschreibung += f" ({raum.quelle})." if raum.quelle and raum_name != "consent_banner" else "."
         return [_issue_dict(
             check,
             title=check["title"],
-            description=check["description"],
+            description=beschreibung,
             severity=check["severity"],
             risk_euro=check["risk_euro"],
             is_missing=True,
@@ -363,6 +494,9 @@ async def run_declarative_checks(
 
     html_lower = str(soup).lower()
     issues: List[Dict[str, Any]] = []
+    # Ein Zwischenspeicher je Seitenlauf: zwoelf Pruefungen mit dem Suchraum
+    # "datenschutz" holen die Unterseite sonst zwoelfmal.
+    raeume: Dict[str, Any] = {}
 
     for check in checks:
         try:
@@ -403,7 +537,9 @@ async def run_declarative_checks(
                 continue
             if not _gate_passes(check.get("applies_when", {}), soup, html_lower):
                 continue
-            issues.extend(await _run_single_check(check, url, soup, html_lower, session))
+            issues.extend(await _run_single_check(
+                check, url, soup, html_lower, session, raeume=raeume
+            ))
         except Exception as e:
             logger.warning(f"Declarative check '{check.get('slug')}' failed (non-critical): {e}")
 

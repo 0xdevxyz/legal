@@ -58,6 +58,7 @@ Anforderungen:
   "applies_when": siehe Abschnitt GELTUNGSBEREICH,
   "detection": {{
     "type": "required_element",
+    "scope": "seite",
     "link_text_keywords": ["sichtbarer linktext (kleingeschrieben)"],
     "link_href_keywords": ["url-fragmente"],
     "html_patterns": ["regex fuer inline-buttons/text"],
@@ -96,9 +97,13 @@ Am 08.09.2026 taten das acht Prüfungen gleichzeitig.
 # WICHTIG
 - detection MUSS mindestens eines der Felder link_text_keywords / link_href_keywords
   / html_patterns / url_paths sinnvoll gefüllt haben.
-- detection sucht im gesamten Seitenquelltext. Formuliere die Pflicht nur dann
-  als Prüfung, wenn ihr Nachweis auch WIRKLICH irgendwo auf der Seite steht —
-  nicht, wenn er nur an einer bestimmten Stelle gälte (z.B. "im Banner").
+- detection.scope sagt, WO gesucht wird. Setze ihn auf die Stelle, über die
+  die Pflicht etwas aussagt, sonst bestätigt ein Treffer irgendwo auf der Seite
+  eine Pflicht, die dort gar nicht gilt:
+{suchraum_liste}
+  Ist der Raum auf einer Seite nicht vorhanden (kein Banner, keine AGB), wird
+  NICHT geprüft — ein fehlender Suchraum belegt kein fehlendes Element.
+- url_paths wirkt nur bei scope "seite".
 - Wähle Keywords spezifisch genug, um Fehlalarme zu vermeiden.
 - severity: im Zweifel "warning".
 - Antworte AUSSCHLIESSLICH mit dem JSON-Objekt.
@@ -119,7 +124,19 @@ def _fakten_liste() -> str:
 
 # Die Fakten stehen fest, sobald das Modul geladen ist — der Prompt wird pro
 # Gesetzesaenderung nur noch mit title/description/requirements formatiert.
-GENERATION_PROMPT = GENERATION_PROMPT.replace("{fakten_liste}", _fakten_liste())
+def _suchraum_liste() -> str:
+    """Die erlaubten Suchraeume als Prompt-Block — aus der Regel-SSOT."""
+    from compliance_engine.check_spec_rules import SUCHRAEUME
+    return "\n".join(
+        f"     {name:<16} {beschreibung}" for name, beschreibung in sorted(SUCHRAEUME.items())
+    )
+
+
+GENERATION_PROMPT = (
+    GENERATION_PROMPT
+    .replace("{fakten_liste}", _fakten_liste())
+    .replace("{suchraum_liste}", _suchraum_liste())
+)
 
 
 CallAi = Callable[[str], Awaitable[str]]
@@ -174,8 +191,15 @@ def _validate_spec(spec: Dict[str, Any]) -> Optional[str]:
     # Qualitaets-Gate (Regel-SSOT check_spec_rules, siehe Audit 2026-07):
     from compliance_engine.check_spec_rules import (
         detection_is_weak, detection_is_inverted, AUTO_CHECK_RISK_CAP,
-        gate_entscheidet_nichts, gate_keyword_too_short, MIN_GATE_KEYWORD_LEN,
+        detection_scope_unbekannt, gate_entscheidet_nichts,
+        gate_keyword_too_short, MIN_GATE_KEYWORD_LEN, SUCHRAEUME,
     )
+    unbekannt = detection_scope_unbekannt(spec["detection"])
+    if unbekannt:
+        return (
+            f"unbekannter Suchraum '{unbekannt}' — erlaubt sind: "
+            f"{', '.join(sorted(SUCHRAEUME))}"
+        )
     kurz = gate_keyword_too_short(spec["applies_when"])
     if kurz:
         return (

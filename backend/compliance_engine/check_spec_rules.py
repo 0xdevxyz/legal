@@ -190,3 +190,37 @@ def gate_entscheidet_nichts(applies_when: Dict[str, Any]) -> Optional[str]:
             f"Thema schreibt, nicht die, fuer die die Pflicht gilt"
         )
     return None
+
+
+# ---------------------------------------------------------------------------
+# Suchraum: WO eine Pruefung nachsehen darf
+# ---------------------------------------------------------------------------
+# Eine Pruefung behauptet etwas ueber eine Stelle der Website, durchsuchte aber
+# bis zum 09.09.2026 immer den ganzen Seitenquelltext. Dieselbe Pruefung irrte
+# dadurch an einem Tag in beide Richtungen: "Das Banner nennt die
+# Gueltigkeitsdauer nicht" verlangte woertlich "6 Monate" irgendwo auf der
+# Seite (Fehlalarm bei einem Banner, das 12 Monate sagt) und traf nach dem
+# Aufweichen des Musters den Fliesstext "...16 Jahre alt sind und Ihre
+# Einwilligung..." (Fehl-Freispruch, ohne je im Banner gewesen zu sein).
+#
+# Das Vokabular steht hier, weil Generator UND Runner es brauchen; aufgeloest
+# werden die Raeume im Runner (declarative_check_runner._hole_suchraum).
+SUCHRAEUME = {
+    "seite":          "die geladene Seite",
+    "consent_banner": "der Cookie-/Consent-Banner",
+    "agb":            "die verlinkten AGB",
+    "datenschutz":    "die verlinkte Datenschutzerklaerung",
+    "impressum":      "das verlinkte Impressum",
+}
+
+
+def detection_scope_unbekannt(detection: Dict[str, Any]) -> Optional[str]:
+    """Gibt den Suchraum-Namen zurueck, wenn er unbekannt ist — sonst None."""
+    if not isinstance(detection, dict):
+        return None
+    raum = detection.get("scope")
+    if raum in (None, "", "seite"):
+        return None
+    if raum not in SUCHRAEUME:
+        return str(raum)
+    return None
