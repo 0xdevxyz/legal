@@ -122,3 +122,43 @@ class TestNachweisBekommtSeineZahlen:
     def test_nachweis_liest_je_regel(self):
         src = _lese("nachweis_routes.py")
         assert 'payload.get("je_regel")' in src
+
+
+class TestWeitereLandmarkenSindVerdrahtet:
+    """
+    Die Geschwister-Landmarken duerfen an keiner Stelle der Kette
+    durchrutschen — weder ungemessen ausgeliefert noch vom Widget als
+    "unnoetig" verworfen werden.
+    """
+
+    def test_verifizierer_misst_auch_ohne_hauptinhalt(self):
+        """
+        Die Wirkungspruefung hing an `haupt_selektor`. Seit es region-Fixes
+        auch ohne Hauptinhalts-Container gibt, gingen die sonst ungemessen
+        auf eine Kundenseite.
+        """
+        src = _lese("compliance_engine", "struktur_verifizierer.py")
+        assert "if (haupt_selektor or geschwister_fixes)" in src
+
+    def test_verifizierer_holt_die_kandidaten(self):
+        src = _lese("compliance_engine", "struktur_verifizierer.py")
+        assert "GESCHWISTER_LANDMARKS_JS" in src
+        assert "baue_geschwister_landmarks" in src
+
+    def test_widget_haelt_die_main_sonderregel_am_wert_fest(self):
+        """
+        Das Widget verwirft einen main-Fix als "unnoetig", wenn die Seite
+        schon eine main-Landmark hat. Haenge diese Regel an `attribut ===
+        'role'` statt am Wert, traefe sie jede region-Landmark mit — auf
+        genau den Seiten, die eine main bekommen, waere der Rest wirkungslos.
+        """
+        src = _lese("widgets", "a11y_remediation.js")
+        assert "f.attribut === 'role' && f.wert === 'main'" in src
+
+    def test_widget_setzt_beliebige_attribute(self):
+        """`aria-label` ist neu — das Widget darf nicht auf role/tabindex
+        festverdrahtet sein."""
+        src = _lese("widgets", "a11y_remediation.js")
+        block = src[src.index("function applyStrukturFixes"):]
+        block = block[:block.index("// CSS einmalig")]
+        assert "el.setAttribute(f.attribut, f.wert)" in block

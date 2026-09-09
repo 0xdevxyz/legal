@@ -17,7 +17,8 @@ from compliance_engine.formular_fixes import (
     FORMULARFELDER_JS, beschriftung_fuer_feld, titel_aus_seite,
 )
 from compliance_engine.struktur_fixes import (
-    ALTERNATIVEN_JS, HAUPTINHALT_JS, STRUKTUR_ANWENDEN_JS, baue_struktur_css, baue_struktur_fixes,
+    ALTERNATIVEN_JS, GESCHWISTER_LANDMARKS_JS, HAUPTINHALT_JS, STRUKTUR_ANWENDEN_JS,
+    baue_geschwister_landmarks, baue_struktur_css, baue_struktur_fixes,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,18 @@ async def verifizierte_struktur_fixes(page) -> Dict[str, Any]:
                 logger.warning(f"Selektor-Alternativen nicht bestimmbar: {e}")
 
     fixes = baue_struktur_fixes(vorher, haupt_selektor, haupt_alternativen)
+
+    # Seiten ohne einen Hauptinhalts-Container: die uebrigen Abschnitte
+    # bekommen eine eigene benannte Landmark. Ein einzelnes role="main" laesst
+    # dort systematisch einen Teil liegen (siehe GESCHWISTER_LANDMARKS_JS).
+    geschwister_fixes = []
+    if region_selektoren:
+        try:
+            kandidaten = await page.evaluate(GESCHWISTER_LANDMARKS_JS, haupt_selektor)
+            geschwister_fixes = baue_geschwister_landmarks(kandidaten)
+            fixes.extend(geschwister_fixes)
+        except Exception as e:
+            logger.warning(f"Weitere Landmarken nicht bestimmbar: {e}")
     css_rules = baue_struktur_css(vorher)
     fixes.extend(await _formular_fixes(page, vorher))
     fixes.extend(await _titel_fix(page, vorher))
@@ -122,11 +135,16 @@ async def verifizierte_struktur_fixes(page) -> Dict[str, Any]:
     # gesetzte main weniger als die Haelfte der Befunde ab, sass es an einem
     # Abschnitt statt am Hauptinhalt. Dann lieber keins.
     genug = region_vorher > 0 and (region_vorher - region_nachher) * 2 >= region_vorher
-    if haupt_selektor and region_vorher > 0 and not genug:
+    # Die Pruefung haengt nicht mehr allein am haupt_selektor: seit es
+    # Geschwister-Landmarken gibt, kann es region-Fixes auch ohne einen
+    # Hauptinhalts-Container geben, und die duerfen genauso wenig ungemessen
+    # auf eine Kundenseite.
+    if (haupt_selektor or geschwister_fixes) and region_vorher > 0 and not genug:
         logger.info(
-            f"role=main auf {haupt_selektor} raeumt nur "
+            f"Landmarken ({haupt_selektor or 'ohne main'}, "
+            f"{len(geschwister_fixes) // 2} weitere) raeumen nur "
             f"{region_vorher - region_nachher} von {region_vorher} Befunden ab — "
-            f"das ist ein Abschnitt, nicht der Hauptinhalt; wird nicht ausgeliefert"
+            f"zu wenig, um den Hauptinhalt zu treffen; wird nicht ausgeliefert"
         )
         fixes = [f for f in fixes if f["regel"] != "region"]
         haupt_selektor = None

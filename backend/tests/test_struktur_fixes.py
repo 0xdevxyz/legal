@@ -18,8 +18,8 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from compliance_engine.struktur_fixes import (  # noqa: E402
-    HAUPTINHALT_JS, baue_struktur_css, baue_struktur_fixes, iframe_titel,
-    viewport_reparieren,
+    GESCHWISTER_LANDMARKS_JS, HAUPTINHALT_JS, baue_geschwister_landmarks,
+    baue_struktur_css, baue_struktur_fixes, iframe_titel, viewport_reparieren,
 )
 
 
@@ -142,3 +142,73 @@ class TestSchutzregelnImBrowsercode:
 
     def test_vorhandene_rollen_werden_nicht_ueberschrieben(self):
         assert "getAttribute('role')" in HAUPTINHALT_JS
+
+
+class TestGeschwisterLandmarks:
+    """
+    Seiten ohne EINEN Hauptinhalt: die uebrigen Abschnitte bekommen eine
+    eigene benannte Landmark.
+
+    Gemessen an panoart360.de (09.09.2026): das einzelne role="main" raeumte
+    34 von 50 region-Fundstellen ab, mit den weiteren Landmarken sind es 45.
+    Die restlichen 5 haben keine Ueberschrift oder keinen eindeutigen
+    Selektor — die bleiben bewusst liegen.
+    """
+
+    def test_je_abschnitt_rolle_und_name(self):
+        fixes = baue_geschwister_landmarks([
+            {"selector": "#about", "name": "Ueber uns"},
+        ])
+        assert [(f["attribut"], f["wert"]) for f in fixes] == [
+            ("role", "region"), ("aria-label", "Ueber uns")]
+        assert all(f["selector"] == "#about" for f in fixes)
+
+    def test_regel_ist_region(self):
+        """
+        Haengt an der Regel: der Verifizierer verwirft region-Fixes, die zu
+        wenig bewirken. Stuende hier etwas anderes, gingen sie ungemessen raus.
+        """
+        fixes = baue_geschwister_landmarks([{"selector": "#a", "name": "A"}])
+        assert {f["regel"] for f in fixes} == {"region"}
+
+    def test_ohne_namen_kein_fix(self):
+        """Eine unbenannte Region senkt die Zahl und hilft niemandem."""
+        assert baue_geschwister_landmarks([{"selector": "#a", "name": ""}]) == []
+        assert baue_geschwister_landmarks([{"selector": "", "name": "A"}]) == []
+
+    def test_leere_eingabe(self):
+        assert baue_geschwister_landmarks([]) == []
+        assert baue_geschwister_landmarks(None) == []
+
+    def test_jeder_fix_traegt_eine_begruendung(self):
+        for f in baue_geschwister_landmarks([{"selector": "#a", "name": "Preise"}]):
+            assert f.get("begruendung"), f
+        # Der Name-Fix sagt, woher der Name stammt — sonst sieht er erfunden aus.
+        namensfix = baue_geschwister_landmarks([{"selector": "#a", "name": "Preise"}])[1]
+        assert "Ueberschrift" in namensfix["begruendung"]
+
+
+class TestSchutzregelnGeschwister:
+    """Die Regeln stehen im Browsercode; hier wird ihr Vorhandensein bewacht."""
+
+    def test_randbereiche_bleiben_aussen_vor(self):
+        assert "NICHT_MAIN" in GESCHWISTER_LANDMARKS_JS
+        assert "istRandbereich" in GESCHWISTER_LANDMARKS_JS
+
+    def test_ohne_ueberschrift_kein_kandidat(self):
+        assert "querySelector('h1, h2, h3')" in GESCHWISTER_LANDMARKS_JS
+
+    def test_selektor_muss_eindeutig_sein(self):
+        assert "eindeutig" in GESCHWISTER_LANDMARKS_JS
+
+    def test_langer_text_wird_am_ersten_satz_geschnitten(self):
+        """
+        Auf panoart360.de steckte in einer h2 ein ganzer Absatz (154 Zeichen).
+        Als Landmark-Name unbrauchbar — der Screenreader liest ihn beim
+        Anspringen komplett vor.
+        """
+        assert "name.length > 80" in GESCHWISTER_LANDMARKS_JS
+        assert "{15,80}" in GESCHWISTER_LANDMARKS_JS
+
+    def test_was_im_hauptinhalt_liegt_wird_uebersprungen(self):
+        assert "hauptEl.contains(kind)" in GESCHWISTER_LANDMARKS_JS

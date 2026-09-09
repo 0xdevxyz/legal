@@ -239,6 +239,137 @@ ALTERNATIVEN_JS = r"""
 }
 """
 
+# Weitere Landmarken fuer Seiten ohne EINEN Hauptinhalts-Container.
+#
+# Hintergrund (Messung 09.09.2026, panoart360.de): dort verteilen sich die 50
+# `region`-Fundstellen auf ACHT Geschwister direkt unter <body> — #works 33,
+# #main 8, #contact 3, #about 1, zwei namenlose sections, ein Loader, ein
+# WhatsApp-Knopf. Der gemeinsame Vorfahr ist damit <body> selbst, und
+# HAUPTINHALT_JS faellt auf "das Kind mit den meisten Knoten" zurueck. Ein
+# einzelnes role="main" raeumte 34 von 50 ab; die uebrigen 16 blieben liegen
+# und sahen auf der Karte aus wie erledigt.
+#
+# Ein One-Pager HAT keinen einzelnen Hauptinhalt. WCAG verlangt hier nicht die
+# eine Landmark, sondern dass Inhalt ueberhaupt in einer liegt: neben dem einen
+# `main` duerfen weitere Abschnitte als benannte `region` gelten.
+#
+# Der Name kommt aus der vorhandenen Ueberschrift des Abschnitts, nicht aus
+# einer Erfindung. Bewusst als `aria-label` mit kopiertem Text und nicht als
+# `aria-labelledby`: letzteres braeuchte eine id auf genau dieser Ueberschrift,
+# und dafuer einen Selektor, der sie eindeutig trifft — bei
+# `#about :is(h1,h2,h3)` waeren es mehrere Treffer und damit dieselbe id
+# mehrfach im Dokument. Der Preis ist bekannt: aendert der Kunde die
+# Ueberschrift, veraltet das Label. Es steht dafuer im Manifest und faellt bei
+# der naechsten Messung auf.
+#
+# Ohne Ueberschrift kein Fix. Eine unbenannte Region ist fuer
+# Screenreader-Nutzer wertlos und fuer axe trotzdem eine Landmark — das waere
+# genau die Sorte Reparatur, die die Zahl senkt und niemandem hilft.
+GESCHWISTER_LANDMARKS_JS = r"""
+(haupt) => {
+  const knoten = window.__complyoRegionKnoten || [];
+  const elemente = [];
+  for (const sel of knoten) {
+    try { const el = document.querySelector(sel); if (el) elemente.push(el); }
+    catch (e) { /* Selektor aus fremdem Markup */ }
+  }
+  if (!elemente.length) return [];
+
+  let hauptEl = null;
+  if (haupt) { try { hauptEl = document.querySelector(haupt); } catch (e) {} }
+
+  const NICHT_MAIN = /(^|[-_ ])(header|footer|nav|navigation|topbar|menu|sidebar|widget|cookie|banner)([-_ ]|$)/i;
+  const istRandbereich = (el) =>
+    ['HEADER', 'NAV', 'FOOTER', 'ASIDE'].includes(el.tagName) ||
+    NICHT_MAIN.test(el.id || '') ||
+    NICHT_MAIN.test((el.className || '').toString());
+
+  const eindeutig = (sel, el) => {
+    try { const t = document.querySelectorAll(sel); return t.length === 1 && t[0] === el; }
+    catch (e) { return false; }
+  };
+
+  const ergebnis = [];
+  for (const kind of document.body.children) {
+    // Was schon im Hauptinhalt liegt, braucht keine zweite Landmark.
+    if (hauptEl && (kind === hauptEl || kind.contains(hauptEl) || hauptEl.contains(kind))) continue;
+    if (istRandbereich(kind)) continue;
+    if (kind.getAttribute('role') || kind.getAttribute('aria-label')) continue;
+    if (['SCRIPT', 'STYLE', 'LINK', 'TEMPLATE', 'NOSCRIPT'].includes(kind.tagName)) continue;
+    // Nur Abschnitte, in denen wirklich bemaengelter Inhalt steckt.
+    if (!elemente.some((e) => kind.contains(e) || kind === e)) continue;
+
+    const h = kind.querySelector('h1, h2, h3');
+    if (!h) continue;
+    let name = (h.textContent || '').replace(/\s+/g, ' ').trim();
+    // Lange Ueberschriften sind meist Ueberschrift PLUS Fliesstext im selben
+    // Element — auf panoart360.de steckte in einer h2 der ganze Absatz:
+    //   "Wir machen Ihre Webseite zum Vertriebskanal. Kein
+    //    Agentur-Wasserfall. Kein Projektmanager-Ping-Pong. ..." (154 Zeichen)
+    // Als Landmark-Name waere das unbrauchbar: der Screenreader liest beim
+    // Anspringen den ganzen Absatz vor. Der erste Satz ist hier die richtige
+    // Grenze, weil sie aus dem Text selbst kommt und nicht aus einer
+    // Zeichenzahl. Die Mindestlaenge haelt Abkuerzungen heraus ("Dr. ").
+    if (name.length > 80) {
+      const m = name.match(/^(.{15,80}?[.!?])\s+[A-ZÄÖÜ]/);
+      if (!m) continue;
+      name = m[1];
+    }
+    // Zu kurz sagt nichts.
+    if (name.length < 3) continue;
+
+    let sel = null;
+    if (kind.id) {
+      const kandidat = '#' + CSS.escape(kind.id);
+      if (eindeutig(kandidat, kind)) sel = kandidat;
+    }
+    if (!sel) {
+      const klassen = (kind.className || '').toString().trim().split(/\s+/).filter(Boolean);
+      if (klassen.length) {
+        const kandidat = kind.tagName.toLowerCase() + '.' + klassen.map(CSS.escape).join('.');
+        if (eindeutig(kandidat, kind)) sel = kandidat;
+      }
+    }
+    // Ohne stabilen, eindeutigen Selektor kein Fix: das Widget wendet ihn auf
+    // jeder Seite erneut an und traefe sonst irgendetwas.
+    if (!sel) continue;
+
+    ergebnis.push({ selector: sel, name: name });
+  }
+  return ergebnis;
+}
+"""
+
+
+def baue_geschwister_landmarks(kandidaten):
+    """
+    Aus den gemessenen Abschnitten werden Attribut-Setzungen.
+
+    Zwei je Abschnitt: `role="region"` macht auch ein <div> zur Landmark, und
+    `aria-label` gibt ihr den Namen, ohne den sie in der Landmark-Liste eines
+    Screenreaders als namenlose "region" stuende.
+    """
+    fixes = []
+    for k in kandidaten or []:
+        selector, name = k.get("selector"), k.get("name")
+        if not selector or not name:
+            continue
+        fixes.append({
+            "selector": selector, "attribut": "role", "wert": "region",
+            "regel": "region",
+            "begruendung": (
+                "Abschnitt ausserhalb jeder Landmark; die Seite hat keinen "
+                "einzelnen Hauptinhalt, in den er fiele."
+            ),
+        })
+        fixes.append({
+            "selector": selector, "attribut": "aria-label", "wert": name,
+            "regel": "region",
+            "begruendung": f"Name aus der vorhandenen Ueberschrift: „{name}“.",
+        })
+    return fixes
+
+
 STRUKTUR_ANWENDEN_JS = r"""
 (fixes) => {
   // Guarded wie ueberall: nur setzen, wo nichts steht.
