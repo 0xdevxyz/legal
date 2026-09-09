@@ -164,6 +164,13 @@ def gate_entscheidet_nichts(applies_when: Dict[str, Any]) -> Optional[str]:
         return None
     if applies_when.get("site_type"):
         return None
+    # Ausdrueckliche Universalpflicht. Es gibt sie wirklich — Impressum und
+    # Datenschutzerklaerung schuldet jede geschaeftsmaessige Website. Sie
+    # braucht aber ein eigenes Wort, damit sie eine Entscheidung ist und kein
+    # Vorgabewert: `always: true` stand in acht Pruefungen, weil niemand eine
+    # Bedingung eingetragen hatte, nicht weil die Pflicht universal waere.
+    if applies_when.get("jede_website") is True:
+        return None
 
     keywords = [
         str(k).strip().lower()

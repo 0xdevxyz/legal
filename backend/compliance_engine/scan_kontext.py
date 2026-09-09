@@ -34,22 +34,43 @@ from typing import Any, Dict, Iterable, Optional
 logger = logging.getLogger(__name__)
 
 
-# Namen aller bekannten Tatsachen. `applies_when.requires` darf nur diese
-# nennen; alles andere ist ein Tippfehler oder eine Tatsache, die noch niemand
-# erhebt — beides fuehrt zum Ueberspringen der Pruefung.
-BEKANNTE_FAKTEN: "frozenset[str]" = frozenset({
-    # Datenschutz / Cookies
-    "consent_banner",      # ein Consent-/Cookie-Banner ist im Markup vorhanden
-    "consent_tracking",    # einwilligungspflichtiges Tracking (analytics/marketing) belegt
-    "drittland_usa",       # Datentransfer in die USA belegt
-    "drittland_uk",        # Datentransfer ins Vereinigte Koenigreich belegt
-    # Vertrieb
-    "newsletter_formular",  # ein Newsletter-Anmeldeformular ist vorhanden
-    # Noch nicht erhoben — hier bewusst benannt, damit Pruefungen, die darauf
-    # beruhen, sichtbar warten statt auf Verdacht zu feuern.
-    "plattform_ugc",       # Seite hostet nutzergenerierte Inhalte (DSA-Plattform)
-    "plattform_werbung",   # Seite zeigt Werbung Dritter (DSA Art. 26)
-})
+# Alle bekannten Tatsachen mit ihrer Bedeutung. EINE Quelle fuer drei
+# Verbraucher: der Runner prueft `applies_when.requires` dagegen, der
+# Check-Generator bekommt daraus seine Auswahlliste in den Prompt, und die
+# Tests halten beide zusammen. Eine neue Tatsache hier einzutragen genuegt,
+# damit sie ueberall bekannt ist.
+#
+# `applies_when.requires` darf nur diese Namen nennen; alles andere ist ein
+# Tippfehler oder eine Tatsache, die noch niemand erhebt — beides fuehrt zum
+# Ueberspringen der Pruefung.
+FAKTEN: Dict[str, str] = {
+    # --- Datenschutz / Cookies ---
+    "consent_banner":
+        "Die Seite zeigt einen Consent-/Cookie-Banner mit echten Akzeptieren-/"
+        "Ablehnen-Knoepfen.",
+    "consent_tracking":
+        "Die Seite setzt einwilligungspflichtiges Tracking ein (Analytics oder "
+        "Marketing, belegt ueber Netzwerk-Requests oder Script-Einbindung).",
+    "drittland_usa":
+        "Es ist ein Datentransfer in die USA belegt (erkannter Dienst mit "
+        "US-Verarbeitung).",
+    "drittland_uk":
+        "Es ist ein Datentransfer ins Vereinigte Koenigreich belegt.",
+    # --- Vertrieb ---
+    "newsletter_formular":
+        "Die Seite hat ein Anmeldeformular mit E-Mail-Feld und Newsletter-Bezug.",
+    # --- Noch nicht erhoben ---
+    # Bewusst benannt, damit Pruefungen, die darauf beruhen, sichtbar warten
+    # statt auf Verdacht zu feuern. Sobald ein Detektor existiert, werden sie
+    # ohne weitere Aenderung scharf.
+    "plattform_ugc":
+        "Die Seite hostet nutzergenerierte Inhalte (Online-Plattform im Sinne "
+        "des DSA). NOCH NICHT ERHOBEN.",
+    "plattform_werbung":
+        "Die Seite zeigt Werbung Dritter (DSA Art. 26). NOCH NICHT ERHOBEN.",
+}
+
+BEKANNTE_FAKTEN: "frozenset[str]" = frozenset(FAKTEN)
 
 # Tatsachen, fuer die es (noch) keinen Detektor gibt. Sie stehen in
 # BEKANNTE_FAKTEN, damit `requires` sie nennen darf, sind aber nie True.

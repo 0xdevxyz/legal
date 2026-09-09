@@ -4,6 +4,13 @@ Tests fuer das Qualitaets-Gate des deklarativen Check-Layers (Tier 3 E).
 Fixtures stammen aus dem realen Prod-Altbestand (Audit 2026-07):
 - google-fonts-lokal-hosting (id 71): invertierte Logik
 - speicherfristen-datenschutzerklaerung: neutralisierte Detection
+
+Ab dem Selbstscan vom 08.09.2026 kommt der Geltungsbereich dazu: acht aktive
+Pruefungen standen auf {"always": true} und behaupteten ihre Pflicht damit auf
+jeder Kundenseite. Der Runner uebersprang solche Specs ab dem 08.09. — der
+Generator schrieb sie aber weiter in die Datenbank, wo sie in der Review-Queue
+wie gueltige Pruefungen aussahen. Beide Verbraucher der Regel-SSOT wenden sie
+jetzt an.
 """
 
 import pytest
@@ -28,7 +35,9 @@ def _base_spec(**overrides):
         "legal_basis": "Art. 13 DSGVO",
         "severity": "warning",
         "risk_euro": 2000,
-        "applies_when": {"always": True},
+        # Seit 09.09.2026 muss der Geltungsbereich eine Bedingung tragen; diese
+        # Fixture prueft die DETECTION, also bekommt sie eine gueltige.
+        "applies_when": {"requires": ["consent_tracking"]},
         "detection": {
             "type": "required_element",
             "html_patterns": [r"speicher(frist|dauer)"],
@@ -219,3 +228,70 @@ def test_ferienpark_gate_faellt_nicht_mehr_auf_kinder():
     html = "<html><body><p>Zusaetzliche Ausstattung: Kindermobiliar, Babybett.</p></body></html>"
     soup = BeautifulSoup(html, "html.parser")
     assert _gate_passes(AI_ACT_278_GATE, soup, html.lower()) is False
+
+
+# ---------------- Geltungsbereich (Selbstscan 08.09.2026) ----------------
+
+def test_bedingungsloser_geltungsbereich_abgelehnt():
+    """Die Form, die acht Pruefungen auf jede Kundenseite losliess."""
+    err = _validate_spec(_base_spec(applies_when={"always": True}))
+    assert err is not None and "entscheidet nichts" in err
+
+
+def test_leerer_geltungsbereich_abgelehnt():
+    err = _validate_spec(_base_spec(applies_when={}))
+    assert err is not None and "entscheidet nichts" in err
+
+
+def test_allerweltsstichwoerter_abgelehnt():
+    """'cookie' trifft jede Seite, die ueber Cookies schreibt."""
+    err = _validate_spec(_base_spec(
+        applies_when={"keywords_any": ["cookie", "einwilligung", "tracking"]}))
+    assert err is not None and "entscheidet nichts" in err
+
+
+def test_gemessene_tatsache_wird_angenommen():
+    assert _validate_spec(_base_spec(
+        applies_when={"requires": ["consent_banner", "drittland_usa"]})) is None
+
+
+def test_seitentyp_wird_angenommen():
+    assert _validate_spec(_base_spec(applies_when={"site_type": "shop"})) is None
+
+
+def test_fachspezifisches_stichwort_wird_angenommen():
+    assert _validate_spec(_base_spec(
+        applies_when={"keywords_any": ["e-zigarette", "verdampfer"]})) is None
+
+
+def test_ausdrueckliche_universalpflicht_wird_angenommen():
+    """Es gibt sie — sie braucht nur ein eigenes Wort statt des Vorgabewerts."""
+    assert _validate_spec(_base_spec(applies_when={"jede_website": True})) is None
+
+
+# ---------------- Prompt kennt die messbaren Tatsachen ----------------
+
+def test_prompt_nennt_jede_bekannte_tatsache():
+    """
+    Ohne die Namen im Prompt kann das Modell die Bedingung nicht ausdruecken —
+    es wuerde weiter {"always": true} schreiben, und der Runner wuerde die
+    Pruefung stillschweigend ueberspringen. Beide Seiten muessen dieselbe
+    Liste kennen.
+    """
+    from compliance_engine.check_generator import GENERATION_PROMPT
+    from compliance_engine.scan_kontext import FAKTEN
+
+    assert "{fakten_liste}" not in GENERATION_PROMPT, "Platzhalter nicht ersetzt"
+    for name in FAKTEN:
+        assert name in GENERATION_PROMPT, f"Tatsache '{name}' fehlt im Prompt"
+
+
+def test_prompt_warnt_vor_allerweltswoertern():
+    from compliance_engine.check_generator import GENERATION_PROMPT
+    from compliance_engine.check_spec_rules import GENERISCHE_GATE_KEYWORDS
+
+    # Eine Auswahl der haeufigsten muss ausdruecklich als verboten dastehen,
+    # sonst waehlt das Modell genau sie.
+    for wort in ("cookie", "tracking", "plattform", "anzeigen", "werbung"):
+        assert wort in GENERISCHE_GATE_KEYWORDS
+        assert wort in GENERATION_PROMPT
