@@ -474,6 +474,114 @@
          * erreicht mindestens einer der beiden 4,5:1 — die Markenfarbe selbst
          * muss deshalb nie angefasst werden.
          */
+        /**
+         * Kontrastverhaeltnis zweier Farben nach WCAG 2.1 (1.4.3).
+         * Gibt null zurueck, wenn eine der Angaben kein Hex ist.
+         */
+        static kontrast(vordergrund, hintergrund) {
+            const l1 = this._leuchtdichte(vordergrund);
+            const l2 = this._leuchtdichte(hintergrund);
+            if (l1 === null || l2 === null) return null;
+            const hell = Math.max(l1, l2), dunkel = Math.min(l1, l2);
+            return (hell + 0.05) / (dunkel + 0.05);
+        }
+
+        static _kanaele(hex) {
+            const m = String(hex).trim().replace(/^#/, '');
+            const voll = m.length === 3 ? m.split('').map(c => c + c).join('') : m;
+            if (!/^[0-9a-fA-F]{6}$/.test(voll)) return null;
+            return [parseInt(voll.slice(0, 2), 16),
+                    parseInt(voll.slice(2, 4), 16),
+                    parseInt(voll.slice(4, 6), 16)];
+        }
+
+        static _hex(kanaele) {
+            return '#' + kanaele
+                .map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0'))
+                .join('');
+        }
+
+        static _leuchtdichte(hex) {
+            const k = this._kanaele(hex);
+            if (!k) return null;
+            const kanal = (v) => {
+                v = v / 255;
+                return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+            };
+            return 0.2126 * kanal(k[0]) + 0.7152 * kanal(k[1]) + 0.0722 * kanal(k[2]);
+        }
+
+        /**
+         * Eine Markenfarbe, die als SCHRIFT auf `hintergrund` lesbar ist.
+         *
+         * lesbareSchrift() loest den umgekehrten Fall — Schrift AUF der
+         * Markenfarbe. Hier steht die Markenfarbe selbst im Text, und genau
+         * daran ist der eigene Banner gescheitert: am 09.09.2026 auf
+         * complyo.de gemessen ergab #25bac8 auf #f0fdfa ein Verhaeltnis von
+         * 2,25:1, noetig sind 4,5:1. Der Knopf "Individuelle
+         * Datenschutzeinstellungen" war damit der Verstoss, den complyo auf
+         * jede Seite mitbringt, auf der der Banner laeuft.
+         *
+         * Die Farbe wird schrittweise in Richtung Schwarz (auf hellem Grund)
+         * bzw. Weiss gezogen, bis sie die Vorgabe erfuellt. Der Farbton bleibt
+         * dabei erhalten, die Marke bleibt erkennbar — anders als bei einem
+         * festen Ersatzwert, der jede Kundenfarbe plattmachen wuerde.
+         */
+        static lesbareMarkenschrift(farbe, hintergrund, ziel = 4.5) {
+            try {
+                const start = this._kanaele(farbe);
+                const lh = this._leuchtdichte(hintergrund);
+                if (!start || lh === null) return this.lesbareSchrift(hintergrund);
+                if ((this.kontrast(farbe, hintergrund) || 0) >= ziel) return farbe;
+
+                // Auf hellem Grund abdunkeln, auf dunklem aufhellen.
+                const nachWeiss = lh < 0.5;
+                let k = start.slice();
+                for (let i = 0; i < 40; i++) {
+                    k = nachWeiss
+                        ? k.map(v => v + (255 - v) * 0.05)
+                        : k.map(v => v * 0.95);
+                    const kandidat = this._hex(k);
+                    if ((this.kontrast(kandidat, hintergrund) || 0) >= ziel) return kandidat;
+                }
+                return this.lesbareSchrift(hintergrund);
+            } catch (e) {
+                return this.lesbareSchrift(hintergrund);
+            }
+        }
+
+        /**
+         * Gedaempfte Schrift, die die Vorgabe noch erfuellt — als Ersatz fuer
+         * `opacity` auf Text.
+         *
+         * Deckkraft ist die haeufigste Kontrastfalle: sie sieht nach
+         * Gestaltung aus, rechnet die Farbe aber in Richtung Hintergrund und
+         * faellt dabei unter die Vorgabe, ohne dass im Quelltext eine
+         * verdaechtige Farbe steht. Im eigenen Banner gemessen: Fusszeilen-
+         * Links mit opacity 0.7 bei 4,07:1, das "Powered by" mit 0.55 bei
+         * 2,85:1.
+         *
+         * Statt eines festen Werts wird so weit gedaempft, wie es die Vorgabe
+         * gerade noch zulaesst: die Abstufung bleibt sichtbar, der Kontrast
+         * haelt.
+         */
+        static gedaempfteSchrift(farbe, hintergrund, ziel = 4.6) {
+            try {
+                const vg = this._kanaele(farbe);
+                const hg = this._kanaele(hintergrund);
+                if (!vg || !hg) return farbe;
+                let letzte = (this.kontrast(farbe, hintergrund) || 0) >= ziel ? farbe : null;
+                for (let anteil = 0.05; anteil <= 0.6; anteil += 0.05) {
+                    const kandidat = this._hex(vg.map((v, i) => v + (hg[i] - v) * anteil));
+                    if ((this.kontrast(kandidat, hintergrund) || 0) >= ziel) letzte = kandidat;
+                    else break;
+                }
+                return letzte || farbe;
+            } catch (e) {
+                return farbe;
+            }
+        }
+
         static lesbareSchrift(hintergrund) {
             try {
                 const kanal = (v) => {
@@ -1302,6 +1410,11 @@
             // eigene Textfarbe.
             const primaryTextColor = this.constructor.lesbareSchrift(primaryColor);
             const accentTextColor = this.constructor.lesbareSchrift(accentColor);
+            // Markenfarbe als Schrift (Link-Knopf) und gedaempfte Schrift statt
+            // Deckkraft (Fusszeile, Branding) — beides gegen den Bannergrund
+            // gerechnet, nicht geraten.
+            const linkColor = this.constructor.lesbareMarkenschrift(primaryColor, bgColor);
+            const leiseColor = this.constructor.gedaempfteSchrift(textColor, bgColor);
 
             return `
                 /* Complyo Cookie Banner Styles v${VERSION} - Modern Edition */
@@ -1582,7 +1695,7 @@
                 
                 .complyo-btn-link {
                     background: transparent;
-                    color: ${primaryColor};
+                    color: ${linkColor};
                     padding: 14px;
                     font-weight: 500;
                     text-decoration: underline;
@@ -1848,17 +1961,15 @@
                 }
                 
                 .complyo-footer a {
-                    color: ${textColor};
+                    color: ${leiseColor};
                     text-decoration: none;
                     font-size: 14px;
-                    opacity: 0.7;
-                    transition: opacity 0.2s ease;
+                    transition: color 0.2s ease;
                 }
                 
                 .complyo-footer a:hover {
-                    opacity: 1;
+                    color: ${textColor};
                     text-decoration: underline;
-                    color: ${primaryColor};
                 }
                 
                 /* Branding */
@@ -1872,8 +1983,7 @@
                 }
 
                 .complyo-branding-prefix {
-                    color: ${textColor};
-                    opacity: 0.55;
+                    color: ${leiseColor};
                 }
 
                 .complyo-branding-link {
