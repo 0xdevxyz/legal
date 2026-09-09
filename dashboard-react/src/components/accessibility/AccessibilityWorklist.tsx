@@ -19,6 +19,7 @@ import { useActiveSite } from '@/contexts/ActiveSiteContext';
 import { generateSiteId } from '@/lib/siteIdUtils';
 import PullRequestCard from './PullRequestCard';
 import KontrastFreigabe, { type KontrastEntscheidung } from './KontrastFreigabe';
+import { eingriffeAus, messungAus, alsText } from './dokBeleg';
 
 interface AltItem {
   id: number;
@@ -52,6 +53,9 @@ interface DocItem {
   // aber niemand hat es je beurteilt. Genau diese laufen seit Wochen auf
   // Kundenseiten, und genau sie verfälschen jede Annahmequote.
   entscheidung_quelle?: string | null;
+  // Kommt vom Backend mit (get_document_fixes_for_site) und ist der einzige
+  // Weg, die Reparatur an Ort und Stelle nachzusehen.
+  page_url?: string | null;
 }
 
 /**
@@ -99,6 +103,71 @@ const DOC_LABEL: Record<string, string> = {
   'css-rule': 'Fokus-/Kontrast-CSS',
   'struktur': 'Überschriften-Struktur',
 };
+
+/**
+ * Was eine dokumentweite Reparatur konkret an der Seite tut.
+ *
+ * Die Karte zeigte bis hierhin „Überschriften-Struktur · WCAG 1.3.1" und zwei
+ * Knöpfe, sonst nichts. Wer so gefragt wird, ob eine Reparatur „passt", kann
+ * es nicht wissen: der Selektor, der gesetzte Wert, die Begründung und die
+ * Messung vorher/nachher stehen im payload, den die Worklist ohnehin
+ * mitliefert — das Frontend hat sie verworfen. Eine Freigabe ohne Einsicht
+ * ist dieselbe Scheinzustimmung, gegen die diese Karte antritt.
+ */
+function DokBeleg({ d }: { d: DocItem }) {
+  const p = (d.payload ?? {}) as Record<string, unknown>;
+  const eingriffe = eingriffeAus(d.fix_type, p);
+  const messung = messungAus(p);
+  const seite = alsText(d.page_url);
+
+  if (eingriffe.length === 0 && messung.length === 0) {
+    return (
+      <p className="mt-2 text-xs text-zinc-500">
+        Zu dieser Reparatur ist nichts weiter hinterlegt — ohne Beleg lieber ablehnen.
+      </p>
+    );
+  }
+
+  const sichtbar = eingriffe.slice(0, 6);
+  const rest = eingriffe.length - sichtbar.length;
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      {sichtbar.map((e, i) => (
+        <div key={i} className="text-xs">
+          <code className="text-zinc-300 break-all">{e.was}</code>
+          {e.wo && (
+            <>
+              <span className="text-zinc-600"> an </span>
+              <code className="text-zinc-400 break-all">{e.wo}</code>
+            </>
+          )}
+          {e.grund && <div className="text-zinc-500 mt-0.5">{e.grund}</div>}
+        </div>
+      ))}
+      {rest > 0 && (
+        <div className="text-xs text-zinc-500">und {rest} weitere Regel{rest === 1 ? '' : 'n'} derselben Art</div>
+      )}
+      {messung.length > 0 && (
+        <div className="text-xs text-zinc-400 pt-1">
+          Gemessen:{' '}
+          {messung.map((m, i) => (
+            <span key={m.regel}>
+              {i > 0 && ', '}
+              <code className="text-zinc-400">{m.regel}</code> {m.vorher} → {m.nachher}
+            </span>
+          ))}
+        </div>
+      )}
+      {seite && (
+        <a href={seite} target="_blank" rel="noopener noreferrer"
+          className="inline-block text-xs text-blue-400 hover:text-blue-300 pt-0.5">
+          Seite öffnen und nachsehen ↗
+        </a>
+      )}
+    </div>
+  );
+}
 
 // Feste Ablehnungsgründe statt Freitext.
 //
@@ -481,6 +550,7 @@ export default function AccessibilityWorklist() {
                   <div className="min-w-0">
                     <div className="text-sm text-zinc-200">{DOC_LABEL[d.fix_type] ?? d.fix_type}</div>
                     {d.wcag_criterion && <div className="text-xs text-zinc-500">WCAG {d.wcag_criterion}</div>}
+                    <DokBeleg d={d} />
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <button onClick={() => decideDok(d, true)} disabled={busy === `dok-${d.id}`}
@@ -544,6 +614,7 @@ export default function AccessibilityWorklist() {
                     <div className="text-sm text-zinc-200">{DOC_LABEL[d.fix_type] ?? d.fix_type}</div>
                     <div className="text-xs text-amber-400/80">läuft live, nie bestätigt</div>
                     {d.wcag_criterion && <div className="text-xs text-zinc-500">WCAG {d.wcag_criterion}</div>}
+                    <DokBeleg d={d} />
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <button onClick={() => decideDok(d, true)} disabled={busy === `dok-${d.id}`}
