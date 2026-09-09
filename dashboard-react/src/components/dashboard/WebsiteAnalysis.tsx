@@ -87,16 +87,6 @@ export const WebsiteAnalysis: React.FC = () => {
     ? (fetchedAnalysisData || storedAnalysisData)
     : (latestScanData || fetchedAnalysisData || storedAnalysisData);
   
-  // ✅ DEBUG: Log final analysisData
-  React.useEffect(() => {
-    
-    // 🔍 DEBUG: Log issue_groups im Detail
-    if (analysisData?.issue_groups) {
-    } else {
-      console.warn('⚠️ Keine issue_groups in analysisData!', analysisData);
-    }
-  }, [analysisData, storedAnalysisData, fetchedAnalysisData, latestScanData]);
-  
   // ✅ FIX: Gesamter Loading-State berücksichtigt auch latestScan
   const isActuallyLoading = isLoading || (isLoadingLatestScan && !fetchedAnalysisData && !storedAnalysisData);
   

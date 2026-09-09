@@ -102,6 +102,8 @@ const DOC_LABEL: Record<string, string> = {
   'landmark-main': 'Hauptinhalts-Landmark (main)',
   'css-rule': 'Fokus-/Kontrast-CSS',
   'struktur': 'Überschriften-Struktur',
+  // Stand als roher Schluessel „kontrast-css" auf der Karte.
+  'kontrast-css': 'Farben & Kontrast',
 };
 
 /**
@@ -662,12 +664,25 @@ export default function AccessibilityWorklist() {
         ) : bestaetigt.length > 0 ? (
           <div className="grid sm:grid-cols-2 gap-3">
             {bestaetigt.map((d) => (
-              <div key={d.fix_type} className="bg-white/60 dark:bg-zinc-900/60 border border-green-500/20 rounded-xl p-3 flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-zinc-200">{DOC_LABEL[d.fix_type] ?? d.fix_type}</div>
-                  {d.wcag_criterion && <div className="text-xs text-zinc-500">WCAG {d.wcag_criterion}</div>}
+              <div key={d.id} className="bg-white/60 dark:bg-zinc-900/60 border border-green-500/20 rounded-xl p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm text-zinc-200">{DOC_LABEL[d.fix_type] ?? d.fix_type}</div>
+                    {d.wcag_criterion && <div className="text-xs text-zinc-500">WCAG {d.wcag_criterion}</div>}
+                  </div>
+                  <span className="text-xs text-green-400 shrink-0 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> aktiv</span>
                 </div>
-                <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> aktiv</span>
+                {/* Auch das Bestaetigte muss nachlesbar bleiben: nach der
+                    Freigabe stand hier nur noch „aktiv", und was da auf der
+                    Seite laeuft, war wieder unsichtbar. Zugeklappt, weil diese
+                    Karten im Raster stehen und die Frage hier „was laeuft da?"
+                    ist, nicht „stimmt das?". */}
+                <details className="mt-2">
+                  <summary className="text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer">
+                    Was diese Reparatur tut
+                  </summary>
+                  <DokBeleg d={d} />
+                </details>
               </div>
             ))}
           </div>
