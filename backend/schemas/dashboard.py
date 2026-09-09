@@ -5,6 +5,9 @@ from typing import Optional
 class DashboardMetrics(BaseModel):
     totalScore: int
     websites: int
+    # Grundlage des Schnitts; kleiner als `websites`, wenn Seiten nie geprueft
+    # wurden. Ohne dieses Feld stuenden Anzahl und Mittel unverbunden nebeneinander.
+    scoredWebsites: int = 0
     criticalIssues: int
     scansAvailable: int
     scansUsed: int

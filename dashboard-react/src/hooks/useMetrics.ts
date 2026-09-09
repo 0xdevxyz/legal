@@ -5,6 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 export interface DashboardMetrics {
   totalScore: number;
   websites: number;
+  /** Auf wie vielen Websites der Schnitt beruht — nie gepruefte zaehlen nicht mit. */
+  scoredWebsites?: number;
   criticalIssues: number;
   scansAvailable: number;
   scansUsed: number;

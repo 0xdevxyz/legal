@@ -58,7 +58,7 @@ function tageText(tage: number): string {
 
 export const Orientierungsband: React.FC = () => {
   const router = useRouter();
-  const { currentWebsite, metrics } = useDashboardStore();
+  const { currentWebsite } = useDashboardStore();
   const { metrics: apiMetrics, isLoading } = useDashboardMetrics();
 
   const [letzterBesuch, setLetzterBesuch] = useState<string | null>(null);
@@ -89,17 +89,31 @@ export const Orientierungsband: React.FC = () => {
     }
   };
 
-  const anzahlSeiten = apiMetrics?.websites ?? metrics.websites ?? 0;
-  const kritisch = apiMetrics?.criticalIssues ?? metrics.criticalIssues ?? 0;
-  const schnitt = apiMetrics?.totalScore ?? metrics.totalScore ?? 0;
+  // Nur der Server. Der Rueckfall auf den Browser-Speicher zeigte am 09.09.
+  // "Ø 33 · 62 kritische Punkte", waehrend die Abfrage mit 401 gescheitert war
+  // — Zahlen, die zu keiner Quelle passten, ohne jeden Hinweis darauf, dass sie
+  // alt sind. Lieber nichts behaupten als etwas Falsches.
+  const anzahlSeiten = apiMetrics?.websites ?? 0;
+  const kritisch = apiMetrics?.criticalIssues ?? 0;
+  const schnitt = apiMetrics?.totalScore ?? 0;
+  const gemessen = apiMetrics?.scoredWebsites ?? anzahlSeiten;
+  const kennzahlenFehlen = !isLoading && !apiMetrics;
   const scanAlter = tageSeit(currentWebsite?.lastScan);
   const besuchAlter = tageSeit(letzterBesuch);
 
   // ---- Frage 1: Wo stehe ich? ----------------------------------------
-  const bestand = anzahlSeiten === 0
-    ? 'Noch keine Website geprüft'
-    : `${anzahlSeiten} ${anzahlSeiten === 1 ? 'Website' : 'Websites'} · Ø ${schnitt} von 100 · ` +
-      `${kritisch} ${kritisch === 1 ? 'kritischer Punkt' : 'kritische Punkte'} offen`;
+  // Beruht der Schnitt auf weniger Seiten als verfolgt werden, steht das dabei:
+  // sonst liest sich "6 Websites · Ø 58" wie eine Aussage ueber alle sechs.
+  const schnittText = gemessen < anzahlSeiten
+    ? `Ø ${schnitt} von 100 aus ${gemessen} geprüften`
+    : `Ø ${schnitt} von 100`;
+
+  const bestand = kennzahlenFehlen
+    ? 'Kennzahlen gerade nicht abrufbar'
+    : anzahlSeiten === 0
+      ? 'Noch keine Website geprüft'
+      : `${anzahlSeiten} ${anzahlSeiten === 1 ? 'Website' : 'Websites'} · ${schnittText} · ` +
+        `${kritisch} ${kritisch === 1 ? 'kritischer Punkt' : 'kritische Punkte'} offen`;
 
   // ---- Frage 2: Was ist passiert? ------------------------------------
   const veraenderung: string[] = [];

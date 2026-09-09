@@ -27,6 +27,9 @@ PLAN_WEBSITES_MAX = {
 class DashboardMetrics(BaseModel):
     totalScore: int
     websites: int
+    # Auf wie vielen Websites der Schnitt beruht. Kann kleiner als `websites`
+    # sein: nie gepruefte Seiten gehen nicht als 0 in den Schnitt ein.
+    scoredWebsites: int = 0
     criticalIssues: int
     scansAvailable: int
     scansUsed: int
@@ -60,27 +63,61 @@ async def get_dashboard_metrics(user: Dict[str, Any] = Depends(get_current_user)
                 user_id
             )
             
-            # Get latest scans per website (URL-based fallback if website_id is NULL)
+            # Der Stand je verfolgter Website kommt aus score_history.
+            #
+            # Bis zum 09.09.2026 wurde hier scan_history gemittelt. Das ist der
+            # Mitschnitt der MANUELLEN Dashboard-Scans; der Monitor schreibt
+            # ausschliesslich nach score_history und tracked_websites. Seit er
+            # laeuft, driftete die Kopfzeile weg: an dem Tag gemessen zeigte sie
+            # den Schnitt 32 aus Werten von Juni bis August, waehrend die sechs
+            # Seiten tatsaechlich bei 58 standen und am Vortag geprueft worden
+            # waren. Daneben stand "letzte Pruefung heute".
+            #
+            # score_history traegt BEIDE Wege (main_production schreibt sie beim
+            # manuellen Scan, cronjobs/website_monitor beim Monitorlauf) und ist
+            # damit die einzige vollstaendige und aktuelle Quelle.
+            #
+            # Der JOIN auf tracked_websites ist kein Beiwerk: vorher lief die
+            # Mittelung ueber COALESCE(website_id, url) aus scan_history und zog
+            # damit auch Seiten ein, die der Kunde laengst entfernt hat — im
+            # gemessenen Fall eine siebte Seite unter der Ueberschrift
+            # "6 Websites". Anzahl und Schnitt meinen jetzt dieselbe Menge.
             latest_scans = await conn.fetch("""
-                SELECT DISTINCT ON (COALESCE(website_id::text, url))
-                    COALESCE(website_id::text, url) AS scan_key,
-                    compliance_score,
-                    critical_issues,
-                    total_risk_euro
-                FROM scan_history
-                WHERE user_id = $1
-                ORDER BY COALESCE(website_id::text, url), scan_timestamp DESC
+                SELECT DISTINCT ON (t.id)
+                    t.id AS website_id,
+                    s.overall_score AS score,
+                    COALESCE((s.pillar_scores->>'critical_issues')::int, 0) AS critical_issues
+                FROM tracked_websites t
+                JOIN score_history s ON s.website_id = t.id
+                WHERE t.user_id = $1 AND s.overall_score IS NOT NULL
+                ORDER BY t.id, s.scan_date DESC
             """, user_id)
-            
-            # Calculate aggregated metrics
+
+            # Ungeprueft ist nicht null: eine nie gemessene Seite geht NICHT als
+            # 0 in den Schnitt, sie bleibt draussen. `scoredWebsites` sagt, auf
+            # wie vielen der Schnitt beruht — sonst stuenden Anzahl und Mittel
+            # nebeneinander, ohne dass jemand die Luecke sehen koennte.
+            scored_websites = len(latest_scans)
+
             if latest_scans:
-                avg_score = int(sum(scan['compliance_score'] for scan in latest_scans) / len(latest_scans))
+                avg_score = int(sum(scan['score'] for scan in latest_scans) / scored_websites)
                 total_critical = sum(scan['critical_issues'] for scan in latest_scans)
-                total_risk = sum(scan['total_risk_euro'] or 0 for scan in latest_scans)
             else:
                 avg_score = 0
                 total_critical = 0
-                total_risk = 0
+
+            # Risikosumme gibt es nur in scan_history — score_history fuehrt sie
+            # nicht. Auf die verfolgten URLs eingegrenzt, damit wenigstens keine
+            # entfernte Seite mehr mitzaehlt.
+            total_risk = await conn.fetchval("""
+                SELECT COALESCE(SUM(letzte.total_risk_euro), 0) FROM (
+                    SELECT DISTINCT ON (h.url) h.total_risk_euro
+                    FROM scan_history h
+                    JOIN tracked_websites t ON t.url = h.url AND t.user_id = h.user_id
+                    WHERE h.user_id = $1
+                    ORDER BY h.url, h.scan_timestamp DESC
+                ) AS letzte
+            """, user_id) or 0
             
             # Get scans this month
             from datetime import datetime, timedelta
@@ -95,18 +132,21 @@ async def get_dashboard_metrics(user: Dict[str, Any] = Depends(get_current_user)
             critical_trend = None
             
             week_ago = datetime.now() - timedelta(days=7)
+            # Derselbe Weg fuer den Vergleichsstand — ein Trend zwischen zwei
+            # verschiedenen Quellen waere eine Zahl ohne Bedeutung.
             old_scans = await conn.fetch("""
-                SELECT DISTINCT ON (COALESCE(website_id::text, url))
-                    COALESCE(website_id::text, url) AS scan_key,
-                    compliance_score,
-                    critical_issues
-                FROM scan_history
-                WHERE user_id = $1 AND scan_timestamp < $2
-                ORDER BY COALESCE(website_id::text, url), scan_timestamp DESC
+                SELECT DISTINCT ON (t.id)
+                    t.id AS website_id,
+                    s.overall_score AS score,
+                    COALESCE((s.pillar_scores->>'critical_issues')::int, 0) AS critical_issues
+                FROM tracked_websites t
+                JOIN score_history s ON s.website_id = t.id
+                WHERE t.user_id = $1 AND s.scan_date < $2 AND s.overall_score IS NOT NULL
+                ORDER BY t.id, s.scan_date DESC
             """, user_id, week_ago)
-            
+
             if old_scans and latest_scans:
-                old_avg_score = int(sum(scan['compliance_score'] for scan in old_scans) / len(old_scans))
+                old_avg_score = int(sum(scan['score'] for scan in old_scans) / len(old_scans))
                 old_critical = sum(scan['critical_issues'] for scan in old_scans)
                 
                 # Berechne prozentuale Änderung des Scores
@@ -138,6 +178,7 @@ async def get_dashboard_metrics(user: Dict[str, Any] = Depends(get_current_user)
             return DashboardMetrics(
                 totalScore=avg_score,
                 websites=websites_count or 0,
+                scoredWebsites=scored_websites,
                 criticalIssues=total_critical,
                 scansAvailable=scans_available,
                 scansUsed=scans_this_month or 0,
