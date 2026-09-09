@@ -113,3 +113,114 @@ def gate_keyword_too_short(applies_when: Dict[str, Any]) -> Optional[str]:
             if 0 < len(k) < MIN_GATE_KEYWORD_LEN:
                 return k
     return None
+
+
+# ---------------------------------------------------------------------------
+# Gate-Staerke: entscheidet die Bedingung ueberhaupt etwas?
+# ---------------------------------------------------------------------------
+# Hintergrund (Selbstscan 08.09.2026): complyo.de bekam im eigenen Scanner 13
+# Befunde, davon 9 aus deklarativen Checks — ueber einen Cookie-Banner, den es
+# auf der Seite nicht gibt, und ueber Drittlandtransfers, die nicht
+# stattfinden. Ursache waren zwei Gate-Formen, die keine Bedingung sind:
+#
+#   {"always": true}                     laeuft auf jeder Website
+#   {"keywords_any": ["cookie", ...]}    trifft jede Seite, die ueber Cookies
+#                                        SCHREIBT (Footer-Link genuegt)
+#
+# Beide erzeugen den Befund unabhaengig davon, ob die Pflicht besteht. Fast
+# jede Pflicht ist aber bedingt: der Ablehnen-Knopf setzt einen Banner voraus,
+# der USA-Hinweis einen USA-Transfer. Die Bedingung gehoert deshalb in
+# `applies_when.requires` und wird gegen belegte Tatsachen geprueft
+# (compliance_engine.scan_kontext), nicht gegen Werbetexte.
+#
+# Diese Woerter kommen in gewoehnlichen Geschaeftstexten vor und grenzen darum
+# nichts ein. Ein Gate, das NUR aus solchen Woertern besteht, ist keines.
+GENERISCHE_GATE_KEYWORDS = frozenset({
+    "cookie", "cookies", "consent", "einwilligung", "zustimmung", "zustimm",
+    "tracking", "analytics", "pixel", "daten", "datenschutz",
+    "shop", "plattform", "marktplatz", "marketplace", "online-plattform",
+    "anzeigen", "anzeige", "werbung", "bewertung", "bewertungen",
+    "anmelden", "abonnieren", "subscribe", "kunden", "service", "angebot",
+    "produkte", "online", "digital", "software", "website", "webseite",
+})
+
+
+def gate_entscheidet_nichts(applies_when: Dict[str, Any]) -> Optional[str]:
+    """
+    Gibt den Grund zurueck, wenn das Gate die Pflicht nicht eingrenzt — sonst None.
+
+    Als Eingrenzung zaehlen:
+      * `requires`  — belegte Tatsachen (der belastbare Weg, siehe scan_kontext)
+      * `site_type` — struktureller Seitentyp (z.B. Shop-Erkennung)
+      * mindestens EIN Gate-Keyword, das kein Allerweltswort ist
+
+    Alles andere laeuft praktisch auf jeder Kundenseite und erzeugt dort den
+    Befund einer Pflicht, die es nicht gibt.
+    """
+    if not isinstance(applies_when, dict):
+        return "applies_when fehlt"
+
+    if [str(r).strip() for r in (applies_when.get("requires") or []) if str(r).strip()]:
+        return None
+    if applies_when.get("site_type"):
+        return None
+    # Ausdrueckliche Universalpflicht. Es gibt sie wirklich — Impressum und
+    # Datenschutzerklaerung schuldet jede geschaeftsmaessige Website. Sie
+    # braucht aber ein eigenes Wort, damit sie eine Entscheidung ist und kein
+    # Vorgabewert: `always: true` stand in acht Pruefungen, weil niemand eine
+    # Bedingung eingetragen hatte, nicht weil die Pflicht universal waere.
+    if applies_when.get("jede_website") is True:
+        return None
+
+    keywords = [
+        str(k).strip().lower()
+        for feld in ("keywords_any", "keywords_all")
+        for k in (applies_when.get(feld) or [])
+        if str(k).strip()
+    ]
+    if not keywords:
+        return (
+            "bedingungslos (always/leer) ohne applies_when.requires — die "
+            "Pflicht wuerde auf jeder Kundenseite behauptet"
+        )
+    if all(k in GENERISCHE_GATE_KEYWORDS for k in keywords):
+        return (
+            f"nur generische Gate-Stichwoerter ({', '.join(sorted(set(keywords)))}) "
+            f"ohne applies_when.requires — sie treffen jede Seite, die ueber das "
+            f"Thema schreibt, nicht die, fuer die die Pflicht gilt"
+        )
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Suchraum: WO eine Pruefung nachsehen darf
+# ---------------------------------------------------------------------------
+# Eine Pruefung behauptet etwas ueber eine Stelle der Website, durchsuchte aber
+# bis zum 09.09.2026 immer den ganzen Seitenquelltext. Dieselbe Pruefung irrte
+# dadurch an einem Tag in beide Richtungen: "Das Banner nennt die
+# Gueltigkeitsdauer nicht" verlangte woertlich "6 Monate" irgendwo auf der
+# Seite (Fehlalarm bei einem Banner, das 12 Monate sagt) und traf nach dem
+# Aufweichen des Musters den Fliesstext "...16 Jahre alt sind und Ihre
+# Einwilligung..." (Fehl-Freispruch, ohne je im Banner gewesen zu sein).
+#
+# Das Vokabular steht hier, weil Generator UND Runner es brauchen; aufgeloest
+# werden die Raeume im Runner (declarative_check_runner._hole_suchraum).
+SUCHRAEUME = {
+    "seite":          "die geladene Seite",
+    "consent_banner": "der Cookie-/Consent-Banner",
+    "agb":            "die verlinkten AGB",
+    "datenschutz":    "die verlinkte Datenschutzerklaerung",
+    "impressum":      "das verlinkte Impressum",
+}
+
+
+def detection_scope_unbekannt(detection: Dict[str, Any]) -> Optional[str]:
+    """Gibt den Suchraum-Namen zurueck, wenn er unbekannt ist — sonst None."""
+    if not isinstance(detection, dict):
+        return None
+    raum = detection.get("scope")
+    if raum in (None, "", "seite"):
+        return None
+    if raum not in SUCHRAEUME:
+        return str(raum)
+    return None

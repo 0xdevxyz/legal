@@ -36,6 +36,7 @@ from compliance_engine.checks.cookie_check import consent_render_needed
 
 # Import declarative (data-driven) checks — automatisch befüllbar durch den Legal-Change-Monitor
 from compliance_engine.declarative_check_runner import run_declarative_checks
+from compliance_engine import scan_kontext
 
 # Import Legal Update Integration
 from compliance_engine.legal_update_integration import legal_update_integration
@@ -346,8 +347,16 @@ class ComplianceScanner:
         if klasse in ("interaktion", "angebot"):
             aufgaben.append(_mit_budget(
                 "shop", check_shop_compliance(seite_url, soup, self.session)))
+        # Unterseiten werden ohne Browser geholt; der Kontext stuetzt sich hier
+        # auf das statische HTML. Das ist die schwaechere, aber ehrliche Quelle:
+        # was nicht belegt ist, wird nicht behauptet.
+        unterseiten_kontext = scan_kontext.ermittle(soup, html=html)
         aufgaben.append(_mit_budget(
-            "declarative", run_declarative_checks(seite_url, soup, self.session)))
+            "declarative",
+            run_declarative_checks(
+                seite_url, soup, self.session, kontext=unterseiten_kontext
+            ),
+        ))
         aufgaben.append(_mit_budget("ki_bild", check_ki_bild_nachweis(
             seite_url, soup, self.session,
             bereits_geprueft=getattr(self, "_ki_bilder_gesehen", None),
@@ -725,7 +734,20 @@ class ComplianceScanner:
             cookie_task = check_cookie_compliance(url, soup, self.session, consent_buttons=consent_buttons, request_urls=render_request_urls)
             agb_task = check_agb_compliance(url, soup, self.session)
             shop_task = check_shop_compliance(url, soup, self.session)
-            declarative_task = run_declarative_checks(url, soup, self.session)
+            # Belegte Tatsachen dieser Seite. Bedingte Pflichten (Ablehnen-Knopf,
+            # USA-Hinweis, Newsletter) werden daran geprueft statt an Stichwoertern
+            # im Werbetext — siehe compliance_engine/scan_kontext.py.
+            seiten_kontext = scan_kontext.ermittle(
+                soup, html=rendered_html, request_urls=render_request_urls
+            )
+            logger.info(
+                "Scan-Kontext %s: %s",
+                url,
+                ", ".join(k for k, v in seiten_kontext.items() if v) or "keine Tatsache belegt",
+            )
+            declarative_task = run_declarative_checks(
+                url, soup, self.session, kontext=seiten_kontext
+            )
             uwg_task = check_uwg_compliance(url, soup, self.session)
             ssl_task = self._check_ssl_security(url, main_page_headers)
             contact_task = self._check_contact_data(url, soup)
@@ -813,11 +835,15 @@ class ComplianceScanner:
                                 kwargs['metadata'] = {**meta, **extra}
                         issues.append(ComplianceIssue(**kwargs))
 
-            # ✅ Prüfe ob Accessibility-Widget gefunden wurde
-            has_accessibility_widget = not any(
-                (issue.title if isinstance(issue, ComplianceIssue) else issue.get('title')) == 'Kein Barrierefreiheits-Tool/Widget gefunden'
-                for issue in (barriere_issues if not isinstance(barriere_issues, Exception) else [])
-            )
+            # Widget-Kennzeichen direkt messen, nicht aus einem Befundtitel ableiten.
+            #
+            # Hier stand eine Suche nach dem Titel 'Kein Barrierefreiheits-Tool/
+            # Widget gefunden'. Diesen Titel gab es nicht — der Befund hiess
+            # 'Hinweis: Kein Assistenz-Widget gefunden'. Die Bedingung war also
+            # immer falsch und das Kennzeichen fuer JEDE Seite True, auch ohne
+            # Widget. Aufgefallen am 09.09.2026, als der Befund entfiel.
+            from compliance_engine.checks.barrierefreiheit_check import hat_assistenz_widget
+            has_accessibility_widget = hat_assistenz_widget(soup)
 
             # ✅ TCF 2.2: Vendor Analysis (optional, additional data)
             tcf_data = {}

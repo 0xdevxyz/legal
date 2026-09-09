@@ -143,23 +143,33 @@ class RiskCalculator:
         self.cache_ttl = cache_ttl_seconds
     
     async def calculate_issue_risk(
-        self, 
-        issue_text: str, 
-        market: str = 'DE'
+        self,
+        issue_text: str,
+        market: str = 'DE',
+        category: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Berechnet das Abmahnrisiko für ein gefundenes Issue
-        
+
         Args:
             issue_text: Text-Beschreibung des Issues
             market: Markt (DE, AT, CH, EU)
-        
+            category: Bereits bekannte Kategorie des Issues. Wenn gesetzt, wird
+                die Stichwortsuche über den Beschreibungstext übersprungen.
+
+                Warum das nötig wurde (Selbstscan 08.09.2026): jeder Aufrufer
+                gab bisher nur den Beschreibungstext her, und `_categorize_issue`
+                riet die Kategorie daraus. Der Hinweis "Kein Cookie-Banner
+                erforderlich" — eine Entwarnung mit Risiko 0 — enthält das Wort
+                Cookie und landete deshalb in der Matrixzeile
+                "cookies/no_consent, 1.000-20.000 EUR". Die Entwarnung des
+                Scanners wurde so zu seinem eigenen teuersten Befund. Die Checks
+                kennen ihre Kategorie; sie zu raten war nie nötig.
         Returns:
             Dict mit category, risk_min, risk_max, risk_range, legal_basis
         """
         try:
-            # Kategorisiere Issue
-            category = self._categorize_issue(issue_text)
+            category = (category or "").strip().lower() or self._categorize_issue(issue_text)
             
             # Hole Risiko aus Matrix
             risk = await self._get_risk_from_matrix(category, market)

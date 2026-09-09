@@ -149,7 +149,10 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
           ? crypto.randomUUID()
           : `scan-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
       setScanToken(token);
-      const result = await analyzeWebsite(domain, legalUpdateId, token);
+      // Nimmt der entkoppelte Weg den Auftrag an, vergibt der Server eine
+      // eigene Kennung und meldet den Fortschritt NUR darunter. Das Panel muss
+      // dann auf sie umschwenken, sonst pollt es das tote Client-Token.
+      const result = await analyzeWebsite(domain, legalUpdateId, token, setScanToken);
 
       // Update store with website
       setCurrentWebsite({

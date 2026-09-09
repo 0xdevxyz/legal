@@ -106,7 +106,12 @@ async function holeV2Ergebnis(kennung: string): Promise<ComplianceAnalysis> {
   );
 }
 
-export const analyzeWebsite = async (url: string, legalUpdateId?: number, scanToken?: string): Promise<ComplianceAnalysis> => {
+export const analyzeWebsite = async (
+  url: string,
+  legalUpdateId?: number,
+  scanToken?: string,
+  onKennung?: (kennung: string) => void,
+): Promise<ComplianceAnalysis> => {
  // Entkoppelter Weg zuerst: Auftrag abgeben, Kennung bekommen, Ergebnis
  // abholen. Die Annahme dauert Millisekunden statt der bis zu 265 s eines
  // Vollscans.
@@ -129,6 +134,11 @@ export const analyzeWebsite = async (url: string, legalUpdateId?: number, scanTo
    );
    const kennung = auftrag.data?.kennung;
    if (kennung) {
+     // Der Fortschritt laeuft unter der Kennung des SERVERS, nicht unter dem
+     // Token, das der Aufrufer vor der Anfrage erzeugt hat. Ohne diese Meldung
+     // pollt ScanProgressPanel ein Token, unter dem nie jemand schreibt: die
+     // Live-Pruefliste blieb dann bis zum Ergebnis leer.
+     onKennung?.(kennung);
      return await holeV2Ergebnis(kennung);
    }
  } catch (e: any) {

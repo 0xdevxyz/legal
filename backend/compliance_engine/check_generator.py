@@ -55,9 +55,10 @@ Anforderungen:
   "legal_basis": "Paragraf / Richtlinie + Datum",
   "severity": "warning",
   "risk_euro": 2000,
-  "applies_when": {{"site_type": "shop"}} ODER {{"keywords_any": ["..."]}} ODER {{"always": true}},
+  "applies_when": siehe Abschnitt GELTUNGSBEREICH,
   "detection": {{
     "type": "required_element",
+    "scope": "seite",
     "link_text_keywords": ["sichtbarer linktext (kleingeschrieben)"],
     "link_href_keywords": ["url-fragmente"],
     "html_patterns": ["regex fuer inline-buttons/text"],
@@ -65,13 +66,78 @@ Anforderungen:
   }}
 }}
 
+# GELTUNGSBEREICH (applies_when)
+Fast jede Pflicht ist BEDINGT. Der Ablehnen-Knopf setzt einen Cookie-Banner
+voraus, der USA-Hinweis einen USA-Transfer, der DSA-Bericht eine Plattform.
+Trage die Bedingung ein, nicht den Verzicht darauf. Bevorzugte Reihenfolge:
+
+1. {{"requires": ["<tatsache>", ...]}}  — BESTER WEG.
+   Der Scanner hat die Tatsache dann gemessen; die Prüfung läuft nur dort, wo
+   die Pflicht wirklich besteht. Mehrere Namen wirken als UND.
+   Verfügbare Tatsachen:
+{fakten_liste}
+
+2. {{"site_type": "shop"}} — für Pflichten, die nur den Verkauf treffen.
+
+3. {{"keywords_any": ["..."]}} — nur wenn 1 und 2 nicht passen, und nur mit
+   FACHSPEZIFISCHEN Wörtern. Verboten sind Allerweltswörter, die in jedem
+   Geschäftstext vorkommen: cookie, consent, tracking, datenschutz, shop,
+   plattform, anzeigen, werbung, bewertung, anmelden, kunden, online, digital.
+   Sie treffen jede Seite, die über das Thema SCHREIBT, statt der Seite, für
+   die die Pflicht GILT. Gut wäre "e-zigarette", "klimaneutral",
+   "empfehlungsalgorithmus".
+
+4. {{"jede_website": true}} — nur für Pflichten, die AUSNAHMSLOS jede Website
+   trifft, unabhängig von Geschäftsmodell, Technik und Inhalt. Das sind sehr
+   wenige. Im Zweifel ist es Nummer 1.
+
+Ein Geltungsbereich ohne Bedingung erzeugt den Befund auf JEDER Kundenseite.
+Am 08.09.2026 taten das acht Prüfungen gleichzeitig.
+
 # WICHTIG
 - detection MUSS mindestens eines der Felder link_text_keywords / link_href_keywords
   / html_patterns / url_paths sinnvoll gefüllt haben.
+- detection.scope sagt, WO gesucht wird. Setze ihn auf die Stelle, über die
+  die Pflicht etwas aussagt, sonst bestätigt ein Treffer irgendwo auf der Seite
+  eine Pflicht, die dort gar nicht gilt:
+{suchraum_liste}
+  Ist der Raum auf einer Seite nicht vorhanden (kein Banner, keine AGB), wird
+  NICHT geprüft — ein fehlender Suchraum belegt kein fehlendes Element.
+- url_paths wirkt nur bei scope "seite".
 - Wähle Keywords spezifisch genug, um Fehlalarme zu vermeiden.
 - severity: im Zweifel "warning".
 - Antworte AUSSCHLIESSLICH mit dem JSON-Objekt.
 """
+
+def _fakten_liste() -> str:
+    """Die messbaren Tatsachen als Prompt-Block — aus dem SSOT, nicht kopiert.
+
+    Eine hier abgeschriebene Liste waere die vierte Stelle, an der dieselben
+    Namen stehen, und die erste, die niemand mitpflegt. Kommt eine Tatsache in
+    scan_kontext.FAKTEN dazu, kennt der Generator sie ohne weiteres Zutun.
+    """
+    from compliance_engine.scan_kontext import FAKTEN
+    return "\n".join(
+        f"     {name:<22} {beschreibung}" for name, beschreibung in sorted(FAKTEN.items())
+    )
+
+
+# Die Fakten stehen fest, sobald das Modul geladen ist — der Prompt wird pro
+# Gesetzesaenderung nur noch mit title/description/requirements formatiert.
+def _suchraum_liste() -> str:
+    """Die erlaubten Suchraeume als Prompt-Block — aus der Regel-SSOT."""
+    from compliance_engine.check_spec_rules import SUCHRAEUME
+    return "\n".join(
+        f"     {name:<16} {beschreibung}" for name, beschreibung in sorted(SUCHRAEUME.items())
+    )
+
+
+GENERATION_PROMPT = (
+    GENERATION_PROMPT
+    .replace("{fakten_liste}", _fakten_liste())
+    .replace("{suchraum_liste}", _suchraum_liste())
+)
+
 
 CallAi = Callable[[str], Awaitable[str]]
 
@@ -125,8 +191,15 @@ def _validate_spec(spec: Dict[str, Any]) -> Optional[str]:
     # Qualitaets-Gate (Regel-SSOT check_spec_rules, siehe Audit 2026-07):
     from compliance_engine.check_spec_rules import (
         detection_is_weak, detection_is_inverted, AUTO_CHECK_RISK_CAP,
-        gate_keyword_too_short, MIN_GATE_KEYWORD_LEN,
+        detection_scope_unbekannt, gate_entscheidet_nichts,
+        gate_keyword_too_short, MIN_GATE_KEYWORD_LEN, SUCHRAEUME,
     )
+    unbekannt = detection_scope_unbekannt(spec["detection"])
+    if unbekannt:
+        return (
+            f"unbekannter Suchraum '{unbekannt}' — erlaubt sind: "
+            f"{', '.join(sorted(SUCHRAEUME))}"
+        )
     kurz = gate_keyword_too_short(spec["applies_when"])
     if kurz:
         return (
@@ -142,6 +215,14 @@ def _validate_spec(spec: Dict[str, Any]) -> Optional[str]:
             f"nicht als required_element verlangt werden (der Check wuerde bei "
             f"konformen Seiten feuern und beim Verstoss schweigen)"
         )
+    # Gate-Staerke. Bis zum 09.09.2026 pruefte nur der Runner das — der Generator
+    # schrieb bedingungslose Specs weiter in die Datenbank, wo sie in der
+    # Review-Queue nach gueltigen Pruefungen aussahen und nach der Freigabe
+    # stillschweigend uebersprungen wurden. Defense in Depth heisst: beide
+    # Verbraucher der Regel-SSOT wenden sie an, nicht einer.
+    schwach = gate_entscheidet_nichts(spec["applies_when"])
+    if schwach:
+        return f"applies_when entscheidet nichts: {schwach}"
     if detection_is_weak(spec["detection"]):
         return (
             "weak detection: generische Rechtsseiten-Link-Keywords ohne "

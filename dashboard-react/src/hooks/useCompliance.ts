@@ -9,10 +9,14 @@ import type { ComplianceAnalysis } from '@/types/api';
  *   Backoffice nur einen Spinner, waehrend der Scan auf der Startseite eine
  *   Live-Liste hatte. Als Ref, damit der Query-Key stabil bleibt und die
  *   bestehenden invalidateQueries-Aufrufe weiter greifen.
+ * @param onKennung Meldet die Kennung, unter der der entkoppelte Weg den
+ *   Fortschritt fuehrt. Sie ersetzt das Client-Token, sobald der Auftrag
+ *   angenommen ist.
  */
 export const useComplianceAnalysis = (
   url: string | null,
   scanTokenRef?: { current: string | null },
+  onKennung?: (kennung: string) => void,
 ) => {
   return useQuery<ComplianceAnalysis>({
     queryKey: ['compliance-analysis', url],
@@ -27,7 +31,12 @@ export const useComplianceAnalysis = (
       const trimmedUrl = url.trim();
 
       try {
-        const result = await analyzeWebsite(trimmedUrl, undefined, scanTokenRef?.current ?? undefined);
+        const result = await analyzeWebsite(
+          trimmedUrl,
+          undefined,
+          scanTokenRef?.current ?? undefined,
+          onKennung,
+        );
 
         return result;
       } catch (error) {

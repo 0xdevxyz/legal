@@ -67,12 +67,17 @@ export const WebsiteAnalysis: React.FC = () => {
   // Pruefung gerade laeuft. Ohne ihn sah der Nutzer hier nur "Analysiere…",
   // waehrend derselbe Scan auf der Startseite eine Live-Liste zeigte.
   const scanTokenRef = useRef<string | null>(null);
+  // Dasselbe Token als Zustand: das Panel muss neu zeichnen, wenn der
+  // entkoppelte Weg die Kennung des Servers nachreicht. Eine Ref allein loest
+  // kein Rendern aus, das Panel haette weiter das tote Client-Token gepollt.
+  const [scanToken, setScanToken] = useState<string | null>(null);
   const [istNeuScan, setIstNeuScan] = useState(false);
 
   // ✅ FIX: Zuerst aus Store lesen, dann ggf. neu laden
   const { data: fetchedAnalysisData, refetch, isLoading } = useComplianceAnalysis(
     currentWebsite?.url || null, // ← CRITICAL FIX: null statt undefined
-    scanTokenRef
+    scanTokenRef,
+    setScanToken,
   );
   
   // Priorität: DB (latestScan) > Fetched > Store (localStorage-Cache).
@@ -141,6 +146,7 @@ export const WebsiteAnalysis: React.FC = () => {
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
         : `scan-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    setScanToken(scanTokenRef.current);
     setIstNeuScan(true);
 
     try {
@@ -513,7 +519,7 @@ export const WebsiteAnalysis: React.FC = () => {
               Startseite — vorher lief hier nur ein Spinner ohne Auskunft. */}
           {istNeuScan && (
             <div className="mt-5">
-              <ScanProgressPanel url={currentWebsite.url} token={scanTokenRef.current} />
+              <ScanProgressPanel url={currentWebsite.url} token={scanToken} />
             </div>
           )}
         </div>

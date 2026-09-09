@@ -507,6 +507,18 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
                             for field_result in analysis["results"]:
                                 field_name = field_result["field"]
                                 
+                                # Ein Feld, das niemand nachgesehen hat, ist kein
+                                # Mangel. Faellt die KI-Zweitmeinung aus (Budget
+                                # gesperrt, Redis weg, kein Schluessel), traegt
+                                # das Ergebnis nur noch die Vermutung des
+                                # Musters — und unsicher war das Muster bei
+                                # genau diesen Feldern. Am 09.09.2026 im
+                                # Bestandsdurchlauf gemessen: der Befund
+                                # "Zwecke der Datenverarbeitung fehlen" traf
+                                # 20 von 24 Seiten ohne KI und 5 von 24 mit ihr.
+                                if field_result.get("unverifiziert"):
+                                    continue
+
                                 if not field_result["found"] and field_name in critical_fields:
                                     field_info = critical_fields[field_name]
                                     
@@ -522,6 +534,34 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
                                         is_missing=False  # Link existiert, nur Inhalt fehlt
                                     )))
                             
+                            # Was nicht geprueft werden konnte, gehoert in den Bericht.
+                            #
+                            # Seit dem 09.09.2026 uebergeht die Schleife oben Felder, deren
+                            # KI-Zweitmeinung ausgefallen ist, statt sie als Mangel zu melden.
+                            # Das allein waere nur die andere Haelfte des Fehlers: der Kunde saehe
+                            # eine bessere Note und wuesste nicht, dass ein Teil ungeprueft blieb.
+                            # "Geprueft und nichts gefunden" und "nicht geprueft" duerfen sich
+                            # nicht gleich lesen.
+                            _ungeprueft = [f["field"] for f in analysis["results"] if f.get("unverifiziert")]
+                            if _ungeprueft:
+                                issues.append(asdict(DatenschutzIssue(
+                                    category='datenschutz',
+                                    severity='info',
+                                    title='Datenschutzerklärung: {} Angabe(n) nicht abschliessend geprueft'.format(len(_ungeprueft)),
+                                    description=(
+                                        'Diese Angaben liessen sich maschinell nicht sicher feststellen und '
+                                        'wurden deshalb weder als vorhanden noch als fehlend gewertet: '
+                                        + ', '.join(_ungeprueft) + '. '
+                                        'Bitte pruefen Sie sie von Hand. Ein spaeterer Scan kann hier zu '
+                                        'einem eindeutigen Ergebnis kommen.'
+                                    ),
+                                    risk_euro=0,
+                                    recommendation='Sehen Sie die genannten Angaben selbst nach.',
+                                    legal_basis='DSGVO Art. 13',
+                                    auto_fixable=False,
+                                    is_missing=False,
+                                )))
+
                             # Qualitäts-Warnung bei niedriger Qualität
                             if analysis["quality"] in ["poor", "insufficient"]:
                                 issues.append(asdict(DatenschutzIssue(

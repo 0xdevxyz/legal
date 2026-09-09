@@ -46,8 +46,18 @@ _REJECT_TEXT_RE = re.compile(
     r'|alle ablehnen',
     re.I,
 )
+# `allow` mit Ausschluss von "not-allowed".
+#
+# Der Attribut-Blob eines Knopfes enthaelt seine CSS-Klassen. Tailwind schreibt
+# den deaktivierten Zustand als `disabled:cursor-not-allowed` — darin steckt
+# "allowed". Jeder Knopf mit dieser Allerweltsklasse galt damit als
+# Zustimmungs-Knopf eines Cookie-Banners. Auf complyo.de machte das aus dem
+# Wartelisten-Formular ("Platz sichern") einen Consent-Banner; die
+# Dark-Pattern-Pruefung lief anschliessend auf einem Anmeldeformular. Die
+# Klasse ist auf Tailwind-Seiten Standard, der Fehler traf also breit.
 _ACCEPT_ATTR_RE = re.compile(
-    r'accept|agree|allow|consent[-_]?all|accept[-_]?all|allow[-_]?all|zustimm|einwillig',
+    r'accept|agree|(?<!not-)(?<!not_)allow|consent[-_]?all|accept[-_]?all'
+    r'|zustimm|einwillig',
     re.I,
 )
 _ACCEPT_TEXT_RE = re.compile(
@@ -266,12 +276,36 @@ _TRACKING_CONSENT_HINT_RE = re.compile(
 )
 
 
+# Womit sich ein Consent-Banner ankuendigt. Bewusst OHNE das blosse Wort
+# "datenschutz": jedes Anmelde- und Kontaktformular verlinkt die
+# Datenschutzerklaerung und waere sonst ein Banner-Kandidat. Ein echter Banner
+# spricht von Cookies, Einwilligung oder Tracking — oder heisst
+# "Datenschutzeinstellungen".
+_BANNER_KONTEXT_RE = re.compile(
+    r'cookie|consent|einwillig|tracking|dsgvo|gdpr|datenschutzeinstellung', re.I
+)
+
+# Eingabefelder, die ein Consent-Banner nicht hat. Kreuzchen und Schalter fuer
+# die Kategorien schon — aber niemand traegt in einen Cookie-Banner seine
+# E-Mail-Adresse ein.
+_EINGABE_TYPEN = ('text', 'email', 'tel', 'search', 'url', 'password', 'number')
+
+
+def _sammelt_eingaben(el) -> bool:
+    """Ist der Container in Wahrheit ein Formular, das Daten entgegennimmt?"""
+    for feld in el.find_all('input'):
+        typ = (feld.get('type') or 'text').lower()
+        if typ in _EINGABE_TYPEN:
+            return True
+    return el.find('textarea') is not None
+
+
 def _find_consent_container(soup):
     """Heuristik für selbstgebaute Banner ohne bekannte CMP-Klasse (v.a. im
     gerenderten DOM): kleinster Container mit Cookie-/Consent-Kontext, der einen
     echten Accept- ODER Reject-Button enthält. Die Accept/Reject-Pflicht verhindert
     False Positives durch bloße Footer-Links ("Cookie-Richtlinie", "Widerruf")."""
-    keyword_re = re.compile(r'cookie|consent|datenschutz|einwillig|tracking|dsgvo|gdpr', re.I)
+    keyword_re = _BANNER_KONTEXT_RE
     best = None
     best_len = None
     for tag in ('dialog', 'aside', 'section', 'div'):
@@ -284,6 +318,8 @@ def _find_consent_container(soup):
             if len(txt) > 1500:
                 continue
             if not (keyword_re.search(cls_id) or keyword_re.search(txt[:800])):
+                continue
+            if _sammelt_eingaben(el):
                 continue
             cls = _classify_consent_buttons(el)
             if not (cls['accept'] or cls['reject']):
