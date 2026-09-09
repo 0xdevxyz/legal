@@ -10,6 +10,19 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002";
 let _client: AxiosInstance | null = null;
 
 let _isRefreshing = false;
+
+// Laeuft gerade eine Abmeldung? Bis zum 09.09. startete JEDE fehlgeschlagene
+// Anfrage ihre eigene: nach laengerer Untaetigkeit laufen ein Dutzend Abfragen
+// gleichzeitig in 401, und jede rief signOut() samt Weiterleitung auf. Der
+// Nutzer sah den Ladebalken rund zwanzigmal, bevor er am Login ankam — es sah
+// kaputt aus, obwohl nur eine abgelaufene Sitzung dahintersteckte.
+let _isLoggingOut = false;
+
+// Dieselbe Buendelung fuer die Sitzungsabfrage. resolveAccessToken() laeuft vor
+// JEDER Anfrage; ohne Token holte jede einzelne ihre eigene next-auth-Sitzung
+// (Netzabruf, bis zu 3 s Wartezeit). Zwoelf parallele Abfragen ergaben zwoelf
+// Sitzungsabrufe, die alle dasselbe Ergebnis hatten.
+let _inflightSession: Promise<string | null> | null = null;
 let _pendingRequests: Array<{
   resolve: (token: string | null) => void;
   reject: (err: unknown) => void;
@@ -29,6 +42,16 @@ async function resolveAccessToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
   const cached = getAccessToken();
   if (cached) return cached;
+  // Wer sich gerade abmeldet, braucht keine Sitzung mehr zu suchen.
+  if (_isLoggingOut) return null;
+  if (_inflightSession) return _inflightSession;
+  _inflightSession = _holeSitzungsToken().finally(() => {
+    _inflightSession = null;
+  });
+  return _inflightSession;
+}
+
+async function _holeSitzungsToken(): Promise<string | null> {
   try {
     const { getSession } = await import("next-auth/react");
     const timeout = new Promise<null>((resolve) =>
@@ -54,6 +77,31 @@ async function resolveAccessToken(): Promise<string | null> {
  * drauf, damit die Antwort noch ankommt.
  */
 export const LANGLAEUFER_TIMEOUT_MS = 330_000;
+
+/**
+ * Abmelden — genau einmal, egal wie viele Anfragen gleichzeitig in 401 laufen.
+ *
+ * Der Riegel faellt VOR dem ersten await: signOut() holt erst ein CSRF-Token
+ * und schickt dann einen POST, dazwischen liegen zwei Netzabrufe. Ohne den
+ * Riegel kamen in dieser Luecke alle uebrigen Anfragen durch und starteten
+ * dieselbe Abmeldung noch einmal.
+ */
+async function _abmelden(): Promise<void> {
+  if (_isLoggingOut) return;
+  _isLoggingOut = true;
+
+  clearAccessToken();
+
+  if (typeof window === "undefined") return;
+  if (window.location.pathname.startsWith("/login")) return;
+
+  try {
+    const { signOut } = await import("next-auth/react");
+    await signOut({ callbackUrl: "/login" });
+  } catch {
+    window.location.href = "/login";
+  }
+}
 
 export function getApiClient(): AxiosInstance {
   if (_client) return _client;
@@ -114,15 +162,7 @@ export function getApiClient(): AxiosInstance {
         }
 
         _onRefreshFail(error);
-        clearAccessToken();
-        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-          try {
-            const { signOut } = await import("next-auth/react");
-            await signOut({ callbackUrl: "/login" });
-          } catch {
-            window.location.href = "/login";
-          }
-        }
+        await _abmelden();
         return Promise.reject(error);
       }
 
