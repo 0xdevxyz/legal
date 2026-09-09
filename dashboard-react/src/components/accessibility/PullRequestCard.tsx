@@ -73,8 +73,17 @@ export const PullRequestCard: React.FC<{
         { redirect_uri: redirect },
       );
       if (res?.url) window.location.href = res.url;
-    } catch {
-      setResult({ success: false, error: 'GitHub-Verbindung konnte nicht gestartet werden.' });
+    } catch (e: unknown) {
+      // Das Backend sagt genau, warum es nicht geht — etwa dass die
+      // OAuth-App auf unserer Seite noch nicht registriert ist, samt Ausweg
+      // (Patch-Datei, Widget). Dieser Satz wurde hier verworfen und durch
+      // eine Zeile ersetzt, die den Kunden bei sich selbst suchen lässt.
+      const detail =
+        (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setResult({
+        success: false,
+        error: detail || 'GitHub-Verbindung konnte nicht gestartet werden.',
+      });
     }
   };
 
