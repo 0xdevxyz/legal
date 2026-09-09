@@ -24,7 +24,7 @@ main_production beim Start von aussen in dieses Modul.
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse, Response
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import logging
@@ -370,7 +370,13 @@ async def refresh_token_from_cookie(request: Request):
     """Refresh access token using HttpOnly cookie (with token rotation)"""
     refresh_token_value = request.cookies.get("refresh_token")
     if not refresh_token_value:
-        return JSONResponse(status_code=204, content=None)
+        # 204 heisst "kein Inhalt" — Starlette setzt dafuer bewusst KEIN
+        # Content-Length. JSONResponse serialisierte `None` trotzdem zu den vier
+        # Bytes `null`, und die ASGI-Schicht brach das mit
+        # "Response content longer than Content-Length" ab. Gemessen am 09.09.:
+        # vier Tracebacks je Aufruf, 40 Stueck an einem Nachmittag, und der
+        # Browser bekam eine Antwort, an der res.json() scheiterte.
+        return Response(status_code=204)
     result = await auth_service.refresh_access_token(refresh_token_value)
     if not result:
         raise HTTPException(
