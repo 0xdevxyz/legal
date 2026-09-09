@@ -18,7 +18,7 @@ from accessibility_templates import AccessibilityTemplates
 from accessibility_patch_generator import AccessibilityPatchGenerator
 import aiohttp
 from accessibility_fix_saver import AccessibilityFixSaver
-from dependencies import get_current_user, get_db
+from dependencies import get_current_user, get_db, rate_limit
 # Gemeinsame Ownership-Prüfung (definiert in alt_text_routes, Quelle:
 # cookie_compliance_routes.get_user_site_ids). Kein Zyklus: alt_text_routes
 # importiert widget_routes nicht.
@@ -268,7 +268,12 @@ async def serve_a11y_remediation_widget(request: Request):
 # leer (count = 0, geprüft 11.08.2026). Die tatsächliche Selbstüberwachung läuft
 # über POST /api/wirkung/{site_id} (wirkung_routes.py).
 
-@router.post("/api/widgets/analytics")
+# Oeffentlich, weil das Widget auf fremden Domains laeuft. Ohne Bremse kann
+# aber jeder die Tabelle vollschreiben und die Nutzungszahlen faelschen, an
+# denen die Upsell-Logik haengt. 120 Meldungen je Minute und IP sind mehr,
+# als ein echter Besucher je erzeugt.
+@router.post("/api/widgets/analytics",
+             dependencies=[Depends(rate_limit("widget_analytics", 120, 60))])
 async def track_widget_analytics(
     data: WidgetAnalyticsRequest,
     background_tasks: BackgroundTasks
@@ -890,17 +895,28 @@ async def download_accessibility_patches(
 
 
 @router.get("/api/widgets/analytics/{site_id}")
-async def get_widget_analytics(site_id: str, days: int = 30):
+async def get_widget_analytics(
+    site_id: str,
+    days: int = 30,
+    current_user: dict = Depends(get_current_user),
+):
     """
     Holt Widget-Analytics für Dashboard
-    
+
+    Anmeldung + Ownership: die Zahlen gehoeren dem Betreiber der Website. Bis
+    zum 09.09.2026 stand der Endpunkt offen — wer eine site_id kannte (sie
+    steht im Einbaucode jeder Kundenseite), konnte Nutzungszahlen fremder
+    Seiten abrufen.
+
     Args:
         site_id: Site-Identifier
-        days: Anzahl Tage zurück (default 30)
-        
+        days: Anzahl Tage zurück (default 30, max 365)
+
     Returns:
         Analytics-Statistiken
     """
+    await require_site_ownership(site_id, current_user)
+    days = max(1, min(int(days), 365))
     try:
         if not db_pool:
             return JSONResponse(
@@ -914,51 +930,51 @@ async def get_widget_analytics(site_id: str, days: int = 30):
         async with db_pool.acquire() as conn:
             # 1. Feature-Popularität
             feature_stats = await conn.fetch(
-                f"""
+                """
                 SELECT 
                     feature,
                     COUNT(*) as usage_count,
                     COUNT(DISTINCT session_id) as unique_sessions
                 FROM widget_analytics
-                WHERE site_id = $1 
-                  AND timestamp > NOW() - INTERVAL '{days} days'
+                WHERE site_id = $1
+                  AND timestamp > NOW() - ($2::int * INTERVAL '1 day')
                   AND event_type = 'feature_toggle'
                   AND feature IS NOT NULL
                 GROUP BY feature
                 ORDER BY usage_count DESC
                 """,
-                site_id
+                site_id, days
             )
             
             # 2. Tägliche Nutzung
             daily_stats = await conn.fetch(
-                f"""
+                """
                 SELECT 
                     DATE(timestamp) as date,
                     COUNT(*) as events,
                     COUNT(DISTINCT session_id) as sessions
                 FROM widget_analytics
-                WHERE site_id = $1 
-                  AND timestamp > NOW() - INTERVAL '{days} days'
+                WHERE site_id = $1
+                  AND timestamp > NOW() - ($2::int * INTERVAL '1 day')
                 GROUP BY DATE(timestamp)
                 ORDER BY date DESC
                 LIMIT 30
                 """,
-                site_id
+                site_id, days
             )
             
             # 3. Gesamt-Statistiken
             total_stats = await conn.fetchrow(
-                f"""
+                """
                 SELECT 
                     COUNT(*) as total_events,
                     COUNT(DISTINCT session_id) as total_sessions,
                     COUNT(DISTINCT DATE(timestamp)) as active_days
                 FROM widget_analytics
-                WHERE site_id = $1 
-                  AND timestamp > NOW() - INTERVAL '{days} days'
+                WHERE site_id = $1
+                  AND timestamp > NOW() - ($2::int * INTERVAL '1 day')
                 """,
-                site_id
+                site_id, days
             )
         
         return JSONResponse(
