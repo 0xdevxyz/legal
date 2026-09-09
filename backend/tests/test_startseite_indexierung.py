@@ -20,11 +20,10 @@ import re
 
 import pytest
 
-# ACHTUNG ZUM AUSFUEHREN: unter dem sonst ueblichen Aufruf
-#     docker run -v $(pwd)/backend:/app -w /app ...
-# ist landing-react nicht gemountet, und diese Tests werden UEBERSPRUNGEN -
-# ein uebersprungener Test bewacht nichts. Damit sie greifen:
-#     docker run -v $(pwd):/repo -w /repo/backend ... python3 -m pytest tests/
+# ACHTUNG ZUM AUSFUEHREN: wird nur backend/ gemountet, ist landing-react nicht
+# da, und diese Tests werden UEBERSPRUNGEN. Ein uebersprungener Test bewacht
+# nichts. Damit sie greifen, das ganze Repo mounten:
+#     scripts/tests-lokal.sh
 # oder COMPLYO_LANDING_SRC auf das app-Verzeichnis der Landing zeigen lassen.
 LANDING = os.path.abspath(
     os.getenv("COMPLYO_LANDING_SRC")
