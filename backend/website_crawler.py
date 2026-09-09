@@ -15,6 +15,7 @@ import re
 import logging
 import colorsys
 from ssrf_protection import validate_url, SSRFError
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ class WebsiteCrawler:
             }
             
             timeout = aiohttp.ClientTimeout(total=self.timeout)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with sichere_session(timeout=timeout) as session:
                 async with session.get(url, headers=headers, allow_redirects=True) as response:
                     if response.status == 200:
                         return await response.text()

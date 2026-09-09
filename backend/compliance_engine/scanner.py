@@ -55,6 +55,7 @@ except ImportError:
 
 # Import centralized Score Calculator (✅ FIX: Einzige Source of Truth)
 from compliance_engine.score_calculator import ScoreCalculator, PillarStatus
+from compliance_engine.sicherer_abruf import sichere_session
 
 @dataclass
 class ComplianceIssue:
@@ -256,7 +257,7 @@ class ComplianceScanner:
         # Create SSL context
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_context)
-        self.session = aiohttp.ClientSession(
+        self.session = sichere_session(
             timeout=aiohttp.ClientTimeout(total=55),
             connector=connector,
             headers={
@@ -1102,7 +1103,7 @@ class ComplianceScanner:
         try:
             ssl_ctx = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_ctx)
-            async with aiohttp.ClientSession(connector=connector) as tmp:
+            async with sichere_session(connector=connector) as tmp:
                 async with tmp.get(
                     http_url,
                     timeout=aiohttp.ClientTimeout(total=8),

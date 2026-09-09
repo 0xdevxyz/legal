@@ -12,6 +12,7 @@ import re
 from typing import List, Dict, Any, Optional
 from accessibility_fix_saver import AccessibilityFixSaver, _als_user_id
 from site_id_utils import derive_site_id
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -443,7 +444,7 @@ class AccessibilityPostScanProcessor:
         html = None
         try:
             timeout = aiohttp.ClientTimeout(total=15)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with sichere_session(timeout=timeout) as session:
                 async with session.get(url, allow_redirects=True) as resp:
                     if resp.status != 200:
                         logger.info(f"[Link-Fix] {url} nicht abrufbar (HTTP {resp.status})")

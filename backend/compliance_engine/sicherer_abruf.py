@@ -26,7 +26,7 @@ from urllib.parse import urljoin
 
 import aiohttp
 
-from ssrf_protection import validate_url, SSRFError
+from ssrf_protection import validate_url, SSRFError, pruefe_adresse
 
 logger = logging.getLogger(__name__)
 
@@ -114,3 +114,73 @@ async def hole(
     finally:
         if eigene:
             await session.close()
+
+
+# ---------------------------------------------------------------------------
+# Die Schranke am Verbindungsaufbau
+# ---------------------------------------------------------------------------
+#
+# `hole` prueft jede Adresse, bevor sie geholt wird. Das genuegt fuer den
+# Abrufweg dieses Moduls, aber der Scanner hat rund zwanzig Stellen, die sich
+# selbst eine Sitzung bauen und `session.get(..., allow_redirects=True)`
+# rufen - Impressum, Datenschutz, AGB, Shop, der Bilddownload des
+# Alt-Text-Generators. Deren Adressen stammen aus der geprueften Seite.
+#
+# Zwei Loecher bleiben selbst bei sauberer Adresspruefung:
+#   1. aiohttp folgt Umleitungen selbst; das Ziel sieht niemand vorher.
+#   2. Zwischen Pruefung und Verbindung darf derselbe Name auf eine andere
+#      Adresse zeigen (DNS-Rebinding).
+#
+# Beides schliesst nur eine Pruefung im Augenblick des Verbindungsaufbaus.
+# Genau das tut dieser Connector: er prueft JEDE aufgeloeste Adresse, egal ob
+# sie aus der ersten Anfrage, aus einer Umleitung oder aus einer zweiten
+# Namensaufloesung stammt.
+
+
+class GepruefterConnector(aiohttp.TCPConnector):
+    """TCPConnector, der keine Verbindung zu einer internen Adresse aufbaut."""
+
+    async def _resolve_host(self, host, port, traces=None):
+        hosts = await super()._resolve_host(host, port, traces)
+        for eintrag in hosts:
+            adresse = eintrag.get("host")
+            if not adresse:
+                continue
+            try:
+                pruefe_adresse(adresse)
+            except SSRFError as e:
+                logger.info(f"Verbindung gesperrt ({e}): {host} -> {adresse}")
+                raise SSRFError(f"{host} zeigt auf eine interne Adresse") from None
+        return hosts
+
+
+def sichere_session(**kwargs) -> aiohttp.ClientSession:
+    """
+    Eine aiohttp-Sitzung, die keine internen Adressen erreicht.
+
+    Ersetzt `aiohttp.ClientSession(...)` ueberall dort, wo die Adresse aus
+    einer fremden Seite stammen kann. Ein uebergebener `connector` wird
+    bewusst NICHT uebernommen: er waere genau die Luecke, die dieser Weg
+    schliesst. Ein `ssl=`-Argument wird an den geprueften Connector
+    weitergereicht, weil mehrere Aufrufer eigene SSL-Zusammenhaenge setzen.
+    """
+    ssl_wert = kwargs.pop("ssl", None)
+    alter = kwargs.pop("connector", None)
+    if alter is not None and ssl_wert is None:
+        # Die Aufrufer bauten sich bisher einen TCPConnector nur, um ihren
+        # SSL-Zusammenhang zu setzen. Den uebernehmen wir; der Connector selbst
+        # wird verworfen (ungenutzt, also ohne Verbindungen - aiohttp raeumt
+        # ihn still ab), denn er waere die Luecke, die dieser Weg schliesst.
+        ssl_wert = getattr(alter, "_ssl", None)
+    connector_args = {}
+    if ssl_wert is not None:
+        connector_args["ssl"] = ssl_wert
+    for name in ("limit", "limit_per_host", "ttl_dns_cache", "force_close"):
+        if name in kwargs:
+            connector_args[name] = kwargs.pop(name)
+    # Ohne DNS-Zwischenspeicher: ein zwischengespeicherter Eintrag umginge die
+    # Pruefung nicht (sie sitzt hinter dem Cache), aber kurze Lebensdauer haelt
+    # den Scanner naeher an der Wirklichkeit der geprueften Seite.
+    connector_args.setdefault("ttl_dns_cache", 30)
+    kwargs["connector"] = GepruefterConnector(**connector_args)
+    return aiohttp.ClientSession(**kwargs)

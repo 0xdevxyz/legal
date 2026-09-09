@@ -23,6 +23,7 @@ from dependencies import get_current_user, get_db
 # cookie_compliance_routes.get_user_site_ids). Kein Zyklus: alt_text_routes
 # importiert widget_routes nicht.
 from alt_text_routes import require_site_ownership
+from compliance_engine.sicherer_abruf import sichere_session
 
 router = APIRouter()
 
@@ -1022,7 +1023,7 @@ async def check_widget_status(website_url: str, site_id: str):
         
         # Lade HTML von Website
         timeout = aiohttp.ClientTimeout(total=15)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with sichere_session(timeout=timeout) as session:
             async with session.get(website_url, allow_redirects=True) as response:
                 if response.status != 200:
                     return JSONResponse(

@@ -32,6 +32,7 @@ from file_storage_service import file_storage
 from agency_report_generator import AgencyReportGenerator
 from compliance_engine.data_processing_countries import country_processing_info
 from dependencies import rate_limit, require_admin, get_client_ip as _client_ip_geprueft
+from compliance_engine.sicherer_abruf import sichere_session
 
 
 def _enrich_third_country(service: dict) -> dict:
@@ -1035,7 +1036,7 @@ async def extract_colors(
             raise HTTPException(status_code=400, detail="URL ist nicht erlaubt (SSRF-Schutz).")
 
         timeout = aiohttp.ClientTimeout(total=10)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with sichere_session(timeout=timeout) as session:
             async with session.get(
                 crawl_url,
                 headers={'User-Agent': 'Mozilla/5.0 (compatible; ComplyoBot/1.0)'},

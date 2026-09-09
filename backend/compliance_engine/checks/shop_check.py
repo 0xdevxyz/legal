@@ -18,6 +18,7 @@ import logging
 import aiohttp
 import ssl
 import certifi
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,7 @@ async def _url_exists(url: str, session=None) -> bool:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as r:
                 return r.status == 200
         connector = aiohttp.TCPConnector(ssl=ssl_ctx)
-        async with aiohttp.ClientSession(connector=connector) as tmp:
+        async with sichere_session(connector=connector) as tmp:
             async with tmp.get(url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as r:
                 return r.status == 200
     except Exception:
@@ -170,7 +171,7 @@ async def _fetch_page_text(url: str, session=None) -> Optional[str]:
                     return await r.text()
         else:
             connector = aiohttp.TCPConnector(ssl=ssl_ctx)
-            async with aiohttp.ClientSession(connector=connector) as tmp:
+            async with sichere_session(connector=connector) as tmp:
                 async with tmp.get(url, timeout=aiohttp.ClientTimeout(total=10), allow_redirects=True) as r:
                     if r.status == 200:
                         return await r.text()

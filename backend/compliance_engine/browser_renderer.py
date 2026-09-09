@@ -17,6 +17,7 @@ from typing import Optional, Dict, Any, Tuple
 from playwright.async_api import async_playwright, Browser, Page
 import re
 from bs4 import BeautifulSoup
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -388,7 +389,7 @@ async def smart_fetch_html(url: str, simple_html: str = None, force: bool = Fals
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         
-        async with aiohttp.ClientSession(connector=connector) as session:
+        async with sichere_session(connector=connector) as session:
             try:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
                     simple_html = await response.text()

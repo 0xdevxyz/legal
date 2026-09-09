@@ -30,6 +30,7 @@ from xml.etree import ElementTree as ET
 
 import aiohttp
 from bs4 import BeautifulSoup
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -306,7 +307,7 @@ async def entdecke_seiten(
         import ssl as _ssl
         import certifi
         ctx = _ssl.create_default_context(cafile=certifi.where())
-        session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ctx))
+        session = sichere_session(connector=aiohttp.TCPConnector(ssl=ctx))
 
     ergebnis = Entdeckung(startseite=startseite)
     try:

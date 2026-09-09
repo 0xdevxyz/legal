@@ -16,6 +16,7 @@ import logging
 import aiohttp
 import ssl
 import certifi
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +109,7 @@ async def _check_agb_url_exists(base_url: str, session=None) -> str | None:
                         return candidate_url
             else:
                 connector = aiohttp.TCPConnector(ssl=ssl_ctx)
-                async with aiohttp.ClientSession(connector=connector) as tmp:
+                async with sichere_session(connector=connector) as tmp:
                     async with tmp.get(
                         candidate_url,
                         timeout=aiohttp.ClientTimeout(total=8),

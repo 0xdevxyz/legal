@@ -15,6 +15,7 @@ from urllib.parse import urljoin
 import logging
 from ssrf_protection import validate_url, SSRFError
 from compliance_engine.privacy_transfer_findings import detect_transfers
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -419,7 +420,7 @@ class CookieScanner:
             if not url.startswith(('http://', 'https://')):
                 url = 'https://' + url
             
-            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+            async with sichere_session(timeout=self.timeout) as session:
                 async with session.get(url, allow_redirects=True) as response:
                     content = await response.text()
                     if response.status == 200:
@@ -471,7 +472,7 @@ class CookieScanner:
 
         css_parts: List[str] = []
         try:
-            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+            async with sichere_session(timeout=self.timeout) as session:
                 for href in hrefs[:MAX_SHEETS]:
                     abs_url = urljoin(base_url, href)
                     # SSRF-Schutz: nur validierte, öffentliche URLs abrufen

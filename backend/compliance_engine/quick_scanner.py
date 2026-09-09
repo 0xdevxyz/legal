@@ -10,6 +10,7 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 import ssl
 import certifi
+from compliance_engine.sicherer_abruf import sichere_session
 
 class QuickScanner:
     def __init__(self):
@@ -18,7 +19,7 @@ class QuickScanner:
     async def __aenter__(self):
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_context)
-        self.session = aiohttp.ClientSession(
+        self.session = sichere_session(
             timeout=aiohttp.ClientTimeout(total=15),  # Shorter timeout for quick scan
             connector=connector,
             headers={

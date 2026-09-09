@@ -16,6 +16,7 @@ from datetime import datetime
 import logging
 import json
 from urllib.parse import urlparse
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +132,7 @@ class AccessibilityPatchGenerator:
         """
         try:
             # Versuche HTML vom Server zu laden
-            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+            async with sichere_session(timeout=self.timeout) as session:
                 async with session.get(page_url) as response:
                     if response.status == 200:
                         html_content = await response.text()

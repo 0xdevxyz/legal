@@ -18,6 +18,7 @@ import aiohttp
 import asyncio
 
 from . import ai_budget
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +265,7 @@ class AIAltTextGenerator:
         """Lädt ein Bild herunter und gibt eine base64-Data-URL zurück (oder None)."""
         try:
             headers = {'User-Agent': 'Mozilla/5.0 (compatible; ComplyoScanner/1.0; +https://complyo.de)'}
-            async with aiohttp.ClientSession(headers=headers) as session:
+            async with sichere_session(headers=headers) as session:
                 async with session.get(
                     image_url, timeout=aiohttp.ClientTimeout(total=20)
                 ) as response:
@@ -342,7 +343,7 @@ class AIAltTextGenerator:
 
             prompt = self._build_prompt(context, language, learning_examples)
 
-            async with aiohttp.ClientSession() as session:
+            async with sichere_session() as session:
                 payload = {
                     'model': self.model,
                     'messages': [
