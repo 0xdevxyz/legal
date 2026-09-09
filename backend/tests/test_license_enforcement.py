@@ -173,3 +173,68 @@ class TestEntzogeneLizenz:
         from license_check import site_has_active_license
         assert await site_has_active_license(_kunde(), "kunde-de") is True
         assert await site_has_active_license(_kunde(("https://x.de",)), "kunde-de") is False
+
+
+class TestSubdomains:
+    """
+    Unterbereiche einer gebuchten Domain sind dieselbe Website.
+
+    Ausloeser: complyo selbst. Gebucht ist `complyo.de`, das Widget laeuft auf
+    `app.complyo.de` — die Pruefung meldete den eigenen Betrieb als Verstoss.
+    Unter `enforcement=block` haette complyo sein eigenes Widget abgeschaltet,
+    und jeder Kunde mit Shop- oder Redaktions-Subdomain ebenso.
+    """
+
+    @pytest.mark.asyncio
+    async def test_subdomain_der_gebuchten_domain_ist_zulaessig(self):
+        pool = _kunde(("https://kunde.de",))
+        req = FakeRequest({"origin": "https://shop.kunde.de"})
+        assert (await evaluate_license(pool, "kunde-de", req))["status"] == "active"
+
+    @pytest.mark.asyncio
+    async def test_der_eigene_fall_app_complyo_de(self):
+        pool = FakePool({"user_id": 1}, ["https://complyo.de"])
+        req = FakeRequest({"origin": "https://app.complyo.de"})
+        assert (await evaluate_license(pool, "complyo-de", req))["status"] == "active"
+
+    @pytest.mark.asyncio
+    async def test_mehrstufige_subdomain_zaehlt_auch(self):
+        pool = _kunde(("https://kunde.de",))
+        req = FakeRequest({"origin": "https://a.b.kunde.de"})
+        assert (await evaluate_license(pool, "kunde-de", req))["status"] == "active"
+
+    @pytest.mark.asyncio
+    async def test_angehaengter_name_ist_keine_subdomain(self):
+        """`boesekunde.de` endet auf `kunde.de` — als Text, nicht als Domain."""
+        pool = _kunde(("https://kunde.de",))
+        req = FakeRequest({"origin": "https://boesekunde.de"})
+        assert (await evaluate_license(pool, "kunde-de", req))["status"] == "unlicensed_domain"
+
+    @pytest.mark.asyncio
+    async def test_die_domain_selbst_bleibt_bei_gebuchter_subdomain_draussen(self):
+        """
+        Gebucht ist die Subdomain, aufgerufen die Hauptdomain: das ist eine
+        andere, groessere Website und nicht mitgebucht.
+        """
+        pool = FakePool({"user_id": 7}, ["https://shop.kunde.de"])
+        req = FakeRequest({"origin": "https://kunde.de"})
+        assert (await evaluate_license(pool, "shop-kunde-de", req))["status"] == "unlicensed_domain"
+
+    @pytest.mark.asyncio
+    async def test_fremde_domain_bleibt_ein_verstoss(self):
+        pool = _kunde(("https://kunde.de",))
+        req = FakeRequest({"origin": "https://ganz-woanders.de"})
+        assert (await evaluate_license(pool, "kunde-de", req))["status"] == "unlicensed_domain"
+
+
+class TestHostVonUrl:
+    def test_nur_fuehrendes_www_faellt_weg(self):
+        assert license_check.host_von_url("https://www.kunde.de/pfad") == "kunde.de"
+        # url_to_site_id entfernt `www.` ueberall im String — hier nicht.
+        assert license_check.host_von_url("https://wwww.kunde.de") == "wwww.kunde.de"
+
+    def test_port_und_grossschreibung(self):
+        assert license_check.host_von_url("HTTPS://Kunde.DE:8443/x") == "kunde.de"
+
+    def test_leer_bleibt_leer(self):
+        assert license_check.host_von_url("") == ""

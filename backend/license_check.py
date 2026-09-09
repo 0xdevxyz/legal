@@ -13,6 +13,11 @@ Zwei Missbrauchswege werden abgedeckt:
    genau eine Domain; ein Wechsel läuft über den Support. Wer den Code
    stattdessen auf eine weitere Seite kopiert, nutzt ihn unlizenziert.
 
+   Unterbereiche einer gebuchten Domain zählen dazu: `shop.kunde.de` und
+   `www.kunde.de` sind dieselbe gebuchte Website. Ohne diese Regel meldete
+   complyo die eigene App (`app.complyo.de` bei gebuchtem `complyo.de`) als
+   Verstoß und hätte sich unter `block` das eigene Widget abgeschaltet.
+
 Erkannt wird die aufrufende Domain am `Origin`- bzw. `Referer`-Header. Beide
 setzt der Browser selbst — Seiten-JavaScript kann sie nicht fälschen. Das ist
 Vertragsdurchsetzung, keine Sicherheitsmaßnahme: Wer die Anfrage serverseitig
@@ -69,11 +74,59 @@ def url_to_site_id(url: str) -> str:
     if not url:
         return ""
     raw = str(url).strip()
-    parsed = urlparse(raw if raw.startswith("http") else f"https://{raw}")
+    hat_schema = raw.lower().startswith(("http://", "https://"))
+    parsed = urlparse(raw if hat_schema else f"https://{raw}")
     hostname = parsed.netloc or parsed.path
     hostname = hostname.split("/")[0].split(":")[0]  # Port und Pfad abschneiden
     hostname = hostname.replace("www.", "")
     return hostname.replace(".", "-").lower()
+
+
+def host_von_url(url: str) -> str:
+    """
+    Der nackte Hostname einer URL: klein, ohne Schema, Port, Pfad und `www.`.
+
+    `url_to_site_id` taugt fuer den Subdomain-Vergleich nicht: sie ersetzt
+    Punkte durch Bindestriche, und aus `a-b-de` laesst sich nicht mehr
+    ablesen, ob `a.b.de` oder `a-b.de` gemeint war.
+    """
+    if not url:
+        return ""
+    raw = str(url).strip()
+    hat_schema = raw.lower().startswith(("http://", "https://"))
+    parsed = urlparse(raw if hat_schema else f"https://{raw}")
+    hostname = (parsed.netloc or parsed.path).split("/")[0].split(":")[0].lower()
+    # Nur ein fuehrendes `www.` — nicht wie url_to_site_id ueberall im String.
+    if hostname.startswith("www."):
+        hostname = hostname[4:]
+    return hostname
+
+
+def ist_subdomain_von(host: str, lizenzierte_hosts) -> bool:
+    """
+    Zaehlt `host` als Teil einer lizenzierten Domain?
+
+    Der Pro-Tarif gilt fuer eine Domain, und eine Domain hat Unterbereiche:
+    `shop.kunde.de` und `www.kunde.de` sind dieselbe gebuchte Website, nicht
+    zwei. Ohne diese Regel meldete complyo die eigene App (`app.complyo.de`,
+    lizenziert ist `complyo.de`) als nicht lizenziert — und haette sich unter
+    `enforcement=block` das eigene Widget abgeschaltet.
+
+    Bewusst als Suffix-Vergleich gegen die tatsaechlich gebuchten Hosts, nicht
+    ueber eine "registrierbare Domain": dafuer braeuchte es die Public-Suffix-
+    Liste (bei `kunde.co.uk` waere `co.uk` sonst die Domain), und die Regel
+    wuerde weiter greifen als der Vertrag. So erlaubt sie ausschliesslich
+    Unterbereiche einer wirklich gebuchten Domain: `boese-kunde.de` endet
+    nicht auf `.kunde.de`.
+    """
+    if not host:
+        return False
+    for lizenziert in lizenzierte_hosts:
+        if not lizenziert:
+            continue
+        if host == lizenziert or host.endswith("." + lizenziert):
+            return True
+    return False
 
 
 def host_from_request(request) -> str:
@@ -98,9 +151,12 @@ def host_from_request(request) -> str:
     return ""
 
 
-async def _licensed_site_ids(pool, site_id: str):
+async def _lizenzumfang(pool, site_id: str):
     """
-    Alle site_ids, die zum Konto hinter dieser site_id gehören.
+    Was zum Konto hinter dieser site_id gehört: (site_ids, hosts).
+
+    Beides stammt aus denselben Zeilen — die site_ids fuer den exakten
+    Vergleich, die Hosts fuer die Subdomain-Regel (siehe `ist_subdomain_von`).
 
     Rückgabe `None` bedeutet: nicht ermittelbar (Legacy-Konfiguration, kein
     Owner, DB-Fehler) — der Aufrufer behandelt das als lizenziert.
@@ -127,7 +183,8 @@ async def _licensed_site_ids(pool, site_id: str):
             "SELECT url FROM tracked_websites WHERE user_id = $1",
             cfg["user_id"],
         )
-        return {url_to_site_id(r["url"]) for r in rows if r["url"]}
+        urls = [r["url"] for r in rows if r["url"]]
+        return ({url_to_site_id(u) for u in urls}, {host_von_url(u) for u in urls})
     except Exception as exc:
         logger.warning("[Lizenz] Konnte Lizenzumfang für %s nicht laden: %s", site_id, exc)
         return None
@@ -148,9 +205,10 @@ async def evaluate_license(pool, site_id: str, request=None) -> dict:
     if pool is None or not site_id:
         return ok
 
-    licensed = await _licensed_site_ids(pool, site_id)
-    if licensed is None:
+    umfang = await _lizenzumfang(pool, site_id)
+    if umfang is None:
         return ok
+    licensed, lizenzierte_hosts = umfang
 
     # Fall 1: Website wurde im Dashboard entfernt → blockt immer.
     if site_id not in licensed:
@@ -173,6 +231,10 @@ async def evaluate_license(pool, site_id: str, request=None) -> dict:
 
     host_id = url_to_site_id(host)
     if not host_id or host_id in licensed:
+        return ok
+
+    # Unterbereiche einer gebuchten Domain gehoeren zur Buchung.
+    if ist_subdomain_von(host_von_url(host), lizenzierte_hosts):
         return ok
 
     logger.warning(
