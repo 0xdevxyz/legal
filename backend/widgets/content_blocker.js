@@ -18,6 +18,16 @@
  */
 
 (function() {
+
+    // Der Name eines blockierten Dienstes stammt teils aus dem Katalog, teils
+    // aus dem Hostnamen des eingebetteten Rahmens - also nicht aus diesem
+    // Skript. Was auf einer Kundenseite als HTML landet, wird entschaerft.
+    function complyoEsc(wert) {
+        if (wert === null || wert === undefined) return '';
+        return String(wert)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+    }
     'use strict';
     
     // ========================================================================
@@ -872,8 +882,8 @@
                         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
                     }
                 </style>
-                <div class="complyo-placeholder-icon">${service.icon}</div>
-                <div class="complyo-placeholder-title">${service.generic ? service.name : service.name + ' Video'}</div>
+                <div class="complyo-placeholder-icon">${complyoEsc(service.icon)}</div>
+                <div class="complyo-placeholder-title">${complyoEsc(service.generic ? service.name : service.name + ' Video')}</div>
                 <div class="complyo-placeholder-text">
                     Zum Laden dieses Inhalts ist Ihre Zustimmung erforderlich.
                 </div>
