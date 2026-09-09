@@ -242,7 +242,14 @@ if os.path.exists(public_dir):
     print(f"✅ Static files mounted at /public (directory: {public_dir})")
 
 # Rate Limiting
-limiter = Limiter(key_func=get_remote_address)
+# Der Schluessel des Ratenzaehlers ist die Besucher-IP, nicht die des Proxys.
+# `get_remote_address` von slowapi liefert `request.client.host`; hinter nginx
+# ist das fuer JEDEN Besucher dieselbe Adresse (gemessen 09.09.2026:
+# 172.22.0.1). Damit teilten sich alle Besucher einen Eimer: drei
+# Registrierungen pro Stunde galten fuer die ganze Plattform, und fuenf
+# Fehlanmeldungen sperrten die Anmeldung fuer alle. Dieselbe Ursache wie beim
+# Landing-Scanner am 12.08.2026, nur an anderer Stelle.
+limiter = Limiter(key_func=get_client_ip)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
