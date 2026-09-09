@@ -28,11 +28,15 @@ export function ActiveSiteProvider({ children }: { children: React.ReactNode }) 
   // Agentur/Expert verwalten mehrere Seiten → kein Single-Domain-Lock.
   const isAgency = user?.plan_type === 'agency' || user?.plan_type === 'expert';
 
-  const load = useCallback(async () => {
+  // `frisch` heisst: an der Buendelung in getTrackedWebsites vorbei. Der
+  // Provider laedt beim Mount und nach Aenderungen (Website angelegt oder
+  // geloescht, SiteSwitcher, Agenturseite) — dort ist eine bis zu 1,5 s alte
+  // Liste genau die falsche Antwort.
+  const load = useCallback(async (frisch = false) => {
     if (!user) return;
     setIsLoading(true);
     try {
-      const data = await getTrackedWebsites();
+      const data = await getTrackedWebsites({ frisch });
       setSites(data);
 
       const savedId = localStorage.getItem(STORAGE_KEY);
@@ -70,13 +74,16 @@ export function ActiveSiteProvider({ children }: { children: React.ReactNode }) 
     });
   }, [isAgency, activeSite, setCurrentWebsite]);
 
+  // Wer refresh() ruft, will den neuen Stand sehen, nicht den gebuendelten.
+  const aktualisieren = useCallback(() => load(true), [load]);
+
   const setActiveSite = useCallback((site: TrackedWebsite) => {
     setActiveSiteState(site);
     localStorage.setItem(STORAGE_KEY, String(site.id));
   }, []);
 
   return (
-    <ActiveSiteContext.Provider value={{ sites, activeSite, setActiveSite, isLoading, refresh: load }}>
+    <ActiveSiteContext.Provider value={{ sites, activeSite, setActiveSite, isLoading, refresh: aktualisieren }}>
       {children}
     </ActiveSiteContext.Provider>
   );

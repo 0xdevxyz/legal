@@ -468,19 +468,61 @@ export interface TrackedWebsite {
   is_primary: boolean;
 }
 
-export const getTrackedWebsites = async (): Promise<TrackedWebsite[]> => {
-  try {
+/**
+ * Laufende Abfrage der Website-Liste — geteilt statt vervierfacht.
+ *
+ * Fuenf Stellen holen dieselbe Liste unabhaengig voneinander:
+ * ActiveSiteContext, DomainHeroSection, OptimizationModeLock,
+ * OptimizationQuickNav und AgenturPortfolioKarte. Im Backend-Log stand das
+ * als vier Anfragen im selben Block — und bei abgelaufener Sitzung als vier
+ * 401-Zeilen in der Konsole, die wie vier Fehler aussahen, obwohl es einer
+ * war.
+ *
+ * Gebuendelt wird nur, was gleichzeitig laeuft, plus ein kurzes Fenster
+ * danach fuer Komponenten, die einen Tick spaeter mounten. Bewusst kein
+ * Cache mit Lebensdauer: dann muesste jede Stelle wissen, wann sie ihn
+ * ungueltig macht, und die Liste haengt an Aktionen (Website anlegen,
+ * loeschen), die genau das vergessen wuerden. `frisch` umgeht das Fenster.
+ */
+let _websitesLaeuft: Promise<TrackedWebsite[]> | null = null;
+let _websitesFertigUm = 0;
+const WEBSITES_FENSTER_MS = 1500;
 
-    const response: AxiosResponse<{ websites: TrackedWebsite[] }> = await apiClient.get('/api/v2/websites');
+export const getTrackedWebsites = async (
+  optionen: { frisch?: boolean } = {},
+): Promise<TrackedWebsite[]> => {
+  if (!optionen.frisch && _websitesLaeuft &&
+      (_websitesFertigUm === 0 || Date.now() - _websitesFertigUm < WEBSITES_FENSTER_MS)) {
+    return _websitesLaeuft;
+  }
 
-    return response.data.websites;
-  } catch (error) {
-    console.error('💥 getTrackedWebsites failed:', error);
-    if (axios.isAxiosError(error)) {
-      const message = error.response?.data?.detail || error.message;
-      throw new Error(`Website Fetch Error: ${message}`);
+  const anfrage = (async () => {
+    try {
+      const response: AxiosResponse<{ websites: TrackedWebsite[] }> =
+        await apiClient.get('/api/v2/websites');
+      return response.data.websites;
+    } catch (error) {
+      console.error('💥 getTrackedWebsites failed:', error);
+      if (axios.isAxiosError(error)) {
+        const message = error.response?.data?.detail || error.message;
+        throw new Error(`Website Fetch Error: ${message}`);
+      }
+      throw error;
     }
-    throw error;
+  })();
+
+  _websitesLaeuft = anfrage;
+  _websitesFertigUm = 0;
+  try {
+    const liste = await anfrage;
+    _websitesFertigUm = Date.now();
+    return liste;
+  } catch (fehler) {
+    // Ein Fehlschlag wird nicht nachgereicht: die naechste Stelle soll es
+    // wirklich neu versuchen duerfen, sonst erbt sie einen alten 401.
+    _websitesLaeuft = null;
+    _websitesFertigUm = 0;
+    throw fehler;
   }
 };
 
