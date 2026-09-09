@@ -697,22 +697,24 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                 </div>
                 <div className="flex-1">
                   <p className="text-sm text-sky-800 font-medium mb-2">Barrierefreiheit beheben:</p>
+                  {/* Schritt 1 nannte bis zum 09.09. einen Knopf "KI-Fix starten",
+                      den es an dieser Stelle nicht gibt: usesDedicatedSolution()
+                      blendet den generischen KI-Fix fuer JEDEN Barrierefreiheits-
+                      Befund aus, weil das Widget der richtige Weg ist. Wer der
+                      Anweisung folgte, landete vor einer Saeule ohne den genannten
+                      Knopf. Der Weg fuer diese Befunde ist die Freigabeliste. */}
                   <ol className="list-decimal list-inside text-sm text-sky-700 space-y-2 mb-4">
-                    <li>Öffnen Sie die Säule <strong>"Barrierefreiheit"</strong> und klicken Sie auf <strong>"KI-Fix starten"</strong></li>
-                    <li>Das Complyo Widget behebt Alt-Texte, Kontrast und ARIA-Labels automatisch auf Ihrer Website</li>
+                    <li>Öffnen Sie <strong>Fixes &amp; Freigaben</strong> — dort liegen die Reparaturvorschläge aus diesem Scan zur Prüfung</li>
+                    <li>Was Sie freigeben, setzt das Complyo Widget auf Ihrer Website um: Alt-Texte, Kontrast und ARIA-Labels</li>
                     <li>Integrieren Sie das Widget per Script-Tag (einmalige Einrichtung, ca. 2 Minuten)</li>
                     <li>Führen Sie einen neuen Scan durch, um die Verbesserung zu bestätigen</li>
                   </ol>
                   <button
-                    onClick={() => {
-                      if (typeof window !== 'undefined') {
-                        window.dispatchEvent(new CustomEvent('complyo:scroll-to-pillar', { detail: { pillarId: 'accessibility' } }));
-                      }
-                    }}
+                    onClick={() => router.push('/accessibility/worklist')}
                     className="flex items-center gap-2 px-4 py-2.5 bg-[#25bac8] text-zinc-950 font-bold rounded-lg hover:bg-[#45d6e2] transition-all text-sm"
                   >
                     <Eye className="w-4 h-4" />
-                    Zur Barrierefreiheit-Lösung
+                    Zu Fixes &amp; Freigaben
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
