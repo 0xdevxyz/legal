@@ -230,6 +230,41 @@ def _heuristic_wcag_criteria(issue) -> set:
     return set(_WCAG_CRIT_RE.findall(text))
 
 
+def _axe_merkmale(issues: list) -> set:
+    """Welche axe-Merkmale (feature_id) sind bereits gemeldet?
+
+    Die Entdopplung ueber WCAG-Kriterien reicht hier nicht: die axe-Regel
+    `region` ("Inhalte ausserhalb von Landmark-Bereichen") ist bei axe als
+    best-practice gefuehrt und traegt GAR KEINE wcag-Tags. Damit war ihr
+    Kriterium leer, der Landmark-Befund des ARIA-Checkers galt als
+    unabgedeckt, und beide standen nebeneinander im Bericht — gemessen am
+    09.09.2026 auf 19 bzw. 18 von 24 Seiten.
+    """
+    merkmale = set()
+    for it in issues:
+        meta = it.get('metadata') if isinstance(it, dict) else getattr(it, 'metadata', None)
+        if isinstance(meta, dict) and meta.get('feature_id'):
+            merkmale.add(meta['feature_id'])
+    return merkmale
+
+
+def _ist_heuristischer_strukturhinweis(issue) -> bool:
+    """Struktur-Hinweise, die axe praeziser liefert.
+
+    axe nennt zu Landmarks und Ueberschriften den betroffenen Selektor; die
+    Heuristik sagt nur, DASS etwas fehlt. Solange axe gelaufen ist, ist der
+    heuristische Hinweis eine zweite Zaehlung desselben Mangels ohne
+    Mehrwert — gemessen am 09.09.2026: vier Befunde fuer eine fehlende
+    <main>-Auszeichnung.
+    """
+    titel = _issue_field(issue, 'title') or ''
+    return (
+        titel.startswith('Fehlende semantische HTML-Elemente')
+        or bool(re.match(r'^\d+ Landmark-Regions fehlen$', titel))
+        or titel == 'Keine H1-Überschrift gefunden'
+    )
+
+
 def _is_manual_contrast_hint(issue) -> bool:
     """Der heuristische 'bitte manuell prüfen'-Kontrast-Hinweis."""
     title = _issue_field(issue, 'title') or ''
@@ -263,12 +298,24 @@ def _merge_axe_into_heuristic(heuristic_issues: list, axe_issues: List[Dict[str,
       Kriterium bereits meldet (vermeidet Doppelzählung in Score/Risiko).
     - Alle übrigen axe-Issues (neue Kriterien) werden ergänzt → echte Mehr-Abdeckung.
     """
-    covered = set()
-    for it in heuristic_issues:
-        covered |= _heuristic_wcag_criteria(it)
+    # Manuellen Kontrast-Hinweis entfernen – axe liefert jetzt echte Werte.
+    # Ebenso die Struktur-Hinweise: axe nennt dort die Fundstelle.
+    merged = [
+        it for it in heuristic_issues
+        if not _is_manual_contrast_hint(it) and not _ist_heuristischer_strukturhinweis(it)
+    ]
 
-    # Manuellen Kontrast-Hinweis entfernen – axe liefert jetzt echte Werte
-    merged = [it for it in heuristic_issues if not _is_manual_contrast_hint(it)]
+    # Abgedeckt ist, was die VERBLIEBENE Heuristik meldet — nicht, was sie vor
+    # dem Aussortieren gemeldet hat.
+    #
+    # Die Reihenfolge ist der ganze Punkt: wird `covered` vorher gebildet,
+    # traegt es noch die Kriterien der gerade entfernten Hinweise. Der
+    # axe-Befund zu genau diesem Kriterium gilt dann als Doppelung und faellt
+    # ebenfalls weg — der Mangel verschwaende komplett aus dem Bericht, statt
+    # praeziser zu werden. Ein Test haelt das fest.
+    covered = set()
+    for it in merged:
+        covered |= _heuristic_wcag_criteria(it)
 
     for ax in axe_issues:
         crit = set((ax.get('metadata') or {}).get('wcag_criteria') or [])
@@ -302,12 +349,17 @@ async def check_barrierefreiheit_compliance(
     
     issues = []
     
-    # 1. Hinweis auf Assistenz-Widget — rein informativ (info, 0 EUR).
-    #    Ein Overlay-Widget stellt KEINE WCAG-/BFSG-Konformitaet her und
-    #    beeinflusst weder Score noch Prueftiefe.
-    widget_issue = await _check_accessibility_widget(soup)
-    if widget_issue:
-        issues.append(widget_issue)
+    # Kein Befund zum Assistenz-Widget mehr.
+    #
+    # Der Hinweis "Kein Assistenz-Widget gefunden" stand im Bestandsdurchlauf
+    # vom 09.09.2026 auf 16 von 24 Kundenberichten. Er sagt nichts ueber die
+    # Rechtslage — der Text raeumte selbst ein, dass Overlays keine Konformitaet
+    # herstellen — und empfahl dabei eine Produktgattung, die complyo verkauft.
+    # Eigenwerbung gehoert nicht in einen Pruefbericht; sie verwaessert ihn und
+    # beschaedigt genau das Vertrauen, das der Bericht tragen soll.
+    #
+    # Ob ein Widget vorhanden ist, bleibt als Tatsache erhalten
+    # (hat_assistenz_widget) und steht dem Scanner weiter zur Verfuegung.
 
     # WCAG 1.1.1: Alt-Texte.
     #
@@ -391,17 +443,43 @@ async def check_barrierefreiheit_compliance(
                 break
 
     if not has_a11y_statement:
+        # Anwendungsbereich pruefen, statt ihn nur im Befundtext zu erwaehnen.
+        #
+        # Der Text nannte die Bedingung schon ("B2C-Dienste: Online-Shops,
+        # Buchungssysteme, digitale Services"), der Befund feuerte aber
+        # unbedingt: im Bestandsdurchlauf vom 09.09.2026 auf 19 von 24 Seiten,
+        # fast durchweg Handwerks- und Praxisseiten, die nur ihr Geschaeft
+        # darstellen. Das BFSG erfasst nach § 1 bestimmte B2C-Dienste
+        # (elektronischer Geschaeftsverkehr, Bankdienste, E-Books, Verkehr),
+        # nicht jede Website.
+        _im_anwendungsbereich = _bfsg_anwendungsbereich(soup)
         issues.append(BarrierefreiheitIssue(
             category='barrierefreiheit',
-            severity='warning',
-            title='Barrierefreiheitserklärung fehlt (BFSG §14)',
-            description=(
-                'Es wurde keine Barrierefreiheitserklärung gefunden. Ab 28.06.2025 sind '
-                'B2C-Dienste (Online-Shops, Buchungssysteme, digitale Services) verpflichtet, '
-                'eine Erklärung zur Barrierefreiheit zu veröffentlichen, die den Konformitätsstatus, '
-                'bekannte Mängel und einen Feedback-Mechanismus enthält.'
+            severity='warning' if _im_anwendungsbereich else 'info',
+            title=(
+                'Barrierefreiheitserklärung fehlt (BFSG §14)'
+                if _im_anwendungsbereich
+                else 'Barrierefreiheitserklärung fehlt — nur Pflicht für B2C-Dienste'
             ),
-            risk_euro=2000,
+            description=(
+                (
+                    'Es wurde keine Barrierefreiheitserklärung gefunden. Auf dieser Seite '
+                    'sind Merkmale eines B2C-Dienstes erkennbar (Bestellung, Buchung oder '
+                    'Kundenkonto). Für solche Dienste ist die Erklärung seit 28.06.2025 '
+                    'Pflicht; sie muss Konformitätsstatus, bekannte Mängel und einen '
+                    'Feedback-Mechanismus enthalten.'
+                )
+                if _im_anwendungsbereich else
+                (
+                    'Es wurde keine Barrierefreiheitserklärung gefunden. Ob Sie eine '
+                    'brauchen, hängt von Ihren Diensten ab: das BFSG erfasst B2C-Dienste '
+                    'wie Online-Shops, Buchungssysteme, Bankdienste oder E-Books. Auf '
+                    'dieser Seite waren solche Merkmale nicht erkennbar. Bieten Sie '
+                    'Verbrauchern online Verträge, Buchungen oder ein Kundenkonto an, '
+                    'ist die Erklärung Pflicht — bitte selbst prüfen.'
+                )
+            ),
+            risk_euro=2000 if _im_anwendungsbereich else 0,
             recommendation=(
                 'Erstellen Sie eine Barrierefreiheitserklärung gemäß BFSG §14 und verlinken Sie diese '
                 'im Footer. Die Erklärung muss enthalten: Konformitätsstatus (WCAG 2.1 AA), '
@@ -525,9 +603,17 @@ async def check_barrierefreiheit_compliance(
 
     try:
         from .aria_checker import ARIAChecker
+        # Landmarks meldet axe bereits mit Fundstelle; der ARIA-Checker taete
+        # es ein zweites Mal, ohne. Ueber das WCAG-Kriterium ist das nicht zu
+        # erkennen (die axe-Regel `region` traegt keine wcag-Tags), also ueber
+        # die Merkmalskennung.
+        gemeldete_merkmale = _axe_merkmale(issues)
         for extra in ARIAChecker().check_aria_compliance(soup, url):
             crit = extra.get('wcag_criterion')
             if crit and crit in reported_criteria:
+                continue
+            if 'Landmark-Regions fehlen' in (extra.get('title') or '') \
+                    and 'LANDMARKS' in gemeldete_merkmale:
                 continue
             issues.append(extra)
             if crit:
@@ -581,9 +667,48 @@ async def check_barrierefreiheit_compliance(
     # im Scanner stumm weg (Säule defaultete auf 100, "Widget vorhanden").
     return [asdict(issue) if is_dataclass(issue) else issue for issue in issues]
 
-async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIssue | None:
+# Merkmale, die auf einen B2C-Dienst im Sinne des § 1 BFSG hindeuten:
+# elektronischer Geschaeftsverkehr, Buchung, Kundenkonto. Bewusst eng — im
+# Zweifel gilt das BFSG nicht, und der Hinweis sagt das auch.
+_BFSG_DIENST_RE = re.compile(
+    r"(in den warenkorb|zum warenkorb|jetzt kaufen|kostenpflichtig bestellen"
+    r"|zur kasse|checkout|jetzt buchen|termin buchen|online buchen|reservierung"
+    r"|jetzt abonnieren|mitgliedschaft abschlie|kundenkonto|mein konto"
+    r"|zahlungspflichtig|jetzt bestellen)",
+    re.I,
+)
+
+
+def _bfsg_anwendungsbereich(soup: BeautifulSoup) -> bool:
+    """Deuten Merkmale auf einen B2C-Dienst nach § 1 BFSG hin?
+
+    Nutzt zuerst die Shop-/Abo-Erkennung, die der Scanner ohnehin fuehrt, und
+    ergaenzt sie um Buchungs- und Kundenkonto-Merkmale. Konservativ: im Zweifel
+    False — dann wird die Erklaerung als Hinweis ausgewiesen, nicht als Mangel.
     """
-    Prüft ob ein Accessibility-Widget/Tool vorhanden ist
+    try:
+        from .shop_check import detect_shop, detect_subscription
+        if detect_shop(soup) or detect_subscription(soup):
+            return True
+    except Exception:  # pragma: no cover - Erkennung darf den Check nie kippen
+        pass
+    try:
+        return bool(_BFSG_DIENST_RE.search(soup.get_text(" ", strip=True)))
+    except Exception:  # pragma: no cover
+        return False
+
+
+def hat_assistenz_widget(soup: BeautifulSoup) -> bool:
+    """
+    Ist ein Accessibility-Widget/Tool eingebunden?
+
+    Gibt eine Tatsache zurueck, keinen Befund. Bis zum 09.09.2026 lieferte diese
+    Funktion einen Hinweis "Kein Assistenz-Widget gefunden", der in 16 von 24
+    Kundenberichten stand: er sagte nichts ueber die Rechtslage — der Text
+    raeumte selbst ein, dass Overlays keine Konformitaet herstellen — und
+    empfahl dabei eine Produktgattung, die complyo verkauft. Der Scanner
+    braucht die Tatsache trotzdem (BFSG-Report, Wirkungsmessung), also bleibt
+    sie; nur der Befund ist weg.
     
     Bekannte Widgets:
     - Complyo (eigenes Widget)
@@ -648,39 +773,39 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
         src = script.get('src', '').lower()
         for pattern in widget_patterns:
             if re.search(pattern, src, re.I):
-                return None
+                return True
 
         # Complyo-spezifische Attribute NUR wenn src auch auf ein Accessibility-Widget deutet
         script_src = script.get('src', '').lower()
         has_site_id = bool(script.get('data-site-id'))
         has_auto_fix = bool(script.get('data-auto-fix'))
         if has_auto_fix and 'accessibility' in script_src:
-            return None
+            return True
         if has_site_id and ('accessibility' in script_src or 'complyo' in script_src or 'widget' in script_src):
-            return None
+            return True
     
     # Suche nach Scripts mit Complyo-spezifischen Attributen (auch ohne src)
     for script in soup.find_all('script'):
         if script.get('data-site-id') and ('complyo' in str(script).lower() or 'accessibility' in str(script).lower()):
-            return None
+            return True
     
     # Suche in Preload-Links (Next.js afterInteractive Scripts)
     for link in soup.find_all('link', href=True):
         href = link.get('href', '').lower()
         for pattern in widget_patterns:
             if re.search(pattern, href, re.I):
-                return None
+                return True
     
     # NEU: Suche im gesamten HTML nach Complyo Widget-URLs (inkl. Preload-Links)
     html_text = str(soup).lower()
     if 'api.complyo.de/api/widgets/accessibility' in html_text:
-        return None  # Complyo Widget URL im HTML gefunden (z.B. als <link rel="preload">)
+        return True  # Complyo Widget URL im HTML gefunden (z.B. als <link rel="preload">)
 
     # Zusätzlich: Suche in allen link-Tags unabhängig von rel-Attribut
     for link in soup.find_all('link', href=True):
         href = link.get('href', '').lower()
         if 'accessibility' in href and ('complyo' in href or 'userway' in href or 'accessibe' in href or 'eye-able' in href):
-            return None
+            return True
     
     # Suche in Script-Content
     script_contents = soup.find_all('script', src=False)
@@ -688,7 +813,7 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
         content = script.string or ''
         for pattern in widget_patterns:
             if re.search(pattern, content, re.I):
-                return None
+                return True
     
     # Suche nach DIV-Containern mit accessibility-Klassen (inkl. Complyo)
     accessibility_divs = soup.find_all(
@@ -696,14 +821,14 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
         class_=re.compile(r'accessibility|a11y|barrier.*free|complyo', re.I)
     )
     if accessibility_divs:
-        return None
+        return True
     
     # Suche nach IDs mit accessibility-Bezug
     accessibility_ids = soup.find_all(
         id=re.compile(r'accessibility|a11y|complyo.*widget|complyo.*a11y', re.I)
     )
     if accessibility_ids:
-        return None
+        return True
     
     # NEU: Suche nach Floating-Buttons (typisch für Accessibility-Widgets)
     # Diese haben oft: fixed position, aria-label mit "Barrierefreiheit" oder "Accessibility"
@@ -712,7 +837,7 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
         attrs={'aria-label': re.compile(r'barrierefreiheit|accessibility|a11y', re.I)}
     )
     if floating_buttons:
-        return None
+        return True
     
     # NEU: Suche nach Buttons mit Settings-Icons (Complyo Widget Pattern)
     # Unser Widget hat: Settings Icon + aria-label "Barrierefreiheits-Einstellungen"
@@ -723,27 +848,10 @@ async def _check_accessibility_widget(soup: BeautifulSoup) -> BarrierefreiheitIs
     for btn in setting_buttons:
         aria = btn.get('aria-label', '').lower()
         if 'barrierefreiheit' in aria or 'accessibility' in aria or 'einstellung' in aria:
-            return None
+            return True
     
-    # Kein Widget gefunden — reiner Hinweis. Overlay-Widgets stellen KEINE
-    # WCAG-/BFSG-Konformitaet her (fachlicher Konsens: Overlays ersetzen keine
-    # strukturellen Fixes) und duerfen deshalb weder Score noch Risiko treiben.
-    return BarrierefreiheitIssue(
-        category='barrierefreiheit',
-        severity='info',
-        title='Hinweis: Kein Assistenz-Widget gefunden',
-        description='Es wurde kein Accessibility-Assistenz-Widget gefunden. Solche Widgets '
-                    'können den Bedienkomfort verbessern (Schriftgröße, Kontrast, Vorlesen), '
-                    'stellen aber KEINE WCAG-/BFSG-Konformität her und ersetzen keine '
-                    'strukturellen Korrekturen im Quellcode.',
-        risk_euro=0,
-        recommendation='Optional: Ein Assistenz-Widget kann ergänzend eingesetzt werden. '
-                      'Maßgeblich für die Rechtskonformität sind die strukturellen Fixes '
-                      '(Alt-Texte, Kontraste, Tastaturbedienbarkeit) — siehe übrige Befunde.',
-        legal_basis='BFSG §12-15 (Hinweis, keine Pflicht)',
-        auto_fixable=False,
-        is_missing=False
-    )
+    return False
+
 
 async def _check_alt_texts(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
     """Prüft ob alle Bilder Alt-Texte haben (Legacy-Version ohne Screenshots)"""
@@ -1046,7 +1154,11 @@ async def _check_semantic_html(soup: BeautifulSoup) -> List[BarrierefreiheitIssu
                        f'Diese helfen Screenreader-Nutzern bei der Navigation.',
             risk_euro=800,
             recommendation='Verwenden Sie semantische HTML5-Elemente für bessere Struktur und Barrierefreiheit.',
-            legal_basis='BFSG §12, WCAG 2.1 (Info and Relationships)',
+            # Kriteriumsnummer AUSGESCHRIEBEN — ohne sie greift die
+            # Entdopplung nicht (sie liest \d.\d+.\d+ aus Titel und
+            # legal_basis) und der ARIA-Checker meldete denselben Mangel
+            # ein zweites Mal.
+            legal_basis='BFSG §12, WCAG 2.1 (1.3.1, Info and Relationships)',
             auto_fixable=False
         ))
     

@@ -1,6 +1,10 @@
 """
 Tests fuer das ehrliche A11y-Bewertungsmodell (Tier 3 B):
-- Overlay-Widget ist Hinweis (info, 0 EUR), kein Score-Malus, kein Scan-Gate
+- Overlay-Widget erzeugt GAR KEINEN Befund mehr (seit 09.09.2026, vorher:
+  Hinweis mit info/0 EUR). Der Hinweis stand im Bestandsdurchlauf auf 16 von 24
+  Kundenberichten, sagte nichts ueber die Rechtslage und empfahl dabei eine
+  Produktgattung, die complyo verkauft. Ob ein Widget da ist, bleibt als
+  Tatsache erhalten (hat_assistenz_widget) — nur als Befund ist es weg.
 - Phantom-Mapping focus-visible entfernt
 - Automatik-Disclaimer in der Score-Ausgabe
 - Tiefen-Checks (ARIAChecker/Media) ergaenzen additiv ohne Doppel-Scoring
@@ -11,7 +15,7 @@ from bs4 import BeautifulSoup
 
 from compliance_engine.checks.barrierefreiheit_check import (
     check_barrierefreiheit_compliance,
-    _check_accessibility_widget,
+    hat_assistenz_widget,
     _collect_reported_criteria,
 )
 from compliance_engine.axe_scanner import AXE_RULE_TO_FEATURE
@@ -29,27 +33,30 @@ PLAIN_PAGE = (
 )
 
 
-@pytest.mark.asyncio
-async def test_missing_widget_is_info_without_risk():
-    issue = await _check_accessibility_widget(_soup(PLAIN_PAGE))
-    assert issue is not None
-    assert issue.severity == "info"
-    assert issue.risk_euro == 0
-    assert issue.is_missing is False
-    assert issue.auto_fixable is False
-    # Empfehlung darf kein Overlay als Konformitaetsloesung verkaufen
-    assert "UserWay" not in issue.recommendation
-    assert "AccessiBe" not in issue.recommendation
+def test_fehlendes_widget_ist_eine_tatsache_kein_befund():
+    """Kein Widget heisst: Tatsache False. Kein Befund, keine Empfehlung.
+
+    Frueher entstand hier ein Hinweis (info, 0 EUR). Er war harmlos fuer den
+    Score, aber er stand in fast jedem Bericht und warb fuer eine
+    Produktgattung — in einem Pruefbericht hat das nichts zu suchen.
+    """
+    assert hat_assistenz_widget(_soup(PLAIN_PAGE)) is False
+
+
+def test_vorhandenes_widget_wird_als_tatsache_erkannt():
+    mit_widget = _soup(
+        '<html><body><script src="https://api.complyo.de/api/widgets/accessibility.js">'
+        "</script></body></html>"
+    )
+    assert hat_assistenz_widget(mit_widget) is True
 
 
 @pytest.mark.asyncio
-async def test_widget_absence_does_not_tank_pillar_score():
+async def test_kein_widget_befund_im_bericht():
+    """Der Bericht enthaelt keinen Widget-Befund mehr — auch keinen harmlosen."""
     issues = await check_barrierefreiheit_compliance("https://example.com", _soup(PLAIN_PAGE))
     widget_issues = [i for i in issues if "Widget" in (i.get("title") or "")]
-    for wi in widget_issues:
-        assert wi["severity"] == "info"
-        assert wi["risk_euro"] == 0
-        assert not wi.get("is_missing")
+    assert widget_issues == [], f"unerwarteter Widget-Befund: {widget_issues}"
 
 
 def test_focus_visible_phantom_mapping_removed():

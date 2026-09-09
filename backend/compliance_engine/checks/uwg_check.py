@@ -25,6 +25,48 @@ class UWGIssue:
     is_missing: bool = False
 
 
+# Belege dafuer, dass die Seite Bewertungen ANZEIGT — nicht dafuer, dass
+# irgendwo das Wort steht.
+#
+# Bis zum 09.09.2026 suchte die Erkennung im ROHEN HTML nach
+# (bewertung|review|rezension|sterne|stars|rating|★|☆). Damit traf sie jede
+# CSS-Klasse "star-rating", jedes data-review-Attribut, jedes Dekor-Sternchen
+# und jeden Fusszeilenlink "Bewertungen" — im Bestandsdurchlauf auf 15 von 24
+# Seiten, darunter Handwerksbetriebe ohne eine einzige Bewertung.
+#
+# § 5b Abs. 3 UWG greift, wenn ein Unternehmer Verbraucherbewertungen
+# ZUGAENGLICH MACHT. Der belastbarste maschinelle Beleg dafuer sind
+# strukturierte Daten (schema.org Review/AggregateRating) — die setzt
+# praktisch jeder, der Bewertungen ausspielt, weil sie in der Google-Suche
+# sichtbar werden. Ergaenzend: sichtbarer Bewertungstext ZUSAMMEN mit einer
+# Bewertungszahl.
+_SCHEMA_BEWERTUNG_RE = re.compile(
+    r'(schema\.org/(aggregate)?review|schema\.org/aggregaterating'
+    r'|"@type"\s*:\s*"(aggregate)?review"|"@type"\s*:\s*"aggregaterating"'
+    r'|itemprop\s*=\s*["\']?(reviewbody|ratingvalue|reviewrating))',
+    re.I,
+)
+_BEWERTUNGSWORT_RE = re.compile(
+    r"(kundenbewertung|kundenstimmen|kundenmeinung|bewertungen unserer"
+    r"|rezension|erfahrungsberichte|das sagen unsere kunden|kundenrezension)",
+    re.I,
+)
+# Eine tatsaechlich ausgewiesene Bewertungszahl: "4,8 von 5", "4.5/5", "5 Sterne".
+_BEWERTUNGSZAHL_RE = re.compile(
+    r"(\d[.,]\d\s*(von|/)\s*5|\b[1-5]\s*(von|/)\s*5\b|\b[1-5][.,]?\d?\s*sterne\b)",
+    re.I,
+)
+
+
+def _zeigt_bewertungen(soup, html_text: str, sicht_text: str) -> bool:
+    """Macht die Seite Verbraucherbewertungen zugaenglich?"""
+    if _SCHEMA_BEWERTUNG_RE.search(html_text):
+        return True
+    return bool(
+        _BEWERTUNGSWORT_RE.search(sicht_text) and _BEWERTUNGSZAHL_RE.search(sicht_text)
+    )
+
+
 async def check_uwg_compliance(url: str, soup: BeautifulSoup, session=None) -> List[Dict[str, Any]]:
     """
     Prüft UWG-Compliance:
@@ -35,18 +77,18 @@ async def check_uwg_compliance(url: str, soup: BeautifulSoup, session=None) -> L
     """
     issues = []
     html_text = str(soup).lower()
+    # Sichtbarer Text fuer alles, was eine Aussage der Seite sein soll.
+    # Klassennamen und Skripte sind keine.
+    sicht_text = soup.get_text(" ", strip=True).lower()
 
     # §5b UWG: Kundenbewertungen ohne Verification-Disclosure
-    has_reviews = bool(re.search(
-        r'(bewertung|review|rezension|sterne|stars|rating|★|☆|✓\s*verifiziert)',
-        html_text
-    ))
+    has_reviews = _zeigt_bewertungen(soup, html_text, sicht_text)
     if has_reviews:
         has_review_disclosure = bool(re.search(
             r'(verifiziert|verified|geprüfte\s*bewertung|echte\s*bewertung|'
             r'nur.*käufer|only.*purchaser|bewertungen.*überprüft|reviews.*verified|'
             r'trustpilot|google.*bewertung|trusted\s*shops)',
-            html_text
+            sicht_text
         ))
         if not has_review_disclosure:
             issues.append(asdict(UWGIssue(

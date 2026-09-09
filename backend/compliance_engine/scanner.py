@@ -835,11 +835,15 @@ class ComplianceScanner:
                                 kwargs['metadata'] = {**meta, **extra}
                         issues.append(ComplianceIssue(**kwargs))
 
-            # ✅ Prüfe ob Accessibility-Widget gefunden wurde
-            has_accessibility_widget = not any(
-                (issue.title if isinstance(issue, ComplianceIssue) else issue.get('title')) == 'Kein Barrierefreiheits-Tool/Widget gefunden'
-                for issue in (barriere_issues if not isinstance(barriere_issues, Exception) else [])
-            )
+            # Widget-Kennzeichen direkt messen, nicht aus einem Befundtitel ableiten.
+            #
+            # Hier stand eine Suche nach dem Titel 'Kein Barrierefreiheits-Tool/
+            # Widget gefunden'. Diesen Titel gab es nicht — der Befund hiess
+            # 'Hinweis: Kein Assistenz-Widget gefunden'. Die Bedingung war also
+            # immer falsch und das Kennzeichen fuer JEDE Seite True, auch ohne
+            # Widget. Aufgefallen am 09.09.2026, als der Befund entfiel.
+            from compliance_engine.checks.barrierefreiheit_check import hat_assistenz_widget
+            has_accessibility_widget = hat_assistenz_widget(soup)
 
             # ✅ TCF 2.2: Vendor Analysis (optional, additional data)
             tcf_data = {}
