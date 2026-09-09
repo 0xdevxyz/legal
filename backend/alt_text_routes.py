@@ -336,6 +336,52 @@ async def approve_dokument(
         raise HTTPException(status_code=500, detail="Freigabe fehlgeschlagen")
 
 
+class VorschlagRequest(BaseModel):
+    """Entscheidung ueber einen wartenden neuen Vorschlag."""
+    fix_id: int
+    uebernehmen: bool
+    ablehngrund: Optional[str] = None
+
+
+@router.post("/vorschlag-entscheiden")
+async def vorschlag_entscheiden(
+    request: VorschlagRequest,
+    current_user: Dict[str, Any] = Depends(get_required_user)
+):
+    """Uebernimmt einen neuen Reparaturvorschlag oder behaelt den laufenden.
+
+    Ein freigegebener Fix wird beim naechsten Scan nicht ueberschrieben; der
+    neue Vorschlag wartet stattdessen unter `neuer_vorschlag` im Payload. Das
+    Feld wurde bis zum 09.09.2026 nirgends gelesen — die Vorschlaege lagen
+    dort ohne jeden Weg heraus, der aelteste vier Wochen.
+    """
+    try:
+        erlaubte = await get_user_site_ids(
+            current_user.get("user_id") or current_user.get("id"))
+        saver = AccessibilityFixSaver(db_pool)
+        try:
+            ok = await saver.entscheide_neuen_vorschlag(
+                fix_id=request.fix_id,
+                uebernehmen=request.uebernehmen,
+                erlaubte_sites=erlaubte,
+                ablehngrund=request.ablehngrund,
+            )
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if not ok:
+            raise HTTPException(
+                status_code=404,
+                detail="Kein wartender Vorschlag oder nicht über diesen Weg entscheidbar",
+            )
+        return {"success": True, "fix_id": request.fix_id,
+                "uebernommen": request.uebernehmen}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"vorschlag_entscheiden fehlgeschlagen: {e}")
+        raise HTTPException(status_code=500, detail="Entscheidung fehlgeschlagen")
+
+
 @router.post("/approve-kontrast")
 async def approve_kontrast(
     request: KontrastFreigabeRequest,

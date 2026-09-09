@@ -218,6 +218,82 @@ const ABLEHNGRUENDE = [
 ] as const;
 
 
+/**
+ * Ein neuer Reparaturvorschlag wartet auf eine Entscheidung.
+ *
+ * Warum es ihn gibt: Ein freigegebener Fix wird beim naechsten Scan bewusst
+ * NICHT ueberschrieben, sonst setzte jeder Wiederholungsscan eine erteilte
+ * Freigabe zurueck und die Reparatur verschwaende still von der Website. Der
+ * neue Vorschlag wandert stattdessen in den Payload.
+ *
+ * Bis zum 09.09.2026 endete er dort. Das Feld wurde nirgends gelesen — nicht
+ * im Dashboard, nicht im Widget, nicht im Backend. Gemessen lagen fuenf
+ * Vorschlaege darin, der aelteste seit vier Wochen. Auf panoart360.de hiess
+ * das: die laufende Struktur-Reparatur raeumt 51 Fundstellen auf 16 ab,
+ * waehrend im selben Datensatz eine wartete, die auf 4 kommt.
+ *
+ * Eine Warteschlange ohne Ausgang ist schlimmer als keine: sie sieht von
+ * innen aus wie ein erledigter Schritt.
+ */
+function NeuerVorschlag({ d, busy, onEntscheiden }: {
+  d: DocItem;
+  busy: boolean;
+  onEntscheiden: (uebernehmen: boolean) => void;
+}) {
+  const p = (d.payload ?? {}) as Record<string, unknown>;
+  const vorschlag = p.neuer_vorschlag as Record<string, unknown> | undefined;
+  if (!vorschlag) return null;
+
+  // Der Vergleich, auf den es ankommt: beide Zahlen sind im Browser gemessen,
+  // vorher und nachher, auf derselben Seite.
+  const zahl = (q: Record<string, unknown> | undefined, k: string) =>
+    typeof q?.[k] === 'number' ? (q[k] as number) : null;
+  const altVor = zahl(p, 'vorher');
+  const altNach = zahl(p, 'nachher');
+  const neuVor = zahl(vorschlag, 'vorher');
+  const neuNach = zahl(vorschlag, 'nachher');
+  const messbar = altVor !== null && altNach !== null && neuNach !== null;
+  const besser = messbar && (neuNach as number) < (altNach as number);
+
+  return (
+    <div className="mt-3 pt-3 border-t border-amber-500/30">
+      <div className="text-xs text-amber-300/90 mb-2">
+        Ein neuerer Scan schlägt eine andere Fassung vor. Bis Sie entscheiden,
+        bleibt die laufende aktiv.
+      </div>
+      {messbar && (
+        <div className="text-xs text-zinc-400 mb-2">
+          <div>läuft: {altVor} → {altNach} Fundstellen</div>
+          <div className={besser ? 'text-green-400' : undefined}>
+            neu: {neuVor ?? altVor} → {neuNach} Fundstellen
+            {besser && ` (${(altNach as number) - (neuNach as number)} weniger)`}
+          </div>
+        </div>
+      )}
+      <div className="mb-2">
+        <DokBeleg d={{ ...d, payload: vorschlag }} />
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={() => onEntscheiden(true)}
+          disabled={busy}
+          className="px-3 py-1.5 text-xs text-white bg-green-600 hover:bg-green-500 disabled:opacity-40 rounded-lg"
+        >
+          Neue Fassung übernehmen
+        </button>
+        <button
+          onClick={() => onEntscheiden(false)}
+          disabled={busy}
+          className="px-3 py-1.5 text-xs text-zinc-300 border border-zinc-600 hover:bg-zinc-700 disabled:opacity-40 rounded-lg"
+        >
+          Laufende behalten
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 export default function AccessibilityWorklist() {
   const { activeSite } = useActiveSite();
   const siteId = activeSite ? generateSiteId(activeSite.url) : '';
@@ -287,6 +363,23 @@ export default function AccessibilityWorklist() {
         rejected_reason: approved ? undefined : grund,
       });
       setGrundFuer(null);
+      await load();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Ein freigegebener Fix wird beim naechsten Scan nicht ueberschrieben — der
+  // neue Vorschlag wartet im Payload. Bis zum 09.09.2026 wartete er dort ohne
+  // Ausgang: das Feld wurde nirgends gelesen, der aelteste Vorschlag lag vier
+  // Wochen. Hier wird die Entscheidung endlich gestellt.
+  const entscheideVorschlag = async (item: DocItem, uebernehmen: boolean) => {
+    setBusy(`dok-${item.id}`);
+    try {
+      await apiClient.post('/api/accessibility/vorschlag-entscheiden', {
+        fix_id: item.id,
+        uebernehmen,
+      });
       await load();
     } finally {
       setBusy(null);
@@ -683,6 +776,11 @@ export default function AccessibilityWorklist() {
                   </summary>
                   <DokBeleg d={d} />
                 </details>
+                <NeuerVorschlag
+                  d={d}
+                  busy={busy === `dok-${d.id}`}
+                  onEntscheiden={(uebernehmen) => entscheideVorschlag(d, uebernehmen)}
+                />
               </div>
             ))}
           </div>

@@ -171,3 +171,101 @@ class TestOberflaeche:
         s = open(pfad, encoding="utf-8").read()
         assert "document_fixes.pending" in s
         assert "pending_count} offen" in s
+
+
+class TestWartenderVorschlag:
+    """
+    Der Ausgang aus der Warteschlange.
+
+    Ein freigegebener Fix wird beim naechsten Scan nicht ueberschrieben; der
+    neue Vorschlag wartet unter `neuer_vorschlag` im Payload. Bis zum
+    09.09.2026 wurde das Feld nirgends gelesen — nicht im Dashboard, nicht im
+    Widget, nicht im Backend. Fuenf Vorschlaege lagen darin, der aelteste seit
+    dem 12.08.2026. Auf panoart360.de raeumte die laufende Reparatur 51 auf 16
+    Fundstellen ab, waehrend im selben Datensatz eine auf 4 wartete.
+    """
+
+    @staticmethod
+    def _zeile(fix_type="struktur", mit_vorschlag=True):
+        payload = {"fixes": [{"selector": "#works"}], "vorher": 51, "nachher": 16}
+        if mit_vorschlag:
+            payload["neuer_vorschlag"] = {
+                "fixes": [{"selector": "#works"}, {"selector": "#about"}],
+                "vorher": 51, "nachher": 4,
+            }
+            payload["bemerkt_am"] = "2026-09-09 21:33:33+00"
+        return {"id": 7, "user_id": "u1", "site_id": "s1",
+                "fix_type": fix_type, "payload": payload}
+
+    @pytest.mark.asyncio
+    async def test_uebernehmen_macht_den_vorschlag_zum_payload(self):
+        conn = FakeConn(self._zeile())
+        ok = await AccessibilityFixSaver(FakePool(conn)).entscheide_neuen_vorschlag(
+            fix_id=7, uebernehmen=True, erlaubte_sites={"s1"})
+        assert ok
+        import json
+        neu = json.loads(conn.aufrufe[0][1][0])
+        assert neu["nachher"] == 4, "die bessere Fassung muss aktiv werden"
+        assert len(neu["fixes"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_uebernahme_traegt_die_warteschlangen_merker_nicht_mit(self):
+        """`neuer_vorschlag` und `bemerkt_am` gehoeren zur Warteschlange."""
+        conn = FakeConn(self._zeile())
+        await AccessibilityFixSaver(FakePool(conn)).entscheide_neuen_vorschlag(
+            fix_id=7, uebernehmen=True, erlaubte_sites={"s1"})
+        import json
+        neu = json.loads(conn.aufrufe[0][1][0])
+        assert "neuer_vorschlag" not in neu
+        assert "bemerkt_am" not in neu
+
+    @pytest.mark.asyncio
+    async def test_behalten_raeumt_den_vorschlag_weg(self):
+        """Sonst stuende dieselbe Frage beim naechsten Laden wieder da."""
+        conn = FakeConn(self._zeile())
+        ok = await AccessibilityFixSaver(FakePool(conn)).entscheide_neuen_vorschlag(
+            fix_id=7, uebernehmen=False, erlaubte_sites={"s1"})
+        assert ok
+        import json
+        neu = json.loads(conn.aufrufe[0][1][0])
+        assert neu["nachher"] == 16, "die laufende Fassung bleibt unangetastet"
+        assert "neuer_vorschlag" not in neu
+
+    @pytest.mark.asyncio
+    async def test_beide_wege_zaehlen_als_menschliche_entscheidung(self):
+        """Auch das Behalten ist eine Entscheidung — sonst faellt sie im
+        Lernstand unter den Tisch."""
+        for uebernehmen in (True, False):
+            conn = FakeConn(self._zeile())
+            await AccessibilityFixSaver(FakePool(conn)).entscheide_neuen_vorschlag(
+                fix_id=7, uebernehmen=uebernehmen, erlaubte_sites={"s1"})
+            assert "entscheidung_quelle = 'mensch'" in conn.aufrufe[0][0]
+
+    @pytest.mark.asyncio
+    async def test_ohne_wartenden_vorschlag_passiert_nichts(self):
+        conn = FakeConn(self._zeile(mit_vorschlag=False))
+        ok = await AccessibilityFixSaver(FakePool(conn)).entscheide_neuen_vorschlag(
+            fix_id=7, uebernehmen=True, erlaubte_sites={"s1"})
+        assert ok is False
+        assert conn.aufrufe == []
+
+    @pytest.mark.asyncio
+    async def test_kontrast_bleibt_aussen_vor(self):
+        """
+        Dort steckt in `entscheidungen` eine Freigabe je Farbpaar. Eine
+        Uebernahme im Ganzen wuerde genau die erteilten Farbfreigaben
+        ueberschreiben, die der Mechanismus schuetzen soll.
+        """
+        conn = FakeConn(self._zeile(fix_type="kontrast-css"))
+        ok = await AccessibilityFixSaver(FakePool(conn)).entscheide_neuen_vorschlag(
+            fix_id=7, uebernehmen=True, erlaubte_sites={"s1"})
+        assert ok is False
+        assert conn.aufrufe == []
+
+    @pytest.mark.asyncio
+    async def test_fremde_site_wird_abgewiesen(self):
+        conn = FakeConn(self._zeile())
+        with pytest.raises(PermissionError):
+            await AccessibilityFixSaver(FakePool(conn)).entscheide_neuen_vorschlag(
+                fix_id=7, uebernehmen=True, erlaubte_sites={"andere-site"})
+        assert conn.aufrufe == []

@@ -794,6 +794,93 @@ class AccessibilityFixSaver:
             )
             return True
 
+
+    async def entscheide_neuen_vorschlag(
+        self,
+        fix_id: int,
+        uebernehmen: bool,
+        erlaubte_sites: Optional[set] = None,
+        ablehngrund: Optional[str] = None,
+    ) -> bool:
+        """
+        Entscheidet ueber einen wartenden `neuer_vorschlag`.
+
+        Wie er entsteht: Ein freigegebener Fix wird beim naechsten Scan nicht
+        ueberschrieben — sonst setzte jeder Wiederholungsscan eine erteilte
+        Freigabe zurueck. Der neue Vorschlag wandert stattdessen unter
+        `neuer_vorschlag` in den Payload.
+
+        Bis hierhin fehlte der Ausgang: Das Feld wurde nirgends gelesen, nicht
+        im Dashboard, nicht im Widget, nicht im Backend. Gemessen am
+        09.09.2026 lagen fuenf Vorschlaege darin, der aelteste seit dem
+        12.08.2026 — vier Wochen. Auf panoart360.de hiess das konkret: die
+        aktive Struktur-Reparatur raeumt 51 auf 16 Fundstellen ab, im Payload
+        wartete eine, die auf 4 kommt.
+
+        `kontrast-css` bleibt aussen vor: dort steckt in `entscheidungen` eine
+        Freigabe je Farbpaar, und eine Uebernahme im Ganzen wuerde genau die
+        erteilten Farbfreigaben ueberschreiben, die der Mechanismus schuetzen
+        soll. Diese Abgleichung ist ein eigenes Problem.
+        """
+        import json as _json
+        async with self.db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT id, user_id, site_id, fix_type, payload "
+                "FROM accessibility_document_fixes WHERE id = $1",
+                fix_id,
+            )
+            if not row:
+                return False
+            if row["fix_type"] == "kontrast-css":
+                logger.warning(
+                    "Vorschlagsuebernahme auf kontrast-css abgelehnt: die "
+                    "Freigaben je Farbpaar wuerden dabei verlorengehen"
+                )
+                return False
+            _pruefe_site_zugehoerigkeit(row, erlaubte_sites)
+
+            payload = row["payload"]
+            if isinstance(payload, str):
+                try:
+                    payload = _json.loads(payload)
+                except Exception:
+                    return False
+            vorschlag = (payload or {}).get("neuer_vorschlag")
+            if not vorschlag:
+                return False
+
+            if uebernehmen:
+                # Der Vorschlag wird der Payload. Die beiden Merker gehoeren
+                # zur Warteschlange, nicht zur Reparatur, und wuerden sonst
+                # mitwandern.
+                neu = dict(vorschlag)
+                neu.pop("neuer_vorschlag", None)
+                neu.pop("bemerkt_am", None)
+            else:
+                neu = {k: v for k, v in (payload or {}).items()
+                       if k not in ("neuer_vorschlag", "bemerkt_am")}
+
+            await conn.execute(
+                """
+                UPDATE accessibility_document_fixes
+                SET payload = $1,
+                    rejected_reason = $2,
+                    -- Auch das Behalten ist eine Entscheidung, und nur eine
+                    -- getroffene Entscheidung ist ein Beleg.
+                    entscheidung_quelle = 'mensch',
+                    updated_at = NOW()
+                WHERE id = $3
+                """,
+                _json.dumps(neu),
+                None if uebernehmen else ablehngrund,
+                fix_id,
+            )
+            logger.info(
+                "Neuer Vorschlag fuer Fix %s %s",
+                fix_id, "uebernommen" if uebernehmen else "verworfen",
+            )
+            return True
+
     async def set_kontrast_freigabe(
         self,
         site_id: str,
