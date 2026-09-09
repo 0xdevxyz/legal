@@ -28,9 +28,19 @@ from typing import Any, Dict, Optional
 # Betreiber-Stammdaten. Zentral pflegbar; bei Änderung der Rechtsform/Anschrift
 # hier anpassen. Quelle: bestehende Nennung in email_service.py / gdpr_api.py.
 # ─────────────────────────────────────────────────────────────────────────────
-COMPLYO_PROVIDER_NAME = "Complyo GmbH"
-COMPLYO_PROVIDER_ADDRESS = "Koburger Straße 198, 04416 Markkleeberg"
-COMPLYO_PROVIDER_CONTACT = "datenschutz@complyo.de"
+# Eine Quelle: anbieter.py. Bis zum 10.09.2026 stand hier "Complyo GmbH,
+# Koburger Straße 198, 04416 Markkleeberg" — ein Name, den es nicht gibt, an
+# einer Anschrift, die nicht stimmt, geschrieben in die Datenschutzerklaerung
+# JEDES Kunden.
+from anbieter import (
+    ABSENDER as _ABSENDER,
+    ANSCHRIFT_EINZEILIG as _ANSCHRIFT,
+    DATENSCHUTZ_EMAIL as _DS_MAIL,
+)
+
+COMPLYO_PROVIDER_NAME = _ABSENDER
+COMPLYO_PROVIDER_ADDRESS = _ANSCHRIFT
+COMPLYO_PROVIDER_CONTACT = _DS_MAIL
 COMPLYO_API_HOST = "api.complyo.de"
 # Verweis auf den im Dashboard generierbaren Auftragsverarbeitungsvertrag (Art. 28).
 # Bewusst neutral formuliert: der AVV wird bereitgestellt und ist abzuschließen —

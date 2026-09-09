@@ -435,7 +435,7 @@ class ComplianceReportGenerator:
         technischen Analyse der Website. Die Ergebnisse stellen eine erste Einschätzung dar und 
         ersetzen nicht die Beratung durch einen qualifizierten Rechtsanwalt.
         
-        Complyo GmbH übernimmt keine Haftung für die Vollständigkeit oder Richtigkeit der Analyse. 
+        Yvonne Weishar · Complyo übernimmt keine Haftung für die Vollständigkeit oder Richtigkeit der Analyse. 
         Rechtliche Änderungen und individuelle Umstände können die Bewertung beeinflussen.
         
         Für eine umfassende rechtliche Beratung empfehlen wir die Konsultation eines Fachanwalts 
@@ -447,7 +447,8 @@ class ComplianceReportGenerator:
         content.append(Spacer(1, 0.3*inch))
         content.append(Paragraph("Kontakt", self.styles['ComplyoHeading']))
         contact = """
-        <b>Complyo GmbH</b><br/>
+        <b>Yvonne Weishar · Complyo</b><br/>
+        Pappelallee 64, 10437 Berlin<br/>
         E-Mail: support@complyo.de<br/>
         Website: https://complyo.de<br/>
         Datenschutz: datenschutz@complyo.de
