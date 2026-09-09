@@ -21,7 +21,7 @@ export default function HeroSection() {
 
             <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 leading-[1.1] mb-6">
               Websites{' '}
-              <span className="akzent-marker">prüfen und reparieren</span>{' '}
+              <span>prüfen und reparieren</span>{' '}
               mit{' '}
               <span className="whitespace-nowrap">
                 <span className="relative inline-block">

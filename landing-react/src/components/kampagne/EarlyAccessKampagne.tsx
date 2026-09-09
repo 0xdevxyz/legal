@@ -123,9 +123,9 @@ export default function EarlyAccessKampagne({
             <PlatzZaehler gesamt={PLAETZE} />
           </div>
 
-          <h1 className="font-heading text-4xl sm:text-5xl font-extrabold text-gray-900 leading-[1.1] mb-5">
-            Seit Juni 2025 gilt das BFSG.{' '}
-            <span className="akzent-marker">Complyo findet die Lücken auf deiner Website – und schließt sie.</span>
+          <h1 className="font-heading text-4xl sm:text-5xl font-extrabold leading-[1.1] mb-5">
+            <span className="text-gray-500">Seit Juni 2025 gilt das BFSG.</span>{' '}
+            <span className="text-gray-900">Complyo findet die Lücken auf deiner Website – und schließt sie.</span>
           </h1>
 
           <p className="text-lg text-gray-600 leading-relaxed mb-3">
