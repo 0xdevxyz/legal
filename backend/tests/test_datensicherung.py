@@ -102,6 +102,24 @@ class TestSicherungsskript:
         assert 'ZIELDATEI=' in s
         assert 'nicht eingerichtet' in s
 
+    def test_kopie_ausser_haus_nur_schreibend_und_nie_ueberschreibend(self):
+        """Seit 11.09.2026 geht die Kopie per rsync an ein rrsync-Ziel, das nur
+        Schreiben erlaubt. scp wuerde dort abgewiesen; --ignore-existing sorgt
+        dafuer, dass ein uebernommener Server die bereits uebertragenen Abzuege
+        nicht nachtraeglich ersetzen kann."""
+        s = _lies(SKRIPT)
+        block = s[s.index('5. Kopie ausser Haus'):s.index('6. Aufr')]
+        assert 'rsync' in block
+        assert '--ignore-existing' in block
+        assert 'scp ' not in block
+
+    def test_probe_vergleicht_exakte_zeilen(self):
+        """n_live_tup ist eine Schaetzung und meldete am 10.09.2026 Zeilen, die
+        es nicht mehr gab: ein korrekter Abzug galt als misslungen."""
+        s = _lies(SKRIPT)
+        assert 'query_to_xml' in s
+        assert "relname || ':' || n_live_tup" not in s
+
     def test_raeumt_auf(self):
         s = _lies(SKRIPT)
         assert 'TAGE_TAEGLICH=14' in s

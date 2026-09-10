@@ -41,7 +41,16 @@ TAGE_MONATLICH=190
 # nur auf derselben Maschine wie die Datenbank — was gegen einen Plattenschaden
 # nicht hilft. Bewusst als Datei und nicht fest verdrahtet: das Ziel ist eine
 # Entscheidung des Betreibers, kein Detail dieses Skripts.
-# Inhalt: eine Zeile, z.B.  user@host:/pfad/zu/complyo-sicherungen
+# Inhalt: erste Zeile das Ziel, z.B.  user@host:/pfad/zu/complyo-sicherungen
+# Danach optional, je Zeile:  PORT=58796  und  SCHLUESSEL=/root/.ssh/eigener_key
+#
+# Eingerichtet am 11.09.2026 (Entscheidung Daniel, Nachtschicht): Ziel ist
+# ionos-web, Nutzer `complyo-sicherung`, dessen Schluessel per rrsync auf
+# *Schreiben in ein Verzeichnis* beschraenkt ist. Wer diesen Server
+# uebernimmt, bekommt damit weder Lesezugriff auf die abgelegten Abzuege noch
+# eine Shell auf der Gegenseite. Gelesen wird die Kopie nur von Hand, mit dem
+# Schluessel, der NICHT hier liegt. Deshalb rsync statt scp: rrsync versteht
+# nur das rsync-Protokoll, ein scp-Aufruf wuerde abgewiesen.
 ZIELDATEI="/home/clawd/saas/legal/.sicherung-ziel"
 
 # Schlüsseldatei für die Verschlüsselung des Abzugs (Prüfung 10.09.2026).
@@ -200,8 +209,16 @@ fi
 docker exec -i "$DB_CONTAINER" pg_restore -U "$DB_USER" -d "$TESTDB" \
   --no-owner --no-privileges < "$ROHDATEI" > /tmp/sicherung-restore.txt 2>&1
 
-VERGLEICH="SELECT relname || ':' || n_live_tup FROM pg_stat_user_tables ORDER BY relname;"
-docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$TESTDB" -c "ANALYZE;" >/dev/null 2>&1
+# Exakte Zeilenzahlen, nicht n_live_tup. Der Schaetzwert aus pg_stat_user_tables
+# hinkt bei kleinen Tabellen dem Bestand hinterher, bis Autovacuum vorbeikommt:
+# am 10.09.2026 meldete er fuer email_bestaetigung und passwort_reset je eine
+# Zeile, die es laengst nicht mehr gab (Testkonto geloescht, Zeilen per CASCADE
+# mit). Die Probe verglich Schaetzung gegen Schaetzung, sah "1 gegen 0" und
+# erklaerte einen korrekten Abzug fuer misslungen. Ein Fehlalarm der Sicherung
+# ist gefaehrlich, weil er die echten unglaubwuerdig macht. query_to_xml ist
+# der uebliche Weg, count(*) fuer jede Tabelle in EINER Abfrage zu bekommen;
+# bei 11 MB Datenbank kostet das Sekundenbruchteile.
+VERGLEICH="SELECT relname || ':' || (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', schemaname, relname), false, true, '')))[1]::text FROM pg_stat_user_tables ORDER BY relname;"
 
 QUELLE=$(psql_lauf "$DB_NAME" "$VERGLEICH")
 PROBE=$(psql_lauf "$TESTDB" "$VERGLEICH")
@@ -281,12 +298,20 @@ fi
 # ---------------------------------------------------------------------------
 if [ -s "$ZIELDATEI" ]; then
   ZIEL="$(head -1 "$ZIELDATEI" | tr -d '\r\n')"
-  if scp -q -o BatchMode=yes -o ConnectTimeout=20 "$DATEI" "$ZIEL/" 2>/tmp/sicherung-scp.txt; then
+  ZIEL_PORT="$(grep -E '^PORT=' "$ZIELDATEI" | head -1 | cut -d= -f2 | tr -d '\r\n')"
+  ZIEL_SCHLUESSEL="$(grep -E '^SCHLUESSEL=' "$ZIELDATEI" | head -1 | cut -d= -f2- | tr -d '\r\n')"
+  SSH_BEFEHL="ssh -o BatchMode=yes -o ConnectTimeout=20"
+  [ -n "$ZIEL_PORT" ] && SSH_BEFEHL="$SSH_BEFEHL -p $ZIEL_PORT"
+  [ -n "$ZIEL_SCHLUESSEL" ] && SSH_BEFEHL="$SSH_BEFEHL -i $ZIEL_SCHLUESSEL"
+  # --ignore-existing: ein Abzug wird nie ueberschrieben. Wer den Server
+  # uebernimmt und die Sicherung manipuliert, kann damit die bereits
+  # uebertragenen Exemplare nicht nachtraeglich ersetzen.
+  if rsync -q --ignore-existing -e "$SSH_BEFEHL" "$DATEI" "$ZIEL/" 2>/tmp/sicherung-rsync.txt; then
     AUSSER_HAUS="uebertragen nach ${ZIEL%%:*}"
     sage "Kopie ausser Haus: $ZIEL"
   else
     AUSSER_HAUS="FEHLGESCHLAGEN"
-    sage "WARNUNG: Kopie ausser Haus gescheitert: $(head -c 160 /tmp/sicherung-scp.txt | tr '\n' ' ')"
+    sage "WARNUNG: Kopie ausser Haus gescheitert: $(head -c 160 /tmp/sicherung-rsync.txt | tr '\n' ' ')"
   fi
 else
   # Kein Alarm: dass es noch kein Ziel gibt, ist eine offene Entscheidung und
