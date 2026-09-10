@@ -174,6 +174,7 @@ import deep_cookie_scanner_routes as _deep_cookie_scanner_routes
 # Knowledge Base - Rechts-Updates & Gesetzes-Vault (reads the Obsidian vault
 # populated by the daily knowledge_updater cron; backed by backend/knowledge engine)
 from knowledge_routes import router as knowledge_router
+from abmahnung_routes import router as abmahnung_router  # Abmahnung gegen die Messung halten
 
 # Models for new endpoints
 class AnalyzeRequest(BaseModel):
@@ -753,6 +754,7 @@ async def startup_event():
     app.include_router(deep_cookie_scanner_router)  # Deep Cookie Scanner - Premium Feature
     app.include_router(legal_document_router)  # AUDIT-19: DPA Generator
     app.include_router(knowledge_router)  # Knowledge Base - Rechts-Updates & Gesetzes-Vault
+    app.include_router(abmahnung_router)  # Abmahnung pruefen: Vorwuerfe gegen die Messung
     
     # Initialize Alt-Text routes
     init_agentur_a11y_routes(db_pool)
