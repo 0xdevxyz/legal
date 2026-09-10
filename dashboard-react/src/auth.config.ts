@@ -1,12 +1,16 @@
 import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
+import { istOeffentlich, istNurFuerGaeste } from "@/lib/oeffentliche-pfade";
 
 const API_URL = process.env.NEXTAUTH_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002";
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  // Zweiter Faktor. Optional: die meisten Konten haben keinen, und die
+  // Anmeldeseite weiss vorher nicht, ob dieses hier einen hat.
+  code: z.string().optional(),
 });
 
 export const authConfig: NextAuthConfig = {
@@ -17,11 +21,12 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
-      const publicPaths = ["/login", "/register", "/auth/callback", "/forgot-password", "/reset-password"];
-      const isPublic = publicPaths.some((p) => nextUrl.pathname.startsWith(p));
 
-      if (isPublic) {
-        if (isLoggedIn && (nextUrl.pathname === "/login" || nextUrl.pathname === "/register")) {
+      // Die Liste steht in lib/oeffentliche-pfade. Dieser Rueckruf laeuft VOR
+      // middleware.ts; solange beide ihre eigene Kopie hatten, war die dort
+      // wirkungslos.
+      if (istOeffentlich(nextUrl.pathname)) {
+        if (isLoggedIn && istNurFuerGaeste(nextUrl.pathname)) {
           return Response.redirect(new URL("/", nextUrl));
         }
         return true;
@@ -115,24 +120,37 @@ export const authConfig: NextAuthConfig = {
         if (!parsed.success) return null;
 
         try {
-          const res = await fetch(`${API_URL}/api/auth/verify-credentials`, {
+          // EIN Anmeldeaufruf, nicht zwei.
+          //
+          // Vorher liefen hier /verify-credentials und /login nacheinander,
+          // beide mit demselben Passwort. Mit zweitem Faktor geht das nicht
+          // mehr: der Code gilt genau einmal, der zweite Aufruf waere eine
+          // Wiederverwendung und wuerde zu Recht abgewiesen. Also einmal
+          // anmelden, danach das Profil mit dem frischen Token holen —
+          // /me liefert ohnehin mehr Felder als /verify-credentials.
+          const res = await fetch(`${API_URL}/api/auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: parsed.data.email, password: parsed.data.password }),
+            body: JSON.stringify({
+              email: parsed.data.email,
+              password: parsed.data.password,
+              code: parsed.data.code,
+            }),
           });
 
           if (!res.ok) return null;
+          const tokenData = await res.json();
 
-          const user = await res.json();
+          // Das Konto verlangt einen zweiten Faktor, und wir haben keinen
+          // (gueltigen) mitgebracht. Die Anmeldeseite erkennt das an ihrer
+          // eigenen Nachfrage und blendet das Codefeld ein.
+          if (tokenData.mfa_required || !tokenData.access_token) return null;
 
-          const tokenRes = await fetch(`${API_URL}/api/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: parsed.data.email, password: parsed.data.password }),
+          const meRes = await fetch(`${API_URL}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${tokenData.access_token}` },
           });
-
-          if (!tokenRes.ok) return null;
-          const tokenData = await tokenRes.json();
+          if (!meRes.ok) return null;
+          const user = await meRes.json();
 
           return {
             id: String(user.id),

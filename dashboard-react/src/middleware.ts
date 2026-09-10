@@ -1,16 +1,16 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { istOeffentlich, istNurFuerGaeste } from "@/lib/oeffentliche-pfade";
 
 export default auth(function middleware(req) {
   const { nextUrl, auth: session } = req;
   const isLoggedIn = !!session;
 
-  const publicPaths = ["/login", "/register", "/auth/callback", "/forgot-password", "/reset-password"];
-  const isPublic = publicPaths.some((p) => nextUrl.pathname.startsWith(p));
+  const isPublic = istOeffentlich(nextUrl.pathname);
 
   if (isPublic) {
-    if (isLoggedIn && (nextUrl.pathname === "/login" || nextUrl.pathname === "/register")) {
+    if (isLoggedIn && istNurFuerGaeste(nextUrl.pathname)) {
       return NextResponse.redirect(new URL("/", nextUrl));
     }
     return NextResponse.next();

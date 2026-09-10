@@ -41,13 +41,32 @@ interface AuthContextType {
   user: User | null;
   accessToken: string | null;
   isAuthReady: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, code?: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   markOnboardingCompleted: () => void;
   refreshUser: () => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
+}
+
+/**
+ * Das Passwort stimmt, aber das Konto verlangt einen zweiten Faktor.
+ *
+ * Eine eigene Klasse und keine Fehlermeldung mit Sonderzeichen darin: die
+ * Anmeldeseite muss darauf UMSCHALTEN, nicht bloss etwas anzeigen. Auf einen
+ * Text zu pruefen waere die Art Bindung, die beim naechsten Umformulieren
+ * still zerbricht.
+ */
+export class ZweiterFaktorNoetig extends Error {
+  /** True, wenn schon ein Code eingegeben wurde — dann war dieser falsch. */
+  readonly codeWarFalsch: boolean;
+
+  constructor(codeWarFalsch: boolean) {
+    super(codeWarFalsch ? 'Der Code stimmt nicht.' : 'Zweiter Faktor erforderlich');
+    this.name = 'ZweiterFaktorNoetig';
+    this.codeWarFalsch = codeWarFalsch;
+  }
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -116,15 +135,41 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [isAuthReady, isAuthenticated, session?.accessToken, hasSyncedPlan, update]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, code?: string) => {
     const result = await signIn('credentials', {
       email,
       password,
+      code,
       redirect: false,
     });
-    if (result?.error) {
-      throw new Error('Ungültige Zugangsdaten');
+    if (!result?.error) return;
+
+    // NextAuth sagt nur "hat nicht geklappt" — `authorize` gibt null zurueck,
+    // egal ob das Passwort falsch war oder der zweite Faktor fehlt. Fuer den
+    // Nutzer ist das ein gewaltiger Unterschied: einmal muss er das Passwort
+    // korrigieren, einmal nur sein Telefon aufschlagen.
+    //
+    // Deshalb genau hier, nach dem Fehlschlag, eine Rueckfrage beim Backend.
+    // Das ist kein Verzeichnis-Orakel: wer bis hierher kommt, hat das richtige
+    // Passwort bereits eingegeben.
+    try {
+      const probe = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (probe.ok) {
+        const daten = await probe.json();
+        if (daten.mfa_required) {
+          throw new ZweiterFaktorNoetig(Boolean(code));
+        }
+      }
+    } catch (fehler) {
+      if (fehler instanceof ZweiterFaktorNoetig) throw fehler;
+      // Netzfehler bei der Rueckfrage: dann eben die allgemeine Meldung.
     }
+
+    throw new Error('Ungültige Zugangsdaten');
   };
 
   const register = async (data: RegisterData) => {

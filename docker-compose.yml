@@ -109,6 +109,9 @@ services:
       # Einrichtung den Dienst (fail-closed) — das TOTP-Geheimnis liegt sonst
       # im Klartext neben dem Passwort-Hash und waere kein zweiter Faktor.
       - COMPLYO_2FA_ENC_KEY=${COMPLYO_2FA_ENC_KEY}
+      # Wohin die Links in den Kontomails zeigen: das Dashboard, nicht die
+      # Startseite. Dort liegen Anmeldung und die Kontoseiten.
+      - FRONTEND_URL=${FRONTEND_URL:-https://app.complyo.de}
       # Loeschfristen: 'ja' loescht auch Nachweise (Einwilligungen, Scanverlauf,
       # Auslieferungsprotokoll) nach Ablauf. Siehe backend/loeschfristen.py.
       - LOESCHFRISTEN_SCHARF=${LOESCHFRISTEN_SCHARF:-nein}

@@ -4,8 +4,7 @@ import React from 'react';
 import { usePathname } from 'next/navigation';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import AuthGuard from '@/components/auth/AuthGuard';
-
-const AUTH_ROUTES = ['/login', '/register', '/auth/callback', '/privacy'];
+import { istOhneRahmen } from '@/lib/oeffentliche-pfade';
 
 interface SidebarLayoutProps {
   children: React.ReactNode;
@@ -17,7 +16,8 @@ interface SidebarLayoutProps {
  */
 export const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
   const pathname = usePathname();
-  const isAuthPage = AUTH_ROUTES.some((route) => pathname?.startsWith(route));
+  // Liste in lib/oeffentliche-pfade — sie stand hier als dritte Kopie.
+  const isAuthPage = istOhneRahmen(pathname ?? '');
 
   if (isAuthPage) {
     return <>{children}</>;

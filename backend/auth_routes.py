@@ -92,6 +92,12 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    # Zweiter Faktor, wenn das Konto einen hat. Optional, weil der Aufrufer
+    # vorher nicht wissen kann, ob einer verlangt wird — ohne Code antwortet
+    # /login mit `mfa_required` und einem Zwischentoken, mit Code direkt mit
+    # den Sitzungstoken. Sechs Ziffern aus der App oder ein
+    # Wiederherstellungscode.
+    code: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -316,15 +322,30 @@ async def login(request: Request, body: LoginRequest):
                 detail="Ungültige Zugangsdaten"
             )
 
-        # Zweiter Faktor eingerichtet? Dann ist hier Halbzeit, nicht Schluss.
-        # Zurueck geht ein kurzlebiges Zwischentoken mit eigener Audience, das
-        # als Zugriffsschluessel nicht taugt (siehe auth_service.create_mfa_token).
+        # Zweiter Faktor eingerichtet? Dann entscheidet sich hier, ob das
+        # Halbzeit ist oder Schluss.
+        #
+        # OHNE Code: zurueck geht ein kurzlebiges Zwischentoken mit eigener
+        # Audience, das als Zugriffsschluessel nicht taugt (siehe
+        # auth_service.create_mfa_token). Der Aufrufer fragt damit den Code ab
+        # und kommt ueber /login/2fa wieder.
+        #
+        # MIT Code: in einem Rutsch fertig. Das braucht die Oberflaeche, die
+        # den Code schon hat, weil sie vorher gefragt hat — sonst muesste sie
+        # das Passwort ein zweites Mal schicken, nur um ein Zwischentoken zu
+        # holen, das sie sofort wieder einloest.
         if await zweiter_faktor.ist_aktiv(auth_service.db_pool, user['id']):
-            return JSONResponse({
-                "mfa_required": True,
-                "mfa_token": auth_service.create_mfa_token(user['id']),
-                "expires_in": auth_service.MFA_GUELTIG_SEKUNDEN,
-            })
+            if not body.code:
+                return JSONResponse({
+                    "mfa_required": True,
+                    "mfa_token": auth_service.create_mfa_token(user['id']),
+                    "expires_in": auth_service.MFA_GUELTIG_SEKUNDEN,
+                })
+            if not await pruefe_zweiten_faktor(user['id'], body.code):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Der Code stimmt nicht.",
+                )
 
         # Create tokens
         access_token = auth_service.create_access_token(user['id'])
@@ -660,6 +681,10 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
 class VerifyCredentialsRequest(BaseModel):
     email: EmailStr
     password: str
+    # Siehe LoginRequest.code. Ohne dieses Feld haette das Dashboard den
+    # zweiten Faktor schlicht umgangen — es meldet sich ueber diesen Endpunkt
+    # an, nicht ueber /login.
+    code: Optional[str] = None
 
 @router.post("/verify-credentials")
 @limiter.limit("5/minute")
@@ -670,6 +695,14 @@ async def verify_credentials(request: Request, body: VerifyCredentialsRequest):
     user = await auth_service.authenticate(body.email, body.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Der zweite Faktor gilt hier genauso. Der Endpunkt gibt zwar keine
+    # Sitzungstoken aus, aber NextAuth baut aus seiner Antwort die Sitzung —
+    # wer hier durchkommt, ist angemeldet.
+    if await zweiter_faktor.ist_aktiv(auth_service.db_pool, user['id']):
+        if not await pruefe_zweiten_faktor(user['id'], body.code):
+            raise HTTPException(status_code=401, detail="Zweiter Faktor fehlt oder stimmt nicht")
+
     async with auth_service.db_pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT onboarding_completed, role FROM users WHERE id = $1",
@@ -988,7 +1021,68 @@ class ZweiterFaktorAbschaltenRequest(BaseModel):
 
 
 def _frontend_url() -> str:
-    return os.getenv("FRONTEND_URL", "https://complyo.de").rstrip("/")
+    """
+    Wohin die Links in den Kontomails zeigen.
+
+    Das ist das DASHBOARD (app.complyo.de), nicht die Startseite: dort liegen
+    Anmeldung, Registrierung und die Kontoseiten. Beim ersten Bauen der
+    Oberflaeche stand hier `https://complyo.de` als Rueckfall und damit auf
+    einer Domain, die /konto/passwort-neu gar nicht kennt — jeder Link in einer
+    Zuruecksetzen-Mail waere ins Leere gelaufen.
+    """
+    return os.getenv("FRONTEND_URL", "https://app.complyo.de").rstrip("/")
+
+
+async def pruefe_zweiten_faktor(user_id: int, eingabe: Optional[str]) -> bool:
+    """
+    Prueft einen zweiten Faktor: sechs Ziffern aus der App oder einen
+    Wiederherstellungscode. Beides wird hier angenommen, unterschieden wird an
+    der Laenge.
+
+    Steht an EINER Stelle, weil es drei Wege gibt, die sie brauchen: /login mit
+    mitgeschicktem Code, /login/2fa als zweiter Schritt und /verify-credentials
+    fuer NextAuth. Beim ersten Anlauf hing die Pruefung nur an /login/2fa —
+    und das Dashboard meldet sich ueber /verify-credentials an. Ein zweiter
+    Faktor, den der eigentliche Anmeldeweg nicht kennt, ist keiner.
+    """
+    text = (eingabe or "").strip()
+    if not text:
+        return False
+
+    ziffern = "".join(z for z in text if z.isdigit())
+
+    if len(ziffern) == zweiter_faktor.ZIFFERN:
+        geheimnis = await zweiter_faktor.lade_geheimnis(auth_service.db_pool, user_id)
+        if not geheimnis:
+            return False
+        schritt = zweiter_faktor.pruefe_code(geheimnis, ziffern)
+        if schritt is None:
+            logger.warning("2FA-Code falsch: user_id=%s", user_id)
+            return False
+        # Ein abgefangener Code darf nicht ein zweites Mal gelten.
+        if await zweiter_faktor.schritt_schon_benutzt(auth_service.redis, user_id, schritt):
+            logger.warning("2FA-Code doppelt eingeloest: user_id=%s", user_id)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Dieser Code wurde bereits verwendet. Bitte den nächsten abwarten.",
+            )
+        await zweiter_faktor.merke_schritt(auth_service.redis, user_id, schritt)
+        return True
+
+    erkannt = await zweiter_faktor.loese_wiederherstellungscode_ein(
+        auth_service.db_pool, user_id, text
+    )
+    if erkannt:
+        offen = await zweiter_faktor.offene_wiederherstellungscodes(
+            auth_service.db_pool, user_id
+        )
+        logger.warning(
+            "Anmeldung ueber Wiederherstellungscode: user_id=%s, noch offen=%s",
+            user_id, offen,
+        )
+    else:
+        logger.warning("2FA fehlgeschlagen: user_id=%s", user_id)
+    return erkannt
 
 
 async def _sende_bestaetigungsmail(user_id: int, email: str, name: Optional[str],
@@ -1175,39 +1269,7 @@ async def login_zweiter_faktor(request: Request, body: ZweiterFaktorLoginRequest
     if not nutzer or not nutzer.get("is_active"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Konto nicht verfügbar")
 
-    eingabe = (body.code or "").strip()
-    ziffern = "".join(z for z in eingabe if z.isdigit())
-    erkannt = False
-
-    if len(ziffern) == zweiter_faktor.ZIFFERN:
-        geheimnis = await zweiter_faktor.lade_geheimnis(auth_service.db_pool, user_id)
-        if geheimnis:
-            schritt = zweiter_faktor.pruefe_code(geheimnis, ziffern)
-            if schritt is not None:
-                # Ein abgefangener Code darf nicht ein zweites Mal gelten.
-                if await zweiter_faktor.schritt_schon_benutzt(auth_service.redis, user_id, schritt):
-                    logger.warning("2FA-Code doppelt eingeloest: user_id=%s", user_id)
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Dieser Code wurde bereits verwendet. Bitte den nächsten abwarten.",
-                    )
-                await zweiter_faktor.merke_schritt(auth_service.redis, user_id, schritt)
-                erkannt = True
-    else:
-        erkannt = await zweiter_faktor.loese_wiederherstellungscode_ein(
-            auth_service.db_pool, user_id, eingabe
-        )
-        if erkannt:
-            offen = await zweiter_faktor.offene_wiederherstellungscodes(
-                auth_service.db_pool, user_id
-            )
-            logger.warning(
-                "Anmeldung ueber Wiederherstellungscode: user_id=%s, noch offen=%s",
-                user_id, offen,
-            )
-
-    if not erkannt:
-        logger.warning("2FA fehlgeschlagen: user_id=%s", user_id)
+    if not await pruefe_zweiten_faktor(user_id, body.code):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Der Code stimmt nicht.",

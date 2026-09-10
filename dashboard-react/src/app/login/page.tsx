@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, ZweiterFaktorNoetig } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { LogIn, Loader2, AlertCircle, Lock, Mail, Eye, EyeOff, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { LogIn, Loader2, AlertCircle, Lock, Mail, Eye, EyeOff, ArrowRight, CheckCircle2, ShieldCheck, KeyRound } from 'lucide-react';
 import SocialLoginButtons from '@/components/SocialLoginButtons';
 import { Logo } from '@/components/Logo';
 // Gemeinsame Gestaltung mit der Registrierung. Vorher lagen Verlauf,
@@ -33,6 +33,13 @@ export default function LoginPage() {
     const [loadingProgress, setLoadingProgress] = useState(0);
     const [emailFocused, setEmailFocused] = useState(false);
     const [passwordFocused, setPasswordFocused] = useState(false);
+    // Zweiter Faktor. `codeSchritt` schaltet die Karte um: statt E-Mail und
+    // Passwort steht dann nur noch das Codefeld da. Passwort und Adresse
+    // bleiben im Zustand, weil die Anmeldung beides zusammen mit dem Code
+    // schickt — der Nutzer soll nicht alles noch einmal tippen.
+    const [codeSchritt, setCodeSchritt] = useState(false);
+    const [code, setCode] = useState('');
+    const [codeFocused, setCodeFocused] = useState(false);
 
 
     useEffect(() => {
@@ -66,11 +73,19 @@ export default function LoginPage() {
         setIsSubmitting(true);
         setLoadingProgress(0);
         try {
-            await login(formData.email, formData.password);
+            await login(formData.email, formData.password, codeSchritt ? code : undefined);
             setLoadingProgress(100);
             setTimeout(() => router.push('/'), 500);
         } catch (error: any) {
-            setError(error.message || 'Login fehlgeschlagen. Bitte prüfen Sie Ihre Zugangsdaten.');
+            if (error instanceof ZweiterFaktorNoetig) {
+                // Passwort stimmt, es fehlt nur der zweite Faktor. Kein Fehler
+                // beim ersten Mal — nur ein Schritt weiter.
+                setCodeSchritt(true);
+                setCode('');
+                setError(error.codeWarFalsch ? error.message : '');
+            } else {
+                setError(error.message || 'Login fehlgeschlagen. Bitte prüfen Sie Ihre Zugangsdaten.');
+            }
             setIsSubmitting(false);
             setLoadingProgress(0);
         }
@@ -105,9 +120,13 @@ export default function LoginPage() {
                     <div className="absolute top-0 left-0 right-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(99,179,237,0.3), transparent)' }} />
 
                     <div className="mb-7">
-                        <h1 className="text-2xl font-semibold text-white mb-1.5 tracking-tight">Willkommen zurück</h1>
+                        <h1 className="text-2xl font-semibold text-white mb-1.5 tracking-tight">
+                            {codeSchritt ? 'Noch ein Schritt' : 'Willkommen zurück'}
+                        </h1>
                         <p className="text-sm" style={{ color: 'rgba(148,163,184,0.6)' }}>
-                            Melden Sie sich an, um auf Ihr Dashboard zuzugreifen
+                            {codeSchritt
+                                ? 'Bitte den sechsstelligen Code aus Ihrer Authenticator-App eingeben.'
+                                : 'Melden Sie sich an, um auf Ihr Dashboard zuzugreifen'}
                         </p>
                     </div>
 
@@ -142,12 +161,66 @@ export default function LoginPage() {
                         </div>
                     )}
 
-                    <div className="mb-5">
-                        <SocialLoginButtons mode="login" />
-                    </div>
+                    {!codeSchritt && (
+                        <div className="mb-5">
+                            <SocialLoginButtons mode="login" />
+                        </div>
+                    )}
 
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="relative">
+                        {codeSchritt && (
+                            <>
+                                <div
+                                    className="p-3.5 rounded-xl flex items-start gap-3 text-sm"
+                                    style={{ background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.18)' }}
+                                >
+                                    <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#34d399' }} />
+                                    <span style={{ color: 'rgba(148,163,184,0.85)' }}>
+                                        Angemeldet als <span className="text-white">{formData.email}</span>
+                                    </span>
+                                </div>
+
+                                <div className="relative">
+                                    <label
+                                        htmlFor="code"
+                                        className="block text-xs font-medium mb-2 transition-colors duration-200"
+                                        style={{ color: codeFocused ? '#60a5fa' : 'rgba(148,163,184,0.7)' }}
+                                    >
+                                        Code aus der App
+                                    </label>
+                                    <div className="relative">
+                                        <KeyRound
+                                            className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200"
+                                            style={{ color: codeFocused ? '#60a5fa' : 'rgba(100,116,139,0.7)' }}
+                                        />
+                                        <input
+                                            id="code"
+                                            /* one-time-code laesst iOS und Android den Code aus der
+                                               Zwischenablage bzw. der Mitteilung vorschlagen. */
+                                            autoComplete="one-time-code"
+                                            inputMode="text"
+                                            autoFocus
+                                            type="text"
+                                            placeholder="123456"
+                                            value={code}
+                                            onChange={(e) => setCode(e.target.value)}
+                                            onFocus={() => setCodeFocused(true)}
+                                            onBlur={() => setCodeFocused(false)}
+                                            required
+                                            disabled={isSubmitting}
+                                            className="w-full pl-10 pr-4 py-3 rounded-xl text-sm text-white placeholder-slate-600 outline-none transition-all duration-200 disabled:opacity-40 tracking-[0.3em]"
+                                            style={feldStil(codeFocused)}
+                                        />
+                                    </div>
+                                    <p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(100,116,139,0.75)' }}>
+                                        Kein Zugriff auf die App? Hier funktioniert auch einer Ihrer
+                                        Wiederherstellungscodes.
+                                    </p>
+                                </div>
+                            </>
+                        )}
+
+                        <div className="relative" hidden={codeSchritt}>
                             <label
                                 htmlFor="email"
                                 className="block text-xs font-medium mb-2 transition-colors duration-200"
@@ -169,7 +242,7 @@ export default function LoginPage() {
                                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                     onFocus={() => setEmailFocused(true)}
                                     onBlur={() => setEmailFocused(false)}
-                                    required
+                                    required={!codeSchritt}
                                     disabled={isSubmitting}
                                     className="w-full pl-10 pr-10 py-3 rounded-xl text-sm text-white placeholder-slate-600 outline-none transition-all duration-200 disabled:opacity-40"
                                     style={feldStil(emailFocused)}
@@ -180,7 +253,7 @@ export default function LoginPage() {
                             </div>
                         </div>
 
-                        <div className="relative">
+                        <div className="relative" hidden={codeSchritt}>
                             <div className="flex items-center justify-between mb-2">
                                 <label
                                     htmlFor="password"
@@ -190,7 +263,7 @@ export default function LoginPage() {
                                     Passwort
                                 </label>
                                 <a
-                                    href="mailto:support@complyo.de"
+                                    href="/passwort-vergessen"
                                     className="text-xs transition-colors duration-200 hover:opacity-80"
                                     style={{ color: 'rgba(96,165,250,0.6)' }}
                                 >
@@ -211,7 +284,7 @@ export default function LoginPage() {
                                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                                     onFocus={() => setPasswordFocused(true)}
                                     onBlur={() => setPasswordFocused(false)}
-                                    required
+                                    required={!codeSchritt}
                                     disabled={isSubmitting}
                                     className="w-full pl-10 pr-10 py-3 rounded-xl text-sm text-white placeholder-slate-600 outline-none transition-all duration-200 disabled:opacity-40"
                                     style={feldStil(passwordFocused)}
@@ -251,13 +324,24 @@ export default function LoginPage() {
                                     </>
                                 ) : (
                                     <>
-                                        <LogIn className="w-4 h-4" />
-                                        Anmelden
+                                        {codeSchritt ? <ShieldCheck className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
+                                        {codeSchritt ? 'Bestätigen' : 'Anmelden'}
                                         <ArrowRight className="w-3.5 h-3.5 opacity-0 -ml-1 group-hover:opacity-100 group-hover:ml-0 transition-all duration-200" />
                                     </>
                                 )}
                             </span>
                         </button>
+
+                        {codeSchritt && !isSubmitting && (
+                            <button
+                                type="button"
+                                onClick={() => { setCodeSchritt(false); setCode(''); setError(''); }}
+                                className="w-full text-xs transition-colors duration-200 hover:opacity-80"
+                                style={{ color: 'rgba(148,163,184,0.6)' }}
+                            >
+                                Zurück zur Anmeldung
+                            </button>
+                        )}
                     </form>
 
                     <div className="mt-6 pt-5" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>

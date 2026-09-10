@@ -196,3 +196,69 @@ def test_angemeldete_2fa_wege_sind_NICHT_ausgenommen():
     for pfad in ("/api/auth/2fa/einrichten", "/api/auth/2fa/bestaetigen",
                  "/api/auth/2fa/abschalten", "/api/auth/email-bestaetigung-erneut"):
         assert pfad not in EXEMPT_PATHS
+
+
+# ---------------------------------------------------------------------------
+# Oeffentliche Pfade des Dashboards: EINE Liste, nicht drei
+# ---------------------------------------------------------------------------
+# Am 10.09.2026 stand die Liste der ohne Anmeldung erreichbaren Seiten an DREI
+# Stellen: im `authorized`-Rueckruf (auth.config.ts), in middleware.ts und als
+# `AUTH_ROUTES` in SidebarLayout.tsx. Die drei laufen nacheinander, und jede
+# konnte fuer sich umleiten. Beim Bau der Kontoseiten wurden zwei davon
+# angepasst — die Seiten waren gebaut, ausgeliefert und serverseitig
+# freigegeben, und der Browser schob sie trotzdem auf /login. Zweimal
+# neugebaut, bis die dritte Kopie gefunden war.
+#
+# Dieser Waechter laesst die vierte Kopie nicht entstehen.
+
+_DASHBOARD = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "dashboard-react", "src",
+)
+
+_WAECHTER_DATEIEN = [
+    "auth.config.ts",
+    "middleware.ts",
+    os.path.join("components", "dashboard", "SidebarLayout.tsx"),
+]
+
+
+def _dashboard_quelle(relpfad: str) -> str:
+    pfad = os.path.join(_DASHBOARD, relpfad)
+    if not os.path.exists(pfad):
+        pytest.skip(f"{relpfad} nicht gemountet — vollstaendiger Lauf: scripts/tests-lokal.sh")
+    with open(pfad, encoding="utf-8") as fh:
+        return fh.read()
+
+
+@pytest.mark.parametrize("datei", _WAECHTER_DATEIEN)
+def test_pfadwaechter_nutzen_die_gemeinsame_liste(datei):
+    quelle = _dashboard_quelle(datei)
+    assert "oeffentliche-pfade" in quelle, (
+        f"{datei} entscheidet ueber den Zugang, importiert die Liste aber nicht "
+        "aus lib/oeffentliche-pfade. Eine zweite Kopie faellt beim Aendern nicht "
+        "auf — sie leitet einfach weiter um."
+    )
+
+
+@pytest.mark.parametrize("datei", _WAECHTER_DATEIEN)
+def test_keine_eigene_pfadliste_mehr(datei):
+    """Gegenprobe: kein fest eingetippter Pfad neben dem Import."""
+    quelle = _dashboard_quelle(datei)
+    verdaechtig = [
+        z.strip() for z in quelle.splitlines()
+        if '"/login"' in z or "'/login'" in z
+    ]
+    # `pages: { signIn: "/login" }` und die Umleitung selbst duerfen bleiben —
+    # verboten ist eine LISTE mit mehreren Pfaden.
+    listen = [z for z in verdaechtig if z.count("/") >= 3 and "[" in z]
+    assert not listen, f"{datei}: eigene Pfadliste gefunden: {listen}"
+
+
+def test_kontoseiten_stehen_in_der_gemeinsamen_liste():
+    quelle = _dashboard_quelle(os.path.join("lib", "oeffentliche-pfade.ts"))
+    for pfad in ("/passwort-vergessen", "/konto/passwort-neu", "/konto/email-bestaetigen"):
+        assert pfad in quelle, (
+            f"{pfad} fehlt in OEFFENTLICHE_PFADE — die Seite waere ohne Anmeldung "
+            "nicht erreichbar, obwohl genau das ihr Zweck ist."
+        )
