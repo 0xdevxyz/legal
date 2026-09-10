@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { LogIn, Loader2, AlertCircle, Lock, Mail, Eye, EyeOff, ArrowRight, CheckCircle2, ShieldCheck, KeyRound } from 'lucide-react';
 import SocialLoginButtons from '@/components/SocialLoginButtons';
 import { Logo } from '@/components/Logo';
+import { zielAusAdresse } from '@/lib/weiterleitung';
 // Gemeinsame Gestaltung mit der Registrierung. Vorher lagen Verlauf,
 // Partikelfeld und Kartenstil doppelt vor — heute gleich, in drei Monaten
 // nicht mehr. Eine Quelle, damit die beiden Seiten nicht auseinanderlaufen.
@@ -61,9 +62,14 @@ export default function LoginPage() {
         };
     }, [isSubmitting]);
 
+    // Schon angemeldet? Dann dorthin, wohin der Nutzer eigentlich wollte.
+    // Vorher stand hier fest `router.push('/')`: der `redirect`-Parameter, den
+    // Middleware und Anmeldewache setzen, wurde nie gelesen. `replace` statt
+    // `push`, damit "Zurueck" nicht wieder auf dieser Seite landet und von
+    // hier sofort erneut weitergeschickt wird.
     useEffect(() => {
         if (isAuthenticated && !isSubmitting) {
-            router.push('/');
+            router.replace(zielAusAdresse());
         }
     }, [isAuthenticated, isSubmitting, router]);
 
@@ -75,7 +81,7 @@ export default function LoginPage() {
         try {
             await login(formData.email, formData.password, codeSchritt ? code : undefined);
             setLoadingProgress(100);
-            setTimeout(() => router.push('/'), 500);
+            setTimeout(() => router.replace(zielAusAdresse()), 500);
         } catch (error: any) {
             if (error instanceof ZweiterFaktorNoetig) {
                 // Passwort stimmt, es fehlt nur der zweite Faktor. Kein Fehler

@@ -8,6 +8,7 @@ ein Kunde sich nicht mehr anmelden kann.
 """
 
 import base64
+import re
 import sys
 import os
 
@@ -262,3 +263,52 @@ def test_kontoseiten_stehen_in_der_gemeinsamen_liste():
             f"{pfad} fehlt in OEFFENTLICHE_PFADE — die Seite waere ohne Anmeldung "
             "nicht erreichbar, obwohl genau das ihr Zweck ist."
         )
+
+
+# ---------------------------------------------------------------------------
+# Rueckweg nach der Anmeldung
+# ---------------------------------------------------------------------------
+# Bis zum 11.09.2026 landete jeder volle Aufruf einer Unterseite auf dem
+# Dashboard. Zwei Fehler hintereinander: die Anmeldewache hielt "Sitzung wird
+# aktualisiert" fuer "abgemeldet", und die Anmeldeseite warf das Ziel weg.
+# Beides hier festgehalten, damit es nicht still zurueckkommt.
+
+def _ohne_kommentare_ts(quelle: str) -> str:
+    """
+    TypeScript ohne Kommentare. Der Kommentar an der Stelle erklaert, was
+    vorher dort stand — und hat diesen Waechter beim ersten Lauf ausgeloest.
+    """
+    quelle = re.sub(r"/\*.*?\*/", "", quelle, flags=re.S)
+    return "\n".join(z for z in quelle.splitlines() if not z.strip().startswith("//"))
+
+
+def test_anmeldeseite_liest_das_ziel():
+    quelle = _ohne_kommentare_ts(_dashboard_quelle(os.path.join("app", "login", "page.tsx")))
+    assert "zielAusAdresse" in quelle, (
+        "Die Anmeldeseite schickt nach dem Anmelden nicht mehr zum Ziel aus "
+        "?redirect= — Lesezeichen und geteilte Links landen dann wieder auf `/`."
+    )
+    assert "router.push('/')" not in quelle, "Fest verdrahteter Sprung auf `/` ist zurueck."
+
+
+def test_wache_gibt_das_ziel_mit():
+    quelle = _dashboard_quelle(os.path.join("components", "auth", "AuthGuard.tsx"))
+    assert "redirect=" in quelle, "Die Anmeldewache leitet ohne Ziel auf /login um."
+    assert "isLoading" in quelle, (
+        "Die Anmeldewache prueft nicht mehr, ob die Sitzung noch laedt — jede "
+        "Hintergrund-Aktualisierung wirft den Nutzer dann wieder auf /login."
+    )
+
+
+def test_hintergrund_aktualisierung_meldet_niemanden_ab():
+    quelle = _dashboard_quelle(os.path.join("contexts", "AuthContext.tsx"))
+    assert "bekannterStatus" in quelle, (
+        "isAuthenticated haengt wieder nur am aktuellen next-auth-Status. "
+        "`update()` setzt den auf 'loading', und das hiess 'abgemeldet'."
+    )
+
+
+def test_weiterleitung_hat_keine_offene_tuer():
+    quelle = _dashboard_quelle(os.path.join("lib", "weiterleitung.ts"))
+    for pruefung in ('startsWith("//")', "url.origin !== BASIS", "istNurFuerGaeste"):
+        assert pruefung in quelle, f"Pruefung fehlt in weiterleitung.ts: {pruefung}"

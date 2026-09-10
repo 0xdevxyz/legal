@@ -18,7 +18,9 @@ export default auth(function middleware(req) {
 
   if (!isLoggedIn) {
     const redirectUrl = new URL("/login", nextUrl);
-    redirectUrl.searchParams.set("redirect", nextUrl.pathname);
+    // Mit Abfrage: /settings?tab=sicherheit soll nach dem Anmelden wieder
+    // auf dem Sicherheits-Reiter landen, nicht auf dem ersten.
+    redirectUrl.searchParams.set("redirect", nextUrl.pathname + nextUrl.search);
     return NextResponse.redirect(redirectUrl);
   }
 

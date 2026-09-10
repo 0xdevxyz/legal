@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
 
 interface User {
@@ -79,8 +79,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [hasTriedUpdate, setHasTriedUpdate] = useState(false);
   const [hasSyncedPlan, setHasSyncedPlan] = useState(false);
 
-  const isLoading = status === 'loading';
-  const isAuthenticated = status === 'authenticated';
+  // Der letzte FESTSTEHENDE Stand der Sitzung.
+  //
+  // next-auth setzt die Sitzung bei jedem `update()` auf "loading" — auch
+  // wenn laengst feststeht, wer angemeldet ist. Dieser Kontext ruft `update()`
+  // beim Laden einmal fuer den Tarifabgleich auf (siehe unten). Bis zum
+  // 11.09.2026 hiess "loading" hier "nicht angemeldet": die Anmeldewache sah
+  // "bereit, aber abgemeldet" und schickte jeden vollen Aufruf einer
+  // Unterseite auf /login, und die Anmeldeseite von dort auf das Dashboard.
+  //
+  // Ein Ref statt State, weil der Wert im selben Render gelten muss, in dem
+  // next-auth auf "loading" springt. Mit State kaeme er einen Render zu spaet
+  // — genau der Render, in dem die Wache umleitet.
+  const bekannterStatus = useRef<'authenticated' | 'unauthenticated' | null>(null);
+  if (status !== 'loading') bekannterStatus.current = status;
+
+  // Laedt nur, solange noch nie feststand, wer angemeldet ist.
+  const isLoading = status === 'loading' && bekannterStatus.current === null;
+  // Eine Aktualisierung im Hintergrund meldet niemanden ab.
+  const isAuthenticated =
+    status === 'authenticated' ||
+    (status === 'loading' && bekannterStatus.current === 'authenticated');
 
   const user: User | null = session?.user
     ? {

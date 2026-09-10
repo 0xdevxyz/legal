@@ -4,15 +4,32 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 
+/**
+ * Laesst nur Angemeldete durch.
+ *
+ * Umgeleitet wird ausschliesslich, wenn feststeht, dass niemand angemeldet
+ * ist — nicht, solange die Sitzung laedt. Bis zum 11.09.2026 genuegte
+ * "bereit und gerade nicht angemeldet". Der Auth-Kontext gleicht beim Laden
+ * einmal den Tarif ab, und next-auth meldet waehrenddessen "laedt". Jeder
+ * volle Aufruf einer Unterseite — Lesezeichen, geteilter Link, Neuladen —
+ * sprang deshalb auf /login und von dort auf das Dashboard. Ueber die
+ * Seitenleiste navigiert fiel es nie auf, weil der Abgleich dann schon
+ * gelaufen war.
+ *
+ * Das Ziel geht jetzt mit: /login?redirect=<Pfad samt Abfrage>. Ohne das
+ * landete auch eine wirklich abgelaufene Sitzung nach dem Anmelden auf `/`
+ * statt dort, wo der Nutzer gerade war.
+ */
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthReady, isAuthenticated } = useAuth();
+  const { isAuthReady, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (isAuthReady && !isAuthenticated) {
-      router.replace('/login');
+    if (isAuthReady && !isLoading && !isAuthenticated) {
+      const ziel = window.location.pathname + window.location.search;
+      router.replace(`/login?redirect=${encodeURIComponent(ziel)}`);
     }
-  }, [isAuthReady, isAuthenticated, router]);
+  }, [isAuthReady, isLoading, isAuthenticated, router]);
 
   if (!isAuthReady) {
     return (
