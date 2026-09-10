@@ -12,7 +12,11 @@ import json
 from dependencies import get_current_user
 from dependencies import require_admin
 from database_service import db_service
-from legal_change_monitor import legal_monitor
+# Das Modul importieren, NICHT den Namen: `from x import singleton` bindet
+# den Wert im Augenblick des Imports — und das ist None, bevor
+# main_production den Dienst anlegt. Die spaetere Zuweisung im anderen
+# Modul erreicht diese Bindung nie.
+import legal_change_monitor as _monitor_modul
 
 router = APIRouter(prefix="/api/legal-changes", tags=["Legal Changes"])
 
@@ -167,7 +171,7 @@ async def analyze_impact_for_user(
     """
     Analysiere die Auswirkungen einer Gesetzesänderung für den aktuellen User
     """
-    if not legal_monitor:
+    if not _monitor_modul.legal_monitor:
         raise HTTPException(
             status_code=503,
             detail="Legal Change Monitor nicht verfügbar"
@@ -366,7 +370,7 @@ async def trigger_legal_monitoring(
     Triggere manuell eine Überprüfung auf neue Gesetzesänderungen
     (Admin only)
     """
-    if not legal_monitor:
+    if not _monitor_modul.legal_monitor:
         raise HTTPException(
             status_code=503,
             detail="Legal Change Monitor nicht verfügbar"
@@ -470,7 +474,7 @@ async def _run_impact_analysis(
         )
         
         # Führe Analyse durch
-        analysis = await legal_monitor.analyze_impact(legal_change, user_context)
+        analysis = await _monitor_modul._monitor_modul.legal_monitor.analyze_impact(legal_change, user_context)
         
         # Speichere Ergebnis
         async with db_service.pool.acquire() as conn:
@@ -502,7 +506,7 @@ async def _run_impact_analysis(
         
         # Generiere Fixes wenn betroffen
         if analysis.get('is_affected', False):
-            fixes = await legal_monitor.generate_compliance_fixes(legal_change, analysis)
+            fixes = await _monitor_modul.legal_monitor.generate_compliance_fixes(legal_change, analysis)
             
             # Speichere Fixes
             async with db_service.pool.acquire() as conn:
@@ -591,7 +595,7 @@ async def _run_legal_monitoring():
     start_time = datetime.now()
 
     try:
-        summary = await legal_monitor.monitor_and_persist()
+        summary = await _monitor_modul.legal_monitor.monitor_and_persist()
         detected = summary.get("detected", 0)
         checks_created = sum(1 for c in summary.get("generated_checks", []) if c.get("created"))
 

@@ -715,8 +715,16 @@ async def startup_event():
     app.include_router(risk_radar_router)  # Risiko-Radar + Frühwarner
     app.include_router(ai_compliance_router)  # AI Compliance (ComploAI Guard)
     app.include_router(addon_payment_router)  # Add-on Payments (ComploAI Guard & Priority Support)
-    app.include_router(widget_router)  # Complyo Widgets (Cookie Consent & Accessibility)
+    # Reihenfolge mit Absicht: cookie_compliance_router traegt den statischen
+    # Pfad /api/cookie-compliance/scan/capabilities, widget_router den
+    # dynamischen /api/cookie-compliance/scan/{site_id}. FastAPI nimmt die
+    # erste passende Route — stand der dynamische vorn, wurde "capabilities"
+    # als site_id gelesen und der Endpunkt antwortete mit "Kein Scan-Ergebnis
+    # gefunden". Andere Ueberschneidungen zwischen beiden Routern gibt es
+    # nicht (geprueft am 10.09.2026 gegen das OpenAPI-Schema); /scan/deep ist
+    # POST, /scan/{site_id} ist GET.
     app.include_router(cookie_compliance_router)  # Cookie Compliance Management
+    app.include_router(widget_router)  # Complyo Widgets (Cookie Consent & Accessibility)
     app.include_router(ab_test_router)  # A/B Testing for Cookie Banner
     
     # TCF 2.2 Routes

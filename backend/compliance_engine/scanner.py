@@ -39,7 +39,13 @@ from compliance_engine.declarative_check_runner import run_declarative_checks
 from compliance_engine import scan_kontext
 
 # Import Legal Update Integration
-from compliance_engine.legal_update_integration import legal_update_integration
+# Das Modul importieren, NICHT den Namen: `from x import singleton` bindet
+# den Wert im Augenblick des Imports — und das ist None, bevor
+# main_production den Dienst anlegt. Die spaetere Zuweisung im anderen
+# Modul erreicht diese Bindung nie.
+# Wirkung hier: `if legal_update_integration:` war IMMER falsch — die
+# aktiven Rechtsaenderungen wurden nie auf ein Scanergebnis angewendet.
+from compliance_engine import legal_update_integration as _rechtsupdates
 
 # Import Issue Grouper
 from compliance_engine.issue_grouper import IssueGrouper
@@ -948,12 +954,12 @@ class ComplianceScanner:
             }
             
             # 🆕 LEGAL UPDATE INTEGRATION: Anwendung aktueller Gesetzesänderungen
-            if legal_update_integration:
+            if _rechtsupdates.legal_update_integration:
                 try:
                     # Lade aktive Legal Updates
-                    await legal_update_integration.get_active_legal_updates()
+                    await _rechtsupdates.legal_update_integration.get_active_legal_updates()
                     # Wende Updates auf Scan-Ergebnisse an
-                    scan_results = legal_update_integration.apply_updates_to_scan_results(scan_results)
+                    scan_results = _rechtsupdates.legal_update_integration.apply_updates_to_scan_results(scan_results)
                     logger.info(f"✅ Legal Updates auf Scan angewendet")
                 except Exception as e:
                     logger.warning(f"⚠️ Legal Update Integration fehlgeschlagen: {e}")
