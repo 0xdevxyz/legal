@@ -22,6 +22,7 @@ auth_service = None
 
 # Kanonische Auth-Dependency (Phase 2 Auth-Konsolidierung)
 from dependencies import get_current_user
+import passwort_richtlinie
 
 @router.get("/domain-locks")
 async def get_domain_locks(current_user: dict = Depends(get_current_user)):
@@ -306,24 +307,55 @@ async def change_password(request: ChangePasswordRequest, current_user: dict = D
         if not user_id:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        if len(request.new_password) < 8:
-            raise HTTPException(status_code=400, detail="Passwort muss mindestens 8 Zeichen lang sein")
-
         async with db_pool.acquire() as conn:
             # Die Spalte heißt password_hash (siehe auth_service) — der alte
             # Name hashed_password existiert im Schema nicht und machte aus
             # jedem Passwortwechsel eine 500.
-            user = await conn.fetchrow("SELECT password_hash FROM users WHERE id = $1", user_id)
+            user = await conn.fetchrow(
+                "SELECT password_hash, email, full_name FROM users WHERE id = $1", user_id
+            )
             if not user:
                 raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
 
             if not _pwd_context.verify(request.current_password, user['password_hash']):
                 raise HTTPException(status_code=400, detail="Aktuelles Passwort ist falsch")
 
-            new_hash = _pwd_context.hash(request.new_password)
-            await conn.execute("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", new_hash, user_id)
+        # Dieselbe Richtlinie wie bei der Registrierung. Vorher standen hier
+        # acht Zeichen und dort gar nichts — zwei Stellen, zwei Meinungen, und
+        # die schwaechere lag am Eingang. Die Pruefung steht jetzt an einem Ort
+        # (passwort_richtlinie), damit sie nicht wieder auseinanderlaeuft.
+        try:
+            passwort_richtlinie.pruefe(
+                request.new_password,
+                email=user['email'],
+                name=user['full_name'],
+            )
+        except passwort_richtlinie.PasswortSchwach as e:
+            raise HTTPException(status_code=400, detail=e.nutzertext)
 
-            return {"success": True, "message": "Passwort erfolgreich geaendert"}
+        async with db_pool.acquire() as conn:
+            new_hash = _pwd_context.hash(request.new_password)
+            await conn.execute(
+                "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2",
+                new_hash, user_id,
+            )
+
+        # Alle anderen Sitzungen beenden. Wer sein Passwort wechselt, tut das
+        # oft, weil er einen Mitleser vermutet; ein Wechsel, nach dem die
+        # fremde Sitzung weiterlaeuft, waere keiner. Der Aufrufer muss sich
+        # danach neu anmelden — das ist der sichtbare Teil dieser Entscheidung.
+        try:
+            from auth_routes import auth_service as _auth
+            if _auth is not None:
+                await _auth.beende_sitzungskette(user_id)
+        except Exception as e:
+            logger.error("Sitzungen nach Passwortwechsel nicht beendet: %s", e)
+
+        return {
+            "success": True,
+            "message": "Passwort geändert. Alle Sitzungen wurden beendet, "
+                       "bitte neu anmelden.",
+        }
     except HTTPException:
         raise
     except Exception as e:

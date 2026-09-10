@@ -36,6 +36,7 @@ deep_cookie_scans
 deep_scan_history
 deep_scan_usage
 domain_locks
+email_bestaetigung
 email_verifications
 export_history
 fix_application_audit
@@ -60,9 +61,11 @@ legal_news
 legal_updates
 legal_updates_archive
 legal_updates_backup_20260811
+loeschprotokoll
 modules
 oauth_providers
 oauth_states
+passwort_reset
 pflichten_events
 rss_feed_sources
 rule_changelog
@@ -81,6 +84,8 @@ user_legal_notifications
 user_limits
 user_modules
 user_sessions
+user_totp
+user_wiederherstellungscodes
 users
 vertragsannahmen
 waitlist_leads

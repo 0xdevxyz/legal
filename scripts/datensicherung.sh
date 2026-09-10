@@ -44,6 +44,27 @@ TAGE_MONATLICH=190
 # Inhalt: eine Zeile, z.B.  user@host:/pfad/zu/complyo-sicherungen
 ZIELDATEI="/home/clawd/saas/legal/.sicherung-ziel"
 
+# Schlüsseldatei für die Verschlüsselung des Abzugs (Prüfung 10.09.2026).
+#
+# Der Abzug enthält den gesamten Kundenbestand: E-Mail-Adressen, bcrypt-Hashes,
+# 1.151 Einwilligungsprotokolle, verschlüsselte Git-Token. Bis heute lag er als
+# unverschlüsselte Datei neben der Datenbank, und die Kopie ausser Haus hätte
+# ihn genau so auf eine fremde Maschine getragen. Eine Sicherung, die man nicht
+# aus der Hand geben kann, ist als Sicherung gegen Serververlust wertlos —
+# und ohne Verschlüsselung darf man sie nicht aus der Hand geben.
+#
+# Verfahren: AES-256-CBC über openssl mit PBKDF2 und 600.000 Runden. Kein gpg,
+# weil dessen Schlüsselbund auf einem unbeaufsichtigten Server mehr bewegliche
+# Teile hat als Nutzen bringt; openssl ist ohnehin installiert.
+#
+# Die Schlüsseldatei gehört NICHT auf diese Maschine allein. Wer nur den Server
+# verliert, verliert sonst mit ihm den Schlüssel zu allen Kopien ausser Haus.
+# Anlegen mit:
+#   openssl rand -base64 48 > /home/clawd/saas/legal/.sicherung-schluessel
+#   chmod 600 /home/clawd/saas/legal/.sicherung-schluessel
+# und danach eine Kopie an einen Ort, der nicht dieser Server ist.
+SCHLUESSELDATEI="/home/clawd/saas/legal/.sicherung-schluessel"
+
 zeit() { date -u +"%Y-%m-%d %H:%M:%S"; }
 sage() { echo "$(zeit) $*"; }
 
@@ -56,6 +77,7 @@ MELDUNG="Lauf nicht abgeschlossen"
 DATEI=""
 GROESSE=0
 GEPRUEFT="nein"
+VERSCHLUESSELT="nein"
 TABELLEN_QUELLE=0
 TABELLEN_PROBE=0
 AUSSER_HAUS="nicht eingerichtet"
@@ -70,6 +92,7 @@ marke_schreiben() {
   "datei": "$DATEI",
   "groesse_bytes": $GROESSE,
   "wiederherstellung_geprueft": "$GEPRUEFT",
+  "verschluesselt": "$VERSCHLUESSELT",
   "tabellen_quelle": $TABELLEN_QUELLE,
   "tabellen_probe": $TABELLEN_PROBE,
   "ausser_haus": "$AUSSER_HAUS"
@@ -99,30 +122,54 @@ fi
 # 1. Abzug
 # ---------------------------------------------------------------------------
 STEMPEL="$(date -u +%Y%m%d-%H%M)"
-DATEI="$ABLAGE/complyo-$STEMPEL.dump"
+# ROHDATEI ist der Klartext-Abzug. Er existiert nur, solange die Probe läuft,
+# und wird danach überschrieben. DATEI ist das, was liegen bleibt.
+ROHDATEI="$ABLAGE/.complyo-$STEMPEL.dump.roh"
+DATEI="$ABLAGE/complyo-$STEMPEL.dump.enc"
+
+# Auch bei Abbruch darf kein Klartext-Abzug zurückbleiben.
+aufraeumen_roh() { [ -n "${ROHDATEI:-}" ] && [ -f "$ROHDATEI" ] && shred -u "$ROHDATEI" 2>/dev/null || rm -f "$ROHDATEI" 2>/dev/null; }
+trap 'aufraeumen_roh; marke_schreiben' EXIT
+
+if [ ! -s "$SCHLUESSELDATEI" ]; then
+  ERGEBNIS="fehlgeschlagen"
+  MELDUNG="Schlüsseldatei $SCHLUESSELDATEI fehlt — ohne sie würde der Abzug im Klartext liegen"
+  sage "FEHLER: $MELDUNG"
+  sage "Anlegen mit: openssl rand -base64 48 > $SCHLUESSELDATEI && chmod 600 $SCHLUESSELDATEI"
+  sage "Danach eine Kopie des Schlüssels an einen Ort ausserhalb dieses Servers."
+  exit 1
+fi
+# Ein weltlesbarer Schlüssel ist kein Schlüssel.
+RECHTE=$(stat -c %a "$SCHLUESSELDATEI")
+if [ "$RECHTE" != "600" ] && [ "$RECHTE" != "400" ]; then
+  ERGEBNIS="fehlgeschlagen"
+  MELDUNG="Schlüsseldatei hat Rechte $RECHTE statt 600"
+  sage "FEHLER: $MELDUNG"; exit 1
+fi
 
 # -Fc: eigenes Format, komprimiert, erlaubt beim Zurückspielen die Auswahl
 # einzelner Tabellen. Ein reiner SQL-Text wäre grösser und nur ganz oder gar
 # nicht einspielbar.
+umask 077
 if ! docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" -d "$DB_NAME" -Fc \
-     > "$DATEI" 2>/tmp/sicherung-fehler.txt; then
+     > "$ROHDATEI" 2>/tmp/sicherung-fehler.txt; then
   ERGEBNIS="fehlgeschlagen"
   MELDUNG="pg_dump gescheitert: $(head -c 200 /tmp/sicherung-fehler.txt | tr '\n' ' ')"
-  sage "FEHLER: $MELDUNG"; rm -f "$DATEI"; exit 1
+  sage "FEHLER: $MELDUNG"; exit 1
 fi
 
-GROESSE=$(stat -c %s "$DATEI" 2>/dev/null || echo 0)
+GROESSE=$(stat -c %s "$ROHDATEI" 2>/dev/null || echo 0)
 if [ "$GROESSE" -lt 100000 ]; then
   ERGEBNIS="fehlgeschlagen"
   MELDUNG="Abzug nur $GROESSE Bytes gross — das kann nicht die Datenbank sein"
   sage "FEHLER: $MELDUNG"; exit 1
 fi
-sage "Abzug geschrieben: $DATEI ($((GROESSE / 1024)) KiB)"
+sage "Abzug geschrieben: $((GROESSE / 1024)) KiB"
 
 # ---------------------------------------------------------------------------
 # 2. Lesbar? (fängt Abbruch und Beschädigung)
 # ---------------------------------------------------------------------------
-if ! docker exec -i "$DB_CONTAINER" pg_restore -l < "$DATEI" > /tmp/sicherung-liste.txt 2>&1; then
+if ! docker exec -i "$DB_CONTAINER" pg_restore -l < "$ROHDATEI" > /tmp/sicherung-liste.txt 2>&1; then
   ERGEBNIS="fehlgeschlagen"
   MELDUNG="Abzug ist nicht lesbar (pg_restore -l scheitert)"
   sage "FEHLER: $MELDUNG"; exit 1
@@ -151,7 +198,7 @@ fi
 # bewusst NICHT als Urteil genommen — er meldet auch Kleinigkeiten wie fehlende
 # Erweiterungen. Was zählt, ist der Zeilenvergleich unten.
 docker exec -i "$DB_CONTAINER" pg_restore -U "$DB_USER" -d "$TESTDB" \
-  --no-owner --no-privileges < "$DATEI" > /tmp/sicherung-restore.txt 2>&1
+  --no-owner --no-privileges < "$ROHDATEI" > /tmp/sicherung-restore.txt 2>&1
 
 VERGLEICH="SELECT relname || ':' || n_live_tup FROM pg_stat_user_tables ORDER BY relname;"
 docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$TESTDB" -c "ANALYZE;" >/dev/null 2>&1
@@ -189,6 +236,40 @@ GEPRUEFT="ja"
 sage "Wiederherstellung geprüft: $TABELLEN_PROBE von $TABELLEN_QUELLE Tabellen, keine leer geblieben"
 
 # ---------------------------------------------------------------------------
+# 3b. Verschlüsseln — und die Entschlüsselung gleich mitprüfen
+# ---------------------------------------------------------------------------
+# Dieselbe Haltung wie bei der Wiederherstellungsprobe: eine Verschlüsselung,
+# die nie zurückgerechnet wurde, ist eine Vermutung. Verglichen wird über die
+# Prüfsumme gegen genau den Abzug, dessen Wiederherstellung eben belegt wurde.
+# Stimmen die Summen, gilt die Probe von oben auch für die Datei, die liegen
+# bleibt — sonst prüfte man das eine und verwahrte das andere.
+PRUEFSUMME_ROH=$(sha256sum "$ROHDATEI" | cut -d' ' -f1)
+
+if ! openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt \
+     -pass "file:$SCHLUESSELDATEI" -in "$ROHDATEI" -out "$DATEI" 2>/tmp/sicherung-krypto.txt; then
+  ERGEBNIS="fehlgeschlagen"
+  MELDUNG="Verschlüsselung gescheitert: $(head -c 160 /tmp/sicherung-krypto.txt | tr '\n' ' ')"
+  sage "FEHLER: $MELDUNG"; rm -f "$DATEI"; exit 1
+fi
+chmod 600 "$DATEI"
+
+PRUEFSUMME_ZURUECK=$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+  -pass "file:$SCHLUESSELDATEI" -in "$DATEI" 2>/tmp/sicherung-krypto.txt | sha256sum | cut -d' ' -f1)
+
+if [ "$PRUEFSUMME_ROH" != "$PRUEFSUMME_ZURUECK" ]; then
+  ERGEBNIS="fehlgeschlagen"
+  MELDUNG="Entschlüsselung ergibt nicht den geprüften Abzug — die Sicherung wäre nicht lesbar"
+  sage "FEHLER: $MELDUNG"; rm -f "$DATEI"; exit 1
+fi
+
+# Klartext weg, und zwar sofort. Ab hier existiert der Bestand auf dieser
+# Platte nur noch verschlüsselt.
+aufraeumen_roh
+GROESSE=$(stat -c %s "$DATEI" 2>/dev/null || echo 0)
+VERSCHLUESSELT="ja"
+sage "Verschlüsselt und zurückgerechnet: $DATEI ($((GROESSE / 1024)) KiB), Prüfsummen gleich"
+
+# ---------------------------------------------------------------------------
 # 4. Monatsexemplar
 # ---------------------------------------------------------------------------
 if [ "$(date -u +%d)" = "01" ]; then
@@ -217,10 +298,10 @@ fi
 # ---------------------------------------------------------------------------
 # 6. Aufräumen
 # ---------------------------------------------------------------------------
-ALT=$(find "$ABLAGE" -name 'complyo-*.dump' -mtime "+$TAGE_TAEGLICH" -print -delete | wc -l)
-ALT_M=$(find "$MONATSABLAGE" -name 'complyo-*.dump' -mtime "+$TAGE_MONATLICH" -print -delete | wc -l)
+ALT=$(find "$ABLAGE" -name 'complyo-*.dump*' -mtime "+$TAGE_TAEGLICH" -print -delete | wc -l)
+ALT_M=$(find "$MONATSABLAGE" -name 'complyo-*.dump*' -mtime "+$TAGE_MONATLICH" -print -delete | wc -l)
 sage "Aufgeräumt: $ALT täglich, $ALT_M monatlich entfernt"
-sage "Bestand: $(ls -1 "$ABLAGE"/*.dump 2>/dev/null | wc -l) täglich, $(ls -1 "$MONATSABLAGE"/*.dump 2>/dev/null | wc -l) monatlich, zusammen $(du -sh /home/clawd/backups 2>/dev/null | cut -f1)"
+sage "Bestand: $(ls -1 "$ABLAGE"/*.dump.enc 2>/dev/null | wc -l) täglich, $(ls -1 "$MONATSABLAGE"/*.dump.enc 2>/dev/null | wc -l) monatlich, zusammen $(du -sh /home/clawd/backups 2>/dev/null | cut -f1)"
 
 ERGEBNIS="erfolgreich"
 MELDUNG="Abzug geschrieben und Wiederherstellung geprüft"

@@ -36,6 +36,9 @@ from slowapi.util import get_remote_address
 from dependencies import get_client_ip
 from schemas.auth import LoginResponse, RegisterResponse, RefreshResponse, MeResponse
 from compliance_engine.jurisdictions import DEFAULT_JURISDICTION
+import konto_token
+import passwort_richtlinie
+import zweiter_faktor
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +194,16 @@ async def register(request: Request, body: RegisterRequest):
         )
     
     try:
+        # Taugt das Passwort? Bis zum 10.09.2026 stand hier nichts: `password`
+        # war ein blankes `str`, ein einzelnes Zeichen wurde angenommen und war
+        # ab da ein gueltiges Konto. Die Pruefung kennt E-Mail und Name, weil
+        # der eigene Name im eigenen Passwort fuer einen gezielten Angriff kein
+        # Geheimnis ist.
+        try:
+            passwort_richtlinie.pruefe(body.password, email=body.email, name=body.full_name)
+        except passwort_richtlinie.PasswortSchwach as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.nutzertext)
+
         # Check if email exists
         existing = await auth_service.get_user_by_email(body.email)
         if existing:
@@ -198,7 +211,7 @@ async def register(request: Request, body: RegisterRequest):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email bereits registriert"
             )
-        
+
         # Create user
         user = await auth_service.register_user(
             body.email,
@@ -215,7 +228,18 @@ async def register(request: Request, body: RegisterRequest):
             user['id'], user['email'], request,
             body.unternehmer_bestaetigt, body.agb_version, body.avv_version,
         )
-        
+
+        # Bestaetigungsmail. `users.is_verified` stand seit dem ersten Schema in
+        # der Tabelle und wurde von keiner Route je gesetzt — es gab keinen Weg,
+        # eine Adresse zu bestaetigen. Der Fehlschlag beim Versand darf die
+        # Registrierung nicht abbrechen: das Konto existiert, die Adresse laesst
+        # sich spaeter ueber /email-bestaetigung-erneut nachholen.
+        try:
+            await _sende_bestaetigungsmail(user['id'], user['email'], user.get('full_name'),
+                                           get_client_ip(request))
+        except Exception as e:
+            logger.error("Bestaetigungsmail nach Registrierung fehlgeschlagen: %s", e)
+
         # Create tokens
         access_token = auth_service.create_access_token(user['id'])
         refresh_token = await auth_service.create_refresh_token(user['id'])
@@ -257,19 +281,17 @@ async def register(request: Request, body: RegisterRequest):
         return response
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Registration error: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Registrierung fehlgeschlagen"
-        )
+    # ValueError VOR Exception. Umgekehrt war es toter Code: `except Exception`
+    # faengt ValueError mit, die beiden Zweige darunter wurden nie erreicht.
+    # Wirkung: die saubere 400 aus `register_user` (etwa bei einer doppelten
+    # Adresse im Wettlauf zweier Anmeldungen) kam beim Nutzer als 500 an.
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
-        logger.error(f"Registration error: {e}")
+        logger.error(f"Registration error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Registrierung fehlgeschlagen"
@@ -293,7 +315,17 @@ async def login(request: Request, body: LoginRequest):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Ungültige Zugangsdaten"
             )
-        
+
+        # Zweiter Faktor eingerichtet? Dann ist hier Halbzeit, nicht Schluss.
+        # Zurueck geht ein kurzlebiges Zwischentoken mit eigener Audience, das
+        # als Zugriffsschluessel nicht taugt (siehe auth_service.create_mfa_token).
+        if await zweiter_faktor.ist_aktiv(auth_service.db_pool, user['id']):
+            return JSONResponse({
+                "mfa_required": True,
+                "mfa_token": auth_service.create_mfa_token(user['id']),
+                "expires_in": auth_service.MFA_GUELTIG_SEKUNDEN,
+            })
+
         # Create tokens
         access_token = auth_service.create_access_token(user['id'])
         refresh_token = await auth_service.create_refresh_token(user['id'])
@@ -302,6 +334,13 @@ async def login(request: Request, body: LoginRequest):
             onboarding_completed = await conn.fetchval(
                 "SELECT onboarding_completed FROM users WHERE id = $1", user['id']
             ) or False
+            # Wer sich anmeldet, ist nicht ruhend. Eine laufende
+            # Loeschankuendigung wird damit gegenstandslos (siehe loeschfristen).
+            await conn.execute(
+                "UPDATE users SET loeschung_angekuendigt_am = NULL "
+                "WHERE id = $1 AND loeschung_angekuendigt_am IS NOT NULL",
+                user['id'],
+            )
 
         is_secure = os.getenv("ENVIRONMENT", "production") == "production"
         access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
@@ -909,6 +948,416 @@ async def firebase_verify(request: FirebaseTokenRequest):
         )
 
 # ============= Health Check =============
+
+# ===========================================================================
+# Passwort vergessen, E-Mail bestaetigen, zweiter Faktor
+# ===========================================================================
+#
+# Alle drei Wege fehlten bis zum 10.09.2026 vollstaendig. Sie stehen hier
+# zusammen, weil sie sich denselben Grundsatz teilen: **die Antwort darf nicht
+# verraten, ob es das Konto gibt.** Wer "Passwort vergessen" fuer eine fremde
+# Adresse ausloest, bekommt exakt dieselbe Antwort wie fuer die eigene. Sonst
+# ist die Route ein Verzeichnis aller Kunden.
+
+
+class PasswortVergessenRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswortNeuRequest(BaseModel):
+    token: str
+    passwort: str
+
+
+class TokenRequest(BaseModel):
+    token: str
+
+
+class ZweiterFaktorLoginRequest(BaseModel):
+    mfa_token: str
+    code: str
+
+
+class ZweiterFaktorBestaetigenRequest(BaseModel):
+    code: str
+
+
+class ZweiterFaktorAbschaltenRequest(BaseModel):
+    passwort: str
+    code: str
+
+
+def _frontend_url() -> str:
+    return os.getenv("FRONTEND_URL", "https://complyo.de").rstrip("/")
+
+
+async def _sende_bestaetigungsmail(user_id: int, email: str, name: Optional[str],
+                                   ip: Optional[str]) -> None:
+    """Legt einen Bestaetigungstoken an und verschickt ihn."""
+    from email_service import email_service
+
+    token = await konto_token.lege_bestaetigung_an(db_pool, user_id, ip)
+    url = f"{_frontend_url()}/konto/email-bestaetigen?token={token}"
+    email_service.sende_konto_bestaetigung(email, name or email, url)
+
+
+def _tokenantwort(user: dict, access_token: str, refresh_token: str,
+                  onboarding_completed: bool) -> JSONResponse:
+    """
+    Die Antwort mit Sitzungscookies. Gleicher Aufbau wie in /login — hier als
+    Funktion, weil der Weg ueber den zweiten Faktor sonst die vierte Kopie
+    derselben dreissig Zeilen waere.
+    """
+    is_secure = os.getenv("ENVIRONMENT", "production") == "production"
+    access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    response = JSONResponse({
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user["id"]),
+            "email": user["email"],
+            "full_name": user.get("full_name"),
+            "company": user.get("company"),
+            "onboarding_completed": onboarding_completed,
+        },
+    })
+    response.set_cookie(
+        key="access_token", value=access_token, httponly=True, secure=is_secure,
+        samesite="lax", max_age=access_token_expire * 60, path="/", domain=COOKIE_DOMAIN,
+    )
+    response.set_cookie(
+        key="refresh_token", value=refresh_token, httponly=True, secure=is_secure,
+        samesite="lax", max_age=60 * 60 * 24 * 30, path="/", domain=COOKIE_DOMAIN,
+    )
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Passwort vergessen
+# ---------------------------------------------------------------------------
+
+@router.post("/passwort-vergessen")
+@limiter.limit("5/hour")
+async def passwort_vergessen(request: Request, body: PasswortVergessenRequest):
+    """
+    Startet das Zuruecksetzen. Antwortet immer gleich.
+
+    Die Ratengrenze steht bei 5/Stunde je IP: hoch genug fuer den Nutzer, der
+    sich vertippt, niedrig genug, dass niemand ueber diese Route Postfaecher
+    mit Mails eindeckt.
+    """
+    antwort = {
+        "message": "Falls ein Konto zu dieser Adresse besteht, ist eine E-Mail "
+                   "mit einem Link zum Zurücksetzen unterwegs.",
+    }
+    try:
+        nutzer = await auth_service.get_user_by_email(body.email)
+        if not nutzer:
+            # Bewusst dieselbe Antwort und keine Verzoegerung: der Zeitunterschied
+            # zwischen "kein Konto" und "Mail verschickt" ist unerheblich, weil
+            # der Versand ohnehin im Hintergrund laeuft.
+            logger.info("Zuruecksetzen fuer unbekannte Adresse angefragt")
+            return JSONResponse(antwort)
+
+        from email_service import email_service
+        token = await konto_token.lege_reset_an(db_pool, nutzer["id"], get_client_ip(request))
+        url = f"{_frontend_url()}/konto/passwort-neu?token={token}"
+        email_service.sende_passwort_zuruecksetzen(
+            nutzer["email"], nutzer.get("full_name") or nutzer["email"], url,
+            konto_token.RESET_GUELTIG_MINUTEN,
+        )
+    except Exception as e:
+        # Auch ein Fehler darf die Antwort nicht veraendern.
+        logger.error("Passwort-Zuruecksetzen fehlgeschlagen: %s", e, exc_info=True)
+    return JSONResponse(antwort)
+
+
+@router.post("/passwort-neu")
+@limiter.limit("10/hour")
+async def passwort_neu(request: Request, body: PasswortNeuRequest):
+    """
+    Loest den Token ein und setzt das neue Passwort.
+
+    Der Token wird zuerst eingeloest und erst danach das Passwort geprueft. Das
+    ist Absicht: ein Token, mit dem jemand ein zu schwaches Passwort probiert
+    hat, ist verbraucht. Sonst waere die Route ein Orakel, an dem sich mit
+    einem einzigen Token beliebig oft die Passwortregel abfragen laesst.
+    """
+    user_id = await konto_token.loese_reset_ein(db_pool, body.token)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Der Link ist abgelaufen oder wurde bereits benutzt. "
+                   "Bitte das Zurücksetzen erneut anfordern.",
+        )
+
+    nutzer = await auth_service.get_user_by_id(user_id)
+    if not nutzer:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Konto nicht gefunden")
+
+    try:
+        passwort_richtlinie.pruefe(
+            body.passwort, email=nutzer.get("email"), name=nutzer.get("full_name")
+        )
+    except passwort_richtlinie.PasswortSchwach as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.nutzertext)
+
+    # Setzt das Passwort UND beendet alle Sitzungen — wer zuruecksetzt,
+    # vermutet oft einen Mitleser.
+    await auth_service.setze_passwort(user_id, body.passwort)
+
+    # Wer den Link in seinem Postfach anklicken konnte, hat die Adresse belegt.
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE users SET is_verified = TRUE WHERE id = $1 AND is_verified IS NOT TRUE",
+            user_id,
+        )
+
+    logger.info("Passwort zurueckgesetzt: user_id=%s", user_id)
+    return {"success": True, "message": "Passwort geändert. Bitte neu anmelden."}
+
+
+# ---------------------------------------------------------------------------
+# E-Mail bestaetigen
+# ---------------------------------------------------------------------------
+
+@router.post("/email-bestaetigen")
+@limiter.limit("20/hour")
+async def email_bestaetigen(request: Request, body: TokenRequest):
+    user_id = await konto_token.loese_bestaetigung_ein(db_pool, body.token)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Der Bestätigungslink ist abgelaufen oder wurde bereits benutzt.",
+        )
+    async with db_pool.acquire() as conn:
+        await conn.execute("UPDATE users SET is_verified = TRUE WHERE id = $1", user_id)
+    logger.info("E-Mail bestaetigt: user_id=%s", user_id)
+    return {"success": True, "message": "E-Mail-Adresse bestätigt."}
+
+
+@router.post("/email-bestaetigung-erneut")
+@limiter.limit("3/hour")
+async def email_bestaetigung_erneut(request: Request,
+                                    current_user: dict = Depends(get_current_user)):
+    if current_user.get("is_verified"):
+        return {"success": True, "message": "Die Adresse ist bereits bestätigt."}
+    await _sende_bestaetigungsmail(
+        current_user["id"], current_user["email"], current_user.get("full_name"),
+        get_client_ip(request),
+    )
+    return {"success": True, "message": "Bestätigungsmail verschickt."}
+
+
+# ---------------------------------------------------------------------------
+# Zweiter Faktor
+# ---------------------------------------------------------------------------
+
+@router.post("/login/2fa")
+@limiter.limit("10/minute")
+async def login_zweiter_faktor(request: Request, body: ZweiterFaktorLoginRequest):
+    """
+    Zweite Haelfte der Anmeldung: Zwischentoken plus Code.
+
+    Angenommen wird beides — der Code aus der App und ein
+    Wiederherstellungscode. Der Unterschied ist die Laenge: sechs Ziffern gegen
+    `xxxxx-xxxxx`.
+    """
+    user_id = auth_service.verify_mfa_token(body.mfa_token)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Die Anmeldung ist abgelaufen. Bitte erneut mit Passwort beginnen.",
+        )
+
+    nutzer = await auth_service.get_user_by_id(user_id)
+    if not nutzer or not nutzer.get("is_active"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Konto nicht verfügbar")
+
+    eingabe = (body.code or "").strip()
+    ziffern = "".join(z for z in eingabe if z.isdigit())
+    erkannt = False
+
+    if len(ziffern) == zweiter_faktor.ZIFFERN:
+        geheimnis = await zweiter_faktor.lade_geheimnis(auth_service.db_pool, user_id)
+        if geheimnis:
+            schritt = zweiter_faktor.pruefe_code(geheimnis, ziffern)
+            if schritt is not None:
+                # Ein abgefangener Code darf nicht ein zweites Mal gelten.
+                if await zweiter_faktor.schritt_schon_benutzt(auth_service.redis, user_id, schritt):
+                    logger.warning("2FA-Code doppelt eingeloest: user_id=%s", user_id)
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Dieser Code wurde bereits verwendet. Bitte den nächsten abwarten.",
+                    )
+                await zweiter_faktor.merke_schritt(auth_service.redis, user_id, schritt)
+                erkannt = True
+    else:
+        erkannt = await zweiter_faktor.loese_wiederherstellungscode_ein(
+            auth_service.db_pool, user_id, eingabe
+        )
+        if erkannt:
+            offen = await zweiter_faktor.offene_wiederherstellungscodes(
+                auth_service.db_pool, user_id
+            )
+            logger.warning(
+                "Anmeldung ueber Wiederherstellungscode: user_id=%s, noch offen=%s",
+                user_id, offen,
+            )
+
+    if not erkannt:
+        logger.warning("2FA fehlgeschlagen: user_id=%s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Der Code stimmt nicht.",
+        )
+
+    access_token = auth_service.create_access_token(user_id)
+    refresh_token = await auth_service.create_refresh_token(
+        user_id,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=get_client_ip(request),
+    )
+    async with auth_service.db_pool.acquire() as conn:
+        onboarding_completed = await conn.fetchval(
+            "SELECT onboarding_completed FROM users WHERE id = $1", user_id
+        ) or False
+        await conn.execute(
+            "UPDATE users SET loeschung_angekuendigt_am = NULL "
+            "WHERE id = $1 AND loeschung_angekuendigt_am IS NOT NULL",
+            user_id,
+        )
+    return _tokenantwort(nutzer, access_token, refresh_token, onboarding_completed)
+
+
+@router.get("/2fa/status")
+async def zweiter_faktor_status(current_user: dict = Depends(get_current_user)):
+    aktiv = await zweiter_faktor.ist_aktiv(db_pool, current_user["id"])
+    return {
+        "aktiv": aktiv,
+        "offene_wiederherstellungscodes": (
+            await zweiter_faktor.offene_wiederherstellungscodes(db_pool, current_user["id"])
+            if aktiv else 0
+        ),
+    }
+
+
+@router.post("/2fa/einrichten")
+@limiter.limit("10/hour")
+async def zweiter_faktor_einrichten(request: Request,
+                                    current_user: dict = Depends(get_current_user)):
+    """
+    Erzeugt ein Geheimnis und gibt es zurueck — einmalig, fuer den QR-Code.
+
+    Scharf ist der zweite Faktor damit noch nicht: das passiert erst in
+    /2fa/bestaetigen, nachdem der Nutzer einen gueltigen Code eingetippt hat.
+    Ohne diesen Zwischenschritt sperrt ein abgebrochener Einrichtungsversuch
+    das eigene Konto aus.
+    """
+    try:
+        geheimnis = await zweiter_faktor.lege_an(db_pool, current_user["id"])
+    except zweiter_faktor.ZweiterFaktorFehler as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return {
+        "geheimnis": geheimnis,
+        "otpauth_uri": zweiter_faktor.otpauth_uri(geheimnis, current_user["email"]),
+        "hinweis": "Diesen Code in der Authenticator-App hinterlegen und danach "
+                   "mit einem Zahlencode bestätigen. Vorher ist nichts aktiv.",
+    }
+
+
+@router.post("/2fa/bestaetigen")
+@limiter.limit("10/hour")
+async def zweiter_faktor_bestaetigen(request: Request,
+                                     body: ZweiterFaktorBestaetigenRequest,
+                                     current_user: dict = Depends(get_current_user)):
+    """Schaltet scharf und gibt die Wiederherstellungscodes aus — einmalig."""
+    geheimnis = await zweiter_faktor.lade_geheimnis(
+        db_pool, current_user["id"], nur_bestaetigt=False
+    )
+    if not geheimnis:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Es ist keine Einrichtung offen. Bitte zuerst /2fa/einrichten aufrufen.",
+        )
+    if zweiter_faktor.pruefe_code(geheimnis, body.code) is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Der Code stimmt nicht. Steht die Uhr des Telefons richtig?",
+        )
+
+    codes = zweiter_faktor.erzeuge_wiederherstellungscodes()
+    try:
+        await zweiter_faktor.bestaetige(db_pool, current_user["id"], codes)
+    except zweiter_faktor.ZweiterFaktorFehler as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    logger.info("Zweiter Faktor aktiviert: user_id=%s", current_user["id"])
+    return {
+        "aktiv": True,
+        "wiederherstellungscodes": codes,
+        "hinweis": "Diese Codes jetzt sichern. Sie werden kein zweites Mal "
+                   "angezeigt und sind der einzige Weg zurück, wenn das Gerät "
+                   "verloren geht.",
+    }
+
+
+@router.post("/2fa/abschalten")
+@limiter.limit("5/hour")
+async def zweiter_faktor_abschalten(request: Request,
+                                    body: ZweiterFaktorAbschaltenRequest,
+                                    current_user: dict = Depends(get_current_user)):
+    """
+    Abschalten verlangt Passwort UND einen gueltigen Code.
+
+    Ein uebernommener Browser hat die Sitzung, aber weder das Passwort noch das
+    Telefon. Ohne beide Nachweise waere der zweite Faktor genau so weit weg wie
+    ein Klick.
+    """
+    nutzer = await auth_service.authenticate(current_user["email"], body.passwort)
+    if not nutzer:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Passwort stimmt nicht.")
+
+    geheimnis = await zweiter_faktor.lade_geheimnis(db_pool, current_user["id"])
+    treffer = geheimnis and zweiter_faktor.pruefe_code(geheimnis, body.code) is not None
+    if not treffer:
+        treffer = await zweiter_faktor.loese_wiederherstellungscode_ein(
+            db_pool, current_user["id"], body.code
+        )
+    if not treffer:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Der Code stimmt nicht.")
+
+    await zweiter_faktor.schalte_ab(db_pool, current_user["id"])
+    logger.warning("Zweiter Faktor abgeschaltet: user_id=%s", current_user["id"])
+    return {"aktiv": False, "message": "Zwei-Faktor-Anmeldung abgeschaltet."}
+
+
+@router.post("/2fa/codes-neu")
+@limiter.limit("5/hour")
+async def zweiter_faktor_codes_neu(request: Request,
+                                   body: ZweiterFaktorBestaetigenRequest,
+                                   current_user: dict = Depends(get_current_user)):
+    """Neue Wiederherstellungscodes; die alten verfallen dabei."""
+    geheimnis = await zweiter_faktor.lade_geheimnis(db_pool, current_user["id"])
+    if not geheimnis or zweiter_faktor.pruefe_code(geheimnis, body.code) is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Der Code stimmt nicht.")
+
+    codes = zweiter_faktor.erzeuge_wiederherstellungscodes()
+    async with db_pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "DELETE FROM user_wiederherstellungscodes WHERE user_id = $1",
+                current_user["id"],
+            )
+            for code in codes:
+                await conn.execute(
+                    "INSERT INTO user_wiederherstellungscodes (user_id, code_hash) VALUES ($1, $2)",
+                    current_user["id"], zweiter_faktor.hashe_wiederherstellungscode(code),
+                )
+    return {"wiederherstellungscodes": codes}
+
+
 
 @router.get("/health")
 async def auth_health():

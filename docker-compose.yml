@@ -105,6 +105,13 @@ services:
       # Bleibt auf warn, bis die [Lizenz]-Logs keine legitimen Kunden mehr
       # zeigen — erst dann darf block gesetzt werden (license_check.py).
       - COMPLYO_LICENSE_ENFORCEMENT=${COMPLYO_LICENSE_ENFORCEMENT:-warn}
+      # Zweiter Faktor (10.09.2026). Ohne diesen Schluessel verweigert die
+      # Einrichtung den Dienst (fail-closed) — das TOTP-Geheimnis liegt sonst
+      # im Klartext neben dem Passwort-Hash und waere kein zweiter Faktor.
+      - COMPLYO_2FA_ENC_KEY=${COMPLYO_2FA_ENC_KEY}
+      # Loeschfristen: 'ja' loescht auch Nachweise (Einwilligungen, Scanverlauf,
+      # Auslieferungsprotokoll) nach Ablauf. Siehe backend/loeschfristen.py.
+      - LOESCHFRISTEN_SCHARF=${LOESCHFRISTEN_SCHARF:-nein}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - STRIPE_WEBHOOK_SECRET_ADDONS=${STRIPE_WEBHOOK_SECRET_ADDONS:-${STRIPE_WEBHOOK_SECRET}}

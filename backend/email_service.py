@@ -885,6 +885,107 @@ Angebot:  {angebot or "(keines)"}
             logger.error(f"Failed to send admin notification for {email}: {e}")
             return False
 
+    # =======================================================================
+    # Kontosicherheit: Bestaetigung, Zuruecksetzen, Loeschankuendigung
+    # =======================================================================
+    #
+    # Drei Mails, die es bis zum 10.09.2026 nicht gab. Alle drei bewusst
+    # schmucklos: keine Bilder, kein Nachverfolgungspixel, ein einziger Link.
+    # Wer eine Mail zum Zuruecksetzen bekommt, die er nicht angefordert hat,
+    # soll auf einen Blick sehen, was zu tun ist — naemlich nichts.
+
+    def _rahmen(self, ueberschrift: str, absatz: str, knopf_text: str,
+                knopf_url: str, fusszeile: str) -> str:
+        return f"""
+        <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,sans-serif;
+                    max-width:520px;margin:0 auto;padding:24px;color:#111">
+          <h1 style="font-size:20px;margin:0 0 16px">{ueberschrift}</h1>
+          <p style="font-size:15px;line-height:1.6;margin:0 0 24px">{absatz}</p>
+          <p style="margin:0 0 24px">
+            <a href="{knopf_url}"
+               style="background:#0f172a;color:#fff;text-decoration:none;
+                      padding:12px 20px;border-radius:6px;display:inline-block;
+                      font-size:15px">{knopf_text}</a>
+          </p>
+          <p style="font-size:13px;line-height:1.6;color:#555;margin:0 0 8px">
+            Falls der Knopf nicht funktioniert, diese Adresse in den Browser kopieren:<br>
+            <span style="word-break:break-all">{knopf_url}</span>
+          </p>
+          <hr style="border:0;border-top:1px solid #e5e7eb;margin:24px 0">
+          <p style="font-size:13px;line-height:1.6;color:#555;margin:0">{fusszeile}</p>
+        </div>
+        """
+
+    def sende_konto_bestaetigung(self, email: str, name: str, url: str) -> bool:
+        """Bestaetigung der E-Mail-Adresse eines Kontos (nicht eines Leads)."""
+        html = self._rahmen(
+            "Bitte E-Mail-Adresse bestätigen",
+            f"Hallo {name}, für diese Adresse wurde ein complyo-Konto angelegt. "
+            "Mit der Bestätigung ist sichergestellt, dass Hinweise zu Fristen und "
+            "Rechtsänderungen Sie auch erreichen.",
+            "Adresse bestätigen", url,
+            "Wenn Sie kein Konto angelegt haben, können Sie diese Nachricht ignorieren. "
+            "Ohne Bestätigung passiert nichts weiter.",
+        )
+        text = (
+            f"Hallo {name},\n\n"
+            "für diese Adresse wurde ein complyo-Konto angelegt. "
+            "Bitte bestätigen Sie die Adresse:\n\n"
+            f"{url}\n\n"
+            "Wenn Sie kein Konto angelegt haben, ignorieren Sie diese Nachricht.\n"
+        )
+        return self._send_email(email, "complyo: E-Mail-Adresse bestätigen", html, text)
+
+    def sende_passwort_zuruecksetzen(self, email: str, name: str, url: str,
+                                     gueltig_minuten: int) -> bool:
+        html = self._rahmen(
+            "Passwort zurücksetzen",
+            f"Hallo {name}, für Ihr complyo-Konto wurde ein neues Passwort angefordert. "
+            f"Der Link gilt {gueltig_minuten} Minuten und lässt sich einmal verwenden.",
+            "Neues Passwort setzen", url,
+            "Wenn Sie das nicht waren, ist nichts passiert: Ihr Passwort bleibt "
+            "unverändert, solange dieser Link nicht benutzt wird. Sie müssen nichts tun. "
+            "Häufen sich solche Nachrichten, melden Sie sich bitte bei uns.",
+        )
+        text = (
+            f"Hallo {name},\n\n"
+            "für Ihr complyo-Konto wurde ein neues Passwort angefordert.\n"
+            f"Der folgende Link gilt {gueltig_minuten} Minuten und nur einmal:\n\n"
+            f"{url}\n\n"
+            "Wenn Sie das nicht waren, müssen Sie nichts tun — Ihr Passwort bleibt "
+            "unverändert, solange der Link nicht benutzt wird.\n"
+        )
+        return self._send_email(email, "complyo: Passwort zurücksetzen", html, text)
+
+    def sende_loeschankuendigung(self, email: str, name: str, tage: int,
+                                 anmelde_url: str) -> bool:
+        """
+        Ankuendigung der Loeschung eines ruhenden Kontos.
+
+        Die Loeschung selbst ist die Pflicht (Art. 5 Abs. 1 lit. e) — die
+        Ankuendigung ist die Fairness. Eine einzige Anmeldung genuegt, um sie
+        abzuwenden.
+        """
+        html = self._rahmen(
+            "Ihr complyo-Konto wird gelöscht",
+            f"Hallo {name}, Ihr Konto wurde lange nicht genutzt. Nach den eigenen "
+            "Löschfristen von complyo werden Daten nicht länger aufbewahrt, als der "
+            f"Zweck es trägt. Ihr Konto und alle zugehörigen Daten werden deshalb in "
+            f"{tage} Tagen gelöscht. Eine einzige Anmeldung genügt, um das abzuwenden.",
+            "Jetzt anmelden und Konto behalten", anmelde_url,
+            "Wenn Sie das Konto nicht mehr brauchen, müssen Sie nichts tun. "
+            "Die Löschung erfolgt dann automatisch und vollständig.",
+        )
+        text = (
+            f"Hallo {name},\n\n"
+            f"Ihr complyo-Konto wurde lange nicht genutzt und wird in {tage} Tagen "
+            "mit allen zugehörigen Daten gelöscht.\n\n"
+            f"Eine einzige Anmeldung genügt, um das abzuwenden:\n{anmelde_url}\n\n"
+            "Wenn Sie das Konto nicht mehr brauchen, müssen Sie nichts tun.\n"
+        )
+        return self._send_email(email, "complyo: Ihr Konto wird in "
+                                       f"{tage} Tagen gelöscht", html, text)
+
 
 # Global email service instance
 email_service = EmailService()

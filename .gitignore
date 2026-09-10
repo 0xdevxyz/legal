@@ -156,3 +156,7 @@ knowledge/_meta/embeddings.json
 # Verlauf. Das kuratierte Stammwissen daneben (knowledge/laws/<sprache>/<AKT>.md)
 # bleibt versioniert.
 knowledge/laws/*/*/
+
+# Schluessel der Datensicherung — gehoert NIE ins Depot
+.sicherung-schluessel
+.sicherung-ziel

@@ -282,6 +282,60 @@ class AuthService:
             logger.warning(f"Redis blacklist check failed: {e}")
             return False
     
+    # -- Zwischentoken fuer den zweiten Faktor --------------------------------
+    #
+    # Zwischen "Passwort stimmt" und "zweiter Faktor stimmt" braucht der Client
+    # etwas, das die halbe Anmeldung belegt, ohne schon Zugriff zu geben.
+    #
+    # Die Audience ist bewusst eine ANDERE (`complyo-mfa`). `get_current_user`
+    # in dependencies.py prueft auf `complyo-api` und weist dieses Token damit
+    # ab. Ohne diese Trennung waere das Zwischentoken ein vollwertiger
+    # Zugriffsschluessel — der zweite Faktor waere umgangen, indem man ihn
+    # einfach nicht eingibt.
+    MFA_AUDIENCE = "complyo-mfa"
+    MFA_GUELTIG_SEKUNDEN = 300
+
+    def create_mfa_token(self, user_id) -> str:
+        now = _utcnow()
+        payload = {
+            "user_id": str(user_id),
+            "sub": str(user_id),
+            "jti": str(uuid4()),
+            "iat": now,
+            "nbf": now,
+            "exp": now + timedelta(seconds=self.MFA_GUELTIG_SEKUNDEN),
+            "iss": self.jwt_issuer,
+            "aud": self.MFA_AUDIENCE,
+        }
+        return jwt.encode(payload, self.jwt_secret, algorithm="HS256")
+
+    def verify_mfa_token(self, token: str) -> Optional[int]:
+        try:
+            payload = jwt.decode(
+                token, self.jwt_secret, algorithms=["HS256"],
+                audience=self.MFA_AUDIENCE, issuer=self.jwt_issuer,
+            )
+            return int(payload.get("user_id") or payload.get("sub"))
+        except (jwt.InvalidTokenError, TypeError, ValueError) as e:
+            logger.warning("MFA-Zwischentoken ungueltig: %s", e)
+            return None
+
+    async def setze_passwort(self, user_id: int, passwort: str) -> None:
+        """
+        Neues Passwort setzen und alle Sitzungen beenden.
+
+        Das Beenden gehoert dazu und nicht in den Aufrufer: wer sein Passwort
+        aendert, tut das oft genau deshalb, weil er einen Mitleser vermutet.
+        Ein Wechsel, nach dem die fremde Sitzung weiterlaeuft, ist keiner.
+        """
+        hash_wert = _bcrypt.hashpw(passwort.encode(), _bcrypt.gensalt()).decode()
+        async with self.db_pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2",
+                hash_wert, user_id,
+            )
+        await self.beende_sitzungskette(user_id)
+
     async def create_refresh_token(self, user_id, user_agent: str = None, ip_address: str = None) -> str:
         """Create and store refresh token with session metadata"""
         token = secrets.token_urlsafe(64)
@@ -312,20 +366,59 @@ class AuthService:
             return None
     
     async def refresh_access_token(self, refresh_token: str, user_agent: str = None, ip_address: str = None) -> Optional[tuple]:
-        """Refresh access token using refresh token (with rotation + reuse-detection)"""
+        """
+        Access-Token erneuern, Refresh-Token dabei drehen — mit Erkennung der
+        Wiederverwendung.
+
+        Bis zum 10.09.2026 stand "reuse-detection" nur in dieser Zeile. Der
+        gedrehte Token wurde per DELETE entfernt, und ein zweiter Aufruf damit
+        fand nichts mehr: eine Warnung ins Log, `None` zurueck, fertig. Genau
+        das ist aber der Abdruck eines gestohlenen Tokens. Wer eine Kopie hat,
+        loest sie irgendwann ein — entweder vor dem echten Nutzer (dann findet
+        DESSEN Aufruf nichts mehr) oder danach. In beiden Faellen blieben alle
+        anderen Sitzungen des Kontos bestehen, samt der frisch ausgegebenen des
+        Angreifers.
+
+        Jetzt wird der gedrehte Token nicht geloescht, sondern mit `revoked_at`
+        entwertet und bis zu seinem Ablauf aufgehoben. Taucht er wieder auf, ist
+        die Sitzungskette kompromittiert: ALLE Sitzungen des Kontos fallen, und
+        alle ausgegebenen Access-Token kommen auf die Sperrliste. Der Nutzer
+        muss sich neu anmelden — das ist der Preis, und er ist gegenueber einem
+        stillen Mitleser der guenstigere.
+
+        Aufgeraeumt werden die entwerteten Zeilen von `cleanup_expired_sessions`
+        ueber `expires_at`, also spaetestens 30 Tage nach der Drehung.
+        """
         async with self.db_pool.acquire() as conn:
             session = await conn.fetchrow(
                 """
-                SELECT user_id, expires_at FROM user_sessions
+                SELECT user_id, expires_at, revoked_at FROM user_sessions
                 WHERE refresh_token = $1
                 """,
                 refresh_token
             )
-        
+
         if not session:
-            logger.warning("Refresh token not found in DB — possible reuse attack, checking token format")
+            # Unbekannt: entweder frei erfunden oder so alt, dass die Zeile
+            # bereits abgeraeumt ist. Ohne user_id gibt es hier nichts zu
+            # sperren; das faengt der Ratenzaehler an der Route ab.
+            logger.warning("Refresh-Token unbekannt — abgelaufen, aufgeraeumt oder erfunden")
             return None
-        
+
+        user_id = session['user_id']
+
+        if session['revoked_at'] is not None:
+            # Der harte Fall. Dieser Token wurde bereits gedreht oder beim
+            # Abmelden entwertet; ein zweiter Einloeseversuch kann nicht vom
+            # rechtmaessigen Inhaber kommen.
+            logger.error(
+                "Wiederverwendung eines entwerteten Refresh-Tokens: user_id=%s, "
+                "ip=%s, agent=%s — alle Sitzungen werden beendet",
+                user_id, ip_address, user_agent
+            )
+            await self.beende_sitzungskette(user_id)
+            return None
+
         if session['expires_at'] < datetime.now(timezone.utc):
             async with self.db_pool.acquire() as conn:
                 await conn.execute(
@@ -333,25 +426,52 @@ class AuthService:
                     refresh_token
                 )
             return None
-        
-        user_id = session['user_id']
-        
+
         async with self.db_pool.acquire() as conn:
-            await conn.execute(
-                "DELETE FROM user_sessions WHERE refresh_token = $1",
+            # Entwerten, nicht loeschen: die Zeile ist ab jetzt der Koeder, an
+            # dem eine Wiederverwendung auffaellt. Die Bedingung
+            # `revoked_at IS NULL` macht daraus einen atomaren Schritt — zwei
+            # gleichzeitige Erneuerungen mit demselben Token koennen nicht
+            # beide gewinnen.
+            entwertet = await conn.execute(
+                "UPDATE user_sessions SET revoked_at = NOW() "
+                "WHERE refresh_token = $1 AND revoked_at IS NULL",
                 refresh_token
             )
-        
+        if entwertet.endswith(" 0"):
+            logger.error(
+                "Wettlauf um denselben Refresh-Token: user_id=%s — Sitzungen werden beendet",
+                user_id
+            )
+            await self.beende_sitzungskette(user_id)
+            return None
+
         new_access_token = self.create_access_token(user_id)
         new_refresh_token = await self.create_refresh_token(user_id, user_agent=user_agent, ip_address=ip_address)
-        
+
         return new_access_token, new_refresh_token
-    
+
+    async def beende_sitzungskette(self, user_id: int):
+        """
+        Antwort auf eine erkannte Wiederverwendung: alle Sitzungen loeschen und
+        alle noch laufenden Access-Token sperren.
+
+        Ohne den zweiten Teil behielte ein Angreifer bis zu 15 Minuten Zugriff —
+        so lange gilt ein Access-Token, und der fragt die Datenbank nicht.
+        """
+        await self.revoke_all_sessions(user_id)
+        await self.blacklist_all_user_jtis(user_id, self.access_token_expire * 60 + 60)
+
     async def revoke_refresh_token(self, refresh_token: str):
-        """Revoke a refresh token (logout)"""
+        """
+        Abmelden. Entwertet statt zu loeschen, aus demselben Grund wie bei der
+        Drehung: taucht der Token nach dem Abmelden wieder auf, hat ihn jemand
+        anders. Aufgeraeumt wird ueber `expires_at`.
+        """
         async with self.db_pool.acquire() as conn:
             await conn.execute(
-                "DELETE FROM user_sessions WHERE refresh_token = $1",
+                "UPDATE user_sessions SET revoked_at = NOW() "
+                "WHERE refresh_token = $1 AND revoked_at IS NULL",
                 refresh_token
             )
 
