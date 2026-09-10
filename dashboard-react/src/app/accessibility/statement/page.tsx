@@ -1,6 +1,7 @@
 'use client';
 
 import StatementGenerator from '@/components/accessibility/StatementGenerator';
+import NachweisLinks from '@/components/accessibility/NachweisLinks';
 
 export default function AccessibilityStatementPage() {
   return (
@@ -11,6 +12,7 @@ export default function AccessibilityStatementPage() {
         <a href="/accessibility/worklist" className="font-semibold underline">Fixes &amp; Freigaben</a>
         {' '}— dort verbinden Sie auch Ihr GitHub-Repository für den Ein-Klick-Pull-Request.
       </div>
+      <NachweisLinks />
       <StatementGenerator />
     </main>
   );

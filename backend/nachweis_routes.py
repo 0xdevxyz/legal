@@ -36,7 +36,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from compliance_engine.nachweis_generator import (
     baue_nachweis, erklaerung_aus_nachweis, nachweis_token,
 )
-from compliance_engine.nachweis_seite import nachweis_als_html
+from compliance_engine.nachweis_seite import erklaerung_als_html, nachweis_als_html
 
 logger = logging.getLogger(__name__)
 
@@ -325,25 +325,65 @@ def _fremdtext(wert: str, grenze: int = 200) -> str:
     return sauber[:grenze]
 
 
+def oeffentliche_basis() -> str:
+    """Die Adresse, unter der complyo.de den Nachweis nach aussen zeigt.
+
+    Die Formen `/nachweis/{site_id}/{token}` (Protokoll) und
+    `.../erklaerung` (Erklaerung) leitet nginx auf die Seiten-Endpunkte
+    dieses Routers weiter. Sie stehen in der Erklaerung und im Einbettungscode
+    des Kunden, deshalb duerfen sie sich nicht aendern.
+    """
+    return os.getenv("COMPLYO_PUBLIC_URL", "https://complyo.de").rstrip("/")
+
+
+async def _erklaerung_text(site_id: str, token: str, anbieter: str,
+                           kontakt: str) -> Dict[str, Any]:
+    """Erklaerung und Nachweis aus derselben Messung, fuer beide Fassungen."""
+    antwort = await oeffentlicher_nachweis(site_id, token)
+    nachweis = json.loads(antwort.body)
+    text = erklaerung_aus_nachweis(
+        nachweis,
+        anbieter=_fremdtext(anbieter) or nachweis["site_url"],
+        kontakt=_fremdtext(kontakt) or "über das Kontaktformular dieser Website",
+        nachweis_url=f"{oeffentliche_basis()}/nachweis/{site_id}/{token}",
+    )
+    return {"markdown": text, "nachweis": nachweis}
+
+
 @router.get("/{site_id}/{token}/erklaerung")
 async def oeffentliche_erklaerung(
     site_id: str, token: str, anbieter: str = "", kontakt: str = ""
 ) -> JSONResponse:
     """Die Barrierefreiheitserklärung als Markdown — aus derselben Messung."""
-    antwort = await oeffentlicher_nachweis(site_id, token)
-    nachweis = json.loads(antwort.body)
-
-    basis = os.getenv("COMPLYO_PUBLIC_URL", "https://complyo.de").rstrip("/")
-    text = erklaerung_aus_nachweis(
-        nachweis,
-        anbieter=_fremdtext(anbieter) or nachweis["site_url"],
-        kontakt=_fremdtext(kontakt) or "über das Kontaktformular dieser Website",
-        nachweis_url=f"{basis}/nachweis/{site_id}/{token}",
-    )
+    ergebnis = await _erklaerung_text(site_id, token, anbieter, kontakt)
     return JSONResponse(
-        content={"markdown": text, "gemessen_am": nachweis["gemessen_am"]},
+        content={"markdown": ergebnis["markdown"],
+                 "gemessen_am": ergebnis["nachweis"]["gemessen_am"]},
         headers={"Access-Control-Allow-Origin": "*",
                  "Cache-Control": "public, max-age=900"},
+    )
+
+
+@router.get("/{site_id}/{token}/erklaerung/seite", response_class=HTMLResponse)
+async def erklaerung_seite(
+    site_id: str, token: str, anbieter: str = "", kontakt: str = ""
+) -> HTMLResponse:
+    """
+    Die Erklaerung als eigenstaendige Seite.
+
+    Bis zum 11.09.2026 gab es die Erklaerung nur als Markdown in einer
+    JSON-Antwort. Der Betreiber, der sie verlinken wollte, hatte nichts zum
+    Verlinken. Diese Seite ist das Ziel fuer `/nachweis/{site_id}/{token}/erklaerung`
+    auf complyo.de. Gleiche Regeln wie beim Protokoll: keine fremden
+    Schriften, kein Skript, `lang="de"`, echte Ueberschriften. `anbieter` und
+    `kontakt` gehen durch `_fremdtext` und werden beim Rendern escaped.
+    """
+    ergebnis = await _erklaerung_text(site_id, token, anbieter, kontakt)
+    return HTMLResponse(
+        content=erklaerung_als_html(ergebnis["markdown"],
+                                    ergebnis["nachweis"]["site_url"]),
+        headers={"Cache-Control": "public, max-age=900",
+                 "X-Content-Type-Options": "nosniff"},
     )
 
 
