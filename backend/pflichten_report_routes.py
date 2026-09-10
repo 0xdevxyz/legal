@@ -4,6 +4,7 @@ Pflichten-Report-API (Phase 7.2 „Pflichtenradar").
 - PUT  /api/pflichten-report/profile  — Firmenprofil speichern (JSONB answers)
 - GET  /api/pflichten-report/profile  — Profil laden
 - GET  /api/pflichten-report          — Report: Katalog × Profil (+ Scan-Kontext)
+- GET  /api/pflichten-report/abmahnwellen — Abmahn-Radar: Wellen × Profil × letzter Scan
 
 Plan-Gating: Free-Plan sieht Zähler + die Top-3-Pflichten (Teaser), zahlende
 Pläne den vollen Report. RDG-Haftungs-Design liegt im Katalog selbst
@@ -19,6 +20,7 @@ from pydantic import BaseModel, Field
 from dependencies import get_current_user, get_db
 from pflichten_katalog import evaluate_pflichten, APPLIES, CHECK
 from pflichten_events import sync_pflichten_events, get_events_for_rules
+from abmahnwellen import ABMAHNWELLEN, HINWEIS, HINWEIS_OHNE_PROFIL, wellen_anreichern, teaser_anwenden
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +172,60 @@ async def get_updates_feed(
             "Automatisch zugeordnete Meldungen aus dem Rechts-Monitoring — "
             "Information, keine Rechtsberatung. Quelle jeweils verlinkt."
         ),
+    }
+
+
+ABMAHN_TEASER_LIMIT = 2
+
+
+@router.get("/abmahnwellen")
+async def get_abmahnwellen(
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    """
+    Abmahn-Radar: kuratierte Wellen (abmahnwellen.py), je Welle mit
+    Betroffenheit aus Firmenprofil und letztem Scan.
+
+    Anders als Report und Feed antwortet die Route ohne Profil NICHT mit 404:
+    die Wellen selbst sind für jeden nützlich, nur die Einschätzung fehlt dann
+    (betroffenheit „unbekannt" plus Hinweis auf den Fragebogen). Die
+    Einzelbefunde des Scans liegen nicht in der Datenbank; die Zuordnung über
+    Stichwörter macht das Dashboard aus seinem Scan-Cache.
+    """
+    user_id = current_user["id"]
+    prow = await db.fetchrow(
+        "SELECT answers FROM company_profiles WHERE user_id = $1", user_id
+    )
+    report_items = None
+    if prow:
+        answers = prow["answers"]
+        if isinstance(answers, str):
+            answers = json.loads(answers)
+        report_items = evaluate_pflichten(answers)["items"]
+
+    scan = await _latest_scan_pillars(db, user_id)
+    wellen = wellen_anreichern(report_items, scan)
+
+    plan_type = await _get_plan_type(db, user_id)
+    is_paid = plan_type not in ("free", "freemium")
+    if not is_paid:
+        wellen = teaser_anwenden(wellen, ABMAHN_TEASER_LIMIT)
+    gesperrt = sum(1 for w in wellen if w["locked"])
+
+    return {
+        "wellen": wellen,
+        "total": len(ABMAHNWELLEN),
+        "profil_vorhanden": report_items is not None,
+        "scan_context": scan,
+        "plan_type": plan_type,
+        "locked": not is_paid,
+        "teaser": (
+            {"hidden_count": gesperrt,
+             "upgrade_hint": f"Betroffenheit für {gesperrt} weitere Wellen im Pro-Plan."}
+            if not is_paid and gesperrt else None
+        ),
+        "hinweis": HINWEIS if report_items is not None else f"{HINWEIS_OHNE_PROFIL} {HINWEIS}",
     }
 
 
