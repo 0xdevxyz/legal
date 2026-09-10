@@ -334,7 +334,7 @@ class AccessibilityPostScanProcessor:
         # geaenderte Linkfarbe sieht der Betreiber sofort. Deshalb `status`
         # 'pending' — das Manifest liefert nur 'approved' aus, es aendert sich
         # also nichts an der Kundenseite, bevor jemand zugestimmt hat.
-        kontrast = self._kontrast_fix_aus_issues(accessibility_issues)
+        kontrast = self._kontrast_fix_aus_issues(accessibility_issues, site_url)
         if kontrast:
             fixes.append(kontrast)
 
@@ -343,7 +343,7 @@ class AccessibilityPostScanProcessor:
         # entsperrter Zoom und ein Titel an einer Einbettung aendern das
         # Aussehen nicht. Sie gehen deshalb wie die uebrigen dokumentweiten
         # Fixes freigegeben raus.
-        struktur = self._struktur_fix_aus_issues(accessibility_issues)
+        struktur = self._struktur_fix_aus_issues(accessibility_issues, site_url)
         if struktur:
             fixes.append(struktur)
 
@@ -351,7 +351,8 @@ class AccessibilityPostScanProcessor:
 
     @staticmethod
     def _struktur_fix_aus_issues(
-        accessibility_issues: List[Dict[str, Any]]
+        accessibility_issues: List[Dict[str, Any]],
+        site_url: str = ""
     ) -> Optional[Dict[str, Any]]:
         """Holt die verifizierten Struktur-Fixes aus dem Scan-Befund."""
         for issue in accessibility_issues:
@@ -373,14 +374,20 @@ class AccessibilityPostScanProcessor:
                 },
                 "wcag_criterion": "1.3.1",
                 "confidence": 0.95,
-                "page_url": issue.get("page_url"),
+                # Rueckfall auf die gescannte Seite: ohne Herkunft kann die
+                # Wirkungsueberwachung spaeter nicht unterscheiden, ob eine
+                # Regel ihr Ziel verloren hat oder auf einer Unterseite
+                # schlicht nichts zu tun ist. Genau daran lag der Fehlalarm
+                # von 118 gegen 24 auf complyo.de (10.09.2026).
+                "page_url": issue.get("page_url") or site_url,
                 "source": "scan",
             }
         return None
 
     @staticmethod
     def _kontrast_fix_aus_issues(
-        accessibility_issues: List[Dict[str, Any]]
+        accessibility_issues: List[Dict[str, Any]],
+        site_url: str = ""
     ) -> Optional[Dict[str, Any]]:
         """Holt die verifizierten Kontrast-Regeln aus dem Scan-Befund."""
         for issue in accessibility_issues:
@@ -400,7 +407,12 @@ class AccessibilityPostScanProcessor:
                 },
                 "wcag_criterion": "1.4.3",
                 "confidence": 0.95,
-                "page_url": issue.get("page_url"),
+                # Rueckfall auf die gescannte Seite: ohne Herkunft kann die
+                # Wirkungsueberwachung spaeter nicht unterscheiden, ob eine
+                # Regel ihr Ziel verloren hat oder auf einer Unterseite
+                # schlicht nichts zu tun ist. Genau daran lag der Fehlalarm
+                # von 118 gegen 24 auf complyo.de (10.09.2026).
+                "page_url": issue.get("page_url") or site_url,
                 "source": "scan",
                 "status": "pending",
             }

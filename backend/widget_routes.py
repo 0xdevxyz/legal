@@ -654,19 +654,37 @@ async def get_fix_manifest(site_id: str, request: Request):
     # `css-rule` traegt genau eine Regel, `kontrast-css` buendelt viele: die
     # Tabelle laesst nur eine Zeile je (site_id, fix_type) zu, und eine
     # Kontrast-Reparatur besteht aus einer Regel je Selektor.
+    # Jede Regel bekommt die Seite mit, auf der sie gemessen wurde.
+    #
+    # Der Grund ist ein Messfehler mit Aussenwirkung: eine Kontrastregel von
+    # der Startseite findet auf einer Unterseite kein Ziel, und das Widget
+    # zaehlte das als "verfehlt". Auf complyo.de standen so 118 verfehlte
+    # gegen 24 angewendete Reparaturen, auf loqal.io 797 gegen 33 — und der
+    # Pruefnachweis meldete dem Kunden woertlich, das deute auf eine Aenderung
+    # an seiner Website hin. Ein Fehlalarm in genau dem Dokument, das Vertrauen
+    # herstellen soll.
+    #
+    # Mit `seite` kann das Widget die beiden Faelle trennen: kein Ziel auf der
+    # Seite, auf der die Regel gemessen wurde, ist ein echter Fehlschlag. Kein
+    # Ziel auf einer anderen Seite heisst schlicht, dass dort nichts zu tun ist.
+    def _mit_seite(regel: dict, quelle: dict) -> dict:
+        angereichert = dict(regel)
+        angereichert.setdefault("seite", quelle.get("page_url"))
+        return angereichert
+
     css_rules = [
-        f["payload"] for f in document_fixes
+        _mit_seite(f["payload"], f) for f in document_fixes
         if f.get("fix_type") == "css-rule" and isinstance(f.get("payload"), dict)
     ]
     for f in document_fixes:
         if f.get("fix_type") == "struktur" and isinstance(f.get("payload"), dict):
             css_rules.extend([
-                r for r in (f["payload"].get("css_rules") or [])
+                _mit_seite(r, f) for r in (f["payload"].get("css_rules") or [])
                 if isinstance(r, dict) and r.get("selector") and r.get("declarations")
             ])
         if f.get("fix_type") == "kontrast-css" and isinstance(f.get("payload"), dict):
             css_rules.extend([
-                r for r in (f["payload"].get("rules") or [])
+                _mit_seite(r, f) for r in (f["payload"].get("rules") or [])
                 if isinstance(r, dict) and r.get("selector") and r.get("declarations")
             ])
 
