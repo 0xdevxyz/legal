@@ -2,14 +2,11 @@
 
 import { useState, Suspense, useEffect } from 'react';
 
-// Fassung der AGB, die bei der Registrierung angezeigt wird. Muss mit dem
-// Stand-Datum auf https://complyo.de/agb uebereinstimmen.
-const AGB_VERSION = '2026-09-01';
-// Fassung des Auftragsverarbeitungsvertrages nach Art. 28 DSGVO. Er wird mit
-// der Registrierung in Textform geschlossen (Art. 28 Abs. 9) — ohne ihn duerfte
-// kein Kunde die Widgets auf seiner Website einsetzen, weil complyo dabei Daten
-// seiner Besucher verarbeitet.
-const AVV_VERSION = '2026-09-10';
+// Fassungen der AGB und des Auftragsverarbeitungsvertrages (Art. 28 DSGVO),
+// die bei der Registrierung angezeigt und protokolliert werden. Sie stehen
+// seit dem 11.09.2026 in lib/vertragsstand, weil das Gate fuer Bestandskonten
+// dieselben Werte braucht.
+import { AGB_VERSION, AVV_VERSION } from '@/lib/vertragsstand';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {

@@ -476,6 +476,31 @@ def pruefe_host_signale() -> list:
     return befunde
 
 
+def pruefe_bezahlweg() -> list:
+    """Kann überhaupt jemand bezahlen?
+
+    Seit dem Launch-Audit vom 31.08.2026 steht Stripe auf einem Testschlüssel.
+    Das ist kein technischer Ausfall, deshalb fiel es keinem Wächter auf: alle
+    Routen antworten, der Checkout öffnet sich, nur echte Karten werden
+    abgelehnt. Elf Tage lang stand der Punkt auf einer Entscheidungsliste,
+    die niemand täglich liest. Ein Geschäftssignal, das den Umsatz auf null
+    hält, gehört in denselben Kanal wie ein kranker Container. Gemeldet wird
+    einmal am Tag (ERNEUT_NACH_STUNDEN), nicht stündlich.
+    """
+    if os.getenv("ENVIRONMENT", "production") != "production":
+        return []
+    key = os.getenv("STRIPE_SECRET_KEY", "")
+    if not key:
+        return [("stripe-schluessel-fehlt",
+                 "STRIPE_SECRET_KEY ist nicht gesetzt: kein Bezahlweg.")]
+    if key.startswith("sk_test_"):
+        return [("stripe-testmodus",
+                 "Stripe läuft mit Testschlüssel (sk_test_): kein Kunde kann bezahlen. "
+                 "Umschalten mit scripts/stripe-live-umschalten.py, Ablauf in "
+                 "planning/STRIPE_LIVE_CHECKLISTE.md.")]
+    return []
+
+
 def baue_telegram_text(befunde: list) -> str:
     zeilen = [f"• {text}" for _, text in befunde]
     return (f"⚠️ complyo-Wächter: {len(befunde)} Befund(e)\n\n"
@@ -562,6 +587,7 @@ async def main() -> int:
         befunde.append(("sicherung-pruefung-abgestuerzt",
                         f"Prüfung der Datensicherung fehlgeschlagen: {e}"))
     befunde.extend(pruefe_host_signale())
+    befunde.extend(pruefe_bezahlweg())
 
     if not befunde:
         logger.info("Alles ruhig — kein Befund.")

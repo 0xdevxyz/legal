@@ -26,6 +26,9 @@ AVV_SEITE = os.path.join(WURZEL, "landing-react", "src", "app", "avv", "page.tsx
 AGB_SEITE = os.path.join(WURZEL, "landing-react", "src", "app", "agb", "page.tsx")
 DSE_SEITE = os.path.join(WURZEL, "landing-react", "src", "app", "datenschutz", "page.tsx")
 REGISTRIERUNG = os.path.join(WURZEL, "dashboard-react", "src", "app", "register", "page.tsx")
+# Seit dem 11.09.2026 steht die Fassung im Dashboard an EINER Stelle; die
+# Registrierung und das Gate fuer Bestandskonten importieren sie von dort.
+DASHBOARD_STAND = os.path.join(WURZEL, "dashboard-react", "src", "lib", "vertragsstand.ts")
 
 frontend_da = pytest.mark.skipif(
     not os.path.exists(AVV_SEITE), reason="landing-react nicht eingehaengt")
@@ -99,11 +102,11 @@ def test_backend_protokolliert_die_avv_fassung():
 
 def test_fassungen_stimmen_ueberein():
     """Registrierung und Vertragstext duerfen nicht auseinanderlaufen."""
-    if not (os.path.exists(REGISTRIERUNG) and os.path.exists(AVV_SEITE)):
+    if not (os.path.exists(DASHBOARD_STAND) and os.path.exists(AVV_SEITE)):
         pytest.skip("Frontends nicht eingehaengt")
-    reg = open(REGISTRIERUNG, encoding="utf-8").read()
+    reg = open(DASHBOARD_STAND, encoding="utf-8").read()
     treffer = re.search(r"const AVV_VERSION = '([\d-]+)'", reg)
-    assert treffer, "AVV_VERSION fehlt in der Registrierung"
+    assert treffer, "AVV_VERSION fehlt in lib/vertragsstand.ts"
     fassung = treffer.group(1)
     jahr, monat, tag = fassung.split("-")
     seite = open(AVV_SEITE, encoding="utf-8").read()

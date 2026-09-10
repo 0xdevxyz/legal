@@ -161,6 +161,8 @@ from git_routes import git_router, init_git_routes
 from alt_text_routes import router as alt_text_router
 from agentur_a11y_routes import router as agentur_a11y_router, init_agentur_a11y_routes
 from nachweis_routes import router as nachweis_router, init_nachweis_routes
+from nachweis_links_routes import router as nachweis_links_router
+from vertrag_routes import router as vertrag_router
 from wirkung_routes import router as wirkung_router, init_wirkung_routes
 # Der Wirkungsscan: misst dieselbe Seite ohne und mit complyo-Widget.
 from wirkungsscan_routes import (
@@ -174,6 +176,7 @@ import deep_cookie_scanner_routes as _deep_cookie_scanner_routes
 # Knowledge Base - Rechts-Updates & Gesetzes-Vault (reads the Obsidian vault
 # populated by the daily knowledge_updater cron; backed by backend/knowledge engine)
 from knowledge_routes import router as knowledge_router
+from abmahnung_routes import router as abmahnung_router  # Abmahnung gegen die Messung halten
 
 # Models for new endpoints
 class AnalyzeRequest(BaseModel):
@@ -746,6 +749,8 @@ async def startup_event():
     # Oeffentlicher Pruefnachweis — bewusst ohne Anmeldung: ein Nachweis, den
     # nur der Betreiber sieht, ist ein Bericht und kein Nachweis.
     app.include_router(nachweis_router)
+    app.include_router(nachweis_links_router)  # Nachweis-Adressen fuer den angemeldeten Kunden
+    app.include_router(vertrag_router)  # Vertragsstand und AVV-Zustimmung fuer Bestandskonten
     # Wirksamkeitsueberwachung: das Widget meldet je Seite, was angekommen ist
     # und was ins Leere lief. Oeffentlich, weil es auf Kundendomains laeuft.
     app.include_router(wirkung_router)
@@ -753,6 +758,7 @@ async def startup_event():
     app.include_router(deep_cookie_scanner_router)  # Deep Cookie Scanner - Premium Feature
     app.include_router(legal_document_router)  # AUDIT-19: DPA Generator
     app.include_router(knowledge_router)  # Knowledge Base - Rechts-Updates & Gesetzes-Vault
+    app.include_router(abmahnung_router)  # Abmahnung pruefen: Vorwuerfe gegen die Messung
     
     # Initialize Alt-Text routes
     init_agentur_a11y_routes(db_pool)

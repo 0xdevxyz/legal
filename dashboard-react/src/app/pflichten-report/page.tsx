@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getApiClient } from '@/lib/api-client';
+import AbmahnRadar from '@/components/pflichten/AbmahnRadar';
 import {
   Radar, Loader2, AlertTriangle, CheckCircle2, HelpCircle, MinusCircle,
   Lock, ExternalLink, Pencil,
@@ -237,6 +238,10 @@ export default function PflichtenReportPage() {
               </div>
             );
           })}
+
+          {/* Abmahn-Radar: Wellen × Profil × Scan-Befunde, vor dem Feed, weil er
+              die konkretere Aussage trägt ("betrifft dich, weil deine Website das hat") */}
+          <AbmahnRadar />
 
           {/* Änderungs-Feed (Phase 7.3 lebender Pflichten-Graph) */}
           {updatesQuery.data && updatesQuery.data.total_events > 0 && (
