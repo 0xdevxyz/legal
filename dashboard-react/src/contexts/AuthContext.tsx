@@ -32,6 +32,9 @@ interface RegisterData {
   // Nachweis nach Ziffer 1 der AGB (Vertragsschluss nur mit Unternehmern).
   unternehmer_bestaetigt?: boolean;
   agb_version?: string;
+  // Fassung des Auftragsverarbeitungsvertrages nach Art. 28 DSGVO, den der
+  // Kunde mit der Registrierung in Textform mitschliesst.
+  avv_version?: string;
 }
 
 interface AuthContextType {

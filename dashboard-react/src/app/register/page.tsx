@@ -30,6 +30,10 @@ const MODULES = [
     { id: 'monitoring', name: 'Monitoring', icon: BarChart3, description: 'Automatische Scans & Alerts' },
 ];
 
+// Preis je einzelner Saeule. Deckungsgleich mit der Tarifkarte und mit
+// STRIPE_PRICE_SINGLE_MODULE (29 EUR/Monat, geprueft am 10.09.2026).
+const EINZELSAEULE_JE_MODUL = 29;
+
 const TARIFE = [
     { id: 'free', name: 'Free', price: '0 €', hint: '1 Fix' },
     { id: 'single', name: 'Einzelsäule', price: '29 €/Monat', hint: 'je Säule' },
@@ -92,12 +96,46 @@ function RegisterForm() {
         );
     };
 
-    const calculatePrice = () => {
+    // Die Zusammenfassung vor dem Kauf MUSS denselben Preis nennen, den Stripe
+    // abbucht. Bis zum 10.09.2026 stand hier die alte Preisliste (Pro 49,
+    // Agentur 299, Monitoring 19, Einzelsaeule 19 je Modul), waehrend die
+    // Tarifkarten darueber und Stripe bereits die neue fuehrten (89 / 599 / 39
+    // / 29). Der letzte Bildschirm vor "Weiter zur Zahlung" versprach damit
+    // rund die Haelfte des Betrages, der dann eingezogen wurde.
+    //
+    // Deshalb kommen die Betraege jetzt aus derselben Quelle wie der Checkout:
+    // GET /api/stripe/plans. Solange sie nicht geladen sind, steht ein
+    // Gedankenstrich — lieber keine Zahl als eine falsche.
+    const [tarifpreise, setTarifpreise] = useState<Record<string, { monthly: number; yearly: number }> | null>(null);
+
+    useEffect(() => {
+        let abgebrochen = false;
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de'}/api/stripe/plans`)
+            .then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+            .then(d => {
+                if (abgebrochen) return;
+                const tabelle: Record<string, { monthly: number; yearly: number }> = {};
+                for (const p of d.plans || []) {
+                    tabelle[p.id] = { monthly: p.price_monthly, yearly: p.price_yearly };
+                }
+                // Die Einzelsaeule ist kein Stripe-Plan, sondern ein Preis je
+                // Modul. Er steht in den Tarifkarten und in Stripe bei 29.
+                tabelle.single = { monthly: EINZELSAEULE_JE_MODUL, yearly: 0 };
+                setTarifpreise(tabelle);
+            })
+            .catch(() => { if (!abgebrochen) setTarifpreise(null); });
+        return () => { abgebrochen = true; };
+    }, []);
+
+    const calculatePrice = (): { monthly: number | null; yearly: number | null; setup: number } => {
         if (plan === 'free') return { monthly: 0, yearly: 0, setup: 0 };
-        if (plan === 'agency') return { monthly: 299, yearly: 2990, setup: 0 };
-        if (plan === 'pro') return { monthly: 49, yearly: 490, setup: 0 };
-        if (plan === 'monitor') return { monthly: 19, yearly: 190, setup: 0 };
-        return { monthly: selectedModules.length * 19, yearly: 0, setup: 0 };
+        if (!tarifpreise) return { monthly: null, yearly: null, setup: 0 };
+        if (plan === 'single') {
+            return { monthly: selectedModules.length * EINZELSAEULE_JE_MODUL, yearly: 0, setup: 0 };
+        }
+        const eintrag = tarifpreise[plan];
+        if (!eintrag) return { monthly: null, yearly: null, setup: 0 };
+        return { monthly: eintrag.monthly, yearly: eintrag.yearly, setup: 0 };
     };
 
     const price = calculatePrice();
@@ -164,7 +202,8 @@ function RegisterForm() {
 
     const getPriceDisplay = () => {
         if (plan === 'free') return 'Kostenlos';
-        if (price.yearly > 0) return `${price.monthly}€/Monat oder ${price.yearly}€/Jahr`;
+        if (price.monthly === null) return 'Preis wird geladen …';
+        if (price.yearly && price.yearly > 0) return `${price.monthly}€/Monat oder ${price.yearly}€/Jahr`;
         return `${price.monthly}€/Monat`;
     };
 
