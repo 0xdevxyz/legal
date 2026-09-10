@@ -13,6 +13,7 @@ wäre schlimmer. Die Seite hat deshalb `lang`, eine Überschriftenordnung, einen
 Sprunglink, echte Tabellenköpfe und Kontraste über 7:1.
 """
 import html
+import re
 from typing import Any, Dict, List
 
 
@@ -232,6 +233,113 @@ def nachweis_als_html(n: Dict[str, Any]) -> str:
   neu erstellt werden. Es ist kein Siegel und bescheinigt keine vollständige
   Konformität — es zeigt, was geprüft wurde, was sich geändert hat und was
   offen ist.</p>
+</main>
+</body>
+</html>"""
+
+
+# ---------------------------------------------------------------------------
+# Die Barrierefreiheitserklaerung als Seite
+# ---------------------------------------------------------------------------
+#
+# Die Erklaerung entsteht als Markdown (siehe nachweis_generator), damit der
+# Betreiber sie in seine eigene Website uebernehmen kann. Bis zum 11.09.2026
+# gab es sie aber NUR so: als JSON mit einem Markdown-Feld. Wer den Link aus
+# dem Dashboard weitergab, schickte einen Datensatz. Hier wird derselbe Text
+# zu einer eigenstaendigen Seite, nach denselben Regeln wie das Protokoll.
+#
+# Der Umsetzer ist absichtlich klein: Ueberschriften, Listen, Absaetze,
+# **fett**, Trennlinie, Adressen. Alles andere bleibt Text. Eine
+# Markdown-Bibliothek liesse rohes HTML durch, und zwei der Eingaben
+# (`anbieter`, `kontakt`) kommen ungeprueft aus der Adresszeile.
+
+_FETT = re.compile(r"\*\*(.+?)\*\*")
+# Kein & im Muster: nach dem Escapen stuende dort `&amp;`, und eine Adresse
+# mit Abfrageteil zoege das Entity in den Link. Die Nachweis-Adresse hat
+# keinen Abfrageteil; alles andere bleibt einfach Text.
+_ADRESSE = re.compile(r"https?://[^\s<>\"'&]+")
+
+
+def _zeile_zu_html(text: str) -> str:
+    """Erst escapen, dann auszeichnen. In dieser Reihenfolge, sonst kommt
+    rohes HTML aus der Abfragezeichenkette durch."""
+    sicher = _e(text)
+
+    def _link(m: "re.Match[str]") -> str:
+        adresse = m.group(0).rstrip(".,;:)")
+        rest = m.group(0)[len(adresse):]
+        return f'<a href="{adresse}">{adresse}</a>{rest}'
+
+    sicher = _ADRESSE.sub(_link, sicher)
+    return _FETT.sub(r"<strong>\1</strong>", sicher)
+
+
+def markdown_zu_html(md: str) -> str:
+    """
+    Der kleine, sichere Umsetzer fuer die Erklaerung.
+
+    Versteht `#`, `##`, `- `, `---`, Leerzeilen als Absatzgrenze und
+    `**fett**`. Zeilen innerhalb eines Absatzes werden mit Zeilenumbruch
+    verbunden: die Kopfzeilen der Erklaerung (Geltungsbereich, Anbieter,
+    Stand) stehen im Markdown untereinander und sollen es auch auf der Seite.
+    """
+    bloecke: List[str] = []
+    absatz: List[str] = []
+    liste: List[str] = []
+
+    def absatz_schliessen() -> None:
+        if absatz:
+            bloecke.append("<p>" + "<br>\n".join(_zeile_zu_html(z) for z in absatz) + "</p>")
+            absatz.clear()
+
+    def liste_schliessen() -> None:
+        if liste:
+            bloecke.append("<ul>" + "".join(f"<li>{_zeile_zu_html(p)}</li>" for p in liste) + "</ul>")
+            liste.clear()
+
+    for roh in md.splitlines():
+        zeile = roh.strip()
+        if not zeile:
+            absatz_schliessen()
+            liste_schliessen()
+        elif zeile.startswith("## "):
+            absatz_schliessen()
+            liste_schliessen()
+            bloecke.append(f"<h2>{_zeile_zu_html(zeile[3:])}</h2>")
+        elif zeile.startswith("# "):
+            absatz_schliessen()
+            liste_schliessen()
+            bloecke.append(f"<h1>{_zeile_zu_html(zeile[2:])}</h1>")
+        elif zeile == "---":
+            absatz_schliessen()
+            liste_schliessen()
+            bloecke.append("<hr>")
+        elif zeile.startswith("- "):
+            absatz_schliessen()
+            liste.append(zeile[2:])
+        else:
+            liste_schliessen()
+            absatz.append(zeile)
+    absatz_schliessen()
+    liste_schliessen()
+    return "\n".join(bloecke)
+
+
+def erklaerung_als_html(markdown: str, site_url: str) -> str:
+    """Die Erklaerung als eigenstaendige, barrierefreie Seite."""
+    return f"""<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Erklärung zur Barrierefreiheit · {_e(site_url)}</title>
+<meta name="robots" content="noindex">
+<style>{STIL}</style>
+</head>
+<body>
+<a class="sprung" href="#inhalt">Zum Inhalt springen</a>
+<main id="inhalt">
+{markdown_zu_html(markdown)}
 </main>
 </body>
 </html>"""
