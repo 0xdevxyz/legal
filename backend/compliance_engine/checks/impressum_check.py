@@ -1,5 +1,5 @@
 """
-Impressum Check (TMG §5)
+Impressum Check (DDG §5, bis 14.05.2024 TMG §5)
 Prüft Impressum-Compliance
 
 ✨ UPGRADED: Nutzt Browser-Rendering für JavaScript-Websites (React, Vue, Next.js)

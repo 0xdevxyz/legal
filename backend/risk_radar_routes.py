@@ -99,7 +99,9 @@ async def get_risk_radar_score(
 
     categories = {
         "dsgvo": {"score": 0, "label": "DSGVO", "issues": []},
-        "ttdsg": {"score": 0, "label": "TTDSG / Cookies", "issues": []},
+        # Der Schluessel bleibt "ttdsg" (Frontend und gespeicherte Daten haengen
+        # daran); das Etikett nennt den seit 14.05.2024 gueltigen Namen.
+        "ttdsg": {"score": 0, "label": "TDDDG / Cookies", "issues": []},
         "uwg": {"score": 0, "label": "UWG / Wettbewerb", "issues": []},
         "bfsg": {"score": 0, "label": "BFSG / Barrierefreiheit", "issues": []},
         "agb": {"score": 0, "label": "AGB / Vertragsrecht", "issues": []},

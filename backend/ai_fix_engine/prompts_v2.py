@@ -203,7 +203,7 @@ class PromptBuilder:
         
         self.legal_keywords_ttdsg = [
             "Cookie", "Einwilligung", "Speicherung", "Tracking",
-            "Endeinrichtung", "§ 25 TTDSG", "Consent"
+            "Endeinrichtung", "§ 25 TDDDG", "Consent"
         ]
     
     def build_code_fix_prompt(
@@ -426,7 +426,7 @@ Erstelle eine VOLLSTÄNDIGE, INDIVIDUELL ANGEPASSTE DSGVO-Datenschutzerklärung.
     "instructions": "CMS-spezifische Anleitung für {cms}: Wo einfügen, wie verlinken"
   }},
   "estimated_time": "10-15 Minuten",
-  "legal_references": ["Art. 13 DSGVO", "Art. 6 DSGVO", "§ 25 TTDSG"]
+  "legal_references": ["Art. 13 DSGVO", "Art. 6 DSGVO", "§ 25 TDDDG"]
 }}
 ```"""
 
@@ -535,7 +535,7 @@ Antworte NUR mit dem JSON im TEXT_FIX_SCHEMA-Format."""
             detected_tools = context.get("technology", {}).get("analytics", [])
             tools_text = ", ".join(detected_tools) if detected_tools else "Keine"
             
-            prompt = f"""Du bist ein Experte für Cookie-Compliance und TTDSG.
+            prompt = f"""Du bist ein Experte für Cookie-Compliance und TDDDG.
 
 **AUFGABE:** Generiere Widget-Integration für Cookie-Consent-Management.
 
@@ -545,7 +545,7 @@ Antworte NUR mit dem JSON im TEXT_FIX_SCHEMA-Format."""
 - Analytics/Tracking: {tools_text}
 
 **WIDGET-ANFORDERUNGEN:**
-1. DSGVO & TTDSG konform (§ 25 TTDSG: Einwilligung vor Speicherung)
+1. DSGVO & TDDDG konform (§ 25 TDDDG: Einwilligung vor Speicherung)
 2. Granulare Consent-Verwaltung (Notwendig, Funktional, Statistik, Marketing)
 3. Opt-in als Standard (KEIN Pre-Check)
 4. Cookie-Details anzeigen
@@ -557,7 +557,7 @@ Antworte NUR mit dem JSON im TEXT_FIX_SCHEMA-Format."""
 {{
   "fix_id": "{issue.get('id', 'cookie_widget')}",
   "title": "Cookie-Consent-Widget Integration",
-  "description": "DSGVO/TTDSG-konformes Cookie-Banner",
+  "description": "DSGVO/TDDDG-konformes Cookie-Banner",
   "widget_type": "cookie-consent",
   "integration_code": "<script src=\\"https://widgets.complyo.de/cookie-banner-v2.0.0.min.js\\" data-site-id=\\"{site_id}\\" data-config='{{...}}'></script>",
   "configuration": {{
@@ -743,8 +743,8 @@ DEINE AUFGABE:
 
 RECHTLICHER KONTEXT:
 - DSGVO (EU-Datenschutz-Grundverordnung)
-- TMG (Telemediengesetz)
-- TTDSG (Telekommunikation-Telemedien-Datenschutz-Gesetz)
+- DDG (Digitale-Dienste-Gesetz)
+- TDDDG (Telekommunikation-Telemedien-Datenschutz-Gesetz)
 - WCAG 2.1 Level AA (Barrierefreiheit)
 - BITV 2.0 (Barrierefreie-Informationstechnik-Verordnung)
 

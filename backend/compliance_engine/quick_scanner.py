@@ -166,7 +166,7 @@ class QuickScanner:
                 "description": "Es wurde kein Impressum gefunden. Dies ist gesetzlich vorgeschrieben.",
                 "risk_euro": 5000,
                 "recommendation": "Impressum mit vollständigen Anbieterdaten erstellen",
-                "legal_basis": "TMG § 5",
+                "legal_basis": "DDG § 5",
                 "auto_fixable": True,
                 "is_missing": True,
                 "ai_explanation": "Das Impressum muss Name, Adresse und Kontaktdaten des Betreibers enthalten. Es schützt Nutzer und ist für alle gewerblichen Websites Pflicht."
@@ -211,7 +211,7 @@ class QuickScanner:
                 "description": "Tracking-Tools gefunden, aber kein Cookie-Consent-Banner. Nutzer müssen zustimmen, bevor Cookies gesetzt werden.",
                 "risk_euro": 50000,
                 "recommendation": "Nutzen Sie die integrierte Complyo Cookie-Compliance-Lösung im Dashboard unter 'Cookie-Compliance'",
-                "legal_basis": "TTDSG § 25, DSGVO Art. 7",
+                "legal_basis": "TDDDG § 25, DSGVO Art. 7",
                 "auto_fixable": True,
                 "ai_explanation": "Seit 2021 müssen Nutzer aktiv zustimmen, bevor Tracking-Cookies gesetzt werden. Complyo bietet ein vollständig DSGVO-konformes Cookie-Banner mit Consent-Management.",
                 "quick_fix_url": "/cookie-compliance"

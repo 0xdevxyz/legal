@@ -1026,7 +1026,7 @@ async def generate_impressum(
     current_user: dict = Depends(get_current_user),
     user_id: Optional[int] = Depends(get_current_user_id),
 ):
-    """AUDIT-28: Generiert Impressum gemäß §5 TMG / §5 DDG."""
+    """AUDIT-28: Generiert Impressum gemäß §5 DDG / §5 DDG."""
     db = get_db_pool()
     company_data = request.dict()
     try:
@@ -1186,7 +1186,7 @@ def _static_impressum(data: dict) -> dict:
     ust = data.get("ust_id", "")
     html = f"""<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Impressum</title></head><body>
 <h1>Impressum</h1>
-<h2>Angaben gemäß § 5 TMG / § 5 DDG</h2>
+<h2>Angaben gemäß § 5 DDG / § 5 DDG</h2>
 <p>{name}<br>{street}<br>{city}</p>
 {'<p>Telefon: ' + phone + '</p>' if phone else ''}
 <p>E-Mail: {email}</p>

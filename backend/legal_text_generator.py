@@ -39,6 +39,52 @@ except ImportError:  # pragma: no cover
 
 from legal_disclaimer import DISCLAIMER_LONG, DISCLAIMER_HTML
 from complyo_privacy_clause import build_complyo_privacy_clause
+
+
+# ---------------------------------------------------------------------------
+# Veraltete Gesetzesnamen
+# ---------------------------------------------------------------------------
+#
+# Am 14.05.2024 wurden drei Bezeichnungen abgeloest, die in jedem aelteren
+# Mustertext stehen und die ein Sprachmodell entsprechend haeufig reproduziert:
+#
+#   Telemediengesetz (TMG)                 -> Digitale-Dienste-Gesetz (DDG)
+#   Telekommunikation-Telemedien-Daten-
+#   schutz-Gesetz (TTDSG)                  -> Telekommunikation-Digitale-
+#                                             Dienste-Datenschutz-Gesetz (TDDDG)
+#   § 55 Rundfunkstaatsvertrag (RStV)      -> § 18 Medienstaatsvertrag (MStV)
+#
+# Der Prompt nennt seit dem 31.08.2026 die richtigen Namen. Es genuegt nicht:
+# das zuletzt erzeugte Dokument stammt vom 08.09.2026 und zitiert weiterhin
+# das TTDSG. Ein Sprachmodell laesst sich bitten, nicht zwingen — deshalb
+# diese feste Nachkorrektur. Sie ersetzt ausschliesslich Bezeichnungen, nie
+# Inhalte.
+_GESETZESNAMEN = (
+    ("Telemediengesetz (TMG)", "Digitale-Dienste-Gesetz (DDG)"),
+    ("Telemediengesetzes (TMG)", "Digitale-Dienste-Gesetzes (DDG)"),
+    ("Telemediengesetz", "Digitale-Dienste-Gesetz"),
+    ("§ 5 TMG", "§ 5 DDG"),
+    ("§5 TMG", "§5 DDG"),
+    ("§ 5 Abs. 1 TMG", "§ 5 Abs. 1 DDG"),
+    ("TMG", "DDG"),
+    ("§ 55 Abs. 2 RStV", "§ 18 Abs. 2 MStV"),
+    ("§ 55 RStV", "§ 18 MStV"),
+    ("§55 RStV", "§18 MStV"),
+    ("Rundfunkstaatsvertrag", "Medienstaatsvertrag"),
+    ("RStV", "MStV"),
+    ("TTDSG", "TDDDG"),
+)
+
+
+def aktuelle_gesetzesnamen(html: str) -> str:
+    """Ersetzt abgeloeste Gesetzesbezeichnungen im erzeugten Text."""
+    if not html:
+        return html
+    for alt, neu in _GESETZESNAMEN:
+        html = html.replace(alt, neu)
+    return html
+
+
 from third_country_clause import build_third_country_clause
 from compliance_engine import ai_budget
 
@@ -321,7 +367,7 @@ class LegalTextGenerator:
         laws_context = self._load_laws_context(["Impressumspflicht"], language)
         prompt = self._build_prompt(template, user_data, laws_context, DocumentType.IMPRINT)
         html = await self._call_ai(prompt)
-        html_with_disclaimer = html + DISCLAIMER_HTML
+        html_with_disclaimer = aktuelle_gesetzesnamen(html) + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.IMPRINT, language, html_with_disclaimer,
             legal_update_id, regeneration_trigger, user_data=user_data
@@ -400,7 +446,8 @@ class LegalTextGenerator:
 
         html = await self._call_ai(prompt)
         complyo_clause = build_complyo_privacy_clause(complyo_context) if complyo_context else ""
-        html_with_disclaimer = html + complyo_clause + third_country_clause + DISCLAIMER_HTML
+        html_with_disclaimer = (aktuelle_gesetzesnamen(html) + complyo_clause
+                                + third_country_clause + DISCLAIMER_HTML)
         doc_id = await self._save(
             user_id, DocumentType.PRIVACY, language, html_with_disclaimer,
             legal_update_id, regeneration_trigger, user_data=enriched_data
@@ -444,7 +491,7 @@ class LegalTextGenerator:
             enriched_data["business_type"] = "saas"
         prompt = self._build_prompt(template, enriched_data, laws_context, DocumentType.TOS)
         html = await self._call_ai(prompt)
-        html_with_disclaimer = html + DISCLAIMER_HTML
+        html_with_disclaimer = aktuelle_gesetzesnamen(html) + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.TOS, language, html_with_disclaimer,
             legal_update_id, regeneration_trigger, user_data=enriched_data
@@ -484,7 +531,7 @@ class LegalTextGenerator:
             enriched_data["cookie_inventory"] = "[]"
         prompt = self._build_prompt(template, enriched_data, laws_context, DocumentType.COOKIE_POLICY)
         html = await self._call_ai(prompt)
-        html_with_disclaimer = html + DISCLAIMER_HTML
+        html_with_disclaimer = aktuelle_gesetzesnamen(html) + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.COOKIE_POLICY, language, html_with_disclaimer,
             legal_update_id, regeneration_trigger, user_data=enriched_data
@@ -519,7 +566,7 @@ class LegalTextGenerator:
         laws_context = self._load_laws_context(["Widerrufsrecht", "Verbraucherrecht", "AGB-Recht"], language)
         prompt = self._build_prompt(template, user_data, laws_context, DocumentType.WITHDRAWAL)
         html = await self._call_ai(prompt)
-        html_with_disclaimer = html + DISCLAIMER_HTML
+        html_with_disclaimer = aktuelle_gesetzesnamen(html) + DISCLAIMER_HTML
         doc_id = await self._save(
             user_id, DocumentType.WITHDRAWAL, language, html_with_disclaimer,
             legal_update_id, regeneration_trigger, user_data=user_data
