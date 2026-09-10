@@ -4,6 +4,7 @@ import React from 'react';
 import { usePathname } from 'next/navigation';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import AuthGuard from '@/components/auth/AuthGuard';
+import VertragsGate from '@/components/auth/VertragsGate';
 import { istOhneRahmen } from '@/lib/oeffentliche-pfade';
 
 interface SidebarLayoutProps {
@@ -25,13 +26,18 @@ export const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
 
   return (
     <AuthGuard>
-      {/* Fixed compliance background sitting behind the whole shell */}
-      <div className="app-backdrop" aria-hidden />
+      {/* Bestandskonten ohne AVV-Zustimmung werden hier angehalten, bis sie
+          zugestimmt haben. Innerhalb der Anmeldewache, damit oeffentliche
+          Seiten nichts davon sehen. */}
+      <VertragsGate>
+        {/* Fixed compliance background sitting behind the whole shell */}
+        <div className="app-backdrop" aria-hidden />
 
-      <div className="app-shell">
-        <Sidebar />
-        <div className="app-content">{children}</div>
-      </div>
+        <div className="app-shell">
+          <Sidebar />
+          <div className="app-content">{children}</div>
+        </div>
+      </VertragsGate>
     </AuthGuard>
   );
 };

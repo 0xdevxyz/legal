@@ -161,6 +161,8 @@ from git_routes import git_router, init_git_routes
 from alt_text_routes import router as alt_text_router
 from agentur_a11y_routes import router as agentur_a11y_router, init_agentur_a11y_routes
 from nachweis_routes import router as nachweis_router, init_nachweis_routes
+from nachweis_links_routes import router as nachweis_links_router
+from vertrag_routes import router as vertrag_router
 from wirkung_routes import router as wirkung_router, init_wirkung_routes
 # Der Wirkungsscan: misst dieselbe Seite ohne und mit complyo-Widget.
 from wirkungsscan_routes import (
@@ -746,6 +748,8 @@ async def startup_event():
     # Oeffentlicher Pruefnachweis — bewusst ohne Anmeldung: ein Nachweis, den
     # nur der Betreiber sieht, ist ein Bericht und kein Nachweis.
     app.include_router(nachweis_router)
+    app.include_router(nachweis_links_router)  # Nachweis-Adressen fuer den angemeldeten Kunden
+    app.include_router(vertrag_router)  # Vertragsstand und AVV-Zustimmung fuer Bestandskonten
     # Wirksamkeitsueberwachung: das Widget meldet je Seite, was angekommen ist
     # und was ins Leere lief. Oeffentlich, weil es auf Kundendomains laeuft.
     app.include_router(wirkung_router)
