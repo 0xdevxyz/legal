@@ -267,9 +267,24 @@ async def get_addons_catalog():
     """
     Hole den kompletten Add-on-Katalog
     """
+    # `buchbar` sagt ehrlich, ob der Kaufweg existiert.
+    #
+    # Ohne dieses Feld zeigt der Katalog "ComploAI Guard, 99 EUR/Monat" wie
+    # jedes andere Angebot — und der Kaufknopf laeuft in einen 503, weil
+    # STRIPE_PRICE_COMPLOAI_GUARD leer ist (Stand 10.09.2026 betrifft das fuenf
+    # der acht Add-ons). Ein Angebot, das man nicht kaufen kann, gehoert nicht
+    # als kaufbares angezeigt.
+    def _mit_buchbarkeit(katalog: dict) -> dict:
+        angereichert = {}
+        for schluessel, eintrag in katalog.items():
+            kopie = dict(eintrag)
+            kopie["buchbar"] = bool(eintrag.get("stripe_price_id"))
+            angereichert[schluessel] = kopie
+        return angereichert
+
     return {
-        "monthly_addons": MONTHLY_ADDONS,
-        "onetime_addons": ONETIME_ADDONS
+        "monthly_addons": _mit_buchbarkeit(MONTHLY_ADDONS),
+        "onetime_addons": _mit_buchbarkeit(ONETIME_ADDONS)
     }
 
 @router.get("/my-addons")
