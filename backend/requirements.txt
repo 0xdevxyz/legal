@@ -49,6 +49,8 @@ jsonschema==4.20.0
 playwright==1.40.0
 certifi>=2024.2.2
 paramiko>=3.4.0
+# Textauszug aus hochgeladenen Abmahnschreiben (abmahnung_routes.py). Nur Text, keine Bilder.
+pypdf>=4.3
 
 # Testing
 pytest>=8.0.0
