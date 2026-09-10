@@ -1,5 +1,5 @@
 """
-Impressum Check (TMG §5)
+Impressum Check (DDG §5, bis 14.05.2024 TMG §5)
 Prüft Impressum-Compliance
 
 ✨ UPGRADED: Nutzt Browser-Rendering für JavaScript-Websites (React, Vue, Next.js)
@@ -11,6 +11,7 @@ from dataclasses import dataclass, asdict
 import re
 import logging
 import aiohttp
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +146,7 @@ async def check_impressum_compliance_smart(url: str, html: str = None, session=N
             import certifi
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_context)
-            async with aiohttp.ClientSession(connector=connector) as temp_session:
+            async with sichere_session(connector=connector) as temp_session:
                 async with temp_session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
                     html = await response.text()
         
@@ -199,7 +200,7 @@ async def _fetch_candidate_text(candidate_url: str, session, ssl_context) -> "tu
         else:
             import aiohttp as _aiohttp
             connector = _aiohttp.TCPConnector(ssl=ssl_context)
-            async with _aiohttp.ClientSession(connector=connector) as tmp:
+            async with sichere_session(connector=connector) as tmp:
                 async with tmp.get(candidate_url, timeout=_aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
                     return resp.status, (await resp.text() if resp.status == 200 else "")
     except Exception:

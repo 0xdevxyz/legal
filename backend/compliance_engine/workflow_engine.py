@@ -137,7 +137,7 @@ class WorkflowEngine:
                     description="Unsere KI analysiert Ihre Website auf Compliance-Probleme",
                     instructions=[
                         "Die KI prüft alle Seiten Ihrer Website",
-                        "DSGVO, TMG, TTDSG und Barrierefreiheit werden überprüft",
+                        "DSGVO, DDG, TDDDG und Barrierefreiheit werden überprüft",
                         "Analyse dauert 2-5 Minuten je nach Website-Größe"
                     ],
                     validation_method="ai_scan_completion",

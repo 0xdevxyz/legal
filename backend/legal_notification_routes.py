@@ -9,7 +9,13 @@ from typing import List, Optional
 
 from dependencies import get_current_user
 from database_service import db_service
-from legal_notification_service import legal_notification_service
+# Das Modul importieren, NICHT den Namen: `from x import singleton` bindet
+# den Wert im Augenblick des Imports — und das ist None, bevor
+# main_production den Dienst anlegt. Die spaetere Zuweisung im anderen
+# Modul erreicht diese Bindung nie.
+# Wirkung hier: alle vier Endpunkte antworteten dauerhaft mit
+# 503 "Notification Service nicht verfuegbar".
+import legal_notification_service as _dienst
 
 router = APIRouter(prefix="/api/legal-notifications", tags=["Legal Notifications"])
 
@@ -51,10 +57,10 @@ async def get_pending_notifications(
     """Holt alle ausstehenden Benachrichtigungen für den aktuellen User"""
     user_id = current_user.get("user_id")
     
-    if not legal_notification_service:
+    if not _dienst.legal_notification_service:
         raise HTTPException(status_code=503, detail="Notification Service nicht verfügbar")
     
-    notifications = await legal_notification_service.get_pending_notifications(user_id)
+    notifications = await _dienst.legal_notification_service.get_pending_notifications(user_id)
     
     return [
         NotificationResponse(
@@ -77,10 +83,10 @@ async def get_pending_notifications(
 @router.get("/confirm/{token}")
 async def confirm_notification(token: str):
     """Bestätigt eine Benachrichtigung (Nutzer hat zur Kenntnis genommen)"""
-    if not legal_notification_service:
+    if not _dienst.legal_notification_service:
         raise HTTPException(status_code=503, detail="Notification Service nicht verfügbar")
     
-    result = await legal_notification_service.confirm_notification(token)
+    result = await _dienst.legal_notification_service.confirm_notification(token)
     
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result.get("error", "Fehler bei Bestätigung"))
@@ -91,10 +97,10 @@ async def confirm_notification(token: str):
 @router.get("/dismiss/{token}")
 async def dismiss_notification(token: str):
     """Markiert eine Benachrichtigung als nicht relevant"""
-    if not legal_notification_service:
+    if not _dienst.legal_notification_service:
         raise HTTPException(status_code=503, detail="Notification Service nicht verfügbar")
     
-    result = await legal_notification_service.dismiss_notification(token)
+    result = await _dienst.legal_notification_service.dismiss_notification(token)
     
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result.get("error", "Fehler beim Verwerfen"))
@@ -245,9 +251,9 @@ async def trigger_process_new_changes(
     current_user: dict = Depends(get_current_user)
 ):
     """Manueller Trigger zum Verarbeiten neuer Gesetzesänderungen (Admin only)"""
-    if not legal_notification_service:
+    if not _dienst.legal_notification_service:
         raise HTTPException(status_code=503, detail="Notification Service nicht verfügbar")
     
-    background_tasks.add_task(legal_notification_service.process_new_legal_changes)
+    background_tasks.add_task(_dienst.legal_notification_service.process_new_legal_changes)
     
     return {"success": True, "message": "Verarbeitung gestartet"}

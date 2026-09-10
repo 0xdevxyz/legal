@@ -241,7 +241,7 @@ Erstelle für jedes Problem eine KONKRETE Lösung im JSON-Format:
 WICHTIG:
 - Nutze die ECHTEN Firmendaten aus dem Kontext
 - Bei fehlenden Daten: Verwende Platzhalter wie [IHRE FIRMA]
-- Texte müssen DSGVO/TMG-konform sein
+- Texte müssen DSGVO/DDG-konform sein
 - Gib konkrete, kopierbare Lösungen"""
     
     def _build_cookie_prompt(self, issues: List[Dict[str, Any]], context: Dict[str, Any]) -> str:
@@ -253,7 +253,7 @@ WICHTIG:
         
         issues_text = "\n".join([f"- {issue['title']}: {issue['description']}" for issue in issues])
         
-        return f"""Du bist ein Experte für Cookie-Compliance (TTDSG).
+        return f"""Du bist ein Experte für Cookie-Compliance (TDDDG).
 
 WEBSITE-KONTEXT:
 - URL: {context["url"]}
@@ -282,7 +282,7 @@ Erstelle Lösungen als JSON:
 WICHTIG:
 - Für Cookie-Banner: Erstelle Widget-Integration
 - Liste alle erkannten Cookies
-- DSGVO & TTDSG konform"""
+- DSGVO & TDDDG konform"""
     
     def _build_accessibility_prompt(self, issues: List[Dict[str, Any]], context: Dict[str, Any]) -> str:
         """

@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 import logging
 from typing import Dict, Any, Optional, Tuple
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,7 @@ async def fetch_html_for_verification(url: str, timeout: int = 12) -> Optional[s
 
         ssl_ctx = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_ctx)
-        async with aiohttp.ClientSession(connector=connector) as session:
+        async with sichere_session(connector=connector) as session:
             async with session.get(
                 url, timeout=aiohttp.ClientTimeout(total=timeout), allow_redirects=True
             ) as r:

@@ -319,8 +319,18 @@ class AISolutionCache:
                     FROM ai_solution_cache
                 """)
                 
+                # `ai_cache_stats` existiert nicht (nie angelegt). Die Zahlen
+                # stehen ohnehin im Zwischenspeicher selbst; sie werden hier
+                # gruppiert, statt eine Sicht abzufragen, die es nicht gibt.
                 category_stats = await conn.fetch("""
-                    SELECT * FROM ai_cache_stats
+                    SELECT category,
+                           COUNT(*)              AS eintraege,
+                           SUM(usage_count)      AS treffer,
+                           AVG(success_rate)     AS erfolgsquote,
+                           MAX(last_used_at)     AS zuletzt
+                    FROM ai_solution_cache
+                    GROUP BY category
+                    ORDER BY treffer DESC NULLS LAST
                 """)
                 
                 return {

@@ -1700,9 +1700,9 @@ Art. 28 DSGVO abgeschlossen:</p>
   </nav>
 </footer>
 
-<!-- Impressum-Seite /impressum (Pflichtangaben §5 TMG / §18 MStV) -->
+<!-- Impressum-Seite /impressum (Pflichtangaben §5 DDG / §18 MStV) -->
 <h1>Impressum</h1>
-<h2>Angaben gemäß § 5 TMG</h2>
+<h2>Angaben gemäß § 5 DDG</h2>
 <address>
   Ihr Firmenname GmbH<br>
   Musterstraße 1<br>
@@ -1717,7 +1717,7 @@ Art. 28 DSGVO abgeschlossen:</p>
 <p>DE123456789</p>''',
             steps=[
                 '1. Erstellen Sie eine Seite unter /impressum',
-                '2. Pflichtangaben: Name + Anschrift + E-Mail + Telefon (§5 TMG)',
+                '2. Pflichtangaben: Name + Anschrift + E-Mail + Telefon (§5 DDG)',
                 '3. Bei GmbH/AG: Handelsregisternummer + Amtsgericht + Geschäftsführer angeben',
                 '4. Verlinken Sie das Impressum im Footer von jeder Seite (max. 2 Klicks)',
                 '5. Nutzen Sie den Complyo Impressum-Generator für alle Pflichtangaben'
@@ -1844,7 +1844,7 @@ def _generate_solution(category: str) -> IssueSolution:
         'impressum': IssueSolution(
             code_snippet='<footer>\n  <a href="/impressum" rel="legal">Impressum</a>\n  <a href="/datenschutz" rel="privacy-policy">Datenschutz</a>\n</footer>',
             steps=[
-                '1. Erstelle eine Impressum-Seite unter /impressum mit allen Pflichtangaben (§5 TMG)',
+                '1. Erstelle eine Impressum-Seite unter /impressum mit allen Pflichtangaben (§5 DDG)',
                 '2. Pflichtangaben: Firmenname, Adresse, E-Mail, Telefon — bei GmbH/AG auch Handelsregisternummer',
                 '3. Verlinke das Impressum im Footer jeder Seite (max. 2 Klicks erreichbar)',
                 '4. Nutze den Complyo Impressum-Generator für eine rechtssichere Vorlage'

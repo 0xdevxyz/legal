@@ -14,6 +14,7 @@ from urllib.parse import urldefrag, urljoin, urlparse
 import logging
 import aiohttp
 from xml.etree import ElementTree as ET
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ async def check_barrierefreiheit_compliance_smart(
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_context)
             
-            async with aiohttp.ClientSession(connector=connector) as temp_session:
+            async with sichere_session(connector=connector) as temp_session:
                 async with temp_session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
                     html = await response.text()
         
@@ -1659,7 +1660,7 @@ async def check_barrierefreiheit_enhanced(
                 import certifi
                 ssl_context = ssl.create_default_context(cafile=certifi.where())
                 connector = aiohttp.TCPConnector(ssl=ssl_context)
-                async with aiohttp.ClientSession(connector=connector) as temp_session:
+                async with sichere_session(connector=connector) as temp_session:
                     async with temp_session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
                         html = await response.text()
             

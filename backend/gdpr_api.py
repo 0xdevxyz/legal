@@ -15,6 +15,7 @@ import logging
 from gdpr_retention_service import gdpr_service
 from email_service import email_service
 from dependencies import get_current_user, require_admin
+from anbieter import VERANTWORTLICHER, DATENSCHUTZ_EMAIL
 
 logger = logging.getLogger(__name__)
 
@@ -414,10 +415,15 @@ async def get_privacy_policy_info():
     """
     return {
         "privacy_policy": {
-            "data_controller": "Complyo GmbH",
-            "contact_email": "datenschutz@complyo.de",
-            "data_protection_officer": "dpo@complyo.de",
-            "legal_basis": "Article 6(1)(a) GDPR - Consent",
+            # Der Verantwortliche muss stimmen: eine betroffene Person soll
+            # wissen, an wen sie sich wendet. "Complyo GmbH" gibt es nicht, und
+            # unter dpo@complyo.de antwortet niemand — ein
+            # Datenschutzbeauftragter ist bei einem Einzelunternehmen unterhalb
+            # der Schwelle des § 38 BDSG auch nicht zu bestellen.
+            "data_controller": VERANTWORTLICHER,
+            "contact_email": DATENSCHUTZ_EMAIL,
+            "data_protection_officer": None,
+            "legal_basis": "Art. 6 Abs. 1 lit. b DSGVO (Vertrag) bzw. lit. a (Einwilligung)",
             "data_retention_period": f"{RETENTION_MONATE} months from collection",
             "purposes_of_processing": [
                 "Website compliance analysis",

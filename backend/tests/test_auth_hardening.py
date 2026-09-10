@@ -134,78 +134,121 @@ class TestRevokedJtiReturns401:
         redis.setex.assert_called_once_with("jwt:blacklist:my-jti", 900, "1")
 
 
+def _verbindung(session=None, execute_ergebnis="UPDATE 1"):
+    """
+    Eine Mock-Verbindung fuer die Sitzungstabelle.
+
+    `execute_ergebnis` ist wichtig: `refresh_access_token` liest den
+    Rueckgabewert des UPDATE, um zu erkennen, ob es eine Zeile getroffen hat.
+    Ein blanker AsyncMock liefert dort ein Objekt, dessen `.endswith()` immer
+    wahr ist — die Pruefung liefe damit ins Gegenteil.
+    """
+    conn = AsyncMock()
+    conn.fetchrow = AsyncMock(return_value=session)
+    conn.execute = AsyncMock(return_value=execute_ergebnis)
+    conn.__aenter__ = AsyncMock(return_value=conn)
+    conn.__aexit__ = AsyncMock(return_value=None)
+    pool = MagicMock()
+    pool.acquire = MagicMock(return_value=conn)
+    return conn, pool
+
+
+def _sitzung(gueltig=True, entwertet=None):
+    return {
+        "user_id": 1,
+        "expires_at": datetime.now(timezone.utc)
+        + (timedelta(days=1) if gueltig else timedelta(days=-1)),
+        "revoked_at": entwertet,
+    }
+
+
 class TestRefreshRotationInvalidatesOldToken:
-    """Scenario 3: after refresh, old token is gone from DB"""
+    """Nach der Erneuerung ist der alte Token entwertet — aber noch da."""
 
     @pytest.mark.asyncio
-    async def test_refresh_deletes_old_session_and_returns_new_tokens(self):
-        fake_session = {
-            "user_id": 1,
-            "expires_at": datetime.now(timezone.utc) + timedelta(days=1),
-        }
-        conn = AsyncMock()
-        conn.fetchrow = AsyncMock(return_value=fake_session)
-        conn.execute = AsyncMock()
-        conn.__aenter__ = AsyncMock(return_value=conn)
-        conn.__aexit__ = AsyncMock(return_value=None)
-
-        pool = MagicMock()
-        pool.acquire = MagicMock(return_value=conn)
-
+    async def test_refresh_entwertet_alten_token_und_gibt_neue_zurueck(self):
+        conn, pool = _verbindung(_sitzung())
         svc = _make_auth_service(db_pool=pool)
+
         result = await svc.refresh_access_token("old-refresh-token")
+
         assert result is not None
         new_access, new_refresh = result
         assert new_access != "old-refresh-token"
 
+        # Der Kern der Aenderung vom 10.09.2026: der gedrehte Token wird
+        # NICHT geloescht. Nur so faellt seine Wiederverwendung spaeter auf.
+        anweisungen = [c[0][0] for c in conn.execute.call_args_list]
+        assert any("UPDATE user_sessions" in a and "revoked_at" in a for a in anweisungen)
+        assert not any(
+            "DELETE FROM user_sessions WHERE refresh_token" in a for a in anweisungen
+        )
+
     @pytest.mark.asyncio
     async def test_expired_session_returns_none(self):
-        fake_session = {
-            "user_id": 1,
-            "expires_at": datetime.now(timezone.utc) - timedelta(days=1),
-        }
-        conn = AsyncMock()
-        conn.fetchrow = AsyncMock(return_value=fake_session)
-        conn.execute = AsyncMock()
-        conn.__aenter__ = AsyncMock(return_value=conn)
-        conn.__aexit__ = AsyncMock(return_value=None)
-
-        pool = MagicMock()
-        pool.acquire = MagicMock(return_value=conn)
-
+        conn, pool = _verbindung(_sitzung(gueltig=False))
         svc = _make_auth_service(db_pool=pool)
-        result = await svc.refresh_access_token("old-refresh-token")
-        assert result is None
+        assert await svc.refresh_access_token("old-refresh-token") is None
 
 
 class TestRefreshReuseAttackRevokesAllSessions:
-    """Scenario 4: reuse of already-rotated refresh token → all sessions deleted"""
+    """
+    Wiederverwendung eines entwerteten Tokens beendet ALLE Sitzungen.
+
+    Diese Klasse trug ihren Namen schon vorher, hat die Zusage aber nie
+    geprueft: sie testete, dass ein unbekannter Token `None` ergibt, und dass
+    `revoke_all_sessions` ein DELETE absetzt. Beides war wahr, waehrend die
+    eigentliche Zusage — Wiederverwendung erkennen und darauf reagieren — im
+    Code gar nicht existierte.
+    """
 
     @pytest.mark.asyncio
     async def test_missing_session_returns_none(self):
-        conn = AsyncMock()
-        conn.fetchrow = AsyncMock(return_value=None)
-        conn.execute = AsyncMock()
-        conn.__aenter__ = AsyncMock(return_value=conn)
-        conn.__aexit__ = AsyncMock(return_value=None)
-
-        pool = MagicMock()
-        pool.acquire = MagicMock(return_value=conn)
-
+        _, pool = _verbindung(None)
         svc = _make_auth_service(db_pool=pool)
-        result = await svc.refresh_access_token("already-rotated-token")
+        assert await svc.refresh_access_token("already-rotated-token") is None
+
+    @pytest.mark.asyncio
+    async def test_wiederverwendung_beendet_alle_sitzungen(self):
+        entwertet = datetime.now(timezone.utc) - timedelta(minutes=5)
+        conn, pool = _verbindung(_sitzung(entwertet=entwertet))
+        svc = _make_auth_service(db_pool=pool)
+
+        result = await svc.refresh_access_token("gestohlener-token")
+
+        assert result is None, "Ein entwerteter Token darf keine neuen Token ergeben"
+        anweisungen = [c[0][0] for c in conn.execute.call_args_list]
+        assert any(
+            "DELETE FROM user_sessions WHERE user_id" in a for a in anweisungen
+        ), "Alle Sitzungen des Kontos muessen fallen"
+
+    @pytest.mark.asyncio
+    async def test_wettlauf_um_denselben_token_beendet_alle_sitzungen(self):
+        """
+        Zwei gleichzeitige Erneuerungen mit demselben Token: eine gewinnt, die
+        andere trifft keine Zeile mehr (`UPDATE 0`). Auch das ist eine
+        Wiederverwendung und muss die Kette beenden.
+        """
+        conn, pool = _verbindung(_sitzung(), execute_ergebnis="UPDATE 0")
+        svc = _make_auth_service(db_pool=pool)
+
+        result = await svc.refresh_access_token("gleichzeitig")
+
         assert result is None
+        anweisungen = [c[0][0] for c in conn.execute.call_args_list]
+        assert any("DELETE FROM user_sessions WHERE user_id" in a for a in anweisungen)
+
+    @pytest.mark.asyncio
+    async def test_abmelden_entwertet_statt_zu_loeschen(self):
+        conn, pool = _verbindung()
+        svc = _make_auth_service(db_pool=pool)
+        await svc.revoke_refresh_token("token")
+        anweisung = conn.execute.call_args[0][0]
+        assert "UPDATE user_sessions" in anweisung and "revoked_at" in anweisung
 
     @pytest.mark.asyncio
     async def test_revoke_all_sessions_calls_delete(self):
-        conn = AsyncMock()
-        conn.execute = AsyncMock()
-        conn.__aenter__ = AsyncMock(return_value=conn)
-        conn.__aexit__ = AsyncMock(return_value=None)
-
-        pool = MagicMock()
-        pool.acquire = MagicMock(return_value=conn)
-
+        conn, pool = _verbindung()
         svc = _make_auth_service(db_pool=pool)
         await svc.revoke_all_sessions(42)
         conn.execute.assert_called_once()

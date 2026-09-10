@@ -2,7 +2,8 @@
 Legal News API Routes für Complyo
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from dependencies import require_admin
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from pydantic import BaseModel
 import logging
@@ -93,10 +94,14 @@ async def get_news_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/news/fetch")
-async def fetch_feeds():
+async def fetch_feeds(admin: dict = Depends(require_admin)):
     """
     Triggert manuell das Fetchen aller RSS-Feeds
     (Normalerweise wird dies automatisch per Cronjob gemacht)
+
+    Nur fuer Verwalter. Ohne Anmeldung liess sich hier beliebig oft ein Abruf
+    aller hinterlegten Feeds ausloesen — fremde Server auf unsere Kosten
+    belasten und den eigenen Prozess blockieren, ein Aufruf je Anfrage.
     """
     try:
         if not news_service:

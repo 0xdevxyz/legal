@@ -63,11 +63,32 @@ class TCFComplianceReport(BaseModel):
 
 
 # Helper: Get Current User from Token
+import json
+
 from dependencies import get_current_user as _canonical_user
 
 async def get_current_user_id(current_user: dict = Depends(_canonical_user)) -> int:
     """User-ID über die kanonische Auth-Dependency (Phase 2 Auth-Konsolidierung)"""
     return current_user["id"]
+
+
+def _tcf_daten(scan_results) -> dict:
+    """Holt `tcf_data` aus dem Scan-Ergebnis.
+
+    asyncpg gibt jsonb ohne eigenen Codec als Zeichenkette zurueck. Vorher
+    stand hier `scan_results.get(...)` — das scheiterte mit
+    "'str' object has no attribute 'get'", sobald die Abfrage endlich die
+    richtige Tabelle traf.
+    """
+    if isinstance(scan_results, str):
+        try:
+            scan_results = json.loads(scan_results)
+        except Exception:
+            return {}
+    if not isinstance(scan_results, dict):
+        return {}
+    daten = scan_results.get("tcf_data") or {}
+    return daten if isinstance(daten, dict) else {}
 
 
 # ==================== TCF ENDPOINTS ====================
@@ -82,11 +103,21 @@ async def get_tcf_status(
     """
     
     # Lade Scan aus Datenbank
+    # Die Scans stehen in `scan_history`; `analysis_results` gab es nie. Alle
+    # vier TCF-Endpunkte antworteten deshalb mit 500, obwohl die Daten da sind:
+    # `tcf_check.check_tcf_compliance` laeuft im Scanner und legt sein Ergebnis
+    # unter `scan_data->tcf_data` ab — in allen 42 gespeicherten Scans.
+    # Angesprochen wird die Kennung, die der Scanner vergibt (`scan_id`); die
+    # interne UUID wird als Rueckfall mitgeprueft.
     query = """
-        SELECT 
-            id, url, scan_results, scanned_at
-        FROM analysis_results
-        WHERE id = $1 AND user_id = $2
+        SELECT scan_id AS id,
+               url,
+               scan_data AS scan_results,
+               COALESCE(scan_date, created_at) AS scanned_at
+        FROM scan_history
+        WHERE (scan_id = $1 OR id::text = $1) AND user_id = $2
+        ORDER BY created_at DESC
+        LIMIT 1
     """
     
     scan = await db_service.pool.fetchrow(query, scan_id, user_id)
@@ -95,8 +126,7 @@ async def get_tcf_status(
         raise HTTPException(status_code=404, detail="Scan nicht gefunden")
     
     # Extrahiere TCF Daten aus scan_results
-    scan_results = scan['scan_results']
-    tcf_data = scan_results.get('tcf_data', {})
+    tcf_data = _tcf_daten(scan['scan_results'])
     
     return TCFStatusResponse(
         scan_id=str(scan['id']),
@@ -121,11 +151,19 @@ async def get_tcf_vendors(
     """
     
     # Lade Scan aus Datenbank
+    # Die Scans stehen in `scan_history`; `analysis_results` gab es nie. Alle
+    # vier TCF-Endpunkte antworteten deshalb mit 500, obwohl die Daten da sind:
+    # `tcf_check.check_tcf_compliance` laeuft im Scanner und legt sein Ergebnis
+    # unter `scan_data->tcf_data` ab — in allen 42 gespeicherten Scans.
+    # Angesprochen wird die Kennung, die der Scanner vergibt (`scan_id`); die
+    # interne UUID wird als Rueckfall mitgeprueft.
     query = """
-        SELECT 
-            id, scan_results
-        FROM analysis_results
-        WHERE id = $1 AND user_id = $2
+        SELECT scan_id AS id,
+               scan_data AS scan_results
+        FROM scan_history
+        WHERE (scan_id = $1 OR id::text = $1) AND user_id = $2
+        ORDER BY created_at DESC
+        LIMIT 1
     """
     
     scan = await db_service.pool.fetchrow(query, scan_id, user_id)
@@ -134,8 +172,7 @@ async def get_tcf_vendors(
         raise HTTPException(status_code=404, detail="Scan nicht gefunden")
     
     # Extrahiere Vendor Daten
-    scan_results = scan['scan_results']
-    tcf_data = scan_results.get('tcf_data', {})
+    tcf_data = _tcf_daten(scan['scan_results'])
     detected_vendors = tcf_data.get('detected_vendors', [])
     
     # Lade GVL für zusätzliche Vendor-Infos
@@ -172,11 +209,19 @@ async def get_tc_string_details(
     """
     
     # Lade Scan aus Datenbank
+    # Die Scans stehen in `scan_history`; `analysis_results` gab es nie. Alle
+    # vier TCF-Endpunkte antworteten deshalb mit 500, obwohl die Daten da sind:
+    # `tcf_check.check_tcf_compliance` laeuft im Scanner und legt sein Ergebnis
+    # unter `scan_data->tcf_data` ab — in allen 42 gespeicherten Scans.
+    # Angesprochen wird die Kennung, die der Scanner vergibt (`scan_id`); die
+    # interne UUID wird als Rueckfall mitgeprueft.
     query = """
-        SELECT 
-            id, scan_results
-        FROM analysis_results
-        WHERE id = $1 AND user_id = $2
+        SELECT scan_id AS id,
+               scan_data AS scan_results
+        FROM scan_history
+        WHERE (scan_id = $1 OR id::text = $1) AND user_id = $2
+        ORDER BY created_at DESC
+        LIMIT 1
     """
     
     scan = await db_service.pool.fetchrow(query, scan_id, user_id)
@@ -185,8 +230,7 @@ async def get_tc_string_details(
         raise HTTPException(status_code=404, detail="Scan nicht gefunden")
     
     # Extrahiere TC String Daten
-    scan_results = scan['scan_results']
-    tcf_data = scan_results.get('tcf_data', {})
+    tcf_data = _tcf_daten(scan['scan_results'])
     
     tc_string_present = tcf_data.get('tc_string_found', False)
     
@@ -215,11 +259,20 @@ async def get_tcf_compliance_report(
     """
     
     # Lade Scan aus Datenbank
+    # Die Scans stehen in `scan_history`; `analysis_results` gab es nie. Alle
+    # vier TCF-Endpunkte antworteten deshalb mit 500, obwohl die Daten da sind:
+    # `tcf_check.check_tcf_compliance` laeuft im Scanner und legt sein Ergebnis
+    # unter `scan_data->tcf_data` ab — in allen 42 gespeicherten Scans.
+    # Angesprochen wird die Kennung, die der Scanner vergibt (`scan_id`); die
+    # interne UUID wird als Rueckfall mitgeprueft.
     query = """
-        SELECT 
-            id, url, scan_results
-        FROM analysis_results
-        WHERE id = $1 AND user_id = $2
+        SELECT scan_id AS id,
+               url,
+               scan_data AS scan_results
+        FROM scan_history
+        WHERE (scan_id = $1 OR id::text = $1) AND user_id = $2
+        ORDER BY created_at DESC
+        LIMIT 1
     """
     
     scan = await db_service.pool.fetchrow(query, scan_id, user_id)
@@ -228,8 +281,7 @@ async def get_tcf_compliance_report(
         raise HTTPException(status_code=404, detail="Scan nicht gefunden")
     
     # Extrahiere TCF Daten
-    scan_results = scan['scan_results']
-    tcf_data = scan_results.get('tcf_data', {})
+    tcf_data = _tcf_daten(scan['scan_results'])
     
     has_tcf = tcf_data.get('has_tcf', False)
     

@@ -115,9 +115,36 @@ def _check_ip(addr: ipaddress._BaseAddress) -> None:
         raise SSRFError("URL resolves to private address")
     if addr.is_reserved:
         raise SSRFError("URL resolves to reserved address")
+    if addr.is_multicast:
+        raise SSRFError("URL resolves to a multicast address")
+    if addr.is_unspecified:
+        raise SSRFError("URL resolves to an unspecified address")
     for network in _PRIVATE_NETWORKS:
         if addr in network:
             raise SSRFError("URL resolves to a private/internal network")
+    # Letzte Schranke: alles, was nicht oeffentlich routbar ist, faellt hier
+    # heraus - Broadcast (255.255.255.255), 240.0.0.0/4, die Messbereiche
+    # 198.18.0.0/15, die Dokumentationsnetze. Die Liste oben einzeln zu pflegen
+    # hiesse, sie irgendwann unvollstaendig zu haben.
+    if not addr.is_global:
+        raise SSRFError("URL resolves to a non-public address")
+
+
+def pruefe_adresse(ip_text: str) -> None:
+    """
+    Prueft eine bereits aufgeloeste IP-Adresse.
+
+    Gedacht fuer den Moment des Verbindungsaufbaus: `validate_url` prueft, was
+    der Namensdienst im Pruefmoment sagt, und zwischen Pruefung und Verbindung
+    kann derselbe Name auf eine andere Adresse zeigen (DNS-Rebinding). Wer
+    diese Funktion im Connector aufruft, prueft die Adresse, mit der
+    tatsaechlich gesprochen wird.
+    """
+    try:
+        addr = ipaddress.ip_address(ip_text)
+    except ValueError:
+        raise SSRFError("Not an IP address")
+    _check_ip(addr)
 
 
 def safe_url_or_none(url: str) -> Optional[str]:

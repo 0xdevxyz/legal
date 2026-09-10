@@ -1,12 +1,23 @@
+# Sicherheitsstand der Abhaengigkeiten: pip-audit vom 09.09.2026 fand 28
+# bekannte Luecken in 8 Paketen. Die hier festgezurrten Versionen sind die
+# Antwort darauf; wer eine davon zurueckdreht, holt sich die Luecke zurueck.
 aiofiles==23.2.1
 aiohttp==3.14.3
 asyncpg==0.29.0
 beautifulsoup4==4.12.2
 lxml>=5.1.0
 feedparser==6.0.10
-fastapi==0.115.6
+# starlette 0.41.3 hatte zwei Denial-of-Service-Wege, die ohne Anmeldung
+# erreichbar sind: ein Range-Header mit quadratischer Laufzeit und ein
+# mehrteiliges Formular mit grossen Dateien, das den Ereignisring blockiert.
+# Der Fix liegt in starlette >= 0.49.1, das wiederum ein neueres FastAPI
+# braucht. starlette steht ausdruecklich daneben, damit die Version nicht
+# still zurueckfaellt.
+fastapi>=0.119.0
+starlette>=0.49.1
 httpx==0.27.2
-Jinja2==3.1.5
+# 3.1.6 schliesst einen Ausbruch aus der Sandbox ueber den |attr-Filter.
+Jinja2>=3.1.6
 numpy==1.26.2
 pandas==2.1.4
 passlib[bcrypt]==1.7.4
@@ -16,12 +27,16 @@ psutil==5.9.6
 pydantic>=2.5.0
 pydantic-settings>=2.5.2
 PyJWT==2.13.0
-python-dotenv==1.0.0
+python-dotenv>=1.2.2
 python-multipart>=0.0.9
 redis==5.0.1
 reportlab==4.0.7
-requests==2.32.3
-scikit-learn==1.3.2
+# 2.32.4 schliesst das Durchreichen von .netrc-Zugangsdaten an Dritte.
+requests>=2.33.0
+# scikit-learn ist raus: keine einzige Zeile im Backend importiert es
+# (geprueft 09.09.2026), es zog aber rund 100 MB und die Datenleck-Meldung
+# PYSEC-2024-110 mit sich. Ungenutzte Abhaengigkeiten sind Angriffsflaeche
+# ohne Gegenwert.
 sqlalchemy==2.0.23
 alembic==1.13.1
 stripe==7.8.0

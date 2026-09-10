@@ -11,6 +11,7 @@ from dataclasses import dataclass, asdict
 import re
 import logging
 import aiohttp
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +146,7 @@ async def check_datenschutz_compliance_smart(url: str, html: str = None, session
             import certifi
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_context)
-            async with aiohttp.ClientSession(connector=connector) as temp_session:
+            async with sichere_session(connector=connector) as temp_session:
                 async with temp_session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
                     html = await response.text()
         
@@ -197,7 +198,7 @@ async def _fetch_candidate_text(candidate_url: str, session, ssl_context) -> "tu
                 return resp.status, (await resp.text() if resp.status == 200 else "")
         else:
             connector = aiohttp.TCPConnector(ssl=ssl_context)
-            async with aiohttp.ClientSession(connector=connector) as tmp:
+            async with sichere_session(connector=connector) as tmp:
                 async with tmp.get(candidate_url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
                     return resp.status, (await resp.text() if resp.status == 200 else "")
     except Exception:
@@ -291,7 +292,7 @@ async def _collect_linked_css(url: str, soup: BeautifulSoup, session=None,
         import ssl
         import certifi
         ssl_ctx = ssl.create_default_context(cafile=certifi.where())
-        session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_ctx))
+        session = sichere_session(connector=aiohttp.TCPConnector(ssl=ssl_ctx))
         close_session = True
 
     chunks = []

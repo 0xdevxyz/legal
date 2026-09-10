@@ -33,20 +33,25 @@ async def get_distribution(conn: asyncpg.Connection, days: int, offset_days: int
     """Holt Klassifikations-Verteilung für ein Zeitfenster."""
     end = datetime.utcnow() - timedelta(days=offset_days)
     start = end - timedelta(days=days)
+    # Gelesen wird `ai_classifications` — die Tabelle, in der die Einstufungen
+    # tatsaechlich stehen. `ai_compliance_logs` mit einer Spalte
+    # `risk_category` hat es nie gegeben; die Abfrage waere bei jedem Lauf
+    # gescheitert. Aufgefallen ist es nicht, weil dieser Lauf gar nicht
+    # eingeplant ist (Stand 10.09.2026, keine Crontab-Zeile).
     rows = await conn.fetch(
         """
-        SELECT risk_category, COUNT(*) AS cnt
-        FROM ai_compliance_logs
+        SELECT severity AS kategorie, COUNT(*) AS cnt
+        FROM ai_classifications
         WHERE created_at BETWEEN $1 AND $2
-        AND risk_category IS NOT NULL
-        GROUP BY risk_category
+          AND severity IS NOT NULL
+        GROUP BY severity
         """,
         start, end
     )
     if not rows:
         return {}
     total = sum(r['cnt'] for r in rows)
-    return {r['risk_category']: r['cnt'] / total for r in rows}
+    return {r['kategorie']: r['cnt'] / total for r in rows}
 
 async def run_drift_detection() -> Optional[float]:
     """Hauptlogik: vergleicht aktuelle 7-Tage-Verteilung gegen 30-Tage-Baseline."""

@@ -363,7 +363,7 @@ class LegalTextValidator:
             "tmg": ["§ 5 tmg", "tmg", "telemediengesetz"]
         }
         
-        # TTDSG Cookie-Keywords
+        # TDDDG Cookie-Keywords
         self.cookie_keywords = [
             "cookie", "einwilligung", "consent", "tracking",
             "speicherung", "ttdsg", "§ 25"
@@ -431,7 +431,7 @@ class LegalTextValidator:
     
     def validate_impressum(self, text: str) -> LegalTextValidationResult:
         """
-        Validiert Impressum auf TMG § 5 Konformität
+        Validiert Impressum auf DDG § 5 Konformität
         """
         errors = []
         warnings = []
@@ -448,7 +448,7 @@ class LegalTextValidator:
             
             if not found:
                 if category in ["anbieter", "adresse", "kontakt"]:
-                    errors.append(f"KRITISCH: TMG-Pflichtangabe fehlt - {category}")
+                    errors.append(f"KRITISCH: DDG-Pflichtangabe fehlt - {category}")
                     missing_keywords.extend(keywords[:2])
                 else:
                     warnings.append(f"Möglicherweise fehlend: {category}")

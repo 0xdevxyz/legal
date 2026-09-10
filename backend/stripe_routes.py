@@ -78,7 +78,11 @@ STRIPE_PRICES = {
     "monitor_yearly":  os.getenv("STRIPE_PRICE_MONITOR_YEARLY", None),   # 390€/Jahr
     # ── Agency Add-ons (greifen, wenn die 25 Projekte voll sind) ──────────────
     # agency_extra: +1 Website, 29€/Monat (nutzt den Single-Preis als Fallback)
+    # Beide Namen gelten: addon_payment_routes liest denselben Preis unter
+    # STRIPE_PRICE_AGENCY_SITES_EXTRA. Zwei Namen fuer eine Sache sind eine
+    # Falle beim Pflegen der .env.
     "agency_extra_monthly": os.getenv("STRIPE_PRICE_AGENCY_EXTRA_SITE")
+        or os.getenv("STRIPE_PRICE_AGENCY_SITES_EXTRA")
         or os.getenv("STRIPE_PRICE_SINGLE_MODULE", None),
     # agency2: weitere 25 Websites (fällt auf den regulären Agency-Preis zurück)
     "agency2_monthly": os.getenv("STRIPE_PRICE_AGENCY2_MONTHLY")

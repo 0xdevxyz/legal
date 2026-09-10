@@ -18,11 +18,12 @@ from accessibility_templates import AccessibilityTemplates
 from accessibility_patch_generator import AccessibilityPatchGenerator
 import aiohttp
 from accessibility_fix_saver import AccessibilityFixSaver
-from dependencies import get_current_user, get_db
+from dependencies import get_current_user, get_db, rate_limit
 # Gemeinsame Ownership-Prüfung (definiert in alt_text_routes, Quelle:
 # cookie_compliance_routes.get_user_site_ids). Kein Zyklus: alt_text_routes
 # importiert widget_routes nicht.
 from alt_text_routes import require_site_ownership
+from compliance_engine.sicherer_abruf import sichere_session
 
 router = APIRouter()
 
@@ -267,7 +268,12 @@ async def serve_a11y_remediation_widget(request: Request):
 # leer (count = 0, geprüft 11.08.2026). Die tatsächliche Selbstüberwachung läuft
 # über POST /api/wirkung/{site_id} (wirkung_routes.py).
 
-@router.post("/api/widgets/analytics")
+# Oeffentlich, weil das Widget auf fremden Domains laeuft. Ohne Bremse kann
+# aber jeder die Tabelle vollschreiben und die Nutzungszahlen faelschen, an
+# denen die Upsell-Logik haengt. 120 Meldungen je Minute und IP sind mehr,
+# als ein echter Besucher je erzeugt.
+@router.post("/api/widgets/analytics",
+             dependencies=[Depends(rate_limit("widget_analytics", 120, 60))])
 async def track_widget_analytics(
     data: WidgetAnalyticsRequest,
     background_tasks: BackgroundTasks
@@ -292,12 +298,25 @@ async def track_widget_analytics(
         if db_pool:
             async with db_pool.acquire() as conn:
                 # Use the stored procedure for efficient tracking
+                # `track_widget_feature` gibt es in der Datenbank nicht — der
+                # Aufruf scheiterte bei JEDEM Ereignis, und der Rumpf unten
+                # meldet trotzdem Erfolg ("Analytics tracking failed
+                # silently"). Deshalb stand die Auswertung seit jeher auf null,
+                # ohne dass es auffiel. Geschrieben wird jetzt in die Tabelle,
+                # die tatsaechlich existiert: widget_events.
                 await conn.execute(
-                    "SELECT track_widget_feature($1, $2, $3, $4)",
+                    """
+                    INSERT INTO widget_events (site_id, widget_type, event_name, event_data)
+                    VALUES ($1, $2, $3, $4::jsonb)
+                    """,
                     data.site_id,
-                    data.session_id,
+                    "accessibility",
                     data.feature,
-                    json.dumps({"value": data.value, "timestamp": data.timestamp}) if data.value else None
+                    json.dumps({
+                        "session_id": data.session_id,
+                        "value": data.value,
+                        "timestamp": data.timestamp,
+                    }),
                 )
             
             logger.info(f"📊 Widget Analytics: Site={data.site_id}, Feature={data.feature}, Session={data.session_id[:8]}...")
@@ -311,11 +330,14 @@ async def track_widget_analytics(
         }
     
     except Exception as e:
-        print(f"Error tracking widget analytics: {e}")
-        # Don't fail the request - analytics shouldn't break the widget
+        # Das Widget laeuft auf der Kundenseite; ein Fehler hier darf sie nicht
+        # stoeren. Die Meldung geht deshalb weiter mit 200 zurueck — aber ins
+        # Log, und nicht als "success". Genau dieses stille "success" hat
+        # jahrelang verdeckt, dass kein einziges Ereignis ankam.
+        logger.warning(f"Widget-Analytics nicht gespeichert: {e}")
         return {
-            "success": True,  # Return success even on error
-            "message": "Analytics tracking failed silently"
+            "success": False,
+            "message": "Analytics nicht gespeichert"
         }
 
 
@@ -336,9 +358,9 @@ async def _check_upsell_opportunity(site_id: str):
 
         async with db_pool.acquire() as conn:
             usage_count = await conn.fetchval(
-                """SELECT COUNT(*) FROM widget_usage_stats
+                """SELECT COUNT(*) FROM widget_events
                    WHERE site_id = $1
-                   AND date > CURRENT_DATE - INTERVAL '30 days'""",
+                     AND created_at > NOW() - INTERVAL '30 days'""",
                 site_id,
             )
 
@@ -632,19 +654,37 @@ async def get_fix_manifest(site_id: str, request: Request):
     # `css-rule` traegt genau eine Regel, `kontrast-css` buendelt viele: die
     # Tabelle laesst nur eine Zeile je (site_id, fix_type) zu, und eine
     # Kontrast-Reparatur besteht aus einer Regel je Selektor.
+    # Jede Regel bekommt die Seite mit, auf der sie gemessen wurde.
+    #
+    # Der Grund ist ein Messfehler mit Aussenwirkung: eine Kontrastregel von
+    # der Startseite findet auf einer Unterseite kein Ziel, und das Widget
+    # zaehlte das als "verfehlt". Auf complyo.de standen so 118 verfehlte
+    # gegen 24 angewendete Reparaturen, auf loqal.io 797 gegen 33 — und der
+    # Pruefnachweis meldete dem Kunden woertlich, das deute auf eine Aenderung
+    # an seiner Website hin. Ein Fehlalarm in genau dem Dokument, das Vertrauen
+    # herstellen soll.
+    #
+    # Mit `seite` kann das Widget die beiden Faelle trennen: kein Ziel auf der
+    # Seite, auf der die Regel gemessen wurde, ist ein echter Fehlschlag. Kein
+    # Ziel auf einer anderen Seite heisst schlicht, dass dort nichts zu tun ist.
+    def _mit_seite(regel: dict, quelle: dict) -> dict:
+        angereichert = dict(regel)
+        angereichert.setdefault("seite", quelle.get("page_url"))
+        return angereichert
+
     css_rules = [
-        f["payload"] for f in document_fixes
+        _mit_seite(f["payload"], f) for f in document_fixes
         if f.get("fix_type") == "css-rule" and isinstance(f.get("payload"), dict)
     ]
     for f in document_fixes:
         if f.get("fix_type") == "struktur" and isinstance(f.get("payload"), dict):
             css_rules.extend([
-                r for r in (f["payload"].get("css_rules") or [])
+                _mit_seite(r, f) for r in (f["payload"].get("css_rules") or [])
                 if isinstance(r, dict) and r.get("selector") and r.get("declarations")
             ])
         if f.get("fix_type") == "kontrast-css" and isinstance(f.get("payload"), dict):
             css_rules.extend([
-                r for r in (f["payload"].get("rules") or [])
+                _mit_seite(r, f) for r in (f["payload"].get("rules") or [])
                 if isinstance(r, dict) and r.get("selector") and r.get("declarations")
             ])
 
@@ -889,17 +929,28 @@ async def download_accessibility_patches(
 
 
 @router.get("/api/widgets/analytics/{site_id}")
-async def get_widget_analytics(site_id: str, days: int = 30):
+async def get_widget_analytics(
+    site_id: str,
+    days: int = 30,
+    current_user: dict = Depends(get_current_user),
+):
     """
     Holt Widget-Analytics für Dashboard
-    
+
+    Anmeldung + Ownership: die Zahlen gehoeren dem Betreiber der Website. Bis
+    zum 09.09.2026 stand der Endpunkt offen — wer eine site_id kannte (sie
+    steht im Einbaucode jeder Kundenseite), konnte Nutzungszahlen fremder
+    Seiten abrufen.
+
     Args:
         site_id: Site-Identifier
-        days: Anzahl Tage zurück (default 30)
-        
+        days: Anzahl Tage zurück (default 30, max 365)
+
     Returns:
         Analytics-Statistiken
     """
+    await require_site_ownership(site_id, current_user)
+    days = max(1, min(int(days), 365))
     try:
         if not db_pool:
             return JSONResponse(
@@ -913,51 +964,50 @@ async def get_widget_analytics(site_id: str, days: int = 30):
         async with db_pool.acquire() as conn:
             # 1. Feature-Popularität
             feature_stats = await conn.fetch(
-                f"""
-                SELECT 
-                    feature,
-                    COUNT(*) as usage_count,
-                    COUNT(DISTINCT session_id) as unique_sessions
-                FROM widget_analytics
-                WHERE site_id = $1 
-                  AND timestamp > NOW() - INTERVAL '{days} days'
-                  AND event_type = 'feature_toggle'
-                  AND feature IS NOT NULL
-                GROUP BY feature
+                """
+                SELECT
+                    event_name AS feature,
+                    COUNT(*) AS usage_count,
+                    COUNT(DISTINCT event_data->>'session_id') AS unique_sessions
+                FROM widget_events
+                WHERE site_id = $1
+                  AND created_at > NOW() - ($2::int * INTERVAL '1 day')
+                  AND event_name IS NOT NULL
+                GROUP BY event_name
                 ORDER BY usage_count DESC
                 """,
-                site_id
+                site_id, days
             )
             
             # 2. Tägliche Nutzung
             daily_stats = await conn.fetch(
-                f"""
-                SELECT 
-                    DATE(timestamp) as date,
-                    COUNT(*) as events,
-                    COUNT(DISTINCT session_id) as sessions
-                FROM widget_analytics
-                WHERE site_id = $1 
-                  AND timestamp > NOW() - INTERVAL '{days} days'
-                GROUP BY DATE(timestamp)
+                """
+                SELECT
+                    DATE(created_at) AS date,
+                    COUNT(*) AS events,
+                    COUNT(DISTINCT event_data->>'session_id') AS sessions
+                FROM widget_events
+                WHERE site_id = $1
+                  AND created_at > NOW() - ($2::int * INTERVAL '1 day')
+                GROUP BY DATE(created_at)
                 ORDER BY date DESC
                 LIMIT 30
                 """,
-                site_id
+                site_id, days
             )
             
             # 3. Gesamt-Statistiken
             total_stats = await conn.fetchrow(
-                f"""
-                SELECT 
-                    COUNT(*) as total_events,
-                    COUNT(DISTINCT session_id) as total_sessions,
-                    COUNT(DISTINCT DATE(timestamp)) as active_days
-                FROM widget_analytics
-                WHERE site_id = $1 
-                  AND timestamp > NOW() - INTERVAL '{days} days'
+                """
+                SELECT
+                    COUNT(*) AS total_events,
+                    COUNT(DISTINCT event_data->>'session_id') AS total_sessions,
+                    COUNT(DISTINCT DATE(created_at)) AS active_days
+                FROM widget_events
+                WHERE site_id = $1
+                  AND created_at > NOW() - ($2::int * INTERVAL '1 day')
                 """,
-                site_id
+                site_id, days
             )
         
         return JSONResponse(
@@ -1022,7 +1072,7 @@ async def check_widget_status(website_url: str, site_id: str):
         
         # Lade HTML von Website
         timeout = aiohttp.ClientTimeout(total=15)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with sichere_session(timeout=timeout) as session:
             async with session.get(website_url, allow_redirects=True) as response:
                 if response.status != 200:
                     return JSONResponse(
@@ -1188,7 +1238,12 @@ async def get_scan_result(
 ):
     """
     Gibt das letzte Scan-Ergebnis für eine Site zurück.
+
+    Zugehoerigkeit vorausgesetzt: das Ergebnis nennt Cookies, Dienste und die
+    eingesetzte Einwilligungsloesung einer Website. Angemeldet allein reichte
+    bis zum 10.09.2026, die Kennung steht im Einbaucode jeder Kundenseite.
     """
+    await require_site_ownership(site_id, current_user)
     row = await db.fetchrow(
         """
         SELECT site_id, url, scanned_at, cookies, services,

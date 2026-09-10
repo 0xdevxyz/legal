@@ -18,6 +18,7 @@ from compliance_engine.jurisdictions import (
     is_supported_jurisdiction,
     normalize_jurisdiction,
 )
+from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
@@ -270,7 +271,7 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                             if _crawl_url:
                                 import aiohttp as _aiohttp
                                 _timeout = _aiohttp.ClientTimeout(total=10)
-                                async with _aiohttp.ClientSession(timeout=_timeout) as _session:
+                                async with sichere_session(timeout=_timeout) as _session:
                                     async with _session.get(
                                         _crawl_url,
                                         headers={'User-Agent': 'Mozilla/5.0 (compatible; ComplyoBot/1.0)'},

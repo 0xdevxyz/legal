@@ -477,7 +477,7 @@ class ScoreCalculator:
         - accessibility  (Barrierefreiheit / BFSG)
         - gdpr           (Datenschutz / DSGVO inkl. Sicherheit Art. 32)
         - legal          (Impressum, AGB, Shop-Pflichttexte, UWG …)
-        - cookies        (Cookie-Banner / TTDSG / TCF)
+        - cookies        (Cookie-Banner / TDDDG / TCF)
 
         Jede Säule: max(0, 100 - (critical×25 + warning×8)),
         fehlendes Kern-Element (is_missing) → 0. Gleichartige Befunde gehen

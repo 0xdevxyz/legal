@@ -44,6 +44,7 @@ export default function FooterSection() {
                 { label: 'Datenschutz', href: '/datenschutz/' },
                 { label: 'Cookie-Richtlinie', href: '/cookie-richtlinie/' },
                 { label: 'AGB', href: '/agb/' },
+                { label: 'Auftragsverarbeitung', href: '/avv/' },
               ].map((l, i) => (
                 <li key={i}><a href={l.href} className="hover:text-white transition-colors">{l.label}</a></li>
               ))}

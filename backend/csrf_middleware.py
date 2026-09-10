@@ -22,6 +22,23 @@ EXEMPT_PATHS: Set[str] = {
     "/api/auth/apple/callback",
     "/api/auth/complete-onboarding",
     "/api/auth/verify-credentials",
+    # Kontowiederherstellung und zweiter Faktor (10.09.2026). Dieselbe Lage wie
+    # bei /login: der Aufrufer ist NICHT angemeldet und hat weder Sitzung noch
+    # CSRF-Cookie, der Double-Submit-Check kann hier nie aufgehen. Beim ersten
+    # Live-Aufruf antwortete /passwort-vergessen dann auch prompt mit
+    # "CSRF token missing or invalid" — waehrend alle Tests gruen waren. Genau
+    # der Fehler, der oben schon zweimal steht.
+    #
+    # Ungeschuetzt sind diese Routen deswegen nicht: sie haengen nicht am
+    # Sitzungscookie, sondern an einem Geheimnis, das der Aufrufer mitbringt —
+    # der Token aus der Mail bzw. das MFA-Zwischentoken. Ein fremder
+    # Seitenbetreiber, der den Browser des Opfers hierher schickt, gewinnt
+    # nichts: ohne das Geheimnis passiert nichts, und wer es hat, braucht den
+    # fremden Browser nicht.
+    "/api/auth/passwort-vergessen",
+    "/api/auth/passwort-neu",
+    "/api/auth/email-bestaetigen",
+    "/api/auth/login/2fa",
     "/api/analyze",
     "/api/analyze-preview",
     # Entkoppelter Pruefweg (04.09.2026). Er wird von derselben oeffentlichen

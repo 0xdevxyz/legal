@@ -5,6 +5,11 @@ import { useState, Suspense, useEffect } from 'react';
 // Fassung der AGB, die bei der Registrierung angezeigt wird. Muss mit dem
 // Stand-Datum auf https://complyo.de/agb uebereinstimmen.
 const AGB_VERSION = '2026-09-01';
+// Fassung des Auftragsverarbeitungsvertrages nach Art. 28 DSGVO. Er wird mit
+// der Registrierung in Textform geschlossen (Art. 28 Abs. 9) — ohne ihn duerfte
+// kein Kunde die Widgets auf seiner Website einsetzen, weil complyo dabei Daten
+// seiner Besucher verarbeitet.
+const AVV_VERSION = '2026-09-10';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -24,6 +29,10 @@ const MODULES = [
     { id: 'legal_texts', name: 'Rechtliche Texte', icon: FileText, description: 'Impressum, Datenschutz, AGB' },
     { id: 'monitoring', name: 'Monitoring', icon: BarChart3, description: 'Automatische Scans & Alerts' },
 ];
+
+// Preis je einzelner Saeule. Deckungsgleich mit der Tarifkarte und mit
+// STRIPE_PRICE_SINGLE_MODULE (29 EUR/Monat, geprueft am 10.09.2026).
+const EINZELSAEULE_JE_MODUL = 29;
 
 const TARIFE = [
     { id: 'free', name: 'Free', price: '0 €', hint: '1 Fix' },
@@ -87,12 +96,46 @@ function RegisterForm() {
         );
     };
 
-    const calculatePrice = () => {
+    // Die Zusammenfassung vor dem Kauf MUSS denselben Preis nennen, den Stripe
+    // abbucht. Bis zum 10.09.2026 stand hier die alte Preisliste (Pro 49,
+    // Agentur 299, Monitoring 19, Einzelsaeule 19 je Modul), waehrend die
+    // Tarifkarten darueber und Stripe bereits die neue fuehrten (89 / 599 / 39
+    // / 29). Der letzte Bildschirm vor "Weiter zur Zahlung" versprach damit
+    // rund die Haelfte des Betrages, der dann eingezogen wurde.
+    //
+    // Deshalb kommen die Betraege jetzt aus derselben Quelle wie der Checkout:
+    // GET /api/stripe/plans. Solange sie nicht geladen sind, steht ein
+    // Gedankenstrich — lieber keine Zahl als eine falsche.
+    const [tarifpreise, setTarifpreise] = useState<Record<string, { monthly: number; yearly: number }> | null>(null);
+
+    useEffect(() => {
+        let abgebrochen = false;
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de'}/api/stripe/plans`)
+            .then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+            .then(d => {
+                if (abgebrochen) return;
+                const tabelle: Record<string, { monthly: number; yearly: number }> = {};
+                for (const p of d.plans || []) {
+                    tabelle[p.id] = { monthly: p.price_monthly, yearly: p.price_yearly };
+                }
+                // Die Einzelsaeule ist kein Stripe-Plan, sondern ein Preis je
+                // Modul. Er steht in den Tarifkarten und in Stripe bei 29.
+                tabelle.single = { monthly: EINZELSAEULE_JE_MODUL, yearly: 0 };
+                setTarifpreise(tabelle);
+            })
+            .catch(() => { if (!abgebrochen) setTarifpreise(null); });
+        return () => { abgebrochen = true; };
+    }, []);
+
+    const calculatePrice = (): { monthly: number | null; yearly: number | null; setup: number } => {
         if (plan === 'free') return { monthly: 0, yearly: 0, setup: 0 };
-        if (plan === 'agency') return { monthly: 299, yearly: 2990, setup: 0 };
-        if (plan === 'pro') return { monthly: 49, yearly: 490, setup: 0 };
-        if (plan === 'monitor') return { monthly: 19, yearly: 190, setup: 0 };
-        return { monthly: selectedModules.length * 19, yearly: 0, setup: 0 };
+        if (!tarifpreise) return { monthly: null, yearly: null, setup: 0 };
+        if (plan === 'single') {
+            return { monthly: selectedModules.length * EINZELSAEULE_JE_MODUL, yearly: 0, setup: 0 };
+        }
+        const eintrag = tarifpreise[plan];
+        if (!eintrag) return { monthly: null, yearly: null, setup: 0 };
+        return { monthly: eintrag.monthly, yearly: eintrag.yearly, setup: 0 };
     };
 
     const price = calculatePrice();
@@ -120,6 +163,7 @@ function RegisterForm() {
                 modules: selectedModules,
                 unternehmer_bestaetigt: istUnternehmer,
                 agb_version: AGB_VERSION,
+                avv_version: AVV_VERSION,
             });
 
             // Free-Tarif: kein Checkout, direkt ins Dashboard.
@@ -158,7 +202,8 @@ function RegisterForm() {
 
     const getPriceDisplay = () => {
         if (plan === 'free') return 'Kostenlos';
-        if (price.yearly > 0) return `${price.monthly}€/Monat oder ${price.yearly}€/Jahr`;
+        if (price.monthly === null) return 'Preis wird geladen …';
+        if (price.yearly && price.yearly > 0) return `${price.monthly}€/Monat oder ${price.yearly}€/Jahr`;
         return `${price.monthly}€/Monat`;
     };
 
@@ -442,6 +487,13 @@ function RegisterForm() {
                             <span>
                                 Ich handle bei diesem Vertrag als Unternehmer im Sinne des § 14 BGB und
                                 nicht als Verbraucher. complyo schließt keine Verträge mit Verbrauchern.
+                                Zugleich schließe ich den{' '}
+                                <a href="https://complyo.de/avv" target="_blank" rel="noopener noreferrer"
+                                   className="underline" style={{ color: 'rgba(96,165,250,0.85)' }}
+                                   onClick={(e) => e.stopPropagation()}>
+                                    Auftragsverarbeitungsvertrag nach Art. 28 DSGVO
+                                </a>{' '}ab — er ist nötig, weil complyo bei der Prüfung und beim Betrieb der
+                                Widgets Daten der Besucher meiner Website verarbeitet.
                             </span>
                         </label>
 
@@ -500,7 +552,11 @@ function RegisterForm() {
                             <a href="https://complyo.de/datenschutz" target="_blank" rel="noopener noreferrer"
                                className="transition-colors duration-200 hover:opacity-80" style={{ color: 'rgba(96,165,250,0.75)' }}>
                                 Datenschutzerklärung
-                            </a>{' '}zu.
+                            </a>{' '}zu und schließen den{' '}
+                            <a href="https://complyo.de/avv" target="_blank" rel="noopener noreferrer"
+                               className="transition-colors duration-200 hover:opacity-80" style={{ color: 'rgba(96,165,250,0.75)' }}>
+                                Auftragsverarbeitungsvertrag
+                            </a>{' '}ab.
                         </p>
                     </div>
                 </section>

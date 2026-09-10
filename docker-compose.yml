@@ -105,11 +105,29 @@ services:
       # Bleibt auf warn, bis die [Lizenz]-Logs keine legitimen Kunden mehr
       # zeigen — erst dann darf block gesetzt werden (license_check.py).
       - COMPLYO_LICENSE_ENFORCEMENT=${COMPLYO_LICENSE_ENFORCEMENT:-warn}
+      # Zweiter Faktor (10.09.2026). Ohne diesen Schluessel verweigert die
+      # Einrichtung den Dienst (fail-closed) — das TOTP-Geheimnis liegt sonst
+      # im Klartext neben dem Passwort-Hash und waere kein zweiter Faktor.
+      - COMPLYO_2FA_ENC_KEY=${COMPLYO_2FA_ENC_KEY}
+      # Wohin die Links in den Kontomails zeigen: das Dashboard, nicht die
+      # Startseite. Dort liegen Anmeldung und die Kontoseiten.
+      - FRONTEND_URL=${FRONTEND_URL:-https://app.complyo.de}
+      # Loeschfristen: 'ja' loescht auch Nachweise (Einwilligungen, Scanverlauf,
+      # Auslieferungsprotokoll) nach Ablauf. Siehe backend/loeschfristen.py.
+      - LOESCHFRISTEN_SCHARF=${LOESCHFRISTEN_SCHARF:-nein}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - STRIPE_WEBHOOK_SECRET_ADDONS=${STRIPE_WEBHOOK_SECRET_ADDONS:-${STRIPE_WEBHOOK_SECRET}}
       - STRIPE_PRICE_PRO_MONTHLY=${STRIPE_PRICE_PRO_MONTHLY}
       - STRIPE_PRICE_PRO_YEARLY=${STRIPE_PRICE_PRO_YEARLY}
+      # Early Access: die ersten 100 bestaetigten Wartelistenplaetze zahlen
+      # 49 statt 89 Euro. Der Preis war in Stripe angelegt und in der .env
+      # eingetragen, stand aber NICHT in dieser Liste — damit erreichte er
+      # den Container nie, und `pro_early_monthly` fiel auf den vollen
+      # Pro-Preis zurueck. Die Startseite versprach 49, gebucht worden
+      # waeren 89 (gemessen 10.09.2026).
+      - STRIPE_PRICE_PRO_EARLY_MONTHLY=${STRIPE_PRICE_PRO_EARLY_MONTHLY:-}
+      - EARLY_ACCESS_PLAETZE=${EARLY_ACCESS_PLAETZE:-100}
       - STRIPE_PRICE_AGENCY_MONTHLY=${STRIPE_PRICE_AGENCY_MONTHLY}
       - STRIPE_PRICE_AGENCY_YEARLY=${STRIPE_PRICE_AGENCY_YEARLY}
       # Pläne: single (19€/Modul), pro (49€/Mon), agency (299€/Mon),

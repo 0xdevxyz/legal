@@ -126,6 +126,16 @@
             .replace(/'/g, '&#x27;');
     }
     
+    // Nur Adressen, die eine Seite oeffnen. `javascript:` in einem href ist
+    // ausfuehrbarer Code, kein Ziel — und die Adressen stammen aus der
+    // Konfiguration bzw. dem Dienste-Katalog, also nicht aus diesem Skript.
+    function sanitizeUrl(wert) {
+        const roh = String(wert || '').trim();
+        if (/^(https?:|mailto:|tel:)/i.test(roh)) return sanitizeText(roh);
+        if (roh.startsWith('/') || roh.startsWith('./') || roh.startsWith('#')) return sanitizeText(roh);
+        return '#';
+    }
+
     // ========================================================================
     // ComplyoCookieBanner Class
     // ========================================================================
@@ -2135,9 +2145,9 @@
             
             // Content
             const t = this.config.texts;
-            const privacyUrl = sanitizeText(this.config.privacyPolicyUrl || '/datenschutz');
-            const cookiePolicyUrl = sanitizeText(this.config.cookiePolicyUrl || '/cookie-richtlinie');
-            const imprintUrl = sanitizeText(this.config.imprintUrl || '/impressum');
+            const privacyUrl = sanitizeUrl(this.config.privacyPolicyUrl || '/datenschutz');
+            const cookiePolicyUrl = sanitizeUrl(this.config.cookiePolicyUrl || '/cookie-richtlinie');
+            const imprintUrl = sanitizeUrl(this.config.imprintUrl || '/impressum');
 
             banner.innerHTML = `
                 <div class="complyo-content">
@@ -2817,8 +2827,8 @@
         }
         
         renderSettingsHTML() {
-            const privacyUrl = sanitizeText(this.config.privacyPolicyUrl || '/datenschutz');
-            const imprintUrl = sanitizeText(this.config.imprintUrl || '/impressum');
+            const privacyUrl = sanitizeUrl(this.config.privacyPolicyUrl || '/datenschutz');
+            const imprintUrl = sanitizeUrl(this.config.imprintUrl || '/impressum');
             const descText = sanitizeText(this.config.texts?.description || 'Hier finden Sie eine Übersicht über alle verwendeten Cookies. Sie können Ihre Einwilligung für ganze Kategorien geben oder sich weitere Informationen anzeigen lassen und bestimmte Cookies auswählen.');
             return `
                 <!-- Header -->
@@ -3109,24 +3119,24 @@
                                     ${provider.address ? `
                                         <div class="cps-details-row">
                                             <span class="cps-details-label">Adresse</span>
-                                            <span class="cps-details-value">${provider.address}</span>
+                                            <span class="cps-details-value">${sanitizeText(provider.address)}</span>
                                         </div>
                                     ` : ''}
                                     ${provider.privacy_url ? `
                                         <div class="cps-details-row">
                                             <span class="cps-details-label">URL der Datenschutzerklärung</span>
-                                            <span class="cps-details-value"><a href="${provider.privacy_url}" target="_blank">${provider.privacy_url}</a></span>
+                                            <span class="cps-details-value"><a href="${sanitizeUrl(provider.privacy_url)}" target="_blank" rel="noopener">${sanitizeText(provider.privacy_url)}</a></span>
                                         </div>
                                     ` : ''}
                                     ${provider.cookie_url ? `
                                         <div class="cps-details-row">
                                             <span class="cps-details-label">Cookie-URL</span>
-                                            <span class="cps-details-value"><a href="${provider.cookie_url}" target="_blank">${provider.cookie_url}</a></span>
+                                            <span class="cps-details-value"><a href="${sanitizeUrl(provider.cookie_url)}" target="_blank" rel="noopener">${sanitizeText(provider.cookie_url)}</a></span>
                                         </div>
                                     ` : ''}
                                     <div class="cps-details-row">
                                         <span class="cps-details-label">Services</span>
-                                        <span class="cps-details-value">${provider.services.map(s => s.name).join(', ')}</span>
+                                        <span class="cps-details-value">${provider.services.map(s => sanitizeText(s.name)).join(', ')}</span>
                                     </div>
                                 </div>
                             </div>

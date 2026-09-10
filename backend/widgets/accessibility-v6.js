@@ -15,6 +15,36 @@
  */
 
 (function() {
+
+  // ==========================================================================
+  // XSS-Schutz
+  // ==========================================================================
+  //
+  // Die Struktur-Ansicht liest Ueberschriften, Landmarken und Links AUS DER
+  // SEITE des Kunden und setzte sie bis zum 09.09.2026 roh per innerHTML
+  // wieder ein. Auf einer Seite mit fremden Beitraegen — einem Blog mit
+  // Kommentaren etwa — reicht dafuer ein Linktext wie "&lt;img src=x
+  // onerror=...&gt;": `textContent` liefert die spitzen Klammern als Zeichen
+  // zurueck, innerHTML macht daraus wieder ein Element. Unser Widget waere
+  // damit der Weg, ueber den fremder Code auf einer Kundenseite laeuft.
+  function complyoEsc(wert) {
+    if (wert === null || wert === undefined) return '';
+    return String(wert)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+  }
+
+  // Nur Adressen, die im Browser eine Seite oeffnen. `javascript:` und `data:`
+  // in einem href sind ausfuehrbarer Code, kein Ziel.
+  function complyoSichereUrl(wert) {
+    const roh = String(wert || '').trim();
+    if (/^(https?:|mailto:|tel:)/i.test(roh)) return complyoEsc(roh);
+    if (roh.startsWith('/') || roh.startsWith('./') || roh.startsWith('#')) return complyoEsc(roh);
+    return '#';
+  }
   'use strict';
   
   const WIDGET_VERSION = '1.0.0';
@@ -1487,8 +1517,8 @@
           const text = h.textContent.trim().substring(0, 50);
           const indent = parseInt(level.charAt(1)) - 1;
           html += `<li class="complyo-heading-${level}" style="padding-left: ${indent * 15}px;">
-            <span class="complyo-heading-badge">${level.toUpperCase()}</span>
-            ${text}
+            <span class="complyo-heading-badge">${complyoEsc(level.toUpperCase())}</span>
+            ${complyoEsc(text)}
           </li>`;
           count++;
         }
@@ -1507,8 +1537,8 @@
           const role = el.getAttribute('role') || el.tagName.toLowerCase();
           const label = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || 'Unlabeled';
           html += `<li class="complyo-landmark-item">
-            <span class="complyo-landmark-badge">${role}</span>
-            ${label}
+            <span class="complyo-landmark-badge">${complyoEsc(role)}</span>
+            ${complyoEsc(label)}
           </li>`;
           count++;
         }
@@ -1528,8 +1558,8 @@
           const href = link.href;
           const isExternal = !href.startsWith(window.location.origin);
           html += `<li class="complyo-link-item">
-            <a href="${href}" target="_blank" rel="noopener">
-              ${isExternal ? '🔗 ' : ''}${text}
+            <a href="${complyoSichereUrl(href)}" target="_blank" rel="noopener">
+              ${isExternal ? '🔗 ' : ''}${complyoEsc(text)}
             </a>
           </li>`;
           count++;

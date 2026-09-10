@@ -45,6 +45,7 @@ from bs4 import BeautifulSoup
 # Erst nach dem sys.path-Eintrag oben importierbar: der Cron laeuft als Skript
 # aus cronjobs/, nicht als Teil des Pakets.
 from compliance_engine import ai_budget
+from compliance_engine.sicherer_abruf import sichere_session
 
 _log_handlers = [logging.StreamHandler()]
 try:
@@ -132,7 +133,7 @@ async def _hole(url: str, timeout: int = 15) -> Optional[str]:
 
     ctx = _ssl.create_default_context(cafile=certifi.where())
     try:
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ctx)) as s:
+        async with sichere_session(connector=aiohttp.TCPConnector(ssl=ctx)) as s:
             async with s.get(
                 url,
                 timeout=aiohttp.ClientTimeout(total=timeout),

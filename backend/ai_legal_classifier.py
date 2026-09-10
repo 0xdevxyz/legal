@@ -423,8 +423,8 @@ Antworte im folgenden JSON-Format:
     "severity": "high",  // critical/high/medium/low/info
     "impact_score": 7.5,  // 0.0 - 10.0
     "reasoning": "Diese Änderung betrifft...",
-    "applicable_laws": ["DSGVO", "TTDSG"],  // Liste der betroffenen Rechtsgebiete/Gesetze
-    "law_confidence": {{"DSGVO": 0.87, "TTDSG": 0.74}},  // Konfidenz pro Gesetz (0.0 - 1.0)
+    "applicable_laws": ["DSGVO", "TDDDG"],  // Liste der betroffenen Rechtsgebiete/Gesetze
+    "law_confidence": {{"DSGVO": 0.87, "TDDDG": 0.74}},  // Konfidenz pro Gesetz (0.0 - 1.0)
     "user_impact": "Für den Nutzer bedeutet das...",
     "consequences_if_ignored": "Bei Nicht-Umsetzung drohen...",
     
@@ -461,7 +461,7 @@ WICHTIG:
 - Button-Farben: red (kritisch), orange (wichtig), blue (moderat), gray (info)
 - Icons: Verwende Lucide React Icon-Namen (Search, AlertTriangle, Shield, etc.)
 - estimated_time: Realistisch einschätzen
-- Gib applicable_laws als Liste der betroffenen Rechtsgebiete zurück (z.B. ["DSGVO", "TTDSG"])
+- Gib applicable_laws als Liste der betroffenen Rechtsgebiete zurück (z.B. ["DSGVO", "TDDDG"])
 - Gib law_confidence als Dict mit Konfidenz pro Gesetz zurück (0.0 - 1.0)
 """
     

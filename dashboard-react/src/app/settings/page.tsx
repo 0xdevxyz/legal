@@ -14,8 +14,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { safeStorage } from '@/lib/storage';
+import { getAccessToken } from '@/lib/auth-refresh';
 import { PageContainer, PageHeader } from '@/components/dashboard/PageShell';
 import GitHubIntegration from '@/components/settings/GitHubIntegration';
+import ZweiterFaktor from '@/components/settings/ZweiterFaktor';
 import { Github } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.complyo.de';
@@ -68,8 +70,14 @@ export default function SettingsPage() {
     }
   }, [user]);
 
+  // `safeStorage.get('access_token')` war leer — die Anmeldung legt den Token
+  // NICHT in den Speicher des Browsers, sondern haelt ihn im Fenster
+  // (lib/auth-refresh) und in der NextAuth-Sitzung. Jeder Aufruf von dieser
+  // Seite ging damit ohne Ausweis raus: Profil speichern, Passwort aendern,
+  // Benachrichtigungen — alles antwortete mit 401, sichtbar nur als
+  // "Fehler beim Speichern". Gemessen am 10.09.2026, Token-Laenge 0.
   const getHeaders = () => ({
-    Authorization: `Bearer ${safeStorage.get('access_token')}`,
+    Authorization: `Bearer ${getAccessToken() ?? ''}`,
     'Content-Type': 'application/json',
   });
 
@@ -118,8 +126,14 @@ export default function SettingsPage() {
       showResult('Passwörter stimmen nicht überein.', true);
       return;
     }
-    if (passwords.next.length < 8) {
-      showResult('Passwort muss mindestens 8 Zeichen haben.', true);
+    // Spiegelt die Untergrenze aus backend/passwort_richtlinie.py, damit der
+    // Nutzer die Antwort vor dem Absenden bekommt. Durchgesetzt wird die Regel
+    // dort, nicht hier — den vollstaendigen Satz an Pruefungen ein zweites Mal
+    // nachzubauen hiesse nur, dass beide auseinanderlaufen.
+    if (passwords.next.length < 12) {
+      showResult('Passwort muss mindestens 12 Zeichen haben. Vier zufällige Wörter '
+        + 'hintereinander sind sicherer und leichter zu merken als ein kurzes mit '
+        + 'Sonderzeichen.', true);
       return;
     }
     setSaving(true);
@@ -325,6 +339,7 @@ export default function SettingsPage() {
 
             {/* ── Sicherheit ── */}
             {activeTab === 'sicherheit' && (
+              <div className="space-y-4">
               <Card className="glass-card border-0">
                 <CardHeader>
                   <CardTitle className="dark:text-white text-gray-900 flex items-center gap-2 text-base">
@@ -359,7 +374,7 @@ export default function SettingsPage() {
                         value={passwords.next}
                         onChange={e => setPasswords(p => ({ ...p, next: e.target.value }))}
                         className="dark:bg-zinc-800 dark:border-zinc-700 dark:text-white bg-white border-gray-200 text-gray-900 focus:border-[color:var(--lime)]"
-                        placeholder="Min. 8 Zeichen"
+                        placeholder="Mindestens 12 Zeichen"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -395,6 +410,8 @@ export default function SettingsPage() {
                   </div>
                 </CardContent>
               </Card>
+                <ZweiterFaktor melde={showResult} />
+              </div>
             )}
 
             {/* ── Datenschutz ── */}

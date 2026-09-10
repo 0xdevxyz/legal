@@ -32,6 +32,7 @@ from file_storage_service import file_storage
 from agency_report_generator import AgencyReportGenerator
 from compliance_engine.data_processing_countries import country_processing_info
 from dependencies import rate_limit, require_admin, get_client_ip as _client_ip_geprueft
+from compliance_engine.sicherer_abruf import sichere_session
 
 
 def _enrich_third_country(service: dict) -> dict:
@@ -242,6 +243,20 @@ async def require_site_access(
         raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Website")
 
     return user, user_id
+
+async def require_site_access_user(site_id: str, user: dict, module: str = 'cookie') -> Any:
+    """Zugehoerigkeitspruefung fuer Routen, die den Nutzer bereits als dict haben.
+
+    Pendant zu `require_site_access`, das die Anmeldedaten selbst aufloest.
+    Beides gibt es, weil die Routen historisch in zwei Stilen geschrieben sind;
+    ein Stil ohne Pruefung ist kein dritter Stil, sondern ein Loch.
+    """
+    user_id = user.get("user_id") or user.get("id")
+    await require_module(user, module)
+    if site_id not in await get_user_site_ids(user_id):
+        logger.warning(f"User {user_id} denied access to site_id '{site_id}'")
+        raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Website")
+    return user_id
 
 # ============================================================================
 # Pydantic Models
@@ -564,20 +579,40 @@ async def log_consent(
         raw_ua = request.headers.get("User-Agent") or consent.user_agent or ""
         user_agent = truncate_user_agent(raw_ua)  # AUDIT-03: DSGVO-compliant truncation
         
-        # Get banner config ID (instead of revision)
+        # Konfigurationszeile UND Fassung holen.
+        #
+        # `revision_id` hiess so, enthielt aber die ID der Konfigurationszeile.
+        # Die bleibt gleich, waehrend der Banner sich aendert — zu keiner
+        # Einwilligung liess sich damit sagen, welcher Banner dem Besucher
+        # vorlag. Art. 7 Abs. 1 DSGVO verlangt genau diesen Nachweis.
+        #
+        # Die Fassung fuehrt der Trigger `trigger_banner_revision` mit; sie
+        # wird ab jetzt in `banner_revision` mitgeschrieben. Die alte Spalte
+        # bleibt unveraendert, damit die bereits erfassten Zeilen nicht
+        # nachtraeglich etwas anderes bedeuten.
         config_query = """
-            SELECT id FROM cookie_banner_configs 
+            SELECT id, revision FROM cookie_banner_configs
             WHERE site_id = $1
         """
         config_row = await db_pool.fetchrow(config_query, consent.site_id)
         revision_id = config_row['id'] if config_row else 1
+        # Vorsichtiger Zugriff: das Protokollieren einer Einwilligung ist der
+        # empfindlichste Schreibweg im ganzen System. Es darf nicht daran
+        # scheitern, dass eine Spalte fehlt — dann lieber ohne Fassung
+        # protokollieren als gar nicht.
+        banner_revision = (
+            config_row["revision"]
+            if config_row is not None and "revision" in config_row
+            else None
+        )
         
         # Insert consent log (with optional device fingerprint as IP alternative)
         insert_query = """
             INSERT INTO cookie_consent_logs (
                 site_id, visitor_id, consent_categories, services_accepted,
-                ip_address_hash, device_fingerprint, user_agent, revision_id, language, banner_shown
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                ip_address_hash, device_fingerprint, user_agent, revision_id, language,
+                banner_shown, banner_revision
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING id, timestamp
         """
         
@@ -595,7 +630,8 @@ async def log_consent(
             user_agent,
             revision_id,
             consent.language,
-            consent.banner_shown
+            consent.banner_shown,
+            banner_revision
         )
         
         # Update statistics (upsert)
@@ -1018,7 +1054,10 @@ async def extract_colors(
 
     Spiegelt das Scraping-Pattern aus website_routes.py (Erstanlage einer Site).
     """
-    # Auth + Modul-Check: nur zahlende Cookie-Kunden dürfen scrapen.
+    # Auth + Modul-Check: nur zahlende Cookie-Kunden dürfen scrapen. Eine
+    # Zugehoerigkeitspruefung gibt es hier bewusst nicht — die Route liest eine
+    # beliebige oeffentliche Adresse aus (Farbvorschlag vor der Erstanlage), es
+    # gibt keine fremden Daten zu erreichen. Der SSRF-Schutz steht unten.
     user = await get_current_user_required(credentials)
     await require_module(user, 'cookie')
 
@@ -1035,7 +1074,7 @@ async def extract_colors(
             raise HTTPException(status_code=400, detail="URL ist nicht erlaubt (SSRF-Schutz).")
 
         timeout = aiohttp.ClientTimeout(total=10)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with sichere_session(timeout=timeout) as session:
             async with session.get(
                 crawl_url,
                 headers={'User-Agent': 'Mozilla/5.0 (compatible; ComplyoBot/1.0)'},
@@ -1295,13 +1334,14 @@ async def update_config_partial(
         # Modul-Check: User muss Cookie-Modul gebucht haben
         await require_module(user, 'cookie')
         
-        # Prüfe, ob die site_id zur registrierten Website des Users gehört
-        registered_site_id = await get_user_website_site_id(user_id)
-        
-        if registered_site_id and site_id != registered_site_id:
+        # Zugehoerigkeit ueber ALLE Websites des Kontos. Die alte Pruefung
+        # verglich nur mit der primaeren Website und liess durch, wenn gar
+        # keine registriert war (`registered_site_id and ...`) — ein frisches
+        # Konto konnte damit den Banner jeder fremden Site umschreiben.
+        if site_id not in await get_user_site_ids(user_id):
             raise HTTPException(
-                status_code=403, 
-                detail=f"Site {site_id} does not belong to this user"
+                status_code=403,
+                detail="Kein Zugriff auf diese Website"
             )
         # Build dynamic update query
         update_fields = []
@@ -1515,7 +1555,10 @@ async def list_custom_services(
 ):
     """List the site's custom service definitions."""
     user = await get_current_user_required(credentials)
-    await require_module(user, 'cookie')
+    # Zugehoerigkeit, nicht nur Anmeldung: bis zum 10.09.2026 genuegte ein
+    # beliebiges Konto mit gebuchtem Cookie-Modul, um die eigenen Dienste
+    # FREMDER Websites zu lesen, anzulegen, zu aendern und zu loeschen.
+    await require_site_access(site_id, credentials)
     try:
         rows = await db_pool.fetch(
             """
@@ -1550,7 +1593,10 @@ async def create_custom_service(
 ):
     """Create a custom service for a site. service_key is derived from the name."""
     user = await get_current_user_required(credentials)
-    await require_module(user, 'cookie')
+    # Zugehoerigkeit, nicht nur Anmeldung: bis zum 10.09.2026 genuegte ein
+    # beliebiges Konto mit gebuchtem Cookie-Modul, um die eigenen Dienste
+    # FREMDER Websites zu lesen, anzulegen, zu aendern und zu loeschen.
+    await require_site_access(site_id, credentials)
     try:
         user_id = None
         try:
@@ -1601,7 +1647,10 @@ async def update_custom_service(
 ):
     """Update an existing custom service."""
     user = await get_current_user_required(credentials)
-    await require_module(user, 'cookie')
+    # Zugehoerigkeit, nicht nur Anmeldung: bis zum 10.09.2026 genuegte ein
+    # beliebiges Konto mit gebuchtem Cookie-Modul, um die eigenen Dienste
+    # FREMDER Websites zu lesen, anzulegen, zu aendern und zu loeschen.
+    await require_site_access(site_id, credentials)
     try:
         result = await db_pool.execute(
             """
@@ -1633,7 +1682,10 @@ async def delete_custom_service(
 ):
     """Delete a custom service."""
     user = await get_current_user_required(credentials)
-    await require_module(user, 'cookie')
+    # Zugehoerigkeit, nicht nur Anmeldung: bis zum 10.09.2026 genuegte ein
+    # beliebiges Konto mit gebuchtem Cookie-Modul, um die eigenen Dienste
+    # FREMDER Websites zu lesen, anzulegen, zu aendern und zu loeschen.
+    await require_site_access(site_id, credentials)
     try:
         result = await db_pool.execute(
             "DELETE FROM cookie_custom_services WHERE site_id=$1 AND service_key=$2",
@@ -1810,7 +1862,7 @@ async def export_consent_logs_csv(
         query = """
             SELECT id, visitor_id, consent_categories, services_accepted,
                    ip_address_hash, user_agent, language, banner_shown,
-                   revision_id, timestamp
+                   revision_id, banner_revision, timestamp
             FROM cookie_consent_logs
             WHERE site_id = $1
             ORDER BY timestamp DESC
@@ -1822,7 +1874,8 @@ async def export_consent_logs_csv(
         writer.writerow([
             'ID', 'Zeitstempel (UTC)', 'Visitor-ID', 'Notwendig', 'Funktional',
             'Statistik', 'Marketing', 'Akzeptierte Services', 'IP-Hash',
-            'User-Agent', 'Sprache', 'Banner angezeigt', 'Konfig-Revision'
+            'User-Agent', 'Sprache', 'Banner angezeigt', 'Konfig-ID',
+            'Banner-Fassung'
         ])
         for r in rows:
             cats = r['consent_categories']
@@ -1852,7 +1905,11 @@ async def export_consent_logs_csv(
                 r['user_agent'] or '',
                 r['language'] or '',
                 'ja' if r['banner_shown'] else 'nein',
-                r['revision_id'] if r['revision_id'] is not None else ''
+                r['revision_id'] if r['revision_id'] is not None else '',
+                # Leer heisst: vor dem 10.09.2026 erfasst, damals wurde die
+                # Fassung nicht mitgeschrieben. Eine Zahl zu erfinden waere
+                # ein Nachweis, der bei der ersten Nachfrage bricht.
+                r['banner_revision'] if r['banner_revision'] is not None else 'nicht erfasst'
             ])
 
         # Prepend BOM so Excel renders UTF-8 (umlauts) correctly.
@@ -2255,7 +2312,19 @@ async def get_blocking_config(
                 "services": []
             }
         
-        selected_services = config['services'] if config['services'] else []
+        # `services` ist jsonb, und der Verbindungspool setzt keinen
+        # jsonb-Codec: asyncpg liefert die Spalte als ZEICHENKETTE. Vorher
+        # stand hier `config['services']` roh, `len('[]')` ergab 2, und der
+        # Aufruf ging mit einem String in `ANY($1::text[])`. Ergebnis: dieser
+        # Endpunkt antwortete fuer JEDE Site mit 500. Die uebrigen Leser
+        # derselben Spalte parsen laengst; nur hier fehlte es.
+        roh = config['services']
+        if isinstance(roh, str):
+            try:
+                roh = json.loads(roh)
+            except (ValueError, TypeError):
+                roh = []
+        selected_services = [str(x) for x in roh] if isinstance(roh, (list, tuple)) else []
         auto_block = config['auto_block_scripts'] if config['auto_block_scripts'] is not None else True
         
         # Get service details with blocking info
@@ -3263,22 +3332,28 @@ async def get_config_revisions(
     """
     await require_site_access(site_id, credentials)
     try:
+        # Die Tabelle heisst `cookie_banner_revisions`, nicht
+        # `cookie_consent_revisions`. Der Endpunkt lief deshalb seit jeher in
+        # einen 500er, obwohl die Daten da sind: der Trigger
+        # `trigger_banner_revision` legt bei jeder Aenderung einen
+        # Schnappschuss ab. Ein Nachweis, den niemand abrufen kann, ist keiner.
         query = """
-            SELECT 
-                revision_number, config_snapshot, changes_summary, created_at
-            FROM cookie_consent_revisions
+            SELECT revision, config_snapshot, services_snapshot,
+                   change_reason, created_at
+            FROM cookie_banner_revisions
             WHERE site_id = $1
-            ORDER BY revision_number DESC
+            ORDER BY revision DESC
             LIMIT 50
         """
         rows = await db_pool.fetch(query, site_id)
-        
+
         revisions = []
         for row in rows:
             revisions.append({
-                "revision": row['revision_number'],
+                "revision": row['revision'],
                 "snapshot": row['config_snapshot'],
-                "changes": row['changes_summary'],
+                "services": row['services_snapshot'],
+                "changes": row['change_reason'],
                 "created_at": row['created_at'].isoformat() if row['created_at'] else None
             })
         
@@ -3553,6 +3628,7 @@ async def get_revocation_stats(
     current_user: Dict = Depends(get_current_user_required),
 ):
     """AUDIT-17: Acceptance vs. Revocation Rate der letzten N Tage."""
+    await require_site_access_user(site_id, current_user)
     if not db_pool:
         return {"site_id": site_id, "acceptance_rate": 0.0, "revocation_rate": 0.0, "total": 0, "days": days}
     try:
@@ -3596,6 +3672,7 @@ async def get_service_consent_stats(
     current_user: Dict = Depends(get_current_user_required),
 ):
     """AUDIT-18: Per-Service Consent-Statistiken (welche Services wie oft akzeptiert)."""
+    await require_site_access_user(site_id, current_user)
     if not db_pool:
         return {"site_id": site_id, "services": {}, "days": days}
     try:

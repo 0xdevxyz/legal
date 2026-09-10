@@ -77,7 +77,7 @@
     alt_texte: { angewendet: 0, verfehlt: 0 },
     link_labels: { angewendet: 0, verfehlt: 0 },
     struktur: { angewendet: 0, verfehlt: 0, unnoetig: 0 },
-    css_regeln: { angewendet: 0, verfehlt: 0 },
+    css_regeln: { angewendet: 0, verfehlt: 0, unnoetig: 0 },
     dokument_fixes: { angewendet: 0, verfehlt: 0, unnoetig: 0 }
   };
 
@@ -392,15 +392,40 @@
       try { trifft = document.querySelectorAll(r.selector).length; } catch (e) { trifft = -1; }
       if (trifft > 0) {
         if (zaehltAngewendet('css_regeln', kennung)) bilanz.css_regeln.angewendet++;
-      } else {
-        // trifft==0 ist KEIN Niemandsland: eine Kontrastregel ohne Ziel ist
-        // entweder eine Unterseite ohne dieses Element — oder ein Selektor,
-        // den ein Theme-Update zerlegt hat. Beides gehoert in `verfehlt`;
-        // erst die Auswertung ueber viele Aufrufe trennt die Faelle. Frueher
-        // zaehlte trifft==0 GAR NICHT — die Regression war unsichtbar.
+      } else if (vonDieserSeite(r.seite)) {
+        // Kein Ziel auf DER Seite, auf der die Regel gemessen wurde: das ist
+        // ein echter Fehlschlag. Entweder hat ein Theme-Update den Selektor
+        // zerlegt, oder das Element ist weg.
         if (zaehltVerfehlt('css_regeln', kennung)) bilanz.css_regeln.verfehlt++;
+      } else {
+        // Kein Ziel auf einer ANDEREN Seite heisst: hier gibt es nichts zu
+        // tun. Bis zum 10.09.2026 zaehlte auch das als "verfehlt" — auf
+        // complyo.de standen dadurch 118 verfehlte gegen 24 angewendete
+        // Reparaturen, auf loqal.io 797 gegen 33, und der Pruefnachweis
+        // meldete dem Kunden einen Fehlalarm.
+        if (zaehltUnnoetig('css_regeln', kennung)) bilanz.css_regeln.unnoetig++;
       }
     }
+  }
+
+
+  // Gehoert eine Regel zu der Seite, auf der wir gerade sind?
+  //
+  // Verglichen wird nur der Pfad; Schema, www und ein abschliessender
+  // Schraegstrich sind fuer diese Frage ohne Bedeutung. Fehlt die Angabe
+  // (aeltere Manifeste), wird die Regel wie zur Seite gehoerig behandelt —
+  // dann bleibt es bei der vorsichtigeren Zaehlung als Fehlschlag.
+  function pfadVon(u) {
+    if (!u) return null;
+    try { return new URL(u, location.href).pathname.replace(/\/+$/, '') || '/'; }
+    catch (e) { return null; }
+  }
+
+  function vonDieserSeite(seite) {
+    var p = pfadVon(seite);
+    if (p === null) return true;
+    var hier = location.pathname.replace(/\/+$/, '') || '/';
+    return p === hier;
   }
 
   // ---- Link-Zweck (WCAG 2.4.4): aria-label auf nichtssagende Links -----------
