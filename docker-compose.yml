@@ -117,6 +117,14 @@ services:
       - STRIPE_WEBHOOK_SECRET_ADDONS=${STRIPE_WEBHOOK_SECRET_ADDONS:-${STRIPE_WEBHOOK_SECRET}}
       - STRIPE_PRICE_PRO_MONTHLY=${STRIPE_PRICE_PRO_MONTHLY}
       - STRIPE_PRICE_PRO_YEARLY=${STRIPE_PRICE_PRO_YEARLY}
+      # Early Access: die ersten 100 bestaetigten Wartelistenplaetze zahlen
+      # 49 statt 89 Euro. Der Preis war in Stripe angelegt und in der .env
+      # eingetragen, stand aber NICHT in dieser Liste — damit erreichte er
+      # den Container nie, und `pro_early_monthly` fiel auf den vollen
+      # Pro-Preis zurueck. Die Startseite versprach 49, gebucht worden
+      # waeren 89 (gemessen 10.09.2026).
+      - STRIPE_PRICE_PRO_EARLY_MONTHLY=${STRIPE_PRICE_PRO_EARLY_MONTHLY:-}
+      - EARLY_ACCESS_PLAETZE=${EARLY_ACCESS_PLAETZE:-100}
       - STRIPE_PRICE_AGENCY_MONTHLY=${STRIPE_PRICE_AGENCY_MONTHLY}
       - STRIPE_PRICE_AGENCY_YEARLY=${STRIPE_PRICE_AGENCY_YEARLY}
       # Pläne: single (19€/Modul), pro (49€/Mon), agency (299€/Mon),
