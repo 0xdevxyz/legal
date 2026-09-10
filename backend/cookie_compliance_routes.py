@@ -2312,7 +2312,19 @@ async def get_blocking_config(
                 "services": []
             }
         
-        selected_services = config['services'] if config['services'] else []
+        # `services` ist jsonb, und der Verbindungspool setzt keinen
+        # jsonb-Codec: asyncpg liefert die Spalte als ZEICHENKETTE. Vorher
+        # stand hier `config['services']` roh, `len('[]')` ergab 2, und der
+        # Aufruf ging mit einem String in `ANY($1::text[])`. Ergebnis: dieser
+        # Endpunkt antwortete fuer JEDE Site mit 500. Die uebrigen Leser
+        # derselben Spalte parsen laengst; nur hier fehlte es.
+        roh = config['services']
+        if isinstance(roh, str):
+            try:
+                roh = json.loads(roh)
+            except (ValueError, TypeError):
+                roh = []
+        selected_services = [str(x) for x in roh] if isinstance(roh, (list, tuple)) else []
         auto_block = config['auto_block_scripts'] if config['auto_block_scripts'] is not None else True
         
         # Get service details with blocking info
