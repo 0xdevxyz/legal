@@ -82,6 +82,9 @@ class RegisterRequest(BaseModel):
     # haelt im Streitfall nicht.
     unternehmer_bestaetigt: bool = False
     agb_version: Optional[str] = None
+    # Fassung des Auftragsverarbeitungsvertrages (Art. 28 DSGVO). Ohne ihn
+    # duerfte kein Kunde complyo auf seiner Website einsetzen.
+    avv_version: Optional[str] = None
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -137,8 +140,9 @@ from dependencies import get_client_ip as _besucher_ip
 
 async def protokolliere_vertragsannahme(user_id: int, email: str, request: Request,
                                         unternehmer_bestaetigt: bool,
-                                        agb_version: Optional[str]) -> None:
-    """Haelt fest, wer wann welche AGB-Fassung als Unternehmer angenommen hat.
+                                        agb_version: Optional[str],
+                                        avv_version: Optional[str] = None) -> None:
+    """Haelt fest, wer wann welche AGB- und AVV-Fassung als Unternehmer angenommen hat.
 
     Best effort mit Absicht: schlaegt der Schreibvorgang fehl, etwa weil
     Migration 0016 noch nicht gelaufen ist, darf das die Registrierung NICHT
@@ -157,10 +161,11 @@ async def protokolliere_vertragsannahme(user_id: int, email: str, request: Reque
             await conn.execute(
                 """
                 INSERT INTO vertragsannahmen
-                    (user_id, email, agb_version, unternehmer_bestaetigt, ip_adresse, user_agent)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                    (user_id, email, agb_version, avv_version, unternehmer_bestaetigt,
+                     ip_adresse, user_agent)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 """,
-                user_id, email, agb_version, unternehmer_bestaetigt,
+                user_id, email, agb_version, avv_version, unternehmer_bestaetigt,
                 ip, request.headers.get("user-agent"),
             )
     except Exception as exc:
@@ -208,7 +213,7 @@ async def register(request: Request, body: RegisterRequest):
         # Nachweis der Unternehmereigenschaft und der akzeptierten AGB-Fassung.
         await protokolliere_vertragsannahme(
             user['id'], user['email'], request,
-            body.unternehmer_bestaetigt, body.agb_version,
+            body.unternehmer_bestaetigt, body.agb_version, body.avv_version,
         )
         
         # Create tokens

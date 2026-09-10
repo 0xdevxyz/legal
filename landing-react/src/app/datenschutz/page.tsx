@@ -44,7 +44,7 @@ const VERARBEITUNGEN = [
   {
     titel: 'Kostenloser Website-Check',
     daten:
-      'Die von Ihnen eingegebene Website-Adresse, das Prüfergebnis, den Zeitpunkt der Prüfung sowie Ihre IP-Adresse zur Begrenzung der Zugriffszahl.',
+      'Die von Ihnen eingegebene Website-Adresse, das Prüfergebnis, den Zeitpunkt der Prüfung sowie Ihre IP-Adresse zur Begrenzung der Zugriffszahl. Für die Erläuterung einzelner Befunde wird der betroffene Ausschnitt der geprüften Seite an unseren KI-Dienstleister übermittelt (siehe Abschnitt 4).',
     zweck:
       'Durchführung der von Ihnen angeforderten Prüfung, Anzeige des Ergebnisses und Schutz des Dienstes vor missbräuchlicher Massennutzung.',
     rechtsgrundlage:
@@ -211,15 +211,39 @@ export default function DatenschutzPage() {
               <h2 className="text-2xl font-bold text-gray-900 mb-4">4. Empfänger Ihrer Daten</h2>
               <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
                 <p>
-                  Ihre Daten werden auf Servern in Deutschland verarbeitet. Dienstleister, die uns beim Betrieb
-                  unterstützen — insbesondere für Hosting und Zahlungsabwicklung — erhalten Zugriff nur, soweit das
-                  für ihre Aufgabe erforderlich ist, und sind über Verträge zur Auftragsverarbeitung nach Art. 28
-                  DSGVO gebunden.
+                  Die Plattform selbst läuft auf Servern in Deutschland. Dienstleister, die uns beim Betrieb
+                  unterstützen, erhalten Zugriff nur, soweit das für ihre Aufgabe erforderlich ist, und sind über
+                  Verträge zur Auftragsverarbeitung nach Art. 28 DSGVO gebunden:
+                </p>
+                <ul className="list-disc pl-5 space-y-2">
+                  <li>
+                    <strong>Hosting:</strong> IONOS SE, Montabaur — Betrieb der Server. Deutschland.
+                  </li>
+                  <li>
+                    <strong>Zahlungsabwicklung:</strong> Stripe Payments Europe Ltd., Dublin, gemeinsam mit
+                    Stripe, Inc., USA. Wir selbst erhalten keine vollständigen Zahlungsdaten.
+                  </li>
+                  <li>
+                    <strong>KI-Analyse:</strong> OpenRouter, Inc., USA, als Vermittler zu den Modellen von
+                    Anthropic PBC, USA, und OpenAI, L.L.C., USA.
+                  </li>
+                </ul>
+                <p>
+                  <strong>Übermittlung in die USA.</strong> Für die KI-gestützte Analyse und für die
+                  Zahlungsabwicklung werden Daten in die Vereinigten Staaten übermittelt. Übermittelt wird bei der
+                  KI-Analyse der <em>Inhalt der geprüften Website</em> — Texte, Struktur und Bildadressen der
+                  Seite, die Sie prüfen lassen — sowie die Angaben, die Sie für die Erzeugung von Rechtstexten
+                  selbst eintragen. Nicht übermittelt werden Zugangsdaten und Zahlungsdaten.
                 </p>
                 <p>
-                  Eine Übermittlung in Länder außerhalb der Europäischen Union findet nicht statt. Sollte sich das
-                  ändern, nennen wir das Land, den Empfänger und die Grundlage der Übermittlung an dieser Stelle,
-                  bevor die Übermittlung beginnt.
+                  Grundlage der Übermittlung sind die Standardvertragsklauseln der Europäischen Kommission nach
+                  Art. 46 Abs. 2 lit. c DSGVO, soweit der Empfänger nicht nach dem EU-US Data Privacy Framework
+                  zertifiziert ist (Angemessenheitsbeschluss vom 10. Juli 2023, Art. 45 DSGVO). Die USA kennen
+                  kein mit der DSGVO deckungsgleiches Datenschutzniveau; insbesondere bestehen weitergehende
+                  Zugriffsrechte staatlicher Stellen, gegen die Betroffene aus der EU nur eingeschränkt vorgehen
+                  können. Wer das vermeiden möchte, kann die KI-gestützten Funktionen ungenutzt lassen; die
+                  technische Prüfung und die Reparaturen ohne Sprachmodell laufen vollständig auf unseren Servern
+                  in Deutschland.
                 </p>
               </div>
             </section>

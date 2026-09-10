@@ -5,6 +5,11 @@ import { useState, Suspense, useEffect } from 'react';
 // Fassung der AGB, die bei der Registrierung angezeigt wird. Muss mit dem
 // Stand-Datum auf https://complyo.de/agb uebereinstimmen.
 const AGB_VERSION = '2026-09-01';
+// Fassung des Auftragsverarbeitungsvertrages nach Art. 28 DSGVO. Er wird mit
+// der Registrierung in Textform geschlossen (Art. 28 Abs. 9) — ohne ihn duerfte
+// kein Kunde die Widgets auf seiner Website einsetzen, weil complyo dabei Daten
+// seiner Besucher verarbeitet.
+const AVV_VERSION = '2026-09-10';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -120,6 +125,7 @@ function RegisterForm() {
                 modules: selectedModules,
                 unternehmer_bestaetigt: istUnternehmer,
                 agb_version: AGB_VERSION,
+                avv_version: AVV_VERSION,
             });
 
             // Free-Tarif: kein Checkout, direkt ins Dashboard.
@@ -442,6 +448,13 @@ function RegisterForm() {
                             <span>
                                 Ich handle bei diesem Vertrag als Unternehmer im Sinne des § 14 BGB und
                                 nicht als Verbraucher. complyo schließt keine Verträge mit Verbrauchern.
+                                Zugleich schließe ich den{' '}
+                                <a href="https://complyo.de/avv" target="_blank" rel="noopener noreferrer"
+                                   className="underline" style={{ color: 'rgba(96,165,250,0.85)' }}
+                                   onClick={(e) => e.stopPropagation()}>
+                                    Auftragsverarbeitungsvertrag nach Art. 28 DSGVO
+                                </a>{' '}ab — er ist nötig, weil complyo bei der Prüfung und beim Betrieb der
+                                Widgets Daten der Besucher meiner Website verarbeitet.
                             </span>
                         </label>
 
@@ -500,7 +513,11 @@ function RegisterForm() {
                             <a href="https://complyo.de/datenschutz" target="_blank" rel="noopener noreferrer"
                                className="transition-colors duration-200 hover:opacity-80" style={{ color: 'rgba(96,165,250,0.75)' }}>
                                 Datenschutzerklärung
-                            </a>{' '}zu.
+                            </a>{' '}zu und schließen den{' '}
+                            <a href="https://complyo.de/avv" target="_blank" rel="noopener noreferrer"
+                               className="transition-colors duration-200 hover:opacity-80" style={{ color: 'rgba(96,165,250,0.75)' }}>
+                                Auftragsverarbeitungsvertrag
+                            </a>{' '}ab.
                         </p>
                     </div>
                 </section>

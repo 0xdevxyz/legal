@@ -135,6 +135,13 @@ export default function AGBPage() {
                 <p>
                   (2) Die Datenerhebung und -verarbeitung erfolgt auf Grundlage von Art. 6 Abs. 1 lit. b DSGVO zur Erfüllung des Vertrages.
                 </p>
+                <p>
+                  (3) Soweit der Anbieter im Rahmen der Leistungserbringung personenbezogene Daten der Besucher der
+                  Website des Kunden verarbeitet — insbesondere Einwilligungsprotokolle und die Verbindungsdaten,
+                  die beim Laden der Widgets anfallen — handelt er als Auftragsverarbeiter des Kunden. Es gilt der{' '}
+                  <a href="/avv/" className="text-akzent-700 underline">Auftragsverarbeitungsvertrag nach Art. 28 DSGVO</a>,
+                  der mit der Registrierung in Textform geschlossen wird und Bestandteil dieses Vertrages ist.
+                </p>
               </div>
             </section>
 
