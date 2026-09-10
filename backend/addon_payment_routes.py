@@ -52,7 +52,12 @@ async def get_current_user_id(current_user: dict = Depends(get_current_user)):
     return current_user["id"]
 
 # Stripe Configuration
-stripe.api_key = os.getenv("STRIPE_API_KEY", "")
+# Derselbe Schluessel wie im Hauptbezahlweg. Hier stand `STRIPE_API_KEY`,
+# gesetzt ist aber `STRIPE_SECRET_KEY` (gemessen 10.09.2026): der
+# Add-on-Kaufweg hatte damit gar keinen Schluessel und haette auch mit
+# gepflegter Preis-ID nichts verkauft. Der alte Name bleibt als Rueckfall,
+# falls ihn jemand in einer anderen Umgebung gesetzt hat.
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY") or os.getenv("STRIPE_API_KEY", "")
 _addon_webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET_ADDONS", "")
 if not _addon_webhook_secret:
     raise RuntimeError("STRIPE_WEBHOOK_SECRET_ADDONS environment variable is required!")
@@ -121,7 +126,11 @@ MONTHLY_ADDONS = {
         "limits_by_plan": {
             "agency": {"extra_sites": 25},
         },
-        "stripe_price_id": os.getenv("STRIPE_PRICE_AGENCY_SITES_EXTRA"),
+        "stripe_price_id": (os.getenv("STRIPE_PRICE_AGENCY_SITES_EXTRA")
+                          # stripe_routes liest denselben Preis unter
+                          # STRIPE_PRICE_AGENCY_EXTRA_SITE. Beide Namen
+                          # gelten, damit ein Eintrag nicht am Namen scheitert.
+                          or os.getenv("STRIPE_PRICE_AGENCY_EXTRA_SITE")),
         "badge": "ADD-ON",
         "compatible_plans": ["agency"],
     }
