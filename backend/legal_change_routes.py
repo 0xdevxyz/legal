@@ -190,8 +190,13 @@ async def analyze_impact_for_user(
         )
         
         # Hole Website-Info (falls vorhanden)
+        # Die Tabelle heisst `tracked_websites`. `monitored_websites` gab es
+        # nie; die Abfrage warf, und der Nutzerzusammenhang fuer die
+        # Rechtsaenderung blieb leer — ohne dass jemand es merkte, weil der
+        # Aufrufer den Fehler auffing.
         site_row = await conn.fetchrow(
-            "SELECT * FROM monitored_websites WHERE user_id = $1 LIMIT 1",
+            "SELECT * FROM tracked_websites WHERE user_id = $1 "
+            "ORDER BY is_primary DESC, created_at ASC LIMIT 1",
             user_id
         )
     

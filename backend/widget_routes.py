@@ -298,12 +298,25 @@ async def track_widget_analytics(
         if db_pool:
             async with db_pool.acquire() as conn:
                 # Use the stored procedure for efficient tracking
+                # `track_widget_feature` gibt es in der Datenbank nicht — der
+                # Aufruf scheiterte bei JEDEM Ereignis, und der Rumpf unten
+                # meldet trotzdem Erfolg ("Analytics tracking failed
+                # silently"). Deshalb stand die Auswertung seit jeher auf null,
+                # ohne dass es auffiel. Geschrieben wird jetzt in die Tabelle,
+                # die tatsaechlich existiert: widget_events.
                 await conn.execute(
-                    "SELECT track_widget_feature($1, $2, $3, $4)",
+                    """
+                    INSERT INTO widget_events (site_id, widget_type, event_name, event_data)
+                    VALUES ($1, $2, $3, $4::jsonb)
+                    """,
                     data.site_id,
-                    data.session_id,
+                    "accessibility",
                     data.feature,
-                    json.dumps({"value": data.value, "timestamp": data.timestamp}) if data.value else None
+                    json.dumps({
+                        "session_id": data.session_id,
+                        "value": data.value,
+                        "timestamp": data.timestamp,
+                    }),
                 )
             
             logger.info(f"📊 Widget Analytics: Site={data.site_id}, Feature={data.feature}, Session={data.session_id[:8]}...")
@@ -317,11 +330,14 @@ async def track_widget_analytics(
         }
     
     except Exception as e:
-        print(f"Error tracking widget analytics: {e}")
-        # Don't fail the request - analytics shouldn't break the widget
+        # Das Widget laeuft auf der Kundenseite; ein Fehler hier darf sie nicht
+        # stoeren. Die Meldung geht deshalb weiter mit 200 zurueck — aber ins
+        # Log, und nicht als "success". Genau dieses stille "success" hat
+        # jahrelang verdeckt, dass kein einziges Ereignis ankam.
+        logger.warning(f"Widget-Analytics nicht gespeichert: {e}")
         return {
-            "success": True,  # Return success even on error
-            "message": "Analytics tracking failed silently"
+            "success": False,
+            "message": "Analytics nicht gespeichert"
         }
 
 
@@ -342,9 +358,9 @@ async def _check_upsell_opportunity(site_id: str):
 
         async with db_pool.acquire() as conn:
             usage_count = await conn.fetchval(
-                """SELECT COUNT(*) FROM widget_usage_stats
+                """SELECT COUNT(*) FROM widget_events
                    WHERE site_id = $1
-                   AND date > CURRENT_DATE - INTERVAL '30 days'""",
+                     AND created_at > NOW() - INTERVAL '30 days'""",
                 site_id,
             )
 
@@ -931,16 +947,15 @@ async def get_widget_analytics(
             # 1. Feature-Popularität
             feature_stats = await conn.fetch(
                 """
-                SELECT 
-                    feature,
-                    COUNT(*) as usage_count,
-                    COUNT(DISTINCT session_id) as unique_sessions
-                FROM widget_analytics
+                SELECT
+                    event_name AS feature,
+                    COUNT(*) AS usage_count,
+                    COUNT(DISTINCT event_data->>'session_id') AS unique_sessions
+                FROM widget_events
                 WHERE site_id = $1
-                  AND timestamp > NOW() - ($2::int * INTERVAL '1 day')
-                  AND event_type = 'feature_toggle'
-                  AND feature IS NOT NULL
-                GROUP BY feature
+                  AND created_at > NOW() - ($2::int * INTERVAL '1 day')
+                  AND event_name IS NOT NULL
+                GROUP BY event_name
                 ORDER BY usage_count DESC
                 """,
                 site_id, days
@@ -949,14 +964,14 @@ async def get_widget_analytics(
             # 2. Tägliche Nutzung
             daily_stats = await conn.fetch(
                 """
-                SELECT 
-                    DATE(timestamp) as date,
-                    COUNT(*) as events,
-                    COUNT(DISTINCT session_id) as sessions
-                FROM widget_analytics
+                SELECT
+                    DATE(created_at) AS date,
+                    COUNT(*) AS events,
+                    COUNT(DISTINCT event_data->>'session_id') AS sessions
+                FROM widget_events
                 WHERE site_id = $1
-                  AND timestamp > NOW() - ($2::int * INTERVAL '1 day')
-                GROUP BY DATE(timestamp)
+                  AND created_at > NOW() - ($2::int * INTERVAL '1 day')
+                GROUP BY DATE(created_at)
                 ORDER BY date DESC
                 LIMIT 30
                 """,
@@ -966,13 +981,13 @@ async def get_widget_analytics(
             # 3. Gesamt-Statistiken
             total_stats = await conn.fetchrow(
                 """
-                SELECT 
-                    COUNT(*) as total_events,
-                    COUNT(DISTINCT session_id) as total_sessions,
-                    COUNT(DISTINCT DATE(timestamp)) as active_days
-                FROM widget_analytics
+                SELECT
+                    COUNT(*) AS total_events,
+                    COUNT(DISTINCT event_data->>'session_id') AS total_sessions,
+                    COUNT(DISTINCT DATE(created_at)) AS active_days
+                FROM widget_events
                 WHERE site_id = $1
-                  AND timestamp > NOW() - ($2::int * INTERVAL '1 day')
+                  AND created_at > NOW() - ($2::int * INTERVAL '1 day')
                 """,
                 site_id, days
             )

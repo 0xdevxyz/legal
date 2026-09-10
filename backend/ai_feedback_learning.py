@@ -456,20 +456,36 @@ class AIFeedbackLearning:
 
     async def _adapt_prompts_from_feedback(self, conn, since) -> None:
         """
-        Analysiert negative Feedbacks und markiert underperformende Prompt-Versionen.
+        Analysiert negative Feedbacks und meldet Kategorien mit hoher Ablehnung.
+
+        Bis zum 10.09.2026 las die Abfrage `ai_compliance_logs` und schrieb in
+        `prompt_versions` — beide Tabellen gibt es nicht und hat es nie
+        gegeben. Der Aufrufer fing die Ausnahme ab und protokollierte
+        "Prompt adaption failed": der Lernkreislauf meldete also genau dann
+        einen Fehlschlag, wenn er zum ersten Mal etwas zu tun gehabt haette.
+
+        Gelesen wird jetzt aus `ai_classifications`, der Tabelle, in der die
+        Einstufungen tatsaechlich stehen. Gruppiert wird nach `severity`; eine
+        `risk_category` gibt es dort nicht.
+
+        Geschrieben wird NICHT mehr: es existiert keine Ablage fuer
+        Prompt-Fassungen. Eine Bewertung in eine Tabelle zu schreiben, die es
+        nicht gibt, ist kein Lernen, sondern ein stiller Fehlschlag. Solange
+        die Ablage fehlt, ist der Befund eine Warnung im Protokoll — sichtbar
+        und ehrlich.
         """
         try:
             # Kategorien mit hoher Ablehnungsrate finden
             rows = await conn.fetch(
                 """
                 SELECT
-                    acl.risk_category,
+                    c.severity AS kategorie,
                     COUNT(*) AS total,
                     SUM(CASE WHEN f.feedback_type = ANY($2::text[]) THEN 1 ELSE 0 END) AS negative
-                FROM ai_compliance_logs acl
-                JOIN ai_classification_feedback f ON f.classification_id = acl.id
+                FROM ai_classifications c
+                JOIN ai_classification_feedback f ON f.classification_id = c.id
                 WHERE f.created_at > $1
-                GROUP BY acl.risk_category
+                GROUP BY c.severity
                 HAVING COUNT(*) >= 3
                 ORDER BY (SUM(CASE WHEN f.feedback_type = ANY($2::text[]) THEN 1 ELSE 0 END)::float / COUNT(*)) DESC
                 """,
@@ -479,17 +495,11 @@ class AIFeedbackLearning:
                 negative_rate = row['negative'] / row['total'] if row['total'] > 0 else 0
                 if negative_rate > 0.4:
                     logger.warning(
-                        f"⚠️ Hohe Ablehnungsrate für '{row['risk_category']}': "
-                        f"{negative_rate:.0%} — Prompt-Review empfohlen"
-                    )
-                    await conn.execute(
-                        """
-                        UPDATE prompt_versions
-                        SET performance_score = performance_score - 0.1,
-                            notes = CONCAT(COALESCE(notes,''), ' | Auto-Flag: high rejection rate ', NOW()::TEXT)
-                        WHERE prompt_key = $1 AND is_active = TRUE
-                        """,
-                        row['risk_category']
+                        f"⚠️ Hohe Ablehnungsrate für '{row['kategorie']}': "
+                        f"{negative_rate:.0%} bei {row['total']} Einstufungen — "
+                        f"der Prompt fuer diese Stufe gehoert nachgesehen. "
+                        f"(Automatisch vermerkt wird nichts: es gibt keine "
+                        f"Ablage fuer Prompt-Fassungen.)"
                     )
         except Exception as e:
             logger.error(f"Prompt adaption failed: {e}")

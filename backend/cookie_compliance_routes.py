@@ -579,20 +579,40 @@ async def log_consent(
         raw_ua = request.headers.get("User-Agent") or consent.user_agent or ""
         user_agent = truncate_user_agent(raw_ua)  # AUDIT-03: DSGVO-compliant truncation
         
-        # Get banner config ID (instead of revision)
+        # Konfigurationszeile UND Fassung holen.
+        #
+        # `revision_id` hiess so, enthielt aber die ID der Konfigurationszeile.
+        # Die bleibt gleich, waehrend der Banner sich aendert — zu keiner
+        # Einwilligung liess sich damit sagen, welcher Banner dem Besucher
+        # vorlag. Art. 7 Abs. 1 DSGVO verlangt genau diesen Nachweis.
+        #
+        # Die Fassung fuehrt der Trigger `trigger_banner_revision` mit; sie
+        # wird ab jetzt in `banner_revision` mitgeschrieben. Die alte Spalte
+        # bleibt unveraendert, damit die bereits erfassten Zeilen nicht
+        # nachtraeglich etwas anderes bedeuten.
         config_query = """
-            SELECT id FROM cookie_banner_configs 
+            SELECT id, revision FROM cookie_banner_configs
             WHERE site_id = $1
         """
         config_row = await db_pool.fetchrow(config_query, consent.site_id)
         revision_id = config_row['id'] if config_row else 1
+        # Vorsichtiger Zugriff: das Protokollieren einer Einwilligung ist der
+        # empfindlichste Schreibweg im ganzen System. Es darf nicht daran
+        # scheitern, dass eine Spalte fehlt — dann lieber ohne Fassung
+        # protokollieren als gar nicht.
+        banner_revision = (
+            config_row["revision"]
+            if config_row is not None and "revision" in config_row
+            else None
+        )
         
         # Insert consent log (with optional device fingerprint as IP alternative)
         insert_query = """
             INSERT INTO cookie_consent_logs (
                 site_id, visitor_id, consent_categories, services_accepted,
-                ip_address_hash, device_fingerprint, user_agent, revision_id, language, banner_shown
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                ip_address_hash, device_fingerprint, user_agent, revision_id, language,
+                banner_shown, banner_revision
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING id, timestamp
         """
         
@@ -610,7 +630,8 @@ async def log_consent(
             user_agent,
             revision_id,
             consent.language,
-            consent.banner_shown
+            consent.banner_shown,
+            banner_revision
         )
         
         # Update statistics (upsert)
@@ -1841,7 +1862,7 @@ async def export_consent_logs_csv(
         query = """
             SELECT id, visitor_id, consent_categories, services_accepted,
                    ip_address_hash, user_agent, language, banner_shown,
-                   revision_id, timestamp
+                   revision_id, banner_revision, timestamp
             FROM cookie_consent_logs
             WHERE site_id = $1
             ORDER BY timestamp DESC
@@ -1853,7 +1874,8 @@ async def export_consent_logs_csv(
         writer.writerow([
             'ID', 'Zeitstempel (UTC)', 'Visitor-ID', 'Notwendig', 'Funktional',
             'Statistik', 'Marketing', 'Akzeptierte Services', 'IP-Hash',
-            'User-Agent', 'Sprache', 'Banner angezeigt', 'Konfig-Revision'
+            'User-Agent', 'Sprache', 'Banner angezeigt', 'Konfig-ID',
+            'Banner-Fassung'
         ])
         for r in rows:
             cats = r['consent_categories']
@@ -1883,7 +1905,11 @@ async def export_consent_logs_csv(
                 r['user_agent'] or '',
                 r['language'] or '',
                 'ja' if r['banner_shown'] else 'nein',
-                r['revision_id'] if r['revision_id'] is not None else ''
+                r['revision_id'] if r['revision_id'] is not None else '',
+                # Leer heisst: vor dem 10.09.2026 erfasst, damals wurde die
+                # Fassung nicht mitgeschrieben. Eine Zahl zu erfinden waere
+                # ein Nachweis, der bei der ersten Nachfrage bricht.
+                r['banner_revision'] if r['banner_revision'] is not None else 'nicht erfasst'
             ])
 
         # Prepend BOM so Excel renders UTF-8 (umlauts) correctly.
@@ -3294,22 +3320,28 @@ async def get_config_revisions(
     """
     await require_site_access(site_id, credentials)
     try:
+        # Die Tabelle heisst `cookie_banner_revisions`, nicht
+        # `cookie_consent_revisions`. Der Endpunkt lief deshalb seit jeher in
+        # einen 500er, obwohl die Daten da sind: der Trigger
+        # `trigger_banner_revision` legt bei jeder Aenderung einen
+        # Schnappschuss ab. Ein Nachweis, den niemand abrufen kann, ist keiner.
         query = """
-            SELECT 
-                revision_number, config_snapshot, changes_summary, created_at
-            FROM cookie_consent_revisions
+            SELECT revision, config_snapshot, services_snapshot,
+                   change_reason, created_at
+            FROM cookie_banner_revisions
             WHERE site_id = $1
-            ORDER BY revision_number DESC
+            ORDER BY revision DESC
             LIMIT 50
         """
         rows = await db_pool.fetch(query, site_id)
-        
+
         revisions = []
         for row in rows:
             revisions.append({
-                "revision": row['revision_number'],
+                "revision": row['revision'],
                 "snapshot": row['config_snapshot'],
-                "changes": row['changes_summary'],
+                "services": row['services_snapshot'],
+                "changes": row['change_reason'],
                 "created_at": row['created_at'].isoformat() if row['created_at'] else None
             })
         

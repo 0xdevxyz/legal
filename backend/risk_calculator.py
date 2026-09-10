@@ -364,50 +364,11 @@ class RiskCalculator:
             'description': 'Allgemeines Compliance-Risiko'
         }
     
-    async def get_pillar_summary(self, market: str = 'DE') -> Dict[str, Any]:
-        """
-        Gibt Zusammenfassung der 4 Hauptsäulen zurück
-        """
-        try:
-            async with self.db_pool.acquire() as conn:
-                pillars = await conn.fetch(
-                    """
-                    SELECT 
-                        pillar,
-                        COUNT(*) as issue_count,
-                        SUM(risk_min_eur) as total_risk_min,
-                        SUM(risk_max_eur) as total_risk_max
-                    FROM complyo_main_pillars
-                    GROUP BY pillar
-                    ORDER BY 
-                        CASE pillar
-                            WHEN 'Barrierefreiheit' THEN 1
-                            WHEN 'Cookie Compliance' THEN 2
-                            WHEN 'Rechtstexte' THEN 3
-                            WHEN 'DSGVO' THEN 4
-                            ELSE 5
-                        END
-                    """
-                )
-                
-                return {
-                    'pillars': [
-                        {
-                            'name': p['pillar'],
-                            'issue_count': p['issue_count'],
-                            'risk_range': self._format_risk_range(
-                                p['total_risk_min'],
-                                p['total_risk_max']
-                            )
-                        }
-                        for p in pillars
-                    ]
-                }
-                
-        except Exception as e:
-            logger.error(f"Error getting pillar summary: {e}")
-            return {'pillars': []}
-    
+    # get_pillar_summary ist am 10.09.2026 entfernt worden: die Methode las
+    # `FROM complyo_main_pillars`, eine Tabelle, die es in keinem Schema gibt,
+    # und wurde von niemandem aufgerufen. Toter Code, der bei jedem Lesen wie
+    # eine vorhandene Auswertung aussah.
+
     async def calculate_total_risk(
         self, 
         issues: list,
