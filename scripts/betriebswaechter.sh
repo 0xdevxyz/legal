@@ -18,6 +18,13 @@ SMTP_HOST_C="$(docker exec complyo-backend printenv SMTP_HOST 2>/dev/null || tru
 SMTP_PORT_C="$(docker exec complyo-backend printenv SMTP_PORT 2>/dev/null || true)"
 SMTP_USER_C="$(docker exec complyo-backend printenv SMTP_USERNAME 2>/dev/null || true)"
 SMTP_PASS_C="$(docker exec complyo-backend printenv SMTP_PASSWORD 2>/dev/null || true)"
+# Der Pruef-Token muss denselben Aussteller tragen wie die Token des Backends.
+# Der Aussteller ist FRONTEND_URL, und die stand seit dem 10.09.2026 in der .env
+# auf app.complyo.de (Kontomails), waehrend der Backend-Container ueber compose
+# weiter complyo.de sieht. Der Waechter las nur die .env, praegte Token mit dem
+# falschen Aussteller und meldete elf Stunden lang fuenf "kaputte" Kernrouten,
+# die alle gesund waren. Deshalb wie bei SMTP: den Wert aus dem Container.
+FRONTEND_URL_C="$(docker exec complyo-backend printenv FRONTEND_URL 2>/dev/null || true)"
 
 # Backend read-only gemountet: der Wächter läuft immer mit dem aktuellen
 # Code-Stand, unabhängig davon, wann das Image zuletzt gebaut wurde.
@@ -31,6 +38,7 @@ exec docker run --rm \
   -e SMTP_PORT="$SMTP_PORT_C" \
   -e SMTP_USERNAME="$SMTP_USER_C" \
   -e SMTP_PASSWORD="$SMTP_PASS_C" \
+  -e FRONTEND_URL="$FRONTEND_URL_C" \
   -e WAECHTER_CONTAINER_STATUS="$CONTAINER_STATUS" \
   -e WAECHTER_FEHLER_1H="$FEHLER_1H" \
   -e WAECHTER_FEHLER_BEISPIELE="$FEHLER_BEISPIELE" \
