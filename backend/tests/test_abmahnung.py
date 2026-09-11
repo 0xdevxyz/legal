@@ -187,6 +187,25 @@ class TestZuordnung:
         assert [b["title"] for b in z[0]["verwandt"]] == ["Impressum: Handelsregister fehlt"]
         assert "demselben Bereich" in z[0]["hinweis"]
 
+    def test_teilwort_bestaetigt_nicht(self):
+        """Live am 11.09.2026: "Telefonnummer fehlt" galt als Beleg fuer
+        "keine Umsatzsteuer-Identifikationsnummer" (gemeinsam: "nummer")."""
+        issues = [{"category": "impressum", "severity": "critical",
+                   "title": "Telefonnummer fehlt im Impressum", "description": "",
+                   "legal_basis": "DDG §5"}]
+        z = ab.zuordnen([_vorwurf("impressum", "Impressum enthält keine Umsatzsteuer-Identifikationsnummer")],
+                        issues, None)
+        assert z[0]["status"] == "nicht_gefunden"
+        assert [b["title"] for b in z[0]["verwandt"]] == ["Telefonnummer fehlt im Impressum"]
+        # Der echte Treffer bleibt einer:
+        issues.append({"category": "impressum", "severity": "warning",
+                       "title": "USt-IdNr. fehlt im Impressum", "description": "",
+                       "legal_basis": "DDG §5"})
+        z = ab.zuordnen([_vorwurf("impressum", "Impressum enthält keine Umsatzsteuer-Identifikationsnummer")],
+                        issues, None)
+        assert z[0]["status"] == "bestaetigt"
+        assert [b["title"] for b in z[0]["befunde"]] == ["USt-IdNr. fehlt im Impressum"]
+
     def test_nicht_gefunden(self):
         z = ab.zuordnen([_vorwurf("impressum")], ISSUES, "2026-09-11T10:00:00")
         assert z[0]["status"] == "nicht_gefunden"

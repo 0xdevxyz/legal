@@ -79,7 +79,10 @@ ZUORDNUNG: Dict[str, Optional[Dict[str, Any]]] = {
                        "tag manager", "pixel"),
     },
     "datenschutz": {
-        "kategorien": {"datenschutz", "avv", "security"},
+        # "security" gehoert nicht dazu: fehlende HSTS- oder CSP-Kopfzeilen
+        # sind kein Abmahnthema und standen als "verwandt" neben einem
+        # Google-Fonts-Vorwurf, mit dem sie nichts zu tun haben.
+        "kategorien": {"datenschutz", "avv"},
         "stichworte": ("datenschutz", "google fonts", "dsgvo", "drittland", "https",
                        "ssl", "tls", "auftragsverarbeit", "kontaktformular"),
     },
@@ -512,19 +515,16 @@ _THEMENWOERTER = {"cookie", "cookies", "banner", "einwilligung", "einwilligen",
 
 
 def _beruehrt(worte: List[str], text: str) -> bool:
-    """Kommt eines der tragenden Woerter im Befund vor?
+    """Kommt eines der tragenden Woerter als GANZES Wort im Befund vor?
 
-    Ab sechs Buchstaben reicht ein gemeinsames Sechserstueck, damit
-    "abzulehnen" den Befund "Ablehnen-Knopf fehlt" trifft und "eingebunden"
-    "Einbindung". Fuenfbuchstabige Woerter muessen ganz vorkommen.
+    Erst hiess es: ab sechs Buchstaben reicht ein gemeinsames Sechserstueck.
+    Live am 11.09.2026 bestaetigte damit "Telefonnummer fehlt im Impressum"
+    den Vorwurf "keine Umsatzsteuer-Identifikationsnummer", weil beide
+    "nummer" enthalten. Wortformen wie "abzulehnen" gegen "Ablehnen-Knopf"
+    faengt _UNTERSCHEIDER ab; hier zaehlt nur das ganze Wort.
     """
-    for w in worte:
-        if len(w) < 6:
-            if w in text:
-                return True
-        elif any(w[i:i + 6] in text for i in range(len(w) - 5)):
-            return True
-    return False
+    return any(re.search(r"(?<![a-zäöüß])" + re.escape(w) + r"(?![a-zäöüß])", text)
+               for w in worte)
 
 
 def _thema_passt(issue: Dict[str, Any], regel: Dict[str, Any]) -> bool:
