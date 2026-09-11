@@ -408,7 +408,11 @@ async def login(request: Request, body: LoginRequest):
         )
 
 @router.post("/refresh", response_model=RefreshResponse)
-@limiter.limit("10/minute")
+# 60 statt 10 je Minute: seit dem 11.09.2026 verlaengert der Dashboard-Server
+# die Token seiner Nutzer ueber diese Route, alle von EINER Adresse aus. Bei
+# zehn je Minute haette die Drossel ab dem elften Kunden in derselben Minute
+# Sitzungen beendet, die nichts falsch gemacht haben.
+@limiter.limit("60/minute")
 async def refresh_token(request: Request, body: RefreshRequest):
     """Refresh access token with token rotation"""
     result = await auth_service.refresh_access_token(body.refresh_token)

@@ -82,8 +82,14 @@ class TestClientHoertAuf:
         assert "res.status === 204" in s
 
     def test_absage_stoppt_weitere_versuche(self):
+        """Die Absage gilt nur fuer den Cookie-Weg. Seit dem 11.09.2026 kommt
+        davor der Sitzungsweg (serverseitige Verlaengerung), und der darf von
+        einer frueheren 204 nicht blockiert werden: sonst bliebe die
+        Verlaengerung tot, sobald einmal kein Cookie da war."""
         s = self._quelle()
-        assert "if (_ohneSitzung) return null;" in s
+        block = s[s.index("export async function refreshAccessToken"):]
+        assert block.index("getSession()") < block.index("if (_ohneSitzung)")
+        assert block.index("if (_ohneSitzung)") < block.index("refresh-cookie")
 
     def test_absage_wird_nach_anmeldung_zurueckgenommen(self):
         """Sonst bliebe die Erneuerung nach dem naechsten Login tot."""

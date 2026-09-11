@@ -3,12 +3,21 @@ import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 import { istOeffentlich, istNurFuerGaeste } from "@/lib/oeffentliche-pfade";
 
-// Laufzeit des Backend-Access-Tokens, muss ACCESS_TOKEN_EXPIRE_MINUTES in
-// docker-compose.yml entsprechen (480 Minuten). Bis zum 11.09.2026 standen hier
-// 60 Minuten, das Backend praegte aber 15: das Dashboard hielt ein totes Token
-// fuer gueltig, jede Anfrage lief in 401, und die Sitzung endete nach einer
-// Viertelstunde. Ein Waechtertest haelt beide Werte zusammen.
-const ACCESS_TOKEN_LAUFZEIT_MS = 480 * 60 * 1000;
+import { erneuereToken } from "@/lib/token-erneuerung";
+
+// Laufzeit des Backend-Access-Tokens. Kommt aus derselben Umgebungsvariable,
+// die das Backend liest (docker-compose.yml reicht sie beiden Diensten), damit
+// beide dieselbe Zahl kennen. Bis zum 11.09.2026 standen hier 60 Minuten, das
+// Backend praegte aber 15: das Dashboard hielt ein totes Token fuer gueltig,
+// jede Anfrage lief in 401, und die Sitzung endete nach einer Viertelstunde.
+// Ein Waechtertest haelt Standardwert und compose zusammen.
+const ACCESS_TOKEN_LAUFZEIT_MS = Number(process.env.ACCESS_TOKEN_EXPIRE_MINUTES || 480) * 60 * 1000;
+
+// Wie lange vor dem Ablauf verlaengert wird: ein Drittel der Laufzeit, aber
+// hoechstens 30 Minuten. Eine Sitzung, die in diesem Fenster irgendetwas
+// abfragt, bekommt ein frisches Paar; eine, die erst nach dem Ablauf
+// zurueckkommt, ebenfalls (der Refresh-Token gilt 30 Tage).
+const ERNEUERN_VOR_ABLAUF_MS = Math.min(30 * 60 * 1000, Math.floor(ACCESS_TOKEN_LAUFZEIT_MS / 3));
 
 const API_URL = process.env.NEXTAUTH_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002";
 
@@ -65,6 +74,33 @@ export const authConfig: NextAuthConfig = {
         token.error = undefined;
       }
 
+      // Verlaengern, bevor das Token ablaeuft. Serverseitig, mit Sperre je
+      // Refresh-Token (lib/token-erneuerung): das Backend dreht den
+      // Refresh-Token und beendet bei doppeltem Einloesen alle Sitzungen des
+      // Kontos. Vor dem 11.09.2026 stand hier nur ein Fehlerflag, auf das
+      // AuthContext mit Abmeldung antwortete: die Sitzung endete mit dem
+      // Token, verlaengert wurde nie.
+      if (!user) {
+        const expiresAt = token.accessTokenExpiresAt as number | undefined;
+        const refreshToken = token.refreshToken as string | undefined;
+        if (expiresAt && refreshToken && Date.now() > expiresAt - ERNEUERN_VOR_ABLAUF_MS) {
+          const e = await erneuereToken(refreshToken, API_URL, ACCESS_TOKEN_LAUFZEIT_MS);
+          if (e.status === "erneuert") {
+            token.accessToken = e.paar.accessToken;
+            token.refreshToken = e.paar.refreshToken;
+            token.accessTokenExpiresAt = e.paar.expiresAt;
+            token.error = undefined;
+          } else if (e.status === "ungueltig" || Date.now() > expiresAt) {
+            // Kette tot, oder abgelaufen und das Backend gerade nicht
+            // erreichbar: ohne gueltiges Token gibt es nichts zu verlaengern.
+            token.error = "RefreshAccessTokenError";
+            return token;
+          }
+          // nicht_erreichbar vor dem Ablauf: altes Token gilt noch, naechster
+          // Aufruf versucht es wieder.
+        }
+      }
+
       if (trigger === "update") {
         // Plan/Rolle/Module frisch aus dem Backend ziehen, damit Planwechsel
         // (z. B. nach Stripe-Checkout) ins JWT übernommen werden und einen
@@ -101,8 +137,10 @@ export const authConfig: NextAuthConfig = {
         return token;
       }
 
+      // Kein Refresh-Token (Alt-Sitzung von vor der Umstellung, Social-Login
+      // ohne Paar): dann endet die Sitzung mit dem Access-Token.
       const expiresAt = token.accessTokenExpiresAt as number | undefined;
-      if (expiresAt && Date.now() > expiresAt - 5 * 60 * 1000) {
+      if (expiresAt && !token.refreshToken && Date.now() > expiresAt) {
         token.error = "RefreshAccessTokenError";
       }
 
