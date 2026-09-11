@@ -57,7 +57,7 @@ export async function refreshAccessToken(): Promise<string | null> {
 
       setAccessToken(newToken);
 
-      const newExpiry = Date.now() + 60 * 60 * 1000;
+      const newExpiry = Date.now() + 480 * 60 * 1000; // wie ACCESS_TOKEN_EXPIRE_MINUTES
       try {
         const { getSession } = await import("next-auth/react");
         const session = await Promise.race([

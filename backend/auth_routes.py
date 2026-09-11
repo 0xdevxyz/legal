@@ -251,7 +251,7 @@ async def register(request: Request, body: RegisterRequest):
         refresh_token = await auth_service.create_refresh_token(user['id'])
         
         is_secure = os.getenv("ENVIRONMENT", "production") == "production"
-        access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+        access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15")  # wie auth_service)
         response = JSONResponse({
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -364,7 +364,7 @@ async def login(request: Request, body: LoginRequest):
             )
 
         is_secure = os.getenv("ENVIRONMENT", "production") == "production"
-        access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+        access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15")  # wie auth_service)
         response = JSONResponse({
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -475,7 +475,7 @@ async def refresh_token_from_cookie(request: Request):
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     is_secure = os.getenv("ENVIRONMENT", "production") == "production"
-    access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15")  # wie auth_service)
     response = JSONResponse({
         "access_token": new_access_token,
         "refresh_token": new_refresh_token,
@@ -1103,7 +1103,7 @@ def _tokenantwort(user: dict, access_token: str, refresh_token: str,
     derselben dreissig Zeilen waere.
     """
     is_secure = os.getenv("ENVIRONMENT", "production") == "production"
-    access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    access_token_expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15")  # wie auth_service)
     response = JSONResponse({
         "access_token": access_token,
         "refresh_token": refresh_token,

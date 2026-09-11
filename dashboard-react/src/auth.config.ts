@@ -3,6 +3,13 @@ import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 import { istOeffentlich, istNurFuerGaeste } from "@/lib/oeffentliche-pfade";
 
+// Laufzeit des Backend-Access-Tokens, muss ACCESS_TOKEN_EXPIRE_MINUTES in
+// docker-compose.yml entsprechen (480 Minuten). Bis zum 11.09.2026 standen hier
+// 60 Minuten, das Backend praegte aber 15: das Dashboard hielt ein totes Token
+// fuer gueltig, jede Anfrage lief in 401, und die Sitzung endete nach einer
+// Viertelstunde. Ein Waechtertest haelt beide Werte zusammen.
+const ACCESS_TOKEN_LAUFZEIT_MS = 480 * 60 * 1000;
+
 const API_URL = process.env.NEXTAUTH_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002";
 
 const loginSchema = z.object({
@@ -54,7 +61,7 @@ export const authConfig: NextAuthConfig = {
         token.active_modules = user.active_modules;
         token.accessToken = user.accessToken;
         token.refreshToken = user.refreshToken;
-        token.accessTokenExpiresAt = (user as any).accessTokenExpiresAt ?? (Date.now() + 60 * 60 * 1000);
+        token.accessTokenExpiresAt = (user as any).accessTokenExpiresAt ?? (Date.now() + ACCESS_TOKEN_LAUFZEIT_MS);
         token.error = undefined;
       }
 
@@ -165,7 +172,7 @@ export const authConfig: NextAuthConfig = {
             active_modules: user.active_modules || [],
             accessToken: tokenData.access_token,
             refreshToken: tokenData.refresh_token,
-            accessTokenExpiresAt: Date.now() + 60 * 60 * 1000,
+            accessTokenExpiresAt: Date.now() + ACCESS_TOKEN_LAUFZEIT_MS,
           };
         } catch {
           return null;

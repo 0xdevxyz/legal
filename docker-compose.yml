@@ -151,6 +151,15 @@ services:
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
       - FRONTEND_URL=https://complyo.de
+      # Sitzungsdauer (11.09.2026). Das Backend praegte Access-Token fuer 15
+      # Minuten (auth_service-Standard), das Dashboard nahm 60 an, und
+      # verlaengern konnte keiner von beiden: das Refresh-Cookie erreicht den
+      # Browser nie, weil die Anmeldung ueber den Dashboard-Server laeuft, und
+      # der NextAuth-Rueckruf setzt bei Ablauf nur ein Fehlerflag. Jede Sitzung
+      # endete deshalb nach einer Viertelstunde mit stiller Abmeldung. Ein
+      # Arbeitstag als Laufzeit; Abmelden sperrt das Token ueber die
+      # jti-Sperrliste sofort.
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-480}
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
       - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
       - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
