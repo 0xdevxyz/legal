@@ -42,6 +42,9 @@ interface Vorwurf {
   frist: string | null;
   status: Status;
   befunde: Befund[];
+  // Befunde aus demselben Bereich, die den Vorwurf nicht treffen: kein Beleg,
+  // aber sichtbar, damit der Kunde sieht, was die Messung dort sonst fand.
+  verwandt?: Befund[];
   hinweis: string;
 }
 
@@ -134,7 +137,7 @@ export default function AbmahnungPage() {
   const [scanToken, setScanToken] = useState<string | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [ergebnis, setErgebnis] = useState<Ergebnis | null>(null);
-  const [offen, setOffen] = useState<Record<number, boolean>>({});
+  const [offen, setOffen] = useState<Record<string | number, boolean>>({});
   const dateiRef = useRef<HTMLInputElement>(null);
 
   const websitesQuery = useQuery({
@@ -426,6 +429,31 @@ export default function AbmahnungPage() {
                           <ul className="mt-2 space-y-2">
                             {v.befunde.map((b, j) => (
                               <li key={j} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-3 text-sm">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className={`text-xs px-2 py-0.5 rounded-full ${SEVERITY_BADGE[b.severity] ?? 'bg-gray-100 text-gray-600'}`}>{b.severity}</span>
+                                  <span className="font-medium text-gray-900 dark:text-gray-100">{b.title}</span>
+                                </div>
+                                {b.legal_basis && <p className="text-xs text-gray-500 mt-1">{b.legal_basis}</p>}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                    {(v.verwandt?.length ?? 0) > 0 && (
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() => setOffen({ ...offen, [`v${i}`]: !offen[`v${i}`] })}
+                          className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1 hover:underline"
+                        >
+                          {offen[`v${i}`] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          {v.verwandt!.length} Befunde aus demselben Bereich (kein direkter Beleg) {offen[`v${i}`] ? 'ausblenden' : 'anzeigen'}
+                        </button>
+                        {offen[`v${i}`] && (
+                          <ul className="mt-2 space-y-2">
+                            {v.verwandt!.map((b, j) => (
+                              <li key={j} className="bg-gray-50 dark:bg-gray-900 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-3 text-sm">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className={`text-xs px-2 py-0.5 rounded-full ${SEVERITY_BADGE[b.severity] ?? 'bg-gray-100 text-gray-600'}`}>{b.severity}</span>
                                   <span className="font-medium text-gray-900 dark:text-gray-100">{b.title}</span>

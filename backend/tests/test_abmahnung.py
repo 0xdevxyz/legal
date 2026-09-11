@@ -131,7 +131,9 @@ class TestZuordnung:
         z = ab.zuordnen([_vorwurf("datenschutz", "Google Fonts ohne Einwilligung")],
                         ISSUES, None)
         assert z[0]["befunde"][0]["title"].startswith("Google Fonts")
-        assert len(z[0]["befunde"]) == 2
+        # Die unvollstaendige Datenschutzerklaerung liegt zwar in derselben
+        # Saeule, beruehrt den Fonts-Vorwurf aber nicht: sie bestaetigt nichts.
+        assert len(z[0]["befunde"]) == 1
 
     def test_stichwort_findet_befund_unter_nachbarsaeule(self):
         """Google-Fonts-Befund liegt unter datenschutz, der Vorwurf sagt "Tracking"."""
@@ -140,6 +142,50 @@ class TestZuordnung:
                    "legal_basis": ""}]
         z = ab.zuordnen([_vorwurf("cookies")], issues, None)
         assert z[0]["status"] == "bestaetigt"
+
+    def test_info_befund_bestaetigt_nie(self):
+        """Live am 11.09.2026: "Kein Cookie-Banner erforderlich" (info) galt als
+        Beleg fuer fuenf Vorwuerfe. Ein Hinweis ist kein Befund."""
+        issues = [{"category": "cookies", "severity": "info",
+                   "title": "Kein Cookie-Banner erforderlich",
+                   "description": "TDDDG §25 Abs. 2", "legal_basis": "TDDDG §25 Abs. 2"}]
+        for kat, text in (("cookies", "Cookie-Banner bietet keine Ablehnen-Möglichkeit"),
+                          ("impressum", "Impressum enthält keine Umsatzsteuer-Identifikationsnummer"),
+                          ("datenschutz", "Google Fonts werden von Google-Servern geladen")):
+            z = ab.zuordnen([_vorwurf(kat, text)], issues, None)
+            assert z[0]["status"] == "nicht_gefunden", (kat, z[0])
+
+    def test_stichwort_braucht_wortgrenze(self):
+        """"ddg" darf nicht in "TDDDG" treffen."""
+        issues = [{"category": "cookies", "severity": "warning",
+                   "title": "Cookie-Banner ohne TDDDG-Hinweis", "description": "",
+                   "legal_basis": ""}]
+        z = ab.zuordnen([_vorwurf("impressum", "Impressum enthält keine Anschrift")], issues, None)
+        assert z[0]["status"] == "nicht_gefunden"
+
+    def test_befund_muss_den_vorwurf_beruehren(self):
+        """Gleiche Saeule reicht nicht: ein Kontrast-Befund bestaetigt keinen
+        Alt-Text-Vorwurf, ein Cookie-Laufzeit-Hinweis keinen fehlenden Ablehnen-Knopf."""
+        issues = [{"category": "cookies", "severity": "warning",
+                   "title": "Banner nennt die Gültigkeitsdauer der Einwilligung nicht",
+                   "description": "", "legal_basis": ""},
+                  {"category": "cookies", "severity": "critical",
+                   "title": "Ablehnen-Knopf fehlt im Cookie-Banner",
+                   "description": "", "legal_basis": ""}]
+        z = ab.zuordnen([_vorwurf("cookies", "Cookie-Banner bietet keine Möglichkeit, die Einwilligung ebenso einfach abzulehnen")], issues, None)
+        assert z[0]["status"] == "bestaetigt"
+        assert [b["title"] for b in z[0]["befunde"]] == ["Ablehnen-Knopf fehlt im Cookie-Banner"]
+
+    def test_verwandte_befunde_stehen_daneben_ohne_zu_bestaetigen(self):
+        issues = [{"category": "impressum", "severity": "warning",
+                   "title": "Impressum: Handelsregister fehlt", "description": "",
+                   "legal_basis": "§ 5 DDG"}]
+        z = ab.zuordnen([_vorwurf("impressum", "Impressum enthält keine Umsatzsteuer-Identifikationsnummer")],
+                        issues, None)
+        assert z[0]["status"] == "nicht_gefunden"
+        assert z[0]["befunde"] == []
+        assert [b["title"] for b in z[0]["verwandt"]] == ["Impressum: Handelsregister fehlt"]
+        assert "demselben Bereich" in z[0]["hinweis"]
 
     def test_nicht_gefunden(self):
         z = ab.zuordnen([_vorwurf("impressum")], ISSUES, "2026-09-11T10:00:00")
