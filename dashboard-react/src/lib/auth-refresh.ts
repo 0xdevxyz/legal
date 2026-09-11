@@ -30,11 +30,39 @@ export function clearAccessToken(): void {
 
 export async function refreshAccessToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
-
-  if (_ohneSitzung) return null;
   if (_inflightRefresh) return _inflightRefresh;
-
   _inflightRefresh = (async () => {
+    // Erster Weg: die Sitzung vom Dashboard-Server holen. Dessen jwt-Rueckruf
+    // verlaengert das Backend-Token serverseitig (lib/token-erneuerung), denn
+    // nur dort liegt der Refresh-Token. Der Cookie-Weg darunter kann im
+    // normalen Betrieb nicht greifen: das Refresh-Cookie wird bei der
+    // Anmeldung ueber den Dashboard-Server gesetzt und erreicht den Browser
+    // nie; bis zum 11.09.2026 endete deshalb jede Sitzung mit dem Token.
+    const alt = getAccessToken();
+    try {
+      const { getSession } = await import("next-auth/react");
+      const session: any = await Promise.race([
+        getSession(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
+      ]);
+      if (session?.error === "RefreshAccessTokenError") {
+        _inflightRefresh = null;
+        return null;
+      }
+      const ausSitzung: string | undefined = session?.accessToken;
+      if (ausSitzung && ausSitzung !== alt) {
+        setAccessToken(ausSitzung);
+        _inflightRefresh = null;
+        return ausSitzung;
+      }
+    } catch {}
+    // Zweiter Weg: das Refresh-Cookie, falls der Browser eines hat
+    // (Social-Login setzt es direkt). 204 heisst: hat er nicht, und dann
+    // braucht es diesen Weg auch nicht noch einmal.
+    if (_ohneSitzung) {
+      _inflightRefresh = null;
+      return null;
+    }
     try {
       const res = await fetch(`${API_URL}/api/auth/refresh-cookie`, {
         method: "POST",

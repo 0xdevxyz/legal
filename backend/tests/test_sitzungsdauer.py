@@ -7,7 +7,10 @@ Refresh-Cookie kommt nie im Browser an, weil die Anmeldung ueber den
 Dashboard-Server laeuft. Gefunden am 11.09.2026 beim Durchklicken: mitten im
 Test war die Sitzung weg.
 
-Diese Tests halten fest, dass alle Stellen denselben Wert tragen.
+Seit demselben Tag verlaengert der Dashboard-Server das Token selbst, mit
+Sperre je Refresh-Token (lib/token-erneuerung.ts, Tests dort per
+`npm run test:token`). Diese Tests halten fest, dass alle Stellen denselben
+Wert tragen und die Verlaengerung verdrahtet bleibt.
 """
 import os
 import re
@@ -21,16 +24,17 @@ def _lies(*teile):
         return f.read()
 
 
-def test_compose_reicht_die_laufzeit_durch():
+def test_compose_reicht_die_laufzeit_an_beide_dienste():
+    """Backend UND Dashboard lesen dieselbe Variable; beide brauchen sie."""
     compose = _lies('docker-compose.yml')
-    m = re.search(r"ACCESS_TOKEN_EXPIRE_MINUTES=\$\{ACCESS_TOKEN_EXPIRE_MINUTES:-(\d+)\}", compose)
-    assert m, "ACCESS_TOKEN_EXPIRE_MINUTES fehlt in docker-compose.yml"
-    assert int(m.group(1)) == 480
+    treffer = re.findall(r"ACCESS_TOKEN_EXPIRE_MINUTES=\$\{ACCESS_TOKEN_EXPIRE_MINUTES:-(\d+)\}", compose)
+    assert len(treffer) == 2, treffer
+    assert set(treffer) == {"480"}
 
 
 def test_dashboard_nimmt_dieselbe_laufzeit_an():
     cfg = _lies('dashboard-react', 'src', 'auth.config.ts')
-    m = re.search(r"ACCESS_TOKEN_LAUFZEIT_MS = (\d+) \* 60 \* 1000", cfg)
+    m = re.search(r"Number\(process\.env\.ACCESS_TOKEN_EXPIRE_MINUTES \|\| (\d+)\) \* 60 \* 1000", cfg)
     assert m and int(m.group(1)) == 480
     assert "60 * 60 * 1000" not in cfg
     refresh = _lies('dashboard-react', 'src', 'lib', 'auth-refresh.ts')
@@ -45,3 +49,22 @@ def test_backend_standards_stimmen_ueberein():
     s = set(re.findall(r'ACCESS_TOKEN_EXPIRE_MINUTES", "(\d+)"', service))
     r = set(re.findall(r'ACCESS_TOKEN_EXPIRE_MINUTES", "(\d+)"', routes))
     assert s and s == r, (s, r)
+
+
+def test_dashboard_verlaengert_serverseitig_mit_sperre():
+    """Der jwt-Rueckruf ruft die gesperrte Verlaengerung auf; der Client holt
+    sich das neue Token ueber die Sitzung, nicht nur ueber das Cookie, das ihn
+    nie erreicht; und die Refresh-Route drosselt nicht schon den elften Kunden
+    derselben Minute, denn alle kommen von der Adresse des Dashboard-Servers."""
+    cfg = _lies('dashboard-react', 'src', 'auth.config.ts')
+    assert "erneuereToken(" in cfg
+    assert 'token.error = "RefreshAccessTokenError"' in cfg
+    helfer = _lies('dashboard-react', 'src', 'lib', 'token-erneuerung.ts')
+    assert "laufende = new Map" in helfer and "erledigte = new Map" in helfer
+    client = _lies('dashboard-react', 'src', 'lib', 'auth-refresh.ts')
+    assert client.index("getSession()") < client.index("refresh-cookie")
+    routes = _lies('backend', 'auth_routes.py')
+    block = routes[routes.index('@router.post("/refresh", response_model=RefreshResponse)'):]
+    assert '@limiter.limit("60/minute")' in block[:700]
+    paket = _lies('dashboard-react', 'package.json')
+    assert '"test:token"' in paket
