@@ -14,6 +14,15 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002',
   },
   
+  // "Abmahnung pruefen" ist seit 11.09.2026 abgeschaltet (Naehe zur
+  // Rechtsdienstleistung, § 2 RDG). Die Seite bleibt im Code; wer einen alten
+  // Link aufruft, landet beim Pflichten-Report statt auf einer toten Seite.
+  async redirects() {
+    return [
+      { source: '/abmahnung', destination: '/pflichten-report', permanent: false },
+    ];
+  },
+  
   async rewrites() {
     return [
       {

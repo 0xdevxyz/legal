@@ -33,7 +33,6 @@ import {
   Package,
   BookOpen,
   Radar,
-  ShieldAlert,
 } from 'lucide-react';
 
 interface NavItem {
@@ -74,7 +73,6 @@ const NAV_GROUPS: NavGroup[] = [
       // Der Pflichten-Report klaert zuerst, WELCHE Regeln ueberhaupt gelten —
       // er gehoert vor die Detailscans, nicht dahinter.
       { label: 'Pflichten-Report', icon: Radar, href: '/pflichten-report' },
-      { label: 'Abmahnung prüfen', icon: ShieldAlert, href: '/abmahnung' },
       { label: 'Cookie-Inventar', icon: ScanLine, href: '/deep-cookie-scanner' },
     ],
   },

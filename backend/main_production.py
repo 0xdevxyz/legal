@@ -758,7 +758,12 @@ async def startup_event():
     app.include_router(deep_cookie_scanner_router)  # Deep Cookie Scanner - Premium Feature
     app.include_router(legal_document_router)  # AUDIT-19: DPA Generator
     app.include_router(knowledge_router)  # Knowledge Base - Rechts-Updates & Gesetzes-Vault
-    app.include_router(abmahnung_router)  # Abmahnung pruefen: Vorwuerfe gegen die Messung
+    # Abmahnung pruefen ist seit 11.09.2026 abgeschaltet: ein konkretes Schreiben
+    # auszuwerten und Vorwuerfe als "bestaetigt" zu markieren, liegt zu nah an einer
+    # Rechtsdienstleistung (§ 2 RDG). Der Code bleibt; COMPLYO_ABMAHNUNG_PRUEFEN=an
+    # schaltet ihn wieder ein, erst nach anwaltlicher Pruefung.
+    if os.getenv("COMPLYO_ABMAHNUNG_PRUEFEN", "aus") == "an":
+        app.include_router(abmahnung_router)
     
     # Initialize Alt-Text routes
     init_agentur_a11y_routes(db_pool)

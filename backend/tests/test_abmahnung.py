@@ -467,10 +467,16 @@ class TestWaechter:
         assert ('user_id, site_id, len(zugeordnet), quelle, zusammenfassung["je_status"]'
                 in src)
 
-    def test_route_registriert(self):
+    def test_route_nur_mit_schalter(self):
+        """Seit 11.09.2026 abgeschaltet: ein konkretes Schreiben auszuwerten liegt
+        zu nah an einer Rechtsdienstleistung. Der Code bleibt, registriert wird der
+        Router nur mit COMPLYO_ABMAHNUNG_PRUEFEN=an, und Produktion setzt ihn nicht."""
         src = _lese("backend", "main_production.py")
         assert "from abmahnung_routes import router as abmahnung_router" in src
-        assert "app.include_router(abmahnung_router)" in src
+        zeilen = src.splitlines()
+        i = next(n for n, z in enumerate(zeilen) if "app.include_router(abmahnung_router)" in z)
+        assert 'os.getenv("COMPLYO_ABMAHNUNG_PRUEFEN", "aus") == "an"' in zeilen[i - 1]
+        assert "COMPLYO_ABMAHNUNG_PRUEFEN" not in _lese("docker-compose.yml")
 
     def test_nicht_in_exempt_paths(self):
         """Angemeldete Route, also CSRF-geschützt."""
@@ -490,11 +496,12 @@ class TestWaechter:
                      "keine rechtliche bewertung"):
             assert wort in text
 
-    def test_dashboard_seite_und_menue(self):
+    def test_seite_bleibt_aber_ohne_menue_und_mit_umleitung(self):
         seite = _lese("dashboard-react", "src", "app", "abmahnung", "page.tsx")
         assert "/api/abmahnung/pruefen" in seite
         assert "analyzeWebsite" in seite
         assert "keine Rechtsberatung" in seite
         sidebar = _lese("dashboard-react", "src", "components", "dashboard", "Sidebar.tsx")
-        assert "href: '/abmahnung'" in sidebar
-        assert sidebar.index("/pflichten-report") < sidebar.index("href: '/abmahnung'")
+        assert "'/abmahnung'" not in sidebar
+        config = _lese("dashboard-react", "next.config.js")
+        assert "{ source: '/abmahnung', destination: '/pflichten-report', permanent: false }" in config
