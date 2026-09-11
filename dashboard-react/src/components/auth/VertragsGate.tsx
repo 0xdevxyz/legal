@@ -91,20 +91,22 @@ export default function VertragsGate({ children }: { children: React.ReactNode }
       <DialogPrimitive.Root open={fehlt} onOpenChange={() => undefined}>
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm" />
+          {/* Radix setzt aria-labelledby/-describedby selbst auf seine
+              Title-/Description-IDs. Eigene ids darauf ueberschrieben diese
+              IDs, und Radix meldete im Browser "DialogContent requires a
+              DialogTitle", obwohl der Titel da war (11.09.2026). */}
           <DialogPrimitive.Content
             role="dialog"
             aria-modal="true"
-            aria-labelledby="vertragsgate-titel"
-            aria-describedby="vertragsgate-text"
             onEscapeKeyDown={(e) => e.preventDefault()}
             onPointerDownOutside={(e) => e.preventDefault()}
             onInteractOutside={(e) => e.preventDefault()}
             className="fixed left-1/2 top-1/2 z-[101] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-gray-200 bg-white p-6 text-gray-900 shadow-2xl outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
           >
-            <DialogPrimitive.Title id="vertragsgate-titel" className="text-lg font-semibold leading-snug">
+            <DialogPrimitive.Title className="text-lg font-semibold leading-snug">
               Bevor es weitergeht: Ihre Zustimmung zu AGB und Auftragsverarbeitungsvertrag
             </DialogPrimitive.Title>
-            <DialogPrimitive.Description id="vertragsgate-text" className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-zinc-400">
+            <DialogPrimitive.Description className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-zinc-400">
               Seit dem 10. September 2026 schließt complyo mit jedem Kunden einen
               Auftragsverarbeitungsvertrag. Ihr Konto besteht schon länger, deshalb holen
               wir Ihre Zustimmung jetzt nach. Ohne sie darf complyo die Daten der Besucher

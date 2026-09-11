@@ -289,10 +289,24 @@ def heuristik_vorwuerfe(text: str) -> List[Dict[str, Any]]:
             s in klein for worte in HEURISTIK_STICHWORTE.values() for s in worte
         ):
             continue
+        # Ein Absatz gehoert zu der Kategorie, die er am haeufigsten nennt.
+        # "Einwilligung" steht auch im Google-Fonts-Absatz; frueher bekam die
+        # Kategorie cookies deshalb den Fonts-Absatz als Vorwurfstext, und der
+        # eigentliche Cookie-Absatz lieferte nur noch Betrag und Frist nach.
+        # Gegen den Cookie-Befund verglichen fand sich dann nichts.
+        treffer = {kat: sum(1 for w in worte if w in klein)
+                   for kat, worte in HEURISTIK_STICHWORTE.items()}
+        beste = max(treffer.values()) if treffer else 0
         for kategorie, worte in HEURISTIK_STICHWORTE.items():
-            if not any(w in klein for w in worte):
+            anzahl = treffer[kategorie]
+            if not anzahl:
                 continue
             eintrag = gefunden.get(kategorie)
+            # Nur die bestpassende Kategorie bekommt den Absatz als
+            # Vorwurfstext; die anderen duerfen Betrag, Frist und Norm
+            # nachliefern, wenn ihnen die noch fehlen.
+            if eintrag is None and anzahl < beste:
+                continue
             if eintrag is None:
                 gefunden[kategorie] = {
                     "vorwurf": _kurz(absatz),
@@ -462,12 +476,133 @@ async def vorwuerfe_ermitteln(text: str, user_id, plan_type: str) -> Tuple[List[
 # Zuordnung zu den Messbefunden
 # ---------------------------------------------------------------------------
 
-def _passt(issue: Dict[str, Any], regel: Dict[str, Any]) -> bool:
+# Nur Befunde mit Gewicht duerfen einen Vorwurf bestaetigen. Ein "info"-Befund
+# ist oft ein Hinweis oder sogar eine Entwarnung. Beim ersten Live-Durchlauf am
+# 11.09.2026 bestaetigte "Kein Cookie-Banner erforderlich" (info) fuenf von
+# fuenf Vorwuerfen gegen complyo.de, darunter zwei zum Impressum, weil das
+# Stichwort "ddg" in "TDDDG" steckt. Eine falsche Bestaetigung ist der teuerste
+# Fehler dieser Seite: sie sagt dem Kunden, der Abmahner habe recht.
+_BESTAETIGENDE_STUFEN = {"critical", "warning", "error", "high", "serious",
+                         "moderate", "medium"}
+
+_FUELLWOERTER = {"ihrer", "ihrem", "ihren", "unter", "sowie", "durch", "wurde",
+                 "werden", "haben", "einer", "eines", "seite", "website",
+                 "internetseite", "unserer", "unseres", "keine", "keinen",
+                 "nicht", "ohne", "damit", "bereits", "diese", "dieser",
+                 "dieses", "wird", "welche", "sowohl", "gegen", "ihres"}
+
+
+def _inhaltsworte(vorwurf_text: str) -> List[str]:
+    """Die tragenden Woerter eines Vorwurfs (ab fuenf Buchstaben, ohne Fuellwoerter)."""
+    return [w for w in re.findall(r"[a-zäöüß]{5,}", (vorwurf_text or "").lower())
+            if w not in _FUELLWOERTER]
+
+
+# Woerter, die nur das Thema benennen, nicht den konkreten Vorwurf. "Cookie",
+# "Banner" und "Einwilligung" stehen in JEDEM Cookie-Vorwurf und in jedem
+# Cookie-Befund; sie unterscheiden "Ablehnen-Knopf fehlt" nicht von "Banner
+# nennt die Laufzeit nicht".
+_THEMENWOERTER = {"cookie", "cookies", "banner", "einwilligung", "einwilligen",
+                  "consent", "tracking", "impressum", "anbieterkennzeichnung",
+                  "angabe", "angaben", "enthält", "enthaelt", "datenschutz",
+                  "datenschutzerklärung", "datenschutzerklaerung", "besucher",
+                  "personenbezogen", "personenbezogene", "daten", "barrierefrei",
+                  "barrierefreiheit", "widerruf", "werbung", "verstoß", "verstoss",
+                  "verstößt", "fehlen", "fehlt", "fehlende", "fehlender"}
+
+
+def _beruehrt(worte: List[str], text: str) -> bool:
+    """Kommt eines der tragenden Woerter im Befund vor?
+
+    Ab sechs Buchstaben reicht ein gemeinsames Sechserstueck, damit
+    "abzulehnen" den Befund "Ablehnen-Knopf fehlt" trifft und "eingebunden"
+    "Einbindung". Fuenfbuchstabige Woerter muessen ganz vorkommen.
+    """
+    for w in worte:
+        if len(w) < 6:
+            if w in text:
+                return True
+        elif any(w[i:i + 6] in text for i in range(len(w) - 5)):
+            return True
+    return False
+
+
+def _thema_passt(issue: Dict[str, Any], regel: Dict[str, Any]) -> bool:
+    """Liegt der Befund thematisch beim Vorwurf und hat er Gewicht?
+
+    Kategorie oder Stichwort im TITEL, mit Wortgrenze links, damit "ddg"
+    nicht "TDDDG" trifft. Befunde der Stufe info zaehlen nie: das sind
+    Hinweise oder Entwarnungen.
+    """
+    if str(issue.get("severity") or "info").lower() not in _BESTAETIGENDE_STUFEN:
+        return False
     kategorie = str(issue.get("category") or "").lower()
-    if kategorie in regel["kategorien"]:
+    titel = str(issue.get("title") or "").lower()
+    return kategorie in regel["kategorien"] or any(
+        re.search(r"(?<![a-zäöüß])" + re.escape(st), titel) for st in regel["stichworte"]
+    )
+
+
+# Was einen Vorwurf von seinem Nachbarn unterscheidet. Jede Gruppe sind
+# Schreibweisen desselben Mechanismus; ein Befund bestaetigt einen Vorwurf,
+# wenn beide dieselbe Gruppe beruehren. "Cookie" und "Einwilligung" stehen
+# bewusst nicht drin: die stehen in jedem Cookie-Vorwurf und jedem
+# Cookie-Befund und unterscheiden nichts. Als Teilzeichenketten gedacht:
+# "lehnen" trifft "ablehnen", "abzulehnen" und "Ablehnen-Knopf".
+_UNTERSCHEIDER: Tuple[Tuple[str, ...], ...] = (
+    ("lehnen", "ablehn", "reject", "gleichwertig", "widerspruch"),
+    ("vor einwilligung", "vor einer einwilligung", "vor der einwilligung", "vor consent",
+     "ohne einwilligung", "bereits vor", "vor zustimmung", "pre-consent", "vor dem klick"),
+    ("google fonts", "fonts.googleapis", "google-fonts", "schriftarten von google"),
+    ("google analytics", "analytics", "_ga", "tag manager", "gtm", "matomo", "facebook pixel",
+     "meta pixel"),
+    ("ust-id", "umsatzsteuer", "ust.-id", "ustid", "steuernummer"),
+    ("registergericht", "handelsregister", "registernummer", "register"),
+    ("anschrift", "adresse", "ladungsfähig", "ladungsfaehig"),
+    ("e-mail", "email", "elektronische kontakt"),
+    ("gültigkeitsdauer", "gueltigkeitsdauer", "laufzeit", "speicherdauer"),
+    ("widerrufsbelehrung", "widerruf", "muster-widerrufsformular"),
+    ("alternativtext", "alt-text", "alt-attribut", "bildbeschreibung", "alt="),
+    ("kontrast",),
+    ("tastatur", "keyboard", "fokus"),
+    ("barrierefreiheitserklärung", "barrierefreiheitserklaerung", "erklärung zur barrierefreiheit"),
+    ("double-opt-in", "double opt-in", "newsletter", "opt-in"),
+    ("https", "ssl", "tls", "verschlüsselung", "verschluesselung"),
+    ("datenschutzerklärung", "datenschutzerklaerung", "datenschutzhinweis"),
+    ("drittland", "usa", "us-server", "übermittl", "uebermittl", "drittstaat"),
+    ("kontaktformular", "formular"),
+    ("streichpreis", "uvp", "statt-preis"),
+    ("versandkosten", "lieferzeit", "grundpreis"),
+)
+
+
+def _gruppen(text: str) -> set:
+    t = (text or "").lower()
+    return {i for i, gruppe in enumerate(_UNTERSCHEIDER) if any(g in t for g in gruppe)}
+
+
+def _passt(issue: Dict[str, Any], regel: Dict[str, Any],
+           inhaltsworte: Optional[List[str]] = None,
+           vorwurf_text: str = "") -> bool:
+    """Bestaetigt dieser Befund den Vorwurf?
+
+    Drei Huerden, alle noetig: (1) Gewicht, (2) Thema (siehe _thema_passt),
+    (3) er beruehrt den konkreten Vorwurf. Das heisst: beide nennen denselben
+    Mechanismus (_UNTERSCHEIDER), oder ein tragendes, nicht bloss
+    themenbenennendes Wort des Vorwurfs kommt im Befund vor. Die dritte Huerde
+    gilt erst, wenn der Vorwurf ueberhaupt Substanz hat (eine Gruppe oder zwei
+    tragende Woerter); ein Vorwurf ohne Substanz kann nichts beruehren.
+    """
+    if not _thema_passt(issue, regel):
+        return False
+    text = f"{str(issue.get('title') or '').lower()} {str(issue.get('description') or '').lower()}"
+    gruppen_vorwurf = _gruppen(vorwurf_text)
+    if gruppen_vorwurf & _gruppen(text):
         return True
-    text = f"{issue.get('title') or ''} {issue.get('description') or ''}".lower()
-    return any(s in text for s in regel["stichworte"])
+    worte = [w for w in (inhaltsworte or []) if w not in _THEMENWOERTER]
+    if not gruppen_vorwurf and len(worte) < 2:
+        return True
+    return _beruehrt(worte, text)
 
 
 def _befund_kurz(issue: Dict[str, Any]) -> Dict[str, Any]:
@@ -503,6 +638,7 @@ def zuordnen(
         eintrag = dict(vorwurf)
         regel = ZUORDNUNG.get(vorwurf.get("kategorie") or "sonstiges")
         eintrag["befunde"] = []
+        eintrag["verwandt"] = []
 
         if regel is None:
             eintrag["status"] = STATUS_NICHT_PRUEFBAR
@@ -517,20 +653,29 @@ def zuordnen(
                 "dann vergleichen wir den Vorwurf mit dem Befund."
             )
         else:
+            worte = _inhaltsworte(vorwurf.get("vorwurf") or "")
             passende = [_befund_kurz(i) for i in issues
-                        if isinstance(i, dict) and _passt(i, regel)]
+                        if isinstance(i, dict)
+                        and _passt(i, regel, worte, vorwurf.get("vorwurf") or "")]
             # Befunde, die den Vorwurf wörtlich treffen, nach vorn: bei
             # "Google Fonts" soll der Fonts-Befund vor dem allgemeinen
             # Datenschutz-Befund stehen.
-            worte = [w for w in re.findall(r"[a-zäöüß]{5,}", (vorwurf.get("vorwurf") or "").lower())
-                     if w not in ("ihrer", "ihrem", "ihren", "unter", "sowie", "durch",
-                                  "wurde", "werden", "haben", "einer", "eines", "seite",
-                                  "website", "internetseite", "unserer", "unseres")]
             def _treffer(b: Dict[str, Any]) -> int:
                 t = f"{b['title']} {b['legal_basis']}".lower()
                 return -sum(1 for w in worte if w in t)
             passende.sort(key=_treffer)
             eintrag["befunde"] = passende[:8]
+            # Befunde derselben Saeule, die den Vorwurf nicht treffen, stehen
+            # getrennt daneben: kein Beleg, aber der Kunde soll sehen, was die
+            # Messung in diesem Bereich sonst gefunden hat. Ein Vorwurf
+            # "USt-IdNr fehlt" trifft den Befund "USt-IdNr. fehlt" wegen der
+            # Schreibweise nicht immer; daneben stehend ist er trotzdem sichtbar.
+            gesehen = {b["title"] for b in passende}
+            eintrag["verwandt"] = [
+                _befund_kurz(i) for i in issues
+                if isinstance(i, dict) and _thema_passt(i, regel)
+                and (i.get("title") or "") not in gesehen
+            ][:5]
             if passende:
                 eintrag["status"] = STATUS_BESTAETIGT
                 eintrag["hinweis"] = (
@@ -545,6 +690,9 @@ def zuordnen(
                     "nichts. Das heißt nicht, dass der Vorwurf falsch ist: er kann "
                     "sich auf eine Unterseite, einen früheren Stand oder etwas "
                     "beziehen, das wir nicht messen."
+                    + (f" {len(eintrag['verwandt'])} Befunde aus demselben Bereich "
+                       "stehen daneben, ohne den Vorwurf direkt zu treffen."
+                       if eintrag["verwandt"] else "")
                 )
         ergebnis.append(eintrag)
     return ergebnis
