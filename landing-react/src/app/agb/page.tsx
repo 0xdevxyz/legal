@@ -43,7 +43,7 @@ export default function AGBPage() {
               <FileText className="w-8 h-8 text-akzent-700" />
               <h1 className="text-4xl font-bold text-gray-900">Allgemeine Geschäftsbedingungen</h1>
             </div>
-            <p className="text-gray-600">Stand: 1. September 2026</p>
+            <p className="text-gray-600">Stand: 10. September 2026</p>
           </div>
 
           <div className="bg-white rounded-xl shadow-lg p-8 space-y-8">

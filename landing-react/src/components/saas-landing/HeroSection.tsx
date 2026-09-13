@@ -82,8 +82,8 @@ export default function HeroSection() {
                   <ShieldCheck className="w-4 h-4 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-gray-900">DSGVO-konform</p>
-                  <p className="text-xs text-gray-500">Automatisch geprüft</p>
+                  <p className="text-xs font-bold text-gray-900">DSGVO und TDDDG geprüft</p>
+                  <p className="text-xs text-gray-500">Im Browser gemessen</p>
                 </div>
               </div>
             </div>

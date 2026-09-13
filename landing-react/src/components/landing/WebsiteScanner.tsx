@@ -77,7 +77,7 @@ export default function WebsiteScanner() {
       name: 'Barrierefreiheit',
       icon: Eye,
       color: 'akzent',
-      description: 'WCAG 2.1 AA Konformität'
+      description: 'Gemessen gegen WCAG 2.1 AA'
     },
     {
       id: 'gdpr',
@@ -620,7 +620,7 @@ export default function WebsiteScanner() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {Object.entries(scanResult.pillars).map(([key, pillarData]: [string, any]) => {
                 const meta: Record<string, { icon: any; color: string; description: string }> = {
-                  accessibility: { icon: Eye,       color: 'akzent', description: 'WCAG 2.1 AA Konformität' },
+                  accessibility: { icon: Eye,       color: 'akzent', description: 'Gemessen gegen WCAG 2.1 AA' },
                   gdpr:          { icon: Shield,     color: 'green',  description: 'Datenschutz-Compliance' },
                   legal:         { icon: FileText,   color: 'purple', description: 'Impressum, AGB, Widerrufsrecht' },
                   cookies:       { icon: Cookie,     color: 'orange', description: 'Cookie-Banner & Consent' },

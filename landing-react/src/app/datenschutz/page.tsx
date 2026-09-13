@@ -111,7 +111,7 @@ export default function DatenschutzPage() {
             </div>
             <p className="text-gray-600">
               Stand:{' '}
-              1. September 2026
+              10. September 2026
             </p>
           </div>
 

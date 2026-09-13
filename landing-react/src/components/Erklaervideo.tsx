@@ -16,7 +16,7 @@ export const TRANSKRIPT = [
     'Jede Woche neue Pflichten, und auf der eigenen Website sammeln sich still ' +
     'die Warnzeichen, während der Laden laufen soll.',
   'Hinter dem Chaos stecken genau vier Säulen: Barrierefreiheit für alle ' +
-    'Besucher, Datenschutz, saubere Cookie-Einwilligung und rechtssichere Texte ' +
+    'Besucher, Datenschutz, saubere Cookie-Einwilligung und vollständige Pflichttexte ' +
     'vom Impressum bis zum Widerruf.',
   'Wer eine Säule ignoriert, riskiert Abmahnung oder Bußgeld, und seit dem ' +
     'Barrierefreiheitsstärkungsgesetz trifft das auch kleine Shops. Die Pflichten ' +

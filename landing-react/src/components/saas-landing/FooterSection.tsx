@@ -61,7 +61,7 @@ export default function FooterSection() {
 
         <div className="border-t border-gray-800 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs">© {new Date().getFullYear()} Complyo. Alle Rechte vorbehalten.</p>
-          <p className="text-xs">Made with ♥ in Germany · DSGVO-konform</p>
+          <p className="text-xs">Made with ♥ in Germany</p>
         </div>
       </div>
     </footer>

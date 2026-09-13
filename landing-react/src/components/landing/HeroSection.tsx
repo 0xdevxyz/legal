@@ -57,7 +57,7 @@ export default function HeroSection() {
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                <span className="text-gray-300">WCAG 2.1 AA konform</span>
+                <span className="text-gray-300">Gemessen gegen WCAG 2.1 AA</span>
               </div>
             </div>
             
@@ -147,15 +147,15 @@ export default function HeroSection() {
                   <div className="flex items-center gap-3 bg-green-500/10 border border-green-500/30 rounded-lg p-3">
                     <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
                     <div className="flex-1">
-                      <div className="text-sm font-semibold text-white">DSGVO-konform</div>
-                      <div className="text-xs text-gray-400">Datenschutzerklärung vollständig</div>
+                      <div className="text-sm font-semibold text-white">Datenschutz geprüft</div>
+                      <div className="text-xs text-gray-400">Pflichtangaben vollständig</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 bg-green-500/10 border border-green-500/30 rounded-lg p-3">
                     <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
                     <div className="flex-1">
                       <div className="text-sm font-semibold text-white">Barrierefreiheit</div>
-                      <div className="text-xs text-gray-400">WCAG 2.1 Level AA erreicht</div>
+                      <div className="text-xs text-gray-400">Keine Verstöße gegen WCAG 2.1 AA gemessen</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
