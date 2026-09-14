@@ -57,10 +57,24 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
     }
   };
 
-  const integrationCode = `<!-- Complyo Cookie-Banner -->
+  // Dieselbe Fassung wie IntegrationGuide.tsx. Vorher stand hier
+  // cdn.complyo.de/cookie-banner.js - ein Host ohne DNS-Eintrag. Wer das
+  // Snippet einbaute, bekam kein Banner und keine Einwilligungsprotokolle,
+  // hielt sich aber fuer abgedeckt. Der Blocker muss VOR dem Banner laden,
+  // sonst laufen fremde Skripte vor der Einwilligung an.
+  const API_BASE = 'https://api.complyo.de';
+  const integrationCode = `<!-- Complyo Cookie Compliance & Auto-Blocking -->
+<!-- Schritt 1: Cookie-Blocker (laedt ZUERST, blockiert Skripte) -->
 <script
-  src="https://cdn.complyo.de/cookie-banner.js"
+  src="${API_BASE}/public/cookie-blocker.js"
   data-site-id="${siteId}"
+></script>
+
+<!-- Schritt 2: Cookie-Banner -->
+<script
+  src="${API_BASE}/api/widgets/cookie-compliance.js"
+  data-site-id="${siteId}"
+  data-complyo-site-id="${siteId}"
   async
 ></script>`;
 
