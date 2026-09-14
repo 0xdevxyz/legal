@@ -7,7 +7,7 @@ Warum es dieses Skript gibt
 Seit dem Launch-Audit vom 31.08.2026 steht auf der Entscheidungsliste:
 "Stripe läuft auf sk_test_, niemand kann zahlen." Der Grund, warum das liegen
 blieb, war nie die Entscheidung, sondern die Arbeit dahinter: zehn Preise in
-vier Produkten von Hand anlegen, zwei Webhook-Endpunkte registrieren, die
+fuenf Produkten von Hand anlegen, zwei Webhook-Endpunkte registrieren, die
 Secrets abschreiben, zwölf Zeilen in der .env tauschen, und bei einem Tippfehler
 bucht der erste Kunde einen Preis, den es nicht gibt (das war am 10.09. bereits
 einmal so: der 49-Euro-Preis erreichte den Container nie).

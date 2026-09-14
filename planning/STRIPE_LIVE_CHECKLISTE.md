@@ -34,7 +34,7 @@ getestet. Es fehlt nur der Schlüssel.
 
        STRIPE_LIVE_SECRET_KEY=sk_live_... python3 scripts/stripe-live-umschalten.py anlegen
 
-   Legt vier Produkte, zehn Preise und zwei Webhook-Endpunkte an, idempotent
+   Legt fuenf Produkte, zehn Preise und zwei Webhook-Endpunkte an, idempotent
    (vorhandene werden über `lookup_key` wiedererkannt). Gibt am Ende den
    fertigen `.env`-Block aus, inklusive der beiden Webhook-Secrets, die Stripe
    nur bei der Anlage zeigt.
