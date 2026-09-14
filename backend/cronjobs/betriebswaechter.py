@@ -240,6 +240,7 @@ def bewerte_quelle(name: str, eintraege_gesamt: int, status: int,
     Waechter, der den echten Ausfall verschweigt.
     """
     stelle = f"rss_feed_sources: {name}"
+    fehler = fehler.rstrip().rstrip(".")
     if fehler:
         return (f"quelle-abruf:{name}",
                 f"Rechtsquelle „{name}“ nicht abrufbar: {fehler}. "
