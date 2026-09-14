@@ -30,25 +30,27 @@ getestet. Es fehlt nur der Schlüssel.
 3. **Live-Geheimschlüssel holen**: Dashboard > Developers > API keys, Live
    mode, „Secret key" (`sk_live_...`). Er wird nirgends abgelegt ausser in der
    .env auf openclaw.
-4. **Preise und Webhooks anlegen** (auf openclaw, im Repo):
+4. **Preise und Webhooks anlegen und eintragen** (auf openclaw, im Repo):
 
-       STRIPE_LIVE_SECRET_KEY=sk_live_... python3 scripts/stripe-live-umschalten.py anlegen
+       cd /home/clawd/saas/legal && python3 scripts/stripe-live-umschalten.py anlegen --schreiben
 
-   Legt 13 Produkte, 19 Preise und zwei Webhook-Endpunkte an, idempotent
-   (vorhandene werden über `lookup_key` wiedererkannt). Gibt am Ende den
-   fertigen `.env`-Block aus, inklusive der beiden Webhook-Secrets, die Stripe
-   nur bei der Anlage zeigt.
-5. **.env tauschen**: erst Kopie (`cp .env .env.bak-$(date +%F)-vor-live`),
-   dann den ausgegebenen Block einsetzen. Die Test-Zeilen auskommentiert
-   stehen lassen, damit der Rückweg dokumentiert ist.
-6. **Backend neu anlegen** (Umgebungsvariablen greifen nicht bei `restart`):
+   Das Skript fragt den Live-Schlüssel unsichtbar ab. Er steht damit weder in
+   der Shell-Historie noch in der Prozessliste, und er muss durch keine
+   Zwischenablage. Danach legt es 13 Produkte, 19 Preise und zwei
+   Webhook-Endpunkte an, idempotent (vorhandene werden über `lookup_key`
+   wiedererkannt, nicht doppelt angelegt), und trägt Schlüssel, Preis-IDs und
+   Webhook-Geheimnisse in die `.env` ein. Eine Kopie der alten Fassung liegt
+   vorher daneben, die alten Werte bleiben als Kommentar in der Datei.
 
-       cd /home/clawd/saas/legal && docker compose up -d backend
+   Ohne `--schreiben` gibt es den Block nur aus, zum Eintragen von Hand.
 
-   Steht seit dem letzten Bau neuer Code im Repo, vorher bauen. Der Code ist
-   ins Image gebacken, `up -d` allein nimmt ihn nicht mit:
+5. **Publishable Key** (optional): `STRIPE_PUBLISHABLE_KEY=pk_live_...` aus dem
+   Dashboard. Das Backend benutzt ihn nicht, der Checkout läuft serverseitig.
 
-       docker compose build backend && docker compose up -d backend
+6. **Backend neu bauen und starten** (der Code ist ins Image gebacken,
+   `up -d` allein nimmt weder neuen Code noch neue Umgebungsvariablen mit):
+
+       cd /home/clawd/saas/legal && docker compose build backend && docker compose up -d backend
 
 7. **Prüfen**:
 

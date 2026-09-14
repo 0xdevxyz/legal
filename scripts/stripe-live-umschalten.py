@@ -6,11 +6,11 @@ Warum es dieses Skript gibt
 ---------------------------
 Seit dem Launch-Audit vom 31.08.2026 steht auf der Entscheidungsliste:
 "Stripe läuft auf sk_test_, niemand kann zahlen." Der Grund, warum das liegen
-blieb, war nie die Entscheidung, sondern die Arbeit dahinter: zehn Preise in
-fuenf Produkten von Hand anlegen, zwei Webhook-Endpunkte registrieren, die
-Secrets abschreiben, zwölf Zeilen in der .env tauschen, und bei einem Tippfehler
-bucht der erste Kunde einen Preis, den es nicht gibt (das war am 10.09. bereits
-einmal so: der 49-Euro-Preis erreichte den Container nie).
+blieb, war nie die Entscheidung, sondern die Arbeit dahinter: 19 Preise in
+13 Produkten von Hand anlegen, zwei Webhook-Endpunkte registrieren, die
+Secrets abschreiben, zwanzig Zeilen in der .env tauschen, und bei einem
+Tippfehler bucht der erste Kunde einen Preis, den es nicht gibt (das war am
+10.09. bereits einmal so: der 49-Euro-Preis erreichte den Container nie).
 
 Dieses Skript macht aus der Stunde Klickarbeit einen Aufruf und aus dem
 Tippfehler-Risiko eine Prüfung. Es braucht nur den Live-Geheimschlüssel, den
@@ -20,8 +20,12 @@ Aufruf
 ------
     # 1. Im Live-Modus Produkte, Preise und Webhooks anlegen (idempotent:
     #    vorhandene Preise werden über lookup_key wiedergefunden, nicht doppelt
-    #    angelegt) und den fertigen .env-Block ausgeben:
-    STRIPE_LIVE_SECRET_KEY=sk_live_... python3 scripts/stripe-live-umschalten.py anlegen
+    #    angelegt) und alles gleich in die .env eintragen (Kopie vorher):
+    python3 scripts/stripe-live-umschalten.py anlegen --schreiben
+
+    #    Der Schlüssel wird unsichtbar abgefragt; er steht damit weder in der
+    #    Shell-Historie noch in der Prozessliste. Ohne --schreiben gibt das
+    #    Skript den .env-Block nur aus.
 
     # 2. Nach dem Eintragen in die .env und `docker compose up -d backend`:
     #    prüft die .env gegen Stripe (Modus, jede Preis-ID vorhanden, aktiv,
@@ -186,7 +190,7 @@ def modus(key: str) -> str:
 # anlegen
 # ---------------------------------------------------------------------------
 
-def anlegen(key: str) -> int:
+def anlegen(key: str, schreiben: bool = False) -> int:
     if modus(key) != "live":
         print("Der Schlüssel in STRIPE_LIVE_SECRET_KEY ist kein Live-Schlüssel (sk_live_...).")
         return 2
@@ -256,6 +260,27 @@ def anlegen(key: str) -> int:
             print(f"Webhook angelegt: {url} ({w['id']})")
             env_zeilen.append(f"{variable}={w['secret']}")
 
+    werte = {"STRIPE_SECRET_KEY": key}
+    werte.update(dict(z.split("=", 1) for z in env_zeilen if not z.startswith("#")))
+
+    # Ein Webhook-Geheimnis zeigt Stripe NUR bei der Anlage. Existierte der
+    # Endpunkt schon, steht in der .env weiter das Geheimnis aus dem Testmodus,
+    # und jede Signaturpruefung scheitert: Kuendigungen und fehlgeschlagene
+    # Zahlungen kaemen nie an, ohne dass irgendwo ein Fehler auftaucht.
+    ohne_geheimnis = [v for _, v, _ in WEBHOOKS if v not in werte]
+    if ohne_geheimnis:
+        print()
+        print("ACHTUNG: fuer diese Endpunkte gibt es kein frisches Geheimnis,")
+        print("weil sie in Stripe schon bestanden:")
+        for v in ohne_geheimnis:
+            print(f"  {v}")
+        print("Im Dashboard unter Developers > Webhooks > Endpunkt > 'Reveal'")
+        print("nachlesen und von Hand eintragen. Bleibt der Testwert stehen,")
+        print("scheitert jede Signaturpruefung stillschweigend.")
+
+    if schreiben:
+        return env_schreiben(werte)
+
     print()
     print("=== In /home/clawd/saas/legal/.env eintragen (vorher Kopie: cp .env .env.bak-$(date +%F)-vor-live) ===")
     print(f"STRIPE_SECRET_KEY={key}")
@@ -264,6 +289,72 @@ def anlegen(key: str) -> int:
         print(z)
     print("=== danach: cd /home/clawd/saas/legal && docker compose up -d backend  (Umgebungsvariablen greifen erst beim Neuanlegen des Containers) ===")
     print("=== dann: python3 scripts/stripe-live-umschalten.py pruefen ===")
+    return 0
+
+
+ENV_PFAD = "/home/clawd/saas/legal/.env"
+
+
+def env_schreiben(werte: dict) -> int:
+    """Traegt die Werte in die .env ein, mit Kopie vorher.
+
+    Warum das Skript das selbst macht und nicht der Mensch per Copy-Paste:
+    der Block enthaelt zwei Webhook-Geheimnisse und zwanzig Kennungen. Jede
+    davon von Hand zu uebertragen ist genau die Gelegenheit, bei der eine
+    Zeile verrutscht, und eine verrutschte Preis-Kennung bucht beim ersten
+    Kunden den falschen Betrag. Ausserdem bleibt der Schluessel damit auf
+    dem Server: er geht nicht durch eine Zwischenablage und nicht durch ein
+    Chatfenster.
+
+    Bestehende Zeilen werden ersetzt, unbekannte angehaengt, alles andere
+    bleibt Zeichen fuer Zeichen stehen. Die alte Fassung liegt daneben.
+    """
+    from datetime import datetime
+    if not os.path.exists(ENV_PFAD):
+        print(f"{ENV_PFAD} gibt es nicht.")
+        return 2
+
+    with open(ENV_PFAD, encoding="utf-8") as fh:
+        zeilen = fh.readlines()
+
+    kopie = f"{ENV_PFAD}.bak-{datetime.now().strftime('%Y%m%d-%H%M')}-vor-live"
+    with open(kopie, "w", encoding="utf-8") as fh:
+        fh.writelines(zeilen)
+    os.chmod(kopie, 0o600)
+
+    offen = dict(werte)
+    neu_zeilen = []
+    ersetzt = []
+    for zeile in zeilen:
+        name = zeile.split("=", 1)[0].strip()
+        if name in offen and not zeile.lstrip().startswith("#"):
+            # Den alten Wert als Kommentar stehen lassen: der Rueckweg soll
+            # in der Datei selbst ablesbar sein, nicht nur in der Kopie.
+            neu_zeilen.append(f"# bis {datetime.now().strftime('%d.%m.%Y')} (Testmodus): {zeile.rstrip()}\n")
+            neu_zeilen.append(f"{name}={offen.pop(name)}\n")
+            ersetzt.append(name)
+        else:
+            neu_zeilen.append(zeile)
+
+    if offen:
+        neu_zeilen.append(f"\n# Ergaenzt am {datetime.now().strftime('%d.%m.%Y')} beim Umschalten auf Live-Preise.\n")
+        for name, wert in offen.items():
+            neu_zeilen.append(f"{name}={wert}\n")
+
+    with open(ENV_PFAD, "w", encoding="utf-8") as fh:
+        fh.writelines(neu_zeilen)
+    os.chmod(ENV_PFAD, 0o600)
+
+    print()
+    print(f"In die .env geschrieben. Kopie der alten Fassung: {kopie}")
+    print(f"  ersetzt ({len(ersetzt)}): " + ", ".join(sorted(ersetzt)))
+    if offen:
+        print(f"  ergaenzt ({len(offen)}): " + ", ".join(sorted(offen)))
+    print()
+    print("Naechster Schritt (baut das Image mit, der Code ist hineingebacken):")
+    print("    cd /home/clawd/saas/legal && docker compose build backend && docker compose up -d backend")
+    print("Danach:")
+    print("    python3 scripts/stripe-live-umschalten.py pruefen")
     return 0
 
 
@@ -417,13 +508,24 @@ def main(argv) -> int:
         print(__doc__)
         return 2
     if argv[1] == "anlegen":
+        schreiben = "--schreiben" in argv
         key = os.getenv("STRIPE_LIVE_SECRET_KEY", "")
         if not key:
-            print("STRIPE_LIVE_SECRET_KEY nicht gesetzt. Den Live-Geheimschlüssel holt der Kontoinhaber"
-                  " im Stripe-Dashboard unter Developers > API keys (Live mode).")
+            # Abfrage ohne Anzeige, statt den Schluessel in die Befehlszeile zu
+            # schreiben: dort landet er in der Shell-Historie und in der
+            # Prozessliste, wo ihn jeder auf der Maschine lesen kann.
+            import getpass
+            try:
+                key = getpass.getpass("Stripe Live-Geheimschluessel (sk_live_..., Eingabe bleibt unsichtbar): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\nAbgebrochen.")
+                return 2
+        if not key:
+            print("Kein Schluessel eingegeben. Der Kontoinhaber findet ihn im"
+                  " Stripe-Dashboard unter Developers > API keys (Live mode).")
             return 2
         try:
-            return anlegen(key)
+            return anlegen(key, schreiben=schreiben)
         except StripeFehler as e:
             print(f"Stripe-Fehler: {e}")
             return 1
