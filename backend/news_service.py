@@ -6,13 +6,58 @@ Parst RSS-Feeds von Rechts- und Datenschutz-Quellen
 import feedparser
 import asyncio
 import asyncpg
+import requests
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, NamedTuple, Optional
 import re
 from bs4 import BeautifulSoup
 import logging
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# HTTP-Antworten, die keine Fehler sind
+# ---------------------------------------------------------------------------
+#
+# Gefunden am 14.09.2026: Die Quelle "EU Parlament Digitales" antwortet mit
+# HTTP 202 ("Accepted", angenommen, der Inhalt wird noch erzeugt) und einem
+# leeren Rumpf. Der Abruf buchte das als `❌ HTTP 202` und brach ab. Die Quelle
+# hat deshalb seit ihrer Anlage keinen einzigen Eintrag geliefert, ohne dass
+# je etwas rot geworden waere: im Log stand eine ERROR-Zeile zwischen
+# Hunderten, im Ergebnis stand "11 Feeds verarbeitet". Fuer ein Produkt,
+# dessen verkauftes Merkmal die Rechtsaenderungs-Ueberwachung ist, heisst eine
+# still ausgefallene Quelle: eine Rechtsaenderung wird nicht bemerkt.
+#
+# 202 ist keine Absage, sondern die Aufforderung, gleich noch einmal zu
+# fragen. Wartezeiten zwischen den Wiederholungen, Summe = Obergrenze je
+# Quelle. Bewusst kurz: der Abruf laeuft sequenziell ueber alle Feeds.
+WARTEPLAN_202 = (4, 8, 12)        # drei Wiederholungen, hoechstens 24 s Warten
+UMLEITUNGEN_MAX = 5               # 3xx sind Wegbeschreibungen, keine Fehler
+
+
+class Abrufergebnis(NamedTuple):
+    """Was ein Feed-Abruf ergeben hat.
+
+    Die Trennung von `eintraege` und `neue_items` ist der Kern. Vorher gab
+    `_fetch_and_parse_feed` nur eine Zahl zurueck, und zwei voellig
+    verschiedene Zustaende sahen identisch aus:
+
+      eintraege=20, neue_items=0  -> Quelle lebt, hat nur nichts Neues
+      eintraege=0,  neue_items=0  -> Quelle liefert nichts Lesbares mehr
+
+    Der zweite Fall wurde als "✅ 0 neue Items gespeichert" protokolliert.
+    Genau so verschwanden EDPB News und Datenschutz.org: ihre Feed-Adresse
+    leitet auf eine HTML-Seite um, Statuscode 200, Inhalt keiner.
+    """
+    neue_items: int = 0
+    eintraege: int = 0
+    status: int = 0
+    fehler: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return not self.fehler
+
 
 class NewsService:
     def __init__(self, db_pool: asyncpg.Pool):
@@ -35,7 +80,11 @@ class NewsService:
                     "total_feeds": len(feeds),
                     "processed": 0,
                     "new_items": 0,
-                    "errors": []
+                    "errors": [],
+                    # Quellen, die geantwortet haben, aber nichts Lesbares
+                    # lieferten. Frueher nicht unterscheidbar von "nichts Neues".
+                    "leere_quellen": [],
+                    "failed": 0,
                 }
                 
                 for feed in feeds:
@@ -48,16 +97,25 @@ class NewsService:
                                 continue
                         
                         logger.info(f"📡 Fetching feed: {feed['name']}")
-                        new_items = await self._fetch_and_parse_feed(
+                        ergebnis = await self._fetch_and_parse_feed(
                             feed['id'],
-                            feed['name'], 
+                            feed['name'],
                             feed['url'],
                             feed['category'],
                             feed['keywords']
                         )
-                        
-                        results['processed'] += 1
-                        results['new_items'] += new_items
+
+                        results['new_items'] += ergebnis.neue_items
+                        if ergebnis.ok:
+                            results['processed'] += 1
+                        else:
+                            # Ein gescheiterter Abruf ist kein verarbeiteter
+                            # Feed. Dass er frueher mitgezaehlt wurde, ist der
+                            # Grund, warum "11 Feeds verarbeitet" im Log stand,
+                            # waehrend drei Quellen seit Monaten nichts lasen.
+                            results['failed'] += 1
+                            results['errors'].append(f"{feed['name']}: {ergebnis.fehler}")
+                            results['leere_quellen'].append(feed['name'])
                         
                         # Update last_fetch timestamp
                         await conn.execute(
@@ -76,39 +134,133 @@ class NewsService:
             logger.error(f"Error in fetch_all_feeds: {e}")
             raise
     
+    async def _abrufen(self, feed_url: str, source_name: str) -> tuple:
+        """Holt den Feed und behandelt die Antworten, die kein Fehler sind.
+
+        Rueckgabe: (response, fehlertext). Ist `response` None, steht in
+        `fehlertext`, warum der Abruf endgueltig gescheitert ist.
+
+          202 Accepted     angenommen, Inhalt folgt -> erneut abrufen
+                           (Wartezeiten WARTEPLAN_202, danach Abbruch)
+          3xx + Location   Wegbeschreibung -> folgen, hoechstens
+                           UMLEITUNGEN_MAX mal (requests folgt normalerweise
+                           selbst; das hier greift, wenn es das ausnahmsweise
+                           nicht tut, etwa beim Schemawechsel)
+
+        204 und 304 kommen hier durch und werden beim Auswerten unterschieden:
+        sie sind gueltige Antworten ohne Inhalt, nicht Fehler.
+        """
+        schleife = asyncio.get_event_loop()
+        kopf = {
+            'User-Agent': 'Mozilla/5.0 (compatible; ComplyoBot/1.0; +https://complyo.de)'
+        }
+        url = feed_url
+        versuche_202 = 0
+        umleitungen = 0
+
+        while True:
+            response = await schleife.run_in_executor(
+                None,
+                lambda ziel=url: requests.get(ziel, headers=kopf, timeout=30)
+            )
+            code = response.status_code
+
+            if code == 202:
+                # Nicht jedes 202 meint "Inhalt folgt". Eine Bot-Abwehr vor
+                # der Quelle antwortet ebenfalls mit 202 und leerem Rumpf,
+                # sagt es aber im Kopf (AWS WAF: x-amzn-waf-action:
+                # challenge; so verhaelt sich europarl.europa.eu, Stand
+                # 14.09.2026). Dagegen hilft kein Wiederholen — wer das nicht
+                # unterscheidet, laesst jemanden ewig auf einen Inhalt warten,
+                # der nie kommen wird.
+                abwehr = (response.headers.get('x-amzn-waf-action')
+                          or response.headers.get('cf-mitigated'))
+                if abwehr:
+                    return None, (
+                        f"HTTP 202, aber vom Bot-Schutz der Quelle "
+                        f"(\"{abwehr}\"), nicht \"Inhalt folgt\". Wiederholen "
+                        f"hilft nicht; die Quelle ist von diesem Server aus "
+                        f"nicht lesbar und braucht eine Entscheidung: ersetzen "
+                        f"oder abschalten."
+                    )
+                if versuche_202 >= len(WARTEPLAN_202):
+                    return None, (
+                        f"HTTP 202 auch nach {len(WARTEPLAN_202) + 1} Abrufen "
+                        f"ueber {sum(WARTEPLAN_202)}s. Inhalt folgte nie."
+                    )
+                warten = WARTEPLAN_202[versuche_202]
+                versuche_202 += 1
+                logger.info(
+                    f"⏳ HTTP 202 (angenommen, Inhalt folgt) fuer {source_name}: "
+                    f"erneuter Abruf in {warten}s "
+                    f"({versuche_202}/{len(WARTEPLAN_202)})"
+                )
+                await asyncio.sleep(warten)
+                continue
+
+            if 300 <= code < 400 and response.headers.get('Location'):
+                if umleitungen >= UMLEITUNGEN_MAX:
+                    return None, f"HTTP {code}: mehr als {UMLEITUNGEN_MAX} Umleitungen"
+                url = requests.compat.urljoin(url, response.headers['Location'])
+                umleitungen += 1
+                logger.info(f"↪️ HTTP {code} fuer {source_name}: folge nach {url}")
+                continue
+
+            return response, ""
+
     async def _fetch_and_parse_feed(
-        self, 
+        self,
         feed_id: int,
-        source_name: str, 
-        feed_url: str, 
+        source_name: str,
+        feed_url: str,
         category: str,
         keywords: List[str]
-    ) -> int:
+    ) -> Abrufergebnis:
         """Parst einen einzelnen RSS-Feed und speichert relevante Items"""
         try:
-            # Fetch RSS-Feed mit User-Agent (viele Seiten blockieren feedparser ohne UA)
-            import requests
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (compatible; ComplyoBot/1.0; +https://complyo.de)'
-            }
-            
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, 
-                lambda: requests.get(feed_url, headers=headers, timeout=30)
-            )
-            
-            if response.status_code != 200:
-                logger.error(f"❌ HTTP {response.status_code} for {source_name}")
-                return 0
-            
+            response, abruf_fehler = await self._abrufen(feed_url, source_name)
+            if response is None:
+                logger.error(f"❌ {source_name}: {abruf_fehler}")
+                return Abrufergebnis(fehler=abruf_fehler)
+
+            code = response.status_code
+
+            # 204 und 304 sind gueltige Antworten ohne Inhalt. Sie als Fehler
+            # zu buchen waere dieselbe Verwechslung wie bei 202: die Quelle
+            # hat geantwortet, sie hat nur nichts zu sagen.
+            if code == 204:
+                logger.info(f"ℹ️ HTTP 204 (kein Inhalt) fuer {source_name}")
+                return Abrufergebnis(status=code)
+            if code == 304:
+                logger.info(f"ℹ️ HTTP 304 (unveraendert) fuer {source_name}")
+                return Abrufergebnis(status=code)
+            if code >= 400:
+                logger.error(f"❌ HTTP {code} fuer {source_name}")
+                return Abrufergebnis(status=code, fehler=f"HTTP {code}")
+            if code != 200:
+                logger.warning(f"⚠️ HTTP {code} fuer {source_name}, wird trotzdem gelesen")
+
             # Parse RSS-Feed
             feed = await asyncio.get_event_loop().run_in_executor(
                 None, feedparser.parse, response.text
             )
-            
+
             if feed.bozo:
                 logger.warning(f"⚠️ Feed parsing warning for {source_name}: {feed.bozo_exception}")
-            
+
+            if not feed.entries:
+                # HTTP 200, aber nichts Lesbares. Genau so sehen die Quellen
+                # aus, deren Feed-Adresse auf eine HTML-Seite umgezogen ist
+                # (EDPB News, Datenschutz.org, Stand 14.09.2026). Das frueher
+                # hier folgende "✅ 0 neue Items gespeichert" war die Unwahrheit,
+                # die beide monatelang verdeckt hat.
+                grund = f"bozo: {feed.bozo_exception}" if feed.bozo else "Feed ohne Eintraege"
+                logger.error(
+                    f"❌ {source_name}: HTTP {code}, aber kein lesbarer Feed ({grund}) "
+                    f"Adresse pruefen: {response.url}"
+                )
+                return Abrufergebnis(status=code, fehler=f"kein lesbarer Feed ({grund})")
+
             new_items = 0
             
             for entry in feed.entries[:20]:  # Nur die neuesten 20 Items
@@ -156,12 +308,19 @@ class NewsService:
                     logger.error(f"Error processing entry from {source_name}: {e}")
                     continue
             
-            logger.info(f"✅ {source_name}: {new_items} neue Items gespeichert")
-            return new_items
-            
+            logger.info(
+                f"✅ {source_name}: {new_items} neue Items gespeichert "
+                f"({len(feed.entries)} Eintraege gelesen)"
+            )
+            return Abrufergebnis(
+                neue_items=new_items,
+                eintraege=len(feed.entries),
+                status=code,
+            )
+
         except Exception as e:
             logger.error(f"Error fetching feed {source_name}: {e}")
-            return 0
+            return Abrufergebnis(fehler=f"{type(e).__name__}: {e}")
     
     def _extract_text(self, html_content: str) -> str:
         """Extrahiert Text aus HTML"""

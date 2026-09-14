@@ -21,7 +21,15 @@ prüft dieser Wächter:
      wiederherstellbar? Ergänzt am 07.09.2026 — bis dahin gab es weder
      Zeitplan noch Prüfung, und eine stillschweigend gescheiterte Sicherung
      wäre genauso unsichtbar gewesen wie gar keine.
-  7. Kernrouten: antworten die Endpunkte, die jeder Kunde anfasst?
+  7. Rechtsquellen: liefern die RSS-Quellen der Rechtsaenderungs-
+     Ueberwachung noch? Ergaenzt am 14.09.2026. Bis dahin waren drei der
+     13 aktiven Quellen seit ihrer Anlage stumm (EU Parlament: HTTP 202
+     als Fehler gebucht; EDPB News und Datenschutz.org: Feed-Adresse
+     leitet auf eine HTML-Seite um, HTTP 200 ohne lesbaren Inhalt) —
+     und der Lauf meldete jeden Morgen "Feed fetch completed". Die
+     Ueberwachung ist ein verkauftes Merkmal: eine stumme Quelle heisst,
+     eine Rechtsaenderung wird nicht bemerkt.
+  8. Kernrouten: antworten die Endpunkte, die jeder Kunde anfasst?
      Ergänzt am 01.09.2026, weil /api/user/profile und
      /api/legal-ai/archive tagelang 500 warfen und der Wächter
      trotzdem stündlich "alles ruhig" meldete: die Seiten werden zu
@@ -40,6 +48,8 @@ import logging
 import os
 import time
 import sys
+
+import feedparser
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -69,6 +79,14 @@ MONITOR_MAX_ALTER_STUNDEN = 26   # Tageslauf 05:00 + Puffer
 SICHERUNG_MAX_ALTER_STUNDEN = 30  # Tageslauf 02:30 + Puffer
 SICHERUNG_MARKE = Path(os.getenv("WAECHTER_SICHERUNG_MARKE",
                                  "/data/waechter/datensicherung.json"))
+
+# Rechtsquellen. Eine Quelle gilt erst nach 30 Tagen ohne Eintrag als
+# verdaechtig — Behoerdenfeeds veroeffentlichen wirklich selten. Erst dann
+# wird sie live nachgemessen, damit der Waechter nicht stuendlich 13 fremde
+# Server abklappert.
+QUELLEN_LEER_TAGE = int(os.getenv("WAECHTER_QUELLEN_LEER_TAGE", "30"))
+# Wenn ueberhaupt keine Quelle mehr etwas liefert, ist die ganze Saeule tot.
+QUELLEN_STILLE_TAGE = int(os.getenv("WAECHTER_QUELLEN_STILLE_TAGE", "7"))
 
 # Kernrouten, stellvertretend für die vier Säulen plus Konto und Bezahlung.
 # Bewusst kurz: der Wächter soll Ausfälle melden, nicht die API testen.
@@ -202,6 +220,123 @@ async def pruefe_datenbank() -> list:
                 f"(Art. 12: unverzüglich, spätestens ein Monat). "
                 f"POST /api/gdpr/admin/confirm-deletion.",
             ))
+    finally:
+        await conn.close()
+    return befunde
+
+
+def bewerte_quelle(name: str, eintraege_gesamt: int, status: int,
+                   eintraege_im_feed: int, fehler: str) -> tuple:
+    """Eine Quelle einordnen, die seit QUELLEN_LEER_TAGE nichts geliefert hat.
+
+    Reine Entscheidung, damit sie ohne Netz und ohne DB pruefbar ist.
+    Rueckgabe: (schluessel, text) oder None (= kein Befund).
+
+    Die Unterscheidung, auf die es ankommt: eine Quelle, die einen lesbaren
+    Feed liefert und nur selten veroeffentlicht (BayLDA: 20 Eintraege, der
+    neueste von Maerz), ist gesund. Eine Quelle, die HTTP 200 und nichts
+    Lesbares liefert, ist kaputt — sieht aber im Log genauso aus. Wer beide
+    gleich behandelt, baut entweder eine Fehlalarm-Maschine oder einen
+    Waechter, der den echten Ausfall verschweigt.
+    """
+    stelle = f"rss_feed_sources: {name}"
+    if fehler:
+        return (f"quelle-abruf:{name}",
+                f"Rechtsquelle „{name}“ nicht abrufbar: {fehler}. "
+                f"Seit {QUELLEN_LEER_TAGE} Tagen kein Eintrag. {stelle}")
+    if status in (204, 304):
+        # Gueltige Antwort ohne Inhalt. Kein Ausfall.
+        return None
+    if status >= 400:
+        return (f"quelle-abruf:{name}",
+                f"Rechtsquelle „{name}“ antwortet mit HTTP {status}. "
+                f"Seit {QUELLEN_LEER_TAGE} Tagen kein Eintrag. {stelle}")
+    if eintraege_im_feed == 0:
+        return (f"quelle-leer:{name}",
+                f"Rechtsquelle „{name}“ antwortet mit HTTP {status}, liefert "
+                f"aber keinen lesbaren Feed (0 Eintraege). Typisch fuer eine "
+                f"Feed-Adresse, die inzwischen auf eine HTML-Seite umleitet. "
+                f"{stelle}")
+    if eintraege_gesamt == 0:
+        return (f"quelle-ohne-treffer:{name}",
+                f"Rechtsquelle „{name}“ liefert {eintraege_im_feed} Eintraege, "
+                f"aber seit ihrer Anlage wurde kein einziger gespeichert. "
+                f"Stichwortfilter (keywords) oder Speicherung pruefen. {stelle}")
+    # Feed lebt und hat schon geliefert — veroeffentlicht nur gerade nichts.
+    return None
+
+
+async def pruefe_rechtsquellen() -> list:
+    """Liefern die RSS-Quellen der Rechtsaenderungs-Ueberwachung noch?
+
+    Gemessen wird die Zieltabelle `legal_news`, nicht der Rueckgabewert des
+    Abrufs. Der sagte am 14.09.2026 elf Morgen in Folge "11 Feeds
+    verarbeitet", waehrend drei Quellen nie einen Eintrag erzeugt hatten.
+
+    Nur Quellen, die in der Tabelle auffaellig sind, werden live nachgemessen
+    — und zwar mit demselben Abruf, den der Dienst benutzt (NewsService.
+    _abrufen). Ein Waechter, der anders abruft als das Produkt, bewacht
+    seinen eigenen Code.
+    """
+    import asyncpg
+    from news_service import NewsService
+
+    befunde = []
+    abruf = NewsService(None)  # _abrufen braucht den Pool nicht
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        aktive = await conn.fetch(
+            f"""
+            SELECT s.name, s.url,
+                   (SELECT count(*) FROM legal_news n WHERE n.source = s.name)
+                       AS gesamt,
+                   (SELECT count(*) FROM legal_news n WHERE n.source = s.name
+                        AND n.fetched_date >= NOW() - INTERVAL '{QUELLEN_LEER_TAGE} days')
+                       AS frisch
+            FROM rss_feed_sources s
+            WHERE s.is_active = TRUE
+            ORDER BY s.id
+            """
+        )
+        if not aktive:
+            return [("quellen-keine-aktive",
+                     "Keine einzige aktive Rechtsquelle konfiguriert. Die "
+                     "Rechtsaenderungs-Ueberwachung laeuft ins Leere.")]
+
+        # 1) Saeulen-Puls: kommt ueberhaupt noch etwas herein?
+        juengster = await conn.fetchval("SELECT MAX(fetched_date) FROM legal_news")
+        if juengster:
+            alter = datetime.now() - juengster
+            if alter > timedelta(days=QUELLEN_STILLE_TAGE):
+                befunde.append((
+                    "quellen-stille",
+                    f"Seit {alter.days} Tagen kein einziger neuer Rechts-Eintrag "
+                    f"aus {len(aktive)} aktiven Quellen (Soll: taeglich 06:00, "
+                    f"cronjobs/fetch_news.py). /var/log/complyo-news-fetch.log.",
+                ))
+
+        # 2) Die still gebliebenen Quellen einzeln nachmessen.
+        stumm = [q for q in aktive if q["frisch"] == 0]
+        for q in stumm:
+            status, eintraege, fehler = 0, 0, ""
+            try:
+                response, fehler = await abruf._abrufen(q["url"], q["name"])
+                if response is not None:
+                    status = response.status_code
+                    if status < 400 and status not in (204, 304):
+                        gelesen = feedparser.parse(response.text)
+                        eintraege = len(gelesen.entries)
+            except Exception as e:
+                fehler = f"{type(e).__name__}: {e}"
+            befund = bewerte_quelle(q["name"], int(q["gesamt"]), status,
+                                    eintraege, fehler)
+            if befund:
+                befunde.append(befund)
+
+        liefernd = len(aktive) - len(stumm)
+        logger.info(f"Rechtsquellen: {liefernd} von {len(aktive)} aktiven Quellen "
+                    f"haben in {QUELLEN_LEER_TAGE} Tagen geliefert, "
+                    f"{len(stumm)} stumm, {len(befunde)} Befund(e).")
     finally:
         await conn.close()
     return befunde
@@ -581,6 +716,11 @@ async def main() -> int:
     except Exception as e:
         befunde.append(("routen-pruefung-abgestuerzt",
                         f"Kernrouten-Prüfung fehlgeschlagen: {e}"))
+    try:
+        befunde.extend(await pruefe_rechtsquellen())
+    except Exception as e:
+        befunde.append(("quellen-pruefung-abgestuerzt",
+                        f"Pruefung der Rechtsquellen fehlgeschlagen: {e}"))
     try:
         befunde.extend(pruefe_datensicherung())
     except Exception as e:
