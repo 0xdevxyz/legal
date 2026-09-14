@@ -77,18 +77,27 @@ STRIPE_PRICES = {
     "monitor_monthly": os.getenv("STRIPE_PRICE_MONITOR_MONTHLY", None),  # 39€/Monat
     "monitor_yearly":  os.getenv("STRIPE_PRICE_MONITOR_YEARLY", None),   # 390€/Jahr
     # ── Agency Add-ons (greifen, wenn die 25 Projekte voll sind) ──────────────
-    # agency_extra: +1 Website, 29€/Monat (nutzt den Single-Preis als Fallback)
-    # Beide Namen gelten: addon_payment_routes liest denselben Preis unter
-    # STRIPE_PRICE_AGENCY_SITES_EXTRA. Zwei Namen fuer eine Sache sind eine
-    # Falle beim Pflegen der .env.
-    "agency_extra_monthly": os.getenv("STRIPE_PRICE_AGENCY_EXTRA_SITE")
-        or os.getenv("STRIPE_PRICE_AGENCY_SITES_EXTRA")
-        or os.getenv("STRIPE_PRICE_SINGLE_MODULE", None),
-    # agency2: weitere 25 Websites (fällt auf den regulären Agency-Preis zurück)
-    "agency2_monthly": os.getenv("STRIPE_PRICE_AGENCY2_MONTHLY")
-        or os.getenv("STRIPE_PRICE_AGENCY_MONTHLY", None),
-    "agency2_yearly":  os.getenv("STRIPE_PRICE_AGENCY2_YEARLY")
-        or os.getenv("STRIPE_PRICE_AGENCY_YEARLY", None),
+    #
+    # Jeder Preis hat seine EIGENE Variable, ohne Rueckfall auf einen fremden
+    # Preis. Korrigiert am 14.09.2026, vor dem Anlegen der Live-Preise:
+    #
+    # `agency_extra` ist der Zusatzplatz fuer EINE Website zu 29 EUR/Monat
+    # (Agentur-Seite, Knopf "+1 Website"). `agency_sites_extra` im Add-on-
+    # Katalog ist ein anderes Produkt: 25 Sites zu 200 EUR/Monat. Bis heute
+    # lasen beide dieselben zwei Variablennamen wechselseitig. Wer die
+    # 200-EUR-Kennung eingetragen haette, haette damit den 29-EUR-Knopf auf
+    # 200 EUR gestellt — dieselbe Klasse Fehler wie "49 EUR gezeigt, 89 EUR
+    # gebucht" vom 10.09.
+    #
+    # Und kein Rueckfall auf STRIPE_PRICE_SINGLE_MODULE mehr: der lieferte
+    # zufaellig denselben Betrag, haette aber bei der naechsten Preisrunde
+    # still den Einzelsaeulen-Preis fuer einen Agentur-Zusatzplatz gebucht.
+    # Fehlt die Kennung, lehnt der Checkout ab: "Dieser Tarif ist derzeit
+    # nicht buchbar" statt eines falschen Betrags.
+    "agency_extra_monthly": os.getenv("STRIPE_PRICE_AGENCY_EXTRA_SITE"),
+    # agency2: weitere 25 Websites, 599 EUR/Monat (Agentur-Seite, "Agency Plan 2")
+    "agency2_monthly": os.getenv("STRIPE_PRICE_AGENCY2_MONTHLY"),
+    "agency2_yearly":  os.getenv("STRIPE_PRICE_AGENCY2_YEARLY"),
 }
 
 # Websites-Limit je Plan (für user_limits nach Checkout)

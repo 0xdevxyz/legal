@@ -126,11 +126,12 @@ MONTHLY_ADDONS = {
         "limits_by_plan": {
             "agency": {"extra_sites": 25},
         },
-        "stripe_price_id": (os.getenv("STRIPE_PRICE_AGENCY_SITES_EXTRA")
-                          # stripe_routes liest denselben Preis unter
-                          # STRIPE_PRICE_AGENCY_EXTRA_SITE. Beide Namen
-                          # gelten, damit ein Eintrag nicht am Namen scheitert.
-                          or os.getenv("STRIPE_PRICE_AGENCY_EXTRA_SITE")),
+        # NUR dieser Name. STRIPE_PRICE_AGENCY_EXTRA_SITE gehoert zu einem
+        # ANDEREN Produkt (Zusatzplatz fuer eine Website, 29 EUR/Monat auf der
+        # Agentur-Seite). Bis zum 14.09.2026 lasen beide Stellen beide Namen
+        # wechselseitig; wer diesen 200-EUR-Preis eingetragen haette, haette
+        # den 29-EUR-Knopf auf 200 EUR gestellt.
+        "stripe_price_id": os.getenv("STRIPE_PRICE_AGENCY_SITES_EXTRA"),
         "badge": "ADD-ON",
         "compatible_plans": ["agency"],
     }

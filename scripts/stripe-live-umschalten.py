@@ -60,7 +60,42 @@ KATALOG = [
     ("complyo_monitor_yearly",    "complyo Monitoring",   39000,  "year",  "STRIPE_PRICE_MONITOR_YEARLY"),
     ("complyo_expert_einmalig",   "complyo Expert",       399000, None,    "STRIPE_PRICE_EXPERT"),
     ("complyo_update_monthly",    "complyo Expert",       2900,   "month", "STRIPE_PRICE_UPDATE_MONTHLY"),
+
+    # ── Agentur-Erweiterungen, buchbar wenn die 25 Projekte voll sind ────────
+    # Beide Knoepfe stehen auf /agency, sobald das Limit erreicht ist.
+    ("complyo_agency_extra_site", "complyo Agentur Zusatzplatz",
+     2900,   "month", "STRIPE_PRICE_AGENCY_EXTRA_SITE"),
+    ("complyo_agency2_monthly",   "complyo Agentur Folgepaket",
+     59900,  "month", "STRIPE_PRICE_AGENCY2_MONTHLY"),
+    ("complyo_agency2_yearly",    "complyo Agentur Folgepaket",
+     599000, "year",  "STRIPE_PRICE_AGENCY2_YEARLY"),
+
+    # ── Add-ons aus dem Add-on-Katalog (backend/addon_payment_routes.py) ─────
+    # Die Betraege sind die, die der Katalog dem Kunden anzeigt. Weichen sie
+    # ab, zeigt die Oberflaeche einen Preis und Stripe bucht einen anderen;
+    # `pruefen` vergleicht deshalb beide Seiten.
+    ("complyo_comploai_guard",    "complyo ComploAI Guard",
+     9900,   "month", "STRIPE_PRICE_COMPLOAI_GUARD"),
+    ("complyo_priority_support",  "complyo Priority Support",
+     8900,   "month", "STRIPE_PRICE_PRIORITY_SUPPORT"),
+    ("complyo_agency_sites_extra", "complyo Extra Sites Paket",
+     20000,  "month", "STRIPE_PRICE_AGENCY_SITES_EXTRA"),
+    ("complyo_expert_ai_audit",   "complyo Expert AI Act Audit",
+     299900, None,    "STRIPE_PRICE_EXPERT_AUDIT"),
+    ("complyo_implementation",    "complyo AI Act Implementation Support",
+     199900, None,    "STRIPE_PRICE_IMPLEMENTATION"),
+    ("complyo_custom_integration", "complyo Custom Integration",
+     399900, None,    "STRIPE_PRICE_CUSTOM_INTEGRATION"),
 ]
+
+# Kein Preis darf an zwei Stellen haengen. Bis zum 14.09.2026 lasen der
+# Zusatzplatz (+1 Website, 29 EUR) und das Extra-Sites-Paket (+25 Sites,
+# 200 EUR) dieselben zwei Variablennamen wechselseitig; eine gepflegte Kennung
+# haette den einen Knopf auf den Preis des anderen gestellt.
+_variablen = [k[4] for k in KATALOG]
+assert len(_variablen) == len(set(_variablen)), "Variable doppelt im Katalog"
+_lookups = [k[0] for k in KATALOG]
+assert len(_lookups) == len(set(_lookups)), "lookup_key doppelt im Katalog"
 
 # Welche Ereignisse die beiden Webhook-Handler tatsächlich auswerten
 # (stripe_routes.py Zeile ~654 ff., addon_payment_routes.py Zeile ~534 ff.).
@@ -234,6 +269,54 @@ def anlegen(key: str) -> int:
 # pruefen
 # ---------------------------------------------------------------------------
 
+# Was die Oberflaeche dem Kunden als Preis anzeigt, je lookup_key. Quelle sind
+# die beiden Kataloge im Backend, nicht eine zweite Liste von Hand: eine Liste,
+# die man pflegen muss, laeuft irgendwann auseinander, und dann zeigt die
+# Oberflaeche einen Preis und Stripe bucht einen anderen. Genau das war am
+# 10.09.2026 der Fall (49 EUR gezeigt, 89 EUR gebucht).
+BEWORBEN = {
+    # lookup_key: (Datei, Schluessel im Katalog, Feldname)
+    "complyo_comploai_guard":     ("backend/addon_payment_routes.py", "comploai_guard", "price_monthly"),
+    "complyo_priority_support":   ("backend/addon_payment_routes.py", "priority_support", "price_monthly"),
+    "complyo_agency_sites_extra": ("backend/addon_payment_routes.py", "agency_sites_extra", "price_monthly"),
+    "complyo_expert_ai_audit":    ("backend/addon_payment_routes.py", "expert_ai_audit", "price"),
+    "complyo_implementation":     ("backend/addon_payment_routes.py", "implementation_support", "price"),
+    "complyo_custom_integration": ("backend/addon_payment_routes.py", "custom_integration", "price"),
+    "complyo_pro_monthly":        ("backend/stripe_routes.py", '"id": "pro"', "price_monthly"),
+    "complyo_pro_yearly":         ("backend/stripe_routes.py", '"id": "pro"', "price_yearly"),
+    "complyo_agency_monthly":     ("backend/stripe_routes.py", '"id": "agency"', "price_monthly"),
+    "complyo_agency_yearly":      ("backend/stripe_routes.py", '"id": "agency"', "price_yearly"),
+    "complyo_monitor_monthly":    ("backend/stripe_routes.py", '"id": "monitor"', "price_monthly"),
+    "complyo_monitor_yearly":     ("backend/stripe_routes.py", '"id": "monitor"', "price_yearly"),
+}
+
+
+def beworbene_betraege(wurzel: str) -> dict:
+    """Liest die angezeigten Preise aus den Backend-Katalogen, in Cent."""
+    import re as _re
+    quellen = {}
+    ergebnis = {}
+    for lookup, (datei, schluessel, feld) in BEWORBEN.items():
+        pfad = os.path.join(wurzel, datei)
+        if pfad not in quellen:
+            try:
+                with open(pfad, encoding="utf-8") as fh:
+                    quellen[pfad] = fh.read()
+            except OSError:
+                quellen[pfad] = ""
+        text = quellen[pfad]
+        if schluessel.startswith('"id"'):
+            i = text.find(schluessel)
+        else:
+            i = text.find('"%s": {' % schluessel)
+        if i < 0:
+            continue
+        m = _re.search(r'"%s": (\d+)' % feld, text[i:i + 1200])
+        if m:
+            ergebnis[lookup] = int(m.group(1)) * 100
+    return ergebnis
+
+
 def lies_env(pfad: str) -> dict:
     werte = {}
     with open(pfad, encoding="utf-8") as fh:
@@ -280,6 +363,17 @@ def pruefen(env_pfad: str) -> int:
         ist_intervall = (p.get("recurring") or {}).get("interval")
         if ist_intervall != intervall:
             befunde.append(f"{variable}={pid}: Intervall {ist_intervall} statt {intervall}.")
+
+    # Zeigt die Oberflaeche denselben Betrag, den Stripe bucht?
+    wurzel = os.path.dirname(os.path.abspath(env_pfad))
+    beworben = beworbene_betraege(wurzel)
+    for lookup, produktname, betrag, intervall, variable in KATALOG:
+        erwartet = beworben.get(lookup)
+        if erwartet is not None and erwartet != betrag:
+            befunde.append(
+                f"{produktname} ({lookup}): die Oberflaeche zeigt "
+                f"{erwartet / 100:.2f} EUR, angelegt sind {betrag / 100:.2f} EUR."
+            )
 
     webhooks = {w["url"]: w for w in _alle(key, "/webhook_endpoints")}
     for url, variable, ereignisse in WEBHOOKS:

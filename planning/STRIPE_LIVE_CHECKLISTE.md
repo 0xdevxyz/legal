@@ -34,7 +34,7 @@ getestet. Es fehlt nur der Schlüssel.
 
        STRIPE_LIVE_SECRET_KEY=sk_live_... python3 scripts/stripe-live-umschalten.py anlegen
 
-   Legt fuenf Produkte, zehn Preise und zwei Webhook-Endpunkte an, idempotent
+   Legt 13 Produkte, 19 Preise und zwei Webhook-Endpunkte an, idempotent
    (vorhandene werden über `lookup_key` wiedererkannt). Gibt am Ende den
    fertigen `.env`-Block aus, inklusive der beiden Webhook-Secrets, die Stripe
    nur bei der Anlage zeigt.
@@ -51,7 +51,10 @@ getestet. Es fehlt nur der Schlüssel.
 
    Muss „Alles stimmig" melden: Live-Modus, jede Preis-ID vorhanden, aktiv,
    richtiger Betrag und Intervall, beide Webhooks registriert, compose reicht
-   jede Variable durch. Der Betriebswächter hört dann von selbst auf zu
+   jede Variable durch. Zusaetzlich vergleicht die Pruefung den angelegten
+   Betrag mit dem, den die Oberflaeche anzeigt (12 der 19 Preise stehen als
+   Zahl im Backend-Katalog): zeigt die Seite 49 und bucht Stripe 89, faellt
+   das hier auf und nicht beim ersten Kunden. Der Betriebswächter hört dann von selbst auf zu
    melden.
 8. **Testkauf mit echter Karte**: Pro monatlich buchen, im Dashboard prüfen,
    dass `user_limits.plan_type` auf pro steht und `user_modules` freigeschaltet
@@ -61,6 +64,25 @@ getestet. Es fehlt nur der Schlüssel.
    weil der Checkout echte Karten ablehnte. Die alte Startseite liegt unter
    `/produkt` (noindex). Beim Zurücklegen `noindex` und `canonical` mitziehen
    (siehe Kommentar in `landing-react/src/app/page.tsx`).
+
+## Eine Preisfrage vor dem Anlegen (14.09.2026)
+
+Es gibt zwei Wege zu denselben 25 zusaetzlichen Agentur-Projekten, zu
+verschiedenen Preisen:
+
+| Weg | Angebot | Preis |
+|---|---|---|
+| Agentur-Seite, Knopf "Agency Plan 2" | +25 Websites | 599 EUR/Monat |
+| Add-on-Seite, "Extra Sites Paket" | +25 Sites | 200 EUR/Monat |
+
+Beide sind nach dem Anlegen buchbar. Wer die Add-on-Seite findet, zahlt ein
+Drittel. Vor dem Live-Schalten entscheiden: entweder "Agency Plan 2" auf 200
+senken, oder das Extra-Sites-Paket auf 599 heben, oder eines von beidem aus
+der Oberflaeche nehmen. Das Skript legt beide Preise an; welcher Knopf stehen
+bleibt, ist eine Preisentscheidung, keine technische.
+
+Der Zusatzplatz (+1 Website, 29 EUR/Monat) ist davon unberuehrt, er ist ein
+eigenes Produkt mit eigener Kennung.
 
 ## Was bewusst nicht im Skript steckt
 

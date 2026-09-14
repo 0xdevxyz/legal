@@ -8,9 +8,13 @@ Gemessen am 10.09.2026 gegen die laufende Umgebung:
     Gesetzt ist `STRIPE_SECRET_KEY`. Der Add-on-Kaufweg hatte damit gar keinen
     Schluessel und haette auch mit gepflegter Preis-ID nichts verkauft.
   * Der Zusatzplatz einer Agentur heisst in `stripe_routes`
-    `STRIPE_PRICE_AGENCY_EXTRA_SITE`, in `addon_payment_routes`
-    `STRIPE_PRICE_AGENCY_SITES_EXTRA`. Zwei Namen fuer eine Sache sind eine
-    Falle beim Pflegen der .env: einer davon wird gepflegt, der andere gilt.
+    `STRIPE_PRICE_AGENCY_EXTRA_SITE`, im Add-on-Katalog
+    `STRIPE_PRICE_AGENCY_SITES_EXTRA`. Damals als "zwei Namen fuer eine Sache"
+    gelesen und wechselseitig verknuepft. Am 14.09.2026 beim Anlegen der
+    Live-Preise nachgesehen: es sind ZWEI Produkte. Der Zusatzplatz gibt
+    +1 Website fuer 29 EUR/Monat, das Extra-Sites-Paket +25 Sites fuer
+    200 EUR/Monat. Wer die 200-EUR-Kennung gepflegt haette, haette damit den
+    29-EUR-Knopf auf 200 EUR gestellt.
 
 Beides ist die Art Fehler, die erst beim ersten echten Kauf auffaellt.
 """
@@ -34,12 +38,48 @@ def test_addon_kaufweg_nutzt_denselben_schluessel_wie_der_hauptweg():
         "Hauptbezahlweg. Gesetzt ist STRIPE_SECRET_KEY.")
 
 
-def test_zusatzplatz_kennt_beide_namen():
-    for datei in ("stripe_routes.py", "addon_payment_routes.py"):
-        text = _quelle(datei)
-        assert "STRIPE_PRICE_AGENCY_EXTRA_SITE" in text and \
-               "STRIPE_PRICE_AGENCY_SITES_EXTRA" in text, (
-            f"{datei} kennt nur einen der beiden Namen fuer den Agentur-Zusatzplatz")
+def test_zusatzplatz_und_extra_sites_paket_bleiben_getrennt():
+    """Zwei Produkte, zwei Variablen, kein wechselseitiger Rueckfall.
+
+    Sonst stellt eine gepflegte Kennung den Preis des jeweils anderen Knopfes.
+    Geprueft werden die tatsaechlich gelesenen Namen, nicht der Fliesstext:
+    die Kommentare nennen beide Namen absichtlich, um die Verwechslung zu
+    erklaeren.
+    """
+    def _gelesen(text, ab, laenge):
+        fenster = text[text.index(ab):][:laenge]
+        return set(re.findall(r'getenv\(\s*["\']([A-Z_0-9]+)["\']', fenster))
+
+    haupt = _gelesen(_quelle("stripe_routes.py"), '"agency_extra_monthly"', 200)
+    assert haupt == {"STRIPE_PRICE_AGENCY_EXTRA_SITE"}, (
+        f"Der Zusatzplatz (+1 Website, 29 EUR) liest {haupt}. Ein Rueckfall auf "
+        "das Extra-Sites-Paket (200 EUR) oder die Einzelsaeule stellt still "
+        "einen fremden Preis ein.")
+
+    addon = _gelesen(_quelle("addon_payment_routes.py"), '"agency_sites_extra"', 1200)
+    assert addon == {"STRIPE_PRICE_AGENCY_SITES_EXTRA"}, (
+        f"Das Extra-Sites-Paket (+25 Sites, 200 EUR) liest {addon}")
+
+
+def test_jede_katalog_variable_erreicht_den_container():
+    """Eine Kennung in der .env, die compose nicht durchreicht, ist wirkungslos.
+
+    Genau so war der 49-Euro-Preis am 10.09.2026 angelegt, eingetragen und
+    trotzdem ohne Wirkung.
+    """
+    wurzel = os.path.dirname(BACKEND)
+    skript = open(os.path.join(wurzel, "scripts", "stripe-live-umschalten.py"),
+                  encoding="utf-8").read()
+    compose = open(os.path.join(wurzel, "docker-compose.yml"), encoding="utf-8").read()
+    variablen = re.findall(r'"(STRIPE_PRICE_[A-Z0-9_]+)"\)?,?\n?\s*$', skript, re.M)
+    variablen = re.findall(r'"(STRIPE_PRICE_[A-Z0-9_]+)"\),', skript) or \
+        re.findall(r'"(STRIPE_PRICE_[A-Z0-9_]+)"\)', skript)
+    katalog = skript[skript.index("KATALOG = ["):skript.index("\n]", skript.index("KATALOG = ["))]
+    variablen = re.findall(r'"(STRIPE_PRICE_[A-Z0-9_]+)"', katalog)
+    assert len(variablen) >= 19, f"Katalog unerwartet klein: {len(variablen)}"
+    assert len(variablen) == len(set(variablen)), "Variable doppelt im Katalog"
+    fehlen = [v for v in variablen if f"{v}=${{{v}" not in compose]
+    assert not fehlen, f"docker-compose.yml reicht nicht durch: {fehlen}"
 
 
 def test_early_access_faellt_auf_den_vollen_preis_zurueck():
