@@ -45,6 +45,11 @@ getestet. Es fehlt nur der Schlüssel.
 
        cd /home/clawd/saas/legal && docker compose up -d backend
 
+   Steht seit dem letzten Bau neuer Code im Repo, vorher bauen. Der Code ist
+   ins Image gebacken, `up -d` allein nimmt ihn nicht mit:
+
+       docker compose build backend && docker compose up -d backend
+
 7. **Prüfen**:
 
        python3 scripts/stripe-live-umschalten.py pruefen
