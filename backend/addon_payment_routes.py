@@ -664,14 +664,53 @@ async def handle_addon_subscription_cancelled(subscription):
     subscription_id = subscription['id']
     try:
         async with db_service.get_connection() as conn:
-            await conn.execute(
+            # Erst lesen, was dieses Add-on gegeben hat, dann abmelden.
+            #
+            # Das Website-Kontingent muss mit zurueck (15.09.2026). Der Kauf
+            # erhoeht `websites_max` additiv; die Kuendigung setzte bisher nur
+            # `user_addons.status` und liess das Kontingent stehen. Wer also
+            # das Extra-Sites-Paket einen Monat lang bucht, behielt die 25
+            # Plaetze fuer immer. Spiegelbild des Fehlers, den die Kuendigung
+            # im Hauptkaufweg hatte.
+            #
+            # Nur die aktive Zeile zaehlt: sonst zieht eine wiederholte
+            # Zustellung desselben Ereignisses das Kontingent mehrfach ab.
+            zeile = await conn.fetchrow(
                 """
                 UPDATE user_addons
                 SET status = 'cancelled', cancelled_at = NOW()
-                WHERE stripe_subscription_id = $1
+                WHERE stripe_subscription_id = $1 AND status = 'active'
+                RETURNING user_id, addon_key, limits
                 """,
                 subscription_id
             )
+            if not zeile:
+                logger.info(f"Add-on subscription cancelled (war schon abgemeldet): {subscription_id}")
+                return
+
+            grenzen = zeile["limits"]
+            if isinstance(grenzen, str):
+                try:
+                    grenzen = json.loads(grenzen)
+                except (ValueError, TypeError):
+                    grenzen = {}
+            extra_sites = (grenzen or {}).get("extra_sites")
+            if extra_sites:
+                # GREATEST(...,1): ein Konto behaelt mindestens seinen einen
+                # Platz, auch wenn die Buchhaltung einmal aus dem Tritt kommt.
+                neu_max = await conn.fetchval(
+                    """
+                    UPDATE user_limits
+                    SET websites_max = GREATEST(COALESCE(websites_max, 0) - $2, 1)
+                    WHERE user_id = $1
+                    RETURNING websites_max
+                    """,
+                    int(zeile["user_id"]), int(extra_sites)
+                )
+                logger.info(
+                    f"Add-on {zeile['addon_key']} gekuendigt: {extra_sites} Plaetze "
+                    f"zurueckgenommen, user {zeile['user_id']} steht jetzt auf {neu_max}"
+                )
         logger.info(f"Add-on subscription cancelled: {subscription_id}")
     except Exception as e:
         logger.error(f"Error cancelling add-on subscription {subscription_id}: {e}")

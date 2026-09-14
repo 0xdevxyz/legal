@@ -39,6 +39,22 @@ EXEMPT_PATHS: Set[str] = {
     "/api/auth/passwort-neu",
     "/api/auth/email-bestaetigen",
     "/api/auth/login/2fa",
+    # Die beiden Stripe-Webhooks (15.09.2026). Stripe schickt seine Ereignisse
+    # ohne Sitzung und ohne Cookie; der Double-Submit-Check kann hier nie
+    # aufgehen, und die Schranke wies JEDES Ereignis mit 403 ab. Gemessen mit
+    # einem signierten Ereignis am Tag nach dem Live-Schalten: eine Zahlung
+    # haette den Tarif nicht freigeschaltet, eine Kuendigung waere nie
+    # angekommen. Stripe wiederholt drei Tage lang und gibt dann auf.
+    #
+    # Ungeschuetzt sind die Routen dadurch nicht, im Gegenteil: sie ziehen ihre
+    # Berechtigung aus der Stripe-Signatur (construct_event mit dem
+    # Webhook-Geheimnis), die ein fremder Aufrufer nicht faelschen kann. Genau
+    # das ist die Bedingung, unter der eine Ausnahme hier richtig ist.
+    #
+    # Der vorhandene Praefix "/api/webhooks/" (Mehrzahl) trifft diese Pfade
+    # nicht: sie heissen /api/stripe/webhook und /api/addons/webhook.
+    "/api/stripe/webhook",
+    "/api/addons/webhook",
     "/api/analyze",
     "/api/analyze-preview",
     # Entkoppelter Pruefweg (04.09.2026). Er wird von derselben oeffentlichen

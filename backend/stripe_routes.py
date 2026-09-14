@@ -728,7 +728,17 @@ async def handle_checkout_completed(session):
         logger.info(f"✅ User {user_id} upgraded to {plan}" + (f" (domain: {domain})" if domain else ""))
         
     except Exception as e:
+        # Weiterreichen, nicht schlucken (15.09.2026). Der Webhook antwortete
+        # bisher auch dann mit 200, wenn die Freischaltung scheiterte: Stripe
+        # hielt das Ereignis fuer zugestellt und wiederholte nie. Der Kunde
+        # haette bezahlt und nichts bekommen, und im Log stuende eine Zeile,
+        # die niemand liest.
+        #
+        # Mit 500 wiederholt Stripe ueber drei Tage mit wachsendem Abstand.
+        # Eine voruebergehende Stoerung (Datenbank kurz weg) heilt damit von
+        # selbst; eine dauerhafte meldet Stripe dem Kontoinhaber.
         logger.error(f"Error handling checkout completed: {e}")
+        raise
 
 async def handle_subscription_created(subscription):
     """Handle subscription creation"""
@@ -820,6 +830,28 @@ async def handle_subscription_deleted(subscription):
                 user_id
             )
             
+            # Die gebuchten Saeulen mit abschalten (15.09.2026).
+            #
+            # Vorher endete die Kuendigung hier: `user_limits` stand auf free,
+            # die Zeilen in `user_modules` blieben auf 'active'. Der Zugang
+            # wird aber aus BEIDEN abgeleitet (`_module_zugang` nimmt die
+            # gebuchten Module und legt die des Tarifs dazu), also behielt ein
+            # gekuendigtes Konto alle vier Saeulen weiter. Gemessen mit einem
+            # signierten Kuendigungs-Ereignis, einen Tag nach dem
+            # Live-Schalten.
+            #
+            # Nur die Module DIESER Subscription: wer daneben eine
+            # Einzelsaeule gebucht hat, soll sie behalten.
+            abgeschaltet = await conn.execute(
+                """
+                UPDATE user_modules
+                SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW()
+                WHERE user_id = $1 AND stripe_subscription_id = $2
+                  AND status = 'active'
+                """,
+                user_id, subscription_id
+            )
+
             # Update subscription status
             await conn.execute(
                 """
@@ -830,7 +862,8 @@ async def handle_subscription_deleted(subscription):
                 subscription_id
             )
             
-        logger.info(f"User {user_id} downgraded to free (subscription canceled)")
+        logger.info(f"User {user_id} downgraded to free (subscription canceled), "
+                    f"Saeulen abgeschaltet: {abgeschaltet}")
         
     except Exception as e:
         logger.error(f"Error handling subscription deleted: {e}")
