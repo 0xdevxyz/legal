@@ -380,7 +380,18 @@ async def create_checkout_session(
         logger.info(f"Checkout success_url={request.success_url}")
         checkout_session = stripe.checkout.Session.create(
             customer_email=user_email,
-            payment_method_types=['card', 'sepa_debit'],
+            # Keine feste Liste der Bezahlarten. Welche moeglich sind,
+            # entscheidet das Stripe-Dashboard (Automatic payment methods);
+            # Stripe zeigt dem Kunden dann, was fuer sein Land und die
+            # Waehrung freigeschaltet ist.
+            #
+            # Vorher stand hier ['card', 'sepa_debit']. Im Testmodus ist SEPA
+            # automatisch aktiv, im Live-Konto war es das nicht: beim ersten
+            # Aufruf nach dem Umschalten am 14.09.2026 antwortete JEDER
+            # Checkout mit 400 "The payment method type provided: sepa_debit
+            # is invalid" und der Kunde sah "Der Zahlungsanbieter ist gerade
+            # nicht erreichbar". Eine fest verdrahtete Liste bricht bei jeder
+            # Bezahlart, die im Konto (noch) nicht freigeschaltet ist.
             line_items=[{
                 'price': price_id,
                 'quantity': len(checkout_modules) if request.plan == 'single' else 1,
