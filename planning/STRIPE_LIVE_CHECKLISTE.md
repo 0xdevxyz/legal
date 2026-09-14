@@ -70,24 +70,19 @@ getestet. Es fehlt nur der Schlüssel.
    `/produkt` (noindex). Beim Zurücklegen `noindex` und `canonical` mitziehen
    (siehe Kommentar in `landing-react/src/app/page.tsx`).
 
-## Eine Preisfrage vor dem Anlegen (14.09.2026)
+## Entschieden: 25 Projekte kosten 599 EUR (14.09.2026)
 
-Es gibt zwei Wege zu denselben 25 zusaetzlichen Agentur-Projekten, zu
-verschiedenen Preisen:
+Es gab zwei Wege zu denselben 25 zusaetzlichen Agentur-Projekten, zu
+verschiedenen Preisen: "Agency Plan 2" auf der Agentur-Seite fuer 599 EUR und
+das "Extra Sites Paket" im Add-on-Katalog fuer 200 EUR. Wer die Add-on-Seite
+fand, zahlte ein Drittel fuer dieselbe Leistung.
 
-| Weg | Angebot | Preis |
-|---|---|---|
-| Agentur-Seite, Knopf "Agency Plan 2" | +25 Websites | 599 EUR/Monat |
-| Add-on-Seite, "Extra Sites Paket" | +25 Sites | 200 EUR/Monat |
+Daniel hat entschieden, das Extra-Sites-Paket auf **599 EUR/Monat**
+anzuheben. Beide Wege kosten jetzt gleich viel; `test_25_projekte_kosten_
+ueberall_gleich` haelt sie zusammen, damit sie nicht wieder auseinanderlaufen.
 
-Beide sind nach dem Anlegen buchbar. Wer die Add-on-Seite findet, zahlt ein
-Drittel. Vor dem Live-Schalten entscheiden: entweder "Agency Plan 2" auf 200
-senken, oder das Extra-Sites-Paket auf 599 heben, oder eines von beidem aus
-der Oberflaeche nehmen. Das Skript legt beide Preise an; welcher Knopf stehen
-bleibt, ist eine Preisentscheidung, keine technische.
-
-Der Zusatzplatz (+1 Website, 29 EUR/Monat) ist davon unberuehrt, er ist ein
-eigenes Produkt mit eigener Kennung.
+Der Zusatzplatz (+1 Website, 29 EUR/Monat) ist ein eigenes Produkt mit eigener
+Kennung und davon unberuehrt.
 
 ## Was bewusst nicht im Skript steckt
 

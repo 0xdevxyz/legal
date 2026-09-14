@@ -116,7 +116,12 @@ MONTHLY_ADDONS = {
     "agency_sites_extra": {
         "name": "Extra Sites Paket",
         "tagline": "25 weitere Client-Sites für Ihr Agentur-Dashboard",
-        "price_monthly": 200,
+        # 599 statt 200 seit dem 14.09.2026 (Entscheidung Daniel). Dasselbe
+        # Angebot gibt es auf der Agentur-Seite als "Agency Plan 2" fuer
+        # 599 EUR/Monat: zweimal 25 Projekte, vorher zu zwei Preisen. Wer die
+        # Add-on-Seite fand, zahlte ein Drittel. Ein Waechtertest haelt beide
+        # Betraege jetzt zusammen.
+        "price_monthly": 599,
         "currency": "eur",
         "features": [
             "25 zusätzliche verwaltete Sites",

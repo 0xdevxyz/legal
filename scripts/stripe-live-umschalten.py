@@ -78,8 +78,10 @@ KATALOG = [
      9900,   "month", "STRIPE_PRICE_COMPLOAI_GUARD"),
     ("complyo_priority_support",  "complyo Priority Support",
      8900,   "month", "STRIPE_PRICE_PRIORITY_SUPPORT"),
+    # Gleiches Angebot wie das Folgepaket (25 Projekte), deshalb derselbe
+    # Betrag. Bis zum 14.09.2026 standen hier 200 EUR.
     ("complyo_agency_sites_extra", "complyo Extra Sites Paket",
-     20000,  "month", "STRIPE_PRICE_AGENCY_SITES_EXTRA"),
+     59900,  "month", "STRIPE_PRICE_AGENCY_SITES_EXTRA"),
     ("complyo_expert_ai_audit",   "complyo Expert AI Act Audit",
      299900, None,    "STRIPE_PRICE_EXPERT_AUDIT"),
     ("complyo_implementation",    "complyo AI Act Implementation Support",
