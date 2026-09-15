@@ -421,13 +421,34 @@ class LegalUpdateIntegration:
                 if bumped:
                     result["rules_updated"] += 1
 
-            # 3. Betroffene Websites markieren
+            # 3. Websites markieren — aber nicht wegen eines Duplikats.
+            #
+            # Derselbe Guard, den Schritt 4 seit jeher hat. Dass er hier fehlte,
+            # war eine Inkonsistenz mit Folgen: ein Titel, den der Feed erneut
+            # ausspielt, setzte jede aktive Site wieder auf rescan_required und
+            # damit den naechsten Vollscan ueber alle Unterseiten in Gang,
+            # obwohl die Rechtslage sich nicht geaendert hatte. Gemessen am
+            # 15.09.2026: alle sieben ueberwachten Sites trugen das Kennzeichen
+            # dauerhaft, `scan_frequency` war dadurch wirkungslos.
+            #
+            # Bewusst NICHT geaendert: dass ALLE aktiven Sites markiert werden
+            # und nicht nur die "betroffenen". Eine Site ohne Cookie-Banner
+            # braucht die Pruefung bei einer Cookie-Entscheidung genauso, sie
+            # ist ja moeglicherweise gerade deshalb angreifbar. Eine Auswahl
+            # nach Kategorie waere eine Verengung mit Haftungsfolgen und keine
+            # Aufraeumarbeit.
             affected_categories = self._extract_affected_categories(legal_update)
-            websites_flagged = await self._flag_websites_for_rescan(
-                legal_update_id=update_id,
-                reason=legal_update.get("title", "Gesetzliche Änderung erkannt"),
-                affected_categories=affected_categories,
-            )
+            ist_duplikat = bool(update_id) and await self._is_duplicate_update(update_id)
+            if ist_duplikat:
+                logger.info(
+                    f"process_new_legal_update #{update_id}: Duplikat — keine Rescan-Markierung"
+                )
+                websites_flagged = 0
+            else:
+                websites_flagged = await self._flag_websites_for_rescan(
+                    legal_update_id=update_id,
+                    reason=legal_update.get("title", "Gesetzliche Änderung erkannt"),
+                )
             result["websites_flagged"] = websites_flagged
 
             # 4. Notifications erstellen — NUR bei Nicht-Duplikat. Duplikate
@@ -435,7 +456,7 @@ class LegalUpdateIntegration:
             #    Benachrichtigungswelle schon beim Original ausgelöst; ohne
             #    diesen Guard bekam jeder User dieselbe Meldung zigfach.
             if update_id and affected_categories:
-                if await self._is_duplicate_update(update_id):
+                if ist_duplikat:
                     logger.info(
                         f"process_new_legal_update #{update_id}: Duplikat — keine Notifications"
                     )
@@ -476,10 +497,15 @@ class LegalUpdateIntegration:
         self,
         legal_update_id: Optional[int],
         reason: str,
-        affected_categories: List[str],
     ) -> int:
         """
         Markiert alle aktiven tracked_websites als rescan_required.
+
+        `affected_categories` war bis zum 15.09.2026 Parameter dieser Methode
+        und wurde nie benutzt. Ein Argument, das der Aufrufer ausrechnet und
+        die Funktion wegwirft, liest sich wie eine Auswahl, die es nicht gibt:
+        markiert werden alle aktiven Sites, und das ist Absicht (Begruendung
+        beim Aufrufer). Deshalb raus, statt eine Verengung vorzutaeuschen.
 
         Returns:
             Anzahl markierter Websites

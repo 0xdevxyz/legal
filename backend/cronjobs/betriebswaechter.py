@@ -473,6 +473,25 @@ PROBESCAN_WARNAB_S = 45
 PROBESCAN_KOPF = "X-Complyo-Probescan"
 PROBESCAN_TOKEN = (os.getenv("COMPLYO_PROBESCAN_TOKEN") or "").strip()
 
+# Stuendlich ohne KI, einmal taeglich mit.
+#
+# Der Probescan beantwortet die Frage "laeuft der Scanpfad ueberhaupt". Dafuer
+# zaehlen success, risk_categories, score und die Dauer, nicht die KI-Pruefung
+# von Impressum und Datenschutz. Die kostete 24 x 0,0069 USD = 0,167 USD am Tag
+# und damit 76 % der gesamten Tagesrechnung (gemessen 15.09.2026).
+#
+# Der KI-Pfad bleibt trotzdem bewacht, nur einmal je Tag statt 24-mal. Feste
+# Stunde und kein Zustand auf Platte: eine Entscheidung, die man an der Uhr
+# nachvollziehen kann, ist im Betrieb mehr wert als eine, die von einer Datei
+# abhaengt, die auch fehlen kann.
+PROBESCAN_MODUS_KOPF = "X-Complyo-Probescan-Modus"
+PROBESCAN_KI_STUNDE = int(os.getenv("WAECHTER_PROBESCAN_KI_STUNDE", "3"))
+
+
+def probescan_modus(stunde: int) -> str:
+    """'vollstaendig' in der KI-Stunde, sonst 'sparsam'."""
+    return "vollstaendig" if stunde == PROBESCAN_KI_STUNDE else "sparsam"
+
 
 async def pruefe_scanpfad() -> list:
     """Fuehrt einen echten Scan aus und bewertet das Ergebnis inhaltlich."""
@@ -488,6 +507,11 @@ async def pruefe_scanpfad() -> list:
             kopfzeilen = (
                 {PROBESCAN_KOPF: PROBESCAN_TOKEN} if PROBESCAN_TOKEN else {}
             )
+            modus = probescan_modus(datetime.utcnow().hour)
+            if PROBESCAN_TOKEN:
+                # Ohne Geheimnis wuerde das Backend den Modus ohnehin nicht
+                # annehmen; dann lieber gar keinen Kopf als einen wirkungslosen.
+                kopfzeilen[PROBESCAN_MODUS_KOPF] = modus
             async with sitzung.post(
                 ROUTEN_BASIS + "/api/analyze-preview",
                 json={"url": PROBESCAN_ZIEL},

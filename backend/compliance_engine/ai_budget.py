@@ -125,6 +125,47 @@ class konto_setzen:
         return False
 
 
+# Fuer Laeufe, die den Scanpfad pruefen und nicht sein Ergebnis brauchen.
+#
+# Der stuendliche Probescan des Betriebswaechters bewertet nur, ob ein Scan
+# ueberhaupt durchlaeuft: success, risk_categories, score, Dauer. Die
+# KI-Pruefung von Impressum und Datenschutz braucht er dafuer nicht, sie kostete
+# aber 0,167 USD am Tag und damit 76 % der gesamten Tagesrechnung (gemessen
+# 15.09.2026). Einmal am Tag laeuft er weiter mit KI, damit auch dieser Pfad
+# bewacht bleibt.
+#
+# Bewusst hier und nicht als Schalter an jeder Aufrufstelle: die
+# Heuristik-Rueckfaelle existieren ohnehin ueberall, weil das Budget sie
+# braucht. Ein "KI aus" laeuft damit durch dieselben, erprobten Wege.
+_ki_aus: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "ki_budget_ki_aus", default=False
+)
+
+
+class ki_aus:
+    """Kontext, in dem bewusst keine KI gerufen wird.
+
+    Kontextmanager wie konto_setzen und aus demselben Grund: langlebige
+    Ereignisprozesse. Ohne reset() haenge der Schalter am naechsten Aufruf.
+    """
+
+    def __init__(self):
+        self._token = None
+
+    def __enter__(self):
+        self._token = _ki_aus.set(True)
+        return self
+
+    def __exit__(self, *_):
+        if self._token is not None:
+            _ki_aus.reset(self._token)
+        return False
+
+
+def ki_ist_aus() -> bool:
+    return _ki_aus.get()
+
+
 def _konto_aufloesen(user_id, plan_type: str) -> Tuple[Optional[str], str]:
     """Ausdruecklich uebergebenes Konto schlaegt den Kontext, Kontext schlaegt nichts."""
     if user_id is not None:
@@ -181,6 +222,12 @@ async def budget_frei(
     (oder den Vorschau-Tagestopf bei anonymem Scan). Kein Redis erreichbar
     -> kein KI-Call, siehe Modul-Docstring.
     """
+    # Bewusst abgeschaltet: kein Fehler, kein Budgetgrund, nur INFO. Wer das
+    # als Warnung protokolliert, erzeugt eine Alarmquelle aus einer Absicht.
+    if _ki_aus.get():
+        logger.info("KI fuer diesen Lauf bewusst aus (ai_budget.ki_aus)")
+        return False
+
     user_id, plan_type = _konto_aufloesen(user_id, plan_type)
 
     r = await _redis()

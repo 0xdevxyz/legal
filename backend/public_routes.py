@@ -2196,6 +2196,22 @@ async def fuehre_preview_scan_aus(url: str) -> Dict[str, Any]:
 # Kennzeichnung NIE — ein leerer Wert darf nicht auf einen leeren Kopf passen.
 PROBESCAN_KOPF = "X-Complyo-Probescan"
 
+# Sparsam = ohne KI. Der Waechter bewertet am Probescan nur, ob ueberhaupt ein
+# Ergebnis entsteht (success, risk_categories, score, Dauer); die KI-Pruefung
+# von Impressum und Datenschutz braucht er dafuer nicht. Sie war mit 0,167 USD
+# am Tag aber 76 % der gesamten Tagesrechnung (gemessen 15.09.2026). Einmal
+# taeglich schickt der Waechter "vollstaendig" und prueft damit auch den
+# KI-Pfad. Fehlt der Kopf, gilt vollstaendig: ein unbekannter Aufrufer darf
+# nicht versehentlich die halbe Pruefung bekommen.
+PROBESCAN_MODUS_KOPF = "X-Complyo-Probescan-Modus"
+PROBESCAN_SPARSAM = "sparsam"
+
+
+def _probescan_ohne_ki(http_request: Request) -> bool:
+    """Soll dieser Probescan ohne KI laufen?"""
+    modus = (http_request.headers.get(PROBESCAN_MODUS_KOPF) or "").strip().lower()
+    return modus == PROBESCAN_SPARSAM
+
 
 def _ist_probescan(http_request: Request) -> bool:
     """Traegt die Anfrage das Probescan-Geheimnis des Betriebswaechters?"""
@@ -2219,10 +2235,14 @@ async def analyze_website_preview(request: AnalyzeRequest, http_request: Request
     """
     if _ist_probescan(http_request):
         # Kontextmanager und nicht set(): der Endpunkt laeuft in einem
-        # langlebigen Ereignisprozess, ein haengengebliebenes Konto wuerde am
-        # naechsten Scan kleben (siehe ai_budget.konto_setzen).
+        # langlebigen Ereignisprozess, ein haengengebliebener Schalter wuerde am
+        # naechsten Scan kleben (siehe ai_budget.konto_setzen / ki_aus).
         from compliance_engine import ai_budget
-        with ai_budget.konto_setzen(ai_budget.SYSTEM):
+        from contextlib import ExitStack
+        with ExitStack() as stapel:
+            stapel.enter_context(ai_budget.konto_setzen(ai_budget.SYSTEM))
+            if _probescan_ohne_ki(http_request):
+                stapel.enter_context(ai_budget.ki_aus())
             return await fuehre_preview_scan_aus(str(request.url))
     return await fuehre_preview_scan_aus(str(request.url))
 

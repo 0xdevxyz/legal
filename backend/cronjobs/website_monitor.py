@@ -148,6 +148,30 @@ async def _hole(url: str, timeout: int = 15) -> Optional[str]:
         return None
 
 
+# Reservierte Namen aus RFC 2606 und RFC 6761. Sie gehoeren niemandem, loesen
+# teils gar nicht auf, und eine Compliance-Pruefung an ihnen misst nichts.
+#
+# Gefunden am 15.09.2026: `https://example.com` stand seit dem 24.05. aktiv in
+# tracked_websites (Konto smoketest@complyo.dev) und wurde 27-mal voll
+# gescannt, inklusive Unterseiten. Ein Smoketest, der Betriebskosten erzeugt,
+# ist kein Smoketest mehr. Die Zeile selbst ist stillgelegt; diese Sperre sorgt
+# dafuer, dass der naechste Testeintrag nicht wieder mitlaeuft.
+RESERVIERTE_ENDUNGEN = (".test", ".example", ".invalid", ".localhost")
+RESERVIERTE_NAMEN = ("example.com", "example.net", "example.org", "localhost")
+
+
+def ist_beispieldomain(url: str) -> bool:
+    """Reservierter Name, an dem eine Pruefung nichts messen kann?"""
+    wirt = (url or "").split("://")[-1].split("/")[0].split(":")[0].strip().lower()
+    if not wirt:
+        return False
+    if wirt.startswith("www."):
+        wirt = wirt[4:]
+    if wirt in RESERVIERTE_NAMEN:
+        return True
+    return wirt.endswith(RESERVIERTE_ENDUNGEN)
+
+
 def _vollscan_noetig(site: dict, neuer_abdruck: Optional[str]) -> "tuple[bool, str]":
     """Entscheidet, ob ein Vollscan laufen muss — und nennt den Grund."""
     if site.get("rescan_required"):
@@ -287,6 +311,13 @@ async def main():
             url = site["url"]
             if not url.startswith(("http://", "https://")):
                 url = "https://" + url
+
+            if ist_beispieldomain(url):
+                # Nicht still ueberspringen: wer den Eintrag angelegt hat, soll
+                # im Log sehen, warum nichts passiert.
+                uebersprungen += 1
+                logger.info(f"   {url}: reservierter Beispielname — nicht geprüft")
+                return
 
             geprueft += 1
             html = await _hole(url)
