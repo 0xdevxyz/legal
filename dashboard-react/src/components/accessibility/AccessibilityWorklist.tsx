@@ -304,6 +304,22 @@ export default function AccessibilityWorklist() {
   const [edits, setEdits] = useState<Record<string, string>>({});
   // Welche Zeile fragt gerade nach einem Ablehnungsgrund
   const [grundFuer, setGrundFuer] = useState<string | null>(null);
+  // Was beim letzten Klick schiefging.
+  //
+  // Bis zum 15.09.2026 gab es diesen Zustand nicht: jede Entscheidung lief in
+  // try/finally ohne catch. Antwortete das Backend mit einem Fehler, brach der
+  // Aufruf ab, `load()` wurde nie erreicht, und die Oberflaeche sah aus wie
+  // vorher. Auf complyo.de hiess das konkret: der Knopf am Kontrast-Vorschlag
+  // bekam 404, es passierte nichts, und nichts sagte, warum.
+  const [fehler, setFehler] = useState<string | null>(null);
+
+  // Was das Backend zu sagen hat, steht in `detail`.
+  const alsText = (e: unknown): string => {
+    const d = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+    if (typeof d === 'string' && d) return d;
+    const m = (e as { message?: string })?.message;
+    return m || 'Unbekannter Fehler';
+  };
 
   const load = useCallback(async () => {
     if (!siteId) return;
@@ -332,7 +348,10 @@ export default function AccessibilityWorklist() {
         rejected_reason: approved ? undefined : grund,
       });
       setGrundFuer(null);
+      setFehler(null);
       await load();
+    } catch (e) {
+      setFehler(alsText(e));
     } finally {
       setBusy(null);
     }
@@ -348,7 +367,10 @@ export default function AccessibilityWorklist() {
         rejected_reason: approved ? undefined : grund,
       });
       setGrundFuer(null);
+      setFehler(null);
       await load();
+    } catch (e) {
+      setFehler(alsText(e));
     } finally {
       setBusy(null);
     }
@@ -363,7 +385,10 @@ export default function AccessibilityWorklist() {
         rejected_reason: approved ? undefined : grund,
       });
       setGrundFuer(null);
+      setFehler(null);
       await load();
+    } catch (e) {
+      setFehler(alsText(e));
     } finally {
       setBusy(null);
     }
@@ -380,7 +405,10 @@ export default function AccessibilityWorklist() {
         fix_id: item.id,
         uebernehmen,
       });
+      setFehler(null);
       await load();
+    } catch (e) {
+      setFehler(alsText(e));
     } finally {
       setBusy(null);
     }
@@ -396,7 +424,10 @@ export default function AccessibilityWorklist() {
         ? '/api/accessibility/approve-alt-text'
         : '/api/accessibility/approve-link';
       await apiClient.post(endpoint, { fix_id: item.id, approved: false });
+      setFehler(null);
       await load();
+    } catch (e) {
+      setFehler(alsText(e));
     } finally {
       setBusy(null);
     }
@@ -447,6 +478,22 @@ export default function AccessibilityWorklist() {
           </button>
         </div>
       </div>
+
+      {/* Ein Klick, der nichts bewirkt, muss sagen warum. */}
+      {fehler && (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300 flex items-start justify-between gap-3"
+        >
+          <span>Die Entscheidung wurde nicht gespeichert: {fehler}</span>
+          <button
+            onClick={() => setFehler(null)}
+            className="text-xs text-red-200/80 hover:text-red-100 shrink-0"
+          >
+            schließen
+          </button>
+        </div>
+      )}
 
       {/* Alt-Texte */}
       <section>

@@ -62,6 +62,120 @@ def _pruefe_site_zugehoerigkeit(row, erlaubte_sites) -> None:
         raise PermissionError("fix gehoert zu einer fremden website")
 
 
+# Felder, die zur Warteschlange gehoeren, nicht zur Reparatur.
+_WARTESCHLANGEN_FELDER = ("neuer_vorschlag", "bemerkt_am")
+
+# Vermerke einer Entscheidung. Ein frischer Scan kennt sie nicht: er misst die
+# Seite, er liest keine Freigaben.
+_FREIGABE_FELDER = ("freigabe", "bestaetigt", "ablehngrund", "quelle_farbe")
+
+
+def _vorschlagskern(payload):
+    """Was ein Payload ueber die REPARATUR sagt, ohne Freigabe und Warteschlange.
+
+    Ohne diese Normalisierung ist jeder Vergleich wertlos. Der laufende Payload
+    traegt erteilte Freigaben und eine Warteschlange, der frische Scan kennt
+    beides nicht — also weichen die beiden immer voneinander ab, auch wenn sie
+    Zeichen fuer Zeichen dieselbe Reparatur beschreiben.
+    """
+    if not isinstance(payload, dict):
+        return payload
+    kern = {k: v for k, v in payload.items() if k not in _WARTESCHLANGEN_FELDER}
+    entscheidungen = kern.get("entscheidungen")
+    if isinstance(entscheidungen, list):
+        # Das ist der kontrast-css-Fall. `rules` wird dort bei jeder Freigabe
+        # aus den zugestimmten Entscheidungen neu gebaut (set_kontrast_status);
+        # ein Ableitungsprodukt der Freigabe gehoert nicht in einen Vergleich
+        # ueber die Reparatur.
+        kern.pop("rules", None)
+        kern["entscheidungen"] = [
+            {k: v for k, v in e.items() if k not in _FREIGABE_FELDER}
+            if isinstance(e, dict) else e
+            for e in entscheidungen
+        ]
+    return kern
+
+
+def _vorschlag_ist_neu(laufend, frisch) -> bool:
+    """Sagt der frische Scan etwas anderes als die laufende Reparatur?
+
+    Ein Vorschlag, der dasselbe sagt, ist keine Entscheidung: beide Antworten
+    fuehren zum selben Ergebnis. Vorgelegt wird er trotzdem, und der Betreiber
+    sucht den Unterschied, den es nicht gibt.
+
+    Gemessen am 15.09.2026 waren sechs von sieben wartenden Vorschlaegen von
+    dieser Art, der aelteste seit dem 12.08. Bei `kontrast-css` entstand so
+    einer bei JEDEM Scan: die Zeile wird immer als 'pending' gespeichert, also
+    greift die Warteschlangen-Regel unten jedes Mal.
+
+    Im Zweifel wird gefragt: was sich nicht vergleichen laesst, gilt als neu.
+    """
+    import json as _json
+    try:
+        return (_json.dumps(_vorschlagskern(laufend), sort_keys=True)
+                != _json.dumps(_vorschlagskern(frisch), sort_keys=True))
+    except (TypeError, ValueError):
+        return True
+
+
+def _kontrast_freigaben_uebernehmen(laufend, frisch):
+    """Traegt erteilte Farbfreigaben in einen neuen Kontrast-Vorschlag ein.
+
+    Bei `kontrast-css` entscheidet der Betreiber je Farbpaar. Ein frischer Scan
+    kennt diese Entscheidungen nicht. Wer seinen Vorschlag ohne Abgleich
+    uebernaehme, loeschte damit jede erteilte Freigabe, und die Farben auf der
+    Kundenseite fielen still auf den alten Stand zurueck.
+
+    Deshalb war die Uebernahme fuer kontrast-css bis zum 15.09.2026 ganz
+    gesperrt. Die Karte im Dashboard bot sie trotzdem an — der Knopf antwortete
+    mit 404 und tat nichts. Eine Sperre, die die Oberflaeche nicht kennt, ist
+    keine Sperre, sondern eine Sackgasse.
+
+    Uebernommen wird eine Freigabe nur fuer ein unveraendertes Farbpaar MIT
+    unveraenderter Zielfarbe. Schlaegt der Scan einen anderen Ton vor, ist die
+    alte Zustimmung kein Beleg fuer den neuen: dann wird wieder gefragt.
+    """
+    from compliance_engine.kontrast_fixes import als_css_regeln
+
+    def schluessel(e):
+        return (e.get("vordergrund"), e.get("hintergrund"), e.get("vorschlag"))
+
+    frueher = {schluessel(e): e
+               for e in ((laufend or {}).get("entscheidungen") or [])
+               if isinstance(e, dict)}
+
+    entscheidungen = []
+    for e in ((frisch or {}).get("entscheidungen") or []):
+        if isinstance(e, dict) and schluessel(e) in frueher:
+            alt = frueher[schluessel(e)]
+            e = dict(e)
+            for feld in ("freigabe", "ablehngrund", "quelle_farbe"):
+                if alt.get(feld) is not None:
+                    e[feld] = alt[feld]
+        entscheidungen.append(e)
+
+    ergebnis = dict(frisch or {})
+    ergebnis["entscheidungen"] = entscheidungen
+    # Ausgeliefert wird nur Zugestimmtes — dieselbe Regel wie bei jeder
+    # einzelnen Freigabe.
+    ergebnis["rules"] = als_css_regeln(
+        [dict(e, bestaetigt=True) for e in entscheidungen
+         if isinstance(e, dict) and e.get("freigabe") == "approved"]
+    )
+    return ergebnis
+
+
+def _als_dict(wert):
+    """jsonb kommt je nach Treiberpfad als dict oder als Text zurueck."""
+    import json as _json
+    if isinstance(wert, str):
+        try:
+            return _json.loads(wert)
+        except ValueError:
+            return None
+    return wert
+
+
 class AccessibilityFixSaver:
     """
     Speichert AI-generierte Alt-Texte und andere Accessibility-Fixes
@@ -430,6 +544,28 @@ class AccessibilityFixSaver:
                     fix_type = fix.get('fix_type')
                     if not fix_type:
                         continue
+
+                    # Fragt dieser Scan ueberhaupt etwas Neues? Die
+                    # Warteschlangen-Regel im ON CONFLICT unten greift bei
+                    # JEDEM Scan, sobald die laufende Reparatur freigegeben und
+                    # die neue 'pending' ist — bei kontrast-css also immer,
+                    # denn so eine Zeile wird nie anders gespeichert. Ohne
+                    # diesen Vergleich legt der Scan Vorschlaege an, die
+                    # dasselbe sagen wie das Laufende, und das Dashboard
+                    # verlangt eine Entscheidung, in der beide Antworten
+                    # dasselbe Ergebnis haben.
+                    laufend = await conn.fetchrow(
+                        "SELECT payload FROM accessibility_document_fixes "
+                        "WHERE site_id = $1 AND fix_type = $2",
+                        site_id, fix_type,
+                    )
+                    vorschlag_lohnt = True
+                    if laufend is not None:
+                        vorschlag_lohnt = _vorschlag_ist_neu(
+                            _als_dict(laufend["payload"]),
+                            fix.get("payload", {}),
+                        )
+
                     try:
                         await conn.execute(
                             """
@@ -477,10 +613,19 @@ class AccessibilityFixSaver:
                                 payload = CASE
                                     WHEN accessibility_document_fixes.status = 'approved'
                                      AND EXCLUDED.status <> 'approved'
+                                     -- Nur was etwas anderes sagt, ist eine
+                                     -- Frage wert ($11, siehe oben).
+                                     AND $11::boolean
                                     THEN accessibility_document_fixes.payload
                                          || jsonb_build_object(
                                                 'neuer_vorschlag', EXCLUDED.payload,
                                                 'bemerkt_am', NOW()::text)
+                                    WHEN accessibility_document_fixes.status = 'approved'
+                                     AND EXCLUDED.status <> 'approved'
+                                    -- Derselbe Vorschlag wie bisher: die
+                                    -- laufende, freigegebene Reparatur bleibt
+                                    -- unangetastet stehen.
+                                    THEN accessibility_document_fixes.payload
                                     ELSE EXCLUDED.payload
                                 END,
                                 wcag_criterion = EXCLUDED.wcag_criterion,
@@ -522,6 +667,7 @@ class AccessibilityFixSaver:
                             # stillschweigend live gehen — der Betreiber sieht
                             # eine geaenderte Linkfarbe sofort.
                             fix.get('status') or status,
+                            vorschlag_lohnt,
                         )
                         saved += 1
                     except Exception as e:
@@ -817,10 +963,14 @@ class AccessibilityFixSaver:
         aktive Struktur-Reparatur raeumt 51 auf 16 Fundstellen ab, im Payload
         wartete eine, die auf 4 kommt.
 
-        `kontrast-css` bleibt aussen vor: dort steckt in `entscheidungen` eine
-        Freigabe je Farbpaar, und eine Uebernahme im Ganzen wuerde genau die
-        erteilten Farbfreigaben ueberschreiben, die der Mechanismus schuetzen
-        soll. Diese Abgleichung ist ein eigenes Problem.
+        `kontrast-css` war hier bis zum 15.09.2026 gesperrt: dort steckt in
+        `entscheidungen` eine Freigabe je Farbpaar, und eine Uebernahme im
+        Ganzen loeschte genau die erteilten Farbfreigaben, die der Mechanismus
+        schuetzen soll. Die Karte im Dashboard bot die Uebernahme trotzdem an
+        und bekam 404 — der Knopf tat nichts, und der Vorschlag konnte nie
+        verschwinden. Jetzt gleicht `_kontrast_freigaben_uebernehmen` ab:
+        unveraenderte Farbpaare behalten ihre Zustimmung, geaenderte werden
+        erneut vorgelegt.
         """
         import json as _json
         async with self.db_pool.acquire() as conn:
@@ -830,12 +980,6 @@ class AccessibilityFixSaver:
                 fix_id,
             )
             if not row:
-                return False
-            if row["fix_type"] == "kontrast-css":
-                logger.warning(
-                    "Vorschlagsuebernahme auf kontrast-css abgelehnt: die "
-                    "Freigaben je Farbpaar wuerden dabei verlorengehen"
-                )
                 return False
             _pruefe_site_zugehoerigkeit(row, erlaubte_sites)
 
@@ -856,15 +1000,26 @@ class AccessibilityFixSaver:
                 neu = dict(vorschlag)
                 neu.pop("neuer_vorschlag", None)
                 neu.pop("bemerkt_am", None)
+                if row["fix_type"] == "kontrast-css":
+                    neu = _kontrast_freigaben_uebernehmen(payload, neu)
             else:
                 neu = {k: v for k, v in (payload or {}).items()
                        if k not in ("neuer_vorschlag", "bemerkt_am")}
+
+            # Bei kontrast-css haengt der Zeilenstatus an den Freigaben: bleibt
+            # nach dem Abgleich keine einzige uebrig, darf die Zeile nicht
+            # 'approved' bleiben — das Manifest lieferte sonst eine Reparatur
+            # ohne einen einzigen freigegebenen Ton aus.
+            status_neu = None
+            if uebernehmen and row["fix_type"] == "kontrast-css":
+                status_neu = "approved" if (neu.get("rules") or []) else "pending"
 
             await conn.execute(
                 """
                 UPDATE accessibility_document_fixes
                 SET payload = $1,
                     rejected_reason = $2,
+                    status = COALESCE($4::varchar, status),
                     -- Auch das Behalten ist eine Entscheidung, und nur eine
                     -- getroffene Entscheidung ist ein Beleg.
                     entscheidung_quelle = 'mensch',
@@ -874,6 +1029,7 @@ class AccessibilityFixSaver:
                 _json.dumps(neu),
                 None if uebernehmen else ablehngrund,
                 fix_id,
+                status_neu,
             )
             logger.info(
                 "Neuer Vorschlag fuer Fix %s %s",

@@ -249,18 +249,6 @@ class TestWartenderVorschlag:
         assert ok is False
         assert conn.aufrufe == []
 
-    @pytest.mark.asyncio
-    async def test_kontrast_bleibt_aussen_vor(self):
-        """
-        Dort steckt in `entscheidungen` eine Freigabe je Farbpaar. Eine
-        Uebernahme im Ganzen wuerde genau die erteilten Farbfreigaben
-        ueberschreiben, die der Mechanismus schuetzen soll.
-        """
-        conn = FakeConn(self._zeile(fix_type="kontrast-css"))
-        ok = await AccessibilityFixSaver(FakePool(conn)).entscheide_neuen_vorschlag(
-            fix_id=7, uebernehmen=True, erlaubte_sites={"s1"})
-        assert ok is False
-        assert conn.aufrufe == []
 
     @pytest.mark.asyncio
     async def test_fremde_site_wird_abgewiesen(self):
@@ -269,3 +257,170 @@ class TestWartenderVorschlag:
             await AccessibilityFixSaver(FakePool(conn)).entscheide_neuen_vorschlag(
                 fix_id=7, uebernehmen=True, erlaubte_sites={"andere-site"})
         assert conn.aufrufe == []
+
+
+class TestKontrastUebernahme:
+    """
+    Der Kontrast-Vorschlag hatte keinen Ausgang.
+
+    Bei `kontrast-css` entscheidet der Betreiber je Farbpaar. Ein frischer Scan
+    kennt diese Entscheidungen nicht, also loeschte eine Uebernahme im Ganzen
+    jede erteilte Freigabe — die Farben auf der Kundenseite fielen still auf den
+    alten Stand zurueck. Darum war der Weg gesperrt.
+
+    Die Karte im Dashboard bot ihn trotzdem an. Gemessen am 15.09.2026 stand auf
+    complyo.de ein Vorschlag seit dem 12.08. in der Warteschlange: der Knopf
+    antwortete mit 404, es passierte nichts, und weg ging er auch nicht. Eine
+    Sperre, die die Oberflaeche nicht kennt, ist keine Sperre, sondern eine
+    Sackgasse.
+
+    Jetzt wird abgeglichen statt gesperrt. Was diese Tests festhalten, ist
+    genau der Schutz, den die Sperre leistete.
+    """
+
+    @staticmethod
+    def _entscheidung(vg, bg, vorschlag, **rest):
+        e = {"vordergrund": vg, "hintergrund": bg, "vorschlag": vorschlag,
+             "stellen": 1, "ziel_ratio": 4.5, "neue_ratio": 4.51,
+             "selektoren": [".x"], "loesbar": True, "abgedeckt": 1}
+        e.update(rest)
+        return e
+
+    @staticmethod
+    def _zeile(laufende, frische):
+        payload = {"entscheidungen": laufende, "rules": [{"selector": ".x"}],
+                   "neuer_vorschlag": {"entscheidungen": frische},
+                   "bemerkt_am": "2026-08-12 08:53:41+00"}
+        return {"id": 37, "user_id": "u1", "site_id": "s1",
+                "fix_type": "kontrast-css", "payload": payload}
+
+    @pytest.mark.asyncio
+    async def test_erteilte_freigabe_ueberlebt_die_uebernahme(self):
+        """Der Grund, aus dem der Weg ueberhaupt gesperrt war."""
+        laufend = [self._entscheidung("#9ca3af", "#ffffff", "#6e7788",
+                                      freigabe="approved", bestaetigt=True)]
+        frisch = [self._entscheidung("#9ca3af", "#ffffff", "#6e7788",
+                                     bestaetigt=True)]
+        conn = FakeConn(self._zeile(laufend, frisch))
+        ok = await AccessibilityFixSaver(FakePool(conn)).entscheide_neuen_vorschlag(
+            fix_id=37, uebernehmen=True, erlaubte_sites={"s1"})
+        assert ok
+        import json
+        neu = json.loads(conn.aufrufe[0][1][0])
+        assert neu["entscheidungen"][0]["freigabe"] == "approved"
+        assert neu["rules"], "freigegebene Farbe muss ausgeliefert werden"
+
+    @pytest.mark.asyncio
+    async def test_andere_zielfarbe_wird_erneut_vorgelegt(self):
+        """Eine Zustimmung zu #6e7788 ist kein Beleg fuer #445566."""
+        laufend = [self._entscheidung("#9ca3af", "#ffffff", "#6e7788",
+                                      freigabe="approved", bestaetigt=True)]
+        frisch = [self._entscheidung("#9ca3af", "#ffffff", "#445566",
+                                     bestaetigt=True)]
+        conn = FakeConn(self._zeile(laufend, frisch))
+        await AccessibilityFixSaver(FakePool(conn)).entscheide_neuen_vorschlag(
+            fix_id=37, uebernehmen=True, erlaubte_sites={"s1"})
+        import json
+        neu = json.loads(conn.aufrufe[0][1][0])
+        assert neu["entscheidungen"][0].get("freigabe") is None
+        assert neu["rules"] == [], "nichts Zugestimmtes, nichts Ausgeliefertes"
+
+    @pytest.mark.asyncio
+    async def test_ohne_freigabe_faellt_die_zeile_auf_pending(self):
+        """Sonst lieferte das Manifest eine Reparatur ohne einen einzigen
+        freigegebenen Ton aus."""
+        laufend = [self._entscheidung("#9ca3af", "#ffffff", "#6e7788",
+                                      freigabe="approved", bestaetigt=True)]
+        frisch = [self._entscheidung("#9ca3af", "#ffffff", "#445566",
+                                     bestaetigt=True)]
+        conn = FakeConn(self._zeile(laufend, frisch))
+        await AccessibilityFixSaver(FakePool(conn)).entscheide_neuen_vorschlag(
+            fix_id=37, uebernehmen=True, erlaubte_sites={"s1"})
+        sql, params = conn.aufrufe[0]
+        assert "COALESCE($4::varchar, status)" in sql
+        assert params[3] == "pending"
+
+    @pytest.mark.asyncio
+    async def test_uebernahme_antwortet_nicht_mehr_mit_nein(self):
+        """Der 404 im Dashboard kam genau von diesem `False`."""
+        laufend = [self._entscheidung("#9ca3af", "#ffffff", "#6e7788",
+                                      freigabe="approved", bestaetigt=True)]
+        conn = FakeConn(self._zeile(laufend, list(laufend)))
+        ok = await AccessibilityFixSaver(FakePool(conn)).entscheide_neuen_vorschlag(
+            fix_id=37, uebernehmen=True, erlaubte_sites={"s1"})
+        assert ok is True
+
+
+class TestVorschlagOhneUnterschied:
+    """
+    Eine Frage, in der beide Antworten dasselbe bewirken, ist keine Frage.
+
+    Die Warteschlangen-Regel im ON CONFLICT greift, sobald die laufende
+    Reparatur freigegeben und die frische 'pending' ist. Bei `kontrast-css` ist
+    das IMMER der Fall — so eine Zeile wird nie anders gespeichert. Also legte
+    jeder Scan einen Vorschlag an, auch wenn er dieselben Farben vorschlug.
+
+    Gemessen am 15.09.2026: sechs von sieben wartenden Vorschlaegen waren mit
+    der laufenden Reparatur identisch, einer davon seit dem 12.08.
+    """
+
+    def test_derselbe_inhalt_ist_kein_vorschlag(self):
+        p = {"fixes": [{"selector": "#a"}], "vorher": 3, "nachher": 0}
+        assert afs._vorschlag_ist_neu(p, dict(p)) is False
+
+    def test_die_warteschlange_selbst_zaehlt_nicht_als_unterschied(self):
+        """Sonst haette der laufende Payload beim zweiten Scan immer einen
+        Unterschied — er traegt den Vorschlag des ersten."""
+        laufend = {"fixes": [{"selector": "#a"}],
+                   "neuer_vorschlag": {"fixes": [{"selector": "#a"}]},
+                   "bemerkt_am": "2026-08-12 08:53:41+00"}
+        assert afs._vorschlag_ist_neu(laufend, {"fixes": [{"selector": "#a"}]}) is False
+
+    def test_freigabevermerke_zaehlen_nicht_als_unterschied(self):
+        """Genau der kontrast-css-Fall: der Scan misst die Seite, er liest
+        keine Freigaben. `rules` haengt an ihnen und faellt deshalb mit weg."""
+        laufend = {"entscheidungen": [{"vordergrund": "#9ca3af",
+                                       "hintergrund": "#ffffff",
+                                       "vorschlag": "#6e7788",
+                                       "freigabe": "approved",
+                                       "bestaetigt": True}],
+                   "rules": [{"selector": ".x", "declarations": "color: #6e7788"}]}
+        frisch = {"entscheidungen": [{"vordergrund": "#9ca3af",
+                                      "hintergrund": "#ffffff",
+                                      "vorschlag": "#6e7788",
+                                      "bestaetigt": True}],
+                  "rules": []}
+        assert afs._vorschlag_ist_neu(laufend, frisch) is False
+
+    def test_eine_bessere_fassung_ist_ein_unterschied(self):
+        """Der Fall, den es zu erhalten gilt: auf panoart360.de raeumte die
+        laufende Reparatur 51 auf 16 ab, die wartende auf 4."""
+        laufend = {"fixes": [{"selector": "#works"}], "vorher": 51, "nachher": 16}
+        frisch = {"fixes": [{"selector": "#works"}, {"selector": "#about"}],
+                  "vorher": 51, "nachher": 4}
+        assert afs._vorschlag_ist_neu(laufend, frisch) is True
+
+    def test_eine_andere_farbe_ist_ein_unterschied(self):
+        laufend = {"entscheidungen": [{"vordergrund": "#9ca3af",
+                                       "hintergrund": "#ffffff",
+                                       "vorschlag": "#6e7788",
+                                       "freigabe": "approved"}]}
+        frisch = {"entscheidungen": [{"vordergrund": "#9ca3af",
+                                      "hintergrund": "#ffffff",
+                                      "vorschlag": "#445566"}]}
+        assert afs._vorschlag_ist_neu(laufend, frisch) is True
+
+    def test_im_zweifel_wird_gefragt(self):
+        """Was sich nicht vergleichen laesst, gilt als neu. Eine verschluckte
+        Verbesserung waere teurer als eine ueberfluessige Frage."""
+        class Unvergleichbar:
+            pass
+        assert afs._vorschlag_ist_neu({"x": Unvergleichbar()}, {"x": 1}) is True
+
+    def test_der_scan_reicht_das_ergebnis_an_das_sql_durch(self):
+        """Ohne den Parameter bliebe die Pruefung folgenlos."""
+        import inspect
+        src = inspect.getsource(AccessibilityFixSaver.save_document_fixes)
+        assert "_vorschlag_ist_neu" in src
+        assert "$11::boolean" in src
+        assert "vorschlag_lohnt," in src
