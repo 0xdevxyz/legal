@@ -1,9 +1,10 @@
 """Was im Zugriffslog steht, und was nicht.
 
-Gemessen am 15.09.2026: von rund 2.500 Zeilen Backend-Log in 13 Stunden waren
-1.558 ein erfolgreiches `GET /health`. Der Gesundheitswaechter laeuft jede
-Minute, dazu der Docker-Healthcheck. Alles andere ersaeuft darin, und ein Log,
-in dem der echte Befund nicht mehr auffaellt, ist kein Betriebsprotokoll mehr.
+Gemessen am 15.09.2026 ueber 13 Stunden Backend-Log: von rund 2.750
+protokollierten HTTP-Abrufen waren 1.558 ein erfolgreiches `GET /health`, also
+knapp 57 %. Der Gesundheitswaechter laeuft jede Minute, dazu der
+Docker-Healthcheck. Alles andere ersaeuft darin, und ein Log, in dem der echte
+Befund nicht mehr auffaellt, ist kein Betriebsprotokoll mehr.
 
 Eigenes Modul und nicht ein paar Zeilen in main_production, damit die
 Entscheidung ohne Datenbank, ohne Netz und ohne den Import der ganzen

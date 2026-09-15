@@ -3,8 +3,9 @@
 Zwei Befunde aus der Kosten/Nutzen-Messung vom 15.09.2026, beide nicht am Betrag,
 sondern am Verhältnis:
 
-1. Von rund 2.500 Zeilen Backend-Log in 13 Stunden waren 1.558 ein erfolgreiches
-   `GET /health`. Der echte Befund fällt in so einem Log nicht mehr auf.
+1. Von rund 2.750 protokollierten HTTP-Abrufen in 13 Stunden waren 1.558 ein
+   erfolgreiches `GET /health`, knapp 57 %. Der echte Befund fällt in so einem
+   Log nicht mehr auf.
 2. Alle 13 Vorschau-Scans derselben 13 Stunden kamen vom Betriebswächter selbst,
    keiner von außen. Sie buchten auf `ki:kosten:vorschau`, den Tagestopf, der
    Interessenten gehört. Sobald Besucher kommen, greift der Deckel zuerst bei
