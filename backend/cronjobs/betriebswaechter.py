@@ -464,6 +464,15 @@ PROBESCAN_ZEITLIMIT = int(os.getenv("WAECHTER_PROBESCAN_ZEITLIMIT", "120"))
 # auch wenn am Ende noch ein Ergebnis kommt.
 PROBESCAN_WARNAB_S = 45
 
+# Der Probescan ist Systemarbeit und soll nicht aus dem Vorschau-Topf bezahlt
+# werden, der Interessenten gehoert (15.09.2026: 100 % des Vorschau-Verbrauchs
+# kam aus diesem einen Selbstscan). Das Backend erkennt ihn an diesem Kopf.
+# Fehlt das Geheimnis, bucht der Scan wie bisher auf den Vorschau-Topf — das ist
+# der alte Zustand, kein Ausfall: der Waechter prueft weiter, nur die
+# Kostenstelle stimmt dann nicht.
+PROBESCAN_KOPF = "X-Complyo-Probescan"
+PROBESCAN_TOKEN = (os.getenv("COMPLYO_PROBESCAN_TOKEN") or "").strip()
+
 
 async def pruefe_scanpfad() -> list:
     """Fuehrt einen echten Scan aus und bewertet das Ergebnis inhaltlich."""
@@ -476,9 +485,13 @@ async def pruefe_scanpfad() -> list:
     begonnen = time.monotonic()
     try:
         async with aiohttp.ClientSession(timeout=zeitlimit) as sitzung:
+            kopfzeilen = (
+                {PROBESCAN_KOPF: PROBESCAN_TOKEN} if PROBESCAN_TOKEN else {}
+            )
             async with sitzung.post(
                 ROUTEN_BASIS + "/api/analyze-preview",
                 json={"url": PROBESCAN_ZIEL},
+                headers=kopfzeilen,
             ) as antwort:
                 status = antwort.status
                 try:

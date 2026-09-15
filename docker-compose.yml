@@ -73,6 +73,9 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}
       - AUTO_ACTIVATE_GENERATED_CHECKS=${AUTO_ACTIVATE_GENERATED_CHECKS:-false}
+      # Kennzeichnet den stuendlichen Selbstscan des Betriebswaechters, damit
+      # er auf den Systemtopf bucht statt auf den Vorschau-Topf der Besucher.
+      - COMPLYO_PROBESCAN_TOKEN=${COMPLYO_PROBESCAN_TOKEN:-}
       - ENVIRONMENT=production
       # Nebenlaeufigkeit des Scanners. Beide Werte haengen zusammen: mehr
       # Arbeiter nuetzen nichts, wenn weniger Browser laufen duerfen.

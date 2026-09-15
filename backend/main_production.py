@@ -30,6 +30,7 @@ import hashlib
 from passlib.context import CryptContext as _CryptContext
 _pwd_context = _CryptContext(schemes=["bcrypt"], deprecated="auto")
 from csrf_middleware import CSRFMiddleware
+import betriebslog
 import datetime
 import os
 from dotenv import load_dotenv
@@ -429,6 +430,12 @@ auth_service = None
 
 # Logger
 logger = logging.getLogger(__name__)
+
+
+# Erfolgreiche Gesundheitsabrufe gehoeren nicht ins Zugriffslog, siehe
+# betriebslog.py. Hier und nicht im Modul selbst angehaengt, damit ein Import
+# von betriebslog (etwa im Test) das Logging des Prozesses nicht umstellt.
+betriebslog.installieren()
 
 
 def _parse_delete_count(status: str) -> int:

@@ -22,6 +22,7 @@ from typing import Dict, Any, Optional, List
 import logging
 import json
 import os
+import hmac
 # `re` wird in _recommendation_to_steps() benutzt und fehlte hier.
 #
 # Folge: JEDER Scan brach ab, sobald ein Befund eine Empfehlung mitbrachte —
@@ -2195,6 +2196,36 @@ async def fuehre_preview_scan_aus(url: str) -> Dict[str, Any]:
         return _preview_scan_fehler(url, "Bei der Prüfung ist ein Fehler aufgetreten.")
 
 
+# Der Probescan des Betriebswaechters ist Systemarbeit, kein Interessent.
+#
+# Er laeuft absichtlich ueber genau diesen oeffentlichen Endpunkt: ein Waechter,
+# der anders abruft als der Kunde, bewacht seinen eigenen Code. Damit hat er aber
+# auch keine user_id und buchte bisher auf `ki:kosten:vorschau`, den Tagestopf,
+# der Besuchern gehoert. Gemessen am 15.09.2026 stammten 100 % des
+# Vorschau-Verbrauchs vom Waechter selbst (24 Selbstscans/Tag, 0,154 EUR).
+# Solange niemand kommt, faellt das nicht auf. Sobald echte Vorschau-Scans
+# kommen, konkurriert die eigene Ueberwachung mit den Interessenten um dieselbe
+# Kasse — und der Deckel greift dann zuerst beim Interessenten. Genau dafuer
+# existiert der Systemtopf (ai_budget.SYSTEM, eigener Tagesdeckel).
+#
+# Erkennung ueber ein gemeinsames Geheimnis, nicht ueber die Quell-IP: der
+# Waechter laeuft als ephemerer `docker run`-Container mit wechselnder Adresse
+# im selben Netz wie die Anwendung. Ohne gesetztes Geheimnis greift die
+# Kennzeichnung NIE — ein leerer Wert darf nicht auf einen leeren Kopf passen.
+PROBESCAN_KOPF = "X-Complyo-Probescan"
+
+
+def _ist_probescan(http_request: Request) -> bool:
+    """Traegt die Anfrage das Probescan-Geheimnis des Betriebswaechters?"""
+    erwartet = (os.getenv("COMPLYO_PROBESCAN_TOKEN") or "").strip()
+    if not erwartet:
+        return False
+    mitgegeben = (http_request.headers.get(PROBESCAN_KOPF) or "").strip()
+    if not mitgegeben:
+        return False
+    return hmac.compare_digest(mitgegeben, erwartet)
+
+
 @public_router.post("/analyze-preview", response_model=Dict[str, Any],
                     dependencies=[Depends(rate_limit("analyze_preview", 3, 60)),
                                   Depends(scan_platz)])
@@ -2204,6 +2235,13 @@ async def analyze_website_preview(request: AnalyzeRequest, http_request: Request
     Der Scan selbst steht in fuehre_preview_scan_aus() - dieselbe Funktion
     benutzt der Hintergrundarbeiter.
     """
+    if _ist_probescan(http_request):
+        # Kontextmanager und nicht set(): der Endpunkt laeuft in einem
+        # langlebigen Ereignisprozess, ein haengengebliebenes Konto wuerde am
+        # naechsten Scan kleben (siehe ai_budget.konto_setzen).
+        from compliance_engine import ai_budget
+        with ai_budget.konto_setzen(ai_budget.SYSTEM):
+            return await fuehre_preview_scan_aus(str(request.url))
     return await fuehre_preview_scan_aus(str(request.url))
 
 
