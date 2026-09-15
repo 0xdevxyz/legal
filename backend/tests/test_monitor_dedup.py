@@ -285,11 +285,21 @@ async def test_regeneration_nur_bei_high_oder_critical(severity, erwartet_regen)
 # ---------------------------------------------------------------------------
 
 def test_monitor_zaehlt_openrouter_requests():
-    """legal_change_monitor muss openrouter_requests_total inkrementieren."""
+    """legal_change_monitor muss openrouter_requests_total inkrementieren.
+
+    Seit dem 15.09.2026 nicht mehr selbst, sondern über die Engstelle
+    ki_zugang, die für alle Aufrufstellen zählt und dort auch das Budget fragt.
+    Der Monitor war der größte ungedeckelte Posten (Cron 05:00, Sonnet 4.5).
+    Geprüft wird beides: die Engstelle zählt, der Monitor geht durch sie.
+    """
     import inspect
+    import ki_zugang
     import legal_change_monitor as mod
 
+    src_engstelle = inspect.getsource(ki_zugang)
+    assert "openrouter_requests_total" in src_engstelle
+    assert '_openrouter_counter.labels(status="success")' in src_engstelle
+    assert '_openrouter_counter.labels(status="error")' in src_engstelle
+
     src = inspect.getsource(mod)
-    assert "openrouter_requests_total" in src
-    assert '_openrouter_counter.labels(status="success")' in src
-    assert '_openrouter_counter.labels(status="error")' in src
+    assert "ki_zugang.chat(" in src

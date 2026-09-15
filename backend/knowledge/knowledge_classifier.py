@@ -71,13 +71,12 @@ class KnowledgeClassifier:
         self._client = None
 
     def _get_client(self):
-        if not self._client:
-            try:
-                from openai import AsyncOpenAI
-                self._client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
-            except ImportError:
-                logger.warning("openai package not installed, using rule-based fallback")
-        return self._client
+        """Nur noch die Frage, ob ueberhaupt ein Schluessel da ist.
+
+        Der eigene AsyncOpenAI-Client ist weg: er ging am Budget vorbei. Der
+        Aufruf laeuft jetzt ueber ki_zugang (siehe ki_zugang.py).
+        """
+        return bool(OPENAI_API_KEY)
 
     def _rule_based_classify(self, item: RawContentItem) -> Dict[str, Any]:
         text = f"{item.title} {item.content}".lower()
@@ -133,23 +132,31 @@ class KnowledgeClassifier:
         classification: Dict[str, Any] = {}
 
         if client and OPENAI_API_KEY:
+            import ki_zugang
             try:
                 prompt = CLASSIFICATION_PROMPT.format(
                     content=f"Titel: {item.title}\n\n{item.content[:1500]}"
                 )
-                response = await client.chat.completions.create(
+                antwort = await ki_zugang.chat(
                     model="gpt-4o-mini",
                     messages=[{"role": "user", "content": prompt}],
+                    zweck="Knowledge Classifier",
                     temperature=0.1,
                     max_tokens=800,
                 )
-                raw = response.choices[0].message.content or ""
-                raw = raw.strip()
+                if not antwort.erfolg or antwort.inhalt is None:
+                    raise RuntimeError(antwort.fehler or "keine Antwort")
+                raw = antwort.inhalt.strip()
                 if raw.startswith("```"):
                     raw = re.sub(r"```[a-z]*\n?", "", raw).strip("`").strip()
                 classification = json.loads(raw)
+            except ki_zugang.BudgetErschoepft as e:
+                # Eigener Zweig: "Budget zu" ist kein Anbieterausfall. Die
+                # regelbasierte Einordnung greift, die Meldung sagt warum.
+                logger.warning(f"Knowledge-Classifier ohne KI: {e}")
+                classification = self._rule_based_classify(item)
             except Exception as e:
-                logger.warning(f"OpenAI classification failed, using fallback: {e}")
+                logger.warning(f"KI-Einordnung fehlgeschlagen, Rueckfall auf Regeln: {e}")
                 classification = self._rule_based_classify(item)
         else:
             classification = self._rule_based_classify(item)

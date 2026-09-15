@@ -26,15 +26,6 @@ SOLUTION_MODEL = os.getenv("COMPLYO_SOLUTION_MODEL", "anthropic/claude-haiku-4.5
 # Override per ENV; Fallback auf das bereits konfigurierte REVIEW_MODEL, falls das
 # Anthropic-Modell über den OpenRouter-Key nicht verfügbar ist.
 VERIFY_MODEL = os.getenv("COMPLYO_VERIFY_MODEL", "anthropic/claude-haiku-4.5")
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-
-_HEADERS = {
-    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-    "Content-Type": "application/json",
-    "HTTP-Referer": "https://complyo.de",
-    "X-Title": "Complyo AI Review Engine",
-}
-
 # Prometheus-Zähler für OpenRouter-Aufrufe (wie ai_fix_engine.unified_fix_engine).
 # Fail-open: ohne metrics-Modul (z.B. isolierte Tests) laufen die Calls ohne Zähler.
 try:
@@ -67,35 +58,27 @@ def _get_solution_cache():
 
 
 async def _call_ai(prompt: str, model: str, max_tokens: int = 600, temperature: float = 0.2) -> Optional[str]:
+    """Ueber ki_zugang, damit der Aufruf am Budget haengt (siehe ki_zugang.py)."""
     if not OPENROUTER_API_KEY:
         return None
+    import ki_zugang
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                OPENROUTER_URL,
-                headers=_HEADERS,
-                json={
-                    "model": model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": max_tokens,
-                    "temperature": temperature,
-                },
-                timeout=aiohttp.ClientTimeout(total=18),
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if _openrouter_counter:
-                        _openrouter_counter.labels(status="success").inc()
-                    return data["choices"][0]["message"]["content"].strip()
-                logger.warning(f"AI call {model} status {resp.status}")
-                if _openrouter_counter:
-                    _openrouter_counter.labels(status="error").inc()
-                return None
-    except Exception as e:
-        logger.warning(f"AI call failed ({model}): {e}")
-        if _openrouter_counter:
-            _openrouter_counter.labels(status="error").inc()
+        antwort = await ki_zugang.chat(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            zweck="Review Engine",
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=18,
+        )
+    except ki_zugang.BudgetErschoepft as e:
+        # Bewusst eigener Zweig: "Budget zu" ist etwas anderes als "Anbieter
+        # kaputt", und der Unterschied muss im Log stehen.
+        logger.warning(f"Review-Engine ohne KI: {e}")
         return None
+    if not antwort.erfolg or antwort.inhalt is None:
+        return None
+    return antwort.inhalt.strip()
 
 
 async def _call_ai_json(prompt: str, model: str, max_tokens: int = 800) -> Optional[Dict]:

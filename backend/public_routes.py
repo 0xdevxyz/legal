@@ -1010,64 +1010,46 @@ Format:
 
 Antworte auf Deutsch, maximal 300 Wörter."""
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://complyo.de",
-                    "X-Title": "Complyo Compliance Scanner"
-                },
-                json={
-                    "model": SOLUTION_MODEL,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    "max_tokens": 800,
-                    "temperature": 0.7
-                },
-                timeout=aiohttp.ClientTimeout(total=15)
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    ai_solution = data.get('choices', [{}])[0].get('message', {}).get('content', '')
-                    logger.info(f"✅ KI-Lösung generiert für: {issue_title[:50]}...")
-                    
-                    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                    # 3️⃣ SPEICHERE NEUE LÖSUNG IM CACHE
-                    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                    if solution_cache and ai_solution:
-                        try:
-                            await solution_cache.store_solution(
-                                category=category,
-                                title=issue_title,
-                                description=issue_description,
-                                solution=ai_solution,
-                                model=SOLUTION_MODEL
-                            )
-                        except Exception as e:
-                            logger.error(f"❌ Failed to cache solution: {e}")
-                    
-                    return ai_solution
-                elif response.status == 429:
-                    # Rate Limit - Retry mit Backoff
-                    if retry_count < MAX_RETRIES:
-                        wait_time = BACKOFF_SECONDS[retry_count]
-                        logger.warning(f"⚠️ Rate Limit (429) - Retry {retry_count + 1}/{MAX_RETRIES} in {wait_time}s...")
-                        await asyncio.sleep(wait_time)
-                        return await _generate_ai_solution(issue_title, issue_description, category, url, retry_count + 1)
-                    else:
-                        logger.error(f"❌ Rate Limit (429) - Max Retries erreicht")
-                        return "⚠️ KI-Analyse vorübergehend nicht verfügbar (Rate Limit). Bitte in wenigen Minuten erneut versuchen."
-                else:
-                    error_text = await response.text()
-                    logger.error(f"❌ OpenRouter API Error: {response.status} - {error_text[:200]}")
-                    return None
-                    
+        # Ueber ki_zugang, damit der Aufruf am Budget haengt (siehe ki_zugang.py).
+        # Diese Stelle erzeugt eine Loesung JE BEFUND auf einem oeffentlichen
+        # Pfad - dieselbe Vervielfacher-Form wie der Vorfall vom 04.09.2026.
+        # Der Cache davor bleibt die erste Bremse, das Budget die zweite.
+        import ki_zugang
+        try:
+            antwort = await ki_zugang.chat(
+                model=SOLUTION_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                zweck="Compliance Scanner",
+                max_tokens=800,
+                temperature=0.7,
+                timeout=15,
+                versuche=MAX_RETRIES,
+            )
+        except ki_zugang.BudgetErschoepft as e:
+            logger.warning(f"KI-Loesung ohne KI (Budget): {e}")
+            return None
+
+        if not antwort.erfolg or not antwort.inhalt:
+            logger.error(f"❌ KI-Loesung fehlgeschlagen: {antwort.fehler}")
+            return None
+
+        ai_solution = antwort.inhalt
+        logger.info(f"✅ KI-Lösung generiert für: {issue_title[:50]}...")
+
+        if solution_cache and ai_solution:
+            try:
+                await solution_cache.store_solution(
+                    category=category,
+                    title=issue_title,
+                    description=issue_description,
+                    solution=ai_solution,
+                    model=SOLUTION_MODEL
+                )
+            except Exception as e:
+                logger.error(f"❌ Failed to cache solution: {e}")
+
+        return ai_solution
+
     except asyncio.TimeoutError:
         logger.error(f"❌ KI-Lösung Timeout für: {issue_title[:50]}")
         return None

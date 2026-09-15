@@ -70,7 +70,6 @@ class AIApiClient:
     
     def __init__(self):
         self.api_key = os.getenv("OPENROUTER_API_KEY", "")
-        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
         self.timeout = 60.0
         
         # Model pricing (USD per 1M tokens) — SCHÄTZUNG für moonshotai/kimi-k2.5.
@@ -106,105 +105,49 @@ class AIApiClient:
                 response_time_ms=0
             )
         
-        start_time = time.time()
-        last_error = None
-        
-        for attempt in range(retry_count):
-            try:
-                async with aiohttp.ClientSession() as session:
-                    headers = {
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                        "HTTP-Referer": "https://complyo.de",
-                        "X-Title": "Complyo AI Fix Engine"
-                    }
-                    
-                    data = {
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": system_message},
-                            {"role": "user", "content": prompt}
-                        ],
-                        "temperature": temperature,
-                        "max_tokens": max_tokens
-                    }
-                    
-                    async with session.post(
-                        self.api_url,
-                        headers=headers,
-                        json=data,
-                        timeout=aiohttp.ClientTimeout(total=self.timeout)
-                    ) as response:
-                        response_time = int((time.time() - start_time) * 1000)
-                        
-                        if response.status == 200:
-                            result = await response.json()
-                            content = result["choices"][0]["message"]["content"]
-                            
-                            # Calculate usage
-                            usage = result.get("usage", {})
-                            input_tokens = usage.get("prompt_tokens", 0)
-                            output_tokens = usage.get("completion_tokens", 0)
-                            total_tokens = input_tokens + output_tokens
-                            
-                            # Calculate cost
-                            pricing = self.pricing.get(model, {"input": 5.0, "output": 15.0})
-                            cost = (input_tokens * pricing["input"] / 1_000_000 + 
-                                   output_tokens * pricing["output"] / 1_000_000)
-                            
-                            if _openrouter_counter:
-                                _openrouter_counter.labels(status="success").inc()
-                            return AICallResult(
-                                success=True,
-                                content=content,
-                                model=model,
-                                tokens_used=total_tokens,
-                                cost_usd=cost,
-                                error=None,
-                                response_time_ms=response_time
-                            )
-                        
-                        elif response.status == 429:
-                            # Rate limit - wait and retry
-                            last_error = "Rate limit erreicht"
-                            wait_time = 2 ** attempt  # Exponential backoff
-                            await asyncio.sleep(wait_time)
-                            continue
-                        
-                        else:
-                            error_text = await response.text()
-                            last_error = f"API Error {response.status}: {error_text}"
-                            
-                            if response.status >= 500:
-                                # Server error - retry
-                                await asyncio.sleep(1)
-                                continue
-                            else:
-                                # Client error - don't retry
-                                break
-            
-            except asyncio.TimeoutError:
-                last_error = "Timeout bei AI-API-Call"
-                await asyncio.sleep(1)
-                continue
-            
-            except Exception as e:
-                last_error = f"Exception: {str(e)}"
-                await asyncio.sleep(1)
-                continue
-        
-        # All retries failed
-        response_time = int((time.time() - start_time) * 1000)
-        if _openrouter_counter:
-            _openrouter_counter.labels(status="error").inc()
+        # Ueber ki_zugang, damit der Aufruf am Budget haengt (siehe ki_zugang.py).
+        # Diese Engine rechnete ihre Kosten vorher zwar aus, fragte aber nie,
+        # ob sie sie ausgeben darf - und sie skaliert mit Nutzeraktionen, ist
+        # also genau die Form, die am 04.09.2026 das Konto leergefahren hat.
+        # Die Wiederholungen liegen jetzt in ki_zugang, die Preistabelle dieser
+        # Engine bleibt fuer die ausgewiesenen USD-Kosten erhalten.
+        import ki_zugang
+        try:
+            antwort = await ki_zugang.chat(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": prompt},
+                ],
+                zweck="AI Fix Engine",
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=self.timeout,
+                versuche=retry_count,
+            )
+        except ki_zugang.BudgetErschoepft as e:
+            return AICallResult(
+                success=False, content=None, model=model, tokens_used=None,
+                cost_usd=None, error=f"KI-Budget: {e}", response_time_ms=0,
+            )
+
+        if antwort.erfolg:
+            pricing = self.pricing.get(model, {"input": 5.0, "output": 15.0})
+            cost = (antwort.prompt_tokens * pricing["input"] / 1_000_000 +
+                    antwort.completion_tokens * pricing["output"] / 1_000_000)
+            return AICallResult(
+                success=True,
+                content=antwort.inhalt,
+                model=model,
+                tokens_used=antwort.tokens,
+                cost_usd=cost,
+                error=None,
+                response_time_ms=antwort.dauer_ms,
+            )
+
         return AICallResult(
-            success=False,
-            content=None,
-            model=model,
-            tokens_used=None,
-            cost_usd=None,
-            error=last_error or "Unknown error",
-            response_time_ms=response_time
+            success=False, content=None, model=model, tokens_used=None,
+            cost_usd=None, error=antwort.fehler, response_time_ms=antwort.dauer_ms,
         )
 
 

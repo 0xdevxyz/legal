@@ -137,7 +137,6 @@ class PatchAIClient:
     
     def __init__(self):
         self.api_key = os.getenv("OPENROUTER_API_KEY", "")
-        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
         self.timeout = 90.0  # Längerer Timeout für komplexe Patches
         
         # Pricing (USD per 1M tokens)
@@ -172,84 +171,40 @@ class PatchAIClient:
         if not self.api_key:
             return False, None, {"error": "OPENROUTER_API_KEY nicht konfiguriert"}
         
-        start_time = time.time()
-        last_error = None
-        
-        for attempt in range(3):
-            try:
-                async with aiohttp.ClientSession() as session:
-                    headers = {
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                        "HTTP-Referer": "https://complyo.de",
-                        "X-Title": "Complyo BFSG Patch Service"
-                    }
-                    
-                    data = {
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": system_message},
-                            {"role": "user", "content": prompt}
-                        ],
-                        "temperature": temperature,
-                        "max_tokens": max_tokens
-                    }
-                    
-                    async with session.post(
-                        self.api_url,
-                        headers=headers,
-                        json=data,
-                        timeout=aiohttp.ClientTimeout(total=self.timeout)
-                    ) as response:
-                        response_time = int((time.time() - start_time) * 1000)
-                        
-                        if response.status == 200:
-                            result = await response.json()
-                            content = result["choices"][0]["message"]["content"]
-                            
-                            # Berechne Kosten
-                            usage = result.get("usage", {})
-                            input_tokens = usage.get("prompt_tokens", 0)
-                            output_tokens = usage.get("completion_tokens", 0)
-                            
-                            pricing = self.pricing.get(model, {"input": 5.0, "output": 15.0})
-                            cost = (input_tokens * pricing["input"] / 1_000_000 + 
-                                   output_tokens * pricing["output"] / 1_000_000)
-                            
-                            return True, content, {
-                                "model": model,
-                                "tokens_used": input_tokens + output_tokens,
-                                "cost_usd": cost,
-                                "response_time_ms": response_time
-                            }
-                        
-                        elif response.status == 429:
-                            last_error = "Rate limit erreicht"
-                            await asyncio.sleep(2 ** attempt)
-                            continue
-                        
-                        else:
-                            error_text = await response.text()
-                            last_error = f"API Error {response.status}: {error_text[:200]}"
-                            
-                            if response.status >= 500:
-                                await asyncio.sleep(1)
-                                continue
-                            break
-            
-            except asyncio.TimeoutError:
-                last_error = "Timeout bei AI-API-Call"
-                await asyncio.sleep(1)
-                continue
-            
-            except Exception as e:
-                last_error = f"Exception: {str(e)}"
-                await asyncio.sleep(1)
-                continue
-        
+        # Ueber ki_zugang, damit der Aufruf am Budget haengt (siehe ki_zugang.py).
+        # Die Preistabelle dieser Datei bleibt fuer die ausgewiesenen USD-Kosten,
+        # die Wiederholungen liegen jetzt in ki_zugang.
+        import ki_zugang
+        try:
+            antwort = await ki_zugang.chat(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": prompt},
+                ],
+                zweck="BFSG Patch Service",
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=self.timeout,
+                versuche=3,
+            )
+        except ki_zugang.BudgetErschoepft as e:
+            return False, None, {"error": f"KI-Budget: {e}"}
+
+        if antwort.erfolg:
+            pricing = self.pricing.get(model, {"input": 5.0, "output": 15.0})
+            cost = (antwort.prompt_tokens * pricing["input"] / 1_000_000 +
+                    antwort.completion_tokens * pricing["output"] / 1_000_000)
+            return True, antwort.inhalt, {
+                "model": model,
+                "tokens_used": antwort.tokens,
+                "cost_usd": cost,
+                "response_time_ms": antwort.dauer_ms,
+            }
+
         return False, None, {
-            "error": last_error or "Unbekannter Fehler",
-            "response_time_ms": int((time.time() - start_time) * 1000)
+            "error": antwort.fehler or "Unbekannter Fehler",
+            "response_time_ms": antwort.dauer_ms,
         }
 
 

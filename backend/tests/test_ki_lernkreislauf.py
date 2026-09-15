@@ -398,10 +398,22 @@ class TestModellnamenUndMetriken:
         assert preis["input"] < 3.0 and preis["output"] < 15.0
 
     def test_openrouter_zaehler_ist_verdrahtet(self):
-        """Die echten Verbraucher müssen openrouter_requests_total zählen."""
+        """Die echten Verbraucher müssen openrouter_requests_total zählen.
+
+        ai_review_engine zählt seit dem 15.09.2026 nicht mehr selbst: der Aufruf
+        läuft über die Engstelle ki_zugang, die für alle zählt (und dort auch
+        das Budget fragt). Geprüft wird deshalb beides, damit der Zähler nicht
+        unterwegs verloren geht: die Engstelle zählt, und ai_review_engine geht
+        durch sie hindurch.
+        """
+        import ki_zugang
+        src_engstelle = inspect.getsource(ki_zugang)
+        assert "openrouter_requests_total" in src_engstelle
+        assert '_openrouter_counter.labels(status="success").inc()' in src_engstelle
+        assert '_openrouter_counter.labels(status="error").inc()' in src_engstelle
+
         src_review = inspect.getsource(ai_review_engine)
-        assert "openrouter_requests_total" in src_review
-        assert '_openrouter_counter.labels(status="success").inc()' in src_review
+        assert "ki_zugang.chat(" in src_review
 
         import compliance_engine.ai_alt_text_generator as altgen
         src_alt = inspect.getsource(altgen)

@@ -5,8 +5,10 @@ Context-aware AI analysis for generating personalized compliance fixes
 
 import os
 import json
+import logging
 from typing import Dict, List, Any
-import aiohttp
+
+logger = logging.getLogger(__name__)
 
 
 class IntelligentAnalyzer:
@@ -16,7 +18,6 @@ class IntelligentAnalyzer:
     
     def __init__(self):
         self.api_key = os.getenv("OPENROUTER_API_KEY", "")
-        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
         self.model = "moonshotai/kimi-k2.5"
     
     async def analyze_and_generate_fixes(self, scan_result: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -148,40 +149,29 @@ class IntelligentAnalyzer:
             print("Warning: No OPENROUTER_API_KEY - using fallback fixes")
             return self._generate_fallback_fixes(issues)
         
+        # Ueber ki_zugang, damit der Aufruf am Budget haengt (siehe ki_zugang.py).
+        import ki_zugang
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self.api_url,
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": self.model,
-                        "messages": [
-                            {
-                                "role": "user",
-                                "content": prompt
-                            }
-                        ],
-                        "temperature": 0.3,
-                        "max_tokens": 2000
-                    },
-                    timeout=aiohttp.ClientTimeout(total=30)
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        content = data["choices"][0]["message"]["content"]
-                        
-                        # Parse AI response
-                        fixes = self._parse_ai_response(content, issues, category)
-                        return fixes
-                    else:
-                        print(f"AI API error: {response.status}")
-                        return self._generate_fallback_fixes(issues)
-        
+            antwort = await ki_zugang.chat(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                zweck="Intelligent Analyzer",
+                temperature=0.3,
+                max_tokens=2000,
+                timeout=30,
+            )
+        except ki_zugang.BudgetErschoepft as e:
+            logger.warning(f"Analyzer ohne KI, Rueckfall auf Vorlagen: {e}")
+            return self._generate_fallback_fixes(issues)
+
+        if not antwort.erfolg or antwort.inhalt is None:
+            logger.warning(f"Analyzer: KI lieferte nichts ({antwort.fehler})")
+            return self._generate_fallback_fixes(issues)
+
+        try:
+            return self._parse_ai_response(antwort.inhalt, issues, category)
         except Exception as e:
-            print(f"AI generation error: {e}")
+            logger.warning(f"Analyzer: Antwort nicht lesbar ({e})")
             return self._generate_fallback_fixes(issues)
     
     def _build_prompt(self, category: str, issues: List[Dict[str, Any]], context: Dict[str, Any]) -> str:

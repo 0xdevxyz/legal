@@ -97,13 +97,12 @@ class KnowledgeRetriever:
         self._load_cache()
 
     def _get_client(self):
-        if not self._openai_client and OPENAI_API_KEY:
-            try:
-                from openai import AsyncOpenAI
-                self._openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
-            except ImportError:
-                logger.warning("openai not installed, keyword-based fallback will be used")
-        return self._openai_client
+        """Nur noch die Frage, ob ein Schluessel da ist.
+
+        Der eigene AsyncOpenAI-Client ist weg: er ging am Budget vorbei. Die
+        Einbettung laeuft jetzt ueber ki_zugang (siehe ki_zugang.py).
+        """
+        return bool(OPENAI_API_KEY)
 
     def _load_cache(self):
         if EMBEDDINGS_CACHE_FILE.exists():
@@ -140,18 +139,19 @@ class KnowledgeRetriever:
         return docs
 
     async def _embed_text(self, text: str) -> Optional[List[float]]:
-        client = self._get_client()
-        if not client:
+        if not self._get_client():
             return None
+        import ki_zugang
         try:
-            text_clean = text[:8000].replace("\n", " ")
-            response = await client.embeddings.create(
+            return await ki_zugang.einbettung(
                 model=EMBEDDING_MODEL,
-                input=text_clean,
+                eingabe=text[:8000].replace("\n", " "),
+                zweck="Knowledge Retriever",
             )
-            return response.data[0].embedding
-        except Exception as e:
-            logger.warning(f"Embedding failed: {e}")
+        except ki_zugang.BudgetErschoepft as e:
+            # Kein Vektor, aber auch kein Ausfall: retrieve() faellt auf die
+            # Stichwortsuche zurueck.
+            logger.warning(f"Knowledge-Retriever ohne Einbettung: {e}")
             return None
 
     def _keyword_score(self, query: str, doc: Dict[str, Any]) -> float:

@@ -137,7 +137,6 @@ class LegalChangeMonitor:
     
     def __init__(self, openrouter_api_key: str = None, db_pool=None):
         self.api_key = openrouter_api_key or os.getenv("OPENROUTER_API_KEY")
-        self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         self.db_pool = db_pool
         
         # Quellen für Gesetzesänderungen
@@ -576,47 +575,33 @@ Antworte im JSON-Format:
         """
         Ruft die OpenRouter AI API auf
         """
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "model": os.getenv("OPENROUTER_LEGAL_MODEL", "anthropic/claude-sonnet-4.5"),
-            "messages": [
+        # Ueber ki_zugang, damit der Aufruf am Budget haengt (siehe ki_zugang.py).
+        # Diese Stelle laeuft taeglich um 05:00 aus dem Cron und war bisher der
+        # groesste ungedeckelte Posten: Sonnet 4.5 mit bis zu 4000 Tokens
+        # Antwort, gemessen rund 0,05 USD am Tag, an keinem Deckel.
+        import ki_zugang
+
+        antwort = await ki_zugang.chat(
+            model=os.getenv("OPENROUTER_LEGAL_MODEL", "anthropic/claude-sonnet-4.5"),
+            messages=[
                 {
                     "role": "system",
                     "content": "Du bist ein Experte für deutsches und europäisches Recht, spezialisiert auf Datenschutz, Cookie-Compliance und Web-Compliance. Du analysierst Gesetzesänderungen und generierst konkrete, umsetzbare Lösungen."
                 },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
+                {"role": "user", "content": prompt},
             ],
-            "temperature": 0.3,
-            "max_tokens": 4000
-        }
-        
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            try:
-                response = await client.post(
-                    self.base_url,
-                    headers=headers,
-                    json=payload
-                )
-                response.raise_for_status()
-            except Exception:
-                # Jeder fehlgeschlagene OpenRouter-Call zählt als error
-                if _openrouter_counter:
-                    _openrouter_counter.labels(status="error").inc()
-                raise
+            zweck="Legal Change Monitor",
+            temperature=0.3,
+            max_tokens=4000,
+            timeout=60,
+        )
 
-            if _openrouter_counter:
-                _openrouter_counter.labels(status="success").inc()
+        # Wie vorher: ein Fehlschlag wird geworfen, nicht verschluckt. Der
+        # Aufrufer haengt daran seine Fehlerbehandlung.
+        if not antwort.erfolg or antwort.inhalt is None:
+            raise RuntimeError(f"Legal-Change-Monitor: KI-Aufruf fehlgeschlagen ({antwort.fehler})")
 
-            data = response.json()
-
-            return data['choices'][0]['message']['content']
+        return antwort.inhalt
     
     def _build_monitoring_prompt(self, news_items: List[Dict[str, Any]]) -> str:
         """
