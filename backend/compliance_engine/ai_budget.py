@@ -71,10 +71,22 @@ PREISE_USD_JE_TOKEN = {
     "anthropic/claude-3.5-sonnet": {"prompt": 0.000003, "completion": 0.000015},
     "anthropic/claude-sonnet-4.5": {"prompt": 0.000003, "completion": 0.000015},
     "anthropic/claude-sonnet-4-20250514": {"prompt": 0.000003, "completion": 0.000015},
-    # aus ai_fix_engine/unified_fix_engine.py uebernommen (dort eigene Buchhaltung,
-    # hier nur fuer den Fall, dass unified_fix_engine spaeter auch ueber dieses
-    # Budget laufen soll).
+    # aus ai_fix_engine/unified_fix_engine.py uebernommen (laeuft seit dem
+    # 15.09.2026 ueber dieses Budget).
     "moonshotai/kimi-k2.5": {"prompt": 0.0000006, "completion": 0.0000025},
+    # Nachgetragen am 15.09.2026, als alle Aufrufstellen ueber ki_zugang an
+    # dieses Budget kamen: diese drei fehlten und wurden deshalb mit dem
+    # teuersten bekannten Satz gerechnet. Bei gpt-4o-mini war das der Faktor 20
+    # (gebucht 0,018 USD statt 0,0008 USD fuer einen Einordnungsaufruf). Ein
+    # Deckel, der Phantomkosten zaehlt, sperrt zu frueh und wird abgeschaltet -
+    # deshalb gehoert jedes benutzte Modell hier hinein.
+    "openai/gpt-4o-mini": {"prompt": 0.00000015, "completion": 0.0000006},
+    "gpt-4o-mini": {"prompt": 0.00000015, "completion": 0.0000006},
+    "openai/gpt-4o": {"prompt": 0.0000025, "completion": 0.00001},
+    "openai/gpt-4-turbo-preview": {"prompt": 0.00001, "completion": 0.00003},
+    # Einbettungen: kein Completion-Anteil.
+    "text-embedding-3-small": {"prompt": 0.00000002, "completion": 0.0},
+    "openai/text-embedding-3-small": {"prompt": 0.00000002, "completion": 0.0},
 }
 _TEUERSTER_BEKANNTER_SATZ = {"prompt": 0.000003, "completion": 0.000015}
 

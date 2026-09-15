@@ -14,6 +14,7 @@ haengen. Eine neue Datei faellt durch, ohne dass jemand daran denken muss.
 import ast
 import asyncio
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -235,3 +236,66 @@ class TestBudgetSperrtWirklich:
         assert antwort.erfolg is False
         assert "500" in (antwort.fehler or "")
         assert gebucht == [], "Ein fehlgeschlagener Aufruf darf nichts buchen"
+
+
+class TestPreiseSindBekannt:
+    """Ein Deckel, der Phantomkosten zaehlt, sperrt zu frueh.
+
+    `ai_budget.kosten_eur` rechnet unbekannte Modelle mit dem teuersten
+    bekannten Satz. Das ist als Sicherung richtig, aber als Dauerzustand
+    schaedlich: am 15.09.2026 buchte ein Einordnungsaufruf mit gpt-4o-mini
+    0,018 USD statt 0,0008 USD, Faktor 20. Wer so misst, sperrt Aufrufe, die
+    nichts gekostet haetten, und schaltet den Deckel am Ende ganz ab.
+    """
+
+    MODELLMUSTER = re.compile(
+        r'"((?:anthropic|openai|moonshotai|google|meta-llama|mistralai)/[A-Za-z0-9.:\-]+)"'
+        r'|"((?:gpt|text-embedding)-[A-Za-z0-9.\-]+)"'
+    )
+
+    def modelle_im_quelltext(self):
+        gefunden = {}
+        for rel, pfad in quelldateien():
+            try:
+                text = pfad.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for treffer in self.MODELLMUSTER.finditer(text):
+                name = treffer.group(1) or treffer.group(2)
+                gefunden.setdefault(name, set()).add(rel)
+        return gefunden
+
+    def test_jedes_benutzte_modell_hat_einen_preis(self):
+        from compliance_engine import ai_budget
+
+        gefunden = self.modelle_im_quelltext()
+        # Die Preistabelle selbst nennt naturgemaess alle Namen.
+        ohne_preis = {
+            name: sorted(dateien - {"compliance_engine/ai_budget.py"})
+            for name, dateien in gefunden.items()
+            if name not in ai_budget.PREISE_USD_JE_TOKEN
+        }
+        ohne_preis = {n: d for n, d in ohne_preis.items() if d}
+        assert not ohne_preis, (
+            "Diese Modelle werden benutzt, stehen aber nicht in "
+            "ai_budget.PREISE_USD_JE_TOKEN und werden deshalb mit dem "
+            "teuersten bekannten Satz gerechnet: "
+            + "; ".join(f"{n} (in {', '.join(d)})" for n, d in sorted(ohne_preis.items()))
+        )
+
+    def test_unbekanntes_modell_bleibt_teuer_gerechnet(self):
+        # Die Sicherung selbst muss bleiben: ein Modell, das niemand
+        # eingetragen hat, wird lieber zu teuer als zu billig gebucht.
+        from compliance_engine import ai_budget
+
+        teuer = ai_budget.kosten_eur("erfundenes/modell", 1_000_000, 0)
+        haiku = ai_budget.kosten_eur("anthropic/claude-haiku-4.5", 1_000_000, 0)
+        assert teuer > haiku
+
+    def test_gpt_4o_mini_wird_realistisch_gerechnet(self):
+        from compliance_engine import ai_budget
+
+        # 2000 Prompt- + 800 Completion-Tokens, der uebliche Zuschnitt der
+        # Wissens-Einordnung. Real rund 0,0008 USD, also weit unter einem Cent.
+        kosten = ai_budget.kosten_eur("gpt-4o-mini", 2000, 800)
+        assert kosten < 0.001, f"{kosten} EUR ist fuer gpt-4o-mini zu hoch gerechnet"
