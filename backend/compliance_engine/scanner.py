@@ -122,6 +122,15 @@ def normalize_severities(issues: "List[ComplianceIssue]") -> "List[ComplianceIss
             )
             normalisiert = "warning"
         issue.severity = normalisiert
+        # Ein Hinweis traegt kein Bussgeldrisiko. Die Risikosumme steht dem
+        # Kunden als "Abmahnrisiko" gegenueber; ein Hinweis zur Handpruefung
+        # ("Guetezeichen ohne verlinkten Nachweis erkannt", 1.000 EUR auf
+        # osteopathie-limbach.de am 16.09.2026) hat darin nichts verloren,
+        # weil niemand gemessen hat, ob ein Mangel vorliegt. Die Quellen
+        # sind bereinigt; diese Zeile haelt die Regel, wenn die naechste
+        # Quelle sie vergisst.
+        if normalisiert == "info" and getattr(issue, "risk_euro", 0):
+            issue.risk_euro = 0
     return issues
 
 
@@ -131,6 +140,15 @@ _DEDUP_UMLAUTE = (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss"))
 # "WCAG 1.2.2: " am Titelanfang beschreibt die Norm, nicht den Mangel —
 # derselbe Fund mit und ohne dieses Praefix ist ein Fund.
 _WCAG_PRAEFIX = re.compile(r"^\s*wcag\s*[\d.]+\s*[:\-–]\s*")
+
+
+# Ein Mangel, den ein Check je nach Seite in zwei Fassungen meldet. Die
+# Barrierefreiheitserklaerung fehlt auf der Startseite als Hinweis ("nur
+# Pflicht fuer B2C-Dienste") und auf der Buchungsseite als Warnung ("BFSG
+# §14"); beide standen am 16.09.2026 nebeneinander im selben Bericht von
+# panoart360.de und osteopathie-limbach.de. Es ist EINE fehlende Erklaerung,
+# und die strengere Fassung hat recht, weil sie den Beleg gesehen hat.
+_MANGEL_STAEMME = ("barrierefreiheitserklaerungfehlt",)
 
 
 def _dedup_key(issue) -> str:
@@ -149,6 +167,10 @@ def _dedup_key(issue) -> str:
     for umlaut, ersatz in _DEDUP_UMLAUTE:
         text = text.replace(umlaut, ersatz)
     text = re.sub(r"[^a-z]", "", text)
+    for stamm in _MANGEL_STAEMME:
+        if text.startswith(stamm):
+            text = stamm
+            break
     saeule = ScoreCalculator.categorize(getattr(issue, "category", "") or "")
     return f"{saeule}|{text}"
 

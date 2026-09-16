@@ -267,6 +267,98 @@ AXE_DE: "dict[str, tuple[str, str]]" = {
         "Scrollbereich nicht per Tastatur erreichbar",
         "Ein scrollbarer Bereich lässt sich nicht mit der Tastatur ansteuern.",
     ),
+
+    # --- Nachtrag 16.09.2026: Regeln, die bis dahin auf Englisch im Bericht
+    # standen ("ARIA role should be appropriate for the element" auf
+    # panoart360.de). Ueberwiegend axe-Empfehlungen. ---
+    "aria-allowed-role": (
+        "ARIA-Rolle passt nicht zum Element",
+        "Ein Element trägt eine ARIA-Rolle, die für diesen Elementtyp nicht vorgesehen ist.",
+    ),
+    "aria-dialog-name": (
+        "Dialog ohne Namen",
+        "Ein Element mit role=\"dialog\" oder \"alertdialog\" hat keinen zugänglichen Namen.",
+    ),
+    "aria-meter-name": (
+        "Messanzeige ohne Namen",
+        "Ein Element mit role=\"meter\" hat keinen zugänglichen Namen.",
+    ),
+    "aria-progressbar-name": (
+        "Fortschrittsanzeige ohne Namen",
+        "Ein Element mit role=\"progressbar\" hat keinen zugänglichen Namen.",
+    ),
+    "aria-roledescription": (
+        "aria-roledescription ohne passende Rolle",
+        "aria-roledescription steht an einem Element ohne (implizite) Rolle und wird nicht vorgelesen.",
+    ),
+    "aria-text": (
+        "role=\"text\" mit fokussierbarem Inhalt",
+        "Ein Element mit role=\"text\" enthält fokussierbare Nachfahren; die verlieren so ihre Bedeutung.",
+    ),
+    "aria-tooltip-name": (
+        "Tooltip ohne Namen",
+        "Ein Element mit role=\"tooltip\" hat keinen zugänglichen Namen.",
+    ),
+    "focus-order-semantics": (
+        "Fokussierbares Element ohne Bedienrolle",
+        "Ein Element liegt in der Tabulator-Reihenfolge, hat aber keine Rolle, die ein Bedienelement beschreibt.",
+    ),
+    "focusable-content": (
+        "Inhalt nicht fokussierbar",
+        "Ein Element mit role=\"application\" oder ähnlichem enthält keinen fokussierbaren Inhalt.",
+    ),
+    "focusable-disabled": (
+        "Fokussierbares Element im deaktivierten Bereich",
+        "Innerhalb eines mit aria-disabled markierten Bereichs sind Elemente weiter per Tastatur erreichbar.",
+    ),
+    "focusable-no-name": (
+        "Fokussierbares Element ohne Namen",
+        "Ein per Tastatur erreichbares Element hat keinen zugänglichen Namen.",
+    ),
+    "frame-focusable-content": (
+        "Frame mit Inhalt, aber aus der Tabulator-Reihenfolge genommen",
+        "Ein <iframe> mit tabindex=\"-1\" enthält fokussierbaren Inhalt, der so nicht erreichbar ist.",
+    ),
+    "html-xml-lang-mismatch": (
+        "lang und xml:lang widersprechen sich",
+        "Das <html>-Element nennt in lang und xml:lang verschiedene Sprachen.",
+    ),
+    "label-title-only": (
+        "Formularfeld nur über title benannt",
+        "Ein Formularfeld hat nur ein title-Attribut als Beschriftung; ein sichtbares <label> fehlt.",
+    ),
+    "landmark-banner-is-top-level": (
+        "Kopfbereich nicht auf oberster Ebene",
+        "Der Banner-Landmark (<header>) steckt in einem anderen Landmark.",
+    ),
+    "landmark-complementary-is-top-level": (
+        "Seitenleiste nicht auf oberster Ebene",
+        "Der Complementary-Landmark (<aside>) steckt in einem anderen Landmark.",
+    ),
+    "landmark-contentinfo-is-top-level": (
+        "Fußbereich nicht auf oberster Ebene",
+        "Der Contentinfo-Landmark (<footer>) steckt in einem anderen Landmark.",
+    ),
+    "landmark-main-is-top-level": (
+        "Hauptinhalt nicht auf oberster Ebene",
+        "Der Main-Landmark steckt in einem anderen Landmark.",
+    ),
+    "landmark-no-duplicate-banner": (
+        "Mehrere Kopfbereiche",
+        "Die Seite hat mehr als einen Banner-Landmark.",
+    ),
+    "landmark-no-duplicate-contentinfo": (
+        "Mehrere Fußbereiche",
+        "Die Seite hat mehr als einen Contentinfo-Landmark.",
+    ),
+    "landmark-no-duplicate-main": (
+        "Mehrere Hauptinhaltsbereiche",
+        "Die Seite hat mehr als einen Main-Landmark.",
+    ),
+    "video-description": (
+        "Video ohne Audiodeskription",
+        "Ein <video> hat keine Tonspur oder Textalternative, die bildliche Informationen beschreibt.",
+    ),
 }
 
 

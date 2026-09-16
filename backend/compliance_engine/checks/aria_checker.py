@@ -360,12 +360,26 @@ class ARIAChecker:
         if tag.get('title'):
             return True
         
-        # Für <a>: href="#" oder leer ist kein valides Label
-        if tag.name == 'a':
-            href = tag.get('href', '')
-            if href and href != '#':
-                # Links mit href haben impliziten Namen
-                return True
+        # Der Name darf aus dem Inhalt kommen (WAI-ARIA 1.2, "name from
+        # content"): ein Bild mit Alt-Text, ein SVG mit <title>, ein Icon
+        # mit aria-label. Bis zum 16.09.2026 sah die Pruefung davon nichts
+        # und meldete auf zua-zwickau.de "A ohne zugaengliches Label" fuer
+        # einen Link, den axe (link-name) auf derselben Seite als benannt
+        # erkannte.
+        if tag.find('img', alt=True) and any(
+                (img.get('alt') or '').strip() for img in tag.find_all('img', alt=True)):
+            return True
+        if tag.find('svg') and tag.find('svg').find('title') \
+                and tag.find('svg').find('title').get_text(strip=True):
+            return True
+        if tag.find(attrs={'aria-label': True}) or tag.find(attrs={'aria-labelledby': True}):
+            return True
+
+        # Ein <a> ohne href ist kein Link (kein Rollen-Mapping, nicht
+        # fokussierbar) und braucht keinen Namen. Ein <a href="#"> dagegen
+        # ist ein Link und muss einen haben.
+        if tag.name == 'a' and not tag.has_attr('href'):
+            return True
         
         # Für <input>: value kann als Label dienen (z.B. submit buttons)
         if tag.name == 'input':

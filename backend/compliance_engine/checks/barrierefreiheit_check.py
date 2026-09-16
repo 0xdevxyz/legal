@@ -648,6 +648,15 @@ async def check_barrierefreiheit_compliance(
             if 'Landmark-Regions fehlen' in (extra.get('title') or '') \
                     and 'LANDMARKS' in gemeldete_merkmale:
                 continue
+            # Zugaengliche Namen von Links und Schaltflaechen prueft axe auf
+            # dem gerenderten DOM (link-name, button-name) und sieht dabei
+            # auch, was erst per Skript entsteht. Die Heuristik liest den
+            # Quelltext. Ist axe gelaufen, hat sie hier nichts hinzuzufuegen;
+            # am 16.09.2026 meldete sie auf zua-zwickau.de "A ohne
+            # zugaengliches Label" fuer einen Link, den axe als benannt fand.
+            if axe_issues is not None \
+                    and (extra.get('title') or '').endswith('ohne zugängliches Label'):
+                continue
             issues.append(extra)
             if crit:
                 reported_criteria.add(crit)

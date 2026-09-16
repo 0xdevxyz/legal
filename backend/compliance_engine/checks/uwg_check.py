@@ -169,7 +169,10 @@ async def check_uwg_compliance(url: str, soup: BeautifulSoup, session=None) -> L
                     'Diese sollten durch einen Link zum Zertifikat oder Prüfbericht belegt werden. '
                     'Nicht belegte oder veraltete Siegel können eine Irreführung nach §5 UWG darstellen.'
                 ),
-                risk_euro=1000,
+                # Ob das Bild ein Siegel ist und ob es eine Genehmigung gibt, sieht
+                # der Scanner nicht. Ein Hinweis zur Handpruefung traegt kein
+                # Bussgeldrisiko; sonst steht er in der Risikosumme des Kunden.
+                risk_euro=0,
                 recommendation=(
                     'Verlinken Sie jedes Gütesiegel mit dem aktuellen Zertifikat oder Prüfbericht. '
                     'Stellen Sie sicher, dass Auszeichnungen aktuell und nicht abgelaufen sind.'
