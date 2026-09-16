@@ -32,6 +32,7 @@ ALLOWED_KEYS = {
     "employees", "revenue", "b2c", "online_shop", "digital_service",
     "uses_ai_chat", "uses_ai_decisions", "ai_generated_content",
     "sends_b2b_invoices", "sells_connected_products", "critical_sector",
+    "provides_cloud_service",
     "newsletter", "employees_data", "branche",
 }
 

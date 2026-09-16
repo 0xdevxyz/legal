@@ -51,7 +51,8 @@ const QUESTIONS: Array<
   { key: 'ai_generated_content', label: 'Veröffentlichen Sie KI-generierte Inhalte (Texte, Bilder, Videos)?', type: 'bool' },
   { key: 'uses_ai_decisions', label: 'Nutzen Sie KI für Entscheidungen über Personen (Bewerbungen, Scoring, Preise)?', type: 'bool' },
   { key: 'sends_b2b_invoices', label: 'Stellen Sie Rechnungen an Unternehmen in Deutschland (B2B)?', type: 'bool' },
-  { key: 'sells_connected_products', label: 'Stellen Sie Produkte mit digitalen Elementen her (Software, vernetzte Geräte)?', type: 'bool' },
+  { key: 'sells_connected_products', label: 'Stellen Sie Produkte mit digitalen Elementen her (Software, Plugins, Apps, vernetzte Geräte)?', type: 'bool' },
+  { key: 'provides_cloud_service', label: 'Betreiben Sie Hosting, Cloud- oder SaaS-Dienste für Kunden oder verkaufen Sie Hosting weiter?', type: 'bool' },
   { key: 'critical_sector', label: 'Sind Sie in einem NIS2-Sektor tätig (Energie, Gesundheit, Transport, IT-Dienste, Produktion kritischer Güter …)?', type: 'bool' },
   { key: 'newsletter', label: 'Versenden Sie Newsletter / E-Mail-Marketing?', type: 'bool' },
 ];

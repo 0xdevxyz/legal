@@ -21,7 +21,8 @@ Profil-Schema (company_profiles.answers, JSONB):
   uses_ai_decisions:  bool  (KI in Bewerbung/Scoring/Preisen o. ä.)
   ai_generated_content: bool (veröffentlicht KI-generierte Inhalte/Bilder)
   sends_b2b_invoices: bool  (stellt Rechnungen an Unternehmen in DE)
-  sells_connected_products: bool (Produkte mit digitalen Elementen/Software)
+  sells_connected_products: bool (Produkte mit digitalen Elementen: Software, Plugins, Apps, Geräte)
+  provides_cloud_service: bool (betreibt oder verkauft Hosting/Cloud/SaaS für Kunden weiter)
   critical_sector:    bool  (Energie/Gesundheit/Transport/IT-Dienste/… NIS2-Sektor)
   newsletter:         bool  (E-Mail-Marketing)
   employees_data:     bool  (Beschäftigte, deren Daten verarbeitet werden) — default True
@@ -197,17 +198,43 @@ PFLICHTEN: List[Rule] = [
         "law": "Cyber Resilience Act",
         "title": "Produkt-Cybersicherheit für Produkte mit digitalen Elementen",
         "legal_basis": "VO (EU) 2024/2847",
-        "deadline": "Meldepflichten ab 2026-09-11; Hauptpflichten ab 2027-12-11",
+        # Stand 16.09.2026: die Meldepflichten laufen seit fuenf Tagen. "ab" waere
+        # jetzt eine Zukunft, die schon Gegenwart ist (BSI, IHK, Handelskammer HH).
+        "deadline": "Meldepflichten seit 2026-09-11 (aktiv ausgenutzte Schwachstellen und schwere Vorfälle: Frühwarnung binnen 24 h, Meldung binnen 72 h); Hauptpflichten ab 2027-12-11",
         "risk_range": [10000, 15000000],
-        "todo": "Produktportfolio klassifizieren; Security-by-Design, Schwachstellenmanagement und Update-Prozesse aufsetzen.",
+        "todo": "Produktportfolio klassifizieren, auch Plugins, Apps und Themes; Meldeweg zu BSI und ENISA einrichten; Security-by-Design, Schwachstellenmanagement und Update-Prozesse aufsetzen. Kleinst- und Kleinunternehmen werden nicht allein wegen einer verpassten 24-h-Frühwarnung bebußt.",
         "scan_pillar": None,
         "confidence": 0.7,
         "evaluate": lambda p: (
             (APPLIES, ["Produkte mit digitalen Elementen"],
-             "Hersteller/Inverkehrbringer vernetzter Produkte oder Software fallen unter den CRA — die Fristen laufen bereits.")
+             "Hersteller und Inverkehrbringer vernetzter Produkte oder Software, auch Plugins und Apps, fallen unter den CRA. Die Meldepflichten gelten seit 2026-09-11.")
             if p.get("sells_connected_products")
             else (NOT_INDICATED, ["keine digitalen Produkte angegeben"],
                   "Ohne Produkte mit digitalen Elementen keine CRA-Herstellerpflichten.")
+        ),
+    },
+    {
+        # Neu am 16.09.2026. Fehlte ganz, obwohl er jede Agentur trifft, die
+        # Hosting weiterverkauft, und jeden, der SaaS betreibt. Das deutsche
+        # Durchfuehrungsgesetz (DADG) ist seit 2026-05-30 in Kraft, Aufsicht
+        # Bundesnetzagentur, Bussgelder gestaffelt bis 5 Mio. EUR bzw. 2 % des
+        # Umsatzes. Welche Stufe Cloud-Switching-Verstoesse trifft, ist hier
+        # nicht einzeln zugeordnet; der Rahmen nennt deshalb die Obergrenze.
+        "id": "data_act",
+        "law": "EU Data Act",
+        "title": "Anbieterwechsel bei Hosting, Cloud und SaaS (Cloud-Switching)",
+        "legal_basis": "Art. 23 bis 31 Data Act (VO (EU) 2023/2854); Durchsetzung nach DADG (seit 2026-05-30), Aufsicht Bundesnetzagentur",
+        "deadline": "gilt seit 2025-09-12; Wechselentgelte ab 2027-01-12 verboten (Art. 29); Vertrag muss Wechselrecht mit höchstens 2 Monaten Ankündigung und höchstens 30 Tagen Übergang enthalten (Art. 25)",
+        "risk_range": [0, 5000000],
+        "todo": "Kundenverträge auf Wechselrecht, Kündigungsfrist und Datenexport prüfen; Exit-Klausel und Umzugsprozess (30 Tage) schriftlich festlegen; ab 2027-01-12 keine Wechselentgelte mehr berechnen.",
+        "scan_pillar": None,
+        "confidence": 0.75,
+        "evaluate": lambda p: (
+            (APPLIES, ["Hosting/Cloud/SaaS für Kunden"],
+             "Wer Datenverarbeitungsdienste anbietet oder weiterverkauft, muss Kunden den Wechsel ermöglichen: Vertragsklauseln nach Art. 25, Übergang in höchstens 30 Tagen, ab 2027-01-12 ohne Wechselentgelt.")
+            if p.get("provides_cloud_service")
+            else (NOT_INDICATED, ["kein Hosting-, Cloud- oder SaaS-Angebot angegeben"],
+                  "Ohne eigenes oder weiterverkauftes Hosting-, Cloud- oder SaaS-Angebot keine Wechselpflichten als Anbieter; als Kunde stehen Ihnen die Wechselrechte zu.")
         ),
     },
     {

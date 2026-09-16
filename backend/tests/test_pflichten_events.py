@@ -15,6 +15,17 @@ def test_ai_act_chatbot_meldung_trifft_transparenz():
     )
     assert "ai_act_transparenz" in rules
     assert "bfsg" not in rules
+    assert "data_act" not in rules
+
+
+def test_data_act_meldung_trifft_data_act():
+    """Neu am 16.09.2026, der Eintrag fehlte im Katalog ganz."""
+    rules = map_update_to_rules(
+        "EU Data Act: Wechselentgelte beim Cloud-Switching ab 12. Januar 2027 verboten",
+        "Anbieterwechsel binnen 30 Tagen, Art. 25 und 29 Data Act", "high",
+    )
+    assert "data_act" in rules
+    assert "ai_act_transparenz" not in rules
 
 
 def test_bfsg_meldung_trifft_bfsg():

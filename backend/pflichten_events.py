@@ -32,6 +32,7 @@ RULE_KEYWORDS: Dict[str, List[str]] = {
     "e_rechnung": [r"e[- ]?rechnung", r"xrechnung", r"zugferd", r"§\s*14\s*ustg"],
     "nis2": [r"nis[- ]?2", r"cybersicherheit.*(pflicht|gesetz)", r"kritis"],
     "cra": [r"cyber resilience", r"\bcra\b", r"produkte mit digitalen elementen"],
+    "data_act": [r"data act", r"datengesetz", r"cloud[- ]?switching", r"anbieterwechsel", r"wechselentgelt", r"2023/2854"],
     "uwg_newsletter": [r"newsletter", r"e[- ]?mail[- ]?(marketing|werbung)", r"double[- ]?opt[- ]?in", r"§\s*7\s*uwg"],
     "dsgvo_verzeichnis": [r"verzeichnis von verarbeitung", r"\bvvt\b", r"art\.?\s*30"],
     "dsgvo_dsb": [r"datenschutzbeauftragte", r"\bdsb\b", r"art\.?\s*37"],

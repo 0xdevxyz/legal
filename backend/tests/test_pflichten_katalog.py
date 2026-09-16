@@ -94,3 +94,35 @@ def test_fristen_sind_konkret_und_nicht_veraltet():
     assert "2026-08-02" in ai
     assert "2026-12-02" in ai
     assert "nicht in Kraft" in ai, "Omnibus-Nachfrist darf nicht als feste Frist stehen"
+
+    cra = by_id["cra"]["deadline"]
+    assert "seit 2026-09-11" in cra and "24 h" in cra and "72 h" in cra and "2027-12-11" in cra
+    assert "ab 2026-09-11" not in cra, "Meldepflichten laufen, das ist keine Zukunft mehr"
+
+    da = by_id["data_act"]["deadline"]
+    assert "2025-09-12" in da and "2027-01-12" in da and "30 Tagen" in da and "Art. 25" in da
+    assert "DADG" in by_id["data_act"]["legal_basis"] and "2026-05-30" in by_id["data_act"]["legal_basis"]
+    assert by_id["data_act"]["risk_range"][1] >= 5_000_000, "DADG-Obergrenze, kein Platzhalter"
+
+
+def test_data_act_trifft_hosting_wiederverkaeufer():
+    """Jede Agentur, die Hosting weiterverkauft, und jeder SaaS-Betreiber.
+
+    Neu am 16.09.2026; der Eintrag fehlte im Katalog ganz.
+    """
+    mit = evaluate_pflichten({"employees": "1-9", "revenue": "<=2m", "provides_cloud_service": True})
+    ohne = evaluate_pflichten({"employees": "1-9", "revenue": "<=2m", "provides_cloud_service": False})
+    by_mit = {i["id"]: i for i in mit["items"]}
+    by_ohne = {i["id"]: i for i in ohne["items"]}
+    assert by_mit["data_act"]["status"] == APPLIES
+    assert any("Hosting" in e or "SaaS" in e for e in by_mit["data_act"]["evidence"])
+    assert "30 Tagen" in by_mit["data_act"]["why"]
+    assert by_ohne["data_act"]["status"] == NOT_INDICATED
+
+
+def test_cra_erfasst_plugins_und_apps():
+    r = evaluate_pflichten({"employees": "1-9", "revenue": "<=2m", "sells_connected_products": True})
+    by_id = {i["id"]: i for i in r["items"]}
+    assert by_id["cra"]["status"] == APPLIES
+    assert "Plugins" in by_id["cra"]["why"]
+    assert "seit 2026-09-11" in by_id["cra"]["why"]
