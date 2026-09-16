@@ -2,8 +2,8 @@
 import React, { useRef, useState } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
 
-// Wortlaut der Erzaehlung, abgelesen aus den eingebrannten Untertiteln der
-// Videodatei. Aenderungen am Video muessen hier und in der VTT-Spur nachgezogen
+// Wortlaut der Erzaehlung der Stickman-Fassung vom 16.09.2026 (sieben Bloecke,
+// Whisper-geprueft gegen die Sprechtakes). Aenderungen am Video muessen hier und in der VTT-Spur nachgezogen
 // werden — sonst steht neben dem Video ein Text, der nicht dazu gehoert.
 //
 // Diese Komponente ist aus HeroSection herausgeloest, weil das Video seit dem
@@ -12,22 +12,25 @@ import { Volume2, VolumeX } from 'lucide-react';
 // Video an einer Stelle nachgezogen wird und an der anderen ein Transkript
 // stehen bleibt, das nicht mehr zum Ton passt.
 export const TRANSKRIPT = [
-  'Datenschutz, Cookie-Banner, Barrierefreiheit – wer blickt da noch durch? ' +
+  'Datenschutz, Cookie-Banner, Barrierefreiheit, wer blickt da noch durch? ' +
     'Jede Woche neue Pflichten, und auf der eigenen Website sammeln sich still ' +
     'die Warnzeichen, während der Laden laufen soll.',
   'Hinter dem Chaos stecken genau vier Säulen: Barrierefreiheit für alle ' +
-    'Besucher, Datenschutz, saubere Cookie-Einwilligung und vollständige Pflichttexte ' +
-    'vom Impressum bis zum Widerruf.',
+    'Besucher, Datenschutz, saubere Cookie-Einwilligung und vollständige ' +
+    'Pflichttexte vom Impressum bis zum Widerruf.',
   'Wer eine Säule ignoriert, riskiert Abmahnung oder Bußgeld, und seit dem ' +
-    'Barrierefreiheitsstärkungsgesetz trifft das auch kleine Shops. Die Pflichten ' +
-    'wachsen schneller als der Umsatz.',
+    'Barrierefreiheitsstärkungsgesetz trifft das auch kleine Shops, die ' +
+    'Pflichten wachsen schneller als der Umsatz.',
   'Genau hier setzt complyo an: Ein Scan prüft die Website in unter sechzig ' +
     'Sekunden gegen alle vier Säulen und zeigt jede Baustelle auf einem Bildschirm.',
+  'Der Ablauf bleibt gleich: Prüfen, Beheben, Nachweisen, Überwachen. Jeder ' +
+    'Befund nennt seine Rechtsgrundlage, und jede Reparatur gibt ein Mensch ' +
+    'frei, nicht die Maschine.',
   'Im Dashboard repariert die künstliche Intelligenz direkt mit: Alt-Texte, ' +
     'Kontraste, Cookie-Banner und Rechtstexte bekommen nacheinander ihren Haken, ' +
     'und jede Reparatur wird im Browser nachgemessen.',
   'Aus vier Baustellen wird eine Übersicht voller Haken, der Prüfnachweis liegt ' +
-    'dabei. Also: Durchblicken statt Ärgern – testen Sie Ihre Website heute, eine ' +
+    'dabei. Also: Durchblicken statt Ärgern, testen Sie Ihre Website heute, eine ' +
     'Minute genügt.',
 ];
 
@@ -55,7 +58,7 @@ export default function Erklaervideo() {
         <div className="w-3 h-3 rounded-full bg-red-400" />
         <div className="w-3 h-3 rounded-full bg-yellow-400" />
         <div className="w-3 h-3 rounded-full bg-green-400" />
-        <span className="ml-3 text-xs text-gray-500">Complyo – in 60 Sekunden erklärt</span>
+        <span className="ml-3 text-xs text-gray-500">complyo – in 70 Sekunden erklärt</span>
       </div>
 
       <div className="relative">
@@ -68,7 +71,7 @@ export default function Erklaervideo() {
           playsInline
           preload="metadata"
           poster="/videos/complyo-erklaervideo-poster.jpg"
-          aria-label="Erklärvideo: Wie Complyo die vier Compliance-Säulen Barrierefreiheit, Datenschutz, Cookie-Einwilligung und Rechtstexte löst. Das vollständige Transkript steht unter dem Video."
+          aria-label="Erklärvideo: Wie complyo die vier Compliance-Säulen Barrierefreiheit, Datenschutz, Cookie-Einwilligung und Pflichttexte prüft, behebt, nachweist und überwacht. Das vollständige Transkript steht unter dem Video."
         >
           <source src="/videos/complyo-erklaervideo.mp4" type="video/mp4" />
           {/* Die im Bild eingebrannten Untertitel sind weder
