@@ -537,21 +537,53 @@ async def check_barrierefreiheit_compliance(
                 has_skip_link = True
                 break
     if not has_skip_link:
-        issues.append(BarrierefreiheitIssue(
-            category='barrierefreiheit',
-            severity='info',
-            title='WCAG 2.4.1: Kein Skip-Navigation-Link gefunden',
-            description=(
-                'Es wurde kein "Zum Inhalt springen"-Link gefunden. '
-                'Tastatur- und Screenreader-Nutzer müssen ohne diesen Link die gesamte Navigation '
-                'auf jeder Seite durchlaufen, bevor sie zum Hauptinhalt gelangen.'
-            ),
-            risk_euro=200,
-            recommendation='Fügen Sie am Seitenanfang einen versteckten Skip-Link ein: <a href="#main" class="skip-link">Zum Inhalt springen</a>.',
-            legal_basis='WCAG 2.1 Level A (2.4.1), BFSG §12',
-            auto_fixable=True,
-            is_missing=False,
-        ))
+        # 2.4.1 verlangt keinen Skip-Link, sondern EINEN Weg, wiederkehrende
+        # Bloecke zu umgehen. Ein <main>-Landmark oder eine Ueberschriften-
+        # struktur erfuellt das ebenso (WCAG-Techniken ARIA11, H69; axe-Regel
+        # `bypass` prueft genau diese drei). Bis zum 16.09.2026 stand der
+        # Befund unabhaengig davon auf 'info' mit 200 EUR Risiko: fuer eine
+        # Seite ohne jeden Umgehungsweg zu wenig, fuer eine Seite mit <main>
+        # eine erfundene Pflicht.
+        anderer_weg = bool(
+            soup.find('main') or soup.find(attrs={'role': 'main'})
+            or soup.find(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+            or soup.find(attrs={'role': 'heading'})
+        )
+        if anderer_weg:
+            issues.append(BarrierefreiheitIssue(
+                category='barrierefreiheit',
+                severity='info',
+                title='Skip-Navigation-Link empfohlen (WCAG 2.4.1 anderweitig erfüllt)',
+                description=(
+                    'Es wurde kein "Zum Inhalt springen"-Link gefunden. WCAG 2.4.1 ist '
+                    'dennoch erfüllt, weil die Seite einen Hauptinhaltsbereich oder eine '
+                    'Überschriftenstruktur hat, über die Screenreader-Nutzer die Navigation '
+                    'überspringen können. Ein Skip-Link hilft zusätzlich reinen '
+                    'Tastaturnutzern, die keine Landmarks ansteuern können.'
+                ),
+                risk_euro=0,
+                recommendation='Fügen Sie am Seitenanfang einen versteckten Skip-Link ein: <a href="#main" class="skip-link">Zum Inhalt springen</a>.',
+                legal_basis='Empfehlung — WCAG 2.1 (2.4.1) durch Landmark oder Überschriften erfüllt',
+                auto_fixable=True,
+                is_missing=False,
+            ))
+        else:
+            issues.append(BarrierefreiheitIssue(
+                category='barrierefreiheit',
+                severity='warning',
+                title='WCAG 2.4.1: Kein Skip-Navigation-Link gefunden',
+                description=(
+                    'Es wurde kein "Zum Inhalt springen"-Link gefunden, und die Seite hat '
+                    'weder einen Hauptinhaltsbereich (<main>) noch Überschriften. '
+                    'Tastatur- und Screenreader-Nutzer müssen so die gesamte Navigation '
+                    'auf jeder Seite durchlaufen, bevor sie zum Hauptinhalt gelangen.'
+                ),
+                risk_euro=200,
+                recommendation='Fügen Sie am Seitenanfang einen versteckten Skip-Link ein: <a href="#main" class="skip-link">Zum Inhalt springen</a>.',
+                legal_basis='WCAG 2.1 Level A (2.4.1), BFSG §12',
+                auto_fixable=True,
+                is_missing=False,
+            ))
 
     # WCAG 2.4.4: Nichtssagende Linktexte ("hier klicken", "mehr", "weiterlesen")
     vague_link_patterns = re.compile(
@@ -1146,14 +1178,21 @@ async def _check_semantic_html(soup: BeautifulSoup) -> List[BarrierefreiheitIssu
         missing_elements.append('<footer>')
     
     if missing_elements:
+        # Landmarks sind Empfehlung, keine Pflicht: WCAG 1.3.1 verlangt, dass
+        # sichtbare Struktur programmatisch erkennbar ist, nicht, dass sie
+        # ueber <main>/<nav>/<header>/<footer> ausgedrueckt wird. axe fuehrt
+        # `landmark-one-main` und `region` deshalb als best-practice. Dieser
+        # heuristische Zwilling stand bis zum 16.09.2026 auf 'warning' mit
+        # 800 EUR und zaehlte 8 Punkte, sobald axe nicht lief. Dieselbe
+        # Seite bekam so je nach Messweg zwei verschiedene Scores.
         issues.append(BarrierefreiheitIssue(
             category='barrierefreiheit',
-            severity='warning',
+            severity='info',
             title='Fehlende semantische HTML-Elemente',
             description=f'Die Seite verwendet nicht alle wichtigen semantischen HTML5-Elemente: '
                        f'{", ".join(missing_elements)}. '
                        f'Diese helfen Screenreader-Nutzern bei der Navigation.',
-            risk_euro=800,
+            risk_euro=0,
             recommendation='Verwenden Sie semantische HTML5-Elemente für bessere Struktur und Barrierefreiheit.',
             # Kriteriumsnummer AUSGESCHRIEBEN — ohne sie greift die
             # Entdopplung nicht (sie liest \d.\d+.\d+ aus Titel und
@@ -1168,14 +1207,18 @@ async def _check_semantic_html(soup: BeautifulSoup) -> List[BarrierefreiheitIssu
     has_h1 = any(h.name == 'h1' for h in headings)
     
     if not has_h1:
+        # Keine WCAG-Pflicht: 2.4.6 verlangt, dass VORHANDENE Ueberschriften
+        # aussagekraeftig sind, 1.3.1 verlangt keine H1. axe fuehrt
+        # `page-has-heading-one` als best-practice. Bis zum 16.09.2026 stand
+        # der heuristische Zwilling hier auf 'warning' mit 300 EUR.
         issues.append(BarrierefreiheitIssue(
             category='barrierefreiheit',
-            severity='warning',
+            severity='info',
             title='Keine H1-Überschrift gefunden',
             description='Die Seite hat keine H1-Überschrift. Eine klare Heading-Struktur ist wichtig für Screenreader.',
-            risk_euro=300,
+            risk_euro=0,
             recommendation='Fügen Sie eine H1-Überschrift mit dem Hauptthema der Seite hinzu.',
-            legal_basis='BFSG §12, WCAG 2.1 (Headings and Labels)',
+            legal_basis='Empfehlung (best practice) — WCAG 2.1 AA verlangt keine H1',
             auto_fixable=False
         ))
     

@@ -11,8 +11,14 @@ deklarative DB-Checks) gescannt. Auswertung: erwartete Befunde vorhanden
 import asyncio
 import http.server
 import json
+import os
 import socketserver
 import threading
+
+# Die Fixtures laufen auf 127.0.0.1; ohne diese Freigabe sperrt die
+# SSRF-Schranke jeden Abruf und der Lauf meldet "0 Befunde" fuer alles
+# (so geschehen vom 09.09. bis 16.09.2026). Gilt nur in diesem Prozess.
+os.environ["SSRF_PRUEFSTAND_LOOPBACK"] = "1"
 
 PORT = 8099
 

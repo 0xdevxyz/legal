@@ -106,8 +106,27 @@ def validate_url(url: str) -> str:
     return url
 
 
+# Der Pruefstand (tools/ground_truth_validation.py) serviert seine vier
+# Fixture-Seiten auf 127.0.0.1 und schickt sie durch die echte Pipeline. Seit
+# die Schranke JEDEN Abruf prueft (065f6cd, 09.09.2026), kam dort nichts mehr
+# an: vier Fixtures, null Befunde, und niemand merkte es, weil "0 Befunde" wie
+# ein bestandener Lauf aussieht. Der Pruefstand war das Release-Gate.
+#
+# Nur Loopback, nur per Umgebungsvariable, nur im Prozess des Pruefstands.
+# Die Compose-Dateien setzen sie nirgends; ein Angreifer, der sie setzen
+# koennte, haette den Prozess ohnehin.
+_PRUEFSTAND_LOOPBACK = "SSRF_PRUEFSTAND_LOOPBACK"
+
+
+def _pruefstand_erlaubt_loopback() -> bool:
+    import os
+    return os.environ.get(_PRUEFSTAND_LOOPBACK) == "1"
+
+
 def _check_ip(addr: ipaddress._BaseAddress) -> None:
     if addr.is_loopback:
+        if _pruefstand_erlaubt_loopback():
+            return
         raise SSRFError("URL resolves to loopback address")
     if addr.is_link_local:
         raise SSRFError("URL resolves to link-local address")

@@ -11,28 +11,6 @@ from .rule_versioning_service import RuleVersioningService
 
 logger = logging.getLogger(__name__)
 
-# Stufen, die in Score und Saeulenstatus als Mangel zaehlen. Der
-# ScoreCalculator rechnet: Saeule = 100 - (critical x 25 + warning x 8); 'info'
-# kostet nichts.
-_MANGELSTUFEN = {"critical", "warning"}
-
-
-def _ist_mangel(issue: Dict[str, Any]) -> bool:
-    """Beschreibt dieser Befund einen Mangel, oder meldet er dessen Abwesenheit?
-
-    Die Trennlinie ist dieselbe, die der ScoreCalculator zieht: Was Punkte
-    kostet, ist ein Mangel; was keine kostet, ist ein Hinweis oder eine
-    Entwarnung.
-
-    Warum das hier gebraucht wird: Auf der 'info'-Seite stehen Saetze wie "Kein
-    Cookie-Banner erforderlich", "Struktur-Reparatur vorbereitet" und "Video
-    ohne Audiodeskription (Textalternative vorhanden)" — allesamt mit Risiko 0.
-    Sie eine Stufe anzuheben, weil zum Thema ein Urteil erging, erfindet einen
-    Mangel, den niemand gemessen hat.
-    """
-    return (issue.get("severity") or "info").strip().lower() in _MANGELSTUFEN
-
-
 class LegalUpdateIntegration:
     """
     Integriert aktuelle Gesetzesänderungen in den Compliance-Scanner
@@ -153,11 +131,23 @@ class LegalUpdateIntegration:
         updates: Optional[List[Dict]] = None
     ) -> Dict[str, Any]:
         """
-        Wendet Legal Updates auf Scan-Ergebnisse an.
+        Haengt jedem Befund die Gesetzes-Updates an, die sein Thema betreffen.
 
-        Ein neues Urteil erhöht die Dringlichkeit eines BESTEHENDEN Mangels.
-        Ob überhaupt einer vorliegt, entscheidet allein die Messung — siehe
-        `_ist_mangel`.
+        Mehr nicht. Bis zum 16.09.2026 hat diese Methode auch BEWERTET: jeder
+        Befund einer Kategorie stieg eine Stufe, sobald dazu eine kritische
+        Aenderung vorlag, und sein Risiko wuchs um die Haelfte. Gemessen an den
+        339 aktiven Updates vom 15.09.2026 hatten cookies (141 relevante),
+        datenschutz (139) und barrierefreiheit (35) DAUERHAFT ein kritisches
+        Update. Die Regel war also keine Verfeinerung, sondern eine
+        Dauerverschaerfung: jeder Mangel dieser drei Saeulen zaehlte permanent
+        25 statt 8 Punkte, jede Entwarnung wurde zur Warnung. shop und
+        ai_act_transparency blieben unberuehrt, weil sie im Woerterbuch der
+        Kategorien fehlten. Verschaerft wurde nach Wortliste, nicht nach
+        Schwere.
+
+        Ein Urteil aendert nichts an dem, was auf der Seite steht. Was ein
+        Befund wiegt, entscheidet der Check, der ihn gemessen hat. Die Aenderung
+        steht daneben, als Nachweis und Lesehinweis.
         
         Args:
             scan_results: Scan-Ergebnisse vom Scanner
@@ -180,75 +170,33 @@ class LegalUpdateIntegration:
                 issues_by_category[category] = []
             issues_by_category[category].append(issue)
         
-        # Wende Updates pro Kategorie an
-        affected_issues = []
+        # Updates je Kategorie anhaengen
+        betroffene = 0
         for category, issues in issues_by_category.items():
             relevant_updates = self.get_relevant_updates_for_category(category, updates)
-            
             if not relevant_updates:
                 continue
-            
-            # Höchste Severity der relevanten Updates
-            max_severity = self._get_max_severity(relevant_updates)
-            
+            nachweis = [
+                {
+                    'id': u['id'],
+                    'title': u['title'],
+                    'url': u.get('url')
+                }
+                for u in relevant_updates[:3]  # Max 3 Updates pro Issue
+            ]
             for issue in issues:
-                # Das neue Urteil steht an JEDEM Befund der Kategorie, auch an
-                # einer Entwarnung: "zu diesem Thema hat sich etwas geaendert"
-                # ist dort eine Beobachtungsempfehlung und keine Bewertung.
-                nachweis = [
-                    {
-                        'id': u['id'],
-                        'title': u['title'],
-                        'url': u.get('url')
-                    }
-                    for u in relevant_updates[:3]  # Max 3 Updates pro Issue
-                ]
+                # Auch an einer Entwarnung: "zu diesem Thema hat sich etwas
+                # geaendert" ist dort eine Beobachtungsempfehlung.
+                issue['relevant_updates'] = nachweis
+                betroffene += 1
 
-                if max_severity != 'critical':
-                    issue['relevant_updates'] = nachweis
-                    continue
-
-                # Hochgestuft wird nur, was gemessen ein Mangel IST.
-                #
-                # Vorher hob diese Regel jeden Befund der Kategorie eine Stufe
-                # an. Getroffen hat das vor allem die Entwarnungen: "Kein
-                # Cookie-Banner erforderlich" (Risiko 0) wurde zur Warnung und
-                # kostete 8 Punkte in der Cookie-Saeule, "Struktur-Reparatur
-                # vorbereitet" ebenso. complyo bestrafte den Kunden also dafuer,
-                # dass complyo selbst repariert hatte. Auf complyo.de waren es
-                # 2 Punkte Gesamtscore, gemessen am 15.09.2026.
-                #
-                # Ein Urteil aendert nichts an dem, was auf der Seite steht. Es
-                # kann einen bestehenden Mangel dringlicher machen, aber keinen
-                # erfinden.
-                if not _ist_mangel(issue):
-                    issue['relevant_updates'] = nachweis
-                    continue
-
-                if issue.get('severity') != 'critical':
-                    issue['severity'] = 'critical'
-                    issue['legal_update_affected'] = True
-                    issue['relevant_updates'] = nachweis
-                    affected_issues.append(issue)
-                else:
-                    issue['relevant_updates'] = nachweis
-
-                # Erhöhe Risk-Euro um 50% bei kritischen Updates
-                original_risk = issue.get('risk_euro', 0)
-                issue['risk_euro'] = int(original_risk * 1.5)
-                issue['risk_increase_reason'] = 'Aktuelle Gesetzesänderung erhöht Abmahnrisiko'
-        
         # Füge Meta-Info zu Legal Updates hinzu
         scan_results['legal_updates_applied'] = True
         scan_results['active_legal_updates_count'] = len(updates)
-        scan_results['affected_issues_count'] = len(affected_issues)
-        
-        # Erhöhe Gesamt-Risiko
-        if affected_issues:
-            original_total_risk = scan_results.get('total_risk_euro', 0)
-            scan_results['total_risk_euro'] = int(original_total_risk * 1.3)
-            scan_results['risk_increase_due_to_legal_updates'] = int(original_total_risk * 0.3)
-        
+        # Befunde mit angehaengtem Update. Vorher zaehlte hier, was
+        # hochgestuft wurde, und das Gesamtrisiko stieg deswegen um 30 %.
+        scan_results['affected_issues_count'] = betroffene
+
         return scan_results
     
     def _get_max_severity(self, updates: List[Dict]) -> str:

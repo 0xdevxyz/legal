@@ -698,9 +698,18 @@ class AxeScanner:
             for idx, node in enumerate(violation.nodes[:MAX_NODES_PER_RULE]):
                 severity = self._impact_to_severity(violation.impact)
                 if not pflicht:
-                    # Empfehlungen erzeugen keinen Rechtsdruck: hoechstens
-                    # Hinweis-Rang, kein Bussgeldrisiko in der Summe.
-                    severity = "info" if severity in ("critical", "high") else severity
+                    # Eine Empfehlung ist ein Hinweis, gleich wie schwer axe
+                    # sie einstuft.
+                    #
+                    # Bis zum 16.09.2026 griff das nur fuer 'critical' und
+                    # 'high'. _impact_to_severity liefert diese Werte aber gar
+                    # nicht fuer 'moderate' (das wird 'warning'), und genau
+                    # dort stehen `region`, `heading-order`, `landmark-one-main`
+                    # und `page-has-heading-one`. Sie liefen als Warnung durch
+                    # und kosteten 8 Punkte je Fundstelle, fuer etwas, das
+                    # WCAG 2.1 AA nicht verlangt. Die Absicht stand schon im
+                    # Kommentar; sie war nur nicht umgesetzt.
+                    severity = "info"
 
                 # target ist eine Liste von Selektoren → ersten als String verwenden
                 target = node.get("target") or []

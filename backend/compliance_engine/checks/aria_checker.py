@@ -136,9 +136,12 @@ class ARIAChecker:
                 missing_landmarks.append(f'{element} (role="{role}")')
         
         if missing_landmarks:
+            # Empfehlung, keine Pflicht (axe: best-practice). Siehe
+            # _check_semantic_html in barrierefreiheit_check.py; bis zum
+            # 16.09.2026 stand dieser Befund auf 'warning' mit 800 EUR.
             issues.append({
                 'category': 'barrierefreiheit',
-                'severity': 'warning',
+                'severity': 'info',
                 'title': f'{len(missing_landmarks)} Landmark-Regions fehlen',
                 'description': (
                     f'Folgende wichtige Landmark-Regions wurden nicht gefunden: '
@@ -146,8 +149,8 @@ class ARIAChecker:
                     f'bei der Navigation.'
                 ),
                 'recommendation': self._get_landmark_recommendation(missing_landmarks),
-                'legal_basis': 'WCAG 2.1 (1.3.1), BFSG §12',
-                'risk_euro': 800,
+                'legal_basis': 'Empfehlung (best practice) — von WCAG 2.1 AA nicht gefordert',
+                'risk_euro': 0,
                 'auto_fixable': False,
                 'wcag_criterion': '1.3.1'
             })
@@ -328,8 +331,11 @@ class ARIAChecker:
                     'Fügen Sie aria-live="polite" oder aria-live="assertive" hinzu, '
                     'je nach Wichtigkeit der Nachricht.'
                 ),
-                'legal_basis': 'WCAG 2.1 (4.1.3), BFSG §12',
-                'risk_euro': 500,
+                # Ob ein Bereich wirklich dynamisch ist, sieht man einem
+                # Klassennamen ("message", "status") nicht an. Ein Hinweis
+                # zur Handpruefung traegt kein Bussgeldrisiko.
+                'legal_basis': 'WCAG 2.1 (4.1.3), BFSG §12 — Hinweis, manuell prüfen',
+                'risk_euro': 0,
                 'auto_fixable': False,
                 'wcag_criterion': '4.1.3'
             })

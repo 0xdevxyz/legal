@@ -1,17 +1,19 @@
-"""Ein Gesetzes-Update darf keinen Mangel erfinden.
+"""Ein Gesetzes-Update bewertet nicht. Es steht daneben.
 
 `apply_updates_to_scan_results` hob bis zum 15.09.2026 JEDEN Befund einer
-Kategorie eine Stufe an, sobald dazu ein kritisches Update vorlag. Getroffen hat
-das vor allem die Befunde, die gerade KEINEN Mangel melden:
+Kategorie eine Stufe an, sobald dazu ein kritisches Update vorlag, und erhoehte
+sein Risiko um die Haelfte. Getroffen hat das zuerst die Befunde, die gerade
+KEINEN Mangel melden ("Kein Cookie-Banner erforderlich", "Struktur-Reparatur
+vorbereitet"): Gesamtscore complyo.de 92 -> 90 ab dem 11.09.2026.
 
-* "Kein Cookie-Banner erforderlich" (Risiko 0, TDDDG §25 Abs. 2) wurde zur
-  Warnung und kostete 8 Punkte in der Cookie-Saeule.
-* "Struktur-Reparatur vorbereitet" und "Kontrast-Reparatur vorbereitet" ebenso —
-  complyo bestrafte den Kunden also dafuer, dass complyo selbst repariert hatte.
+Am 16.09.2026 fiel auch die zweite Haelfte der Regel. Gemessen an den 339
+aktiven Updates hatten cookies (141 relevante), datenschutz (139) und
+barrierefreiheit (35) DAUERHAFT ein kritisches Update: jeder Mangel dieser drei
+Saeulen zaehlte permanent 25 statt 8 Punkte, waehrend shop und
+ai_act_transparency unberuehrt blieben, weil sie im Kategorien-Woerterbuch
+fehlten. Verschaerft wurde nach Wortliste, nicht nach Schwere.
 
-Live gemessen auf complyo.de: Gesamtscore 92 -> 90, Cookie-Saeule 100 -> 92,
-genau ab dem Scan vom 11.09.2026, in dem die Entwarnung als 'warning' ankam.
-Gegenprobe mit 'info': Saeule wieder 100.
+Was ein Befund wiegt, entscheidet der Check, der ihn gemessen hat.
 """
 
 import os
@@ -19,9 +21,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from compliance_engine.legal_update_integration import (
-    LegalUpdateIntegration, _ist_mangel,
-)
+from compliance_engine.legal_update_integration import LegalUpdateIntegration
 
 
 KRITISCHES_UPDATE = {
@@ -35,104 +35,83 @@ KRITISCHES_UPDATE = {
 }
 
 
-def _integration():
-    return LegalUpdateIntegration(db_pool=None)
-
-
 def _anwenden(issues, updates=None):
     scan = {"issues": issues, "total_risk_euro": 1000}
-    return _integration().apply_updates_to_scan_results(
+    return LegalUpdateIntegration(db_pool=None).apply_updates_to_scan_results(
         scan, updates or [KRITISCHES_UPDATE])
 
 
-class TestEntwarnungBleibtEntwarnung:
-    def test_kein_banner_erforderlich_wird_keine_warnung(self):
+def _befund(severity, risiko, titel):
+    return {"category": "cookies", "severity": severity, "risk_euro": risiko,
+            "title": titel}
+
+
+class TestDieStufeBleibtWieGemessen:
+    def test_entwarnung_bleibt_info(self):
         """Der gemessene Fall von complyo.de."""
-        issues = [{"category": "cookies", "severity": "info", "risk_euro": 0,
-                   "title": "Kein Cookie-Banner erforderlich"}]
-        ergebnis = _anwenden(issues)
-        assert ergebnis["issues"][0]["severity"] == "info"
+        b = _anwenden([_befund("info", 0, "Kein Cookie-Banner erforderlich")])["issues"][0]
+        assert b["severity"] == "info"
 
-    def test_vorbereitete_reparatur_wird_keine_warnung(self):
+    def test_vorbereitete_reparatur_bleibt_info(self):
         """complyo darf den Kunden nicht dafuer bestrafen, dass es repariert."""
-        issues = [{"category": "cookies", "severity": "info", "risk_euro": 0,
-                   "title": "Struktur-Reparatur vorbereitet"}]
-        assert _anwenden(issues)["issues"][0]["severity"] == "info"
+        b = _anwenden([_befund("info", 0, "Struktur-Reparatur vorbereitet")])["issues"][0]
+        assert b["severity"] == "info"
 
-    def test_das_urteil_steht_trotzdem_am_befund(self):
-        """Die Information geht nicht verloren, sie bewertet nur nicht mehr.
-        Bei einer Entwarnung ist sie eine Beobachtungsempfehlung."""
-        issues = [{"category": "cookies", "severity": "info", "risk_euro": 0,
-                   "title": "Kein Cookie-Banner erforderlich"}]
-        befund = _anwenden(issues)["issues"][0]
-        assert befund["relevant_updates"][0]["id"] == 675
+    def test_warnung_bleibt_warnung(self):
+        """Die zweite Haelfte der alten Regel: kein 'critical' per Wortliste."""
+        b = _anwenden([_befund("warning", 2000, "Banner ohne gleichwertigen Ablehnen-Knopf")])["issues"][0]
+        assert b["severity"] == "warning"
 
-    def test_eine_entwarnung_zaehlt_nicht_als_betroffen(self):
-        """`affected_issues_count` traegt sonst eine Zahl, hinter der kein
-        einziger Mangel steht — und das Gesamtrisiko stiege um 30 %."""
-        issues = [{"category": "cookies", "severity": "info", "risk_euro": 0,
-                   "title": "Kein Cookie-Banner erforderlich"}]
-        ergebnis = _anwenden(issues)
-        assert ergebnis["affected_issues_count"] == 0
-        assert ergebnis["total_risk_euro"] == 1000
-
-    def test_entwarnung_bekommt_kein_erhoehtes_risiko(self):
-        issues = [{"category": "cookies", "severity": "info", "risk_euro": 0,
-                   "title": "Kein Cookie-Banner erforderlich"}]
-        befund = _anwenden(issues)["issues"][0]
-        assert befund["risk_euro"] == 0
-        assert "risk_increase_reason" not in befund
+    def test_kritisch_bleibt_kritisch(self):
+        b = _anwenden([_befund("critical", 5000, "Tracking vor Einwilligung")])["issues"][0]
+        assert b["severity"] == "critical"
 
 
-class TestEchterMangelSteigtWeiter:
-    """Was die Regel leisten soll, leistet sie unveraendert: ein neues Urteil
-    macht einen BESTEHENDEN Mangel dringlicher."""
+class TestDasRisikoBleibtWieGemessen:
+    def test_kein_aufschlag_am_befund(self):
+        b = _anwenden([_befund("warning", 2000, "Banner ohne Ablehnen-Knopf")])["issues"][0]
+        assert b["risk_euro"] == 2000
+        assert "risk_increase_reason" not in b
 
-    def test_warnung_wird_kritisch(self):
-        issues = [{"category": "cookies", "severity": "warning",
-                   "risk_euro": 2000,
-                   "title": "Banner ohne gleichwertigen Ablehnen-Knopf"}]
-        ergebnis = _anwenden(issues)
-        assert ergebnis["issues"][0]["severity"] == "critical"
-        assert ergebnis["affected_issues_count"] == 1
-
-    def test_risiko_steigt_um_die_haelfte(self):
-        issues = [{"category": "cookies", "severity": "warning",
-                   "risk_euro": 2000, "title": "Banner ohne Ablehnen-Knopf"}]
-        befund = _anwenden(issues)["issues"][0]
-        assert befund["risk_euro"] == 3000
-        assert befund["risk_increase_reason"]
-
-    def test_bereits_kritisch_bleibt_kritisch_und_zaehlt_nicht_doppelt(self):
-        issues = [{"category": "cookies", "severity": "critical",
-                   "risk_euro": 2000, "title": "Tracking vor Einwilligung"}]
-        ergebnis = _anwenden(issues)
-        assert ergebnis["issues"][0]["severity"] == "critical"
-        assert ergebnis["affected_issues_count"] == 0
-
-    def test_ohne_kritisches_update_bleibt_alles_wie_gemessen(self):
-        leichtes = dict(KRITISCHES_UPDATE, severity="medium")
-        issues = [{"category": "cookies", "severity": "warning",
-                   "risk_euro": 2000, "title": "Banner ohne Ablehnen-Knopf"}]
-        befund = _anwenden(issues, [leichtes])["issues"][0]
-        assert befund["severity"] == "warning"
-        assert befund["risk_euro"] == 2000
+    def test_kein_aufschlag_auf_die_summe(self):
+        """Vorher +30 % auf das Gesamtrisiko, sobald irgendein Befund stieg."""
+        assert _anwenden([_befund("warning", 2000, "x")])["total_risk_euro"] == 1000
 
 
-class TestTrennlinie:
-    """`_ist_mangel` zieht dieselbe Linie wie der ScoreCalculator: was Punkte
-    kostet, ist ein Mangel."""
+class TestDasUpdateStehtDaneben:
+    def test_nachweis_haengt_am_befund(self):
+        """Die Information geht nicht verloren, sie bewertet nur nicht mehr."""
+        b = _anwenden([_befund("warning", 2000, "x")])["issues"][0]
+        assert b["relevant_updates"][0]["id"] == 675
 
-    def test_info_ist_kein_mangel(self):
-        assert _ist_mangel({"severity": "info"}) is False
+    def test_auch_an_einer_entwarnung(self):
+        """Dort ist es eine Beobachtungsempfehlung."""
+        b = _anwenden([_befund("info", 0, "Kein Cookie-Banner erforderlich")])["issues"][0]
+        assert b["relevant_updates"][0]["id"] == 675
 
-    def test_warning_und_critical_sind_mangel(self):
-        assert _ist_mangel({"severity": "warning"}) is True
-        assert _ist_mangel({"severity": "critical"}) is True
+    def test_hoechstens_drei_updates_je_befund(self):
+        updates = [dict(KRITISCHES_UPDATE, id=i) for i in range(1, 6)]
+        b = _anwenden([_befund("warning", 2000, "x")], updates)["issues"][0]
+        assert len(b["relevant_updates"]) == 3
 
-    def test_fehlende_angabe_gilt_als_hinweis(self):
-        """Ohne Stufe ist nichts gemessen — dann wird auch nichts angehoben."""
-        assert _ist_mangel({}) is False
+    def test_fremde_kategorie_bekommt_nichts(self):
+        b = _anwenden([{"category": "shop", "severity": "warning",
+                        "risk_euro": 500, "title": "x"}])["issues"][0]
+        assert "relevant_updates" not in b
 
-    def test_schreibweise_entscheidet_nicht(self):
-        assert _ist_mangel({"severity": " Warning "}) is True
+    def test_zaehler_meint_angehaengte_befunde(self):
+        """`affected_issues_count` zaehlte vorher Hochstufungen; heute zaehlt es,
+        woran ein Update haengt."""
+        ergebnis = _anwenden([_befund("info", 0, "a"), _befund("warning", 1, "b")])
+        assert ergebnis["affected_issues_count"] == 2
+        assert ergebnis["legal_updates_applied"] is True
+
+
+class TestKeineBewertungMehrImModul:
+    def test_die_methode_schreibt_keine_stufe(self):
+        """Regressionsschutz gegen die Rueckkehr der Hochstufung."""
+        import inspect
+        src = inspect.getsource(LegalUpdateIntegration.apply_updates_to_scan_results)
+        assert "issue['severity'] =" not in src
+        assert "issue['risk_euro'] =" not in src
+        assert "* 1.3" not in src and "* 1.5" not in src
