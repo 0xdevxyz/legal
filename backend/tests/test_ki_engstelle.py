@@ -13,6 +13,7 @@ haengen. Eine neue Datei faellt durch, ohne dass jemand daran denken muss.
 """
 import ast
 import asyncio
+import logging
 import os
 import re
 import sys
@@ -151,7 +152,7 @@ class TestBudgetSperrtWirklich:
                 zweck="Probe",
             ))
 
-    def test_erfolg_bucht_die_echten_tokens(self, monkeypatch):
+    def test_erfolg_bucht_die_echten_tokens(self, monkeypatch, caplog):
         import aiohttp
         ki_zugang, gebucht = self._chat(monkeypatch, frei=True)
         gesendet = {}
@@ -187,12 +188,15 @@ class TestBudgetSperrtWirklich:
                 return FakeAntwort()
 
         monkeypatch.setattr(aiohttp, "ClientSession", FakeSitzung)
+        caplog.set_level(logging.INFO, logger="ki_zugang")
         antwort = asyncio.run(ki_zugang.chat(
             model="anthropic/claude-haiku-4.5",
             messages=[{"role": "user", "content": "x"}],
             zweck="Probe",
         ))
         assert antwort.erfolg and antwort.inhalt == "hallo"
+        # Das Log ist die Pruefspur: Zweck, Modell, Tokens, Kosten je Aufruf.
+        assert "KI 'Probe' anthropic/claude-haiku-4.5: 1000+500 Tokens, 0.0032 EUR" in caplog.text
         assert antwort.prompt_tokens == 1000 and antwort.completion_tokens == 500
         # Haiku 4.5: 1000 * 0.000001 + 500 * 0.000005 = 0,0035 USD -> * 0,92
         assert gebucht and abs(gebucht[0] - 0.00322) < 1e-6, gebucht
@@ -299,3 +303,57 @@ class TestPreiseSindBekannt:
         # Wissens-Einordnung. Real rund 0,0008 USD, also weit unter einem Cent.
         kosten = ai_budget.kosten_eur("gpt-4o-mini", 2000, 800)
         assert kosten < 0.001, f"{kosten} EUR ist fuer gpt-4o-mini zu hoch gerechnet"
+
+
+class TestCronjobsBuchenAufDenSystemtopf:
+    """Cronjobs ohne Kunden muessen im Systemkonto laufen.
+
+    Gemessen am 16.09.2026: 0,127 EUR im Vorschau-Topf der Besucher, obwohl kein
+    einziger externer Vorschau-Scan gelaufen war. Es waren der Rechtsmonitor
+    (05:00) und der Wissens-Cron (07:00), beide ohne gesetztes Konto. Der
+    Systemtopf existierte seit dem 08.09. genau dafuer und wurde nicht benutzt.
+    """
+
+    # website_monitor setzt das Konto je Site (der Scan gehoert dem Kunden),
+    # deshalb steht er hier bewusst nicht.
+    CRONS = ["cronjobs/legal_change_monitor_cron.py", "cronjobs/knowledge_updater.py"]
+
+    @staticmethod
+    def _ist_konto_system(ausdruck) -> bool:
+        return (
+            isinstance(ausdruck, ast.Call)
+            and isinstance(ausdruck.func, ast.Attribute)
+            and ausdruck.func.attr == "konto_setzen"
+            and len(ausdruck.args) >= 1
+            and isinstance(ausdruck.args[0], ast.Attribute)
+            and ausdruck.args[0].attr == "SYSTEM"
+        )
+
+    @staticmethod
+    def _ruft_asyncio_run(knoten) -> bool:
+        return any(
+            isinstance(k, ast.Call) and isinstance(k.func, ast.Attribute)
+            and k.func.attr == "run" and isinstance(k.func.value, ast.Name)
+            and k.func.value.id == "asyncio"
+            for k in ast.walk(knoten)
+        )
+
+    @pytest.mark.parametrize("rel", CRONS)
+    def test_asyncio_run_liegt_im_systemkonto(self, rel):
+        baum = ast.parse((BACKEND / rel).read_text(encoding="utf-8"))
+        passende = [
+            w for w in ast.walk(baum)
+            if isinstance(w, ast.With)
+            and any(self._ist_konto_system(i.context_expr) for i in w.items)
+            and self._ruft_asyncio_run(w)
+        ]
+        assert passende, (
+            f"{rel}: asyncio.run() laeuft nicht innerhalb von "
+            "ai_budget.konto_setzen(ai_budget.SYSTEM); der Lauf bucht dann auf "
+            "den Vorschau-Topf der Besucher"
+        )
+        # Und kein asyncio.run ausserhalb davon, sonst gibt es einen zweiten
+        # Weg, der wieder falsch bucht.
+        alle = [k for k in ast.walk(baum) if self._ruft_asyncio_run(k) and isinstance(k, ast.Call)]
+        innen = [k for w in passende for k in ast.walk(w) if isinstance(k, ast.Call) and self._ruft_asyncio_run(k)]
+        assert len(alle) == len(innen), f"{rel}: asyncio.run() auch ausserhalb des Systemkontos"

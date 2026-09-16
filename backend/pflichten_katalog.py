@@ -111,9 +111,14 @@ PFLICHTEN: List[Rule] = [
         "law": "EU AI Act",
         "title": "KI-Transparenz gegenüber Nutzern (Chatbots, KI-Inhalte)",
         "legal_basis": "Art. 50 KI-VO (VO (EU) 2024/1689)",
-        "deadline": "2026-08-02 (bußgeldbewehrt)",
+        # Die Nachfrist bis 2026-12-02 fuer die maschinenlesbare Kennzeichnung
+        # (Abs. 2) stammt aus dem Digital Omnibus: politische Einigung vom
+        # 07.05.2026, kein geltendes Recht (Haufe, 20.07.2026: "im Gespraech,
+        # Quellenlage uneinheitlich"). Sie darf deshalb nicht als feste Frist
+        # stehen. Wer sie so zeigt, behauptet einen Zustand statt ihn zu messen.
+        "deadline": "seit 2026-08-02 (bußgeldbewehrt); Nachfrist bis 2026-12-02 für die maschinenlesbare Kennzeichnung nach Abs. 2 ist im Digital Omnibus politisch vereinbart, aber nicht in Kraft",
         "risk_range": [1000, 15000000],
-        "todo": "KI-Interaktion kennzeichnen (Chatbot-Hinweis); KI-generierte Inhalte/Deepfakes kennzeichnen.",
+        "todo": "KI-Interaktion kennzeichnen (Chatbot-Hinweis); KI-generierte Inhalte/Deepfakes kennzeichnen; maschinenlesbare Kennzeichnung nicht auf die Omnibus-Nachfrist verlassen.",
         "scan_pillar": None,
         "confidence": 0.9,
         "evaluate": lambda p: (
@@ -147,10 +152,11 @@ PFLICHTEN: List[Rule] = [
         "id": "e_rechnung",
         "law": "Wachstumschancengesetz",
         "title": "E-Rechnung im B2B (Empfang jetzt, Versand gestaffelt)",
-        "legal_basis": "§ 14 UStG n. F.",
-        "deadline": "Empfang seit 2025-01-01; Versand ab 2027/2028 (nach Umsatz)",
+        "legal_basis": "§ 14 UStG n. F.; Übergang § 27 Abs. 38 UStG",
+        # Stand 16.09.2026, gegen DATEV und mehrere Kanzleiquellen geprueft.
+        "deadline": "Empfang seit 2025-01-01; Versand ab 2027-01-01 bei über 800.000 € Vorjahresumsatz, ab 2028-01-01 für alle (Kleinunternehmer nach § 19 UStG befreit)",
         "risk_range": [0, 5000],
-        "todo": "Empfang strukturierter E-Rechnungen (XRechnung/ZUGFeRD) sicherstellen; Versand-Fahrplan festlegen.",
+        "todo": "Empfang strukturierter E-Rechnungen (XRechnung, ZUGFeRD ab 2.0.1) sicherstellen; Versand ab 2027 bzw. 2028 einplanen, Papier und einfaches PDF gelten dann nicht mehr.",
         "scan_pillar": None,
         "confidence": 0.9,
         "evaluate": lambda p: (
@@ -166,9 +172,13 @@ PFLICHTEN: List[Rule] = [
         "law": "NIS2 / NIS2UmsuCG",
         "title": "Cybersicherheits-Pflichten (Risikomanagement, Meldewege)",
         "legal_basis": "NIS2-RL (EU) 2022/2555, dt. Umsetzung",
-        "deadline": "Registrierung/Nachweise nach Inkrafttreten der dt. Umsetzung",
+        # Bis 16.09.2026 stand hier "nach Inkrafttreten der dt. Umsetzung". Das
+        # Gesetz galt da seit neun Monaten, und beide Registrierungsfristen
+        # waren verstrichen. Ein Pflichtenradar, der eine abgelaufene Frist
+        # als kuenftige zeigt, sagt dem Kunden das Gegenteil der Wahrheit.
+        "deadline": "NIS2UmsuCG in Kraft seit 2025-12-06; BSI-Registrierung war bis 2026-03-06 fällig, Nachfrist bis 2026-07-31 abgelaufen",
         "risk_range": [10000, 7000000],
-        "todo": "Betroffenheit klären (Sektor + Größe); Risikomanagement nach Stand der Technik, Melde- und Registrierungspflichten vorbereiten.",
+        "todo": "Betroffenheit klären (Sektor + Größe); falls betroffen: BSI-Registrierung unverzüglich nachholen, Risikomanagement nach Stand der Technik und Meldewege einrichten.",
         "scan_pillar": None,
         "confidence": 0.65,
         "evaluate": lambda p: (

@@ -127,4 +127,12 @@ async def run() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(run()))
+    # Systemarbeit ohne Kunden bucht auf den Systemtopf, nicht auf den
+    # Vorschau-Topf der Besucher. Gemessen am 16.09.2026: 0,127 EUR lagen im
+    # Vorschau-Topf, obwohl kein einziger externer Vorschau-Scan gelaufen war;
+    # es waren die Cronjobs, die ohne Konto liefen. Hier gesetzt und nicht
+    # tiefer, weil asyncio.run() den Kontext in die Aufgabe kopiert: alles,
+    # was darin KI ruft, bucht damit richtig, auch kuenftige Aufrufstellen.
+    from compliance_engine import ai_budget
+    with ai_budget.konto_setzen(ai_budget.SYSTEM):
+        sys.exit(asyncio.run(run()))

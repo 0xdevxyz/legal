@@ -67,3 +67,30 @@ def test_kaputtes_profil_faellt_auf_check_zurueck():
     assert len(r["items"]) == len(PFLICHTEN)
     for item in r["items"]:
         assert item["status"] in (APPLIES, CHECK, NOT_INDICATED)
+
+
+def test_fristen_sind_konkret_und_nicht_veraltet():
+    """Stand 16.09.2026, gegen aktuelle Quellen geprueft.
+
+    NIS2 stand bis dahin mit "nach Inkrafttreten der dt. Umsetzung" im Katalog,
+    neun Monate nachdem das NIS2UmsuCG in Kraft war und nachdem beide
+    Registrierungsfristen verstrichen waren. Ein Pflichtenradar, der eine
+    abgelaufene Frist als kuenftige zeigt, sagt dem Kunden das Gegenteil der
+    Wahrheit. Die Omnibus-Nachfrist fuer Art. 50 Abs. 2 ist nur politisch
+    vereinbart; sie darf im Text stehen, aber nicht als feste Frist.
+    """
+    by_id = {r["id"]: r for r in PFLICHTEN}
+
+    nis2 = by_id["nis2"]["deadline"]
+    assert "Inkrafttreten" not in nis2
+    assert "2025-12-06" in nis2 and "2026-03-06" in nis2 and "2026-07-31" in nis2
+    assert "nachholen" in by_id["nis2"]["todo"]
+
+    er = by_id["e_rechnung"]["deadline"]
+    assert "800.000" in er and "2027-01-01" in er and "2028-01-01" in er
+    assert "§ 19" in er
+
+    ai = by_id["ai_act_transparenz"]["deadline"]
+    assert "2026-08-02" in ai
+    assert "2026-12-02" in ai
+    assert "nicht in Kraft" in ai, "Omnibus-Nachfrist darf nicht als feste Frist stehen"

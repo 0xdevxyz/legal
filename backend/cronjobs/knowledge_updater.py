@@ -166,5 +166,13 @@ async def _trigger_rule_reviews(db_pool, high_impact_items):
 
 
 if __name__ == "__main__":
-    result = asyncio.run(run_knowledge_update())
+    # Systemarbeit ohne Kunden bucht auf den Systemtopf, nicht auf den
+    # Vorschau-Topf der Besucher. Gemessen am 16.09.2026: 0,127 EUR lagen im
+    # Vorschau-Topf, obwohl kein einziger externer Vorschau-Scan gelaufen war;
+    # es waren die Cronjobs, die ohne Konto liefen. Hier gesetzt und nicht
+    # tiefer, weil asyncio.run() den Kontext in die Aufgabe kopiert: alles,
+    # was darin KI ruft, bucht damit richtig, auch kuenftige Aufrufstellen.
+    from compliance_engine import ai_budget
+    with ai_budget.konto_setzen(ai_budget.SYSTEM):
+        result = asyncio.run(run_knowledge_update())
     sys.exit(0 if result.get("success") else 1)

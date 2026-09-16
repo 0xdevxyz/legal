@@ -154,6 +154,14 @@ async def chat(
                         ct = int(usage.get("completion_tokens", 0) or 0)
                         kosten = ai_budget.kosten_eur(model, pt, ct)
                         await ai_budget.kosten_buchen(user_id, kosten)
+                        # Eine Zeile je Aufruf, damit das Log die Pruefspur ist.
+                        # Vorher schrieb der httpx-Client der Aufrufstellen je
+                        # Anfrage eine Zeile; seit dem Umbau auf aiohttp fehlte
+                        # sie, und am 16.09.2026 liess sich nicht mehr aus dem
+                        # Log ablesen, wer den Vorschau-Topf geleert hatte.
+                        logger.info(
+                            f"KI '{zweck}' {model}: {pt}+{ct} Tokens, {kosten:.4f} EUR"
+                        )
                         if _openrouter_counter:
                             _openrouter_counter.labels(status="success").inc()
                         try:
@@ -248,6 +256,7 @@ async def einbettung(
                     int(usage.get("completion_tokens", 0) or 0),
                 )
                 await ai_budget.kosten_buchen(user_id, kosten)
+                logger.info(f"Einbettung '{zweck}' {model}: {kosten:.6f} EUR")
                 return daten["data"][0]["embedding"]
     except BudgetErschoepft:
         raise
