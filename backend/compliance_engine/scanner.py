@@ -192,6 +192,45 @@ def _ist_einzelfundstelle(issue) -> bool:
 _SEVERITY_RANG = {"critical": 3, "warning": 2, "info": 1}
 
 
+_LANDMARK_HEURISTIK_RE = re.compile(r'^\d+ Landmark-Regions fehlen$')
+
+
+def _unterdruecke_globale_landmark_dopplung(issues: list) -> list:
+    """Der ARIA-Checker-Sammelbefund weicht axe, sobald axe irgendwo auf der
+    Site zu Landmarks gesprochen hat.
+
+    Innerhalb EINER Seite unterdrueckt `check_barrierefreiheit_compliance`
+    bereits den groben ARIA-Checker-Befund ("N Landmark-Regions fehlen"),
+    wenn axe auf DERSELBEN Seite ein LANDMARKS-Merkmal gemeldet hat (siehe
+    `_axe_merkmale` dort). Im Mehrseiten-Scan laeuft axe aus Zeitgruenden
+    aber nicht auf jeder Unterseite — dann bleibt der grobe Befund fuer genau
+    diese Seite stehen, waehrend eine ANDERE Seite bereits axes praezisen
+    Befund traegt ("Kein <main>-Bereich vorhanden"). Im zusammengefuehrten
+    Bericht standen beide Formulierungen nebeneinander, gemessen am
+    16.09.2026 auf panoart360.de: axe auf der Startseite und /referenzen,
+    der Sammelbefund auf /impressum, /impressum.html und dem Blogartikel.
+
+    Hat axe auf IRGENDEINER Seite zu Landmarks gesprochen, ist die grobe
+    Sammelmeldung fuer die ganze Site kein Erkenntnisgewinn mehr — axe hat
+    das praezisere Bild bereits geliefert. Die Fundstellen der axe-Befunde
+    bleiben davon unberuehrt.
+    """
+    def _feature_id(issue):
+        meta = getattr(issue, "metadata", None) or {}
+        return meta.get("feature_id") if isinstance(meta, dict) else None
+
+    axe_hat_landmarks_gesagt = any(
+        _feature_id(issue) == "LANDMARKS" for issue in issues
+    )
+    if not axe_hat_landmarks_gesagt:
+        return issues
+
+    return [
+        issue for issue in issues
+        if not _LANDMARK_HEURISTIK_RE.match(getattr(issue, "title", "") or "")
+    ]
+
+
 def dedupe_issues(issues: "List[ComplianceIssue]") -> "List[ComplianceIssue]":
     """
     Fasst Mehrfachmeldungen desselben Mangels zu einer zusammen.
@@ -564,6 +603,7 @@ class ComplianceScanner:
             alt.append(iss)
 
         alle = normalize_severities(alt + neue)
+        alle = _unterdruecke_globale_landmark_dopplung(alle)
         # Derselbe Mangel auf fuenf Unterseiten ist EINE Aufgabe, nicht fuenf.
         # dedupe_issues fasst ueber die Saeule zusammen; die erste Fundstelle
         # bleibt erhalten, die Anzahl merken wir uns separat.

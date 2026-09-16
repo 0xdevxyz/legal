@@ -115,3 +115,8 @@ class TestKeineBewertungMehrImModul:
         assert "issue['severity'] =" not in src
         assert "issue['risk_euro'] =" not in src
         assert "* 1.3" not in src and "* 1.5" not in src
+
+    def test_der_tote_severity_helfer_ist_weg(self):
+        """`_get_max_severity` diente ausschliesslich der abgeschafften
+        Hochstufung; kein Aufrufer bleibt uebrig (16.09.2026)."""
+        assert not hasattr(LegalUpdateIntegration, "_get_max_severity")

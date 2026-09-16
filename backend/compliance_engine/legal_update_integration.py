@@ -198,22 +198,7 @@ class LegalUpdateIntegration:
         scan_results['affected_issues_count'] = betroffene
 
         return scan_results
-    
-    def _get_max_severity(self, updates: List[Dict]) -> str:
-        """Ermittelt höchste Severity aus Updates"""
-        severity_order = {'critical': 3, 'high': 2, 'medium': 1, 'low': 0, 'info': 0}
-        max_severity = 'info'
-        max_value = 0
-        
-        for update in updates:
-            severity = update.get('severity', 'info')
-            value = severity_order.get(severity, 0)
-            if value > max_value:
-                max_value = value
-                max_severity = severity
-        
-        return max_severity
-    
+
     async def get_fix_priority_adjustments(self, updates: Optional[List[Dict]] = None) -> Dict[str, int]:
         """
         Berechnet Prioritäts-Anpassungen für Fixes basierend auf Legal Updates
