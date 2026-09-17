@@ -99,7 +99,7 @@ export const CookieComplianceWidget: React.FC = () => {
                 </Badge>
               </span>
               <p className="text-sm text-gray-600 dark:text-zinc-400 mt-1 font-normal">
-                DSGVO-konformes Cookie-Banner mit Consent-Management
+                Cookie-Banner mit Einwilligungsverwaltung
               </p>
             </div>
           </CardTitle>

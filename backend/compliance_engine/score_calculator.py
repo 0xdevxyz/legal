@@ -205,7 +205,7 @@ class ScoreCalculator:
     PILLAR_LABELS = {
         "accessibility": "Barrierefreiheit",
         "gdpr":          "Datenschutz",
-        "legal":         "Rechtssichere Texte",
+        "legal":         "Pflichttexte",
         "cookies":       "Cookie-Compliance",
     }
 

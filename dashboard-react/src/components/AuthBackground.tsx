@@ -142,8 +142,9 @@ export function AuthVertrauen() {
         <div className="mt-5 flex items-center justify-center gap-4">
             <span className="text-xs" style={{ color: 'rgba(100,116,139,0.4)' }}>256-bit SSL</span>
             <div className="w-px h-3" style={{ background: 'rgba(100,116,139,0.2)' }} />
-            <span className="text-xs" style={{ color: 'rgba(100,116,139,0.4)' }}>DSGVO-konform</span>
-            <div className="w-px h-3" style={{ background: 'rgba(100,116,139,0.2)' }} />
+            {/* Hier stand "DSGVO-konform". Eine Zustandsbehauptung ueber das
+                eigene Angebot, und keine Messung dahinter. Am 13.09.2026 aus der
+                Fussleiste der Website entfernt, am 17.09. hier (§ 305c BGB). */}
             {/* Hier stand "ISO 27001". Eine Zertifizierung, die complyo nicht
                 haelt, und ohne Beleglink — genau der Befund, den der eigene
                 Scanner als Irrefuehrung nach §5 UWG meldet. Ersetzt durch eine

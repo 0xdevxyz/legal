@@ -125,7 +125,7 @@ export default function StatementGenerator() {
           Barrierefreiheitserklärung generieren
         </h1>
         <p className="mt-1 text-sm text-gray-600">
-          Erstellen Sie eine BFSG-konforme Barrierefreiheitserklärung für Ihre Website.{' '}
+          Erstellen Sie eine Barrierefreiheitserklärung mit den Angaben, die das BFSG verlangt.{' '}
           <a
             href="https://www.bfsg.de/"
             target="_blank"

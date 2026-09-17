@@ -365,7 +365,7 @@ export default function WebsiteScanner() {
             Kostenloser Website-Check
           </div>
           <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            Wie rechtskonform ist Ihre Website?
+            Was findet der Check auf Ihrer Website?
           </h2>
           <p className="text-xl text-gray-300 max-w-3xl mx-auto">
             Prüfen Sie Ihre Website <span className="font-semibold text-akzent-400">kostenlos</span> auf die 4 wichtigsten Compliance-Säulen

@@ -256,7 +256,7 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                   <CheckCircle className="w-10 h-10 text-green-400 mx-auto mb-2" />
                   <p className="text-sm font-semibold text-green-400">Kein Cookie-Banner erforderlich</p>
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                    Ihre Website verwendet nur essenzielle Cookies — Sie sind bereits DSGVO-konform.
+                    Im Scan wurden nur essenzielle Cookies gefunden, die keine Einwilligung benötigen.
                   </p>
                 </div>
               )}

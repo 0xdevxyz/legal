@@ -149,6 +149,11 @@ export default function AccessibilityScore({ config }: AccessibilityScoreProps) 
     return 'Kritisch';
   };
   
+  // Der Badge sagte "WCAG 2.2 AA konform", sobald der Score 70 erreichte.
+  // 70 von 100 heisst aber, dass Pruefpunkte offen sind, und der Score misst
+  // nur die Banner-Einstellungen, nicht die Website. Also die Messung nennen.
+  const offeneChecks = checks.filter(c => !c.passed).length;
+
   const categories = [
     { id: 'contrast', name: 'Kontrast', icon: Palette },
     { id: 'navigation', name: 'Navigation', icon: MousePointer },
@@ -182,7 +187,9 @@ export default function AccessibilityScore({ config }: AccessibilityScoreProps) 
             <div className="flex items-center justify-between mb-2">
               <span className={`font-medium ${getScoreColor()}`}>{getScoreLabel()}</span>
               <Badge variant="outline" className={score >= 70 ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400'}>
-                {score >= 70 ? 'WCAG 2.2 AA konform' : 'Anpassung empfohlen'}
+                {offeneChecks === 0
+                  ? 'alle Prüfpunkte bestanden'
+                  : `${offeneChecks} von ${checks.length} Prüfpunkten offen`}
               </Badge>
             </div>
             <Progress value={score} className="h-3" />

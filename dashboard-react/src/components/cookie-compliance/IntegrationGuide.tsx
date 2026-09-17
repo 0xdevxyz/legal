@@ -390,7 +390,7 @@ export default function Document() {
           
           <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
             <p className="text-xs text-gray-700 dark:text-gray-300">
-              <strong className="text-purple-300">100% DSGVO-konform:</strong> Keine Tracking-Scripts laden vor Zustimmung.
+              <strong className="text-purple-300">Script-Blocking vor Einwilligung:</strong> Keine Tracking-Scripts laden vor Zustimmung.
             </p>
           </div>
         </CardContent>

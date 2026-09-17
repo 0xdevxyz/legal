@@ -323,7 +323,7 @@ export default function JourneyPage() {
           <div className="max-w-md">
             <h2 className="text-xl font-bold">Starten Sie Ihre Compliance-Reise</h2>
             <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-              Complyo führt Sie Schritt für Schritt zur rechtskonformen Website – ganz ohne
+              Complyo führt Sie Schritt für Schritt durch die gemessenen Befunde Ihrer Website – ganz ohne
               juristisches Fachwissen.
             </p>
           </div>

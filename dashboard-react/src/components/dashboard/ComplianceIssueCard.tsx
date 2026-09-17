@@ -645,7 +645,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                 <div className="flex-1">
                   <p className="text-sm text-orange-800 font-medium mb-2">🍪 Cookie-Compliance mit Complyo beheben:</p>
                   <p className="text-sm text-orange-700 mb-3">
-                    Complyo bietet eine <strong>integrierte DSGVO-konforme Cookie-Banner-Lösung</strong> - 
+                    Complyo bietet eine <strong>integrierte Cookie-Banner-Lösung mit Einwilligungsverwaltung</strong> - 
                     ohne externe Tools wie Cookiebot oder Usercentrics!
                   </p>
                   <ul className="text-sm text-orange-700 space-y-1.5 mb-4">

@@ -274,7 +274,7 @@ export const WebsiteAnalysis: React.FC = () => {
       name: 'Barrierefreiheit',
       icon: Eye,
       color: 'blue',
-      description: 'WCAG 2.1 AA Konformität',
+      description: 'gemessen gegen WCAG 2.1 AA',
       keywords: ['accessibility', 'wcag', 'aria', 'barrierefreiheit', 'barriere', 'alt-text', 'alt_text', 'kontrast', 'contrast', 'tastat']
     },
     {

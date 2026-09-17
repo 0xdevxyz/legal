@@ -79,7 +79,7 @@ export default function TCFComplianceWidget({ scanId, tcfData }: TCFComplianceWi
   if (has_tcf) {
     if (tc_string_found && (!issues || issues.length === 0)) {
       statusColor = 'green';
-      statusText = 'TCF 2.2 Konform';
+      statusText = 'TCF 2.2 ohne Befund';
       statusIcon = <CheckCircle className="w-5 h-5" />;
     } else if (tc_string_found) {
       statusColor = 'yellow';

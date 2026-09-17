@@ -279,7 +279,7 @@ export default function CookieCompliancePage() {
           <div className="dark:bg-zinc-800/50 bg-gray-100 border dark:border-zinc-700 border-gray-200 rounded-xl p-6 mb-8 text-left space-y-3">
             <div className="flex items-center gap-3 text-sm dark:text-gray-300 text-gray-700">
               <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-              <span>DSGVO- & TTDSG-konformes Cookie-Banner</span>
+              <span>Cookie-Banner mit Einwilligungsverwaltung, Ablehnen gleichwertig</span>
             </div>
             <div className="flex items-center gap-3 text-sm dark:text-gray-300 text-gray-700">
               <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
@@ -357,7 +357,7 @@ export default function CookieCompliancePage() {
                 </div>
                 <div>
                   <h1 className="text-xl font-bold">Cookie-Compliance</h1>
-                  <p className="text-sm dark:text-gray-400 text-gray-600">DSGVO-konformes Cookie-Management</p>
+                  <p className="text-sm dark:text-gray-400 text-gray-600">Einwilligungsverwaltung für Cookies und Tracking-Dienste</p>
                 </div>
               </div>
             </div>
@@ -516,7 +516,7 @@ export default function CookieCompliancePage() {
                     <strong className="dark:text-gray-300 text-gray-700">Was bedeutet das?</strong>
                     <ul className="list-disc list-inside mt-1 space-y-1">
                       <li>Sie müssen keinen Cookie-Banner einbinden</li>
-                      <li>Ihre Website ist bereits DSGVO-konform bezüglich Cookies</li>
+                      <li>Ihre Cookies sind in diesem Scan ohne Befund geblieben</li>
                       <li>Falls Sie später Tracking-Tools (wie Google Analytics) hinzufügen, scannen Sie erneut</li>
                     </ul>
                   </div>
@@ -543,7 +543,7 @@ export default function CookieCompliancePage() {
                 </div>
                 <div className="flex-1">
                   <div className="font-bold dark:text-white text-gray-900 mb-1">Setup erforderlich</div>
-                  <div className="text-sm dark:text-gray-300 text-gray-700">Folgen Sie diesen 3 Schritten, um Ihren DSGVO-konformen Cookie-Banner einzurichten.</div>
+                  <div className="text-sm dark:text-gray-300 text-gray-700">Folgen Sie diesen 3 Schritten, um Ihren Cookie-Banner mit Einwilligungsverwaltung einzurichten.</div>
                 </div>
                 <Button
                   onClick={() => setActiveTab('services')}
