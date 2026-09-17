@@ -2,8 +2,9 @@
 import React, { useRef, useState } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
 
-// Wortlaut der Erzaehlung der Fassung vom 17.09.2026 (sieben Bloecke; die Bloecke
-// vier bis sechs sind echte Aufnahmen aus dem angemeldeten Backoffice). Aenderungen am Video muessen hier und in der VTT-Spur nachgezogen
+// Wortlaut der Erzaehlung der Fassung vom 18.09.2026 (sieben Bloecke; die Bloecke
+// vier bis sechs sind echte Aufnahmen aus dem angemeldeten Backoffice, Kundendomains
+// verdeckt; am Ende ein Abbinder mit Logo und Adresse). Aenderungen am Video muessen hier und in der VTT-Spur nachgezogen
 // werden — sonst steht neben dem Video ein Text, der nicht dazu gehoert.
 //
 // Diese Komponente ist aus HeroSection herausgeloest, weil das Video seit dem
@@ -24,8 +25,8 @@ export const TRANSKRIPT = [
     'Freigeben muss ein Mensch, nicht die Maschine.',
   'Täglich prüft complyo Ihre Website neu und die Rechtsquellen. Neue Pflichten ' +
     'der Branche meldet es mit Frist und Aufgabe.',
-  'Kern bekommt den öffentlichen Prüfnachweis samt offenen Punkten, seine ' +
-    'Agentur dreißig. Prüfen Sie Ihre Website.',
+  'Am Ende bekommt jede geprüfte Website ihr eigenes öffentliches Protokoll, ' +
+    'offene Punkte eingeschlossen. Prüfen Sie Ihre Website.',
 ];
 
 export default function Erklaervideo() {
@@ -65,7 +66,7 @@ export default function Erklaervideo() {
           playsInline
           preload="metadata"
           poster="/videos/complyo-erklaervideo-poster.jpg"
-          aria-label="Erklärvideo: Wie complyo Websites gegen Barrierefreiheit, Datenschutz, Cookie-Einwilligung und Pflichttexte prüft, Reparaturen zur Freigabe vorschlägt, täglich neue Rechtspflichten meldet und einen öffentlichen Prüfnachweis erstellt. Das vollständige Transkript steht unter dem Video."
+          aria-label="Erklärvideo: Wie complyo Websites gegen Barrierefreiheit, Datenschutz, Cookie-Einwilligung und Pflichttexte prüft, Reparaturen zur Freigabe vorschlägt, täglich neue Rechtspflichten meldet und für jede geprüfte Website ein öffentliches Prüfprotokoll erstellt. Das vollständige Transkript steht unter dem Video."
         >
           <source src="/videos/complyo-erklaervideo.mp4" type="video/mp4" />
           {/* Die im Bild eingebrannten Untertitel sind weder
