@@ -110,14 +110,30 @@ class TestSpeicherung:
         s = _lies(SAVER)
         assert "THEN 'automatik' ELSE NULL END" in s
 
-    def test_menschliche_entscheidung_ueberlebt_den_naechsten_scan(self):
-        """Ohne diese Klausel schriebe der naechste Scan 'automatik' ueber das
-        Urteil, und der einzige Beleg dafuer, dass jemand hingesehen hat, waere
-        weg. Derselbe Fehler wie beim Status, nur eine Spalte weiter."""
+    def test_jede_festgestellte_herkunft_ueberlebt_den_naechsten_scan(self):
+        """Nicht nur 'mensch' — auch 'automatik'.
+
+        Die erste Fassung schuetzte nur 'mensch' und liess sonst
+        `EXCLUDED.entscheidung_quelle` gelten. EXCLUDED ist aber NULL, sobald
+        der Scan 'pending' liefert, und das tut er seit dem 05.09. immer. Also
+        loeschte jeder Wiederholungsscan den Vermerk 'automatik': die Zeile
+        blieb freigegeben und live, las sich aber nur noch als "Herkunft
+        unbekannt". Fuenf der achtzehn Vermerke aus 0024b waren am 17.09.2026
+        auf diesem Weg verschwunden.
+
+        Eine Herkunft ist eine Aussage ueber die Vergangenheit. Ein spaeterer
+        Scan weiss darueber nichts Besseres, also darf er sie nur ergaenzen,
+        nie ersetzen. Genau das leistet COALESCE — und ein CASE auf einen
+        einzelnen Wert leistet es nicht.
+        """
         s = _lies(SAVER)
-        assert "entscheidung_quelle = CASE" in s
-        assert "WHEN accessibility_document_fixes.entscheidung_quelle = 'mensch'" in s
-        assert "THEN 'mensch'" in s
+        block = s.split('ON CONFLICT (site_id, fix_type)')[1].split('"""')[0]
+        assert 'entscheidung_quelle = COALESCE(' in block
+        assert 'accessibility_document_fixes.entscheidung_quelle,' in block
+        assert 'EXCLUDED.entscheidung_quelle)' in block
+        # Die Gegenprobe: kein Zweig darf die Spalte auf einen einzelnen Wert
+        # festnageln, sonst faellt alles andere wieder auf NULL.
+        assert "THEN 'mensch'\n" not in block
 
     def test_freigaberoute_schreibt_mensch(self):
         s = _lies(SAVER)
@@ -129,6 +145,55 @@ class TestSpeicherung:
         block = s.split('async def get_document_fixes_for_site')[1].split('async def ')[0]
         assert 'entscheidung_quelle' in block
         assert '"entscheidung_quelle": r[' in block
+
+
+# ---------------------------------------------------------------------------
+# Nachtrag: was der Wiederholungsscan geloescht hatte
+# ---------------------------------------------------------------------------
+
+NACHTRAG = os.path.join(
+    BACKEND, 'alembic', 'versions',
+    '20260917_0033_herkunft_ueberlebt_scan.py')
+
+
+class TestNachtrag:
+    def test_haengt_am_kopf(self):
+        s = _lies(NACHTRAG)
+        assert 'revision: str = "0033_herkunft_ueberlebt_scan"' in s
+        assert 'down_revision: Union[str, None] = "0032_kontosicherheit"' in s
+
+    def test_sieht_auf_created_at_statt_updated_at(self):
+        """0024b sah auf COALESCE(updated_at, created_at). Genau dieses Feld
+        hat der Wiederholungsscan verstellt — es taugt hier nicht mehr als
+        Beleg dafuer, wann die Zeile zuletzt beurteilt wurde."""
+        s = _lies(NACHTRAG)
+        # Nur die Anweisung selbst, nicht der erklaerende Kopf: dort steht der
+        # alte Ausdruck als Begruendung, und das soll er auch.
+        sql = s.split('def upgrade')[1].split('def downgrade')[0]
+        assert "created_at < TIMESTAMP" in sql
+        assert "COALESCE(updated_at, created_at)" not in sql
+
+    def test_verlangt_die_signatur_der_auto_freigabe(self):
+        """approved_at = created_at. Die Freigaberoute setzt approved_at auf
+        NOW(), also spaeter als die Anlage. Ohne diese Bedingung koennte der
+        Nachtrag eine von Hand erteilte Freigabe als 'automatik' ausgeben —
+        und eine erfundene Herkunft ist schlimmer als eine Luecke, weil sie
+        sich als Beleg ausgibt."""
+        s = _lies(NACHTRAG)
+        assert "approved_at = created_at" in s.split('def downgrade')[0]
+
+    def test_ruehrt_nur_unentschiedene_zeilen_an(self):
+        s = _lies(NACHTRAG)
+        oben = s.split('def downgrade')[0]
+        assert "entscheidung_quelle IS NULL" in oben
+        assert "fix_type <> 'kontrast-css'" in oben
+
+    def test_downgrade_loescht_den_vermerk_nicht_erneut(self):
+        """Ein Zurueck waere genau der Fehler, den die Revision behebt."""
+        s = _lies(NACHTRAG)
+        unten = s.split('def downgrade')[1]
+        assert 'op.execute' not in unten
+        assert 'UPDATE' not in unten
 
 
 # ---------------------------------------------------------------------------

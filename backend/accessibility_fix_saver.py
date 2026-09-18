@@ -638,17 +638,30 @@ class AccessibilityFixSaver:
                                       OR EXCLUDED.status = 'approved'
                                     THEN COALESCE(accessibility_document_fixes.approved_at, NOW())
                                     ELSE NULL END,
-                                -- Ein erteiltes Urteil ueberlebt den naechsten
-                                -- Scan. Ohne diese Zeile schriebe er
-                                -- 'automatik' darueber, und der einzige Beleg
-                                -- dafuer, dass jemand hingesehen hat, waere
-                                -- weg — derselbe Fehler wie beim Status, nur
-                                -- eine Spalte weiter.
-                                entscheidung_quelle = CASE
-                                    WHEN accessibility_document_fixes.entscheidung_quelle = 'mensch'
-                                    THEN 'mensch'
-                                    ELSE EXCLUDED.entscheidung_quelle
-                                END,
+                                -- Eine einmal festgestellte Herkunft ueberlebt
+                                -- jeden weiteren Scan. Sie beschreibt ein
+                                -- Ereignis der Vergangenheit; ein spaeterer
+                                -- Scan weiss darueber nichts Besseres.
+                                --
+                                -- Vorher stand hier nur 'mensch' unter Schutz,
+                                -- sonst EXCLUDED. EXCLUDED ist aber NULL,
+                                -- sobald der Scan 'pending' liefert — und das
+                                -- tut er seit dem 05.09. immer. Jeder
+                                -- Wiederholungsscan loeschte damit den Vermerk
+                                -- 'automatik': die Zeile blieb freigegeben und
+                                -- live, las sich aber nur noch als "Herkunft
+                                -- unbekannt". In der Produktion sind so fuenf
+                                -- der achtzehn Vermerke aus Migration 0024b
+                                -- verschwunden (panoart360 am 15.09.,
+                                -- zua-zwickau am 17.09.2026).
+                                --
+                                -- Derselbe Fehler wie beim Status, nur eine
+                                -- Spalte weiter — und er faellt nicht auf, weil
+                                -- er nichts kaputt macht, sondern nur Wissen
+                                -- still in Nichtwissen verwandelt.
+                                entscheidung_quelle = COALESCE(
+                                    accessibility_document_fixes.entscheidung_quelle,
+                                    EXCLUDED.entscheidung_quelle),
                                 updated_at = NOW()
                             """,
                             site_id,
