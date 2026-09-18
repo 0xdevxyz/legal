@@ -137,3 +137,64 @@ def test_kein_ausgegebener_text_zitiert_ein_abgeloestes_gesetz():
         "Abgeloestes Gesetz in einem ausgegebenen Text:\n" + "\n".join(sorted(set(treffer)))
         + "\n\nSeit 14.05.2024: TMG -> DDG, TTDSG -> TDDDG, § 55 RStV -> § 18 MStV."
     )
+
+
+# --------------------------------------------------------------------------
+# Dieselbe Frage an die Frontends.
+#
+# Der Test oben liest Backend-Python. Am 18.09.2026 nachgemessen: in den
+# beiden Frontends standen zehn weitere Stellen, acht davon Text, den ein
+# Kunde liest - die Seitenbeschreibung des Dashboards, die Laenderseite
+# ("§ 25 TTDSG"), der Satz im Einrichtungsassistenten, zwei Rechtsgrundlagen
+# in Befundkarten. Wer nur eine Sprache prueft, prueft die Haelfte.
+#
+# Ohne TypeScript-Parser wird ueber den Rohtext gelesen. Das ist hier
+# vertretbar: gesucht werden drei Abkuerzungen, und die Ausnahmen sind
+# dieselben wie oben - erklaerende Nennungen ("vormals TTDSG", "Nachfolger
+# des TMG") und Suchmuster, mit denen complyo fremde Seiten prueft.
+FRONTENDS = ("dashboard-react/src", "landing-react/src")
+ENDUNGEN = (".ts", ".tsx", ".js", ".jsx")
+WURZEL = os.path.dirname(BACKEND)
+
+# Erklaerender Kontext: der alte Name steht da, um den Wechsel zu benennen.
+ERKLAEREND = re.compile(
+    r"vormals\s+(TMG|TTDSG|RStV)"
+    r"|Nachfolger\s+des\s+(TMG|TTDSG|RStV)"
+    r"|bis\s+(Mai\s+2024|14\.05\.2024)"
+    r"|\(ex\s+(TMG|TTDSG|RStV)\)"
+    r"|hie(ss|ß)\s+es\s+(TMG|TTDSG|RStV)",
+    re.IGNORECASE)
+
+
+def _frontend_dateien():
+    for teil in FRONTENDS:
+        wurzel = os.path.join(WURZEL, teil)
+        if not os.path.isdir(wurzel):
+            continue
+        for ordner, unter, dateien in os.walk(wurzel):
+            unter[:] = [u for u in unter
+                        if u not in ("node_modules", ".next", "dist", "build")]
+            for name in dateien:
+                if name.endswith(ENDUNGEN) and ".bak" not in name:
+                    yield os.path.join(ordner, name)
+
+
+@pytest.mark.skipif(not os.path.isdir(os.path.join(WURZEL, "dashboard-react", "src")),
+                    reason="Frontend-Quellen nicht im Arbeitsbaum")
+def test_frontends_zitieren_kein_abgeloestes_gesetz():
+    treffer = []
+    for pfad in _frontend_dateien():
+        rel = os.path.relpath(pfad, WURZEL)
+        with open(pfad, encoding="utf-8", errors="replace") as f:
+            for nr, zeile in enumerate(f, 1):
+                if not re.search(r"\bTMG\b|\bTTDSG\b|\bRStV\b", zeile):
+                    continue
+                if ERKLAEREND.search(zeile):
+                    continue
+                treffer.append(f"  {rel}:{nr}  {zeile.strip()[:80]}")
+    assert not treffer, (
+        "Abgeloestes Gesetz im Frontend:\n" + "\n".join(sorted(set(treffer)))
+        + "\n\nSeit 14.05.2024: TMG -> DDG, TTDSG -> TDDDG, "
+          "§ 55 RStV -> § 18 MStV. Soll der alte Name stehen bleiben, muss "
+          "die Zeile den Wechsel benennen (\"vormals TTDSG\")."
+    )

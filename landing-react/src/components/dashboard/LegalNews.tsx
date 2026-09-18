@@ -12,7 +12,7 @@ export const LegalNews: React.FC = () => {
     {
       id: '1',
       type: 'critical' as const,
-      title: 'TTDSG Änderung: Neue Cookie-Richtlinien',
+      title: 'TDDDG Änderung: Neue Cookie-Richtlinien',
       description: 'Seit 1. August 2025 gelten verschärfte Regeln für Cookie-Banner. Ihre Website ist betroffen.',
       timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
       action_available: true,
@@ -44,7 +44,7 @@ export const LegalNews: React.FC = () => {
   const handleAction = (newsId: string, actionText: string) => {
     switch (actionText) {
       case 'Automatisch anpassen':
-        alert('Cookie-Banner wird an neue TTDSG-Richtlinien angepasst!');
+        alert('Cookie-Banner wird an neue TDDDG-Richtlinien angepasst!');
         break;
       case 'Templates abrufen':
         alert('Templates werden vorbereitet und per E-Mail gesendet.');

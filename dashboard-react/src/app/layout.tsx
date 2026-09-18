@@ -12,8 +12,8 @@ const SidebarLayout = dynamic(
 
 export const metadata: Metadata = {
   title: 'Complyo Dashboard - KI-gestützte Website-Compliance',
-  description: 'Automatische DSGVO, TTDSG & Barrierefreiheits-Compliance mit KI',
-  keywords: ['DSGVO', 'TTDSG', 'Compliance', 'Website', 'KI', 'Automation'],
+  description: 'Automatische DSGVO, TDDDG & Barrierefreiheits-Compliance mit KI',
+  keywords: ['DSGVO', 'TDDDG', 'Compliance', 'Website', 'KI', 'Automation'],
   authors: [{ name: 'Complyo Team' }],
   // Das Dashboard ist eine eingeloggte Anwendung und gehoert nicht in den Index.
   // Ohne das wurde app.complyo.de/register?plan=pro von Google indexiert.

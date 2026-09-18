@@ -985,7 +985,7 @@ const normalizeIssue = (issue: any): ComplianceIssue | null => {
       risk_euro_max: riskEuro * 2,
       risk_range: `${riskEuro}€ - ${riskEuro * 2}€`,
       recommendation: 'Bitte korrigieren Sie diesen Punkt',
-      legal_basis: 'DSGVO, TMG',
+      legal_basis: 'DSGVO, DDG',
       location: {
         area: 'Allgemein',
         hint: 'Überprüfen Sie Ihre Website'

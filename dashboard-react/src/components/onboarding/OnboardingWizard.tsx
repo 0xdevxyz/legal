@@ -416,7 +416,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
             <div className="bg-gray-50 rounded-xl p-4 mb-6 flex items-start gap-3">
               <Shield className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
               <p className="text-sm text-gray-600">
-                Die Analyse dauert <strong>10–20 Sekunden</strong> und prüft Ihre Website auf DSGVO, TTDSG, Impressumspflicht und BFSG-Barrierefreiheit.
+                Die Analyse dauert <strong>10–20 Sekunden</strong> und prüft Ihre Website auf DSGVO, TDDDG, Impressumspflicht und BFSG-Barrierefreiheit.
               </p>
             </div>
 

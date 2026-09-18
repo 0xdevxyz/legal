@@ -17,9 +17,9 @@ const countries: CountryInfo[] = [
     code: 'DE',
     name: 'Deutschland',
     authority: 'DSK / Landesbehörden',
-    framework: 'DSGVO + TTDSG',
+    framework: 'DSGVO + TDDDG',
     specifics: [
-      'Opt-in erforderlich für nicht-essentielle Cookies (§ 25 TTDSG).',
+      'Opt-in erforderlich für nicht-essentielle Cookies (§ 25 TDDDG).',
       'Cookie-Consent muss vor dem Setzen von Tracking-Cookies eingeholt werden.',
       'Dark Patterns (vorausgewählte Checkboxen) sind unzulässig.',
       'Widerruf muss genauso einfach sein wie die Einwilligung.',

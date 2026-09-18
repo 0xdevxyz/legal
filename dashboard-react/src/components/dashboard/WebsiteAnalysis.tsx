@@ -238,7 +238,7 @@ export const WebsiteAnalysis: React.FC = () => {
             description: issue,
             risk_euro: severity === 'critical' ? 5000 : severity === 'warning' ? 1000 : 0,
             recommendation: 'Bitte korrigieren Sie diesen Punkt',
-            legal_basis: severity === 'critical' ? 'DSGVO, TMG, TTDSG' : 'Best Practice',
+            legal_basis: severity === 'critical' ? 'DSGVO, DDG, TDDDG' : 'Best Practice',
             auto_fixable: category === 'impressum' || category === 'datenschutz' || category === 'cookies'
           } as ComplianceIssue;
         }
@@ -333,7 +333,7 @@ export const WebsiteAnalysis: React.FC = () => {
       }
     }
 
-    return 'legal'; // Default für TMG/UWG-Issues ohne explizites Keyword
+    return 'legal'; // Default für DDG/UWG-Issues ohne explizites Keyword
   };
 
   // ✅ NEU: Verwende Backend-Säulen-Scores (wenn vorhanden), sonst Fallback
