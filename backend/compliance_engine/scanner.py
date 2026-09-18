@@ -1211,14 +1211,49 @@ class ComplianceScanner:
                             description=(
                                 f'{mixed_count} Ressourcen werden über HTTP statt HTTPS geladen. '
                                 'Mixed Content untergräbt die HTTPS-Verschlüsselung und wird von '
-                                'modernen Browsern blockiert.'
+                                'modernen Browsern blockiert. Anders als die HTTP-Header ist das '
+                                'eine Basis-Anforderung: APP.3.2.A11 sagt "Mixed Content DARF '
+                                'NICHT verwendet werden".'
                             ),
                             risk_euro=500,
-                            legal_basis='DSGVO Art. 32',
+                            legal_basis='BSI IT-Grundschutz APP.3.2.A11 (Basis-Anforderung), DSGVO Art. 32 Abs. 1 lit. a',
                             recommendation='Ersetzen Sie alle http://-URLs in Scripts, Stylesheets und Bildern durch https://.',
                         ))
         except Exception:
             pass
+
+        # Einordnung der vier Header-Befunde, am 18.09.2026 an der Quelle
+        # geprueft. Vorher stand hier "DSGVO Art. 32, BSI IT-Grundschutz TLS.1"
+        # bzw. "DSGVO Art. 32, OWASP Top 10". Beides war falsch:
+        #
+        # * Einen IT-Grundschutz-Baustein "TLS.1" gibt es nicht. Die Bausteine
+        #   tragen die Praefixe ISMS, ORP, CON, OPS, DER, APP, SYS, IND, NET,
+        #   INF. Die Quelle fuer HTTP-Header ist APP.3.1.A21 "Sichere
+        #   HTTP-Konfiguration bei Webanwendungen"; sie zaehlt genau
+        #   Content-Security-Policy, Strict-Transport-Security, Content-Type,
+        #   X-Content-Type-Options und Cache-Control auf.
+        # * Die OWASP Top 10 sind eine Verbandsliste, keine Rechtsgrundlage.
+        #   Sie neben eine Norm zu stellen laesst beides gleich verbindlich
+        #   aussehen.
+        # * A21 ist eine STANDARD-Anforderung ("SOLLTEN"). Das BSI definiert
+        #   Basis- und Standard-Anforderungen zusammen als Stand der Technik.
+        #   Art. 32 Abs. 1 DSGVO verlangt Massnahmen "unter Beruecksichtigung
+        #   des Stands der Technik" und nur, soweit personenbezogene Daten
+        #   verarbeitet werden. Ein fehlender Header ist deshalb eine
+        #   Abweichung vom Stand der Technik, kein festgestellter Verstoss -
+        #   und traegt keinen Eurobetrag, weil es dafuer kein Bussgeld und
+        #   keine Abmahnpraxis gibt, auf die man sich berufen koennte.
+        #
+        # Mixed Content steht bewusst anders da: APP.3.2.A11 ist eine
+        # BASIS-Anforderung und sagt "DARF NICHT".
+        EINORDNUNG_HTTP_HEADER = (
+            'Der BSI-Baustein APP.3.1.A21 fuehrt diesen Header als '
+            'Standard-Anforderung ("SOLLTE"), also als Stand der Technik. '
+            'Art. 32 Abs. 1 DSGVO verlangt Massnahmen nach dem Stand der '
+            'Technik, sobald die Website personenbezogene Daten verarbeitet. '
+            'Ein fehlender Header allein ist damit eine Abweichung vom Stand '
+            'der Technik, kein festgestellter Verstoss.'
+        )
 
         # Check HTTP security headers
         if response_headers:
@@ -1232,10 +1267,11 @@ class ComplianceScanner:
                     description=(
                         'Der HTTP-Header "Strict-Transport-Security" (HSTS) ist nicht gesetzt. '
                         'HSTS weist Browser an, die Website ausschließlich über HTTPS zu laden '
-                        'und verhindert SSL-Stripping-Angriffe.'
+                        'und verhindert SSL-Stripping-Angriffe. '
+                        + EINORDNUNG_HTTP_HEADER
                     ),
-                    risk_euro=500,
-                    legal_basis='DSGVO Art. 32, BSI IT-Grundschutz TLS.1',
+                    risk_euro=0,
+                    legal_basis='BSI IT-Grundschutz APP.3.1.A21 (Stand der Technik), im Rahmen von DSGVO Art. 32 Abs. 1',
                     recommendation='Setzen Sie den Header: Strict-Transport-Security: max-age=31536000; includeSubDomains',
                 ))
 
@@ -1246,10 +1282,11 @@ class ComplianceScanner:
                     title='Content-Security-Policy-Header fehlt',
                     description=(
                         'Der Content-Security-Policy (CSP) Header ist nicht gesetzt. '
-                        'CSP verhindert Cross-Site-Scripting (XSS) und andere Injection-Angriffe.'
+                        'CSP verhindert Cross-Site-Scripting (XSS) und andere Injection-Angriffe. '
+                        + EINORDNUNG_HTTP_HEADER
                     ),
-                    risk_euro=500,
-                    legal_basis='DSGVO Art. 32, OWASP Top 10',
+                    risk_euro=0,
+                    legal_basis='BSI IT-Grundschutz APP.3.1.A21 (Stand der Technik), im Rahmen von DSGVO Art. 32 Abs. 1',
                     recommendation='Implementieren Sie eine Content-Security-Policy, die nur vertrauenswürdige Quellen erlaubt.',
                 ))
 
@@ -1258,9 +1295,12 @@ class ComplianceScanner:
                     category='security',
                     severity='info',
                     title='X-Content-Type-Options-Header fehlt',
-                    description='Der X-Content-Type-Options: nosniff Header fehlt. Er verhindert MIME-Type-Sniffing durch Browser.',
+                    description=(
+                        'Der X-Content-Type-Options: nosniff Header fehlt. Er verhindert '
+                        'MIME-Type-Sniffing durch Browser. ' + EINORDNUNG_HTTP_HEADER
+                    ),
                     risk_euro=0,
-                    legal_basis='DSGVO Art. 32, BSI IT-Grundschutz',
+                    legal_basis='BSI IT-Grundschutz APP.3.1.A21 (Stand der Technik), im Rahmen von DSGVO Art. 32 Abs. 1',
                     recommendation='Setzen Sie: X-Content-Type-Options: nosniff',
                 ))
 
@@ -1271,10 +1311,14 @@ class ComplianceScanner:
                     title='Clickjacking-Schutz fehlt (X-Frame-Options)',
                     description=(
                         'Weder X-Frame-Options noch frame-ancestors in CSP sind gesetzt. '
-                        'Die Seite könnte in einem iframe eingebettet und für Clickjacking-Angriffe missbraucht werden.'
+                        'Die Seite könnte in einem iframe eingebettet und für Clickjacking-Angriffe '
+                        'missbraucht werden. APP.3.1.A21 nennt Clickjacking als den Angriff, den '
+                        'die HTTP-Header abwehren sollen; X-Frame-Options selbst zählt die '
+                        'Anforderung nicht auf, frame-ancestors in der CSP deckt denselben Fall ab. '
+                        + EINORDNUNG_HTTP_HEADER
                     ),
-                    risk_euro=500,
-                    legal_basis='DSGVO Art. 32, OWASP Top 10',
+                    risk_euro=0,
+                    legal_basis='BSI IT-Grundschutz APP.3.1.A21 (Stand der Technik), im Rahmen von DSGVO Art. 32 Abs. 1',
                     recommendation='Setzen Sie: X-Frame-Options: SAMEORIGIN oder frame-ancestors in der CSP.',
                 ))
 
