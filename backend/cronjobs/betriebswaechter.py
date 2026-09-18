@@ -34,6 +34,13 @@ prüft dieser Wächter:
      /api/legal-ai/archive tagelang 500 warfen und der Wächter
      trotzdem stündlich "alles ruhig" meldete: die Seiten werden zu
      selten aufgerufen, um den Fehlerdruck-Schwellwert zu reißen.
+  9. Einbau: traegt jede Site mit freigegebenen Reparaturen auch das
+     Widget, das sie ausliefert? Ergaenzt am 18.09.2026, weil
+     panoart360.de und osteopathie-limbach.de seit August freigegebene
+     Fixes im Manifest fuehrten und keine einzige davon je eine Seite
+     erreichte: es war dort nie ein complyo-Skript eingebaut. Pruefung 2
+     konnte das nicht sehen: sie vermisst einen Herzschlag, und wer nie
+     angefangen hat zu melden, hat keinen.
 
 Alarm nur bei Befund; jeder Befund höchstens einmal je 24 h (State-Datei),
 damit ein Dauerzustand nicht stündlich mailt. Läuft als Host-Cron über
@@ -79,6 +86,18 @@ MONITOR_MAX_ALTER_STUNDEN = 26   # Tageslauf 05:00 + Puffer
 SICHERUNG_MAX_ALTER_STUNDEN = 30  # Tageslauf 02:30 + Puffer
 SICHERUNG_MARKE = Path(os.getenv("WAECHTER_SICHERUNG_MARKE",
                                  "/data/waechter/datensicherung.json"))
+
+# Einbau-Pruefung: traegt jede Site mit freigegebenen Reparaturen auch das
+# Widget, ueber das sie ausgeliefert werden? Einmal taeglich, weil sich der
+# Einbau einer Seite nicht im Stundentakt aendert.
+WIDGET_ADRESSE = os.getenv("WAECHTER_WIDGET_ADRESSE",
+                           "api.complyo.de/api/widgets/accessibility.js")
+EINBAU_PRUEFSTUNDE = int(os.getenv("WAECHTER_EINBAU_STUNDE", "6"))
+EINBAU_ZEITLIMIT = 25
+EINBAU_KENNUNG = "complyo-Einbauwaechter/1.0 (+https://complyo.de)"
+# Zeichen hinter einem data-site-id, in denen die Kennung stehen darf.
+# Grosszuegig, weil Maskierungen die Zeichenkette verlaengern.
+KENNUNG_NAEHE = 40
 
 # Rechtsquellen. Eine Quelle gilt erst nach 30 Tagen ohne Eintrag als
 # verdaechtig — Behoerdenfeeds veroeffentlichen wirklich selten. Erst dann
@@ -674,6 +693,170 @@ def pruefe_bezahlweg() -> list:
     return []
 
 
+def kennung_steht_dabei(html: str, site_id: str) -> bool:
+    """Steht die Kennung der Site beim Einbau des Widgets?
+
+    Nicht nach einer festen Schreibweise suchen. complyo.de baut das Widget
+    ueber next/script ein; im ausgelieferten HTML steht die Kennung deshalb
+    nicht als Attribut, sondern maskiert in der RSC-Nutzlast:
+    data-site-id\\":\\"complyo-de\\". Der Waechter meldete beim ersten Lauf
+    prompt einen Ausfall, den es nicht gab. Dieselbe Falle wie bei den
+    maskierten Umlauten im Next-Bundle am 17.09.: gemessen wird, was im
+    Browser ankommt, und das steht hier nicht in Anfuehrungszeichen, die
+    ein grep kennt.
+
+    Geprueft wird deshalb die Naehe: taucht die Kennung kurz hinter einem
+    data-site-id auf, gilt sie als gesetzt. Das laesst jede Maskierung durch
+    und faengt trotzdem den Fall, auf den es ankommt, naemlich den Schnipsel
+    der Nachbarsite mit fremder Kennung.
+    """
+    stelle = html.find("data-site-id")
+    while stelle != -1:
+        if site_id in html[stelle:stelle + len("data-site-id") + KENNUNG_NAEHE]:
+            return True
+        stelle = html.find("data-site-id", stelle + 1)
+    return False
+
+
+def bewerte_einbau(site_id: str, seite: str, status: int, html: str) -> tuple:
+    """Traegt die Seite das Widget, mit dem ihre Reparaturen ausgeliefert werden?
+
+    Rueckgabe: (befund_text, None) oder (None, grund_fuer_unpruefbar).
+
+    Geprueft wird das AUSGELIEFERTE HTML, nicht die Datenbank und nicht das
+    Manifest. Beides sagte am 18.09.2026 fuer panoart360.de und
+    osteopathie-limbach.de "freigegeben" und "hier sind die Reparaturen".
+    Im Browser stand davon nichts, weil auf keiner der beiden Seiten je ein
+    complyo-Skript eingebaut worden war (Git-Historie beider Auftritte:
+    kein einziger Commit mit api.complyo.de).
+
+    Zwei Dinge muessen stimmen, nicht nur eines: die Adresse des Widgets UND
+    die passende Kennung. Ein Skript mit fremder data-site-id laedt zwar,
+    holt aber ein fremdes Manifest, also derselbe stille Ausfall mit
+    einem gruenen Haken davor.
+    """
+    if status is None:
+        return None, "nicht erreichbar"
+    if status >= 400:
+        return None, f"HTTP {status}"
+    if WIDGET_ADRESSE not in html:
+        return (f"{site_id}: freigegebene Reparaturen, aber {seite} bindet "
+                f"{WIDGET_ADRESSE} nicht ein. Die Fixes stehen im Manifest "
+                f"und erreichen die Seite nie."), None
+    if not kennung_steht_dabei(html, site_id):
+        return (f"{site_id}: {seite} laedt accessibility.js, aber ohne "
+                f"data-site-id=\"{site_id}\". Das Widget holt damit das "
+                f"Manifest einer anderen Kennung oder gar keines."), None
+    return None, None
+
+
+async def pruefe_einbau() -> list:
+    """Freigegebene Reparaturen, die ihre Seite nie erreichen.
+
+    Der Wirkungs-Herzschlag (Pruefung 2) kann das nicht finden: er bemerkt,
+    dass ein Widget AUFHOERT zu melden. Eine Site, die noch nie gemeldet hat,
+    weil dort nie eines eingebaut wurde, hat keinen Herzschlag, den er
+    vermissen koennte. Genau so blieben panoart360.de (seit 07.08.2026) und
+    osteopathie-limbach.de (seit 31.08.2026) unbemerkt: gescannt, repariert,
+    freigegeben, im Manifest, und im Browser null Wirkung.
+
+    Laeuft einmal taeglich (EINBAU_PRUEFSTUNDE), nicht stuendlich: der Einbau
+    einer Seite aendert sich nicht im Stundentakt, und der Waechter soll
+    keine Kundenserver abklappern.
+    """
+    if datetime.now().hour != EINBAU_PRUEFSTUNDE:
+        return []
+
+    import asyncpg
+    try:
+        import aiohttp
+    except Exception as e:
+        return [("einbau-pruefung-unmoeglich",
+                 f"Einbau der Widgets nicht pruefbar: {e}")]
+
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        # Adresse je Site aus den Fixes selbst, nicht aus tracked_websites:
+        # osteopathie-limbach-de hat Fixes und Scans, steht dort aber gar
+        # nicht drin. Wer die Liste aus der Ueberwachungstabelle zieht,
+        # prueft ausgerechnet die vergessenen Sites nicht.
+        zeilen = await conn.fetch(
+            """
+            SELECT site_id, min(page_url) AS seite, sum(n) AS fixes
+            FROM (
+                SELECT site_id, page_url, count(*) n
+                  FROM accessibility_document_fixes
+                 WHERE status = 'approved' AND page_url LIKE 'http%'
+                 GROUP BY 1, 2
+                UNION ALL
+                SELECT site_id, page_url, count(*) n
+                  FROM accessibility_alt_text_fixes
+                 WHERE status = 'approved' AND page_url LIKE 'http%'
+                 GROUP BY 1, 2
+                UNION ALL
+                SELECT site_id, page_url, count(*) n
+                  FROM accessibility_link_fixes
+                 WHERE status = 'approved' AND page_url LIKE 'http%'
+                 GROUP BY 1, 2
+            ) q
+            GROUP BY site_id
+            ORDER BY site_id
+            """
+        )
+        # Zweiter Befund derselben Klasse: eine Site mit freigegebenen
+        # Reparaturen, die in keiner Ueberwachung steht, wird nie wieder
+        # gescannt. Ihre Fixes veralten still mit der Seite.
+        ungetrackt = await conn.fetch(
+            """
+            SELECT DISTINCT f.site_id, min(f.page_url) AS seite
+              FROM accessibility_document_fixes f
+             WHERE f.status = 'approved' AND f.page_url LIKE 'http%'
+               AND NOT EXISTS (
+                   SELECT 1 FROM tracked_websites t
+                    WHERE rtrim(t.url, '/') = rtrim(f.page_url, '/')
+               )
+             GROUP BY f.site_id
+            """
+        )
+    finally:
+        await conn.close()
+
+    befunde = []
+    for zeile in ungetrackt:
+        befunde.append((
+            f"einbau-ungetrackt:{zeile['site_id']}",
+            f"{zeile['site_id']}: freigegebene Reparaturen, aber {zeile['seite']} "
+            f"steht in keiner ueberwachten Website. Die Seite wird nicht mehr "
+            f"nachgescannt, die Fixes veralten mit ihr.",
+        ))
+
+    zeitlimit = aiohttp.ClientTimeout(total=EINBAU_ZEITLIMIT)
+    unpruefbar = []
+    async with aiohttp.ClientSession(timeout=zeitlimit) as sitzung:
+        for zeile in zeilen:
+            site_id, seite = zeile["site_id"], zeile["seite"]
+            status, html = None, ""
+            try:
+                async with sitzung.get(seite, headers={"User-Agent": EINBAU_KENNUNG},
+                                       allow_redirects=True) as antwort:
+                    status = antwort.status
+                    html = await antwort.text()
+            except Exception as e:
+                unpruefbar.append(f"{site_id} ({e.__class__.__name__})")
+                continue
+            text, grund = bewerte_einbau(site_id, seite, status, html)
+            if text:
+                befunde.append((f"einbau-fehlt:{site_id}", text))
+            elif grund:
+                unpruefbar.append(f"{site_id} ({grund})")
+
+    # Fail-open: eine unerreichbare Kundenseite ist ein eigenes Thema und darf
+    # die Pruefung der anderen nicht zu einer Fehlerflut machen.
+    if unpruefbar:
+        befunde.append(("einbau-unpruefbar",
+                        "Einbau nicht pruefbar auf: " + ", ".join(unpruefbar)))
+    return befunde
+
 def baue_telegram_text(befunde: list) -> str:
     zeilen = [f"• {text}" for _, text in befunde]
     return (f"⚠️ complyo-Wächter: {len(befunde)} Befund(e)\n\n"
@@ -764,6 +947,11 @@ async def main() -> int:
     except Exception as e:
         befunde.append(("sicherung-pruefung-abgestuerzt",
                         f"Prüfung der Datensicherung fehlgeschlagen: {e}"))
+    try:
+        befunde.extend(await pruefe_einbau())
+    except Exception as e:
+        befunde.append(("einbau-pruefung-abgestuerzt",
+                        f"Prüfung des Widget-Einbaus fehlgeschlagen: {e}"))
     befunde.extend(pruefe_host_signale())
     befunde.extend(pruefe_bezahlweg())
 
