@@ -29,6 +29,12 @@ weil sie sich sonst wiederholen:
   stehen aber schon im Widget-Quelltext selbst, den die Seite ja enthaelt.
   Alles "gefunden", nichts gerendert. Gemessen wird nur ueber das DOM.
 
+Gemessen wird in ZWEI Zustaenden. Der geschlossene Zustand ist der, den
+jeder Besucher sieht; der aufgeklappte ist der, in dem ein Fehler am
+laengsten unentdeckt bleibt, weil ihn nur sieht, wer den Dialog oeffnet.
+Aufgeklappt heisst hier: Einstellungsdialog des Banners, Bedienfeld des
+Barrierefreiheits-Widgets, dessen Text-Dialog und die Seitenstruktur-Flaeche.
+
 Gegenprobe: baut man den behobenen Fehler wieder ein, faellt
 `test_widgets_bringen_nichts_mit`.
 """
@@ -68,6 +74,47 @@ PALETTEN = {
     "complyo-de": {"primary_color": "#25bac8", "accent_color": "#00fff7",
                    "text_color": "#134e4a", "bg_color": "#f0fdfa"},
 }
+
+# Die Flaechen, die erst auf Klick entstehen. Je Eintrag: worauf geklickt
+# wird und was danach sichtbar sein MUSS. Ist es das nicht, hat der Test den
+# Dialog nicht geoeffnet und misst die Seite darunter, also nichts.
+#
+# Je Zustand hoechstens EIN Dialog. Gestapelt scheitert der zweite Klick am
+# Hintergrund des ersten: der faengt ihn ab, und Playwright wartet, bis die
+# Zeit ablaeuft. Das war der erste Anlauf, und er sah aus wie ein Fehler im
+# Widget, war aber einer im Waechter.
+ZUSTAENDE = {
+    "geschlossen": [],
+    "banner-einstellungen": [
+        ("#complyo-settings", "#complyo-settings-modal"),
+    ],
+    "a11y-bedienfeld": [
+        (".complyo-toggle-btn", "#complyo-panel"),
+    ],
+    "a11y-textdialog": [
+        (".complyo-toggle-btn", "#complyo-panel"),
+        ('#complyo-a11y-widget [data-feature="fontSize"]',
+         "#complyo-text-settings-modal"),
+    ],
+    "a11y-seitenstruktur": [
+        (".complyo-toggle-btn", "#complyo-panel"),
+        ('#complyo-a11y-widget [data-feature="pageStructure"]',
+         "#complyo-page-structure-overlay"),
+    ],
+}
+
+AUFGEKLAPPT = [z for z in ZUSTAENDE if z != "geschlossen"]
+
+# `optout_center.js` ist seit mindestens Juli 2026 tot: keine Backend-Route
+# liefert es aus, kein Konsument laedt es, die Opt-out-Funktion steckt im
+# Banner. Es hier trotzdem zu messen waere Theater. Ein Waechter, der toten
+# Code prueft, faerbt die Suite rot, wenn jemand an einer Datei etwas findet,
+# die niemand ausliefert.
+#
+# Was stattdessen bewacht wird: die Annahme selbst. Sobald die Datei wieder
+# irgendwo referenziert wird, MUSS sie in OBERFLAECHEN stehen. Das ist der
+# Moment, in dem die Messung faellig wird, und genau dann faellt der Test.
+UNAUSGELIEFERT = "optout_center.js"
 
 TRAEGERSEITE = """<!doctype html>
 <html lang="de">
@@ -118,7 +165,7 @@ def _seite(mit_widgets: bool, palette: dict) -> str:
     return TRAEGERSEITE.replace("__EINBAU__", "\n".join(teile))
 
 
-async def _messen(html: str) -> dict:
+async def _messen(html: str, aufklappen=()) -> dict:
     from playwright.async_api import async_playwright
     from compliance_engine.axe_scanner import AXE_CORE_JS
 
@@ -133,6 +180,21 @@ async def _messen(html: str) -> dict:
             await seite.goto(f"file://{pfad}", wait_until="domcontentloaded")
             await seite.wait_for_timeout(3500)
 
+            # Erst die Pflichtflaechen des geschlossenen Zustands pruefen,
+            # dann aufklappen: wer auf einen Knopf klickt, den es nicht gibt,
+            # soll das hier lesen und nicht in einer leeren Messung enden.
+            geoeffnet = []
+            for klick, erwartet in aufklappen:
+                knopf = await seite.query_selector(klick)
+                if knopf is None:
+                    raise AssertionError(
+                        f"Bedienelement {klick} fehlt — der Dialog konnte nicht "
+                        "geoeffnet werden, gemessen waere die Seite darunter."
+                    )
+                await knopf.click()
+                await seite.wait_for_timeout(600)
+                geoeffnet.append(erwartet)
+
             sichtbar = await seite.evaluate(
                 """(auswahl) => Object.fromEntries(auswahl.map((s) => {
                     const e = document.querySelector(s);
@@ -142,7 +204,7 @@ async def _messen(html: str) -> dict:
                     return [s, cs.display !== 'none' && cs.visibility !== 'hidden'
                                && r.width > 0 && r.height > 0];
                 }))""",
-                PFLICHT_SICHTBAR,
+                (PFLICHT_SICHTBAR if not geoeffnet else geoeffnet),
             )
 
             await seite.evaluate(AXE_CORE_JS)
@@ -160,10 +222,24 @@ async def _messen(html: str) -> dict:
         os.unlink(pfad)
 
 
-def _lauf(mit_widgets: bool, palette: dict) -> dict:
+def _lauf(mit_widgets: bool, palette: dict, aufklappen=()) -> dict:
     return asyncio.new_event_loop().run_until_complete(
-        _messen(_seite(mit_widgets, palette))
+        _messen(_seite(mit_widgets, palette), aufklappen)
     )
+
+
+_LEER: dict = {}
+
+
+def _leermessung() -> dict:
+    """Die leere Traegerseite aendert sich zwischen den Faellen nicht.
+
+    Sie je Fall neu zu messen kostete einen Browserstart pro Zustand und
+    Palette, bei zehn Faellen also neun umsonst.
+    """
+    if not _LEER:
+        _LEER.update(_lauf(False, {})["befunde"])
+    return _LEER
 
 
 axe_da = pytest.mark.skipif(
@@ -179,21 +255,73 @@ class TestEigeneOberflaechen:
         leer = _lauf(False, {})
         assert leer["befunde"] == {}, f"Traegerseite nicht sauber: {leer['befunde']}"
 
+    @pytest.mark.parametrize("zustand", sorted(ZUSTAENDE))
     @pytest.mark.parametrize("name", sorted(PALETTEN))
-    def test_widgets_bringen_nichts_mit(self, name):
+    def test_widgets_bringen_nichts_mit(self, name, zustand):
         palette = PALETTEN[name]
-        mit = _lauf(True, palette)
+        mit = _lauf(True, palette, ZUSTAENDE[zustand])
 
         fehlend = [s for s, ok in mit["sichtbar"].items() if not ok]
         assert not fehlend, (
-            f"[{name}] Nichts gemessen — diese Elemente sind nicht sichtbar: {fehlend}. "
-            "Ein Waechter, der eine leere Seite misst, ist schlimmer als keiner."
+            f"[{name}/{zustand}] Nichts gemessen — diese Elemente sind nicht "
+            f"sichtbar: {fehlend}. Ein Waechter, der eine leere Seite misst, "
+            "ist schlimmer als keiner."
         )
 
-        leer = _lauf(False, {})["befunde"]
+        leer = _leermessung()
         neu = {r: n - leer.get(r, 0) for r, n in mit["befunde"].items()
                if n > leer.get(r, 0)}
         assert not neu, (
-            f"[{name}] complyo bringt Verstoesse in die Seite ein: "
+            f"[{name}/{zustand}] complyo bringt Verstoesse in die Seite ein: "
             + ", ".join(f"{r} (+{n})" for r, n in sorted(neu.items()))
+        )
+
+    @pytest.mark.parametrize("zustand", AUFGEKLAPPT)
+    def test_dialog_ist_wirklich_offen(self, zustand):
+        """Ohne das koennte das Aufklappen still ausfallen.
+
+        Klickt der Waechter ins Leere oder schliesst ein Dialog sich sofort
+        wieder, sieht die Messung aus wie der geschlossene Zustand und meldet
+        trotzdem gruen: ein Zustand, den niemand geprueft hat, sieht dann
+        genauso gruen aus wie einer, der sauber ist.
+        """
+        auf = _lauf(True, PALETTEN["complyo-de"], ZUSTAENDE[zustand])
+        erwartet = [s for _, s in ZUSTAENDE[zustand]]
+        fehlend = [s for s in erwartet if not auf["sichtbar"].get(s)]
+        assert not fehlend, (
+            f"[{zustand}] geklickt, aber nicht sichtbar: {fehlend}"
+        )
+
+
+class TestUnausgelieferteOberflaeche:
+    """Tote Widget-Dateien werden nicht gemessen, aber ihr Tod wird bewacht."""
+
+    def test_optout_center_bleibt_unausgeliefert_oder_wird_gemessen(self):
+        wurzel = os.path.abspath(os.path.join(BACKEND, ".."))
+        treffer = []
+        for ordner, unter, dateien in os.walk(wurzel):
+            unter[:] = [u for u in unter if u not in {
+                ".git", "node_modules", ".next", "__pycache__", "venv",
+                ".venv", "dist", "build", "vendor", "tests"}]
+            for datei in dateien:
+                if not datei.endswith((".py", ".ts", ".tsx", ".js", ".jsx", ".php")):
+                    continue
+                voll = os.path.join(ordner, datei)
+                if os.path.samefile(os.path.dirname(voll), WIDGETS) and datei == UNAUSGELIEFERT:
+                    continue  # die Datei selbst darf sich nennen
+                try:
+                    inhalt = open(voll, encoding="utf-8", errors="ignore").read()
+                except OSError:
+                    continue
+                if "optout_center" in inhalt or "optout-center" in inhalt:
+                    treffer.append(os.path.relpath(voll, wurzel))
+
+        if not treffer:
+            return  # tot wie dokumentiert, nichts zu messen
+
+        assert any(d == UNAUSGELIEFERT for d, _ in OBERFLAECHEN), (
+            f"{UNAUSGELIEFERT} wird wieder referenziert ({', '.join(sorted(treffer))}), "
+            "steht aber nicht in OBERFLAECHEN. Was complyo in fremde Seiten "
+            "zeichnet, wird vor der Auslieferung gemessen — sonst ist der "
+            "Waechter ab jetzt blind fuer genau diese Flaeche."
         )

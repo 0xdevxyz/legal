@@ -81,3 +81,54 @@ class TestCookieBanner:
         """Sicherung der Pruefregel selbst."""
         tag = '<input type="text" id="such" placeholder="Suchen...">'
         assert not _ist_beschriftet(tag, tag)
+
+
+class TestKachelnSindSchalter:
+    """Die neunzehn Kacheln des Bedienfelds muessen Schalter sein, keine Kisten.
+
+    Bis zum 18.09.2026 waren sie <div data-feature="..."> mit einer
+    Klickbehandlung: kein role, kein tabindex, keine Taste. Mit der Tastatur
+    allein war das Barrierefreiheits-Widget nicht bedienbar, ein Screenreader
+    las Text statt Schaltern. Es lief so auf sechs Kundenseiten.
+
+    Warum das so lange unbemerkt blieb: axe kann ein <div> mit Klickbehandlung
+    nicht als Bedienelement erkennen, es gibt nichts zu pruefen. Gemeldet wurde
+    nur die Folge - ein scrollbarer Bereich ohne irgendetwas Fokussierbares.
+    Ein Waechter auf der Quelle ist deshalb hier nicht die zweitbeste Loesung,
+    sondern die einzige, die den Fall direkt benennt.
+    """
+
+    QUELLE = 'accessibility-v6.js'
+
+    def test_kacheln_bekommen_rolle_und_fokus(self):
+        q = _lies(self.QUELLE)
+        assert "tile.setAttribute('role', 'button')" in q, (
+            "Die Kacheln tragen keine Rolle mehr - ein Screenreader liest "
+            "wieder Text statt Schalter."
+        )
+        assert "tile.setAttribute('tabindex', '0')" in q, (
+            "Die Kacheln sind nicht mehr fokussierbar - mit der Tastatur "
+            "allein ist das Widget dann unbedienbar."
+        )
+
+    def test_kacheln_hoeren_auf_die_tastatur(self):
+        q = _lies(self.QUELLE)
+        assert "tile.addEventListener('keydown'" in q, (
+            "Kein keydown auf den Kacheln: fokussierbar, aber nicht "
+            "ausloesbar ist keine Bedienbarkeit."
+        )
+        stelle = q[q.index("tile.addEventListener('keydown'"):][:400]
+        for taste in ("'Enter'", "' '"):
+            assert taste in stelle, f"Taste {taste} loest die Kachel nicht aus"
+        assert "preventDefault" in stelle, (
+            "Ohne preventDefault scrollt die Leertaste die Seite, statt die "
+            "Kachel zu schalten."
+        )
+
+    def test_zustand_steht_im_markup(self):
+        q = _lies(self.QUELLE)
+        assert "aria-pressed" in q, "Der Schaltzustand wird nicht angesagt"
+        assert "aria-haspopup" in q, (
+            "Die vier Kacheln mit Schiebereglern oeffnen einen Dialog, sie "
+            "sind keine Schalter - das muss im Markup stehen."
+        )

@@ -2391,6 +2391,17 @@
             if (document.getElementById('complyo-settings-styles')) return;
             
             const { primaryColor, accentColor } = this.config;
+
+            // Schrift AUF der Markenfarbe (Reiter, Speichern, Alle
+            // akzeptieren) und Markenfarbe ALS Schrift auf Weiss (die
+            // Aufklapp-Knoepfe der Kategorien). Beides wurde bis zum
+            // 18.09.2026 fest verdrahtet: weiss auf #25bac8 und #25bac8 auf
+            // weiss ergeben je 2,34:1, noetig sind 4,5:1. Der Banner rechnet
+            // seit dem 09.09. richtig, sein Einstellungsdialog nicht - er
+            // wurde nie aufgeklappt gemessen.
+            const aufMarke = this.constructor.lesbareSchrift(primaryColor);
+            const markeAufWeiss = this.constructor.lesbareMarkenschrift(primaryColor, '#ffffff');
+
             const style = document.createElement('style');
             style.id = 'complyo-settings-styles';
             style.textContent = `
@@ -2515,7 +2526,7 @@
                 }
                 .cps-tab.cps-active {
                     background: ${primaryColor};
-                    color: white;
+                    color: ${aufMarke};
                     border-bottom-color: ${primaryColor};
                 }
                 
@@ -2637,7 +2648,7 @@
                 .cps-expand-btn {
                     background: none;
                     border: none;
-                    color: ${primaryColor};
+                    color: ${markeAufWeiss};
                     font-size: 12px;
                     cursor: pointer;
                     display: flex;
@@ -2781,14 +2792,14 @@
                 }
                 .cps-btn-save {
                     background: ${primaryColor};
-                    color: white;
+                    color: ${aufMarke};
                 }
                 .cps-btn-save:hover {
                     background: ${accentColor};
                 }
                 .cps-btn-accept {
                     background: ${primaryColor};
-                    color: white;
+                    color: ${aufMarke};
                 }
                 .cps-btn-accept:hover {
                     background: ${accentColor};
@@ -2844,7 +2855,11 @@
                 </div>
                 
                 <!-- Description -->
-                <div class="cps-description">
+                <!-- tabindex und role: der Kasten scrollt (max-height 200px)
+                     und enthaelt nur Text. Ohne Fokus kommt niemand, der die
+                     Maus nicht benutzt, an die unteren Zeilen. -->
+                <div class="cps-description" tabindex="0" role="region"
+                     aria-label="Beschreibung der Datenschutzeinstellungen">
                     ${descText}
                 </div>
                 

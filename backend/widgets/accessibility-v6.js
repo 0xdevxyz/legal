@@ -915,10 +915,44 @@
       closeBtn.addEventListener('click', () => this.closePanel());
       
       // Feature Tiles
+      //
+      // Die neunzehn Kacheln waren <div> ohne role, ohne tabindex und ohne
+      // Tastaturbehandlung. Mit der Tastatur allein war das
+      // Barrierefreiheits-Widget damit gar nicht bedienbar (WCAG 2.1.1), und
+      // ein Screenreader las Text statt eines Schalters (WCAG 4.1.2). Genau
+      // die zwei Verstoesse, gegen die das Widget verkauft wird.
+      //
+      // axe hat das nie gemeldet: ein <div> mit Klickbehandlung ist fuer die
+      // Pruefung kein Bedienelement, es gibt nichts, wogegen sie pruefen
+      // koennte. Aufgefallen ist es am 18.09.2026 nur ueber den Umweg
+      // 'scrollable-region-focusable': der Bedienbereich scrollt und enthielt
+      // NICHTS Fokussierbares - neunzehn Schalter, kein einziger erreichbar.
+      //
+      // Die vier Kacheln mit Schiebereglern oeffnen einen Dialog, sie sind
+      // keine Schalter; sie tragen deshalb aria-haspopup statt aria-pressed.
+      const MIT_DIALOG = ['fontSize', 'letterSpacing', 'lineHeight', 'textAlign'];
       this.container.querySelectorAll('.complyo-feature-tile').forEach(tile => {
+        const feature = tile.dataset.feature;
+        tile.setAttribute('role', 'button');
+        tile.setAttribute('tabindex', '0');
+        if (MIT_DIALOG.includes(feature)) {
+          tile.setAttribute('aria-haspopup', 'dialog');
+        } else {
+          tile.setAttribute('aria-pressed', 'false');
+        }
+        // Der Haken gehoert nicht in den Namen des Schalters, sein Zustand
+        // steht in aria-pressed.
+        const haken = tile.querySelector('.complyo-tile-check');
+        if (haken) haken.setAttribute('aria-hidden', 'true');
+
         tile.addEventListener('click', () => {
-          const feature = tile.dataset.feature;
           this.toggleFeature(feature);
+        });
+        tile.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+            e.preventDefault();  // sonst scrollt die Leertaste die Seite
+            this.toggleFeature(feature);
+          }
         });
       });
       
@@ -1193,12 +1227,17 @@
       const check = tile.querySelector('.complyo-tile-check');
       const isActive = this.features[feature] && this.features[feature] !== 100 && this.features[feature] !== 150 && this.features[feature] !== 0 && this.features[feature] !== 'default';
       
-      if (isActive || this.features[feature] === true) {
+      const an = Boolean(isActive || this.features[feature] === true);
+      if (an) {
         tile.classList.add('active');
         if (check) check.hidden = false;
       } else {
         tile.classList.remove('active');
         if (check) check.hidden = true;
+      }
+      // Nur die Schalter tragen einen Zustand; die Dialog-Kacheln nicht.
+      if (tile.hasAttribute('aria-pressed')) {
+        tile.setAttribute('aria-pressed', an ? 'true' : 'false');
       }
     }
     
