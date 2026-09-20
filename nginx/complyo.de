@@ -15,6 +15,14 @@ map $http_origin $cors_allow_credentials {
     "https://dashboard.complyo.de" "true";
 }
 
+# Kanal-Kurzlinks (16.09.2026): optionales ?c=<kennung> wird als utm_content
+# durchgereicht, damit sich einzelne Beitraege eines Kanals unterscheiden
+# lassen. Nur ein enges Zeichenset, alles andere faellt weg.
+map $arg_c $social_content {
+    default                     "";
+    "~^[A-Za-z0-9_-]{1,40}$"    "&utm_content=$arg_c";
+}
+
 server {
     server_name complyo.de www.complyo.de;
 
@@ -40,6 +48,21 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+
+    # Kanal-Kurzlinks fuer Social Media (16.09.2026). Ein Link je Kanal fuer
+    # Profil und Beitraege. Die Warteliste speichert utm_* aus der Adresszeile
+    # (WartelistenFormular.tsx); so bleibt je Kanal zaehlbar, was ankommt.
+    # Ziel ist /early-access/, nicht /: die Startseite wechselt nach dem
+    # Stripe-Testkauf zurueck auf die Produktseite, die Kampagnenseite bleibt.
+    # 302 statt 301, damit ein Zielwechsel sofort greift und kein Browser den
+    # alten Weg dauerhaft behaelt.
+    location ~ "^/li/?$"   { return 302 "https://complyo.de/early-access/?utm_source=linkedin&utm_medium=social&utm_campaign=ea100$social_content"; }
+    location ~ "^/ig/?$"   { return 302 "https://complyo.de/early-access/?utm_source=instagram&utm_medium=social&utm_campaign=ea100$social_content"; }
+    location ~ "^/tt/?$"   { return 302 "https://complyo.de/early-access/?utm_source=tiktok&utm_medium=social&utm_campaign=ea100$social_content"; }
+    location ~ "^/yt/?$"   { return 302 "https://complyo.de/early-access/?utm_source=youtube&utm_medium=social&utm_campaign=ea100$social_content"; }
+    location ~ "^/fb/?$"   { return 302 "https://complyo.de/early-access/?utm_source=facebook&utm_medium=social&utm_campaign=ea100$social_content"; }
+    # Fuer Beitraege, die den kostenlosen Scan versprechen: dort gibt es ihn.
+    location ~ "^/scan/?$" { return 302 "https://complyo.de/bfsg-check/?utm_source=social&utm_medium=social&utm_campaign=ea100$social_content"; }
 
     # Oeffentlicher Pruefnachweis (11.09.2026). Die Barrierefreiheitserklaerung
     # jedes Kunden verlinkt auf https://complyo.de/nachweis/<site>/<token>.
