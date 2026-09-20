@@ -233,3 +233,69 @@ class TestDieHauptzahlBleibtDieWebsite:
             "eigene Reparatur mitbewertet: dann waere sie eine Aussage ueber "
             "complyo und keine ueber die Website des Kunden."
         )
+
+
+class TestDieZuschreibungReistMit:
+    """Wer die Differenz anzeigt, muss pruefen koennen, ob complyo lief.
+
+    Am 20.09.2026 an zwei echten Kundenseiten gemessen: panoart360.de 55 -> 8
+    Befunde, also "85 % behoben". Ob diese Zahl eine Wirkung beschreibt oder
+    nur zwei verschieden geladene Seiten, entscheidet allein die Beobachtung,
+    ob das Skript im zweiten Lauf angefordert wurde.
+
+    Das Urteil kannte diese Antwort, das Ergebnis trug sie nicht. Ein
+    Aufrufer, der die Wirkungsanzeige baut, haette "47 behoben" darstellen
+    koennen, ohne die Zuschreibung pruefen zu koennen, und haette damit eine
+    Wirkung behauptet, die er nicht gemessen hat.
+    """
+
+    @staticmethod
+    def _lauf(ohne_regeln, mit_regeln, widget_geladen):
+        import asyncio
+
+        from compliance_engine.wirkungsscan import wirkungsscan
+
+        class Ergebnis:
+            def __init__(self, regeln, geladen):
+                self.violations = [{"id": r, "nodes": [{}] * n}
+                                   for r, n in regeln.items()]
+                self.by_impact = {}
+                self.widget_geladen = geladen
+
+        class Scanner:
+            def __init__(self):
+                self.reihe = [Ergebnis(ohne_regeln, False),
+                              Ergebnis(mit_regeln, widget_geladen)]
+
+            async def scan_page(self, url, wcag_level=None, timeout=None,
+                                widget_blockieren=True):
+                return self.reihe.pop(0)
+
+        return asyncio.run(wirkungsscan(Scanner(), "https://beispiel.test"))
+
+    def test_ergebnis_nennt_ob_das_widget_lief(self):
+        e = self._lauf({"region": 49}, {"region": 4}, widget_geladen=True)
+        assert e["widget_geladen"] is True, (
+            "Das Ergebnis traegt die Zuschreibung nicht. Dann laesst sich "
+            "'47 behoben' nicht von zwei verschieden geladenen Seiten "
+            "unterscheiden."
+        )
+
+    def test_ohne_widget_keine_wirkungsbehauptung(self):
+        """Dieselbe Differenz, aber ohne Skript: das ist Messrauschen."""
+        e = self._lauf({"region": 49}, {"region": 4}, widget_geladen=False)
+        assert e["widget_geladen"] is False
+        assert e["urteil"]["lage"] == "kein_widget", (
+            "Ohne beobachtetes Skript darf keine Wirkung zugeschrieben werden."
+        )
+        assert e["vergleich"]["neu"] == []
+        assert "messrauschen" in e["vergleich"]
+
+    def test_die_zahlen_reisen_nie_ohne_die_zuschreibung(self):
+        """Wer mit_widget ausliefert, liefert widget_geladen mit."""
+        for geladen in (True, False):
+            e = self._lauf({"region": 9}, {"region": 2}, widget_geladen=geladen)
+            assert ("mit_widget" in e) == ("widget_geladen" in e), (
+                "mit_widget und widget_geladen gehoeren zusammen: die Zahl "
+                "ohne die Zuschreibung ist eine Behauptung."
+            )

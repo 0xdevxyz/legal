@@ -182,6 +182,11 @@ async def wirkungsscan(scanner, url: str, wcag_level: str = "wcag21aa",
         "regelsatz": wcag_level,
         "ohne_widget": {"gesamt": sum(z_ohne.values()), "je_regel": z_ohne},
         "mit_widget": {"gesamt": sum(z_mit.values()), "je_regel": z_mit},
+        # Die Zuschreibung gehoert neben die Zahlen, nicht nur ins Urteil.
+        # Ohne sie kann ein Aufrufer "47 behoben" anzeigen, ohne pruefen zu
+        # koennen, ob complyo dafuer ueberhaupt gelaufen ist. Genau diese
+        # Frage entscheidet, ob die Differenz eine Wirkung ist oder Rauschen.
+        "widget_geladen": widget_lief,
         "vergleich": vergleich,
         "urteil": _urteil(vergleich, widget_lief),
         "hinweis": ("Zwei Messungen derselben Seite im selben Lauf: einmal mit "
