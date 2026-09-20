@@ -190,7 +190,7 @@ def nachweis_als_html(n: Dict[str, Any]) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Prüfnachweis Barrierefreiheit — {_e(n['site_url'])}</title>
+<title>Prüfnachweis Barrierefreiheit: {_e(n['site_url'])}</title>
 <meta name="robots" content="noindex">
 <style>{STIL}</style>
 </head>

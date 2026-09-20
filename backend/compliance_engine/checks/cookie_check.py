@@ -617,13 +617,13 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                            'Ein Cookie-Banner mit Opt-In ist nach TDDDG §25 verpflichtend. '
                            '⚠️ Tracking ohne Einwilligung ist illegal.\n\n'
                            'Der Banner muss sechs Anforderungen zugleich erfüllen:\n'
-                           '1. Opt-In — Cookies erst nach aktiver Zustimmung setzen (TDDDG §25 Abs. 1)\n'
-                           '2. Ablehnung — "Ablehnen" bzw. "Nur notwendige" gleichwertig sichtbar '
+                           '1. Opt-In: Cookies erst nach aktiver Zustimmung setzen (TDDDG §25 Abs. 1)\n'
+                           '2. Ablehnung: "Ablehnen" bzw. "Nur notwendige" gleichwertig sichtbar '
                            '(TDDDG §25 Abs. 1, DSGVO Art. 7 Abs. 3)\n'
-                           '3. Information — welche Cookies, zu welchem Zweck, wie lange (DSGVO Art. 13)\n'
-                           '4. Widerruf — Einwilligung jederzeit einfach zurücknehmbar (DSGVO Art. 7 Abs. 3)\n'
-                           '5. Nachweis — erteilte Einwilligungen dokumentieren (DSGVO Art. 7 Abs. 1)\n'
-                           '6. Granularität — Zustimmung je Zweck, nicht nur pauschal',
+                           '3. Information: welche Cookies, zu welchem Zweck, wie lange (DSGVO Art. 13)\n'
+                           '4. Widerruf: Einwilligung jederzeit einfach zurücknehmbar (DSGVO Art. 7 Abs. 3)\n'
+                           '5. Nachweis: erteilte Einwilligungen dokumentieren (DSGVO Art. 7 Abs. 1)\n'
+                           '6. Granularität: Zustimmung je Zweck, nicht nur pauschal',
                 risk_euro=5000,
                 recommendation='Nutzen Sie die integrierte Complyo Cookie-Compliance-Lösung im Dashboard unter '
                              '"Cookies". Sie erfüllt alle sechs Anforderungen: automatische Cookie-Erkennung, '
@@ -664,7 +664,7 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                 description=(
                     f'{len(prechecked_toggles)} Kategorie-Toggle(s) im Cookie-Banner sind '
                     f'bereits vorangekreuzt (z.B. {prechecked_toggles[0]}). Eine wirksame '
-                    f'Einwilligung erfordert aktives Opt-in — vorausgewählte Kästchen für '
+                    f'Einwilligung erfordert aktives Opt-in, vorausgewählte Kästchen für '
                     f'nicht-notwendige Kategorien sind unzulässig.'
                 ),
                 risk_euro=3000,
@@ -778,7 +778,7 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                 description=(
                     'Der Cookie-Banner wurde gefunden, bietet aber keine klare Möglichkeit zum Ablehnen. '
                     'Nach EuGH-Rechtsprechung (C-673/17) und TDDDG §25 muss das Ablehnen genauso einfach '
-                    'sein wie das Akzeptieren — kein "Dark Pattern" erlaubt.'
+                    'sein wie das Akzeptieren, kein "Dark Pattern" erlaubt.'
                 ),
                 risk_euro=5000,
                 recommendation=(
@@ -802,7 +802,7 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                         'Ein Ablehnen-Button ist zwar vorhanden, aber nicht gleich prominent wie '
                         'der Akzeptieren-Button: ' + ' '.join(dp_findings) + ' '
                         'Nach TDDDG §25 und EuGH C-673/17 muss das Ablehnen genauso einfach und '
-                        'sichtbar sein wie das Akzeptieren — eine optische Bevorzugung der '
+                        'sichtbar sein wie das Akzeptieren, eine optische Bevorzugung der '
                         'Zustimmung ist ein unzulässiges Dark Pattern.'
                     ),
                     risk_euro=3000,
@@ -849,7 +849,7 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                 risk_euro=1500,
                 recommendation=(
                     'Ergänzen Sie den Banner um Kategorien: Notwendig (immer aktiv), '
-                    'Statistik, Marketing, Funktional — jeweils mit ein/aus Toggle.'
+                    'Statistik, Marketing, Funktional, jeweils mit ein/aus Toggle.'
                 ),
                 legal_basis='DSGVO Art. 5 Abs. 1 lit. b (Zweckbindung), DSK-Orientierungshilfe Telemedien',
                 auto_fixable=True,
@@ -900,7 +900,7 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                 title=f'Tracking vor Consent geladen ({", ".join(tracking_before_consent[:3])})',
                 description=(
                     _evidence_text +
-                    'Das ist ein klarer Verstoß gegen DSGVO Art. 6 und TDDDG §25 — '
+                    'Das ist ein klarer Verstoß gegen DSGVO Art. 6 und TDDDG §25: '
                     'selbst mit Cookie-Banner, wenn Tracker vor der Einwilligung laden.'
                 ),
                 risk_euro=10000,

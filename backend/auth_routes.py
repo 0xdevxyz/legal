@@ -1498,7 +1498,7 @@ async def reset_master_password(request: Request, admin_key: str = Query(..., al
             logger.info(f"Master user created: {email}")
             return {
                 "success": True,
-                "message": "Master user created — password set from MASTER_RESET_PASSWORD env var",
+                "message": "Master user created, password set from MASTER_RESET_PASSWORD env var",
                 "email": email,
             }
         else:
@@ -1520,7 +1520,7 @@ async def reset_master_password(request: Request, admin_key: str = Query(..., al
             logger.info(f"Master user password reset: {email}")
             return {
                 "success": True,
-                "message": "Password reset successfully — new password is in MASTER_RESET_PASSWORD env var",
+                "message": "Password reset successfully, new password is in MASTER_RESET_PASSWORD env var",
                 "email": email,
             }
             

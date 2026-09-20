@@ -460,7 +460,7 @@ async def check_barrierefreiheit_compliance(
             title=(
                 'Barrierefreiheitserklärung fehlt (BFSG §14)'
                 if _im_anwendungsbereich
-                else 'Barrierefreiheitserklärung fehlt — nur Pflicht für B2C-Dienste'
+                else 'Barrierefreiheitserklärung fehlt, nur Pflicht für B2C-Dienste'
             ),
             description=(
                 (
@@ -477,7 +477,7 @@ async def check_barrierefreiheit_compliance(
                     'wie Online-Shops, Buchungssysteme, Bankdienste oder E-Books. Auf '
                     'dieser Seite waren solche Merkmale nicht erkennbar. Bieten Sie '
                     'Verbrauchern online Verträge, Buchungen oder ein Kundenkonto an, '
-                    'ist die Erklärung Pflicht — bitte selbst prüfen.'
+                    'ist die Erklärung Pflicht, bitte selbst prüfen.'
                 )
             ),
             risk_euro=2000 if _im_anwendungsbereich else 0,
@@ -518,7 +518,7 @@ async def check_barrierefreiheit_compliance(
             title='WCAG 2.4.2: Seitentitel fehlt oder ist leer',
             description=(
                 'Die Seite hat keinen oder einen leeren <title>-Tag. '
-                'Screenreader-Nutzer hören den Seitentitel beim Laden — er ist essenziell zur Orientierung.'
+                'Screenreader-Nutzer hören den Seitentitel beim Laden, er ist essenziell zur Orientierung.'
             ),
             risk_euro=300,
             recommendation='Fügen Sie einen aussagekräftigen <title> hinzu, der Seite und Website beschreibt.',
@@ -563,7 +563,7 @@ async def check_barrierefreiheit_compliance(
                 ),
                 risk_euro=0,
                 recommendation='Fügen Sie am Seitenanfang einen versteckten Skip-Link ein: <a href="#main" class="skip-link">Zum Inhalt springen</a>.',
-                legal_basis='Empfehlung — WCAG 2.1 (2.4.1) durch Landmark oder Überschriften erfüllt',
+                legal_basis='Empfehlung, WCAG 2.1 (2.4.1) durch Landmark oder Überschriften erfüllt',
                 auto_fixable=True,
                 is_missing=False,
             ))
@@ -605,7 +605,7 @@ async def check_barrierefreiheit_compliance(
             title=f'WCAG 2.4.4: {count} nichtssagende Linktexte gefunden',
             description=(
                 f'{count} Links haben nichtssagende Texte wie "hier", "mehr", "weiterlesen". '
-                'Screenreader-Nutzer navigieren häufig durch Sprung von Link zu Link — '
+                'Screenreader-Nutzer navigieren häufig durch Sprung von Link zu Link, '
                 'ohne Kontext sind diese Links unverständlich.'
             ),
             risk_euro=500,
@@ -1227,7 +1227,7 @@ async def _check_semantic_html(soup: BeautifulSoup) -> List[BarrierefreiheitIssu
             description='Die Seite hat keine H1-Überschrift. Eine klare Heading-Struktur ist wichtig für Screenreader.',
             risk_euro=0,
             recommendation='Fügen Sie eine H1-Überschrift mit dem Hauptthema der Seite hinzu.',
-            legal_basis='Empfehlung (best practice) — WCAG 2.1 AA verlangt keine H1',
+            legal_basis='Empfehlung (best practice), WCAG 2.1 AA verlangt keine H1',
             auto_fixable=False
         ))
     
@@ -1933,8 +1933,8 @@ def _check_tables_svg_canvas(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
             severity='warning',
             title=f'WCAG 1.1.1: {anzahl} SVG-Grafik(en) ohne Textalternative',
             description=(
-                f'{anzahl} SVG-Grafik(en) tragen Bedeutung — sie sind entweder als Bild '
-                'ausgezeichnet oder beschriften allein einen Button/Link — haben aber '
+                f'{anzahl} SVG-Grafik(en) tragen Bedeutung: sie sind entweder als Bild '
+                'ausgezeichnet oder beschriften allein einen Button/Link, haben aber '
                 'keinen zugänglichen Namen. Screenreader können sie nicht beschreiben. '
                 'Rein dekorative Icons neben sichtbarem Text sind davon nicht betroffen.'
             ),
@@ -2021,7 +2021,7 @@ def _check_pdf_links(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
         issues.append(BarrierefreiheitIssue(
             category='barrierefreiheit',
             severity='info',
-            title=f'PDF-Links gefunden: {len(pdf_links)} PDF(s) — manuelle Prüfung erforderlich',
+            title=f'PDF-Links gefunden: {len(pdf_links)} PDF(s), manuelle Prüfung erforderlich',
             description=(
                 f'Es wurden {len(pdf_links)} Links zu PDF-Dokumenten gefunden. '
                 'PDF-Barrierefreiheit (Tagged PDF, Lesereihenfolge, Alt-Texte in PDF) '

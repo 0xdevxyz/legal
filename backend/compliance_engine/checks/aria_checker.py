@@ -149,7 +149,7 @@ class ARIAChecker:
                     f'bei der Navigation.'
                 ),
                 'recommendation': self._get_landmark_recommendation(missing_landmarks),
-                'legal_basis': 'Empfehlung (best practice) — von WCAG 2.1 AA nicht gefordert',
+                'legal_basis': 'Empfehlung (best practice), von WCAG 2.1 AA nicht gefordert',
                 'risk_euro': 0,
                 'auto_fixable': False,
                 'wcag_criterion': '1.3.1'
@@ -334,7 +334,7 @@ class ARIAChecker:
                 # Ob ein Bereich wirklich dynamisch ist, sieht man einem
                 # Klassennamen ("message", "status") nicht an. Ein Hinweis
                 # zur Handpruefung traegt kein Bussgeldrisiko.
-                'legal_basis': 'WCAG 2.1 (4.1.3), BFSG §12 — Hinweis, manuell prüfen',
+                'legal_basis': 'WCAG 2.1 (4.1.3), BFSG §12. Hinweis, manuell prüfen',
                 'risk_euro': 0,
                 'auto_fixable': False,
                 'wcag_criterion': '4.1.3'

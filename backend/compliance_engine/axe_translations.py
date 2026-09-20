@@ -70,7 +70,7 @@ AXE_DE: "dict[str, tuple[str, str]]" = {
     ),
     "frame-title": (
         "Frame ohne Titel",
-        "Ein <iframe> hat kein title-Attribut — sein Zweck ist für Screenreader unklar.",
+        "Ein <iframe> hat kein title-Attribut: sein Zweck ist für Screenreader unklar.",
     ),
 
     # --- Struktur und Navigation ---
@@ -129,7 +129,7 @@ AXE_DE: "dict[str, tuple[str, str]]" = {
     ),
     "link-in-text-block": (
         "Link nur durch Farbe erkennbar",
-        "Ein Link im Fließtext ist allein an der Farbe erkennbar — für Farbfehlsichtige unsichtbar.",
+        "Ein Link im Fließtext ist allein an der Farbe erkennbar, für Farbfehlsichtige unsichtbar.",
     ),
     "meta-viewport": (
         "Zoom gesperrt",

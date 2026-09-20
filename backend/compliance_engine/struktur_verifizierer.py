@@ -192,7 +192,7 @@ async def _formular_fixes(page, befunde) -> List[Dict[str, Any]]:
             fixes.append({
                 "selector": feld["selector"], "attribut": "aria-hidden",
                 "wert": "true", "regel": "label",
-                "begruendung": "Spam-Koeder — fuer alle unsichtbar statt beschriftet.",
+                "begruendung": "Spam-Koeder, fuer alle unsichtbar statt beschriftet.",
             })
             continue
         fixes.append({
@@ -219,5 +219,5 @@ async def _titel_fix(page, befunde) -> List[Dict[str, Any]]:
     return [{
         "selector": "title", "attribut": "__text__", "wert": titel,
         "regel": "document-title",
-        "begruendung": "Seite ohne Titel — abgeleitet aus der Hauptueberschrift.",
+        "begruendung": "Seite ohne Titel, abgeleitet aus der Hauptueberschrift.",
     }]

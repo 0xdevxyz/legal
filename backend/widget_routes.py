@@ -464,7 +464,7 @@ async def get_widget_snippet(
                 "plan": plan or "free",
                 "message": (
                     "Der Einbettungscode ist im Free-Tarif nicht enthalten. "
-                    "Scan, Konfiguration und Vorschau bleiben kostenlos — zum "
+                    "Scan, Konfiguration und Vorschau bleiben kostenlos. Zum "
                     "Ausspielen auf deiner Website braucht es einen bezahlten Tarif."
                 ),
             },

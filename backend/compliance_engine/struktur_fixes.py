@@ -428,7 +428,7 @@ def baue_struktur_fixes(befunde: Dict[str, List[Dict[str, Any]]],
             "wert": "main",
             "regel": "region",
             "begruendung": (
-                "Inhalt ausserhalb jeder Landmark — der Container wurde aus den "
+                "Inhalt ausserhalb jeder Landmark: der Container wurde aus den "
                 "bemaengelten Knoten bestimmt, nicht geraten."
             ),
         }
@@ -458,7 +458,7 @@ def baue_struktur_fixes(befunde: Dict[str, List[Dict[str, Any]]],
             fixes.append({
                 "selector": sel, "attribut": "title", "wert": titel,
                 "regel": "frame-title",
-                "begruendung": "Einbettung ohne Titel — abgeleitet aus der Quelle.",
+                "begruendung": "Einbettung ohne Titel, abgeleitet aus der Quelle.",
             })
 
     for node in befunde.get("scrollable-region-focusable", []):

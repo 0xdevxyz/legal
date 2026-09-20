@@ -96,7 +96,7 @@ async def check_ai_act_transparency(
         for provider, ki_nativ, confidence, evidence in detected:
             if ki_nativ and not has_disclosure:
                 severity = "warning"
-                title = f"KI-Chatbot erkannt ({provider}) — Transparenzhinweis nach Art. 50 KI-VO fehlt offenbar"
+                title = f"KI-Chatbot erkannt ({provider}): Transparenzhinweis nach Art. 50 KI-VO fehlt offenbar"
                 description = (
                     f"Auf der Seite wurde ein KI-Chat-System des Anbieters {provider} "
                     f"erkannt, aber kein für Nutzer erkennbarer Hinweis, dass sie mit "
@@ -107,7 +107,7 @@ async def check_ai_act_transparency(
                 risk_euro = 5000
             elif ki_nativ:
                 severity = "info"
-                title = f"KI-Chatbot erkannt ({provider}) — Transparenzhinweis vorhanden"
+                title = f"KI-Chatbot erkannt ({provider}): Transparenzhinweis vorhanden"
                 description = (
                     f"KI-Chat-System ({provider}) erkannt; die Seite enthält einen "
                     f"Hinweis auf KI-Interaktion. Empfehlung: Hinweis direkt im "
@@ -116,7 +116,7 @@ async def check_ai_act_transparency(
                 risk_euro = 0
             else:
                 severity = "info"
-                title = f"Chat-System erkannt ({provider}) — KI-Modus prüfen (Art. 50 KI-VO)"
+                title = f"Chat-System erkannt ({provider}): KI-Modus prüfen (Art. 50 KI-VO)"
                 description = (
                     f"Chat-Plattform {provider} erkannt. Falls dort ein KI-Bot "
                     f"(z. B. AI-Antworten/Copilot-Modus) aktiv ist, greift die "

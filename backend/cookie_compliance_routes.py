@@ -1094,7 +1094,7 @@ async def extract_colors(
             return {
                 "success": True,
                 "scraped": False,
-                "message": "Keine eindeutigen Markenfarben gefunden — Standardvorschlag beibehalten.",
+                "message": "Keine eindeutigen Markenfarben gefunden, Standardvorschlag beibehalten.",
                 "colors": {
                     "primary_color": colors['primary_color'],
                     "accent_color": colors['accent_color'],

@@ -58,7 +58,7 @@ class ApplyFixRequest(BaseModel):
     deployment_method: str = Field(..., description="ftp | sftp")
     credentials: Dict[str, str] = Field(..., description="Deployment-Credentials (werden nie gespeichert)")
     target_path: str = Field(..., description="Remote-Pfad der Zieldatei, z. B. snippets/complyo-fix.html")
-    user_confirmed: bool = Field(False, description="Explizite Kundenbestätigung — Pflicht")
+    user_confirmed: bool = Field(False, description="Explizite Kundenbestätigung, Pflicht")
 
 
 class ApplyFixResponse(BaseModel):
@@ -73,7 +73,7 @@ class ApplyFixResponse(BaseModel):
 class RollbackRequest(BaseModel):
     backup_id: str = Field(..., description="ID des Backups")
     credentials: Dict[str, str] = Field(..., description="Deployment-Credentials (werden nie gespeichert)")
-    user_confirmed: bool = Field(False, description="Explizite Kundenbestätigung — Pflicht")
+    user_confirmed: bool = Field(False, description="Explizite Kundenbestätigung, Pflicht")
 
 
 class ApplyStatusResponse(BaseModel):

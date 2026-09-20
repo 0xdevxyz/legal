@@ -245,7 +245,7 @@ async def _auslieferung(site_id: str) -> Dict[str, Any]:
         return {**basis, "auslieferung": "greift_nicht",
                 "hinweis": (f"{s_verfehlt} selektorgebundene Reparaturen haben ihr "
                             f"Ziel nicht gefunden, keine einzige hat gegriffen. "
-                            f"Die Seite wurde vermutlich umgebaut — ein neuer Scan "
+                            f"Die Seite wurde vermutlich umgebaut, ein neuer Scan "
                             f"ist faellig. (Nicht gefundene Bilder zaehlen hier "
                             f"nicht mit: die kommen auf Unterseiten normal vor.)")}
 

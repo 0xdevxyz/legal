@@ -481,7 +481,7 @@ class GDPRRetentionService:
                         "message": f"Konto {user_id} wurde gelöscht.",
                         "reference_id": antrag["id"]}
             return {"success": False,
-                    "message": "Löschantrag bestätigt, Ausführung fehlgeschlagen — "
+                    "message": "Löschantrag bestätigt, Ausführung fehlgeschlagen: "
                                "wird im nächsten Bereinigungslauf erneut versucht.",
                     "reference_id": antrag["id"]}
 

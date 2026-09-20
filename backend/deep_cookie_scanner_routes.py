@@ -541,7 +541,7 @@ async def apply_scan_to_banner(
         return {
             "applied": 0,
             "added": [],
-            "message": "Keine katalog-erkannten Dienste im Scan — nichts zu übernehmen.",
+            "message": "Keine katalog-erkannten Dienste im Scan, nichts zu übernehmen.",
         }
 
     # Ziel-Site bestimmen (explizit übergeben oder primäre Website des Nutzers)

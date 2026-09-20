@@ -738,7 +738,7 @@ class AxeScanner:
                     "recommendation": failure,
                     "legal_basis": (
                         f"WCAG 2.1 ({wcag_str}), BFSG §12" if pflicht
-                        else "Empfehlung (axe best-practice) — nicht aus WCAG 2.1 AA gefordert"
+                        else "Empfehlung (axe best-practice), nicht aus WCAG 2.1 AA gefordert"
                     ),
                     "auto_fixable": violation.feature_id in ["ALT_TEXT", "CONTRAST", "FOCUS", "LANDMARKS"],
                     "is_missing": False,

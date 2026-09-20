@@ -447,7 +447,7 @@ async def _run_single_check(
             if missing:
                 return [_issue_dict(
                     check,
-                    title=f"{check['title']} — unvollständig",
+                    title=f"{check['title']}, unvollständig",
                     description=(
                         f"{check['title']} gefunden, aber ohne erkennbare Angaben zu: "
                         f"{', '.join(missing)}."

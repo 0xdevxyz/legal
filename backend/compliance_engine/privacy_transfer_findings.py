@@ -65,7 +65,7 @@ TRANSFER_SERVICES: List[Dict] = [
         "recommendation": (
             "Google Fonts lokal (self-hosted) einbinden statt von Google-Servern. "
             "Schriften herunterladen (z. B. google-webfonts-helper) und vom eigenen "
-            "Server ausliefern — dann findet kein Request an Google statt."
+            "Server ausliefern, dann findet kein Request an Google statt."
         ),
     },
     {
@@ -278,7 +278,7 @@ def _build_finding(service: Dict, *, evidence: List[str], sources: List[str]) ->
         "risk_euro": service["risk_euro"],
         "requires_consent": True,
         "is_third_country_transfer": True,
-        "title": f"{service['name']} — Drittlandtransfer ohne Einwilligung",
+        "title": f"{service['name']}: Drittlandtransfer ohne Einwilligung",
         "description": description,
         "recommendation": service["recommendation"],
         "legal_basis": service["legal_basis"]

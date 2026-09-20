@@ -274,7 +274,7 @@ async def oeffentlicher_nachweis(site_id: str, token: str) -> JSONResponse:
     # laufend und alle. Fehlt es, steht das ausdruecklich da statt einer Null.
     from wirkung_routes import wirkung_fuer_site
     nachweis["im_betrieb"] = await wirkung_fuer_site(site_id) or {
-        "hinweis": "Noch keine Betriebsdaten — das Widget hat sich noch nicht gemeldet.",
+        "hinweis": "Noch keine Betriebsdaten: das Widget hat sich noch nicht gemeldet.",
     }
 
     return JSONResponse(

@@ -714,7 +714,7 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                     detail={
                         "error": "SCANNER_ERROR",
                         "message": ("Beim Prüfen ist auf unserer Seite etwas "
-                                    "schiefgegangen — nicht an Ihrer Website."),
+                                    "schiefgegangen, nicht an Ihrer Website."),
                         "suggestions": [
                             "Bitte versuchen Sie es in ein paar Minuten erneut",
                             "Der Fehler ist bei uns protokolliert und wird geprüft",

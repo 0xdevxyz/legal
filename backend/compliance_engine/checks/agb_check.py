@@ -246,7 +246,7 @@ async def check_agb_compliance(url: str, soup: BeautifulSoup, session=None, is_s
                         issues.append(asdict(AGBIssue(
                             category='agb',
                             severity='warning',
-                            title='AGB unvollständig — mehrere Pflichtbereiche fehlen',
+                            title='AGB unvollständig: mehrere Pflichtbereiche fehlen',
                             description=(
                                 f'Die AGB wurden gefunden, enthalten aber keine erkennbaren Angaben zu: '
                                 f'{", ".join(missing_clauses)}. '

@@ -1562,7 +1562,7 @@ class ComplianceScanner:
                 description=(
                     f'Folgende Social-Media-Inhalte werden direkt eingebettet: {", ".join(found_platforms)}. '
                     f'Dabei werden beim Laden der Seite automatisch Daten an die jeweiligen Anbieter '
-                    f'übertragen — auch ohne Nutzerinteraktion und ohne Einwilligung.'
+                    f'übertragen, auch ohne Nutzerinteraktion und ohne Einwilligung.'
                 ),
                 risk_euro=2000,
                 legal_basis='DSGVO Art. 6 Abs. 1, EuGH C-40/17 (Fashion ID)',
