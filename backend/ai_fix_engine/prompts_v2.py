@@ -559,7 +559,7 @@ Antworte NUR mit dem JSON im TEXT_FIX_SCHEMA-Format."""
   "title": "Cookie-Consent-Widget Integration",
   "description": "DSGVO/TDDDG-konformes Cookie-Banner",
   "widget_type": "cookie-consent",
-  "integration_code": "<script src=\\"https://widgets.complyo.de/cookie-banner-v2.0.0.min.js\\" data-site-id=\\"{site_id}\\" data-config='{{...}}'></script>",
+  "integration_code": "<script src=\\"https://api.complyo.de/api/widgets/cookie-compliance.js\\" data-site-id=\\"{site_id}\\" data-config='{{...}}'></script>",
   "configuration": {{
     "cookies": {json.dumps([c.get("name") for c in cookies[:20]])},
     "detected_tools": {json.dumps(detected_tools)},
@@ -567,7 +567,7 @@ Antworte NUR mit dem JSON im TEXT_FIX_SCHEMA-Format."""
     "primaryColor": "#7c3aed",
     "autoBlock": true
   }},
-  "preview_url": "https://widgets.complyo.de/preview/cookie-consent?site={site_id}",
+  "preview_url": "https://app.complyo.de/cookie-compliance",
   "features": [
     "Granulare Consent-Verwaltung",
     "Auto-Cookie-Blocking",
@@ -600,14 +600,14 @@ Generiere die Widget-Integration:"""
   "title": "Accessibility-Widget Integration",
   "description": "WCAG 2.1 AA Compliance durch automatische Fixes",
   "widget_type": "accessibility",
-  "integration_code": "<script src=\\"https://widgets.complyo.de/accessibility-v2.0.0.min.js\\" data-site-id=\\"{site_id}\\" data-auto-fix=\\"true\\"></script>",
+  "integration_code": "<script src=\\"https://api.complyo.de/api/widgets/accessibility.js\\" data-site-id=\\"{site_id}\\" data-complyo-a11y></script>",
   "configuration": {{
     "siteId": "{site_id}",
     "autoFix": true,
     "showToolbar": true,
     "features": ["contrast", "fontsize", "alt-text-fix", "aria-fix", "keyboard-nav"]
   }},
-  "preview_url": "https://widgets.complyo.de/preview/accessibility?site={site_id}",
+  "preview_url": "https://app.complyo.de/accessibility/worklist",
   "features": [
     "Automatische Alt-Text-Ergänzung",
     "ARIA-Label-Fixes",
