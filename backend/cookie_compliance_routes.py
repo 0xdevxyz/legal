@@ -424,10 +424,41 @@ def _as_list(val) -> List[str]:
     return []
 
 def hash_ip_address(ip: str) -> str:
-    """Hash IP address with SHA256 for privacy"""
+    """Die IP-Adresse des Besuchers als Hashwert, mit Pfeffer.
+
+    Warum der Pfeffer noetig ist: ein blanker SHA-256 ueber eine IPv4-Adresse
+    ist keine Einbahnstrasse. Es gibt rund 4,3 Milliarden Moeglichkeiten, und
+    die durchzurechnen kostet auf handelsueblicher Hardware Minuten. Ohne
+    Zusatzwert ist der gespeicherte Wert also rueckrechenbar, und wer die
+    Datenbank hat, hat damit die Klartext-Adressen.
+
+    Der AVV nannte den Wert bis zum 23.09.2026 einen "gekuerzten Hashwert".
+    Er war weder gekuerzt noch anonym. Eine Anlage 2, die eine Massnahme
+    beschreibt, die es so nicht gibt, ist schlimmer als gar keine: sie laedt
+    dazu ein, sich auf sie zu verlassen.
+
+    Der Pfeffer steht in der Umgebung, nicht in der Datenbank. Wer nur den
+    Datenbankabzug hat, kann damit nichts zurueckrechnen.
+
+    **Fail-open mit Warnung, nicht fail-closed.** Ohne gesetzten Pfeffer wird
+    weiter protokolliert, nur eben so schwach wie vorher. Der Grund ist die
+    Reihenfolge der Schaeden: eine Einwilligung, die mangels Pfeffer gar nicht
+    erst festgehalten wird, vernichtet den Nachweis nach Art. 7 Abs. 1 DSGVO
+    fuer den Kunden, und zwar sofort und unwiederbringlich. Ein schwacher
+    Hashwert ist ein Mangel, ein fehlender Nachweis ist ein Ausfall.
+
+    Aeltere Zeilen lassen sich nicht nachtraeglich umrechnen, die
+    Ausgangsadresse liegt nicht mehr vor. Der Wechsel wirkt nur nach vorn.
+    """
     if not ip:
         return ""
-    return hashlib.sha256(ip.encode()).hexdigest()
+    pfeffer = os.getenv("COMPLYO_IP_PFEFFER", "").strip()
+    if not pfeffer:
+        logger.warning(
+            "COMPLYO_IP_PFEFFER ist nicht gesetzt. Der Hashwert der IP-Adresse "
+            "bleibt rueckrechenbar; Anlage 2.3 des AVV trifft dann nicht zu."
+        )
+    return hashlib.sha256((pfeffer + ip).encode()).hexdigest()
 
 
 def truncate_user_agent(ua_string):
