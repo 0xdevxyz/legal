@@ -19,6 +19,17 @@ import AnbieterUnvollstaendig from '@/components/legal/AnbieterUnvollstaendig';
 // den tatsaechlichen Betrieb: Logrotate loescht die Server-Logs nach 14 Tagen,
 // die Einwilligung liegt im Local Storage, Lead-Daten werden nach 730 Tagen
 // automatisch geloescht (GDPR_RETENTION_DAYS).
+//
+// 23.09.2026: Die Warteliste fehlte in dieser Liste, obwohl das Formular in
+// components/kampagne/WartelistenFormular.tsx genau hierher verlinkt. Ein
+// Formular, das eine E-Mail-Adresse auf eine Einwilligung stuetzt und zur
+// Information auf ein Dokument zeigt, das diese Verarbeitung nicht nennt,
+// erfuellt Art. 13 DSGVO nicht. Eintrag ergaenzt.
+//
+// Ebenfalls richtiggestellt: der kostenlose Check sagte eine Loeschung nach
+// 30 Tagen zu. Nachgemessen speichert /api/analyze-preview gar nichts, es gibt
+// also nichts zu loeschen. Die alte Zusage war nicht schaedlich, aber unwahr,
+// und die wahre Aussage ist datensparsamer.
 const VERARBEITUNGEN = [
   {
     titel: 'Aufruf der Website (Server-Log-Dateien)',
@@ -50,7 +61,18 @@ const VERARBEITUNGEN = [
     rechtsgrundlage:
       'Art. 6 Abs. 1 lit. b DSGVO — Durchführung vorvertraglicher Maßnahmen auf Ihre Anfrage; hinsichtlich der Missbrauchsabwehr Art. 6 Abs. 1 lit. f DSGVO.',
     dauer:
-      'Prüfergebnisse ohne Kundenkonto werden nach 30 Tagen gelöscht. Ergebnisse in einem Kundenkonto bleiben gespeichert, solange das Konto besteht, damit Sie Verläufe vergleichen können.',
+      'Ein Prüfergebnis ohne Kundenkonto wird nicht dauerhaft gespeichert: der Auftrag liegt für die Dauer der Prüfung im Zwischenspeicher, das Ergebnis geht an Ihren Browser. Ergebnisse in einem Kundenkonto bleiben gespeichert, solange das Konto besteht, damit Sie Verläufe vergleichen können, längstens 730 Tage.',
+  },
+  {
+    titel: 'Warteliste und Early Access',
+    daten:
+      'Ihre E-Mail-Adresse, der Zeitpunkt der Anmeldung und der Bestätigung, die vergebene Platznummer sowie der Kanal, über den Sie zu uns gekommen sind.',
+    zweck:
+      'Vergabe der vergünstigten Plätze und Benachrichtigung, sobald der Betrieb startet.',
+    rechtsgrundlage:
+      'Art. 6 Abs. 1 lit. a DSGVO — Ihre Einwilligung, die Sie im Bestätigungslink erteilen. Sie können sie jederzeit für die Zukunft widerrufen.',
+    dauer:
+      'Ohne Bestätigung löschen wir den Eintrag nach 30 Tagen. Mit Bestätigung bleibt er bis zu Ihrem Widerruf gespeichert, längstens bis zum Ende der Aktion.',
   },
   {
     titel: 'Kundenkonto und Vertragsabwicklung',
@@ -111,7 +133,7 @@ export default function DatenschutzPage() {
             </div>
             <p className="text-gray-600">
               Stand:{' '}
-              10. September 2026
+              23. September 2026
             </p>
           </div>
 
