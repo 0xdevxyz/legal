@@ -60,6 +60,18 @@ DATEIEN_JE_PRUEFUNG = {
     "uwg": ["checks/uwg_check.py"],
     "pangv": ["checks/shop_check.py"],
     "widerruf": ["checks/shop_check.py"],
+    # Unionsweit geltendes Recht, siehe jurisdictions.UNIONSWEIT.
+    "ai_act": ["checks/ai_act_transparency_check.py"],
+    "ki_bild": ["checks/ki_bild_nachweis_check.py"],
+    # Drei Pruefungen als Methoden am Scanner: _check_ssl_security,
+    # _check_contact_data, _check_social_media_plugins.
+    "ssl": ["scanner.py"],
+    "kontakt": ["scanner.py"],
+    "social": ["scanner.py"],
+    # Die Rechtsgrundlage der deklarativen Pruefungen steht in der Datenbank,
+    # nicht im Quelltext. Der Waechter deckt hier nur den Interpreter ab; die
+    # Daten gatten sich selbst ueber applies_when.
+    "deklarativ": ["declarative_check_runner.py"],
 }
 
 # Erkennungsmuster und Modellanweisungen, nicht Ausgabe an den Kunden.

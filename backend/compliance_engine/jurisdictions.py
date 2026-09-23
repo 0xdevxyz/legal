@@ -21,18 +21,36 @@ JURISDICTION_PROFILES: Dict[str, Dict] = {
     "de": {
         "language": "de",
         "checks": [
+            # rechtsraumgebunden
             "datenschutz", "cookie", "impressum", "barrierefreiheit",
             "agb", "uwg", "pangv", "widerruf", "tcf",
+            # unionsweit, siehe UNIONSWEIT
+            "ai_act", "ki_bild", "ssl", "kontakt", "social", "deklarativ",
         ],
         "pillars": ["accessibility", "gdpr", "legal", "cookies"],
     },
     "eu": {
         "language": "en",
-        # DE-only Checks (Impressum/AGB/UWG/PAngV/Widerruf) deaktiviert
-        "checks": ["datenschutz", "cookie", "barrierefreiheit", "tcf"],
+        # Ohne Impressum, AGB, UWG, PAngV und Widerruf: das sind nationale
+        # Pflichten, deren konkrete Ausgestaltung sich je Mitgliedstaat
+        # unterscheidet. Ein generisches EU-Profil kann sie nicht pruefen,
+        # ohne etwas zu behaupten.
+        "checks": [
+            "datenschutz", "cookie", "barrierefreiheit", "tcf",
+            "ai_act", "ki_bild", "ssl", "kontakt", "social", "deklarativ",
+        ],
         "pillars": ["accessibility", "gdpr", "cookies"],
     },
 }
+
+# Pruefungen, die auf unionsweit unmittelbar geltendem Recht beruhen und
+# deshalb in jedem EU-Profil stehen: DSGVO, KI-Verordnung, ePrivacy.
+#
+# Sie stehen trotzdem in den Listen oben und nicht als Ausnahme daneben. Eine
+# Liste, die nicht alles nennt, was laeuft, ist keine Registry, sondern eine
+# Teilmenge mit Gedaechtnisluecke. Bis zum 23.09.2026 nannte das Profil "de"
+# neun Pruefungen, waehrend der Scanner vierzehn ausfuehrte.
+UNIONSWEIT = ("ai_act", "ki_bild", "ssl", "kontakt", "social", "deklarativ")
 
 SUPPORTED_JURISDICTIONS = tuple(JURISDICTION_PROFILES.keys())
 

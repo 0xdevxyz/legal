@@ -12,6 +12,7 @@ import ssl
 import certifi
 from compliance_engine.sicherer_abruf import sichere_session
 from compliance_engine.rechtsgrundlagen import (
+    ANBIETERKENNZEICHNUNG,
     COOKIE_EINWILLIGUNG,
     grundlage,
 )
@@ -170,7 +171,7 @@ class QuickScanner:
                 "description": "Es wurde kein Impressum gefunden. Dies ist gesetzlich vorgeschrieben.",
                 "risk_euro": 5000,
                 "recommendation": "Impressum mit vollständigen Anbieterdaten erstellen",
-                "legal_basis": "DDG § 5",
+                "legal_basis": grundlage(ANBIETERKENNZEICHNUNG),
                 "auto_fixable": True,
                 "is_missing": True,
                 "ai_explanation": "Das Impressum muss Name, Adresse und Kontaktdaten des Betreibers enthalten. Es schützt Nutzer und ist für alle gewerblichen Websites Pflicht."

@@ -62,6 +62,36 @@ except ImportError:
 # Import centralized Score Calculator (✅ FIX: Einzige Source of Truth)
 from compliance_engine.score_calculator import ScoreCalculator, PillarStatus
 from compliance_engine.sicherer_abruf import sichere_session
+from compliance_engine.context import ScanContext
+from compliance_engine.jurisdictions import (
+    DEFAULT_JURISDICTION,
+    active_checks,
+    active_pillars,
+)
+from compliance_engine.rechtsgrundlagen import (
+    ANBIETERKENNZEICHNUNG,
+    BARRIEREFREIHEIT_TECHNISCH,
+    COOKIE_EINWILLIGUNG,
+    DIREKTWERBUNG,
+    grundlage,
+)
+
+
+def _grundlage_fuer_saeule(saeule: str) -> str:
+    """Die Rechtsgrundlage eines saeulenweiten KI-Befundes.
+
+    Vorher stand hier fest "DSGVO / DDG / BFSG": eine Aufzaehlung dreier
+    Gesetze, von denen je nach Saeule hoechstens eines passte, und zwei davon
+    ausserhalb Deutschlands gar nicht. Jetzt entscheidet die Saeule.
+    """
+    if saeule == "accessibility":
+        return grundlage(BARRIEREFREIHEIT_TECHNISCH)
+    if saeule == "cookies":
+        return grundlage(COOKIE_EINWILLIGUNG)
+    if saeule == "legal":
+        return grundlage(ANBIETERKENNZEICHNUNG)
+    return "DSGVO"
+
 
 @dataclass
 class ComplianceIssue:
@@ -313,6 +343,11 @@ def _zeitnot_hinweis(nicht_geschafft: "List[str]") -> Dict[str, Any]:
             f"tatsaechlich geprueften Seiten."
         ),
     }
+
+
+# Registry-Namen, die ein einzelnes Pruefmodul mitbedient.
+# Siehe jurisdictions.JURISDICTION_PROFILES.
+MODUL_DECKT_AB = {"shop": ("pangv", "widerruf")}
 
 
 class ComplianceScanner:
@@ -657,11 +692,31 @@ class ComplianceScanner:
         )
         return ergebnis
 
-    async def scan_website(self, url: str, progress_token: "Optional[str]" = None) -> Dict[str, Any]:
+    async def scan_website(
+        self,
+        url: str,
+        progress_token: "Optional[str]" = None,
+        jurisdiction: str = DEFAULT_JURISDICTION,
+    ) -> Dict[str, Any]:
+        """Vollstaendiger Compliance-Scan einer Website.
+
+        `jurisdiction` entscheidet, welche Pruefungen laufen und welche Saeulen
+        in den Punktestand eingehen (siehe jurisdictions.py). Die Vorgabe "de"
+        liefert dasselbe Ergebnis wie vor dem Umbau; dafuer gibt es einen Test,
+        der die Pruefliste des Profils gegen die frueher fest verdrahtete Liste
+        haelt.
+
+        Warum das nicht optional ist: bis zum 23.09.2026 lief jede Website
+        durch dieselben deutschen Pruefungen. Ein niederlaendischer Kunde bekam
+        Befunde, die ihm die Verletzung des deutschen
+        Barrierefreiheitsstaerkungsgesetzes vorwarfen.
         """
-        Comprehensive compliance scan of a website
-        Returns detailed compliance report with risk assessment
-        """
+        kontext = ScanContext(url=url, jurisdiction=jurisdiction, session=self.session)
+        aktive_pruefungen = set(active_checks(kontext.jurisdiction))
+        logger.info(
+            "Rechtsraum %s: %d Pruefungen aktiv", kontext.jurisdiction,
+            len(aktive_pruefungen),
+        )
         start_time = datetime.now()
         issues = []
         # Nie das HTML des vorigen Scans weiterreichen — dieselbe Scanner-Instanz
@@ -795,14 +850,30 @@ class ComplianceScanner:
                         f"Datenschutzerklärung erforderlich."
                     )
 
-            # Run all compliance checks in parallel using pre-rendered soup
-            # barrierefreiheit: no session = single-page only (avoids multi-page scan)
-            barriere_task = check_barrierefreiheit_compliance(url, soup, None)
-            impressum_task = check_impressum_compliance(url, soup, self.session)
-            datenschutz_task = check_datenschutz_compliance(url, soup, self.session, request_urls=render_request_urls)
-            cookie_task = check_cookie_compliance(url, soup, self.session, consent_buttons=consent_buttons, request_urls=render_request_urls)
-            agb_task = check_agb_compliance(url, soup, self.session)
-            shop_task = check_shop_compliance(url, soup, self.session)
+            # Die Pruefungen laufen nebenlaeufig, aber nur die, die im
+            # Rechtsraum gelten. Erzeugt wird eine Koroutine erst, wenn ihre
+            # Pruefung aktiv ist: eine erzeugte und nie erwartete Koroutine
+            # waere eine Warnung im Log und verbrauchter Speicher.
+            #
+            # Benannt statt positionsweise. Die fruehere Fassung reichte
+            # dreizehn Aufgaben in fester Reihenfolge an asyncio.gather und
+            # packte das Ergebnis in derselben Reihenfolge wieder aus. Sobald
+            # eine davon entfallen kann, verschiebt sich alles dahinter, und
+            # der Impressum-Befund landet in der Cookie-Variablen.
+            aufgaben: "Dict[str, Any]" = {}
+
+            def _wenn(name: str, koroutine):
+                if name in aktive_pruefungen:
+                    aufgaben[name] = koroutine
+                else:
+                    koroutine.close()
+
+            # barrierefreiheit: ohne Session = nur diese Seite, kein Mehrseitenscan
+            _wenn("barrierefreiheit", check_barrierefreiheit_compliance(url, soup, None))
+            _wenn("impressum", check_impressum_compliance(url, soup, self.session))
+            _wenn("datenschutz", check_datenschutz_compliance(url, soup, self.session, request_urls=render_request_urls))
+            _wenn("cookie", check_cookie_compliance(url, soup, self.session, consent_buttons=consent_buttons, request_urls=render_request_urls))
+            _wenn("agb", check_agb_compliance(url, soup, self.session))
             # Belegte Tatsachen dieser Seite. Bedingte Pflichten (Ablehnen-Knopf,
             # USA-Hinweis, Newsletter) werden daran geprueft statt an Stichwoertern
             # im Werbetext — siehe compliance_engine/scan_kontext.py.
@@ -814,20 +885,30 @@ class ComplianceScanner:
                 url,
                 ", ".join(k for k, v in seiten_kontext.items() if v) or "keine Tatsache belegt",
             )
-            declarative_task = run_declarative_checks(
-                url, soup, self.session, kontext=seiten_kontext
-            )
-            uwg_task = check_uwg_compliance(url, soup, self.session)
-            ssl_task = self._check_ssl_security(url, main_page_headers)
-            contact_task = self._check_contact_data(url, soup)
-            social_task = self._check_social_media_plugins(url, soup)
-            ai_act_task = check_ai_act_transparency(url, soup, request_urls=render_request_urls)
+            # Ein Modul kann mehrere Registry-Namen bedienen: shop_check deckt
+            # Preisangaben und Widerruf ab und laeuft, sobald einer von beiden
+            # gilt. Die Zuordnung steht als Konstante da, damit der Waechter in
+            # tests/test_engine_rechtsraum.py sie lesen kann; eine Bedingung im
+            # Fliesstext haette er nicht gefunden und die beiden Namen still
+            # als unverdrahtet gemeldet.
+            if set(MODUL_DECKT_AB["shop"]) & aktive_pruefungen:
+                aufgaben["shop"] = check_shop_compliance(url, soup, self.session)
+
+            _wenn("deklarativ", run_declarative_checks(
+                url, soup, self.session, kontext=seiten_kontext,
+                jurisdiction=kontext.jurisdiction,
+            ))
+            _wenn("uwg", check_uwg_compliance(url, soup, self.session))
+            _wenn("ssl", self._check_ssl_security(url, main_page_headers))
+            _wenn("kontakt", self._check_contact_data(url, soup))
+            _wenn("social", self._check_social_media_plugins(url, soup))
+            _wenn("ai_act", check_ai_act_transparency(url, soup, request_urls=render_request_urls))
             # Ueber alle Seiten mitgefuehrt: dasselbe Bild auf zehn Unterseiten
             # ist ein Befund, nicht zehn.
             self._ki_bilder_gesehen = set()
-            ki_bild_task = check_ki_bild_nachweis(
+            _wenn("ki_bild", check_ki_bild_nachweis(
                 url, soup, self.session, bereits_geprueft=self._ki_bilder_gesehen
-            )
+            ))
 
             if progress_token:
                 _fortschritt.setze_phase(progress_token, "Prüfungen laufen")
@@ -836,31 +917,49 @@ class ComplianceScanner:
                 _DSC = "Datenschutz & Cookies"
                 _A11Y = "Barrierefreiheit (BFSG)"
                 _TECH = "Technik & Sicherheit"
-                barriere_task = _n(barriere_task, progress_token, _A11Y, "axe-core & WCAG-Heuristiken (~100 Regeln)")
-                impressum_task = _n(impressum_task, progress_token, _RECHT, "Impressum")
-                agb_task = _n(agb_task, progress_token, _RECHT, "AGB & Widerruf")
-                shop_task = _n(shop_task, progress_token, _RECHT, "Shop-Pflichten (Button-Lösung, §312k)")
-                uwg_task = _n(uwg_task, progress_token, _RECHT, "Werbekennzeichnung (UWG)")
-                declarative_task = _n(declarative_task, progress_token, _RECHT, "Aktuelle Rechts-Checks (EUR-Lex)")
-                datenschutz_task = _n(datenschutz_task, progress_token, _DSC, "Datenschutzerklärung & Drittlandtransfer")
-                cookie_task = _n(cookie_task, progress_token, _DSC, "Cookie-Banner & Tracking (Netzwerk-Evidenz)")
-                ssl_task = _n(ssl_task, progress_token, _TECH, "SSL & Security-Header")
-                contact_task = _n(contact_task, progress_token, _TECH, "Kontaktformular (Art. 13)")
-                social_task = _n(social_task, progress_token, _TECH, "Social-Media-Plugins")
-                ai_act_task = _n(ai_act_task, progress_token, _TECH, "KI-Systeme & AI-Act-Transparenz")
-                ki_bild_task = _n(ki_bild_task, progress_token, _TECH, "Bilder auf KI-Nachweis (Art. 50)")
+                _BESCHRIFTUNG = {
+                    "barrierefreiheit": (_A11Y, "axe-core & WCAG-Heuristiken (~100 Regeln)"),
+                    "impressum":  (_RECHT, "Impressum"),
+                    "agb":        (_RECHT, "AGB & Widerruf"),
+                    "shop":       (_RECHT, "Shop-Pflichten (Button-Lösung, §312k)"),
+                    "uwg":        (_RECHT, "Werbekennzeichnung (UWG)"),
+                    "deklarativ": (_RECHT, "Aktuelle Rechts-Checks (EUR-Lex)"),
+                    "datenschutz": (_DSC, "Datenschutzerklärung & Drittlandtransfer"),
+                    "cookie":     (_DSC, "Cookie-Banner & Tracking (Netzwerk-Evidenz)"),
+                    "ssl":        (_TECH, "SSL & Security-Header"),
+                    "kontakt":    (_TECH, "Kontaktformular (Art. 13)"),
+                    "social":     (_TECH, "Social-Media-Plugins"),
+                    "ai_act":     (_TECH, "KI-Systeme & AI-Act-Transparenz"),
+                    "ki_bild":    (_TECH, "Bilder auf KI-Nachweis (Art. 50)"),
+                }
+                for _name, (_gruppe, _text) in _BESCHRIFTUNG.items():
+                    if _name in aufgaben:
+                        aufgaben[_name] = _n(aufgaben[_name], progress_token, _gruppe, _text)
 
-            results = await asyncio.gather(
-                barriere_task, impressum_task, datenschutz_task, cookie_task,
-                agb_task, shop_task, declarative_task, uwg_task,
-                ssl_task, contact_task, social_task, ai_act_task, ki_bild_task,
-                return_exceptions=True
+            _namen = list(aufgaben)
+            _ergebnisse = await asyncio.gather(
+                *aufgaben.values(), return_exceptions=True
             )
+            nach_name = dict(zip(_namen, _ergebnisse))
 
-            barriere_issues, impressum_issues, datenschutz_issues, cookie_issues, \
-                agb_issues, shop_issues, declarative_issues, uwg_issues, \
-                ssl_issues, contact_issues, social_issues, ai_act_issues, \
-                ki_bild_issues = results
+            # Eine nicht gelaufene Pruefung liefert eine leere Liste, keine
+            # Ausnahme. Der Unterschied traegt: eine Ausnahme bedeutet "haette
+            # laufen sollen, ging schief" und macht die Saeule ungeprueft, eine
+            # leere Liste bedeutet "gilt hier nicht" und wird ueber
+            # active_pillars ohnehin nicht gewertet.
+            barriere_issues = nach_name.get("barrierefreiheit", [])
+            impressum_issues = nach_name.get("impressum", [])
+            datenschutz_issues = nach_name.get("datenschutz", [])
+            cookie_issues = nach_name.get("cookie", [])
+            agb_issues = nach_name.get("agb", [])
+            shop_issues = nach_name.get("shop", [])
+            declarative_issues = nach_name.get("deklarativ", [])
+            uwg_issues = nach_name.get("uwg", [])
+            ssl_issues = nach_name.get("ssl", [])
+            contact_issues = nach_name.get("kontakt", [])
+            social_issues = nach_name.get("social", [])
+            ai_act_issues = nach_name.get("ai_act", [])
+            ki_bild_issues = nach_name.get("ki_bild", [])
 
             # ✅ v4.0 evidenz-basiert: Wenn der PRIMÄR-Check einer Säule abstürzt
             # (Exception, Seite nicht auswertbar), liegt KEINE Evidenz vor → die
@@ -958,7 +1057,10 @@ class ComplianceScanner:
 
             # ✅ FIX v4.0: Evidenz-basierter Gesamtscore = Mittelwert der 4 Säulen,
             # ungeprüfte Säulen zählen NICHT als bestanden (Status UNVERIFIED).
-            _scores = ScoreCalculator.compute_with_status(issues, unverified_pillars)
+            _scores = ScoreCalculator.compute_with_status(
+                issues, unverified_pillars,
+                aktive_saeulen=active_pillars(kontext.jurisdiction),
+            )
             compliance_score = _scores["overall_score"]
             _pillar_scores = _scores["pillar_scores"]
             _pillar_status = _scores["pillar_status"]
@@ -1414,7 +1516,8 @@ class ComplianceScanner:
                     'Kontaktmöglichkeit vorfinden (u.a. für DSGVO-Anfragen wie Auskunft/Löschung).'
                 ),
                 risk_euro=1000,
-                legal_basis='DSGVO Art. 12 Abs. 1 (Transparenz), DDG §5 Abs. 1 Nr. 2',
+                legal_basis=('DSGVO Art. 12 Abs. 1 (Transparenz), '
+                             + grundlage(ANBIETERKENNZEICHNUNG, detail='Abs. 1 Nr. 2')),
                 recommendation=(
                     'Fügen Sie mindestens eine Email-Adresse oder ein Kontaktformular hinzu. '
                     'Eine dedizierte /kontakt Seite ist Best Practice.'
@@ -1492,7 +1595,8 @@ class ComplianceScanner:
                             'ein Double-Opt-In-Verfahren (Bestätigungsmail).'
                         ),
                         risk_euro=2000,
-                        legal_basis='DSGVO Art. 6 Abs. 1 lit. a, Art. 7; § 7 UWG',
+                        legal_basis=('DSGVO Art. 6 Abs. 1 lit. a, Art. 7; '
+                                     + grundlage(DIREKTWERBUNG)),
                         recommendation=(
                             'Ergänzen Sie eine aktive Einwilligungs-Checkbox mit Verweis auf die '
                             'Datenschutzerklärung und richten Sie ein Double-Opt-In ein '
@@ -1675,7 +1779,7 @@ class ComplianceScanner:
                     ),
                     risk_euro=3000,
                     recommendation=f"Ergänzen/vervollständigen Sie: {missing}" if missing else "Inhalt vervollständigen.",
-                    legal_basis="DSGVO / DDG / BFSG",
+                    legal_basis=_grundlage_fuer_saeule(pillar),
                     auto_fixable=False,
                     is_missing=True,
                     metadata={"ai_verified": True, "confidence": verdict.get("confidence")},

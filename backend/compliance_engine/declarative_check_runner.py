@@ -38,6 +38,10 @@ from compliance_engine.check_spec_rules import (
     SUCHRAEUME,
     AUTO_CHECK_RISK_CAP as _RISK_CAP,
 )
+from compliance_engine.jurisdictions import (
+    DEFAULT_JURISDICTION,
+    normalize_jurisdiction,
+)
 from compliance_engine.scan_kontext import erfuellt as _kontext_erfuellt
 
 
@@ -160,8 +164,32 @@ def _keyword_trifft(keyword: str, text: str) -> bool:
     return re.search(r"(?<![\w])" + re.escape(k), text) is not None
 
 
-def _gate_passes(applies_when: Dict[str, Any], soup: BeautifulSoup, html_lower: str) -> bool:
-    if not applies_when or applies_when.get("always") is True:
+def _gate_passes(
+    applies_when: Dict[str, Any],
+    soup: BeautifulSoup,
+    html_lower: str,
+    jurisdiction: str = DEFAULT_JURISDICTION,
+) -> bool:
+    if not applies_when:
+        return True
+
+    # Das Landesgatter wirkt auch bei "always": eine Pflicht, die nur in einem
+    # Rechtsraum besteht, ist dort ausnahmslos, aber eben nur dort. Waere
+    # "always" staerker, wuerde der Widerrufsbutton nach deutschem Recht auch
+    # einer niederlaendischen Website vorgehalten.
+    #
+    # Der Schluessel ist eine Liste von Rechtsraum-Kennungen. Fehlt er, gilt
+    # die Pruefung ueberall: das ist die Vorgabe fuer alles, was aus
+    # unionsweitem Recht stammt, und der Bestand ist genau das.
+    laender = applies_when.get("land")
+    if laender:
+        if isinstance(laender, str):
+            laender = [laender]
+        erlaubt = {str(l).strip().lower() for l in laender if str(l).strip()}
+        if erlaubt and normalize_jurisdiction(jurisdiction) not in erlaubt:
+            return False
+
+    if applies_when.get("always") is True:
         return True
 
     # AND über alle gesetzten Bedingungen
@@ -471,6 +499,7 @@ async def run_declarative_checks(
     soup: BeautifulSoup,
     session=None,
     kontext: Optional[Dict[str, bool]] = None,
+    jurisdiction: str = DEFAULT_JURISDICTION,
 ) -> List[Dict[str, Any]]:
     """
     Einstiegspunkt für den Scanner. Lädt aktive deklarative Checks aus der
@@ -535,7 +564,7 @@ async def run_declarative_checks(
                         f"'{grund}' auf dieser Seite nicht belegt — nicht anwendbar"
                     )
                 continue
-            if not _gate_passes(check.get("applies_when", {}), soup, html_lower):
+            if not _gate_passes(check.get("applies_when", {}), soup, html_lower, jurisdiction):
                 continue
             issues.extend(await _run_single_check(
                 check, url, soup, html_lower, session, raeume=raeume

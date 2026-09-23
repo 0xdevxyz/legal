@@ -84,6 +84,7 @@ WIDERRUF = "widerruf"
 PREISANGABE = "preisangabe"
 IRREFUEHRUNG = "irrefuehrung"
 KUENDIGUNGSBUTTON = "kuendigungsbutton"
+DIREKTWERBUNG = "direktwerbung"
 
 
 # Die europäisch einheitliche Grundlage je Thema.
@@ -99,6 +100,7 @@ EUROPAEISCH: Dict[str, Optional[str]] = {
     PREISANGABE: "Richtlinie 98/6/EG",
     IRREFUEHRUNG: "Richtlinie 2005/29/EG",
     KUENDIGUNGSBUTTON: None,
+    DIREKTWERBUNG: "Richtlinie 2002/58/EG Art. 13",
 }
 
 
@@ -113,6 +115,7 @@ VERBUND: Dict[str, str] = {
     PREISANGABE: ERSETZT,
     IRREFUEHRUNG: ERSETZT,
     KUENDIGUNGSBUTTON: ERSETZT,
+    DIREKTWERBUNG: ERSETZT,
 }
 
 
@@ -138,6 +141,11 @@ ANKER: Dict[str, Dict[str, str]] = {
         PREISANGABE: "PAngV §3",
         IRREFUEHRUNG: "UWG §5",
         KUENDIGUNGSBUTTON: "BGB §312k",
+        # Schreibweise wie an der Fundstelle in scanner.py, damit die deutsche
+        # Ausgabe unveraendert bleibt. Der Katalog ist in sich uneinheitlich
+        # ("UWG §5" vs "§ 7 UWG"); das zu glaetten gehoert zur anwaltlichen
+        # Durchsicht, nicht in einen Umbau der Technik.
+        DIREKTWERBUNG: "§ 7 UWG",
     },
     "eu": {
         BARRIEREFREIHEIT_TECHNISCH: "EN 301 549",
@@ -190,10 +198,19 @@ def grundlage(
     national = ANKER.get(jur, {}).get(thema)
     teile = []
 
-    if VERBUND[thema] == ERSETZT and national:
-        # Der nationale Anker tritt an die Stelle der Richtlinie. Ein Detail
-        # gehört dann davor, weil es die Fundstelle näher bestimmt.
-        teile.append(f"{national} {detail}".strip() if detail else national)
+    if VERBUND[thema] == ERSETZT:
+        # Der nationale Anker tritt an die Stelle der Richtlinie.
+        #
+        # `detail` ist hier eine nationale Unterteilung ("Abs. 1 Nr. 2") und
+        # wird deshalb NUR an den Anker gehängt. Ohne Anker entfällt es: eine
+        # europäische Richtlinie hat keinen "§ 5 Abs. 1 Nr. 2", und die Angabe
+        # daran zu kleben wäre eine erfundene Fundstelle. Bei ZUSAMMEN ist es
+        # umgekehrt, dort bestimmt das Detail die europäische Angabe näher
+        # (das WCAG-Kriterium).
+        if national:
+            teile.append(f"{national} {detail}".strip() if detail else national)
+        elif eu:
+            teile.append(eu)
     else:
         if eu:
             teile.append(f"{eu} {detail}".strip() if detail else eu)

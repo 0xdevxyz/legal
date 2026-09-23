@@ -423,7 +423,10 @@ class ScoreCalculator:
         return "legal"  # rechtliche Auffangsäule
 
     @staticmethod
-    def calculate_overall_score(pillar_scores: Dict[str, int]) -> int:
+    def calculate_overall_score(
+        pillar_scores: Dict[str, int],
+        aktive_saeulen: "list[str] | set[str] | None" = None,
+    ) -> int:
         """
         Berechne Gesamt-Score als GLEICH gewichteten Mittelwert der 4 Säulen (v3.0).
 
@@ -442,10 +445,11 @@ class ScoreCalculator:
         Returns:
             int: Gesamtscore 0-100
         """
-        scores = [
-            pillar_scores.get(pillar, 0)
-            for pillar in ScoreCalculator.PILLAR_IDS
-        ]
+        saeulen = [
+            pid for pid in ScoreCalculator.PILLAR_IDS
+            if aktive_saeulen is None or pid in set(aktive_saeulen)
+        ] or list(ScoreCalculator.PILLAR_IDS)
+        scores = [pillar_scores.get(pillar, 0) for pillar in saeulen]
         if not scores:
             return 100
         return round(sum(scores) / len(scores))
@@ -527,6 +531,7 @@ class ScoreCalculator:
     def compute_with_status(
         issues: List[ComplianceIssue],
         unverified_pillars: "set[str] | None" = None,
+        aktive_saeulen: "list[str] | set[str] | None" = None,
     ) -> Dict[str, Any]:
         """
         Evidenz-basierte Score-Berechnung (v4.0) — liefert zusätzlich pro Säule
@@ -550,9 +555,25 @@ class ScoreCalculator:
             }
         """
         unverified = set(unverified_pillars or [])
-        buckets: Dict[str, list] = {pillar: [] for pillar in ScoreCalculator.PILLAR_IDS}
+
+        # Saeulen, die im Rechtsraum ueberhaupt gelten. Ausserhalb Deutschlands
+        # gibt es keine Saeule "legal": Impressum, AGB, Preisangaben und
+        # Widerruf sind nationales Recht, und die zugehoerigen Pruefungen
+        # laufen dort nicht. Wuerde die Saeule trotzdem gewertet, zoege eine
+        # Pflicht, die es nicht gibt, den Punktestand nach unten.
+        saeulen = [
+            pid for pid in ScoreCalculator.PILLAR_IDS
+            if aktive_saeulen is None or pid in set(aktive_saeulen)
+        ] or list(ScoreCalculator.PILLAR_IDS)
+
+        buckets: Dict[str, list] = {pillar: [] for pillar in saeulen}
         for issue in issues:
-            buckets[ScoreCalculator.categorize(issue.category)].append(issue)
+            saeule = ScoreCalculator.categorize(issue.category)
+            # Ein Befund aus einer Saeule, die hier nicht gilt, faellt weg. Das
+            # kann vorkommen, wenn eine deklarative Pruefung ihren
+            # Geltungsbereich zu weit gefasst hat.
+            if saeule in buckets:
+                buckets[saeule].append(issue)
 
         pillar_scores: Dict[str, int] = {}
         pillar_status: Dict[str, str] = {}
@@ -582,7 +603,9 @@ class ScoreCalculator:
             )
 
         return {
-            "overall_score": ScoreCalculator.calculate_overall_score(pillar_scores),
+            "overall_score": ScoreCalculator.calculate_overall_score(
+                pillar_scores, aktive_saeulen=saeulen
+            ),
             "pillar_scores": pillar_scores,
             "pillar_status": pillar_status,
             # Ehrlichkeits-Hinweis: automatisierte A11y-Pruefung deckt nur einen
