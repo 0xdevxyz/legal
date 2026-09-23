@@ -66,11 +66,6 @@ STRIPE_WEBHOOK_SECRET = _webhook_secret
 STRIPE_PRICES = {
     "pro_monthly":     os.getenv("STRIPE_PRICE_PRO_MONTHLY", None),      # 89€/Monat
     "pro_yearly":      os.getenv("STRIPE_PRICE_PRO_YEARLY", None),       # 890€/Jahr
-    # Early Access: die ersten 100 Konten zahlen 49€ statt 89€, zwoelf Monate.
-    # Faellt auf den regulaeren Pro-Preis zurueck, wenn nichts konfiguriert ist —
-    # lieber der volle Preis als ein Checkout, der 500 wirft.
-    "pro_early_monthly": os.getenv("STRIPE_PRICE_PRO_EARLY_MONTHLY")
-        or os.getenv("STRIPE_PRICE_PRO_MONTHLY", None),                  # 49€/Monat
     "agency_monthly":  os.getenv("STRIPE_PRICE_AGENCY_MONTHLY", None),   # 599€/Monat
     "agency_yearly":   os.getenv("STRIPE_PRICE_AGENCY_YEARLY", None),    # 5.990€/Jahr
     "single_monthly":  os.getenv("STRIPE_PRICE_SINGLE_MODULE", None),    # 29€/Monat
@@ -99,6 +94,16 @@ STRIPE_PRICES = {
     "agency2_monthly": os.getenv("STRIPE_PRICE_AGENCY2_MONTHLY"),
     "agency2_yearly":  os.getenv("STRIPE_PRICE_AGENCY2_YEARLY"),
 }
+
+# Gutschein fuer den Early-Access-Nachlass: 40 Euro auf zwoelf Monate, auf den
+# regulaeren Pro-Preis. Kein eigener Preis mehr (siehe Checkout weiter unten).
+#
+# Warum ein Gutschein und kein zweiter Preis: ein wiederkehrender Preis laeuft
+# unbefristet. Die Kampagne verspricht zwoelf Monate. Ein Gutschein mit
+# `duration=repeating, duration_in_months=12` ist die einzige Form, in der
+# Stripe eine Befristung von sich aus beendet.
+EARLY_ACCESS_GUTSCHEIN = os.getenv("STRIPE_COUPON_EARLY_ACCESS", "").strip() or None
+
 
 # Websites-Limit je Plan (für user_limits nach Checkout)
 PLAN_WEBSITES_MAX = {
@@ -346,14 +351,39 @@ async def create_checkout_session(
         price_key = f"{request.plan}_{request.billing_period}"
 
         # Early Access: die ersten 100 bestaetigten Wartelisten-Plaetze zahlen
-        # Pro fuer 49 statt 89, zwoelf Monate. Der Anspruch haengt am
+        # Pro fuer 49 statt 89, **zwoelf Monate**. Der Anspruch haengt am
         # bestaetigten Platz (platz_nr), nicht an der blossen Anmeldung — sonst
         # koennte sich jeder den Preis durch einen Listeneintrag nehmen.
-        # Gilt nur monatlich: fuer den Jahrespreis gibt es kein Early-Access-Produkt.
+        # Gilt nur monatlich: fuer den Jahrespreis gibt es kein Early-Access-Angebot.
+        #
+        # Umgestellt am 23.09.2026 von einem eigenen 49-Euro-Preis auf den
+        # regulaeren Preis mit Gutschein. Grund: ein wiederkehrender Preis endet
+        # nicht von selbst. Der alte Weg haette den Nachlass dauerhaft gewaehrt,
+        # obwohl die Kampagnenseite zwoelf Monate verspricht ("Danach gilt der
+        # regulaere Preis, und du kannst monatlich kuendigen"). Bei 100 Plaetzen
+        # und 40 Euro Unterschied waeren das ab dem 13. Monat 4.000 Euro im
+        # Monat, die nie abgerechnet worden waeren.
+        rabatte = []
         if request.plan == "pro" and request.billing_period == "monthly":
             if await _hat_early_access_platz(user_email):
-                price_key = "pro_early_monthly"
-                logger.info(f"Early-Access-Preis fuer {user_email} angewandt")
+                if EARLY_ACCESS_GUTSCHEIN:
+                    rabatte = [{"coupon": EARLY_ACCESS_GUTSCHEIN}]
+                    logger.info(
+                        "Early-Access-Gutschein %s fuer %s angewandt",
+                        EARLY_ACCESS_GUTSCHEIN, user_email,
+                    )
+                else:
+                    # Rueckfall auf den vollen Preis, nicht auf einen Dauerrabatt.
+                    # Die Rangfolge steht in tests/test_stripe_namen.py: ein
+                    # stillschweigend gewaehrter Dauerrabatt ist schlimmer als der
+                    # volle Preis, und der volle Preis schlimmer als nichts.
+                    # Dass es nie so weit kommt, sichert
+                    # tests/test_konfig_erreicht_code.py.
+                    logger.error(
+                        "STRIPE_COUPON_EARLY_ACCESS fehlt. %s hat einen "
+                        "Early-Access-Platz, wird aber zum vollen Preis gebucht.",
+                        user_email,
+                    )
 
         price_id = STRIPE_PRICES.get(price_key)
         
@@ -403,7 +433,10 @@ async def create_checkout_session(
             subscription_data={
                 'metadata': checkout_metadata
             },
-            allow_promotion_codes=True,
+            # Stripe laesst `discounts` und `allow_promotion_codes` nicht
+            # zusammen zu. Liegt ein Gutschein an, gilt er; sonst darf der Kunde
+            # einen Aktionscode eintippen.
+            **({'discounts': rabatte} if rabatte else {'allow_promotion_codes': True}),
             billing_address_collection='required',
             locale='de',
             api_key=_stripe_key

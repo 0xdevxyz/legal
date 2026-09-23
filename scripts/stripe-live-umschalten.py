@@ -54,9 +54,14 @@ STRIPE_API = "https://api.stripe.com/v1"
 KATALOG = [
     ("complyo_pro_monthly",       "complyo Pro",          8900,   "month", "STRIPE_PRICE_PRO_MONTHLY"),
     ("complyo_pro_yearly",        "complyo Pro",          89000,  "year",  "STRIPE_PRICE_PRO_YEARLY"),
-    # Early Access: die ersten 100 bestätigten Wartelistenplätze, 49 statt 89.
-    # Die Zwölf-Monats-Grenze setzt der Code beim Verlängern durch, nicht Stripe.
-    ("complyo_pro_early_monthly", "complyo Pro",          4900,   "month", "STRIPE_PRICE_PRO_EARLY_MONTHLY"),
+    # Early Access hat seit dem 23.09.2026 keinen eigenen Preis mehr. Der
+    # Nachlass laeuft ueber den Gutschein `early-access-12m` auf den regulaeren
+    # Pro-Preis: 40 Euro Abzug, duration=repeating, duration_in_months=12.
+    #
+    # Der Kommentar, der hier stand, sagte "Die Zwoelf-Monats-Grenze setzt der
+    # Code beim Verlaengern durch, nicht Stripe". Das war nie so: es gab keine
+    # Stelle, die verlaengert oder umstellt. Ein wiederkehrender Preis laeuft
+    # unbefristet, und der Nachlass waere dauerhaft geblieben.
     ("complyo_agency_monthly",    "complyo Agentur",      59900,  "month", "STRIPE_PRICE_AGENCY_MONTHLY"),
     ("complyo_agency_yearly",     "complyo Agentur",      599000, "year",  "STRIPE_PRICE_AGENCY_YEARLY"),
     ("complyo_single_monthly",    "complyo Einzelsäule",  2900,   "month", "STRIPE_PRICE_SINGLE_MODULE"),

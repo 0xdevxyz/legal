@@ -125,22 +125,54 @@ def test_jede_katalog_variable_erreicht_den_container():
         re.findall(r'"(STRIPE_PRICE_[A-Z0-9_]+)"\)', skript)
     katalog = skript[skript.index("KATALOG = ["):skript.index("\n]", skript.index("KATALOG = ["))]
     variablen = re.findall(r'"(STRIPE_PRICE_[A-Z0-9_]+)"', katalog)
-    assert len(variablen) >= 19, f"Katalog unerwartet klein: {len(variablen)}"
+    # 19 bis zum 23.09.2026, seitdem 18: der eigene Early-Access-Preis ist
+    # einem Gutschein gewichen (siehe test_early_access_laeuft_ueber_einen_gutschein).
+    assert len(variablen) >= 18, f"Katalog unerwartet klein: {len(variablen)}"
     assert len(variablen) == len(set(variablen)), "Variable doppelt im Katalog"
     fehlen = [v for v in variablen if f"{v}=${{{v}" not in compose]
     assert not fehlen, f"docker-compose.yml reicht nicht durch: {fehlen}"
 
 
-def test_early_access_faellt_auf_den_vollen_preis_zurueck():
+def test_early_access_laeuft_ueber_einen_gutschein():
     """
-    Ohne konfigurierten Early-Access-Preis muss der regulaere gelten.
-    Ein Checkout, der 500 wirft, waere schlimmer als der volle Preis — und ein
-    stillschweigend gewaehrter Dauerrabatt schlimmer als beides.
+    Der Nachlass muss befristet sein, und die Befristung muss von Stripe kommen.
+
+    Bis zum 23.09.2026 gab es einen eigenen 49-Euro-Preis. Ein wiederkehrender
+    Preis endet nicht von selbst, und keine Stelle im Code stellte ihn je um.
+    Die Kampagnenseite verspricht dagegen zwoelf Monate ("Danach gilt der
+    regulaere Preis"). Bei 100 Plaetzen und 40 Euro Unterschied waeren das ab
+    dem 13. Monat 4.000 Euro im Monat, die niemand abgerechnet haette.
+
+    Ein Gutschein mit duration=repeating und duration_in_months=12 ist die
+    einzige Form, in der Stripe die Frist selbst beendet.
     """
     text = _quelle("stripe_routes.py")
-    stelle = text[text.index('"pro_early_monthly"'):][:300]
-    assert 'os.getenv("STRIPE_PRICE_PRO_MONTHLY"' in stelle, (
-        "Der Early-Access-Preis hat keinen Rueckfall auf den regulaeren Preis")
+    assert '"pro_early_monthly"' not in text, (
+        "Der eigene Early-Access-Preis ist zurueck. Er laeuft unbefristet und "
+        "widerspricht der beworbenen Frist von zwoelf Monaten.")
+    assert 'STRIPE_COUPON_EARLY_ACCESS' in text, (
+        "Der Early-Access-Nachlass haengt an keinem Gutschein mehr.")
+    assert "'discounts': rabatte" in text, (
+        "Der Gutschein wird nicht an die Checkout-Session uebergeben.")
+
+
+def test_ohne_gutschein_gilt_der_volle_preis():
+    """
+    Die Rangfolge der Schaeden, unveraendert seit dem 10.09.2026.
+
+    Ein stillschweigend gewaehrter Dauerrabatt ist schlimmer als der volle
+    Preis, und der volle Preis schlimmer als ein Checkout, der 500 wirft.
+    Fehlt der Gutschein, wird also regulaer gebucht und laut protokolliert,
+    statt auf einen unbefristeten Nachlass auszuweichen.
+    """
+    text = _quelle("stripe_routes.py")
+    stelle = text[text.index("EARLY_ACCESS_GUTSCHEIN:"):][:900]
+    assert "logger.error" in stelle, (
+        "Ein fehlender Gutschein muss laut protokolliert werden, sonst faellt "
+        "erst der Kunde auf, der 89 statt 49 bezahlt hat.")
+    assert "price_key" not in stelle, (
+        "Im Rueckfall darf der Preis nicht getauscht werden; es bleibt beim "
+        "regulaeren Pro-Preis.")
 
 
 def test_kein_stripe_name_ohne_leser():

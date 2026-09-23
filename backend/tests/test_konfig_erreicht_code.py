@@ -70,10 +70,18 @@ def test_jeder_gelesene_stripe_wert_wird_durchgereicht():
 
 
 @pytest.mark.skipif(not os.path.exists(COMPOSE), reason="docker-compose.yml nicht eingehaengt")
-def test_early_access_preis_wird_durchgereicht():
-    """Der Fall, an dem es aufgefallen ist. Namentlich, damit er nicht zurueckkommt."""
+def test_early_access_wird_durchgereicht():
+    """Der Fall, an dem es aufgefallen ist. Namentlich, damit er nicht zurueckkommt.
+
+    Seit dem 23.09.2026 traegt den Nachlass ein Gutschein statt eines eigenen
+    Preises. Der Fehler von damals bleibt derselbe und waere hier genauso
+    unsichtbar: ein Wert in der .env, den compose nicht durchreicht, wirkt
+    nicht. Dann haette ein Early-Access-Kunde 89 statt 49 bezahlt.
+    """
     compose = open(COMPOSE, encoding="utf-8").read()
-    assert "- STRIPE_PRICE_PRO_EARLY_MONTHLY=" in compose
+    assert "- STRIPE_COUPON_EARLY_ACCESS=" in compose, (
+        "Ohne diesen Durchreicher bucht der Checkout den vollen Preis, obwohl "
+        "die Kampagnenseite 49 Euro verspricht.")
     assert "- EARLY_ACCESS_PLAETZE=" in compose, (
         "Die Platzgrenze muss aus derselben Quelle kommen wie der Zaehler auf "
         "der Kampagnenseite, sonst laufen Anzeige und Kaufweg auseinander.")

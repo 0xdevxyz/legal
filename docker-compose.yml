@@ -132,12 +132,18 @@ services:
       - STRIPE_PRICE_PRO_MONTHLY=${STRIPE_PRICE_PRO_MONTHLY}
       - STRIPE_PRICE_PRO_YEARLY=${STRIPE_PRICE_PRO_YEARLY}
       # Early Access: die ersten 100 bestaetigten Wartelistenplaetze zahlen
-      # 49 statt 89 Euro. Der Preis war in Stripe angelegt und in der .env
-      # eingetragen, stand aber NICHT in dieser Liste — damit erreichte er
-      # den Container nie, und `pro_early_monthly` fiel auf den vollen
-      # Pro-Preis zurueck. Die Startseite versprach 49, gebucht worden
-      # waeren 89 (gemessen 10.09.2026).
-      - STRIPE_PRICE_PRO_EARLY_MONTHLY=${STRIPE_PRICE_PRO_EARLY_MONTHLY:-}
+      # 49 statt 89 Euro, zwoelf Monate lang.
+      #
+      # Seit dem 23.09.2026 ueber einen Gutschein auf den regulaeren Preis
+      # statt ueber einen eigenen 49-Euro-Preis. Ein wiederkehrender Preis
+      # endet nicht von selbst; der alte Weg haette den Nachlass dauerhaft
+      # gewaehrt, obwohl die Kampagne zwoelf Monate verspricht.
+      #
+      # Der Vorgaenger STRIPE_PRICE_PRO_EARLY_MONTHLY stand am 10.09.2026
+      # zwar in der .env, aber nicht in dieser Liste, erreichte den Container
+      # also nie: die Startseite versprach 49, gebucht worden waeren 89.
+      # Deshalb steht der Gutschein hier, bevor er irgendwo sonst steht.
+      - STRIPE_COUPON_EARLY_ACCESS=${STRIPE_COUPON_EARLY_ACCESS:-}
       - EARLY_ACCESS_PLAETZE=${EARLY_ACCESS_PLAETZE:-100}
       - STRIPE_PRICE_AGENCY_MONTHLY=${STRIPE_PRICE_AGENCY_MONTHLY}
       - STRIPE_PRICE_AGENCY_YEARLY=${STRIPE_PRICE_AGENCY_YEARLY}
