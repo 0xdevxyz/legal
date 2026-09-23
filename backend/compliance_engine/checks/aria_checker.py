@@ -6,6 +6,10 @@ WCAG 2.1 Level AA Kriterien 4.1.2 (Name, Role, Value)
 from typing import Dict, List, Any
 from bs4 import BeautifulSoup, Tag
 import logging
+from compliance_engine.rechtsgrundlagen import (
+    BARRIEREFREIHEIT_TECHNISCH,
+    grundlage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +113,7 @@ class ARIAChecker:
                         ),
                         'element_html': str(tag)[:200],
                         'recommendation': self._get_label_recommendation(tag),
-                        'legal_basis': 'WCAG 2.1 (4.1.2), BFSG §12',
+                        'legal_basis': grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='(4.1.2)'),
                         'risk_euro': 1500,
                         'auto_fixable': False,
                         'wcag_criterion': '4.1.2'
@@ -189,7 +193,7 @@ class ARIAChecker:
                     'Verwenden Sie nur valide ARIA-Rollen aus der ARIA 1.2 Spezifikation. '
                     'Siehe: https://www.w3.org/TR/wai-aria-1.2/#role_definitions'
                 ),
-                'legal_basis': 'WCAG 2.1 (4.1.2), BFSG §12',
+                'legal_basis': grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='(4.1.2)'),
                 'risk_euro': 1000,
                 'auto_fixable': False,
                 'wcag_criterion': '4.1.2'
@@ -238,7 +242,7 @@ class ARIAChecker:
                         ),
                         'element_html': str(tag)[:200],
                         'recommendation': f'Stellen Sie sicher, dass ein Element mit id="{label_id}" existiert.',
-                        'legal_basis': 'WCAG 2.1 (4.1.2), BFSG §12',
+                        'legal_basis': grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='(4.1.2)'),
                         'risk_euro': 1000,
                         'auto_fixable': False,
                         'wcag_criterion': '4.1.2'
@@ -291,7 +295,7 @@ class ARIAChecker:
                     'Fügen Sie jedem Input-Feld ein <label> hinzu oder verwenden Sie '
                     'aria-label/aria-labelledby.'
                 ),
-                'legal_basis': 'WCAG 2.1 (3.3.2), BFSG §12',
+                'legal_basis': grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='(3.3.2)'),
                 'risk_euro': 2000,
                 'auto_fixable': False,
                 'wcag_criterion': '3.3.2'
@@ -334,7 +338,7 @@ class ARIAChecker:
                 # Ob ein Bereich wirklich dynamisch ist, sieht man einem
                 # Klassennamen ("message", "status") nicht an. Ein Hinweis
                 # zur Handpruefung traegt kein Bussgeldrisiko.
-                'legal_basis': 'WCAG 2.1 (4.1.3), BFSG §12. Hinweis, manuell prüfen',
+                'legal_basis': grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='(4.1.3)') + '. Hinweis, manuell prüfen',
                 'risk_euro': 0,
                 'auto_fixable': False,
                 'wcag_criterion': '4.1.3'

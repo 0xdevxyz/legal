@@ -16,6 +16,10 @@ from dataclasses import dataclass, asdict, field
 import re
 from urllib.parse import urljoin
 import logging
+from compliance_engine.rechtsgrundlagen import (
+    BARRIEREFREIHEIT_TECHNISCH,
+    grundlage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +175,7 @@ class MediaAccessibilityChecker:
                                f"Gehörlose und schwerhörige Nutzer können den Audioinhalt nicht verstehen.",
                     severity="critical",
                     wcag_criteria=["1.2.2", "1.2.4"],
-                    legal_basis="WCAG 2.1 Level A (1.2.2), BFSG §12",
+                    legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail="Level A (1.2.2)"),
                     recommendation="Fügen Sie Untertitel hinzu: <track kind='captions' src='untertitel.vtt' srclang='de' label='Deutsch'>",
                     media_type="video",
                     media_src=media.src,
@@ -215,7 +219,7 @@ class MediaAccessibilityChecker:
                                    "sind nicht zugänglich.",
                         severity="warning",
                         wcag_criteria=["1.2.3", "1.2.5"],
-                        legal_basis="WCAG 2.1 Level AA (1.2.5), BFSG §12",
+                        legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail="Level AA (1.2.5)"),
                         recommendation="Fügen Sie eine Audiodeskription hinzu oder stellen Sie eine Textalternative bereit.",
                         media_type="video",
                         media_src=media.src,
@@ -268,7 +272,7 @@ class MediaAccessibilityChecker:
                                "Gehörlose Nutzer können den Inhalt nicht verstehen.",
                     severity="warning",
                     wcag_criteria=["1.2.1"],
-                    legal_basis="WCAG 2.1 Level A (1.2.1), BFSG §12",
+                    legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail="Level A (1.2.1)"),
                     recommendation="Stellen Sie ein vollständiges Transkript bereit und verlinken Sie es beim Audio-Player.",
                     media_type="audio",
                     media_src=media.src,
@@ -307,7 +311,7 @@ class MediaAccessibilityChecker:
                                    f"Screenreader können das Video nicht identifizieren.",
                         severity="warning",
                         wcag_criteria=["4.1.2"],
-                        legal_basis="WCAG 2.1 Level A (4.1.2), BFSG §12",
+                        legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail="Level A (4.1.2)"),
                         recommendation=f"Fügen Sie ein title-Attribut hinzu: <iframe title='Beschreibung des Videos' ...>",
                         media_type="iframe",
                         media_src=src,
@@ -358,7 +362,7 @@ class MediaAccessibilityChecker:
                                "Dies kann Screenreader-Nutzer stören und ist unerwartet für alle Nutzer.",
                     severity="warning",
                     wcag_criteria=["1.4.2"],
-                    legal_basis="WCAG 2.1 Level A (1.4.2), BFSG §12",
+                    legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail="Level A (1.4.2)"),
                     recommendation="Entfernen Sie autoplay oder fügen Sie muted hinzu: <video autoplay muted>",
                     media_type="video",
                     media_src=video.get('src', ''),
@@ -378,7 +382,7 @@ class MediaAccessibilityChecker:
                            "Dies stört Screenreader-Nutzer und ist unerwartet.",
                 severity="critical",
                 wcag_criteria=["1.4.2"],
-                legal_basis="WCAG 2.1 Level A (1.4.2), BFSG §12",
+                legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail="Level A (1.4.2)"),
                 recommendation="Entfernen Sie das autoplay-Attribut: <audio controls> statt <audio autoplay controls>",
                 media_type="audio",
                 media_src=audio.get('src', ''),

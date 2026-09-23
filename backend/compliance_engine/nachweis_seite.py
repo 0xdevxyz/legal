@@ -17,6 +17,14 @@ import re
 from typing import Any, Dict, List
 
 
+# Die Sprache der Texte auf diesen Seiten. Bewusst eine Konstante und kein
+# Ableiten aus dem Rechtsraum: das lang-Attribut beschreibt, in welcher Sprache
+# der Text geschrieben ist, nicht welches Recht gilt. Ein oesterreichischer
+# Kunde bekommt deutsche Texte, ein niederlaendischer bekaeme sie bis Block 3
+# ebenfalls. Erst wenn der Textkatalog steht, darf hier etwas anderes stehen.
+SPRACHE_DES_INHALTS = "de"
+
+
 def _e(text: Any) -> str:
     return html.escape(str(text if text is not None else ""))
 
@@ -79,8 +87,15 @@ a:focus-visible, .sprung:focus { outline: 3px solid #0b4f9e; outline-offset: 2px
 """
 
 
-def nachweis_als_html(n: Dict[str, Any]) -> str:
-    """Rendert das Protokoll als eigenständige, barrierefreie Seite."""
+def nachweis_als_html(n: Dict[str, Any], sprache: str = SPRACHE_DES_INHALTS) -> str:
+    """Rendert das Protokoll als eigenständige, barrierefreie Seite.
+
+    `sprache` setzt das lang-Attribut. Es beschreibt die Sprache des TEXTES auf
+    dieser Seite, nicht den Rechtsraum des Kunden. Wer hier "en" setzt, ohne die
+    Texte zu übersetzen, erzeugt auf der eigenen Nachweisseite einen Verstoß
+    gegen WCAG 3.1.1, und zwar ausgerechnet dort, wo complyo seine Messung
+    vorzeigt.
+    """
     s = n["summe"]
     betrieb = n.get("im_betrieb") or {}
 
@@ -186,7 +201,7 @@ def nachweis_als_html(n: Dict[str, Any]) -> str:
         )
 
     return f"""<!doctype html>
-<html lang="de">
+<html lang="{_e(sprache)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -325,10 +340,15 @@ def markdown_zu_html(md: str) -> str:
     return "\n".join(bloecke)
 
 
-def erklaerung_als_html(markdown: str, site_url: str) -> str:
-    """Die Erklaerung als eigenstaendige, barrierefreie Seite."""
+def erklaerung_als_html(markdown: str, site_url: str,
+                        sprache: str = SPRACHE_DES_INHALTS) -> str:
+    """Die Erklaerung als eigenstaendige, barrierefreie Seite.
+
+    Zu `sprache` gilt dasselbe wie bei `nachweis_als_html`: sie beschreibt den
+    Text, nicht den Rechtsraum.
+    """
     return f"""<!doctype html>
-<html lang="de">
+<html lang="{_e(sprache)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

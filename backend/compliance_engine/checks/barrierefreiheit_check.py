@@ -15,6 +15,11 @@ import logging
 import aiohttp
 from xml.etree import ElementTree as ET
 from compliance_engine.sicherer_abruf import sichere_session
+from compliance_engine.rechtsgrundlagen import (
+    BARRIEREFREIHEIT_TECHNISCH,
+    BARRIEREFREIHEITSERKLAERUNG,
+    grundlage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +161,7 @@ async def _run_axe_core_safe(url: str, timeout: float = 35.0) -> Optional[List[D
                 ),
                 "risk_euro": 0,
                 "recommendation": "Wird ueber Widget bzw. Plugin ausgeliefert.",
-                "legal_basis": "WCAG 2.1 (1.3.1, 1.4.4, 4.1.2), BFSG §12",
+                "legal_basis": grundlage(BARRIEREFREIHEIT_TECHNISCH, detail="(1.3.1, 1.4.4, 4.1.2)"),
                 "auto_fixable": True,
                 "is_missing": False,
                 "rechtspflicht": True,
@@ -191,7 +196,7 @@ async def _run_axe_core_safe(url: str, timeout: float = 35.0) -> Optional[List[D
                     ),
                     "risk_euro": 0,
                     "recommendation": "Farben in der Worklist pruefen und freigeben.",
-                    "legal_basis": "WCAG 2.1 (1.4.3), BFSG §12",
+                    "legal_basis": grundlage(BARRIEREFREIHEIT_TECHNISCH, detail="(1.4.3)"),
                     "auto_fixable": True,
                     "is_missing": False,
                     "rechtspflicht": True,
@@ -486,7 +491,7 @@ async def check_barrierefreiheit_compliance(
                 'im Footer. Die Erklärung muss enthalten: Konformitätsstatus (WCAG 2.1 AA), '
                 'nicht konforme Bereiche, Alternativen, Feedback-Kontakt.'
             ),
-            legal_basis='BFSG §14, EU-Richtlinie 2019/882 (European Accessibility Act)',
+            legal_basis=grundlage(BARRIEREFREIHEITSERKLAERUNG),
             auto_fixable=False,
             is_missing=False,
         ))
@@ -504,7 +509,7 @@ async def check_barrierefreiheit_compliance(
             ),
             risk_euro=500,
             recommendation='Fügen Sie dem <html>-Element ein lang-Attribut hinzu, z.B. <html lang="de">.',
-            legal_basis='WCAG 2.1 Level A (3.1.1), BFSG §12',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level A (3.1.1)'),
             auto_fixable=True,
             is_missing=False,
         ))
@@ -522,7 +527,7 @@ async def check_barrierefreiheit_compliance(
             ),
             risk_euro=300,
             recommendation='Fügen Sie einen aussagekräftigen <title> hinzu, der Seite und Website beschreibt.',
-            legal_basis='WCAG 2.1 Level A (2.4.2), BFSG §12',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level A (2.4.2)'),
             auto_fixable=True,
             is_missing=False,
         ))
@@ -580,7 +585,7 @@ async def check_barrierefreiheit_compliance(
                 ),
                 risk_euro=200,
                 recommendation='Fügen Sie am Seitenanfang einen versteckten Skip-Link ein: <a href="#main" class="skip-link">Zum Inhalt springen</a>.',
-                legal_basis='WCAG 2.1 Level A (2.4.1), BFSG §12',
+                legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level A (2.4.1)'),
                 auto_fixable=True,
                 is_missing=False,
             ))
@@ -614,7 +619,7 @@ async def check_barrierefreiheit_compliance(
                 '"Mehr über unsere Datenschutzrichtlinie" statt "hier". '
                 'Oder ergänzen Sie aria-label mit dem vollständigen Kontext.'
             ),
-            legal_basis='WCAG 2.1 Level A (2.4.4), BFSG §12',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level A (2.4.4)'),
             auto_fixable=False,
             is_missing=False,
         ))
@@ -695,7 +700,7 @@ async def check_barrierefreiheit_compliance(
                             f'Vorschlag: Vordergrund {ci.suggested_foreground or ci.foreground} '
                             f'oder Hintergrund {ci.suggested_background or ci.background} anpassen.'
                         ),
-                        'legal_basis': 'WCAG 2.1 Level AA (1.4.3), BFSG §12',
+                        'legal_basis': grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level AA (1.4.3)'),
                         'risk_euro': 500,
                         'auto_fixable': False,
                         'wcag_criterion': '1.4.3',
@@ -933,7 +938,7 @@ async def _check_alt_texts(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
             risk_euro=500 * min(count, 5),  # Max 2500€
             recommendation='Fügen Sie aussagekräftige alt-Attribute zu allen Bildern hinzu. '
                           'Beschreiben Sie, was auf dem Bild zu sehen ist.',
-            legal_basis='BFSG §12, WCAG 2.1 Level AA',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level AA'),
             auto_fixable=False
         ))
     
@@ -1010,7 +1015,7 @@ async def _check_alt_texts_enhanced(url: str, soup: BeautifulSoup, session=None)
             risk_euro=500,
             recommendation='Fügen Sie ein beschreibendes alt-Attribut hinzu '
                            '(oder alt="" für rein dekorative Bilder).',
-            legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level A (1.1.1)'),
             auto_fixable=True,
             element_html=str(img)[:300],
             image_src=src,
@@ -1033,7 +1038,7 @@ async def _check_alt_texts_enhanced(url: str, soup: BeautifulSoup, session=None)
                            f'Screenreader können das Bild nicht beschreiben.',
                 risk_euro=500,
                 recommendation=f'Fügen Sie einen Alt-Text hinzu. AI-Vorschlag: "{suggested_alt}"',
-                legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
+                legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level A (1.1.1)'),
                 auto_fixable=True,  # Via Fix-Manifest/KI-Alt-Text behebbar
                 screenshot_url=img_data.get('screenshot_data_url'),
                 element_html=f'<img src="{src}" ... />',
@@ -1060,7 +1065,7 @@ async def _check_alt_texts_enhanced(url: str, soup: BeautifulSoup, session=None)
                        f'Dies ist ein kritisches Barrierefreiheitsproblem.',
             risk_euro=min(len(issues) * 500, 5000),  # Max 5000€
             recommendation='Nutzen Sie die Complyo KI-Alt-Text-Generierung (Fix-Manifest/Review-Queue) für automatische Korrekturen im Quellcode.',
-            legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level A (1.1.1)'),
             auto_fixable=True
         )
         issues.insert(0, summary)  # Am Anfang einfügen
@@ -1096,7 +1101,7 @@ async def _check_aria_labels(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
                        f'Screenreader können diese Elemente nicht vorlesen.',
             risk_euro=300 * min(count, 5),
             recommendation='Fügen Sie aria-label oder aussagekräftigen Text zu allen Buttons hinzu.',
-            legal_basis='BFSG §12, WCAG 2.1 (Name, Role, Value)',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='(Name, Role, Value)'),
             auto_fixable=False
         ))
     
@@ -1160,7 +1165,7 @@ async def _check_aria_labels(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
                        f'Screenreader-Nutzer wissen nicht, was sie eingeben sollen.',
             risk_euro=400 * min(count, 5),
             recommendation='Verwenden Sie <label for="..."> oder aria-label für alle Formularfelder.',
-            legal_basis='BFSG §12, WCAG 2.1 (Labels or Instructions)',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='(Labels or Instructions)'),
             auto_fixable=False
         ))
     
@@ -1207,7 +1212,7 @@ async def _check_semantic_html(soup: BeautifulSoup) -> List[BarrierefreiheitIssu
             # Entdopplung nicht (sie liest \d.\d+.\d+ aus Titel und
             # legal_basis) und der ARIA-Checker meldete denselben Mangel
             # ein zweites Mal.
-            legal_basis='BFSG §12, WCAG 2.1 (1.3.1, Info and Relationships)',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='(1.3.1, Info and Relationships)'),
             auto_fixable=False
         ))
     
@@ -1323,7 +1328,7 @@ async def _check_keyboard_navigation(soup: BeautifulSoup) -> List[Barrierefreihe
             ),
             risk_euro=500,
             recommendation='Entfernen Sie tabindex="-1" von interaktiven Elementen oder setzen Sie tabindex="0".',
-            legal_basis='BFSG §12, WCAG 2.1 (Keyboard Accessible)',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='(Keyboard Accessible)'),
             auto_fixable=False
         ))
 
@@ -1351,7 +1356,7 @@ async def _check_color_contrast(soup: BeautifulSoup) -> List[BarrierefreiheitIss
                        'dem WCAG Contrast Checker, ob alle Texte ausreichend Kontrast haben (mind. 4.5:1).',
             risk_euro=0,
             recommendation='Verwenden Sie Tools wie WebAIM Contrast Checker oder axe DevTools.',
-            legal_basis='BFSG §12, WCAG 2.1 Level AA (Contrast Minimum)',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level AA (Contrast Minimum)'),
             auto_fixable=False
         ))
     
@@ -1582,7 +1587,7 @@ async def _check_images_for_alt_text(url: str, soup: BeautifulSoup) -> List[Barr
                 description=f'Das Bild "{filename}" auf Seite {url} hat keinen Alternativtext für Screenreader.',
                 risk_euro=500,
                 recommendation='Fügen Sie einen beschreibenden Alt-Text hinzu. KI kann Vorschläge generieren.',
-                legal_basis='WCAG 2.1 Level A (1.1.1 Non-text Content), BFSG §12',
+                legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level A (1.1.1 Non-text Content)'),
                 auto_fixable=True,
                 image_src=urljoin(url, img_src),  # Make absolute URL
                 element_html=str(img),
@@ -1763,7 +1768,7 @@ def _check_touch_targets(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
                 'Stellen Sie sicher, dass alle anklickbaren Elemente (Buttons, Links, Inputs) '
                 'mindestens 44×44 CSS-Pixel groß sind (WCAG 2.5.5 Level AA).'
             ),
-            legal_basis='WCAG 2.1 Level AA (2.5.5), BFSG §12',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level AA (2.5.5)'),
             auto_fixable=False,
             metadata={'small_targets': small_targets[:5]},
         ))
@@ -1903,7 +1908,7 @@ def _check_tables_svg_canvas(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
                 description='Eine Datentabelle hat keine <caption>. Screenreader-Nutzer können den Zweck der Tabelle nicht erkennen.',
                 risk_euro=400,
                 recommendation='Fügen Sie ein <caption>-Element als erstes Kind der <table> ein.',
-                legal_basis='WCAG 2.1 Level A (1.3.1), BFSG §12',
+                legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level A (1.3.1)'),
                 auto_fixable=False,
                 element_html=str(table)[:200],
             ))
@@ -1916,7 +1921,7 @@ def _check_tables_svg_canvas(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
                 description='Tabellenköpfe ohne scope-Attribut sind für Screenreader mehrdeutig.',
                 risk_euro=300,
                 recommendation='Ergänzen Sie scope="col" oder scope="row" auf allen <th>-Elementen.',
-                legal_basis='WCAG 2.1 Level A (1.3.1), BFSG §12',
+                legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level A (1.3.1)'),
                 auto_fixable=False,
             ))
 
@@ -1944,7 +1949,7 @@ def _check_tables_svg_canvas(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
                 'setzen Sie aria-label="Beschreibung". Rein dekorative Grafiken markieren '
                 'Sie stattdessen mit aria-hidden="true".'
             ),
-            legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level A (1.1.1)'),
             auto_fixable=False,
             element_html=str(svg_offenders[0])[:200],
         ))
@@ -1959,7 +1964,7 @@ def _check_tables_svg_canvas(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]
                 description='Ein <canvas>-Element hat kein aria-label oder aria-labelledby. Screenreader haben keinen Zugang zu dessen Inhalt.',
                 risk_euro=400,
                 recommendation='Fügen Sie aria-label="Beschreibung des Canvas-Inhalts" hinzu.',
-                legal_basis='WCAG 2.1 Level A (1.1.1), BFSG §12',
+                legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level A (1.1.1)'),
                 auto_fixable=False,
             ))
 
@@ -1985,7 +1990,7 @@ def _check_video_captions(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
                 description='Ein <video>-Element hat kein <track kind="captions"> oder <track kind="subtitles">. Gehörlose und schwerhörige Nutzer können den Inhalt nicht konsumieren.',
                 risk_euro=1500,
                 recommendation='Fügen Sie <track kind="captions" src="untertitel.vtt" srclang="de" label="Deutsch"> innerhalb des <video>-Elements ein.',
-                legal_basis='WCAG 2.1 Level AA (1.2.2), BFSG §12',
+                legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level AA (1.2.2)'),
                 auto_fixable=False,
                 element_html=str(video)[:300],
             ))
@@ -1999,7 +2004,7 @@ def _check_video_captions(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
                         description='Ein <track>-Element für Untertitel hat kein srclang-Attribut. Screenreader und Browser können die Sprache nicht erkennen.',
                         risk_euro=300,
                         recommendation='Ergänzen Sie srclang="de" (oder die jeweilige Sprache) auf dem <track>-Element.',
-                        legal_basis='WCAG 2.1 Level AA (1.2.2), BFSG §12',
+                        legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='Level AA (1.2.2)'),
                         auto_fixable=True,
                     ))
     return [asdict(i) for i in issues]
@@ -2033,7 +2038,7 @@ def _check_pdf_links(soup: BeautifulSoup) -> List[BarrierefreiheitIssue]:
                 'oder dem PAC 3-Tool. Stellen Sie sicher, dass PDFs getaggt sind und eine logische '
                 'Lesereihenfolge haben (WCAG 1.3.2, PDF/UA-1).'
             ),
-            legal_basis='WCAG 2.1 (1.3.2), PDF/UA-1 (ISO 14289-1), BFSG §12',
+            legal_basis=grundlage(BARRIEREFREIHEIT_TECHNISCH, detail='(1.3.2), PDF/UA-1 (ISO 14289-1)'),
             auto_fixable=False,
             metadata={'pdf_links': pdf_links[:10]},
         ))

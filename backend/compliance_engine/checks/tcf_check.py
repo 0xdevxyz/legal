@@ -7,6 +7,10 @@ from bs4 import BeautifulSoup
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, asdict
 import re
+from compliance_engine.rechtsgrundlagen import (
+    COOKIE_EINWILLIGUNG,
+    grundlage,
+)
 
 @dataclass
 class TCFIssue:
@@ -185,7 +189,7 @@ async def check_tcf_compliance(url: str, soup: BeautifulSoup, page_content: str 
                 risk_euro=0,
                 recommendation=f'Erwägen Sie die Aktivierung von TCF 2.2 in {cmp_name}, wenn Sie mit '
                              f'Werbenetzwerken arbeiten oder programmatic advertising nutzen.',
-                legal_basis='DSGVO Art. 7, TDDDG §25',
+                legal_basis='DSGVO Art. 7, ' + grundlage(COOKIE_EINWILLIGUNG),
                 auto_fixable=False
             )))
     else:

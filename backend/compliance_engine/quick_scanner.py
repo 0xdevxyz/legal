@@ -11,6 +11,10 @@ from datetime import datetime
 import ssl
 import certifi
 from compliance_engine.sicherer_abruf import sichere_session
+from compliance_engine.rechtsgrundlagen import (
+    COOKIE_EINWILLIGUNG,
+    grundlage,
+)
 
 class QuickScanner:
     def __init__(self):
@@ -211,7 +215,7 @@ class QuickScanner:
                 "description": "Tracking-Tools gefunden, aber kein Cookie-Consent-Banner. Nutzer müssen zustimmen, bevor Cookies gesetzt werden.",
                 "risk_euro": 50000,
                 "recommendation": "Nutzen Sie die integrierte Complyo Cookie-Compliance-Lösung im Dashboard unter 'Cookie-Compliance'",
-                "legal_basis": "TDDDG § 25, DSGVO Art. 7",
+                "legal_basis": grundlage(COOKIE_EINWILLIGUNG) + ', DSGVO Art. 7',
                 "auto_fixable": True,
                 "ai_explanation": "Seit 2021 müssen Nutzer aktiv zustimmen, bevor Tracking-Cookies gesetzt werden. Complyo bietet ein vollständig DSGVO-konformes Cookie-Banner mit Consent-Management.",
                 "quick_fix_url": "/cookie-compliance"

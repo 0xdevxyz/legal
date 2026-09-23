@@ -8,6 +8,10 @@ from bs4 import BeautifulSoup
 from typing import List, Dict, Any
 from dataclasses import dataclass, asdict
 import re
+from compliance_engine.rechtsgrundlagen import (
+    COOKIE_EINWILLIGUNG,
+    grundlage,
+)
 
 @dataclass
 class CookieIssue:
@@ -629,7 +633,7 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                              '"Cookies". Sie erfüllt alle sechs Anforderungen: automatische Cookie-Erkennung, '
                              'gleichwertiger Ablehnen-Button, Zweck-Kategorien, Widerruf-Link und Consent-Logs '
                              'als Nachweis.',
-                legal_basis='TDDDG §25, DSGVO Art. 7 und Art. 13',
+                legal_basis=grundlage(COOKIE_EINWILLIGUNG) + ', DSGVO Art. 7 und Art. 13',
                 auto_fixable=True,
                 is_missing=True
             )))
@@ -646,7 +650,7 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                            'Sobald Analytics oder andere nicht-notwendige Cookies eingesetzt werden, wird ein Banner Pflicht.',
                 risk_euro=0,
                 recommendation='Prüfen Sie, ob Ihre Website nicht-notwendige Cookies setzt. Falls ja, implementieren Sie einen Cookie-Consent-Banner.',
-                legal_basis='TDDDG §25 Abs. 2 (Ausnahme für technisch notwendige Cookies)',
+                legal_basis=grundlage(COOKIE_EINWILLIGUNG) + ' (Ausnahme für technisch notwendige Cookies)',
                 auto_fixable=False,
                 is_missing=False
             )))
@@ -692,7 +696,7 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                 ),
                 risk_euro=0,
                 recommendation='Kein Handlungsbedarf. Sobald Tracking oder Analytics eingesetzt werden, muss ein Consent-Banner ergänzt werden.',
-                legal_basis='TDDDG §25 Abs. 2 (Ausnahme technisch notwendige Cookies)',
+                legal_basis=grundlage(COOKIE_EINWILLIGUNG) + ' (Ausnahme technisch notwendige Cookies)',
                 auto_fixable=False,
                 is_missing=False,
             )))
@@ -785,7 +789,7 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                     'Fügen Sie einen gleichwertigen "Ablehnen"- oder "Nur notwendige Cookies"-Button '
                     'direkt im Banner hinzu, ohne zusätzliche Klicks.'
                 ),
-                legal_basis='TDDDG §25, EuGH C-673/17 (Planet49), DSGVO Art. 7 Abs. 3',
+                legal_basis=grundlage(COOKIE_EINWILLIGUNG) + ', EuGH C-673/17 (Planet49), DSGVO Art. 7 Abs. 3',
                 auto_fixable=True,
                 is_missing=False,
             )))
@@ -811,7 +815,7 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                         'gleiche Schrift und gleiche visuelle Gewichtung (keine farbliche Bevorzugung '
                         'nur des Akzeptieren-Buttons).'
                     ),
-                    legal_basis='TDDDG §25, EuGH C-673/17 (Planet49), DSK-Orientierungshilfe',
+                    legal_basis=grundlage(COOKIE_EINWILLIGUNG) + ', EuGH C-673/17 (Planet49), DSK-Orientierungshilfe',
                     auto_fixable=True,
                     is_missing=False,
                 )))
@@ -831,7 +835,7 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                     'Stellen Sie sicher dass Cookies erst nach aktivem Klick auf "Akzeptieren" '
                     'oder "Zustimmen" gesetzt werden.'
                 ),
-                legal_basis='TDDDG §25, DSGVO Art. 4 Nr. 11 (Einwilligungsdefinition)',
+                legal_basis=grundlage(COOKIE_EINWILLIGUNG) + ', DSGVO Art. 4 Nr. 11 (Einwilligungsdefinition)',
                 auto_fixable=True,
                 is_missing=False,
             )))
@@ -909,7 +913,7 @@ async def check_cookie_compliance(url: str, soup: BeautifulSoup, session=None, c
                     '(conditional loading). Nutzen Sie Tag Manager mit Consent-Mode oder '
                     'das Complyo Cookie-Blocking-Feature.'
                 ),
-                legal_basis='DSGVO Art. 6 Abs. 1, TDDDG §25, BayLDA Prüfbericht 2022',
+                legal_basis='DSGVO Art. 6 Abs. 1, ' + grundlage(COOKIE_EINWILLIGUNG) + ', BayLDA Prüfbericht 2022',
                 auto_fixable=True,
                 is_missing=False,
             )))

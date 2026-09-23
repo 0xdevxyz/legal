@@ -21,6 +21,10 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 from compliance_engine.axe_translations import uebersetze as uebersetze_axe
+from compliance_engine.rechtsgrundlagen import (
+    BARRIEREFREIHEIT_TECHNISCH,
+    grundlage,
+)
 
 # axe-core wird lokal gebundelt und zur Scan-Zeit injiziert — kein externes CDN
 # (SPOF vermieden; vendored axe-core 4.11.4).
@@ -737,7 +741,7 @@ class AxeScanner:
                     "risk_euro": self._impact_to_risk_euro(violation.impact) if pflicht else 0,
                     "recommendation": failure,
                     "legal_basis": (
-                        f"WCAG 2.1 ({wcag_str}), BFSG §12" if pflicht
+                        grundlage(BARRIEREFREIHEIT_TECHNISCH, detail=f"({wcag_str})") if pflicht
                         else "Empfehlung (axe best-practice), nicht aus WCAG 2.1 AA gefordert"
                     ),
                     "auto_fixable": violation.feature_id in ["ALT_TEXT", "CONTRAST", "FOCUS", "LANDMARKS"],
