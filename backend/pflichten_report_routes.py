@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from dependencies import get_current_user, get_db
 from pflichten_katalog import evaluate_pflichten, APPLIES, CHECK
+from tarifempfehlung import empfehlung as tarifempfehlung
 from pflichten_events import sync_pflichten_events, get_events_for_rules
 from abmahnwellen import ABMAHNWELLEN, HINWEIS, HINWEIS_OHNE_PROFIL, wellen_anreichern, teaser_anwenden
 
@@ -268,6 +269,22 @@ async def get_report(
     is_paid = plan_type not in ("free", "freemium")
     report["plan_type"] = plan_type
     report["locked"] = not is_paid
+
+    # Die Tarifempfehlung wird VOR der Kuerzung berechnet. Der Teaser schneidet
+    # nur die Einzelposten weg, die Zaehler bleiben vollstaendig; wuerde sie
+    # danach laufen, saehe ein Interessent eine kleinere Pflichtenlast als er
+    # hat, und der Report wuerde ausgerechnet dort untertreiben, wo er
+    # ueberzeugen soll.
+    try:
+        anzahl_websites = await db.fetchval(
+            "SELECT COUNT(*) FROM tracked_websites WHERE user_id = $1", user_id
+        )
+    except Exception:
+        # Die Empfehlung darf am Zaehlen der Websites nicht scheitern; ohne die
+        # Zahl entfaellt nur der Hinweis auf die zweite Tarifdimension.
+        anzahl_websites = None
+    report["tarifempfehlung"] = tarifempfehlung(report, websites=anzahl_websites)
+
     if not is_paid:
         # Teaser: volle Zähler, aber nur die Top-3-Einträge im Detail
         visible = report["items"][:TEASER_LIMIT]
