@@ -112,6 +112,14 @@ services:
       # Einrichtung den Dienst (fail-closed) — das TOTP-Geheimnis liegt sonst
       # im Klartext neben dem Passwort-Hash und waere kein zweiter Faktor.
       - COMPLYO_2FA_ENC_KEY=${COMPLYO_2FA_ENC_KEY}
+      # Pfeffer fuer den Hashwert der IP-Adresse in den Einwilligungs-
+      # protokollen (23.09.2026). Ohne ihn ist der gespeicherte SHA-256 ueber
+      # eine IPv4-Adresse in Minuten rueckrechenbar, und Anlage 2.3 des AVV
+      # trifft nicht zu. Fail-open mit Warnung: eine Einwilligung, die mangels
+      # Pfeffer gar nicht festgehalten wuerde, vernichtet den Nachweis nach
+      # Art. 7 Abs. 1 DSGVO sofort. Ein Wechsel macht alte und neue Zeilen
+      # zueinander unvergleichbar, die alten bleiben aber gueltig.
+      - COMPLYO_IP_PFEFFER=${COMPLYO_IP_PFEFFER:-}
       # Wohin die Links in den Kontomails zeigen: das Dashboard, nicht die
       # Startseite. Dort liegen Anmeldung und die Kontoseiten.
       - FRONTEND_URL=${FRONTEND_URL:-https://app.complyo.de}
