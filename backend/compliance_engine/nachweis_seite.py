@@ -160,7 +160,21 @@ def nachweis_als_html(n: Dict[str, Any], sprache: str = SPRACHE_DES_INHALTS) -> 
 
     betrieb_html = ""
     if betrieb.get("seiten_beobachtet"):
-        verfehlt = betrieb.get("ziele_verfehlt") or 0
+        # "Ziele nicht gefunden" stand hier bis zum 25.09.2026 als dritte
+        # Kennzahl, mit dem Hinweis, das deute auf eine Aenderung an der
+        # Website hin. Das war ein Fehlalarm, und zwar auf der Seite, mit der
+        # complyo seine Messgenauigkeit vorzeigt.
+        #
+        # Der Grund: eine freigegebene Reparatur gilt fuer die Stelle, an der
+        # sie gemessen wurde. Dass der Alternativtext des Startseitenbildes auf
+        # /impressum/ nicht greift, ist der Normalfall und kein Mangel. Gemessen
+        # am 25.09. auf complyo.de: 25 angewendet, 33 "nicht gefunden", und
+        # kein einziger davon war ein Mangel.
+        #
+        # Was etwas aussagt, ist die Reichweite: auf wie vielen beobachteten
+        # Seiten ueberhaupt etwas ankommt.
+        mit_wirkung = betrieb.get("seiten_mit_wirkung")
+        verworfen = betrieb.get("meldungen_verworfen") or 0
         betrieb_html = (
             '<h2 id="betrieb">Wirksamkeit im Betrieb</h2>'
             "<p>Der Prüflauf oben misst einen Zeitpunkt. Zusätzlich meldet das "
@@ -169,14 +183,19 @@ def nachweis_als_html(n: Dict[str, Any], sprache: str = SPRACHE_DES_INHALTS) -> 
             "Unterseiten, nicht nur auf der geprüften.</p>"
             '<div class="kennzahl">'
             f"<div><b>{betrieb['seiten_beobachtet']}</b><span>Seiten beobachtet</span></div>"
-            f"<div><b>{betrieb['reparaturen_angewendet']}</b><span>Reparaturen angewendet</span></div>"
-            f"<div><b>{verfehlt}</b><span>Ziele nicht gefunden</span></div>"
+            + (f"<div><b>{mit_wirkung}</b><span>davon mit angewendeter Reparatur</span></div>"
+               if mit_wirkung is not None else "")
+            + f"<div><b>{betrieb['reparaturen_angewendet']}</b><span>Reparaturen angewendet</span></div>"
             "</div>"
             f"<p>Zuletzt bestätigt am {_e(betrieb['zuletzt_bestaetigt'])}.</p>"
-            + ('<div class="hinweis offen"><p>Bei einigen Reparaturen wurde das '
-               "Ziel nicht mehr gefunden. Das deutet auf eine Änderung an der "
-               "Website hin (etwa ein Theme-Update) und wird geprüft.</p></div>"
-               if verfehlt else "")
+            "<p>Eine Reparatur gilt für die Stelle, an der sie gemessen wurde. "
+            "Dass sie auf anderen Unterseiten nicht greift, ist der Normalfall "
+            "und kein Mangel; diese Fälle sind hier deshalb nicht als Fehler "
+            "gezählt.</p>"
+            + (f'<div class="hinweis offen"><p>{verworfen} Meldungen waren in sich '
+               "unstimmig (es wurden mehr Ziele als verfehlt gemeldet, als es zu "
+               "treffen gab) und sind in diesen Zahlen nicht enthalten.</p></div>"
+               if verworfen else "")
         )
     elif betrieb.get("hinweis"):
         betrieb_html = ('<h2 id="betrieb">Wirksamkeit im Betrieb</h2>'

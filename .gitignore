@@ -160,3 +160,8 @@ knowledge/laws/*/*/
 # Schluessel der Datensicherung — gehoert NIE ins Depot
 .sicherung-schluessel
 .sicherung-ziel
+
+# Laufzeitdaten der Waechter: Zaehler, Neustartjournal, Verfuegbarkeitsreihe.
+# Sie gehoeren zum Betrieb dieser einen Maschine, nicht in den Quelltext.
+data/waechter/
+data/verfuegbarkeit/

@@ -83,6 +83,10 @@
 
   var BILANZ_ARTEN = ['alt_texte', 'link_labels', 'struktur', 'css_regeln', 'dokument_fixes'];
 
+  // Fassung dieses Melders. Hochzaehlen, sobald sich aendert, WIE gezaehlt
+  // wird — nicht bei jeder Textaenderung.
+  var MELDER_FASSUNG = 'a11y-2026-09-25';
+
   function leereMenge() { return Object.create(null); }
 
   function _merkeNeu(menge, id) {
@@ -586,6 +590,12 @@
       css_regeln: bilanz.css_regeln,
       dokument_fixes: bilanz.dokument_fixes,
       unbekannte_kennung: unbekannteKennung,
+      // Welche Fassung diese Zahlen geschrieben hat. Am 25.09.2026 standen in
+      // der Tabelle Zeilen mit verfehlt=35 bei erwartet=4, und niemand konnte
+      // sagen, aus welcher Widget-Fassung sie stammten. Ohne diese Angabe ist
+      // nach dem naechsten Umbau wieder nicht unterscheidbar, ob eine Zahl alt
+      // oder falsch ist.
+      melder: MELDER_FASSUNG,
       erwartet: {
         alt_texte: Object.keys(map).length,
         link_labels: linkFixes.length,

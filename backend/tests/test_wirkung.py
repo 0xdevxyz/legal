@@ -59,7 +59,22 @@ class TestDatensparsamkeit:
         felder = set(wr.WirkungsMeldung.model_fields)
         assert felder == {"pfad", "alt_texte", "link_labels", "struktur",
                           "css_regeln", "dokument_fixes", "unbekannte_kennung",
-                          "erwartet"}
+                          "erwartet", "melder"}
+
+    def test_melder_ist_kein_freies_textfeld(self):
+        """`melder` kam am 25.09.2026 dazu und ist die Ausnahme von der Regel.
+
+        Es ist keine Aussage ueber die Seite, sondern ueber das Widget. Genau
+        deshalb darf es kein freier Text sein: der Endpunkt ist oeffentlich,
+        und was von einer fremden Domain kommt, kann alles enthalten.
+
+        Eine Auswahl aus bekannten Fassungen kann nichts transportieren. Wer
+        das Feld wieder oeffnet, faellt hier durch.
+        """
+        assert wr.WirkungsMeldung(pfad="/", melder="a11y-2026-09-25").melder
+        for versuch in ("besucher-12345", "ip:1.2.3.4", "<script>", "beliebig"):
+            assert wr.WirkungsMeldung(pfad="/", melder=versuch).melder == "", (
+                f"{versuch!r} wurde uebernommen — das Feld ist wieder frei.")
 
     def test_kein_feld_beschreibt_den_besucher(self):
         for feld in wr.WirkungsMeldung.model_fields:

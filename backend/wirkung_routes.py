@@ -34,7 +34,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from dependencies import rate_limit
 
@@ -62,6 +62,14 @@ CREATE INDEX IF NOT EXISTS idx_wirkung_site ON accessibility_wirkung (site_id);
 """
 
 
+# Fassungen des Melders, die der Server kennt. Ein Wert ausserhalb dieser
+# Menge wird verworfen, nicht gespeichert.
+#
+# Wer die Fassung im Widget hochzaehlt, traegt sie hier ein. Dass das nicht
+# vergessen wird, sichert tests/test_wirkung_plausibel.py.
+MELDER_FASSUNGEN = frozenset({"a11y-2026-09-25"})
+
+
 class Zaehler(BaseModel):
     angewendet: int = Field(0, ge=0, le=100000)
     verfehlt: int = Field(0, ge=0, le=100000)
@@ -87,6 +95,22 @@ class WirkungsMeldung(BaseModel):
     # Dann ist die Seite eingebunden und bekommt trotzdem nie eine Reparatur.
     unbekannte_kennung: bool = False
     erwartet: Dict[str, int] = Field(default_factory=dict)
+    # Welche Fassung des Widgets diese Zeile geschrieben hat. Ohne sie laesst
+    # sich nach dem naechsten Umbau nicht unterscheiden, ob eine Zahl alt oder
+    # falsch ist.
+    #
+    # KEIN freies Textfeld, sondern eine Auswahl aus bekannten Fassungen. Der
+    # Endpunkt ist oeffentlich und wird von fremden Domains beschrieben; ein
+    # freies Feld waere eine Stelle, an der jemand etwas unterbringen koennte,
+    # das hier nichts verloren hat. Unbekannte Werte werden zu "" — das ist die
+    # ehrliche Antwort sowohl fuer ein altes Widget als auch fuer eine
+    # gefaelschte Angabe.
+    melder: str = Field("", max_length=32)
+
+    @field_validator("melder")
+    @classmethod
+    def _nur_bekannte_fassung(cls, v: str) -> str:
+        return v if v in MELDER_FASSUNGEN else ""
 
 
 def _keine_antwort() -> Response:
@@ -171,6 +195,26 @@ async def melde_wirkung(site_id: str, request: Request) -> Response:
         if isinstance(meldung.erwartet.get(name), int)
     )
 
+    # Die Invariante: man kann nicht mehr Ziele verfehlen, als es ueberhaupt zu
+    # treffen gab. Am 25.09.2026 stand in der Tabelle fuer eine loqal.io-
+    # Unterseite verfehlt=35 bei erwartet=4, und der oeffentliche Pruefnachweis
+    # zeigte die Summe daraus als "Ziele nicht gefunden".
+    #
+    # Genau dieser Fehler war am 10.09.2026 schon einmal behoben (17d0a8f). Er
+    # kam zurueck, weil ihn niemand faengt. Deshalb steht die Pruefung jetzt
+    # hier, an der Stelle, an der die Zahl in die Datenbank geht.
+    #
+    # Die Meldung wird NICHT abgewiesen: sie ist der Beleg dafuer, dass etwas
+    # schieflaeuft, und genau den braucht man beim naechsten Mal. Sie wird
+    # gekennzeichnet und nicht veroeffentlicht.
+    unplausibel = verfehlt > erwartet
+    if unplausibel:
+        logger.warning(
+            "[Wirkung] unstimmige Meldung fuer %s%s: verfehlt=%d > erwartet=%d "
+            "(Melder: %s). Zeile wird gespeichert, aber nicht veroeffentlicht.",
+            site_id, meldung.pfad, verfehlt, erwartet, meldung.melder or "unbekannt",
+        )
+
     import json as _json
     _inhalt = {
         name: {"angewendet": z.angewendet, "verfehlt": z.verfehlt,
@@ -194,18 +238,22 @@ async def melde_wirkung(site_id: str, request: Request) -> Response:
             await conn.execute(
                 """
                 INSERT INTO accessibility_wirkung
-                    (site_id, pfad, angewendet, verfehlt, erwartet, je_art)
-                VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+                    (site_id, pfad, angewendet, verfehlt, erwartet, je_art,
+                     unplausibel, melder)
+                VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
                 ON CONFLICT (site_id, pfad) DO UPDATE SET
-                    angewendet = EXCLUDED.angewendet,
-                    verfehlt   = EXCLUDED.verfehlt,
-                    erwartet   = EXCLUDED.erwartet,
-                    je_art     = EXCLUDED.je_art,
-                    aufrufe    = accessibility_wirkung.aufrufe + 1,
-                    zuletzt    = NOW()
+                    angewendet  = EXCLUDED.angewendet,
+                    verfehlt    = EXCLUDED.verfehlt,
+                    erwartet    = EXCLUDED.erwartet,
+                    je_art      = EXCLUDED.je_art,
+                    unplausibel = EXCLUDED.unplausibel,
+                    melder      = EXCLUDED.melder,
+                    aufrufe     = accessibility_wirkung.aufrufe + 1,
+                    zuletzt     = NOW()
                 """,
                 site_id, _pfad_saeubern(meldung.pfad),
                 angewendet, verfehlt, erwartet, je_art,
+                unplausibel, (meldung.melder or None),
             )
     except Exception as e:
         # Fail-silent nach aussen, laut im Log: eine kaputte Statistik darf
@@ -267,11 +315,20 @@ async def wirkung_fuer_site(site_id: str) -> Optional[Dict[str, Any]]:
         return None
     async with db_pool.acquire() as conn:
         zeilen = await conn.fetch(
-            """SELECT pfad, angewendet, verfehlt, erwartet, aufrufe, zuletzt
+            """SELECT pfad, angewendet, verfehlt, erwartet, aufrufe, zuletzt,
+                      unplausibel
                FROM accessibility_wirkung WHERE site_id = $1
                ORDER BY zuletzt DESC LIMIT 500""",
             site_id,
         )
+    if not zeilen:
+        return None
+
+    # Unstimmige Zeilen bleiben in der Tabelle, aber nicht im Nachweis. Ihre
+    # Zahl wird trotzdem ausgewiesen: eine Auswertung, die stillschweigend
+    # etwas weglaesst, ist dieselbe Sorte Aussage wie eine falsche.
+    verworfen = [z for z in zeilen if z["unplausibel"]]
+    zeilen = [z for z in zeilen if not z["unplausibel"]]
     if not zeilen:
         return None
 
@@ -282,6 +339,11 @@ async def wirkung_fuer_site(site_id: str) -> Optional[Dict[str, Any]]:
 
     return {
         "seiten_beobachtet": seiten,
+        # Die Zahl, die etwas aussagt: auf wie vielen Seiten ist ueberhaupt
+        # etwas angekommen. `ziele_verfehlt` allein ist kein Mangel, siehe
+        # nachweis_seite.py.
+        "seiten_mit_wirkung": sum(1 for z in zeilen if z["angewendet"] > 0),
+        "meldungen_verworfen": len(verworfen),
         "aufrufe": sum(z["aufrufe"] for z in zeilen),
         "reparaturen_angewendet": angewendet,
         "ziele_verfehlt": verfehlt,

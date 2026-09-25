@@ -294,10 +294,13 @@ def erklaerung_aus_nachweis(nachweis: Dict[str, Any], anbieter: str,
             f"**{betrieb['seiten_beobachtet']} Seiten** dieser Website wurden bei "
             f"echten Aufrufen **{betrieb['reparaturen_angewendet']} Reparaturen** "
             f"angewendet; zuletzt bestätigt am {betrieb['zuletzt_bestaetigt']}."
-            + (f" Bei **{betrieb['ziele_verfehlt']}** Reparaturen wurde das Ziel "
-               f"nicht mehr gefunden — das deutet auf eine Änderung an der "
-               f"Website hin und wird geprüft."
-               if betrieb.get("ziele_verfehlt") else ""),
+            # Der frühere Zusatz zu "Ziel nicht mehr gefunden" war ein
+            # Fehlalarm: eine Reparatur gilt für die Stelle, an der sie
+            # gemessen wurde, und greift auf anderen Unterseiten
+            # berechtigterweise nicht. Siehe nachweis_seite.py.
+            + (f" Auf **{betrieb['seiten_mit_wirkung']}** dieser Seiten ist "
+               f"mindestens eine Reparatur angekommen."
+               if betrieb.get("seiten_mit_wirkung") is not None else ""),
             "",
         ]
 
