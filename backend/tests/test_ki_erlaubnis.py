@@ -110,6 +110,30 @@ def test_der_weg_zum_umschalten_existiert():
     assert '@gdpr_router.get("/ki-erlaubnis")' in quelle
 
 
+def test_der_schalter_steht_auch_in_der_oberflaeche():
+    """Eine Wahl, die nur ueber die Schnittstelle geht, ist fuer den Kunden keine.
+
+    Der Test liegt hier und nicht bei den Oberflaechentests, weil er zur
+    Zusage gehoert: die Datenschutzerklaerung sagt dem Kunden, er koenne die
+    KI-Funktionen ungenutzt lassen, und der Kunde liest keine OpenAPI.
+    """
+    pfad = os.path.join(
+        os.path.dirname(_BACKEND), "dashboard-react", "src", "app",
+        "settings", "page.tsx",
+    )
+    if not os.path.exists(pfad):
+        pytest.skip("dashboard-react nicht eingehaengt")
+    with open(pfad, encoding="utf-8") as fh:
+        quelle = fh.read()
+    assert "/api/gdpr/ki-erlaubnis" in quelle, (
+        "Die Einstellungsseite ruft die KI-Erlaubnis nicht mehr ab. Dann gibt "
+        "es den Schalter im Backend, aber nicht fuer den Kunden."
+    )
+    assert "method: 'PUT'" in quelle or 'method: "PUT"' in quelle, (
+        "Die Seite liest die Erlaubnis, setzt sie aber nicht."
+    )
+
+
 def test_was_der_weg_zurueckmeldet_stimmt_mit_der_schranke():
     """Die Aufzaehlung im Endpunkt darf nicht mehr versprechen als gebaut ist.
 
