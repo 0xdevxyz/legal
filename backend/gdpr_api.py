@@ -14,7 +14,7 @@ from typing import Optional
 import logging
 from gdpr_retention_service import gdpr_service
 from email_service import email_service
-from dependencies import get_current_user, require_admin
+from dependencies import get_current_user, get_db, require_admin
 from anbieter import VERANTWORTLICHER, DATENSCHUTZ_EMAIL
 
 logger = logging.getLogger(__name__)
@@ -445,3 +445,75 @@ async def get_privacy_policy_info():
             "response_time": "We will respond within 30 days"
         }
     }
+
+
+# ---------------------------------------------------------------------------
+# Widerspruch gegen die KI-gestuetzten Funktionen
+#
+# Die veroeffentlichte Datenschutzerklaerung sagt zu: "Wer das vermeiden
+# moechte, kann die KI-gestuetzten Funktionen ungenutzt lassen". Am 25.09.2026
+# gemessen: es gab keinen Schalter, und ungenutzt lassen liess sich die KI
+# nicht, weil sie am Scan haengt. Diese beiden Wege machen die Zusage
+# bedienbar.
+#
+# Der Weg liegt bewusst hier und nicht in einer eigenen Kontoverwaltung: die
+# Datenschutzerklaerung verweist fuer die Ausuebung von Rechten auf die
+# DSGVO-Datenverwaltung, und das ist dieser Router.
+# ---------------------------------------------------------------------------
+
+class KiErlaubnisRequest(BaseModel):
+    erlaubt: bool
+
+
+@gdpr_router.get("/ki-erlaubnis")
+async def ki_erlaubnis_lesen(
+    current_user: dict = Depends(get_verified_user),
+    db=Depends(get_db),
+):
+    async with db.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT ki_erlaubt, ki_erlaubnis_geaendert_am FROM users WHERE id = $1",
+            int(current_user["id"]),
+        )
+    if not row:
+        raise HTTPException(status_code=404, detail="Konto nicht gefunden")
+    return {
+        "erlaubt": bool(row["ki_erlaubt"]),
+        "geaendert_am": (
+            row["ki_erlaubnis_geaendert_am"].isoformat()
+            if row["ki_erlaubnis_geaendert_am"] else None
+        ),
+        # Was hier steht, muss stimmen, sonst ist es dieselbe Zusage ohne
+        # Mechanismus wie vorher. Gemeint sind die Stellen, die tatsaechlich
+        # hinter der Schranke liegen.
+        "betrifft": [
+            "Alt-Text-Vorschlaege fuer Bilder (Claude Vision)",
+        ],
+        "betrifft_nicht": [
+            "die technische Pruefung selbst",
+            "die mechanischen Reparaturen (Kontrast, Struktur, Cookie-Banner)",
+            "die Rechtsupdate-Auswertung, die oeffentliche Quellen liest und "
+            "keine Kundendaten uebermittelt",
+        ],
+        "hinweis": (
+            "Kein Einwilligungsvorbehalt: die Verarbeitung stuetzt sich auf "
+            "Art. 6 Abs. 1 lit. b DSGVO. Diese Einstellung ist die Ausuebung "
+            "der Wahl, die die Datenschutzerklaerung zusagt."
+        ),
+    }
+
+
+@gdpr_router.put("/ki-erlaubnis")
+async def ki_erlaubnis_setzen(
+    request: KiErlaubnisRequest,
+    current_user: dict = Depends(get_verified_user),
+    db=Depends(get_db),
+):
+    import ki_erlaubnis
+
+    neu = await ki_erlaubnis.setze(db, int(current_user["id"]), request.erlaubt)
+    logger.info(
+        "[KI-Erlaubnis] Konto %s auf %s gesetzt",
+        current_user["id"], "erlaubt" if neu else "abgeschaltet",
+    )
+    return {"erlaubt": neu}

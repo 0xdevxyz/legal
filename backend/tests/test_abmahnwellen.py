@@ -224,6 +224,10 @@ SCAN_ROW = {
     "url": "https://shop.example.de", "overall_score": 60.0, "accessibility_score": 41.0,
     "cookie_score": 55.0, "legal_score": 90.0, "privacy_score": 72.0,
     "scan_date": datetime(2026, 9, 10, 20, 0, 0),
+    # Der Rechtsraum gehoert in die nachgebildete Zeile, weil er in der
+    # echten Tabelle steht (Migration 0035). Ohne ihn prueft der Test einen
+    # Report, den es nicht gibt.
+    "jurisdiction": "de",
 }
 
 

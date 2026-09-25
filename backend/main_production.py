@@ -37,6 +37,7 @@ from dotenv import load_dotenv
 import time as _time
 import asyncpg
 import json
+from scan_persistenz import werte_fuer_insert
 import logging
 
 import sentry_sdk as _sentry_sdk
@@ -1288,8 +1289,11 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
                 """
                 INSERT INTO scan_history (
                     scan_id, user_id, url, scan_duration_ms, compliance_score, total_risk_euro,
-                    critical_issues, warning_issues, total_issues, scan_data
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    critical_issues, warning_issues, total_issues, scan_data,
+                    overall_score, accessibility_score, privacy_score,
+                    legal_score, cookie_score, jurisdiction
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                          $11, $12, $13, $14, $15, $16)
                 """,
                 scan_id,
                 int(current_user["id"]),
@@ -1300,7 +1304,9 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
                 scan_result["critical_issues"],
                 scan_result["warning_issues"],
                 scan_result["total_issues"],
-                json.dumps(scan_result, default=str)  # Store full scan result as JSONB
+                json.dumps(scan_result, default=str),  # Store full scan result as JSONB
+                # Saeulenwerte und Rechtsraum, siehe scan_persistenz.py.
+                *werte_fuer_insert(scan_result)
             )
             new_scan = await connection.fetchrow(
                 "SELECT id FROM scan_history WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", 
@@ -1415,8 +1421,11 @@ async def fuehre_v2_scan_aus(
                 """
                 INSERT INTO scan_history (
                     scan_id, user_id, url, scan_duration_ms, compliance_score, total_risk_euro,
-                    critical_issues, warning_issues, total_issues, scan_data, legal_update_id
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    critical_issues, warning_issues, total_issues, scan_data, legal_update_id,
+                    overall_score, accessibility_score, privacy_score,
+                    legal_score, cookie_score, jurisdiction
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                          $12, $13, $14, $15, $16, $17)
                 """,
                 scan_id,
                 user_id_value,
@@ -1428,7 +1437,9 @@ async def fuehre_v2_scan_aus(
                 scan_result["warning_issues"],
                 scan_result["total_issues"],
                 json.dumps(scan_result, default=str),
-                legal_update_id
+                legal_update_id,
+                # Saeulenwerte und Rechtsraum, siehe scan_persistenz.py.
+                *werte_fuer_insert(scan_result)
             )
             user_id_int = user_id_value
             new_scan = await connection.fetchrow("SELECT id, scan_id FROM scan_history WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", user_id_int)

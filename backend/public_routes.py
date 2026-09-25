@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 import logging
 import json
+from scan_persistenz import werte_fuer_insert
 import os
 import hmac
 # `re` wird in _recommendation_to_steps() benutzt und fehlte hier.
@@ -538,8 +539,11 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         INSERT INTO scan_history (
                             scan_id, user_id, website_id, url, website_name, scan_timestamp,
                             scan_data, compliance_score, total_risk_euro, critical_issues,
-                            warning_issues, total_issues, scan_duration_ms, legal_update_id
-                        ) VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7, $8, $9, $10, $11, $12, $13)
+                            warning_issues, total_issues, scan_duration_ms, legal_update_id,
+                            overall_score, accessibility_score, privacy_score,
+                            legal_score, cookie_score, jurisdiction
+                        ) VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7, $8, $9, $10, $11, $12, $13,
+                                  $14, $15, $16, $17, $18, $19)
                         """,
                         scan_id,
                         user_id_int,
@@ -572,6 +576,14 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                             'detected_cms': scan_result.get('detected_cms'),
                             'is_placeholder': scan_result.get('is_placeholder', False),
                             'scan_notice': scan_result.get('scan_notice'),
+                            # Der Rechtsraum gehoert auch in die abgelegte
+                            # Fassung: dieses scan_data ist die einzige
+                            # vollstaendige Kopie des Ergebnisses, und ein
+                            # Punktestand ohne seinen Rechtsraum ist nicht
+                            # deutbar.
+                            'jurisdiction': scan_result.get('jurisdiction'),
+                            'gewertete_saeulen': scan_result.get('gewertete_saeulen'),
+                            'score_hinweis': scan_result.get('score_hinweis'),
                         }),
                         overall_compliance_score,
                         total_risk_data.get('total_risk_max', 0),
@@ -579,7 +591,13 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         warning_issues_count,
                         len(structured_issues),
                         scan_result.get("scan_duration_ms"),
-                        legal_update_id
+                        legal_update_id,
+                        # Saeulenwerte und Rechtsraum. Die fuenf Score-Spalten
+                        # gab es seit dem Anfang und sie waren in allen 51
+                        # Zeilen leer, obwohl der Pflichten-Report genau sie
+                        # liest. Der Gesamtwert ist der selbst gerechnete, denn
+                        # das ist der, den der Kunde angezeigt bekommt.
+                        *werte_fuer_insert(scan_result, overall=overall_compliance_score)
                         )
                         logger.info(f"Saved scan history for website ID {website_id}" + (f" (triggered by legal update {legal_update_id})" if legal_update_id else ""))
                     except Exception as persist_error:

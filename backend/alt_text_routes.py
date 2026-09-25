@@ -137,6 +137,20 @@ async def generate_alt_texts(
 
     user_id = await require_site_ownership(request.site_id, current_user)
 
+    # Die Erlaubnis des Kontos vor dem Aufruf. Siehe ki_erlaubnis.py: die
+    # Datenschutzerklaerung sagt zu, die KI-gestuetzten Funktionen liessen sich
+    # ungenutzt lassen, und dieser Weg schickt Bildadressen der Kundenseite an
+    # Claude Vision in die USA.
+    from ki_erlaubnis import darf_ki
+    if not await darf_ki(db_pool, user_id):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Fuer dieses Konto sind KI-Funktionen abgeschaltet. "
+                "Alt-Text-Vorschlaege setzen ein Sprachmodell voraus."
+            ),
+        )
+
     try:
         generator = AIAltTextGenerator()
 
@@ -554,6 +568,17 @@ async def scan_images_for_alt_text(
     from ssrf_protection import validate_url, SSRFError
 
     user_id = await require_site_ownership(site_id, current_user)
+
+    # Wie bei /generate-alt-texts: erst die Erlaubnis, dann das Modell.
+    from ki_erlaubnis import darf_ki
+    if not await darf_ki(db_pool, user_id):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Fuer dieses Konto sind KI-Funktionen abgeschaltet. "
+                "Alt-Text-Vorschlaege setzen ein Sprachmodell voraus."
+            ),
+        )
 
     # SSRF: site_url wird serverseitig gerendert/abgerufen. Ohne Prüfung liesse
     # sich der Backend-Renderer als Proxy auf interne Dienste und

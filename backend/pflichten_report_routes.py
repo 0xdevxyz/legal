@@ -93,7 +93,7 @@ async def _latest_scan_pillars(db, user_id: int) -> Optional[Dict[str, Any]]:
     row = await db.fetchrow(
         """
         SELECT url, overall_score, accessibility_score, cookie_score,
-               legal_score, privacy_score, scan_date
+               legal_score, privacy_score, scan_date, jurisdiction
         FROM scan_history
         WHERE user_id = $1
         ORDER BY scan_date DESC NULLS LAST
@@ -113,6 +113,12 @@ async def _latest_scan_pillars(db, user_id: int) -> Optional[Dict[str, Any]]:
             "gdpr": row["privacy_score"],
         },
         "overall": row["overall_score"],
+        # Der Rechtsraum gehoert an die Zahl. Er bestimmt, welche Saeulen in den
+        # Gesamtwert eingehen, und damit ist derselbe Zustand derselben
+        # Website im Profil "de" mit 50 und im Profil "eu" mit 34 Punkten
+        # bewertet. NULL heisst: dieser Scan wurde gespeichert, bevor der
+        # Rechtsraum mitgeschrieben wurde.
+        "jurisdiction": row["jurisdiction"],
     }
 
 

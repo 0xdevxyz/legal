@@ -81,6 +81,47 @@ export default function SettingsPage() {
     'Content-Type': 'application/json',
   });
 
+  // KI-Erlaubnis des Kontos. null = noch nicht geladen; der Schalter bleibt
+  // dann aus, statt einen Zustand zu zeigen, den niemand abgefragt hat.
+  const [kiErlaubt, setKiErlaubt] = useState<boolean | null>(null);
+  const [kiSpeichert, setKiSpeichert] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== 'datenschutz' || kiErlaubt !== null) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/gdpr/ki-erlaubnis`, { headers: getHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        setKiErlaubt(Boolean(data.erlaubt));
+      } catch {
+        // Stillschweigend: ein nicht ladbarer Zustand darf die Seite nicht
+        // blockieren. Der Schalter bleibt dann ungesetzt und nicht falsch.
+      }
+    })();
+  }, [activeTab, kiErlaubt]);
+
+  const kiErlaubnisSetzen = async (wert: boolean) => {
+    setKiSpeichert(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/gdpr/ki-erlaubnis`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({ erlaubt: wert }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setKiErlaubt(Boolean(data.erlaubt));
+      showResult(data.erlaubt
+        ? 'KI-Funktionen sind für dieses Konto eingeschaltet.'
+        : 'KI-Funktionen sind für dieses Konto abgeschaltet. Prüfung und mechanische Reparaturen laufen weiter.');
+    } catch {
+      showResult('Die Einstellung konnte nicht gespeichert werden.', true);
+    } finally {
+      setKiSpeichert(false);
+    }
+  };
+
   const showResult = (msg: string, isError = false) => {
     if (isError) { setError(msg); setSuccess(''); }
     else { setSuccess(msg); setError(''); }
@@ -417,6 +458,39 @@ export default function SettingsPage() {
             {/* ── Datenschutz ── */}
             {activeTab === 'datenschutz' && (
               <div className="space-y-4">
+                <Card className="glass-card border-0">
+                  <CardHeader>
+                    <CardTitle className="dark:text-white text-gray-900 flex items-center gap-2 text-base">
+                      <Globe className="w-4 h-4 text-[color:var(--lime)]" />
+                      KI-gestützte Funktionen
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm dark:text-zinc-400 text-gray-600 mb-4">
+                      Für Alt-Text-Vorschläge zu Bildern wird die Bildadresse Ihrer Seite an
+                      ein Sprachmodell in den USA übermittelt. Sie können das abschalten.
+                      Die Prüfung selbst und die mechanischen Reparaturen, also Kontrast,
+                      Struktur und Cookie-Banner, laufen vollständig auf unseren Servern in
+                      Deutschland und bleiben davon unberührt.
+                    </p>
+                    <div className="flex items-center justify-between gap-4">
+                      <Label htmlFor="ki-erlaubnis" className="text-sm dark:text-zinc-300 text-gray-700">
+                        {kiErlaubt === null
+                          ? 'Einstellung wird geladen …'
+                          : kiErlaubt
+                            ? 'Eingeschaltet'
+                            : 'Abgeschaltet'}
+                      </Label>
+                      <Switch
+                        id="ki-erlaubnis"
+                        checked={kiErlaubt === true}
+                        disabled={kiErlaubt === null || kiSpeichert}
+                        onCheckedChange={kiErlaubnisSetzen}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
                 <Card className="glass-card border-0">
                   <CardHeader>
                     <CardTitle className="dark:text-white text-gray-900 flex items-center gap-2 text-base">

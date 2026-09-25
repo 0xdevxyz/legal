@@ -139,6 +139,30 @@ class AccessibilityPostScanProcessor:
             logger.info(f"🖼️ Found {len(alt_text_issues)} alt-text issues")
 
             # 3. Generiere AI Alt-Texte (Budget richtet sich nach dem Tarif des Kontos)
+            #
+            # Davor die Erlaubnis des Kontos. Die Datenschutzerklaerung sagt
+            # zu, die KI-gestuetzten Funktionen liessen sich ungenutzt lassen;
+            # bis zum 25.09.2026 war das an dieser Stelle nicht wahr, weil hier
+            # nur Budget und Tarif gefragt wurden. Die Bildadressen der
+            # Kundenseite gehen an Claude Vision ueber OpenRouter, also in die
+            # USA, und das ist der Vorgang, den ein Kunde abwaehlen koennen
+            # muss (siehe ki_erlaubnis.py).
+            from ki_erlaubnis import darf_ki
+            if not await darf_ki(self.db_pool, user_id):
+                logger.info(
+                    "Alt-Texte ohne KI fuer Konto %s: die Erlaubnis fehlt. "
+                    "Die dokumentweiten Reparaturen sind gespeichert.", user_id,
+                )
+                return {
+                    "success": True,
+                    "alt_texts_generated": 0,
+                    "document_fixes_generated": doc_saved,
+                    "ki_uebersprungen": True,
+                    "message": (
+                        "Alt-Text-Vorschlaege setzen ein Sprachmodell voraus. "
+                        "Fuer dieses Konto sind KI-Funktionen abgeschaltet."
+                    ),
+                }
             plan_type = await self._hole_plan_type(user_id)
             alt_text_fixes = await self._generate_alt_text_fixes(
                 alt_text_issues,
