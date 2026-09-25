@@ -1057,9 +1057,9 @@ class ComplianceScanner:
 
             # ✅ FIX v4.0: Evidenz-basierter Gesamtscore = Mittelwert der 4 Säulen,
             # ungeprüfte Säulen zählen NICHT als bestanden (Status UNVERIFIED).
+            aktive_saeulen = active_pillars(kontext.jurisdiction)
             _scores = ScoreCalculator.compute_with_status(
-                issues, unverified_pillars,
-                aktive_saeulen=active_pillars(kontext.jurisdiction),
+                issues, unverified_pillars, aktive_saeulen=aktive_saeulen,
             )
             compliance_score = _scores["overall_score"]
             _pillar_scores = _scores["pillar_scores"]
@@ -1093,6 +1093,29 @@ class ComplianceScanner:
                     for pillar, score in _pillar_scores.items()
                 ],
                 "pillar_status": _pillar_status,
+                # Der Rechtsraum gehoert an die Zahl, nicht in die Fussnote.
+                #
+                # Gemessen am 23.09.2026 auf panoart360.de: im Profil "de" 50
+                # Punkte ueber vier Saeulen, im Profil "eu" 34 ueber drei. Der
+                # EU-Wert liegt NIEDRIGER, obwohl die Website dieselbe ist und
+                # kein einziger Befund hinzukam: die gut bewertete Saeule
+                # "legal" faellt weg, weil es dort keine Impressumspflicht nach
+                # deutschem Recht gibt.
+                #
+                # Das ist richtig gerechnet und trotzdem gefaehrlich. Zwei
+                # Punktestaende aus verschiedenen Rechtsraeumen nebeneinander
+                # legen einen Vergleich nahe, den die Zahlen nicht hergeben.
+                # Wer sie vergleichen will, muss wenigstens sehen, dass er es
+                # nicht darf.
+                "jurisdiction": kontext.jurisdiction,
+                "gewertete_saeulen": aktive_saeulen,
+                "score_hinweis": (
+                    "Der Punktestand ist das Mittel ueber die Saeulen, die im "
+                    f"Rechtsraum '{kontext.jurisdiction}' gelten "
+                    f"({', '.join(aktive_saeulen)}). Punktestaende aus "
+                    "verschiedenen Rechtsraeumen sind deshalb nicht "
+                    "miteinander vergleichbar."
+                ),
                 # Ehrlichkeits-Layer: Automatik-Grenzen + manuelle Pruef-Anleitungen
                 # ("erkennen ODER anleiten" — nichts bleibt stillschweigend offen).
                 "pillar_notes": _scores.get("pillar_notes", {}),

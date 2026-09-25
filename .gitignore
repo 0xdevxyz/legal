@@ -165,3 +165,19 @@ knowledge/laws/*/*/
 # Sie gehoeren zum Betrieb dieser einen Maschine, nicht in den Quelltext.
 data/waechter/
 data/verfuegbarkeit/
+
+# Ausbeute des Rechts-Update-Laeufers (25.09.2026).
+#
+# KNOWLEDGE_VAULT_PATH zeigt standardmaessig in die Arbeitskopie, also schreibt
+# der taegliche Cron seine Funde mitten ins Repository. Das Ergebnis war ein
+# dauerhaft schmutziger Baum: 35 unversionierte Dateien, in denen eine echte
+# Aenderung untergeht. Genau davor warnt der Grundsatz, vor jedem Deploy erst
+# git status zu lesen: eine Liste, die man gewohnheitsmaessig ueberblaettert,
+# warnt nicht mehr.
+#
+# Die Dateien selbst sind kein Verlust: sie tragen ihr Datum im Namen, werden
+# nie ueberschrieben und entstehen aus den Quellen neu. Die acht bereits
+# versionierten bleiben liegen, wo sie sind, denn gitignore greift nur fuer
+# noch nicht verfolgte Dateien.
+knowledge/updates/*.md
+knowledge/patterns/*.md

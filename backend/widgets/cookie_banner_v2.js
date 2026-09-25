@@ -800,9 +800,27 @@
             let serverTexts = null;
             if (serverConfig.texts && serverConfig.texts[browserLang]) {
                 serverTexts = serverConfig.texts[browserLang];
-            } else if (serverConfig.texts && serverConfig.texts['de']) {
-                serverTexts = serverConfig.texts['de'];
             }
+            // KEIN Rueckfall mehr auf 'de' (25.09.2026).
+            //
+            // Zwei Zeilen darueber wurden gerade die eingebauten Uebersetzungen
+            // fuer die Sprache des Besuchers hineingemischt; translations.js
+            // haelt sie fuer alle 17 erkannten Sprachen bereit. Der alte
+            // Rueckfall hat sie anschliessend mit dem deutschen Text des Kunden
+            // wieder ueberschrieben, und zwar immer: die gespeicherte
+            // Konfiguration enthaelt bei jedem Kunden genau eine Sprache, weil
+            // die Standardtexte im Server nur Deutsch anlegen.
+            //
+            // Ergebnis war ein deutsches Banner fuer jeden nichtdeutschen
+            // Besucher, obwohl die Uebersetzung daneben lag. Eine Einwilligung,
+            // die der Besucher nicht lesen kann, ist keine informierte
+            // Einwilligung (Art. 4 Nr. 11 DSGVO).
+            //
+            // Jetzt gilt: der eigene Text des Kunden schlaegt die eingebaute
+            // Uebersetzung nur dort, wo er in der Sprache des Besuchers
+            // vorliegt. Sonst bleibt die Uebersetzung stehen. Ein allgemeiner
+            // Text, den jemand versteht, ist mehr wert als ein eigener, den er
+            // nicht liest.
             
             if (serverTexts) {
                 const mapped = {

@@ -206,3 +206,29 @@ def test_mehrere_laender_moeglich():
     gatter = {"always": True, "land": ["de", "eu"]}
     assert _gate_passes(gatter, LEER, "", "eu") is True
     assert _gate_passes(gatter, LEER, "", "de") is True
+
+
+# ---------------------------------------------------------------------------
+# Der Punktestand traegt seinen Rechtsraum mit
+# ---------------------------------------------------------------------------
+def test_ergebnis_nennt_den_rechtsraum_und_die_gewerteten_saeulen():
+    """Gemessen am 23.09.2026 auf panoart360.de: de 50, eu 34.
+
+    Dieselbe Website, kein zusaetzlicher Befund, sechzehn Punkte Unterschied,
+    nur weil die Saeule "legal" im EU-Profil wegfaellt. Richtig gerechnet und
+    trotzdem gefaehrlich: zwei solche Zahlen nebeneinander legen einen
+    Vergleich nahe, den sie nicht hergeben.
+    """
+    assert '"jurisdiction": kontext.jurisdiction' in QUELLE, (
+        "Das Ergebnis nennt den Rechtsraum nicht. Dann steht die Zahl nackt da.")
+    assert '"gewertete_saeulen"' in QUELLE
+    assert '"score_hinweis"' in QUELLE, (
+        "Es fehlt der Satz, dass Punktestaende aus verschiedenen Rechtsraeumen "
+        "nicht vergleichbar sind.")
+
+
+def test_der_hinweis_nennt_die_unvergleichbarkeit_ausdruecklich():
+    i = QUELLE.index('"score_hinweis"')
+    stelle = QUELLE[i:i + 600]
+    assert "nicht" in stelle and "vergleichbar" in stelle, (
+        "Der Hinweis sagt nicht, worauf es ankommt.")
