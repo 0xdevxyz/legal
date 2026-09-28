@@ -1,6 +1,8 @@
 'use client';
 import React from 'react';
 import { Check, ArrowRight, Sparkles } from 'lucide-react';
+import { useHerkunft, mitHerkunft } from '@/lib/herkunft';
+import { PLAETZE, PREIS_EARLY } from '@/components/kampagne/angebot';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de';
 
@@ -100,6 +102,9 @@ const PLANS: Plan[] = [
 ];
 
 export default function PricingSection() {
+  // Herkunft (utm) reist mit in die Registrierung, damit ein Kauf seinem
+  // Kanal zugeordnet werden kann. Siehe lib/herkunft.ts.
+  const herkunft = useHerkunft();
   return (
     <section id="preise" className="bg-gray-50 py-20 scroll-mt-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -139,6 +144,12 @@ export default function PricingSection() {
                 <span className="text-sm text-gray-500">{plan.period}</span>
               </div>
               <p className="text-xs text-gray-500 mb-6 min-h-[16px]">{plan.note ?? ''}</p>
+              {plan.id === 'pro' && (
+                <p className="text-xs text-akzent-800 -mt-4 mb-6">
+                  Early Access: die ersten {PLAETZE} bestätigten Plätze zahlen {PREIS_EARLY} für zwölf Monate.{' '}
+                  <a href="#anmeldung" className="underline underline-offset-2 hover:text-akzent-900">Platz sichern</a>
+                </p>
+              )}
 
               <ul className="space-y-3 mb-8 flex-1">
                 {plan.features.map((feature, i) => (
@@ -150,7 +161,7 @@ export default function PricingSection() {
               </ul>
 
               <a
-                href={plan.href}
+                href={mitHerkunft(plan.href, herkunft)}
                 className={`inline-flex items-center justify-center gap-2 w-full font-semibold px-5 py-3 rounded-xl transition-colors ${
                   plan.highlighted
                     ? 'bg-akzent-400 hover:bg-akzent-500 text-gray-900 shadow-md shadow-akzent-100'
@@ -195,7 +206,7 @@ export default function PricingSection() {
         </div>
 
         <p className="text-center text-xs text-gray-500 mt-6">
-          Alle Preise zzgl. MwSt. · Abos monatlich kündbar · Zahlung per Karte oder SEPA-Lastschrift
+          Alle Preise zzgl. MwSt. · Abos monatlich kündbar · Zahlung per Karte und den im Checkout angezeigten Bezahlarten
         </p>
         {/* Die Klarstellung gehoert dorthin, wo bestellt wird — nicht nur in die
             AGB. Nur so ist vor Vertragsschluss erkennbar, dass sich das Angebot
