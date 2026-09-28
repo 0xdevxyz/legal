@@ -791,3 +791,41 @@ class TestZustellbarkeit:
         # Der Besucher soll den Tippfehler selbst beheben koennen.
         assert "Schreibweise" in response.json()["detail"]
         mock_db.get_connection.assert_not_called()
+
+
+class TestBestaetigungslinkZeigtAufDieApi:
+    """Der Link in der Bestaetigungsmail muss den Endpunkt erreichen.
+
+    Befund 28.09.2026: Der Link wurde aus FRONTEND_URL gebaut, im Container
+    https://complyo.de. Dort geht /api/ an die Next-Landing, und
+    `curl -L https://complyo.de/api/leads/waitlist/confirm?token=x` endete in
+    404. Seit dem Start der Warteliste konnte niemand bestaetigen; der einzige
+    Eintrag vom 07.09. hat keine Platznummer. Die Tests oben riefen den
+    Endpunkt direkt auf und sahen deshalb nie, wohin die Mail zeigt.
+    """
+
+    @patch("lead_routes.email_service")
+    @patch("lead_routes.db_service")
+    def test_link_geht_an_die_api_nicht_an_die_landing(self, mock_db, mock_email, client, monkeypatch):
+        monkeypatch.setenv("FRONTEND_URL", "https://complyo.de")
+        monkeypatch.delenv("PUBLIC_API_BASE", raising=False)
+        verbindung(mock_db, fetchrow=[None])
+        mock_email.send_waitlist_confirmation = MagicMock(return_value=True)
+
+        response = client.post("/api/leads/waitlist", json=gueltige_daten())
+
+        assert response.status_code == 200
+        link = mock_email.send_waitlist_confirmation.call_args.args[2]
+        assert link.startswith("https://api.complyo.de/api/leads/waitlist/confirm?token="), link
+
+    @patch("lead_routes.email_service")
+    @patch("lead_routes.db_service")
+    def test_basis_kommt_aus_public_api_base(self, mock_db, mock_email, client, monkeypatch):
+        monkeypatch.setenv("PUBLIC_API_BASE", "https://api.beispiel.test/")
+        verbindung(mock_db, fetchrow=[None])
+        mock_email.send_waitlist_confirmation = MagicMock(return_value=True)
+
+        client.post("/api/leads/waitlist", json=gueltige_daten())
+
+        link = mock_email.send_waitlist_confirmation.call_args.args[2]
+        assert link.startswith("https://api.beispiel.test/api/leads/waitlist/confirm?token="), link
