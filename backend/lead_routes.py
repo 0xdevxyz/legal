@@ -508,8 +508,10 @@ async def join_waitlist(
                 angebot,
             )
 
-        frontend_url = os.getenv("FRONTEND_URL", "https://complyo.de")
-        confirm_url = f"{frontend_url}/api/leads/waitlist/confirm?token={confirm_token}"
+        # Der Link muss ans Backend. complyo.de gibt /api/ an die Landing weiter
+        # (308 auf 404), deshalb nicht FRONTEND_URL, sondern der API-Host.
+        api_base = os.getenv("PUBLIC_API_BASE", "https://api.complyo.de").rstrip("/")
+        confirm_url = f"{api_base}/api/leads/waitlist/confirm?token={confirm_token}"
 
         background_tasks.add_task(
             email_service.send_waitlist_confirmation,

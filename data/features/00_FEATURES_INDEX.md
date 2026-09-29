@@ -21,17 +21,17 @@
 |---|---|---|---|
 | **Scan-/Analyse-Kern** (Quick/Deep/Complete, Check-Registry, Score, Issue-Grouping) | [scan-analyze-kern.md](scan-analyze-kern.md) | 🟢 live | 2026-07-17 |
 | **Regulierungs-Radar** (BFSG-Report + AI-Act-Transparenz-Check im Free-Scan) | [regulierungs-radar.md](regulierungs-radar.md) | 🟢 live | 2026-07-17 |
-| **Pflichten-Report** (Firmenprofil → 13 Pflichten + lebender Änderungs-Feed; Premium-Gating) | [pflichten-report.md](pflichten-report.md) | 🟢 live (7.2+7.3) | 2026-07-17 |
+| **Pflichten-Report** (Firmenprofil → 13 Pflichten + lebender Änderungs-Feed; Premium-Gating) | [pflichten-report.md](pflichten-report.md) | 🟢 live (Report, Feed, Abmahn-Radar; Tarifempfehlung nur API) | 2026-09-28 |
 | **KI-Fix-Engine** (Fix-Generierung, Quality-Gate, Review-Kette, Fix-Jobs-Queue) | [ai-fix-engine.md](ai-fix-engine.md) | 🟢 Review-Kette + Gating live | 2026-07-30 |
-| **Cookie-Consent-Widget** (ausgeliefertes JS: Banner v2, Content-Blocker, Consent Mode) | [cookie-consent-widget.md](cookie-consent-widget.md) | 🟢 live (tote Pfade bereinigt) | 2026-07-17 |
-| **Cookie-Consent-Management** (Server: Consent-Logging, Katalog, Banner-Config) | [cookie-consent-management.md](cookie-consent-management.md) | 🟡 in Arbeit | 2026-07-17 |
+| **Cookie-Consent-Widget** (ausgeliefertes JS: Banner v2, Content-Blocker, Consent Mode) | [cookie-consent-widget.md](cookie-consent-widget.md) | 🟢 live (Banner in Besuchersprache, XSS- und Kontrastfixes; offen: kein Cache/Minify, TCF-Stub, zwei Blocker) | 2026-09-28 |
+| **Cookie-Consent-Management** (Server: Consent-Logging, Katalog, Banner-Config) | [cookie-consent-management.md](cookie-consent-management.md) | 🟢 live (Zusatzmodule repariert, Nachweis mit Banner-Fassung und gepfeffertem IP-Hash; offen: widersprüchliche Aufbewahrungsfrist) | 2026-09-28 |
 | **Legal Text Generator** (KI-Rechtstexte: Impressum, Datenschutz, AGB, Cookie, Widerruf) | [legal-text-generator.md](legal-text-generator.md) | 🟢 live (Auto-Update jetzt live) | 2026-07-17 |
-| **Legal-Change-Monitoring** (EUR-Lex/RSS/KI-Recherche, Klassifikation, Benachrichtigung) | [legal-change-monitoring.md](legal-change-monitoring.md) | 🟡 in Arbeit | 2026-07-17 |
+| **Legal-Change-Monitoring** (EUR-Lex/RSS/KI-Recherche, Klassifikation, Benachrichtigung) | [legal-change-monitoring.md](legal-change-monitoring.md) | 🟢 live (Kette läuft täglich; offen: Mail-Benachrichtigung ohne Cron, Auto-Rechtstexte unvollständig) | 2026-09-28 |
 | **AI-Act-Compliance** ("ComplyoAI Guard": KI-Register, Risikoklassifizierung, Doku) | [ai-act-compliance.md](ai-act-compliance.md) | 🟡 in Arbeit | 2026-07-17 |
-| **Jurisdiction-Kontext** (internationale Compliance Stufe 1) | [jurisdiction-kontext.md](jurisdiction-kontext.md) | 🟡 Fundament, ohne Wirkung | 2026-07-17 |
-| **Billing / Pläne / Add-ons** (Stripe-Abos, Checkout, Webhooks, Plan-Gating) | [billing-plans-addons.md](billing-plans-addons.md) | 🟡 in Arbeit | 2026-07-17 |
+| **Jurisdiction-Kontext** (internationale Compliance Stufe 1) | [jurisdiction-kontext.md](jurisdiction-kontext.md) | 🟡 Engine rechtsraumfähig (Block 0+1), nicht angeschlossen: alle Live-Scans laufen als de | 2026-09-28 |
+| **Billing / Pläne / Add-ons** (Stripe-Abos, Checkout, Webhooks, Plan-Gating) | [billing-plans-addons.md](billing-plans-addons.md) | 🟢 live (Kaufweg seit 14.09.; Add-on-Freischaltung und Webhook-Überkreuzung fehlerhaft) | 2026-09-28 |
 | **Agentur / White-Label** (Kundengruppen, Logo, Kundenreports, Agentur-Stats) | [agentur-white-label.md](agentur-white-label.md) | 🟢 live | 2026-07-17 |
-| **Lead-/Free-Scan-Funnel** (Scan ohne Login, Double-Opt-in, Warteliste) | [lead-free-scan-funnel.md](lead-free-scan-funnel.md) | 🟡 in Arbeit (leads-Tabelle+Auth gefixt; Double-Opt-in offen) | 2026-07-17 |
+| **Lead-/Free-Scan-Funnel** (Scan ohne Login, Double-Opt-in, Warteliste) | [lead-free-scan-funnel.md](lead-free-scan-funnel.md) | 🟢 live (Warteliste, Double-Opt-in, Scan ohne Login, Kurzlinks) | 2026-09-28 |
 | **Alt-Text-KI-Generierung** (Vision-KI für Bild-Alternativtexte + Patches) | [alt-text-ki-generierung.md](alt-text-ki-generierung.md) | 🟢 live | 2026-07-17 |
 | **WordPress-Plugin** (Widget, Inline-Blocker, A11y-Remediation, Local Fonts) | [wordpress-plugin.md](wordpress-plugin.md) | 🟢 live (v2.6.0) | 2026-07-17 |
 | **Joomla-Plugin** (nur Widget-Einbindung) | [joomla-plugin.md](joomla-plugin.md) | 🟡 Teilstand (v2.1.0) | 2026-07-17 |
@@ -41,7 +41,7 @@
 | **Knowledge-Base / Gesetzes-Vault** (Obsidian-Vault: Gesetze + Templates) | [knowledge-base-gesetzes-vault.md](knowledge-base-gesetzes-vault.md) | 🟡 in Arbeit | 2026-07-17 |
 | **AVV/DPA-Generator** (Auftragsverarbeitungsvertrag) | [avv-dpa-generator.md](avv-dpa-generator.md) | 🟡 nur HTML-Rendering | 2026-07-17 |
 | **TCF 2.2** (IAB-Vendorliste, TCF-Config) | [tcf-2-2.md](tcf-2-2.md) | 🟡 nicht IAB-registriert | 2026-07-17 |
-| **DSGVO-Betroffenenrechte** (Auskunft/Löschung/Export, Retention) | [dsgvo-betroffenenrechte.md](dsgvo-betroffenenrechte.md) | 🟡 teilbehoben (Cleanup+Auth gefixt) | 2026-07-17 |
+| **DSGVO-Betroffenenrechte** (Auskunft/Löschung/Export, Retention) | [dsgvo-betroffenenrechte.md](dsgvo-betroffenenrechte.md) | 🟢 live (Export, zweistufige Löschung, KI-Erlaubnis, Löschfristen; offen: Löschknopf nur per Mail, zwei Fristen für Einwilligungsprotokolle) | 2026-09-28 |
 | **MCP-Server** (Complyo-API für KI-Agenten unter `/mcp`) | [mcp-server.md](mcp-server.md) | 🟢 kuratierte Allowlist (12 Tools) + Rate-Limit | 2026-07-30 |
 | **Channel HTML-CLI** (Fix-Manifest auf statische Projekte anwenden) | [channel-html-cli.md](channel-html-cli.md) | 🟢 live | 2026-07-17 |
 | **Risiko-Radar** (Score-Trend, Frühwarnung) | [risiko-radar.md](risiko-radar.md) | 🟡 Backend ohne UI | 2026-07-17 |
