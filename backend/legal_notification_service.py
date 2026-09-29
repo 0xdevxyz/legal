@@ -16,6 +16,8 @@ import os
 import logging
 from jinja2 import Template
 
+from adressen import dashboard_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,7 +30,8 @@ class LegalNewsNotificationService:
         self.smtp_password = os.getenv('SMTP_PASSWORD', '')
         self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.de')
         self.sender_name = os.getenv('SENDER_NAME', 'Complyo Legal Updates')
-        self.frontend_url = os.getenv('FRONTEND_URL', 'https://app.complyo.de')
+        # Alle Links dieser Mails gehen ins Dashboard (adressen.py).
+        self.frontend_url = dashboard_url()
         self.environment = os.getenv('ENVIRONMENT', 'development')
         self.demo_mode = not all([self.smtp_username, self.smtp_password])
         
