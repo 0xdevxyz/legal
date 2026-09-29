@@ -37,6 +37,7 @@ from dependencies import get_client_ip
 from schemas.auth import LoginResponse, RegisterResponse, RefreshResponse, MeResponse
 from compliance_engine.jurisdictions import DEFAULT_JURISDICTION
 import konto_token
+from adressen import dashboard_url
 import passwort_richtlinie
 import zweiter_faktor
 
@@ -803,7 +804,7 @@ async def google_oauth_callback(code: str, state: str):
         
         # Set HttpOnly cookie and redirect cleanly — never put tokens in URL fragments
         is_secure = os.getenv("ENVIRONMENT", "production") == "production"
-        frontend_url = os.getenv("FRONTEND_URL", "https://app.complyo.de")
+        frontend_url = dashboard_url()
         response = RedirectResponse(url=f"{frontend_url}/auth/callback?provider=google&status=ok")
         response.set_cookie(
             key="access_token_once",
@@ -889,7 +890,7 @@ async def apple_oauth_callback(code: str, state: str):
         refresh_token = await auth_service.create_refresh_token(user['id'])
         
         is_secure = os.getenv("ENVIRONMENT", "production") == "production"
-        frontend_url = os.getenv("FRONTEND_URL", "https://app.complyo.de")
+        frontend_url = dashboard_url()
         response = RedirectResponse(url=f"{frontend_url}/auth/callback?provider=apple&status=ok")
         response.set_cookie(
             key="access_token_once",
@@ -1033,8 +1034,12 @@ def _frontend_url() -> str:
     Oberflaeche stand hier `https://complyo.de` als Rueckfall und damit auf
     einer Domain, die /konto/passwort-neu gar nicht kennt — jeder Link in einer
     Zuruecksetzen-Mail waere ins Leere gelaufen.
+
+    Genau das geschah trotzdem: docker-compose ueberschrieb FRONTEND_URL im
+    Backend mit der Startseite. Seit 29.09.2026 eigene Variable, siehe
+    adressen.py.
     """
-    return os.getenv("FRONTEND_URL", "https://app.complyo.de").rstrip("/")
+    return dashboard_url()
 
 
 async def pruefe_zweiten_faktor(user_id: int, eingabe: Optional[str]) -> bool:

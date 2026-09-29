@@ -12,6 +12,8 @@ from typing import Dict, Any, List
 from datetime import datetime
 import logging
 
+from adressen import dashboard_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +25,8 @@ class AIComplianceNotificationService:
         self.smtp_password = os.getenv('SMTP_PASSWORD', '')
         self.sender_email = os.getenv('SENDER_EMAIL', 'noreply@complyo.de')
         self.sender_name = os.getenv('SENDER_NAME', 'Complyo AI Compliance')
-        self.frontend_url = os.getenv('FRONTEND_URL', 'https://app.complyo.de')
+        # Alle Links dieser Mails gehen ins Dashboard (adressen.py).
+        self.frontend_url = dashboard_url()
         self.environment = os.getenv('ENVIRONMENT', 'development')
         self.demo_mode = not all([self.smtp_username, self.smtp_password])
 

@@ -31,6 +31,7 @@ import asyncpg  # noqa: E402
 
 import konto_token  # noqa: E402
 import loeschfristen  # noqa: E402
+from adressen import dashboard_url  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -50,7 +51,8 @@ async def _ruhende_konten(pool, trocken: bool) -> dict:
     from email_service import email_service
     from gdpr_retention_service import gdpr_service
 
-    frontend = os.getenv("FRONTEND_URL", "https://complyo.de").rstrip("/")
+    # Anmeldung liegt im Dashboard; complyo.de/login ist 404 (adressen.py).
+    frontend = dashboard_url()
     bericht = {"angekuendigt": 0, "geloescht": 0, "fehler": []}
 
     for konto in await loeschfristen.finde_ruhende_konten(pool):
