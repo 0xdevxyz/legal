@@ -14,9 +14,9 @@ import smtplib
 import ssl
 import os
 import logging
-from jinja2 import Template
 
-from adressen import dashboard_url
+from adressen import dashboard_url, api_url
+import mail_layout
 
 logger = logging.getLogger(__name__)
 
@@ -183,8 +183,13 @@ class LegalNewsNotificationService:
                 notification_id
             )
             
-            confirm_url = f"{self.frontend_url}/legal/confirm/{notification['confirmation_token']}"
-            dismiss_url = f"{self.frontend_url}/legal/dismiss/{notification['confirmation_token']}"
+            # Die Knoepfe gehen an die API, die bestaetigt und dann ins
+            # Dashboard weiterleitet. Bis zum 29.09.2026 zeigten sie auf
+            # /legal/confirm und /legal/dismiss im Frontend, und diese Seiten
+            # gibt es weder auf der Startseite noch im Dashboard (404).
+            token = notification['confirmation_token']
+            confirm_url = f"{api_url()}/api/legal-notifications/confirm/{token}"
+            dismiss_url = f"{api_url()}/api/legal-notifications/dismiss/{token}"
             
             subject = self._get_email_subject(news)
             html_body = self._get_notification_email_template(user, news, confirm_url, dismiss_url)
@@ -226,14 +231,6 @@ class LegalNewsNotificationService:
         dismiss_url: str
     ) -> str:
         """HTML-Template für Legal News Benachrichtigung"""
-        severity_colors = {
-            'critical': '#dc3545',
-            'warning': '#fd7e14',
-            'high': '#ffc107',
-            'medium': '#17a2b8',
-            'low': '#6c757d',
-            'info': '#6c757d'
-        }
         
         severity_labels = {
             'critical': 'KRITISCH - Sofortiger Handlungsbedarf',
@@ -244,113 +241,53 @@ class LegalNewsNotificationService:
             'info': 'Information'
         }
         
-        color = severity_colors.get(news['severity'], '#6c757d')
         label = severity_labels.get(news['severity'], 'Information')
-        
-        template = Template("""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gesetzesänderung - Complyo</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
-    <div style="background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-        <div style="background: {{ color }}; color: white; padding: 20px; text-align: center;">
-            <h1 style="margin: 0; font-size: 24px;">Complyo Legal Update</h1>
-            <p style="margin: 10px 0 0 0; font-size: 14px; opacity: 0.9;">{{ severity_label }}</p>
-        </div>
-        
-        <div style="padding: 30px;">
-            <h2 style="color: #333; margin-top: 0; font-size: 20px;">{{ title }}</h2>
-            
-            <div style="background: #f8f9fa; border-left: 4px solid {{ color }}; padding: 15px; margin: 20px 0; border-radius: 0 4px 4px 0;">
-                <p style="margin: 0; font-size: 14px;">{{ summary }}</p>
-            </div>
-            
-            <div style="margin: 20px 0;">
-                <p style="margin: 0 0 5px 0; font-size: 12px; color: #666;">
-                    <strong>Quelle:</strong> {{ source }}
-                </p>
-                <p style="margin: 0 0 5px 0; font-size: 12px; color: #666;">
-                    <strong>Veröffentlicht:</strong> {{ published_date }}
-                </p>
-                {% if url %}
-                <p style="margin: 0; font-size: 12px;">
-                    <a href="{{ url }}" style="color: #667eea;">Originalartikel lesen</a>
-                </p>
-                {% endif %}
-            </div>
-            
-            <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 4px; margin: 20px 0;">
-                <h4 style="margin: 0 0 10px 0; color: #856404;">Was bedeutet das für Sie?</h4>
-                <p style="margin: 0; font-size: 14px; color: #856404;">
-                    Diese Änderung könnte Auswirkungen auf Ihre Website-Compliance haben. 
-                    Bitte prüfen Sie, ob Handlungsbedarf besteht.
-                </p>
-            </div>
-            
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="{{ confirm_url }}" 
-                   style="background: {{ color }}; 
-                          color: white; 
-                          text-decoration: none; 
-                          padding: 15px 30px; 
-                          border-radius: 25px; 
-                          font-weight: bold; 
-                          display: inline-block;
-                          margin: 5px;">
-                    Zur Kenntnis genommen
-                </a>
-                <br><br>
-                <a href="{{ dismiss_url }}" 
-                   style="color: #666; 
-                          text-decoration: underline; 
-                          font-size: 12px;">
-                    Nicht relevant für mich
-                </a>
-            </div>
-            
-            <div style="background: #e3f2fd; border-radius: 4px; padding: 15px; margin-top: 20px;">
-                <h4 style="margin: 0 0 10px 0; color: #1976d2;">Benötigen Sie Unterstützung?</h4>
-                <p style="margin: 0; font-size: 14px;">
-                    Mit Complyo Pro können Sie Compliance-Änderungen automatisch analysieren 
-                    und mit KI-Unterstützung umsetzen lassen.
-                </p>
-                <a href="{{ frontend_url }}/upgrade" style="color: #1976d2; font-weight: bold;">
-                    Mehr erfahren
-                </a>
-            </div>
-        </div>
-        
-        <div style="background: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; color: #666;">
-            <p style="margin: 0 0 10px 0;">
-                <a href="{{ frontend_url }}/settings/notifications" style="color: #667eea;">
-                    Benachrichtigungseinstellungen ändern
-                </a>
-            </p>
-            <p style="margin: 0;">
-                Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin | 
-                <a href="mailto:datenschutz@complyo.de" style="color: #667eea;">datenschutz@complyo.de</a>
-            </p>
-        </div>
-    </div>
-</body>
-</html>
-        """)
-        
-        return template.render(
-            color=color,
-            severity_label=label,
-            title=news['title'],
-            summary=news['summary'] or news['content'][:300] + '...',
-            source=news['source'],
-            published_date=news['published_date'].strftime('%d.%m.%Y'),
-            url=news.get('url', ''),
-            confirm_url=confirm_url,
-            dismiss_url=dismiss_url,
-            frontend_url=self.frontend_url
+        ton = {'critical': 'gefahr', 'warning': 'warnung', 'high': 'warnung'}.get(
+            news['severity'], 'info')
+
+        # Titel und Zusammenfassung stammen aus fremden Nachrichtenquellen. Das
+        # Jinja-Template lief ohne Autoescape, beides ging roh ins HTML.
+        e = mail_layout.escape
+        titel = e(news['title'] or '')
+        zusammenfassung = e(news['summary'] or (news['content'] or '')[:300] + '...')
+        zeilen = [
+            ("Quelle", e(str(news['source'] or ''))),
+            ("Veröffentlicht", news['published_date'].strftime('%d.%m.%Y')),
+        ]
+        if news.get('url'):
+            zeilen.append(("Original", f'<a href="{e(news["url"], quote=True)}" '
+                                       'style="color:#00706c;">Artikel lesen</a>'))
+        einstellungen = e(f"{self.frontend_url}/settings", quote=True)
+        return mail_layout.seite(
+            "Gesetzesänderung - Complyo",
+            news['title'] or "Gesetzesänderung",
+            mail_layout.kopf(e(label), titel),
+            mail_layout.hinweis("Worum es geht", zusammenfassung, ton=ton),
+            mail_layout.angaben(zeilen),
+            mail_layout.text(
+                "<strong>Was bedeutet das für Sie?</strong><br>Diese Änderung könnte "
+                "Auswirkungen auf Ihre Website-Compliance haben. Bitte prüfen Sie, ob "
+                "Handlungsbedarf besteht."
+            ),
+            mail_layout.aktion("", "Zur Kenntnis genommen", e(confirm_url, quote=True)),
+            mail_layout.text(
+                f'<a href="{e(dismiss_url, quote=True)}" style="color:#4b5563;'
+                'font-size:14px;">Nicht relevant für mich</a>'
+            ),
+            mail_layout.hinweis(
+                "Benötigen Sie Unterstützung?",
+                "Mit Complyo Pro können Sie Compliance-Änderungen automatisch analysieren "
+                "und mit KI-Unterstützung umsetzen lassen. "
+                f'<a href="{e(self.frontend_url + "/subscription", quote=True)}" '
+                'style="color:#00706c;font-weight:700;">Mehr erfahren</a>',
+            ),
+            mail_layout.gruss(),
+            mail_layout.kontakt(),
+            mail_layout.fuss(
+                f'<a href="{einstellungen}" style="color:#5b6b78;">'
+                "Benachrichtigungseinstellungen ändern</a>",
+                mail_layout.rechtliches(),
+            ),
         )
     
     def _get_notification_email_text(
@@ -394,7 +331,7 @@ Nicht relevant für mich: {dismiss_url}
 
 ---
 
-Benachrichtigungseinstellungen: {self.frontend_url}/settings/notifications
+Benachrichtigungseinstellungen: {self.frontend_url}/settings
 
 Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin | datenschutz@complyo.de
         """
@@ -624,25 +561,26 @@ Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin | datenschutz@complyo.de
                 # 3. E-Mail bei hoher Severity
                 if severity in ("critical", "high") and user_email:
                     subject = f"[Complyo] Neu scannen empfohlen: {title[:60]}"
-                    html_body = f"""
-                    <p>Hallo,</p>
-                    <p>eine gesetzliche Änderung wurde erkannt, die Ihre Website betreffen könnte:</p>
-                    <p><strong>{title}</strong></p>
-                    <p>Wir empfehlen, Ihre Website erneut zu scannen, um sicherzustellen,
-                    dass Sie weiterhin konform sind.</p>
-                    <p>
-                      <a href="{self.frontend_url}/dashboard" style="
-                        background:#4f46e5;color:#fff;padding:10px 20px;
-                        border-radius:6px;text-decoration:none;font-weight:600;
-                      ">Jetzt neu scannen</a>
-                    </p>
-                    <p style="color:#666;font-size:12px;">
-                      Diese E-Mail wurde automatisch von Complyo versendet.
-                    </p>
-                    """
+                    html_body = mail_layout.seite(
+                        "Neu scannen empfohlen",
+                        title,
+                        mail_layout.kopf("Gesetzesänderung", "Neu scannen empfohlen"),
+                        mail_layout.text(
+                            "Hallo,",
+                            "eine gesetzliche Änderung wurde erkannt, die Ihre Website "
+                            f"betreffen könnte: <strong>{mail_layout.escape(title)}</strong>",
+                            "Ein neuer Scan zeigt, ob Ihre Website die geänderte "
+                            "Anforderung erfüllt.",
+                        ),
+                        mail_layout.aktion("", "Jetzt neu scannen", mail_layout.escape(
+                            f"{self.frontend_url}/dashboard", quote=True)),
+                        mail_layout.gruss(),
+                        mail_layout.fuss("Diese E-Mail wurde automatisch von complyo versendet.",
+                                         mail_layout.rechtliches()),
+                    )
                     text_body = (
                         f"Gesetzliche Änderung erkannt: {title}\n\n"
-                        f"Wir empfehlen, Ihre Website zu überprüfen.\n\n"
+                        f"Ein neuer Scan zeigt, ob Ihre Website die geänderte Anforderung erfüllt.\n\n"
                         f"Zum Dashboard: {self.frontend_url}/dashboard\n"
                     )
                     await self._send_email(user_email, subject, html_body, text_body)

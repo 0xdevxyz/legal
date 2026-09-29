@@ -114,6 +114,64 @@ def aktion(ueberschrift: str, knopf_text: str, url: str) -> str:
     )
 
 
+def angaben(zeilen, titel: str = "") -> str:
+    """Bezeichnung links, Wert rechts. Werte kommen maskiert herein."""
+    kopfzeile = (f'<div style="color:{TEXT};font-size:20px;font-weight:700;'
+                 f'margin:0 0 18px;">{titel}</div>') if titel else ""
+    reihen = "".join(
+        '<tr>'
+        f'<td valign="top" style="padding:0 16px 12px 0;width:40%;color:{TEXT_LEISE};'
+        f'font-family:{SCHRIFT};font-size:14px;">{bez}</td>'
+        f'<td valign="top" style="padding:0 0 12px;color:{TEXT};font-family:{SCHRIFT};'
+        f'font-size:15px;word-break:break-word;">{wert}</td>'
+        '</tr>'
+        for bez, wert in zeilen
+    )
+    return karte(
+        kopfzeile + '<table role="presentation" width="100%" cellpadding="0" '
+        f'cellspacing="0" border="0">{reihen}</table>',
+        innen="30px 40px 20px",
+    )
+
+
+def liste(titel: str, punkte) -> str:
+    """Aufzaehlung als Tabelle: Outlook setzt Einzuege von <ul> unberechenbar."""
+    reihen = "".join(
+        '<tr>'
+        f'<td valign="top" style="padding:0 10px 10px 0;color:{LINK};font-size:15px;'
+        f'font-family:{SCHRIFT};">&#8226;</td>'
+        f'<td valign="top" style="padding:0 0 10px;color:{TEXT};font-size:15px;'
+        f'line-height:1.5;font-family:{SCHRIFT};">{p}</td>'
+        '</tr>'
+        for p in punkte
+    )
+    kopfzeile = (f'<div style="color:{TEXT};font-size:20px;font-weight:700;'
+                 f'margin:0 0 16px;">{titel}</div>') if titel else ""
+    return karte(
+        kopfzeile + '<table role="presentation" cellpadding="0" cellspacing="0" '
+        f'border="0">{reihen}</table>',
+        innen="30px 40px 22px",
+    )
+
+
+# Randfarbe je Ton. Die Farbe ist nur Rand, die Schrift bleibt TEXT: so
+# haengt die Lesbarkeit nie an der Signalfarbe.
+_TOENE = {"gefahr": "#b91c1c", "warnung": "#b45309", "info": LINK}
+
+
+def hinweis(titel: str, inhalt: str, ton: str = "info") -> str:
+    rand = _TOENE.get(ton, LINK)
+    return karte(
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">'
+        f'<tr><td style="border-left:4px solid {rand};padding:2px 0 2px 18px;'
+        f'font-family:{SCHRIFT};">'
+        f'<div style="color:{TEXT};font-size:17px;font-weight:700;margin:0 0 8px;">{titel}</div>'
+        f'<div style="color:{TEXT};font-size:15px;line-height:1.6;">{inhalt}</div>'
+        '</td></tr></table>',
+        innen="28px 40px 28px",
+    )
+
+
 def gruss(zeile: str = "vom complyo-Team") -> str:
     return karte(
         f'<div style="color:{TEXT};font-size:20px;font-weight:700;">Beste Grüße</div>'
@@ -167,7 +225,11 @@ def seite(titel: str, vorschau: str, *bausteine: str) -> str:
 
     `vorschau` ist die Zeile, die Mailprogramme hinter dem Betreff zeigen.
     Ohne sie nehmen sie den ersten Text der Mail, hier also "complyo".
+    Titel und Vorschau sind Rohtext und werden hier maskiert: dort landen
+    Systemnamen und Nachrichtentitel aus fremden Quellen.
     """
+    titel = escape(str(titel))
+    vorschau = escape(str(vorschau))
     zwischen = _abstand(16)
     return f"""<!DOCTYPE html>
 <html lang="de">
@@ -193,5 +255,5 @@ def seite(titel: str, vorschau: str, *bausteine: str) -> str:
 </html>"""
 
 
-__all__ = ["seite", "kopf", "text", "aktion", "gruss", "kontakt", "fuss",
-           "rechtliches", "karte", "escape", "ANBIETER"]
+__all__ = ["seite", "kopf", "text", "aktion", "angaben", "liste", "hinweis",
+           "gruss", "kontakt", "fuss", "rechtliches", "karte", "escape", "ANBIETER"]

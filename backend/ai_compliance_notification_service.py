@@ -13,8 +13,23 @@ from datetime import datetime
 import logging
 
 from adressen import dashboard_url
+import mail_layout
 
 logger = logging.getLogger(__name__)
+
+
+# Risikoklassen des AI Act, wie sie in der Mail stehen. Vorher stand der
+# Datenbankwert in Grossbuchstaben da ("als HIGH eingestuft").
+RISIKOKLASSE = {
+    "prohibited": "verboten",
+    "high": "Hochrisiko",
+    "limited": "begrenztes Risiko",
+    "minimal": "minimales Risiko",
+}
+
+
+def _risikoklasse(wert) -> str:
+    return RISIKOKLASSE.get(str(wert).lower(), str(wert))
 
 
 class AIComplianceNotificationService:
@@ -92,58 +107,33 @@ class AIComplianceNotificationService:
         
         system_url = f"{self.frontend_url}/ai-compliance/systems/{system_id}"
         
-        findings_html = ""
-        if findings:
-            findings_html = "<ul style='margin: 10px 0; padding-left: 20px;'>"
-            for f in findings[:5]:
-                findings_html += f"<li style='margin: 5px 0;'>{f.get('requirement', f.get('title', 'N/A'))}</li>"
-            findings_html += "</ul>"
-        
-        html_body = f"""
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="UTF-8"></head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background: {'#dc3545' if severity == 'critical' else '#ffc107'}; color: {'white' if severity == 'critical' else '#333'}; padding: 20px; border-radius: 8px 8px 0 0;">
-                <h1 style="margin: 0; font-size: 24px;">AI Compliance Alert</h1>
-                <p style="margin: 5px 0 0 0; opacity: 0.9;">Ihr KI-System benötigt Aufmerksamkeit</p>
-            </div>
-            
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 0 0 8px 8px;">
-                <p>Hallo {user_name},</p>
-                
-                <p>Der Compliance-Score Ihres KI-Systems <strong>{system_name}</strong> hat sich verändert:</p>
-                
-                <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
-                    <div style="display: inline-block; margin: 0 20px;">
-                        <div style="font-size: 14px; color: #666;">Vorher</div>
-                        <div style="font-size: 36px; font-weight: bold; color: #666;">{old_score}%</div>
-                    </div>
-                    <div style="display: inline-block; font-size: 24px; color: #666;">→</div>
-                    <div style="display: inline-block; margin: 0 20px;">
-                        <div style="font-size: 14px; color: #666;">Aktuell</div>
-                        <div style="font-size: 36px; font-weight: bold; color: {'#dc3545' if new_score < 60 else '#ffc107' if new_score < 80 else '#28a745'};">{new_score}%</div>
-                    </div>
-                </div>
-                
-                <p><strong>Risikokategorie:</strong> {risk_category.upper()}</p>
-                
-                {f'<p><strong>Gefundene Probleme:</strong></p>{findings_html}' if findings_html else ''}
-                
-                <div style="margin-top: 30px; text-align: center;">
-                    <a href="{system_url}" style="display: inline-block; background: #6366f1; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">
-                        System überprüfen
-                    </a>
-                </div>
-                
-                <p style="margin-top: 30px; font-size: 12px; color: #666;">
-                    Diese E-Mail wurde automatisch von Complyo AI Compliance gesendet.<br>
-                    <a href="{self.frontend_url}/profile" style="color: #6366f1;">Benachrichtigungseinstellungen ändern</a>
-                </p>
-            </div>
-        </body>
-        </html>
-        """
+        name = mail_layout.escape(system_name or "")
+        treffer = [mail_layout.escape(str(f.get('requirement', f.get('title', 'N/A'))))
+                   for f in (findings or [])[:5]]
+        html_body = mail_layout.seite(
+            f"KI-Compliance: {system_name}",
+            f"Der Compliance-Score von {system_name} ist von {old_score} auf {new_score} % gesunken.",
+            mail_layout.kopf("KI-Compliance", f"Score von {name} gesunken"),
+            mail_layout.text(
+                f"Hallo {mail_layout.escape(user_name or '')},",
+                f"der Compliance-Score Ihres KI-Systems <strong>{name}</strong> hat sich verändert.",
+            ),
+            mail_layout.angaben([
+                ("Vorher", f"{old_score} %"),
+                ("Aktuell", f"<strong>{new_score} %</strong>"),
+                ("Risikokategorie", mail_layout.escape(_risikoklasse(risk_category))),
+            ]),
+            mail_layout.liste("Gefundene Probleme", treffer) if treffer else "",
+            mail_layout.aktion("", "System überprüfen",
+                               mail_layout.escape(system_url, quote=True)),
+            mail_layout.gruss(),
+            mail_layout.fuss(
+                "Diese E-Mail wurde automatisch von complyo gesendet. "
+                f'<a href="{mail_layout.escape(self.frontend_url + "/profile", quote=True)}" '
+                'style="color:#5b6b78;">Benachrichtigungseinstellungen ändern</a>',
+                mail_layout.rechtliches(),
+            ),
+        )
         
         text_body = f"""
 AI Compliance Alert - {system_name}
@@ -153,7 +143,7 @@ Hallo {user_name},
 Der Compliance-Score Ihres KI-Systems "{system_name}" hat sich verändert:
 - Vorher: {old_score}%
 - Aktuell: {new_score}%
-- Risikokategorie: {risk_category.upper()}
+- Risikokategorie: {_risikoklasse(risk_category)}
 
 Bitte überprüfen Sie Ihr System: {system_url}
 
@@ -175,50 +165,41 @@ Complyo AI Compliance
         
         subject = "🔍 AI Compliance: Scan-Erinnerung für Ihre KI-Systeme"
         
-        systems_html = "<ul style='margin: 10px 0; padding-left: 20px;'>"
-        for s in systems:
-            last_scan = s.get('last_assessment_date', 'Nie')
+        
+        eintraege = []
+        for s_ in systems:
+            last_scan = s_.get('last_assessment_date', 'Nie')
             if last_scan and last_scan != 'Nie':
                 try:
                     last_scan = datetime.fromisoformat(str(last_scan).replace('Z', '+00:00')).strftime('%d.%m.%Y')
-                except:
+                except Exception:
                     pass
-            systems_html += f"""
-            <li style='margin: 10px 0;'>
-                <strong>{s.get('name', 'Unbekannt')}</strong><br>
-                <span style='color: #666; font-size: 13px;'>Letzter Scan: {last_scan}</span>
-            </li>
-            """
-        systems_html += "</ul>"
-        
-        html_body = f"""
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="UTF-8"></head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background: #6366f1; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
-                <h1 style="margin: 0; font-size: 24px;">Scan-Erinnerung</h1>
-                <p style="margin: 5px 0 0 0; opacity: 0.9;">EU AI Act Compliance Monitoring</p>
-            </div>
-            
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 0 0 8px 8px;">
-                <p>Hallo {user_name},</p>
-                
-                <p>Folgende KI-Systeme wurden länger nicht auf Compliance geprüft:</p>
-                
-                {systems_html}
-                
-                <p>Regelmäßige Scans sind wichtig, um die kontinuierliche Einhaltung des EU AI Acts sicherzustellen.</p>
-                
-                <div style="margin-top: 30px; text-align: center;">
-                    <a href="{self.frontend_url}/ai-compliance" style="display: inline-block; background: #6366f1; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">
-                        Jetzt Scans durchführen
-                    </a>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
+            eintraege.append(
+                f"<strong>{mail_layout.escape(str(s_.get('name', 'Unbekannt')))}</strong><br>"
+                f'<span style="color:#4b5563;font-size:13px;">Letzter Scan: '
+                f"{mail_layout.escape(str(last_scan or 'Nie'))}</span>"
+            )
+        html_body = mail_layout.seite(
+            "Scan-Erinnerung",
+            "Einige Ihrer KI-Systeme wurden länger nicht geprüft.",
+            mail_layout.kopf("KI-Compliance", "Scan-Erinnerung"),
+            mail_layout.text(
+                f"Hallo {mail_layout.escape(user_name or '')},",
+                "folgende KI-Systeme wurden länger nicht auf Compliance geprüft:",
+            ),
+            mail_layout.liste("", eintraege),
+            mail_layout.text("Regelmäßige Scans zeigen, ob Ihre KI-Systeme die Anforderungen "
+                             "des EU AI Act weiterhin erfüllen."),
+            mail_layout.aktion("", "Jetzt Scans durchführen",
+                               mail_layout.escape(f"{self.frontend_url}/ai-compliance", quote=True)),
+            mail_layout.gruss(),
+            mail_layout.fuss(
+                "Diese E-Mail wurde automatisch von complyo gesendet. "
+                f'<a href="{mail_layout.escape(self.frontend_url + "/profile", quote=True)}" '
+                'style="color:#5b6b78;">Benachrichtigungseinstellungen ändern</a>',
+                mail_layout.rechtliches(),
+            ),
+        )
         
         text_body = f"""
 Scan-Erinnerung - EU AI Act Compliance
@@ -229,7 +210,7 @@ Folgende KI-Systeme wurden länger nicht auf Compliance geprüft:
 
 {chr(10).join([f"- {s.get('name', 'Unbekannt')}" for s in systems])}
 
-Regelmäßige Scans sind wichtig für die EU AI Act Compliance.
+Regelmäßige Scans zeigen, ob Ihre KI-Systeme die Anforderungen des EU AI Act weiterhin erfüllen.
 
 Dashboard: {self.frontend_url}/ai-compliance
 
@@ -257,45 +238,41 @@ Complyo AI Compliance
         
         system_url = f"{self.frontend_url}/ai-compliance/systems/{system_id}"
         
-        html_body = f"""
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="UTF-8"></head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background: {'#dc3545' if is_prohibited else '#fd7e14'}; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
-                <h1 style="margin: 0; font-size: 24px;">
-                    {'🚫 Verbotenes System' if is_prohibited else '⚠️ Hochrisiko-System'} erkannt
-                </h1>
-            </div>
-            
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 0 0 8px 8px;">
-                <p>Hallo {user_name},</p>
-                
-                <p>Ihr KI-System <strong>{system_name}</strong> wurde als <strong style="color: {'#dc3545' if is_prohibited else '#fd7e14'};">{risk_category.upper()}</strong> klassifiziert.</p>
-                
-                <div style="background: white; border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 20px 0;">
-                    <strong>Begründung:</strong>
-                    <p style="margin: 10px 0 0 0; color: #555;">{risk_reasoning}</p>
-                </div>
-                
-                {'<div style="background: #dc3545; color: white; padding: 15px; border-radius: 8px; margin: 20px 0;"><strong>ACHTUNG:</strong> Verbotene KI-Systeme dürfen in der EU nicht betrieben werden. Sofortige Maßnahmen erforderlich!</div>' if is_prohibited else ''}
-                
-                <div style="margin-top: 30px; text-align: center;">
-                    <a href="{system_url}" style="display: inline-block; background: #6366f1; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">
-                        Details ansehen
-                    </a>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
+        name = mail_layout.escape(system_name or "")
+        html_body = mail_layout.seite(
+            f"KI-System eingestuft: {system_name}",
+            f"{system_name} wurde als {'verboten' if is_prohibited else 'Hochrisiko'} eingestuft.",
+            mail_layout.kopf("KI-Compliance", "Verbotenes KI-System erkannt"
+                             if is_prohibited else "Hochrisiko-System erkannt"),
+            mail_layout.text(
+                f"Hallo {mail_layout.escape(user_name or '')},",
+                f"Ihr KI-System <strong>{name}</strong> wurde als "
+                f"<strong>{mail_layout.escape(_risikoklasse(risk_category))}</strong> eingestuft.",
+            ),
+            mail_layout.hinweis("Begründung", mail_layout.escape(str(risk_reasoning or "")),
+                                ton="gefahr" if is_prohibited else "warnung"),
+            mail_layout.hinweis(
+                "Achtung",
+                "Verbotene KI-Systeme dürfen in der EU nicht betrieben werden. "
+                "Sofortige Maßnahmen erforderlich.",
+                ton="gefahr",
+            ) if is_prohibited else "",
+            mail_layout.aktion("", "Details ansehen", mail_layout.escape(system_url, quote=True)),
+            mail_layout.gruss(),
+            mail_layout.fuss(
+                "Diese E-Mail wurde automatisch von complyo gesendet. "
+                f'<a href="{mail_layout.escape(self.frontend_url + "/profile", quote=True)}" '
+                'style="color:#5b6b78;">Benachrichtigungseinstellungen ändern</a>',
+                mail_layout.rechtliches(),
+            ),
+        )
         
         text_body = f"""
 {'VERBOTENES' if is_prohibited else 'Hochrisiko'} KI-System erkannt
 
 Hallo {user_name},
 
-Ihr KI-System "{system_name}" wurde als {risk_category.upper()} klassifiziert.
+Ihr KI-System "{system_name}" wurde als {_risikoklasse(risk_category)} klassifiziert.
 
 Begründung: {risk_reasoning}
 

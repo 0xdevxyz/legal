@@ -18,7 +18,6 @@ import os
 from datetime import datetime
 from typing import Optional, Dict, Any
 import logging
-from jinja2 import Template
 import json
 from pdf_report_generator import pdf_generator
 from i18n_service import i18n_service
@@ -81,14 +80,11 @@ class EmailService:
                 try:
                     import json
                     analysis_data = json.loads(analysis_data)
-                except:
-                    # If it's not valid JSON, create a minimal structure
-                    analysis_data = {
-                        'compliance_score': 45,
-                        'estimated_risk_euro': '5000-15000',
-                        'findings': {},
-                        'url': 'N/A'
-                    }
+                except Exception:
+                    # Unlesbar heisst unbekannt. Hier standen frueher erfundene
+                    # Werte (Score 45 %, Risiko 5.000-15.000 EUR), die als
+                    # Messergebnis beim Kunden ankamen.
+                    analysis_data = {}
             
             # Generate PDF report
             if not lead_data:
@@ -205,74 +201,44 @@ class EmailService:
 
     def _get_verification_email_template(self, name: str, verification_url: str, language: str = "de") -> str:
         """
-        GDPR-compliant verification email template in specified language
+        Double-Opt-In fuer den Compliance-Report (Lead, kein Konto).
+
+        Rahmen aus mail_layout.py. Der Einwilligungstext ist wortgleich zum
+        frueheren geblieben: er ist die Grundlage fuer den Versand und wird
+        hier nicht nebenbei umformuliert.
         """
-        greeting = i18n_service.get_translation("greeting", language, name=name)
-        title = i18n_service.get_translation("verify_email_title", language)
-        button_text = i18n_service.get_translation("verify_button", language)
-        gdpr_notice = i18n_service.get_translation("gdpr_notice", language)
-        template = Template("""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>E-Mail-Verifizierung - Complyo</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="margin: 0; font-size: 28px;">🛡️ Complyo</h1>
-        <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Compliance Made Simple</p>
-    </div>
-    
-    <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-        <h2 style="color: #333; margin-top: 0;">Hallo {{ name }},</h2>
-        
-        <p>vielen Dank für Ihr Interesse an unserem Compliance-Report! </p>
-        
-        <p><strong>🔐 Bitte bestätigen Sie Ihre E-Mail-Adresse:</strong></p>
-        
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="{{ verification_url }}" 
-               style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                      color: white; 
-                      text-decoration: none; 
-                      padding: 15px 30px; 
-                      border-radius: 25px; 
-                      font-weight: bold; 
-                      display: inline-block;
-                      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
-                ✅ E-Mail-Adresse bestätigen
-            </a>
-        </div>
-        
-        <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; margin: 20px 0; border-radius: 4px;">
-            <h4 style="margin-top: 0; color: #1976d2;">🇩🇪 DSGVO-Hinweis</h4>
-            <p style="margin-bottom: 0; font-size: 14px;">
-                Mit der Bestätigung willigen Sie ein, dass wir Ihnen den angeforderten Compliance-Report 
-                sowie gelegentlich relevante Compliance-Informationen zusenden dürfen. 
-                <strong>Widerruf jederzeit möglich</strong> unter datenschutz@complyo.de
-            </p>
-        </div>
-        
-        <p style="font-size: 14px; color: #666;">
-            <strong>⏰ Wichtig:</strong> Dieser Link ist 24 Stunden gültig.<br>
-            Falls Sie diese E-Mail nicht angefordert haben, können Sie sie einfach ignorieren.
-        </p>
-        
-        <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-        
-        <p style="font-size: 12px; color: #888; text-align: center;">
-            Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin • Compliance Made Simple<br>
-            <a href="mailto:datenschutz@complyo.de" style="color: #667eea;">datenschutz@complyo.de</a> • 
-            <a href="https://complyo.de/datenschutz" style="color: #667eea;">Datenschutzerklärung</a>
-        </p>
-    </div>
-</body>
-</html>
-        """)
-        
-        return template.render(name=name, verification_url=verification_url)
+        n = mail_layout.escape(name or "")
+        link = mail_layout.escape(verification_url, quote=True)
+        leise = '<span style="color:#4b5563;font-size:14px;">'
+        return mail_layout.seite(
+            "E-Mail-Verifizierung - Complyo",
+            "Bitte bestätigen Sie Ihre E-Mail-Adresse, dann schicken wir Ihren Report.",
+            mail_layout.kopf("Ihr Compliance-Report", "Bitte bestätigen Sie Ihre E-Mail-Adresse"),
+            mail_layout.text(
+                f"Hallo {n}," if n else "Hallo,",
+                "vielen Dank für Ihr Interesse an unserem Compliance-Report. Sobald Sie "
+                "Ihre Adresse bestätigt haben, schicken wir ihn Ihnen zu.",
+            ),
+            mail_layout.aktion("", "E-Mail-Adresse bestätigen", link),
+            mail_layout.hinweis(
+                "Datenschutz",
+                "Mit der Bestätigung willigen Sie ein, dass wir Ihnen den angeforderten "
+                "Compliance-Report sowie gelegentlich relevante Compliance-Informationen "
+                "zusenden dürfen. <strong>Widerruf jederzeit möglich</strong> unter "
+                '<a href="mailto:datenschutz@complyo.de" style="color:#00706c;">'
+                "datenschutz@complyo.de</a>.",
+            ),
+            mail_layout.text(
+                leise + "Dieser Link ist 24 Stunden gültig. Falls der Knopf nicht "
+                "funktioniert, kopieren Sie diese Adresse in den Browser:<br>"
+                f'<a href="{link}" style="color:#00706c;word-break:break-all;">{link}</a></span>',
+                leise + "Falls Sie diese E-Mail nicht angefordert haben, können Sie sie "
+                "einfach ignorieren.</span>",
+            ),
+            mail_layout.gruss(),
+            mail_layout.kontakt(),
+            mail_layout.fuss(mail_layout.rechtliches()),
+        )
 
     def _get_verification_email_text(self, name: str, verification_url: str, language: str = "de") -> str:
         """
@@ -302,217 +268,188 @@ datenschutz@complyo.de • https://complyo.de/datenschutz
 
     def _get_report_email_template(self, name: str, analysis_data: Dict[str, Any]) -> str:
         """
-        Compliance report delivery email template
-        """
-        compliance_score = analysis_data.get('compliance_score', 0)
-        risk_level = analysis_data.get('estimated_risk_euro', 'Unbekannt')
-        findings_count = len(analysis_data.get('findings', {}))
-        
-        template = Template("""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ihr Compliance-Report - Complyo</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="margin: 0; font-size: 28px;">📊 Ihr Compliance-Report</h1>
-        <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Complyo Analyse-Ergebnisse</p>
-    </div>
-    
-    <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-        <h2 style="color: #333; margin-top: 0;">Hallo {{ name }},</h2>
-        
-        <p>Ihre Website-Analyse ist abgeschlossen! Hier sind die wichtigsten Ergebnisse:</p>
-        
-        <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <h3 style="margin-top: 0; color: #667eea;">🎯 Analyse-Zusammenfassung</h3>
-            <ul style="list-style: none; padding: 0;">
-                <li style="padding: 8px 0; border-bottom: 1px solid #eee;">
-                    <strong>Compliance-Score:</strong> {{ compliance_score }}%
-                </li>
-                <li style="padding: 8px 0; border-bottom: 1px solid #eee;">
-                    <strong>Geschätztes Risiko:</strong> {{ risk_level }} EUR
-                </li>
-                <li style="padding: 8px 0;">
-                    <strong>Gefundene Probleme:</strong> {{ findings_count }} Bereiche
-                </li>
-            </ul>
-        </div>
-        
-        <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;">
-            <h4 style="margin-top: 0; color: #856404;">⚡ Nächste Schritte</h4>
-            <p style="margin-bottom: 0; font-size: 14px;">
-                Für eine detaillierte Lösungsstrategie und automatische Umsetzung
-                empfehlen wir Ihnen unsere Tarife Single (29€/Monat) oder Pro (89€/Monat).
-            </p>
-        </div>
+        Begleitmail zum PDF-Report.
 
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="{{ frontend_url }}/#pricing"
-               style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                      color: white; 
-                      text-decoration: none; 
-                      padding: 15px 30px; 
-                      border-radius: 25px; 
-                      font-weight: bold; 
-                      display: inline-block;
-                      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
-                🚀 Jetzt Compliance optimieren
-            </a>
-        </div>
-        
-        <p style="font-size: 14px; color: #666;">
-            <strong>🔒 Datenschutz:</strong> Ihre Daten werden DSGVO-konform verarbeitet. 
-            Widerruf jederzeit unter datenschutz@complyo.de möglich.
-        </p>
-        
-        <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-        
-        <p style="font-size: 12px; color: #888; text-align: center;">
-            Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin • Compliance Made Simple<br>
-            <a href="mailto:support@complyo.de" style="color: #667eea;">support@complyo.de</a> •
-            <a href="{{ frontend_url }}" style="color: #667eea;">complyo.de</a>
-        </p>
-    </div>
-</body>
-</html>
-        """)
-        
-        return template.render(
-            name=name,
-            compliance_score=compliance_score,
-            risk_level=risk_level,
-            findings_count=findings_count,
-            frontend_url=self.frontend_url
+        Es stehen nur Werte in der Mail, die in analysis_data wirklich
+        vorliegen. Frueher erfand send_compliance_report bei unlesbaren Daten
+        einen Score von 45 % und ein Risiko von 5.000 bis 15.000 EUR und
+        schickte beides als Messergebnis hinaus.
+        """
+        n = mail_layout.escape(name or "")
+        zeilen = []
+        if analysis_data.get('compliance_score') is not None:
+            zeilen.append(("Compliance-Score",
+                           f"{mail_layout.escape(str(analysis_data['compliance_score']))} %"))
+        if analysis_data.get('estimated_risk_euro'):
+            zeilen.append(("Geschätztes Risiko",
+                           f"{mail_layout.escape(str(analysis_data['estimated_risk_euro']))} EUR"))
+        if analysis_data.get('findings'):
+            zeilen.append(("Bereiche mit Befunden", str(len(analysis_data['findings']))))
+
+        zusammenfassung = (
+            mail_layout.angaben(zeilen, "Analyse-Zusammenfassung") if zeilen else
+            mail_layout.text("Die Zusammenfassung ließ sich nicht aus den Analysedaten "
+                             "lesen. Alle Ergebnisse stehen im beigefügten PDF.")
+        )
+        return mail_layout.seite(
+            "Ihr Compliance-Report - Complyo",
+            "Ihre Website-Analyse ist abgeschlossen, der Report hängt an dieser Mail.",
+            mail_layout.kopf("Ihr Compliance-Report", "Ihre Analyse ist abgeschlossen"),
+            mail_layout.text(
+                f"Hallo {n}," if n else "Hallo,",
+                "Ihre Website-Analyse ist abgeschlossen. Den vollständigen Report finden "
+                "Sie als PDF im Anhang, hier die wichtigsten Werte:",
+            ),
+            zusammenfassung,
+            mail_layout.hinweis(
+                "Nächste Schritte",
+                "Für eine detaillierte Lösungsstrategie und automatische Umsetzung "
+                "empfehlen wir Ihnen unsere Tarife Single (29 €/Monat) oder Pro (89 €/Monat).",
+            ),
+            mail_layout.aktion("", "Tarife ansehen",
+                               mail_layout.escape(f"{self.frontend_url}/#pricing", quote=True)),
+            mail_layout.gruss(),
+            mail_layout.kontakt(),
+            mail_layout.fuss(
+                "Rechtsgrundlage für diese Mail ist Ihre Einwilligung (Art. 6 Abs. 1 lit. a "
+                "DSGVO). Widerruf jederzeit unter datenschutz@complyo.de.",
+                mail_layout.rechtliches(),
+            ),
         )
 
     def _get_report_email_text(self, name: str, analysis_data: Dict[str, Any]) -> str:
         """
         Plain text version of report email
         """
-        compliance_score = analysis_data.get('compliance_score', 0)
-        risk_level = analysis_data.get('estimated_risk_euro', 'Unbekannt')
-        findings_count = len(analysis_data.get('findings', {}))
-        
+        zeilen = []
+        if analysis_data.get('compliance_score') is not None:
+            zeilen.append(f"• Compliance-Score: {analysis_data['compliance_score']}%")
+        if analysis_data.get('estimated_risk_euro'):
+            zeilen.append(f"• Geschätztes Risiko: {analysis_data['estimated_risk_euro']} EUR")
+        if analysis_data.get('findings'):
+            zeilen.append(f"• Bereiche mit Befunden: {len(analysis_data['findings'])}")
+        zusammenfassung = "\n".join(zeilen) or (
+            "Die Zusammenfassung ließ sich nicht aus den Analysedaten lesen.\n"
+            "Alle Ergebnisse stehen im beigefügten PDF.")
+
         return f"""
 Hallo {name},
 
-Ihre Website-Analyse ist abgeschlossen! Hier sind die wichtigsten Ergebnisse:
+Ihre Website-Analyse ist abgeschlossen. Den vollständigen Report finden Sie als PDF im Anhang.
 
-📊 ANALYSE-ZUSAMMENFASSUNG:
-• Compliance-Score: {compliance_score}%
-• Geschätztes Risiko: {risk_level} EUR
-• Gefundene Probleme: {findings_count} Bereiche
+ANALYSE-ZUSAMMENFASSUNG:
+{zusammenfassung}
 
-⚡ NÄCHSTE SCHRITTE:
+NÄCHSTE SCHRITTE:
 Für eine detaillierte Lösungsstrategie und automatische Umsetzung
-empfehlen wir Ihnen unsere Tarife Single (29€/Monat) oder Pro (89€/Monat).
+empfehlen wir Ihnen unsere Tarife Single (29 €/Monat) oder Pro (89 €/Monat).
 
-🚀 Jetzt optimieren: {self.frontend_url}/#pricing
+Tarife ansehen: {self.frontend_url}/#pricing
 
-🔒 DATENSCHUTZ:
-Ihre Daten werden DSGVO-konform verarbeitet.
-Widerruf jederzeit unter datenschutz@complyo.de möglich.
+Rechtsgrundlage für diese Mail ist Ihre Einwilligung (Art. 6 Abs. 1 lit. a DSGVO).
+Widerruf jederzeit unter datenschutz@complyo.de.
 
 ---
-Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin • Compliance Made Simple
+Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin
 support@complyo.de • {self.frontend_url}
         """
 
+    # Was bei einer Kontoloeschung wirklich passiert, und nur das. Die
+    # fruehere Mail sagte "permanent und unwiderruflich aus allen unseren
+    # Systemen, einschliesslich Einwilligungsnachweis und technischer Logs"
+    # und verwies auf "unseren Datenschutzbeauftragten". Nachgemessen am
+    # 29.09.2026: die Loeschung schreibt die Adresse selbst ins Log, die
+    # Datensicherung haelt Tagesstaende 14 und Monatsstaende 190 Tage
+    # (scripts/datensicherung.sh), und einen Datenschutzbeauftragten nennt
+    # die Datenschutzerklaerung nicht. Die Liste folgt
+    # gdpr_retention_service._LOESCH_STATEMENTS.
+    LOESCHUNG_UMFANG = [
+        "Ihr Konto mit Anmeldedaten, Sitzungen und Einstellungen",
+        "Ihre Websites, Scans und Scanverläufe",
+        "erzeugte Dokumente und Korrekturen",
+        "Firmen- und Abonnementdaten",
+    ]
+    LOESCHUNG_GRENZEN = (
+        "Bearbeitungsvermerke, die andere Datensätze tragen, sind anonymisiert. "
+        "In unseren Datensicherungen bleiben die Daten bis zu deren Ablauf erhalten, "
+        "höchstens 190 Tage, danach werden sie überschrieben. Aus einer Sicherung "
+        "stellen wir sie nicht wieder her. Rechnungen, die wir nach Handels- und "
+        "Steuerrecht aufbewahren müssen, bleiben bis zum Ende dieser Frist gespeichert."
+    )
+
     def send_deletion_confirmation_email(self, email: str, reference_id: str) -> bool:
         """
-        Send confirmation email after data deletion (GDPR compliance)
+        Bestaetigung nach ausgefuehrter Kontoloeschung (Art. 17 DSGVO).
         """
         try:
             subject = "Bestätigung der Datenlöschung - Complyo"
-            
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <title>Datenlöschung bestätigt</title>
-            </head>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <div style="text-align: center; margin-bottom: 30px;">
-                        <h1 style="color: #667eea;">🛡️ Complyo</h1>
-                        <h2 style="color: #333;">Datenlöschung bestätigt</h2>
-                    </div>
-                    
-                    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                        <p>Sehr geehrte Damen und Herren,</p>
-                        
-                        <p>hiermit bestätigen wir die <strong>vollständige Löschung</strong> Ihrer personenbezogenen Daten aus unserem System gemäß <strong>Artikel 17 DSGVO</strong> (Recht auf Vergessenwerden).</p>
-                        
-                        <div style="background-color: #e7f3ff; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                            <strong>Löschungsdetails:</strong><br>
-                            📅 Durchgeführt am: {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')}<br>
-                            🔗 Referenz-ID: {reference_id}<br>
-                            ⚖️ Rechtsgrundlage: DSGVO Artikel 17
-                        </div>
-                        
-                        <p>Ihre Daten wurden <strong>permanent und unwiderruflich</strong> aus allen unseren Systemen gelöscht, einschließlich:</p>
-                        <ul>
-                            <li>Persönliche Kontaktdaten</li>
-                            <li>Website-Analyse-Ergebnisse</li>
-                            <li>E-Mail-Kommunikation</li>
-                            <li>Einwilligungsnachweis</li>
-                            <li>Technische Logs</li>
-                        </ul>
-                        
-                        <p>Falls Sie in Zukunft unsere Dienste erneut nutzen möchten, müssen Sie eine neue Einwilligung erteilen.</p>
-                    </div>
-                    
-                    <div style="border-top: 1px solid #eee; padding-top: 20px; font-size: 12px; color: #666;">
-                        <p><strong>Yvonne Weishar · Complyo</strong><br>
-                        Pappelallee 64, 10437 Berlin<br>
-                        E-Mail: datenschutz@complyo.de<br>
-                        Website: https://complyo.de</p>
-                        
-                        <p>Bei Fragen wenden Sie sich gerne an unseren Datenschutzbeauftragten.</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-            
-            text_content = f"""
-            Datenlöschung bestätigt - Complyo
-            
-            Sehr geehrte Damen und Herren,
-            
-            hiermit bestätigen wir die vollständige Löschung Ihrer personenbezogenen Daten 
-            aus unserem System gemäß Artikel 17 DSGVO (Recht auf Vergessenwerden).
-            
-            Löschungsdetails:
-            - Durchgeführt am: {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')}
-            - Referenz-ID: {reference_id}
-            - Rechtsgrundlage: DSGVO Artikel 17
-            
-            Ihre Daten wurden permanent und unwiderruflich gelöscht.
-            
-            Bei Fragen: datenschutz@complyo.de
-            
-            Mit freundlichen Grüßen,
-            Ihr Complyo Team
-            """
-            
+            zeitpunkt = datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')
+            ref = mail_layout.escape(str(reference_id))
+
+            html_content = mail_layout.seite(
+                "Datenlöschung bestätigt",
+                "Ihr Konto und die zugehörigen Daten sind gelöscht.",
+                mail_layout.kopf("Art. 17 DSGVO", "Ihre Daten sind gelöscht"),
+                mail_layout.text(
+                    "Sehr geehrte Damen und Herren,",
+                    "hiermit bestätigen wir die Löschung Ihres complyo-Kontos und der "
+                    "zugehörigen personenbezogenen Daten gemäß Artikel 17 DSGVO.",
+                ),
+                mail_layout.angaben([
+                    ("Durchgeführt am", zeitpunkt),
+                    ("Referenz", ref),
+                    ("Rechtsgrundlage", "Art. 17 DSGVO"),
+                ]),
+                mail_layout.liste("Gelöscht wurden", self.LOESCHUNG_UMFANG),
+                mail_layout.hinweis("Was bleibt", self.LOESCHUNG_GRENZEN),
+                mail_layout.text(
+                    "Falls Sie unsere Dienste später erneut nutzen möchten, legen Sie "
+                    "einfach ein neues Konto an. Bei Fragen erreichen Sie uns unter "
+                    '<a href="mailto:datenschutz@complyo.de" style="color:#00706c;">'
+                    "datenschutz@complyo.de</a>.",
+                ),
+                mail_layout.gruss(),
+                mail_layout.kontakt(),
+                mail_layout.fuss(mail_layout.rechtliches()),
+            )
+
+            umfang = "\n".join(f"- {p}" for p in self.LOESCHUNG_UMFANG)
+            text_content = f"""Datenlöschung bestätigt - Complyo
+
+Sehr geehrte Damen und Herren,
+
+hiermit bestätigen wir die Löschung Ihres complyo-Kontos und der zugehörigen
+personenbezogenen Daten gemäß Artikel 17 DSGVO.
+
+Durchgeführt am: {zeitpunkt}
+Referenz: {reference_id}
+Rechtsgrundlage: Art. 17 DSGVO
+
+Gelöscht wurden:
+{umfang}
+
+Was bleibt: {self.LOESCHUNG_GRENZEN}
+
+Bei Fragen: datenschutz@complyo.de
+
+Mit freundlichen Grüßen
+Ihr complyo-Team
+"""
             return self._send_email(email, subject, html_content, text_content)
-            
+
         except Exception as e:
             logger.error(f"Error sending deletion confirmation email: {e}")
             return False
     
     def send_data_export_email(self, email: str, export_data: dict) -> bool:
         """
-        Send data export email (GDPR data portability)
+        Datenexport nach Art. 20 DSGVO.
+
+        Der Export enthaelt Freitext aus dem Konto (Websites, Firmendaten). Er
+        ging unmaskiert als <pre> ins HTML; jetzt maskiert.
         """
         try:
-            subject = "Ihre Datenexport - Complyo DSGVO"
+            subject = "Ihr Datenexport - Complyo"
 
             # Zusammenfassung generisch aufbauen — der Export ist seit 2026-08-11
             # das aggregierte Konto-JSON (users + zugehörige Tabellen), nicht
@@ -527,90 +464,74 @@ support@complyo.de • {self.frontend_url}
                     export_summary[kategorie] = "Ja"
                 else:
                     export_summary[kategorie] = "Ja" if inhalt else "Nein"
-            
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <title>Ihr Datenexport</title>
-            </head>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <div style="text-align: center; margin-bottom: 30px;">
-                        <h1 style="color: #667eea;">🛡️ Complyo</h1>
-                        <h2 style="color: #333;">Ihr Datenexport</h2>
-                    </div>
-                    
-                    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                        <p>Sehr geehrte Damen und Herren,</p>
-                        
-                        <p>gemäß <strong>Artikel 20 DSGVO</strong> (Recht auf Datenübertragbarkeit) erhalten Sie hiermit alle Ihre bei uns gespeicherten personenbezogenen Daten.</p>
-                        
-                        <div style="background-color: #e7f3ff; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                            <strong>Export-Details:</strong><br>
-                            📅 Erstellt am: {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')}<br>
-                            📊 Datenkategorien: {len(export_data)}<br>
-                            ⚖️ Rechtsgrundlage: DSGVO Artikel 20
-                        </div>
-                        
-                        <h3>Ihre Daten im Überblick:</h3>
-                        <ul>
-                            {''.join([f"<li><strong>{k}:</strong> {v}</li>" for k, v in export_summary.items()])}
-                        </ul>
-                        
-                        <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                            <strong>⚠️ Wichtiger Hinweis:</strong><br>
-                            Diese E-Mail enthält Ihre vollständigen personenbezogenen Daten. 
-                            Behandeln Sie diese Informationen vertraulich und löschen Sie sie 
-                            nach der Verwendung sicher.
-                        </div>
-                        
-                        <p>Die vollständigen Daten finden Sie im JSON-Format am Ende dieser E-Mail.</p>
-                    </div>
-                    
-                    <div style="border-top: 1px solid #eee; padding-top: 20px; font-size: 12px; color: #666;">
-                        <p><strong>Yvonne Weishar · Complyo</strong><br>
-                        Pappelallee 64, 10437 Berlin<br>
-                        E-Mail: datenschutz@complyo.de<br>
-                        Website: https://complyo.de</p>
-                    </div>
-                    
-                    <div style="margin-top: 30px; padding: 20px; background-color: #f8f9fa; border-radius: 8px;">
-                        <h3>Ihre vollständigen Daten (JSON-Format):</h3>
-                        <pre style="background-color: #fff; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 11px;">{json.dumps(export_data, indent=2, ensure_ascii=False)}</pre>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-            
-            text_content = f"""
-            Ihr Datenexport - Complyo DSGVO
-            
-            Sehr geehrte Damen und Herren,
-            
-            gemäß Artikel 20 DSGVO (Recht auf Datenübertragbarkeit) erhalten Sie hiermit 
-            alle Ihre bei uns gespeicherten personenbezogenen Daten.
-            
-            Export-Details:
-            - Erstellt am: {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')}
-            - Datenkategorien: {len(export_data)}
-            - Rechtsgrundlage: DSGVO Artikel 20
-            
-            Ihre Daten (JSON-Format):
-            {json.dumps(export_data, indent=2, ensure_ascii=False)}
-            
-            Behandeln Sie diese Daten vertraulich.
-            
-            Bei Fragen: datenschutz@complyo.de
-            
-            Mit freundlichen Grüßen,
-            Ihr Complyo Team
-            """
-            
+
+            zeitpunkt = datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')
+            daten_json = json.dumps(export_data, indent=2, ensure_ascii=False, default=str)
+            leise = '<span style="color:#4b5563;font-size:14px;">'
+
+            html_content = mail_layout.seite(
+                "Ihr Datenexport",
+                "Alle bei complyo gespeicherten Daten zu Ihrem Konto.",
+                mail_layout.kopf("Art. 20 DSGVO", "Ihr Datenexport"),
+                mail_layout.text(
+                    "Sehr geehrte Damen und Herren,",
+                    "gemäß Artikel 20 DSGVO (Recht auf Datenübertragbarkeit) erhalten Sie "
+                    "hiermit alle Ihre bei uns gespeicherten personenbezogenen Daten. "
+                    "Die vollständigen Daten stehen im JSON-Format am Ende dieser E-Mail.",
+                ),
+                mail_layout.angaben([
+                    ("Erstellt am", zeitpunkt),
+                    ("Datenkategorien", str(len(export_summary))),
+                    ("Rechtsgrundlage", "Art. 20 DSGVO"),
+                ]),
+                mail_layout.angaben(
+                    [(mail_layout.escape(str(k)), mail_layout.escape(str(v)))
+                     for k, v in export_summary.items()],
+                    "Ihre Daten im Überblick",
+                ),
+                mail_layout.hinweis(
+                    "Vertraulich behandeln",
+                    "Diese E-Mail enthält Ihre vollständigen personenbezogenen Daten. "
+                    "Behandeln Sie sie vertraulich und löschen Sie sie nach der Verwendung.",
+                    ton="warnung",
+                ),
+                mail_layout.karte(
+                    '<div style="color:#111827;font-size:17px;font-weight:700;'
+                    'margin:0 0 12px;">Ihre vollständigen Daten (JSON)</div>'
+                    '<pre style="margin:0;white-space:pre-wrap;word-break:break-all;'
+                    'font-family:Menlo,Consolas,monospace;font-size:11px;line-height:1.5;'
+                    f'color:#111827;">{mail_layout.escape(daten_json)}</pre>',
+                    innen="28px 32px",
+                ),
+                mail_layout.text(leise + "Bei Fragen: datenschutz@complyo.de</span>"),
+                mail_layout.gruss(),
+                mail_layout.kontakt(),
+                mail_layout.fuss(mail_layout.rechtliches()),
+            )
+
+            text_content = f"""Ihr Datenexport - Complyo
+
+Sehr geehrte Damen und Herren,
+
+gemäß Artikel 20 DSGVO (Recht auf Datenübertragbarkeit) erhalten Sie hiermit
+alle Ihre bei uns gespeicherten personenbezogenen Daten.
+
+Erstellt am: {zeitpunkt}
+Datenkategorien: {len(export_summary)}
+Rechtsgrundlage: Art. 20 DSGVO
+
+Ihre Daten (JSON-Format):
+{daten_json}
+
+Behandeln Sie diese Daten vertraulich.
+
+Bei Fragen: datenschutz@complyo.de
+
+Mit freundlichen Grüßen
+Ihr complyo-Team
+"""
             return self._send_email(email, subject, html_content, text_content)
-            
+
         except Exception as e:
             logger.error(f"Error sending data export email: {e}")
             return False

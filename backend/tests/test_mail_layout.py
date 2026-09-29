@@ -158,3 +158,197 @@ class TestKontomails:
         for m in liste:
             assert "<i>Kai</i>" not in m["html"]
             assert "&lt;i&gt;Kai" in m["html"]
+
+
+# ---------------------------------------------------------------------------
+# Die uebrigen Kundenmails (29.09.2026 umgestellt)
+# ---------------------------------------------------------------------------
+
+ALTES_LAYOUT = ("linear-gradient", "display:flex", "display: flex", "display:inline-flex",
+                "#667eea", "#6366f1", "#2563eb")
+
+
+def _neues_layout(html: str):
+    import mail_layout
+    assert mail_layout.LOGO_URL in html
+    klein = html.lower()
+    for alt in ALTES_LAYOUT:
+        assert alt not in klein, f"{alt} steht noch in der Mail"
+
+
+class TestLeadMails:
+    def test_verifizierung(self, gesendet):
+        svc, liste = gesendet
+        svc.send_verification_email("l@example.org", "<b>Lea</b>", "tok123")
+        html = liste[0]["html"]
+        _neues_layout(html)
+        assert "&lt;b&gt;Lea" in html and "<b>Lea</b>" not in html
+        assert "verify-email?token=tok123" in html
+        assert "24 Stunden" in html, "Gueltigkeit steht in database_service (24 h)"
+
+    def test_report_erfindet_keine_werte(self, gesendet, monkeypatch):
+        import email_service
+        svc, liste = gesendet
+        monkeypatch.setattr(email_service.pdf_generator, "generate_compliance_report",
+                            lambda daten, lead: b"%PDF-1.4 probe")
+        svc.send_compliance_report("l@example.org", "Lea", "kein json")
+        html, text = liste[0]["html"], liste[0]["text"]
+        _neues_layout(html)
+        for erfunden in ("45 %", "45%", "5000-15000"):
+            assert erfunden not in html and erfunden not in text, erfunden
+        assert "beigefügten PDF" in html
+
+    def test_report_zeigt_gemessene_werte(self, gesendet, monkeypatch):
+        import email_service
+        svc, liste = gesendet
+        monkeypatch.setattr(email_service.pdf_generator, "generate_compliance_report",
+                            lambda daten, lead: b"%PDF-1.4 probe")
+        svc.send_compliance_report("l@example.org", "Lea", {
+            "compliance_score": 72, "estimated_risk_euro": "2000-4000",
+            "findings": {"a": 1, "b": 2}})
+        html = liste[0]["html"]
+        assert "72 %" in html and "2000-4000 EUR" in html
+        assert "DSGVO-konform" not in html
+
+
+class TestDsgvoMails:
+    def test_loeschbestaetigung_sagt_nur_was_stimmt(self, gesendet):
+        svc, liste = gesendet
+        svc.send_deletion_confirmation_email("k@example.org", "user-7")
+        html, text = liste[0]["html"], liste[0]["text"]
+        _neues_layout(html)
+        for falsch in ("Datenschutzbeauftragt", "aus allen unseren Systemen",
+                       "Technische Logs", "Einwilligungsnachweis"):
+            assert falsch not in html and falsch not in text, falsch
+        assert "190 Tage" in html and "190 Tage" in text, "Sicherungen muessen genannt sein"
+
+    def test_datenexport_maskiert(self, gesendet):
+        svc, liste = gesendet
+        svc.send_data_export_email("k@example.org", {
+            "users": [{"firma": "<script>alert(1)</script>"}], "export_info": {}})
+        html = liste[0]["html"]
+        _neues_layout(html)
+        assert "<script>alert(1)</script>" not in html
+        assert "&lt;script&gt;" in html
+        assert liste[0]["betreff"].startswith("Ihr Datenexport")
+
+
+def _lauf(koro):
+    import asyncio
+    return asyncio.new_event_loop().run_until_complete(koro)
+
+
+class TestLoeschreihenfolge:
+    """Bestaetigt wird erst, wenn wirklich geloescht ist."""
+
+    def test_keine_bestaetigung_wenn_loeschen_scheitert(self, monkeypatch):
+        from unittest.mock import AsyncMock
+        import gdpr_retention_service as g
+        dienst = g.gdpr_service
+        monkeypatch.setattr(g.db_service, "get_lead_by_id",
+                            AsyncMock(return_value={"id": "L1", "email": "x@example.org"}))
+        monkeypatch.setattr(g.db_service, "mark_lead_for_deletion", AsyncMock(return_value=True))
+        monkeypatch.setattr(g.db_service, "delete_lead_permanently", AsyncMock(return_value=False))
+        mail = AsyncMock()
+        monkeypatch.setattr(dienst, "_send_deletion_confirmation", mail)
+        _lauf(dienst.process_deletion_request("L1"))
+        mail.assert_not_awaited()
+
+    def test_bestaetigung_nach_erfolg(self, monkeypatch):
+        from unittest.mock import AsyncMock
+        import gdpr_retention_service as g
+        dienst = g.gdpr_service
+        monkeypatch.setattr(g.db_service, "get_lead_by_id",
+                            AsyncMock(return_value={"id": "L1", "email": "x@example.org"}))
+        monkeypatch.setattr(g.db_service, "mark_lead_for_deletion", AsyncMock(return_value=True))
+        monkeypatch.setattr(g.db_service, "delete_lead_permanently", AsyncMock(return_value=True))
+        mail = AsyncMock()
+        monkeypatch.setattr(dienst, "_send_deletion_confirmation", mail)
+        _lauf(dienst.process_deletion_request("L1"))
+        mail.assert_awaited_once()
+
+
+class TestKiComplianceMails:
+    def _dienst(self, monkeypatch):
+        monkeypatch.delenv("DASHBOARD_URL", raising=False)
+        import importlib
+        import ai_compliance_notification_service as m
+        importlib.reload(m)
+        d = m.ai_compliance_notification_service
+        liste = []
+        d._send_email = lambda an, betreff, html, text: liste.append((betreff, html, text)) or True
+        return d, liste
+
+    def test_alle_drei(self, monkeypatch):
+        d, liste = self._dienst(monkeypatch)
+        _lauf(d.send_compliance_alert("u@example.org", "Uli", "<i>Bot</i>", "s1", 90, 60,
+                                      "high", [{"title": "<b>X</b>"}]))
+        _lauf(d.send_scan_reminder("u@example.org", "Uli", [{"name": "<i>Bot</i>"}]))
+        _lauf(d.send_high_risk_alert("u@example.org", "Uli", "<i>Bot</i>", "s1",
+                                     "prohibited", "<img src=x onerror=alert(1)>"))
+        assert len(liste) == 3
+        for betreff, html, _ in liste:
+            _neues_layout(html)
+            assert "<i>Bot</i>" not in html and "<img src=x" not in html, betreff
+            assert "https://app.complyo.de/" in html, "Links gehoeren ins Dashboard"
+
+
+class TestRechtsaenderungsMails:
+    NEWS = {"title": "<b>Neu</b>: BFSG", "summary": "<script>x</script>", "content": "",
+            "source": "BGBl", "url": "https://example.org/a", "severity": "critical"}
+
+    def _dienst(self):
+        import datetime as dt
+        from legal_notification_service import LegalNewsNotificationService
+        d = LegalNewsNotificationService(db_pool=None)
+        self.NEWS["published_date"] = dt.datetime(2026, 9, 29)
+        return d
+
+    def test_vorlage_maskiert_und_neues_layout(self):
+        d = self._dienst()
+        html = d._get_notification_email_template(
+            {"email": "u@example.org"}, self.NEWS,
+            "https://api.complyo.de/api/legal-notifications/confirm/t",
+            "https://api.complyo.de/api/legal-notifications/dismiss/t")
+        _neues_layout(html)
+        assert "<script>x</script>" not in html and "&lt;script&gt;" in html
+        assert "<b>Neu</b>" not in html
+        for tot in ("/upgrade", "/settings/notifications", "/legal/confirm", "/legal/dismiss"):
+            assert tot not in html, f"{tot} ist 404"
+
+    def test_knoepfe_zeigen_auf_die_api(self, monkeypatch):
+        from unittest.mock import AsyncMock
+        d = self._dienst()
+        gefangen = {}
+
+        async def _senden(an, betreff, html, text):
+            gefangen["html"], gefangen["text"] = html, text
+            return True
+
+        d._send_email = _senden
+        conn = AsyncMock()
+        conn.fetchrow = AsyncMock(return_value={"confirmation_token": "tok9"})
+        monkeypatch.delenv("PUBLIC_API_BASE", raising=False)
+        assert _lauf(d._send_notification_email(conn, 1, {"email": "u@example.org"}, self.NEWS))
+        for teil in (gefangen["html"], gefangen["text"]):
+            assert "https://api.complyo.de/api/legal-notifications/confirm/tok9" in teil
+            assert "https://api.complyo.de/api/legal-notifications/dismiss/tok9" in teil
+
+    def test_bestaetigen_leitet_ins_dashboard(self, monkeypatch):
+        from unittest.mock import AsyncMock, MagicMock
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        import legal_notification_routes as r
+        monkeypatch.delenv("DASHBOARD_URL", raising=False)
+        dienst = MagicMock()
+        dienst.confirm_notification = AsyncMock(return_value={"success": True})
+        dienst.dismiss_notification = AsyncMock(return_value={"success": False})
+        monkeypatch.setattr(r._dienst, "legal_notification_service", dienst)
+        app = FastAPI()
+        app.include_router(r.router)
+        c = TestClient(app)
+        a = c.get("/api/legal-notifications/confirm/t", follow_redirects=False)
+        assert a.status_code == 303
+        assert a.headers["location"] == "https://app.complyo.de/dashboard?rechtsaenderung=bestaetigt"
+        b = c.get("/api/legal-notifications/dismiss/t", follow_redirects=False)
+        assert b.headers["location"].endswith("rechtsaenderung=ungueltig")
