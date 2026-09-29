@@ -120,9 +120,12 @@ services:
       # Art. 7 Abs. 1 DSGVO sofort. Ein Wechsel macht alte und neue Zeilen
       # zueinander unvergleichbar, die alten bleiben aber gueltig.
       - COMPLYO_IP_PFEFFER=${COMPLYO_IP_PFEFFER:-}
-      # Wohin die Links in den Kontomails zeigen: das Dashboard, nicht die
-      # Startseite. Dort liegen Anmeldung und die Kontoseiten.
-      - FRONTEND_URL=${FRONTEND_URL:-https://app.complyo.de}
+      # Wohin die Links in Mails und Weiterleitungen ins Dashboard zeigen:
+      # Anmeldung, Konto, Passwort, Add-ons (backend/adressen.py). Bis zum
+      # 29.09.2026 stand hier FRONTEND_URL, weiter unten ein zweites Mal hart
+      # auf der Startseite, und der spaetere Eintrag gewann: Passwort- und
+      # Bestaetigungslinks liefen auf complyo.de in 404.
+      - DASHBOARD_URL=${DASHBOARD_URL:-https://app.complyo.de}
       # Loeschfristen: 'ja' loescht auch Nachweise (Einwilligungen, Scanverlauf,
       # Auslieferungsprotokoll) nach Ablauf. Siehe backend/loeschfristen.py.
       - LOESCHFRISTEN_SCHARF=${LOESCHFRISTEN_SCHARF:-nein}
@@ -174,6 +177,8 @@ services:
       - GIT_TOKEN_ENC_KEY=${GIT_TOKEN_ENC_KEY:-}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      # Startseite (Warteliste, Lead-Mails) und JWT-Aussteller. Nicht aendern:
+      # ein anderer Aussteller meldet alle angemeldeten Nutzer ab.
       - FRONTEND_URL=https://complyo.de
       # Sitzungsdauer (11.09.2026). Das Backend praegte Access-Token fuer 15
       # Minuten (auth_service-Standard), das Dashboard nahm 60 an, und

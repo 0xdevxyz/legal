@@ -15,6 +15,7 @@ from email.mime.text import MIMEText
 
 from database_service import db_service
 from dependencies import get_current_user
+from adressen import dashboard_url
 
 router = APIRouter(prefix="/api/addons", tags=["Add-Ons"])
 security = HTTPBearer()
@@ -62,7 +63,8 @@ _addon_webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET_ADDONS", "")
 if not _addon_webhook_secret:
     raise RuntimeError("STRIPE_WEBHOOK_SECRET_ADDONS environment variable is required!")
 STRIPE_WEBHOOK_SECRET = _addon_webhook_secret
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://app.complyo.de")
+# Stripe-Ruecksprung ins Dashboard, nicht auf die Startseite (adressen.py).
+FRONTEND_URL = dashboard_url()
 
 # ==================== PRICING CONFIGURATION ====================
 
