@@ -22,6 +22,7 @@ from jinja2 import Template
 import json
 from pdf_report_generator import pdf_generator
 from i18n_service import i18n_service
+import mail_layout
 
 logger = logging.getLogger(__name__)
 
@@ -617,65 +618,45 @@ support@complyo.de • {self.frontend_url}
     def send_waitlist_confirmation(self, email: str, name: str, confirm_url: str) -> bool:
         """
         Bestätigungs-E-Mail für die Early-Access Waitlist (Double-Opt-In, DSGVO-konform)
+
+        Aufbau nach dem gemeinsamen Rahmen in mail_layout.py. Der Name kommt
+        frei aus dem Formular und wird deshalb maskiert, bevor er ins HTML geht.
         """
         try:
             greeting = f"Hallo{(' ' + name) if name else ''},"
             subject = "Bestätige deine Anmeldung auf der Complyo Early-Access-Liste"
+            anrede = f"Hallo{(' ' + mail_layout.escape(name)) if name else ''},"
+            link = mail_layout.escape(confirm_url, quote=True)
 
-            html_body = f"""<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bestätige deine Early-Access-Anmeldung</title>
-</head>
-<body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
-  <div style="background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);color:white;padding:32px;text-align:center;border-radius:12px 12px 0 0;">
-    <div style="display:inline-flex;align-items:center;gap:10px;margin-bottom:8px;">
-      <div style="width:36px;height:36px;background:rgba(255,255,255,0.2);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:18px;">C</div>
-      <span style="font-size:22px;font-weight:bold;">complyo</span>
-    </div>
-    <p style="margin:0;font-size:15px;opacity:0.85;">Early Access – Jetzt bestätigen</p>
-  </div>
-
-  <div style="background:#f8fafc;padding:32px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0;border-top:none;">
-    <h2 style="color:#1e293b;margin-top:0;">{greeting}</h2>
-
-    <p>vielen Dank für dein Interesse an <strong>complyo</strong> – der KI-Compliance-Plattform für Websites.</p>
-
-    <p>Bitte bestätige jetzt deine E-Mail-Adresse, um deinen Early-Access-Platz zu sichern:</p>
-
-    <div style="text-align:center;margin:32px 0;">
-      <a href="{confirm_url}"
-         style="background:#2563eb;color:white;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:bold;font-size:16px;display:inline-block;box-shadow:0 4px 14px rgba(37,99,235,0.35);">
-        E-Mail bestätigen
-      </a>
-    </div>
-
-    <p style="font-size:13px;color:#64748b;">
-      Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:<br>
-      <a href="{confirm_url}" style="color:#2563eb;word-break:break-all;">{confirm_url}</a>
-    </p>
-
-    <p style="font-size:13px;color:#64748b;">
-      Dieser Link ist 7 Tage gültig. Falls du dich nicht angemeldet hast, ignoriere diese E-Mail einfach.
-    </p>
-
-    <hr style="border:none;border-top:1px solid #e2e8f0;margin:28px 0;">
-
-    <p style="font-size:12px;color:#94a3b8;text-align:center;">
-      <strong>Complyo</strong> &bull; KI-Compliance-Plattform &bull; Made in Germany<br>
-      <a href="https://complyo.de/impressum" style="color:#94a3b8;">Impressum</a> &bull;
-      <a href="https://complyo.de/datenschutz" style="color:#94a3b8;">Datenschutz</a> &bull;
-      <a href="mailto:support@complyo.de" style="color:#94a3b8;">support@complyo.de</a>
-    </p>
-    <p style="font-size:11px;color:#cbd5e1;text-align:center;">
-      Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.de für Early Access angemeldet hast.
-      Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
-    </p>
-  </div>
-</body>
-</html>"""
+            html_body = mail_layout.seite(
+                "Bestätige deine Early-Access-Anmeldung",
+                "Ein Klick auf den Link, dann ist deine Anmeldung bestätigt.",
+                mail_layout.kopf("Early Access", "Bitte bestätige deine Anmeldung"),
+                mail_layout.text(
+                    anrede,
+                    "vielen Dank für dein Interesse an <strong>complyo</strong>, "
+                    "der KI-Compliance-Plattform für Websites.",
+                    "Bitte bestätige jetzt deine E-Mail-Adresse, um deinen "
+                    "Early-Access-Platz zu sichern. Der Link ist 7 Tage gültig.",
+                ),
+                mail_layout.aktion("E-Mail-Adresse bestätigen", "Jetzt bestätigen", link),
+                mail_layout.text(
+                    '<span style="color:#4b5563;font-size:14px;">Falls der Knopf nicht '
+                    'funktioniert, kopiere diesen Link in deinen Browser:<br>'
+                    f'<a href="{link}" style="color:#00706c;word-break:break-all;">{link}</a></span>',
+                    '<span style="color:#4b5563;font-size:14px;">Falls du dich nicht '
+                    'angemeldet hast, ignoriere diese E-Mail einfach. Ohne Bestätigung '
+                    'passiert nichts weiter.</span>',
+                ),
+                mail_layout.gruss(),
+                mail_layout.kontakt(),
+                mail_layout.fuss(
+                    "Du erhältst diese E-Mail, weil du dich auf complyo.de für Early "
+                    "Access angemeldet hast. Deine Daten werden DSGVO-konform "
+                    "verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).",
+                    mail_layout.rechtliches(),
+                ),
+            )
 
             text_body = f"""{greeting}
 
@@ -694,7 +675,7 @@ Impressum: https://complyo.de/impressum
 Datenschutz: https://complyo.de/datenschutz
 Kontakt: support@complyo.de
 
-Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.de für Early Access angemeldet hast.
+Du erhältst diese E-Mail, weil du dich auf complyo.de für Early Access angemeldet hast.
 Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
 """
             return self._send_email(
@@ -794,10 +775,10 @@ Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
             def _zeile(bezeichnung: str, wert: str) -> str:
                 return (
                     '<tr>'
-                    '<td style="padding:0 0 14px;color:#7f92a3;font-size:14px;'
+                    '<td style="padding:0 0 14px;color:#4b5563;font-size:14px;'
                     'width:132px;vertical-align:top;">' + bezeichnung + '</td>'
-                    '<td style="padding:0 0 14px;color:#22384a;font-size:14px;">'
-                    + wert + '</td>'
+                    '<td style="padding:0 0 14px;color:#111827;font-size:14px;'
+                    'word-break:break-word;">' + mail_layout.escape(wert) + '</td>'
                     '</tr>'
                 )
 
@@ -810,57 +791,21 @@ Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
                 + _zeile("Angebot", angebot or "(keines)")
             )
 
-            schrift = ("-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,"
-                       "Helvetica,Arial,sans-serif")
-
-            unterzeile_html = (
-                f'<div style="margin:10px 0 0;color:#5d7285;font-size:16px;">'
-                f'{unterzeile}</div>' if unterzeile else ""
+            # Derselbe Rahmen wie die Mails an Interessenten (mail_layout.py),
+            # ohne Gruss und Kontakt: die Meldung geht nur an uns.
+            html_body = mail_layout.seite(
+                kopfzeile,
+                f"{augenmerk}: {schlagzeile}",
+                mail_layout.kopf(augenmerk, mail_layout.escape(schlagzeile),
+                                 mail_layout.escape(unterzeile)),
+                mail_layout.karte(
+                    '<table role="presentation" width="100%" cellpadding="0" '
+                    f'cellspacing="0" border="0" style="font-family:{mail_layout.SCHRIFT};">'
+                    f'{angaben}</table>',
+                    innen="32px 40px 22px",
+                ),
+                mail_layout.fuss(fusszeile),
             )
-
-            html_body = f"""<!DOCTYPE html>
-<html lang="de">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>{kopfzeile}</title></head>
-<body style="margin:0;padding:0;background:#eef4fa;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-       style="background:#eef4fa;padding:32px 16px;">
-  <tr><td align="center">
-    <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
-           style="width:100%;max-width:600px;">
-
-      <tr><td style="padding:0 0 20px;font-family:{schrift};font-size:13px;
-                     color:#8ea2b4;text-align:center;letter-spacing:.04em;">
-        complyo
-      </td></tr>
-
-      <tr><td style="background:#ffffff;border-radius:14px;padding:40px 40px 36px;
-                     font-family:{schrift};">
-        <div style="color:#8ea2b4;font-size:14px;">{augenmerk}</div>
-        <div style="margin:14px 0 0;color:#1f3d55;font-size:34px;line-height:1.2;
-                    font-weight:700;word-break:break-word;">{schlagzeile}</div>
-        {unterzeile_html}
-      </td></tr>
-
-      <tr><td style="height:16px;line-height:16px;font-size:0;">&nbsp;</td></tr>
-
-      <tr><td style="background:#ffffff;border-radius:14px;padding:32px 40px 22px;
-                     font-family:{schrift};">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-          {angaben}
-        </table>
-      </td></tr>
-
-      <tr><td style="padding:22px 40px 0;font-family:{schrift};font-size:13px;
-                     line-height:1.6;color:#8ea2b4;">
-        {fusszeile}
-      </td></tr>
-
-    </table>
-  </td></tr>
-</table>
-</body>
-</html>"""
             text_body = f"""{augenmerk}
 
 {schlagzeile}{chr(10) + unterzeile if unterzeile else ""}
