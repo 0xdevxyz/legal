@@ -87,18 +87,22 @@ def text(*absaetze: str) -> str:
 
 
 def aktion(ueberschrift: str, knopf_text: str, url: str) -> str:
-    """Das dunkle Band mit dem einen Knopf.
+    """Das dunkle Band mit dem einen Knopf. Ohne Ueberschrift nur der Knopf,
+    wenn die Schlagzeile oben schon sagt, worum es geht.
 
     Der Knopf ist eine Tabellenzelle mit Hintergrund plus Link mit Innenabstand
     ("bulletproof"): so bleibt er auch in Outlook eine Flaeche und nicht nur
     ein unterstrichenes Wort.
     """
+    kopfzeile = (
+        '<tr>'
+        f'<td style="padding:6px 0 16px;color:#ffffff;font-family:{SCHRIFT};font-size:20px;'
+        f'line-height:1.3;font-weight:700;">{ueberschrift}</td>'
+        '</tr>'
+    ) if ueberschrift else ""
     return karte(
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">'
-        '<tr>'
-        f'<td style="padding:6px 0;color:#ffffff;font-family:{SCHRIFT};font-size:20px;'
-        f'line-height:1.3;font-weight:700;">{ueberschrift}</td>'
-        '</tr><tr><td style="padding:16px 0 0;">'
+        f'{kopfzeile}<tr><td style="padding:0;">'
         '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
         f'<td bgcolor="{AKZENT}" style="background:{AKZENT};border-radius:10px;">'
         f'<a href="{url}" style="display:inline-block;padding:14px 28px;'

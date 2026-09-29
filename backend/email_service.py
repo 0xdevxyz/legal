@@ -652,8 +652,8 @@ support@complyo.de • {self.frontend_url}
                 mail_layout.kontakt(),
                 mail_layout.fuss(
                     "Du erhältst diese E-Mail, weil du dich auf complyo.de für Early "
-                    "Access angemeldet hast. Deine Daten werden DSGVO-konform "
-                    "verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).",
+                    "Access angemeldet hast. Rechtsgrundlage ist deine Einwilligung "
+                    "(Art. 6 Abs. 1 lit. a DSGVO), die du jederzeit widerrufen kannst.",
                     mail_layout.rechtliches(),
                 ),
             )
@@ -676,7 +676,7 @@ Datenschutz: https://complyo.de/datenschutz
 Kontakt: support@complyo.de
 
 Du erhältst diese E-Mail, weil du dich auf complyo.de für Early Access angemeldet hast.
-Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
+Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO), die du jederzeit widerrufen kannst.
 """
             return self._send_email(
                 to_email=email,
@@ -834,38 +834,43 @@ Angebot:  {angebot or "(keines)"}
     # Kontosicherheit: Bestaetigung, Zuruecksetzen, Loeschankuendigung
     # =======================================================================
     #
-    # Drei Mails, die es bis zum 10.09.2026 nicht gab. Alle drei bewusst
-    # schmucklos: keine Bilder, kein Nachverfolgungspixel, ein einziger Link.
-    # Wer eine Mail zum Zuruecksetzen bekommt, die er nicht angefordert hat,
-    # soll auf einen Blick sehen, was zu tun ist — naemlich nichts.
+    # Drei Mails, die es bis zum 10.09.2026 nicht gab. Seit 29.09.2026 im
+    # Rahmen aus mail_layout.py, damit sie aussehen wie der Rest von complyo.
+    # Geblieben ist die Regel von damals: keine Nachverfolgung, und der
+    # einzige anklickbare Weg ist der eine Link, um den es geht. Deshalb
+    # hier keine Kontaktkarte und keine Links im Fuss. Wer eine Mail zum
+    # Zuruecksetzen bekommt, die er nicht angefordert hat, soll auf einen
+    # Blick sehen, was zu tun ist, naemlich nichts. Das Logo ist eine
+    # statische Datei ohne Kennung, es verraet nicht, wer die Mail oeffnet.
 
     def _rahmen(self, ueberschrift: str, absatz: str, knopf_text: str,
                 knopf_url: str, fusszeile: str) -> str:
-        return f"""
-        <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,sans-serif;
-                    max-width:520px;margin:0 auto;padding:24px;color:#111">
-          <h1 style="font-size:20px;margin:0 0 16px">{ueberschrift}</h1>
-          <p style="font-size:15px;line-height:1.6;margin:0 0 24px">{absatz}</p>
-          <p style="margin:0 0 24px">
-            <a href="{knopf_url}"
-               style="background:#0f172a;color:#fff;text-decoration:none;
-                      padding:12px 20px;border-radius:6px;display:inline-block;
-                      font-size:15px">{knopf_text}</a>
-          </p>
-          <p style="font-size:13px;line-height:1.6;color:#555;margin:0 0 8px">
-            Falls der Knopf nicht funktioniert, diese Adresse in den Browser kopieren:<br>
-            <span style="word-break:break-all">{knopf_url}</span>
-          </p>
-          <hr style="border:0;border-top:1px solid #e5e7eb;margin:24px 0">
-          <p style="font-size:13px;line-height:1.6;color:#555;margin:0">{fusszeile}</p>
-        </div>
-        """
+        link = mail_layout.escape(knopf_url, quote=True)
+        leise = '<span style="color:#4b5563;font-size:14px;">'
+        return mail_layout.seite(
+            ueberschrift,
+            ueberschrift,
+            mail_layout.kopf("Ihr complyo-Konto", ueberschrift),
+            mail_layout.text(absatz),
+            mail_layout.aktion("", knopf_text, link),
+            mail_layout.text(
+                leise + "Falls der Knopf nicht funktioniert, diese Adresse in den "
+                "Browser kopieren:<br>"
+                f'<span style="color:#111827;word-break:break-all;">{link}</span></span>',
+                leise + fusszeile + "</span>",
+            ),
+            mail_layout.gruss(),
+            mail_layout.fuss(
+                f"{mail_layout.ANBIETER['geschaeftsbezeichnung']} · "
+                f"{mail_layout.ANBIETER['strasse']} · {mail_layout.ANBIETER['plz_ort']}"
+            ),
+        )
 
     def sende_konto_bestaetigung(self, email: str, name: str, url: str) -> bool:
         """Bestaetigung der E-Mail-Adresse eines Kontos (nicht eines Leads)."""
         html = self._rahmen(
             "Bitte E-Mail-Adresse bestätigen",
-            f"Hallo {name}, für diese Adresse wurde ein complyo-Konto angelegt. "
+            f"Hallo {mail_layout.escape(name)}, für diese Adresse wurde ein complyo-Konto angelegt. "
             "Mit der Bestätigung ist sichergestellt, dass Hinweise zu Fristen und "
             "Rechtsänderungen Sie auch erreichen.",
             "Adresse bestätigen", url,
@@ -885,7 +890,7 @@ Angebot:  {angebot or "(keines)"}
                                      gueltig_minuten: int) -> bool:
         html = self._rahmen(
             "Passwort zurücksetzen",
-            f"Hallo {name}, für Ihr complyo-Konto wurde ein neues Passwort angefordert. "
+            f"Hallo {mail_layout.escape(name)}, für Ihr complyo-Konto wurde ein neues Passwort angefordert. "
             f"Der Link gilt {gueltig_minuten} Minuten und lässt sich einmal verwenden.",
             "Neues Passwort setzen", url,
             "Wenn Sie das nicht waren, ist nichts passiert: Ihr Passwort bleibt "
@@ -913,7 +918,7 @@ Angebot:  {angebot or "(keines)"}
         """
         html = self._rahmen(
             "Ihr complyo-Konto wird gelöscht",
-            f"Hallo {name}, Ihr Konto wurde lange nicht genutzt. Nach den eigenen "
+            f"Hallo {mail_layout.escape(name)}, Ihr Konto wurde lange nicht genutzt. Nach den eigenen "
             "Löschfristen von complyo werden Daten nicht länger aufbewahrt, als der "
             f"Zweck es trägt. Ihr Konto und alle zugehörigen Daten werden deshalb in "
             f"{tage} Tagen gelöscht. Eine einzige Anmeldung genügt, um das abzuwenden.",

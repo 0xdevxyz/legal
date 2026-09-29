@@ -73,6 +73,16 @@ class TestBestaetigungsmail:
         assert LINK in text
         assert html.count(LINK.replace("&", "&amp;")) >= 2, "Knopf und Ersatzlink"
 
+    def test_keine_zustandsbehauptung(self, gesendet):
+        """ "DSGVO-konform verarbeitet" behauptet einen Zustand, den niemand
+        gemessen hat. Die Mail nennt stattdessen die Rechtsgrundlage und das
+        Widerrufsrecht, wie in PR #10 entschieden."""
+        svc, liste = gesendet
+        svc.send_waitlist_confirmation("a@example.org", "", LINK)
+        for teil in (liste[0]["html"], liste[0]["text"]):
+            assert "DSGVO-konform" not in teil
+            assert "jederzeit widerrufen" in teil
+
     def test_kein_doppeltes_complyo_de(self, gesendet):
         svc, liste = gesendet
         svc.send_waitlist_confirmation("a@example.org", "", LINK)
@@ -115,3 +125,36 @@ class TestAnbieterangaben:
         assert a["strasse"] == feld("strasse")
         assert a["plz_ort"] == feld("plz") + " " + feld("ort")
         assert a["email"] == feld("email")
+
+
+class TestKontomails:
+    """Bestaetigung, Passwort, Loeschankuendigung: gleicher Rahmen, aber nur
+    der eine Link, um den es geht. Wer eine Passwortmail bekommt, die er nicht
+    angefordert hat, soll nichts anderes anklicken koennen."""
+
+    URL = "https://app.complyo.de/passwort?token=xyz&a=1"
+
+    def _alle(self, svc):
+        svc.sende_konto_bestaetigung("k@example.org", "<i>Kai</i>", self.URL)
+        svc.sende_passwort_zuruecksetzen("k@example.org", "<i>Kai</i>", self.URL, 30)
+        svc.sende_loeschankuendigung("k@example.org", "<i>Kai</i>", 30, self.URL)
+
+    def test_rahmen_und_ein_einziger_link(self, gesendet):
+        import mail_layout
+        svc, liste = gesendet
+        self._alle(svc)
+        assert len(liste) == 3
+        for m in liste:
+            html = m["html"]
+            assert mail_layout.LOGO_URL in html, m["betreff"]
+            ziele = set(re.findall(r'href="([^"]+)"', html))
+            assert ziele == {self.URL.replace("&", "&amp;")}, (
+                f"{m['betreff']}: weitere Links {ziele}"
+            )
+
+    def test_name_maskiert(self, gesendet):
+        svc, liste = gesendet
+        self._alle(svc)
+        for m in liste:
+            assert "<i>Kai</i>" not in m["html"]
+            assert "&lt;i&gt;Kai" in m["html"]
