@@ -508,14 +508,10 @@ async def join_waitlist(
                 angebot,
             )
 
-        # Der Link zeigt auf die API, nicht auf die Landing. Bis zum 28.09.2026
-        # stand hier FRONTEND_URL (https://complyo.de): dort geht /api/ an die
-        # Next-Landing, und jeder Bestaetigungsklick endete in 404. Seit dem
-        # Start der Warteliste hat deshalb niemand einen Platz bekommen.
-        # api.complyo.de antwortet richtig (Weiterleitung auf die Herkunftsseite).
-        # Dieselbe Konvention wie cookie_compliance_routes (PUBLIC_API_BASE).
-        api_basis = os.getenv("PUBLIC_API_BASE", "https://api.complyo.de").rstrip("/")
-        confirm_url = f"{api_basis}/api/leads/waitlist/confirm?token={confirm_token}"
+        # Der Link muss ans Backend. complyo.de gibt /api/ an die Landing weiter
+        # (308 auf 404), deshalb nicht FRONTEND_URL, sondern der API-Host.
+        api_base = os.getenv("PUBLIC_API_BASE", "https://api.complyo.de").rstrip("/")
+        confirm_url = f"{api_base}/api/leads/waitlist/confirm?token={confirm_token}"
 
         background_tasks.add_task(
             email_service.send_waitlist_confirmation,

@@ -670,8 +670,8 @@ support@complyo.de • {self.frontend_url}
       <a href="mailto:support@complyo.de" style="color:#94a3b8;">support@complyo.de</a>
     </p>
     <p style="font-size:11px;color:#cbd5e1;text-align:center;">
-      Du erhältst diese E-Mail, weil du dich auf complyo.de für Early Access angemeldet hast.
-      Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO), die du jederzeit widerrufen kannst.
+      Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.de für Early Access angemeldet hast.
+      Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
     </p>
   </div>
 </body>
@@ -694,8 +694,8 @@ Impressum: https://complyo.de/impressum
 Datenschutz: https://complyo.de/datenschutz
 Kontakt: support@complyo.de
 
-Du erhältst diese E-Mail, weil du dich auf complyo.de für Early Access angemeldet hast.
-Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO), die du jederzeit widerrufen kannst.
+Du erhältst diese E-Mail, weil du dich auf complyo.de / complyo.de für Early Access angemeldet hast.
+Deine Daten werden DSGVO-konform verarbeitet (Art. 6 Abs. 1 lit. a DSGVO).
 """
             return self._send_email(
                 to_email=email,

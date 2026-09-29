@@ -188,6 +188,22 @@ class TestWaitlistJoin:
         assert data["status"] == "pending_confirmation"
         assert "Bestätigungsmail" in data["message"]
 
+    @patch("lead_routes.email_service")
+    @patch("lead_routes.db_service")
+    def test_bestaetigungslink_zeigt_auf_api_host(self, mock_db, mock_email, client, monkeypatch):
+        # complyo.de gibt /api/ an die Landing weiter (308 auf 404). Der Link muss
+        # unabhaengig von FRONTEND_URL auf den API-Host zeigen.
+        monkeypatch.setenv("FRONTEND_URL", "https://complyo.de")
+        monkeypatch.delenv("PUBLIC_API_BASE", raising=False)
+        verbindung(mock_db, fetchrow=[None])
+        mock_email.send_waitlist_confirmation = MagicMock(return_value=True)
+
+        response = client.post("/api/leads/waitlist", json=gueltige_daten())
+
+        assert response.status_code == 200
+        link = mock_email.send_waitlist_confirmation.call_args[0][2]
+        assert link.startswith("https://api.complyo.de/api/leads/waitlist/confirm?token=")
+
     @patch("lead_routes.db_service")
     def test_consent_false_returns_422(self, mock_db, client):
         payload = {**gueltige_daten(), "consent": False}
