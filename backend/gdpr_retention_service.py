@@ -99,13 +99,15 @@ class GDPRRetentionService:
 
             for lead in expired_leads:
                 try:
-                    # Send deletion notification before deleting (if email still valid)
-                    await self._send_deletion_notification(lead)
-
                     # Permanently delete the lead
                     success = await db_service.delete_lead_permanently(lead["id"])
 
                     if success:
+                        # Mitteilung nach der Loeschung, nicht davor: sie ging
+                        # frueher im selben Durchlauf unmittelbar vorher raus,
+                        # war also nie eine Vorwarnung, sagte aber "werden
+                        # geloescht", auch wenn es dann scheiterte.
+                        await self._send_deletion_notification(lead)
                         cleanup_results["leads_deleted"] += 1
 
                         # Log the deletion
@@ -175,9 +177,6 @@ class GDPRRetentionService:
                 logger.warning(f"Lead {lead_id} not found for deletion request")
                 return False
 
-            # Send deletion confirmation email
-            await self._send_deletion_confirmation(lead)
-
             # Mark for deletion first
             await db_service.mark_lead_for_deletion(lead_id)
 
@@ -185,6 +184,11 @@ class GDPRRetentionService:
             success = await db_service.delete_lead_permanently(lead_id)
 
             if success:
+                # Erst nach der Loeschung bestaetigen. Bis zum 29.09.2026 ging
+                # die Mail "Ihre Daten wurden geloescht" VOR dem Loeschen raus,
+                # also auch dann, wenn das Loeschen danach scheiterte.
+                await self._send_deletion_confirmation(lead)
+
                 # Log the deletion
                 deletion_log_entry = {
                     "lead_id": lead_id,
@@ -571,23 +575,39 @@ class GDPRRetentionService:
         """Eingangsbestätigung für einen Kontolöschantrag. Gibt Versandstatus zurück."""
         try:
             from email_service import email_service
-            inhalt = f"""
-            Sehr geehrte Damen und Herren,
+            import mail_layout
+            inhalt = f"""Sehr geehrte Damen und Herren,
 
-            wir haben Ihren Antrag auf Löschung Ihres Complyo-Kontos erhalten
-            (Art. 17 DSGVO, Referenz {antrag_id}).
+wir haben Ihren Antrag auf Löschung Ihres Complyo-Kontos erhalten
+(Art. 17 DSGVO, Referenz {antrag_id}).
 
-            Die Löschung wird nach Prüfung ausgeführt; Sie erhalten dann eine
-            abschließende Bestätigung. Bis dahin können Sie den Antrag im
-            Dashboard oder per E-Mail an datenschutz@complyo.de zurückziehen.
+Die Löschung wird nach Prüfung ausgeführt; Sie erhalten dann eine
+abschließende Bestätigung. Bis dahin können Sie den Antrag im
+Dashboard oder per E-Mail an datenschutz@complyo.de zurückziehen.
 
-            Mit freundlichen Grüßen,
-            Ihr Complyo Team
-            """
+Mit freundlichen Grüßen
+Ihr complyo-Team
+"""
+            html = mail_layout.seite(
+                "Ihr Löschantrag ist eingegangen",
+                "Wir haben Ihren Antrag auf Löschung Ihres Kontos erhalten.",
+                mail_layout.kopf("Art. 17 DSGVO", "Ihr Löschantrag ist eingegangen"),
+                mail_layout.text(
+                    "Sehr geehrte Damen und Herren,",
+                    "wir haben Ihren Antrag auf Löschung Ihres complyo-Kontos erhalten "
+                    f"(Referenz {mail_layout.escape(str(antrag_id))}).",
+                    "Die Löschung wird nach Prüfung ausgeführt; Sie erhalten dann eine "
+                    "abschließende Bestätigung. Bis dahin können Sie den Antrag im "
+                    "Dashboard oder per E-Mail an datenschutz@complyo.de zurückziehen.",
+                ),
+                mail_layout.gruss(),
+                mail_layout.kontakt(),
+                mail_layout.fuss(mail_layout.rechtliches()),
+            )
             return email_service._send_email(
                 to_email=email,
                 subject="Ihr Löschantrag ist eingegangen - Complyo",
-                html_body=inhalt.replace("\n", "<br>"),
+                html_body=html,
                 text_body=inhalt,
             )
         except Exception as e:
@@ -673,24 +693,46 @@ class GDPRRetentionService:
             return False
 
     async def _send_deletion_notification(self, lead: Dict[str, Any]):
-        """Send notification before automatic deletion"""
+        """Mitteilung nach der automatischen Löschung (Aufbewahrungsfrist abgelaufen)."""
         try:
+            import mail_layout
             subject = "Automatische Löschung Ihrer Daten - Complyo"
+            name = lead.get('name') or ''
+            frist = lead.get('data_retention_until') or 'unbekannt'
+            if hasattr(frist, 'strftime'):
+                frist = frist.strftime('%d.%m.%Y')
+            anrede = f"Guten Tag {name}," if name else "Guten Tag,"
 
-            # Create notification email content
-            email_content = f"""
-            Sehr geehrte/r {lead.get('name', 'Kunde/Kundin')},
+            email_content = f"""{anrede}
 
-            gemäß der Datenschutz-Grundverordnung (DSGVO) werden Ihre Daten automatisch nach Ablauf
-            der Aufbewahrungsfrist gelöscht.
+die Aufbewahrungsfrist für Ihre Daten bei complyo ist am {frist} abgelaufen.
+Wir haben die Daten zu Ihrer Anfrage deshalb gelöscht.
 
-            Ihre Daten wurden am {lead.get('data_retention_until', 'unbekannt')} zur Löschung vorgesehen.
+In unseren Datensicherungen bleiben sie bis zu deren Ablauf erhalten,
+höchstens 190 Tage, danach werden sie überschrieben.
 
-            Falls Sie Fragen haben, kontaktieren Sie uns unter datenschutz@complyo.de.
+Falls Sie Fragen haben, kontaktieren Sie uns unter datenschutz@complyo.de.
 
-            Mit freundlichen Grüßen,
-            Ihr Complyo Team
-            """
+Mit freundlichen Grüßen
+Ihr complyo-Team
+"""
+            html = mail_layout.seite(
+                "Automatische Löschung Ihrer Daten",
+                "Die Aufbewahrungsfrist ist abgelaufen, Ihre Daten sind gelöscht.",
+                mail_layout.kopf("Datenschutz", "Ihre Daten sind gelöscht"),
+                mail_layout.text(
+                    f"Guten Tag {mail_layout.escape(name)}," if name else "Guten Tag,",
+                    "die Aufbewahrungsfrist für Ihre Daten bei complyo ist am "
+                    f"{mail_layout.escape(str(frist))} abgelaufen. Wir haben die Daten zu "
+                    "Ihrer Anfrage deshalb gelöscht.",
+                    "In unseren Datensicherungen bleiben sie bis zu deren Ablauf erhalten, "
+                    "höchstens 190 Tage, danach werden sie überschrieben.",
+                    "Falls Sie Fragen haben, erreichen Sie uns unter datenschutz@complyo.de.",
+                ),
+                mail_layout.gruss(),
+                mail_layout.kontakt(),
+                mail_layout.fuss(mail_layout.rechtliches()),
+            )
 
             # Frueher stand hier nur "Would send actual email in production"
             # samt einer Logzeile, die so tat, als waere etwas passiert.
@@ -699,36 +741,63 @@ class GDPRRetentionService:
             from email_service import email_service
             versandt = email_service._send_email(
                 to_email=lead["email"], subject=subject,
-                html_body=email_content.replace("\n", "<br>"),
-                text_body=email_content)
+                html_body=html, text_body=email_content)
             if versandt:
-                logger.info("Loeschankuendigung an %s verschickt", lead["email"])
+                logger.info("Loeschmitteilung an %s verschickt", lead["email"])
             else:
-                logger.error("Loeschankuendigung an %s NICHT verschickt",
+                logger.error("Loeschmitteilung an %s NICHT verschickt",
                              lead["email"])
 
         except Exception as e:
             logger.error(f"Error sending deletion notification: {e}")
 
     async def _send_deletion_confirmation(self, lead: Dict[str, Any]):
-        """Send confirmation after deletion"""
+        """Bestätigung nach einem Löschantrag (Art. 17 DSGVO), erst nach der Löschung."""
         try:
+            import mail_layout
             subject = "Bestätigung der Datenlöschung - Complyo"
+            name = lead.get('name') or ''
+            zeitpunkt = datetime.now().strftime('%d.%m.%Y %H:%M')
+            anrede = f"Guten Tag {name}," if name else "Guten Tag,"
 
-            email_content = f"""
-            Sehr geehrte/r {lead.get('name', 'Kunde/Kundin')},
+            email_content = f"""{anrede}
 
-            hiermit bestätigen wir die vollständige Löschung Ihrer personenbezogenen Daten
-            aus unserem System gemäß Artikel 17 DSGVO (Recht auf Vergessenwerden).
+hiermit bestätigen wir die Löschung Ihrer personenbezogenen Daten gemäß
+Artikel 17 DSGVO.
 
-            Löschung durchgeführt am: {datetime.now().strftime('%d.%m.%Y %H:%M')}
-            Referenz-ID: {lead['id']}
+Löschung durchgeführt am: {zeitpunkt}
+Referenz-ID: {lead['id']}
 
-            Ihre Daten wurden permanent und unwiderruflich gelöscht.
+In unseren Datensicherungen bleiben die Daten bis zu deren Ablauf erhalten,
+höchstens 190 Tage, danach werden sie überschrieben. Aus einer Sicherung
+stellen wir sie nicht wieder her.
 
-            Mit freundlichen Grüßen,
-            Ihr Complyo Team
-            """
+Mit freundlichen Grüßen
+Ihr complyo-Team
+"""
+            html = mail_layout.seite(
+                "Datenlöschung bestätigt",
+                "Ihre Daten sind gelöscht.",
+                mail_layout.kopf("Art. 17 DSGVO", "Ihre Daten sind gelöscht"),
+                mail_layout.text(
+                    f"Guten Tag {mail_layout.escape(name)}," if name else "Guten Tag,",
+                    "hiermit bestätigen wir die Löschung Ihrer personenbezogenen Daten "
+                    "gemäß Artikel 17 DSGVO.",
+                ),
+                mail_layout.angaben([
+                    ("Durchgeführt am", zeitpunkt),
+                    ("Referenz", mail_layout.escape(str(lead['id']))),
+                ]),
+                mail_layout.hinweis(
+                    "Was bleibt",
+                    "In unseren Datensicherungen bleiben die Daten bis zu deren Ablauf "
+                    "erhalten, höchstens 190 Tage, danach werden sie überschrieben. Aus "
+                    "einer Sicherung stellen wir sie nicht wieder her.",
+                ),
+                mail_layout.gruss(),
+                mail_layout.kontakt(),
+                mail_layout.fuss(mail_layout.rechtliches()),
+            )
 
             # Wie die Ankuendigung: sie wurde nie verschickt, die Logzeile
             # tat nur so. Eine Loeschbestaetigung nach Art. 17 DSGVO ist die
@@ -736,8 +805,7 @@ class GDPRRetentionService:
             from email_service import email_service
             versandt = email_service._send_email(
                 to_email=lead["email"], subject=subject,
-                html_body=email_content.replace("\n", "<br>"),
-                text_body=email_content)
+                html_body=html, text_body=email_content)
             if versandt:
                 logger.info("Loeschbestaetigung an %s verschickt", lead["email"])
             else:
