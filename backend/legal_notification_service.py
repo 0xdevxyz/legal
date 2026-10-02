@@ -331,7 +331,7 @@ class LegalNewsNotificationService:
                 </a>
             </p>
             <p style="margin: 0;">
-                Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin | 
+                Yvonne Weishar · Complyo, Koburger Straße 198, 04416 Markkleeberg | 
                 <a href="mailto:datenschutz@complyo.de" style="color: #667eea;">datenschutz@complyo.de</a>
             </p>
         </div>
@@ -396,7 +396,7 @@ Nicht relevant für mich: {dismiss_url}
 
 Benachrichtigungseinstellungen: {self.frontend_url}/settings/notifications
 
-Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin | datenschutz@complyo.de
+Yvonne Weishar · Complyo, Koburger Straße 198, 04416 Markkleeberg | datenschutz@complyo.de
         """
     
     async def _send_email(

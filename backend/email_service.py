@@ -262,7 +262,7 @@ class EmailService:
         <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
         
         <p style="font-size: 12px; color: #888; text-align: center;">
-            Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin • Compliance Made Simple<br>
+            Yvonne Weishar · Complyo, Koburger Straße 198, 04416 Markkleeberg • Compliance Made Simple<br>
             <a href="mailto:datenschutz@complyo.de" style="color: #667eea;">datenschutz@complyo.de</a> • 
             <a href="https://complyo.de/datenschutz" style="color: #667eea;">Datenschutzerklärung</a>
         </p>
@@ -295,7 +295,7 @@ zusenden dürfen. Widerruf jederzeit möglich unter datenschutz@complyo.de
 Falls Sie diese E-Mail nicht angefordert haben, können Sie sie einfach ignorieren.
 
 ---
-Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin • Compliance Made Simple
+Yvonne Weishar · Complyo, Koburger Straße 198, 04416 Markkleeberg • Compliance Made Simple
 datenschutz@complyo.de • https://complyo.de/datenschutz
         """
 
@@ -371,7 +371,7 @@ datenschutz@complyo.de • https://complyo.de/datenschutz
         <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
         
         <p style="font-size: 12px; color: #888; text-align: center;">
-            Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin • Compliance Made Simple<br>
+            Yvonne Weishar · Complyo, Koburger Straße 198, 04416 Markkleeberg • Compliance Made Simple<br>
             <a href="mailto:support@complyo.de" style="color: #667eea;">support@complyo.de</a> •
             <a href="{{ frontend_url }}" style="color: #667eea;">complyo.de</a>
         </p>
@@ -417,7 +417,7 @@ Ihre Daten werden DSGVO-konform verarbeitet.
 Widerruf jederzeit unter datenschutz@complyo.de möglich.
 
 ---
-Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin • Compliance Made Simple
+Yvonne Weishar · Complyo, Koburger Straße 198, 04416 Markkleeberg • Compliance Made Simple
 support@complyo.de • {self.frontend_url}
         """
 
@@ -468,7 +468,7 @@ support@complyo.de • {self.frontend_url}
                     
                     <div style="border-top: 1px solid #eee; padding-top: 20px; font-size: 12px; color: #666;">
                         <p><strong>Yvonne Weishar · Complyo</strong><br>
-                        Pappelallee 64, 10437 Berlin<br>
+                        Koburger Straße 198, 04416 Markkleeberg<br>
                         E-Mail: datenschutz@complyo.de<br>
                         Website: https://complyo.de</p>
                         
@@ -570,7 +570,7 @@ support@complyo.de • {self.frontend_url}
                     
                     <div style="border-top: 1px solid #eee; padding-top: 20px; font-size: 12px; color: #666;">
                         <p><strong>Yvonne Weishar · Complyo</strong><br>
-                        Pappelallee 64, 10437 Berlin<br>
+                        Koburger Straße 198, 04416 Markkleeberg<br>
                         E-Mail: datenschutz@complyo.de<br>
                         Website: https://complyo.de</p>
                     </div>

@@ -448,7 +448,7 @@ class ComplianceReportGenerator:
         content.append(Paragraph("Kontakt", self.styles['ComplyoHeading']))
         contact = """
         <b>Yvonne Weishar · Complyo</b><br/>
-        Pappelallee 64, 10437 Berlin<br/>
+        Koburger Straße 198, 04416 Markkleeberg<br/>
         E-Mail: support@complyo.de<br/>
         Website: https://complyo.de<br/>
         Datenschutz: datenschutz@complyo.de

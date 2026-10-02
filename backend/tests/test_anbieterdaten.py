@@ -3,8 +3,8 @@
 complyo darf nicht behaupten, etwas anderes zu sein, als es ist.
 
 Gemessen am 10.09.2026: an dreizehn Stellen in fuenf Backend-Dateien trat
-complyo als "Complyo GmbH" auf, teils an einer Anschrift in Markkleeberg, die
-nie gestimmt hat. Betroffen war nicht nur die eigene Aussendarstellung:
+complyo als "Complyo GmbH" auf, eine Gesellschaft, die es nicht gibt.
+Betroffen war nicht nur die eigene Aussendarstellung:
 
   * `complyo_privacy_clause.py` schrieb diesen Namen in die
     Datenschutzerklaerung JEDES Kunden. Der Kunde benennt darin seinen
@@ -37,8 +37,6 @@ WURZEL = os.path.dirname(BACKEND)
 VERBOTEN = (
     "Complyo GmbH",
     "complyo GmbH",
-    "Koburger",
-    "Markkleeberg",
     "dpo@complyo.de",
 )
 
@@ -88,8 +86,8 @@ def test_keine_erfundene_rechtsform_in_ausgegebenen_texten():
 
 
 @pytest.mark.parametrize("datei,erwartet", [
-    ("email_service.py", "Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin"),
-    ("legal_notification_service.py", "Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin"),
+    ("email_service.py", "Yvonne Weishar · Complyo, Koburger Straße 198, 04416 Markkleeberg"),
+    ("legal_notification_service.py", "Yvonne Weishar · Complyo, Koburger Straße 198, 04416 Markkleeberg"),
     ("pdf_report_generator.py", "Yvonne Weishar · Complyo"),
 ])
 def test_vorlagen_nennen_den_richtigen_anbieter(datei, erwartet):
@@ -100,9 +98,9 @@ def test_vorlagen_nennen_den_richtigen_anbieter(datei, erwartet):
 def test_vorlagentext_deckt_sich_mit_der_quelle():
     """Der woertliche Text in den Vorlagen und anbieter.py duerfen nicht auseinanderlaufen."""
     assert anbieter.ABSENDER == "Yvonne Weishar · Complyo"
-    assert anbieter.ANSCHRIFT_EINZEILIG == "Pappelallee 64, 10437 Berlin"
+    assert anbieter.ANSCHRIFT_EINZEILIG == "Koburger Straße 198, 04416 Markkleeberg"
     assert anbieter.ABSENDER_MIT_ANSCHRIFT == (
-        "Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin")
+        "Yvonne Weishar · Complyo, Koburger Straße 198, 04416 Markkleeberg")
 
 
 def test_backend_und_frontend_nennen_denselben_anbieter():
