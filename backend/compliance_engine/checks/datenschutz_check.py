@@ -14,7 +14,11 @@ import aiohttp
 from compliance_engine.sicherer_abruf import sichere_session
 from compliance_engine.checks.rechtsseiten_links import (
     ist_seitenlink, attrappen, attrappen_satz, lade_rechtsseite,
+    seitenlink_art, ART_ANKER,
     PROBLEM_KEIN_RECHTSTEXT, PROBLEM_NICHT_ERREICHBAR,
+)
+from compliance_engine.checks.rechtsseiten_text import (
+    fremder_host_ohne_klartext, finde_eingebetteten_text, eingebettete_seite,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,7 +95,7 @@ def _nach_guete(links):
     return sorted(links, key=_linkguete, reverse=True)
 
 
-def _find_datenschutz_links(soup: BeautifulSoup) -> List:
+def _find_datenschutz_links(soup: BeautifulSoup, basis_url: str = None) -> List:
     """
     Verbesserte Suche nach Datenschutz-Links
     Findet auch Links in modernen JS-Frameworks (React, Vue, Next.js)
@@ -113,6 +117,11 @@ def _find_datenschutz_links(soup: BeautifulSoup) -> List:
         # mailto:, tel:, javascript: und leere Ziele fuehren zu keiner Seite;
         # ein so beschrifteter Link ist kein Rechtsseiten-Kandidat.
         if not ist_seitenlink(a_tag.get('href')):
+            continue
+        # Ein Link auf einen fremden Host ist nur dann die Erklaerung, wenn sein
+        # Text sie beim Namen nennt: "www.datenschutz.sachsen.de" ist die
+        # Landesbehoerde, nicht die Datenschutzerklaerung dieser Website.
+        if fremder_host_ohne_klartext(a_tag, basis_url):
             continue
         href = a_tag.get('href', '').lower()
         link_text = a_tag.get_text(strip=True).lower()
@@ -396,13 +405,21 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
     # nicht auf der Startseite).
     ds_page_text = None
     
-    datenschutz_links = _find_datenschutz_links(soup)
+    datenschutz_links = _find_datenschutz_links(soup, url)
+    # Steht der Text im Dokument (Overlay, Abschnitt), wird er gelesen, statt
+    # "keine Datenschutzerklaerung" zu melden. Fuehrt der beste Link nur auf
+    # einen Anker der eigenen Seite, ist der Abschnitt selbst die genauere
+    # Quelle als die ganze Seite.
+    eingebettet = None
+    if (not datenschutz_links
+            or seitenlink_art(datenschutz_links[0].get('href')) == ART_ANKER):
+        eingebettet = finde_eingebetteten_text(soup, 'datenschutz', _looks_like_datenschutz)
     
     logger.info(f"🔍 Datenschutz-Links gefunden: {len(datenschutz_links)}")
     for link in datenschutz_links[:3]:
         logger.info(f"   → {link.get('href', 'N/A')}: {link.get_text(strip=True)[:50]}")
     
-    if not datenschutz_links:
+    if not datenschutz_links and not eingebettet:
         datenschutz_url_exists = await _check_datenschutz_url_exists(url, session)
         if datenschutz_url_exists:
             logger.info("✅ Datenschutz per Direkt-URL-Check gefunden — kein Issue")
@@ -515,18 +532,21 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
         try:
             from ..hybrid_validator import HybridValidator
             
-            # Hole Datenschutz-URL
-            datenschutz_link = datenschutz_links[0]
-            datenschutz_href = datenschutz_link.get('href', '')
-            
-            # Erstelle absolute URL
+            # Hole Datenschutz-URL (oder lies den Text aus dem Dokument)
             from urllib.parse import urljoin
-            datenschutz_url = urljoin(url, datenschutz_href)
+            if eingebettet:
+                datenschutz_href, datenschutz_url = '', url
+            else:
+                datenschutz_href = datenschutz_links[0].get('href', '')
+                datenschutz_url = urljoin(url, datenschutz_href)
             
             # Fetche Datenschutz-Seite
-            if session:
-                geladen = await lade_rechtsseite(url, datenschutz_href, soup, session,
-                                                 _looks_like_datenschutz)
+            if session or eingebettet:
+                if eingebettet:
+                    geladen = eingebettete_seite(url, eingebettet)
+                else:
+                    geladen = await lade_rechtsseite(url, datenschutz_href, soup, session,
+                                                     _looks_like_datenschutz)
                 if not geladen.ok:
                     # Kein stiller Durchlauf, siehe rechtsseiten_links.
                     issues.append(_rechtsseiten_befund(geladen))
