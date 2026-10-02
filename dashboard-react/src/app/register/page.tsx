@@ -16,6 +16,7 @@ import {
 import SocialLoginButtons from '@/components/SocialLoginButtons';
 import { Logo } from '@/components/Logo';
 import { apiClient } from '@/lib/api-client';
+import { herkunftAusParametern, herkunftMerken, gemerkteHerkunft } from '@/lib/herkunft';
 import {
     AuthBackground, AuthVertrauen, AUTH_KARTE, AUTH_VERLAUF, feldStil,
 } from '@/components/AuthBackground';
@@ -52,6 +53,12 @@ function RegisterForm() {
     const planParam = searchParams?.get('plan') || 'pro';
     const initialPlan = BEKANNTE_TARIFE.has(planParam) ? planParam : 'pro';
     const initialModule = searchParams?.get('module') || '';
+
+    // Herkunft (utm) aus der Adresszeile fuer die Sitzung merken, damit sie
+    // den Kauf erreicht, auch nach Neuladen oder Google-Popup.
+    useEffect(() => {
+        herkunftMerken(herkunftAusParametern(searchParams));
+    }, [searchParams]);
 
     const [plan, setPlan] = useState(initialPlan);
     const [selectedModules, setSelectedModules] = useState<string[]>(
@@ -173,6 +180,7 @@ function RegisterForm() {
                 plan: plan,
                 modules: selectedModules,
                 billing_period: 'monthly',
+                herkunft: gemerkteHerkunft(),
                 success_url: `${window.location.origin}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
                 cancel_url: `${window.location.origin}/register`
             }) as any;
