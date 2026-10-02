@@ -123,6 +123,58 @@ FIXTURES = {
         "expect_present": ["Widerruf", "Kündigungsbutton"],
         "expect_absent": ["AGB fehlen", "MwSt", "Versandkosten", "Grundpreis"],
     },
+    # E — ATTRAPPE: "Impressum" und "Datenschutz" stehen im Footer, fuehren
+    # aber nirgendwohin (mailto:, javascript:). Bis 02.10.2026 galt so eine
+    # Seite als sauber: der Abruf von mailto: warf, das except schwieg.
+    "attrappe": {
+        "/": """<!doctype html><html lang="de"><head><title>Attrappe GmbH</title></head><body>
+<main><h1>Attrappe GmbH</h1><p>Wir beraten.</p></main>
+<footer><a href="mailto:info@attrappe.de?subject=Impressum">Impressum</a>
+<a href="javascript:void(0)" onclick="openModal('ds')">Datenschutz</a></footer>
+</body></html>""",
+        "expect_present": ["Kein Impressum-Link gefunden", "Keine Datenschutzerklärung gefunden"],
+        "expect_absent": ["nicht abschliessend geprueft", "führt zu keiner"],
+    },
+    # F — EINSEITER: Rechtstexte als Abschnitte auf der Startseite, die
+    # Footer-Links sind Anker. Das ist zulaessig und darf keinen
+    # "fehlt"-Befund erzeugen.
+    "einseiter": {
+        "/": """<!doctype html><html lang="de"><head><title>Einseiter GmbH</title></head><body>
+<main><h1>Einseiter GmbH</h1><p>Wir beraten.</p>
+<section id="impressum"><h2>Impressum</h2>
+<p>Angaben gemäß § 5 DDG</p>
+<p>Einseiter GmbH<br>Musterweg 1<br>04109 Leipzig</p>
+<p>Vertreten durch: Max Mustermann (Geschäftsführer)</p>
+<p>Kontakt: E-Mail info@einseiter.de, Telefon: 0341 123456</p>
+<p>Registergericht: Amtsgericht Leipzig, HRB 12345</p>
+<p>USt-IdNr: DE123456789</p></section>
+<section id="datenschutz"><h2>Datenschutzerklärung</h2>
+<p>Verantwortlicher im Sinne der DSGVO: Einseiter GmbH, Musterweg 1, 04109 Leipzig, info@einseiter.de.</p>
+<p>Zwecke der Verarbeitung: Bereitstellung der Website, Beantwortung von Anfragen.</p>
+<p>Rechtsgrundlage ist Art. 6 Abs. 1 lit. b und f DSGVO.</p>
+<p>Speicherdauer: Server-Logs werden nach 7 Tagen gelöscht.</p>
+<p>Ihre Betroffenenrechte: Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit, Widerspruch.</p>
+<p>Beschwerderecht: Sie haben das Recht auf Beschwerde bei einer Aufsichtsbehörde.</p></section>
+</main>
+<footer><a href="#impressum">Impressum</a> <a href="#datenschutz">Datenschutz</a></footer>
+</body></html>""",
+        "expect_absent": ["Kein Impressum", "Keine Datenschutzerklärung", "führt zu keiner",
+                          "nicht erreichbar"],
+    },
+    # G — FEHLLINK: die Links fuehren zu einer echten Seite, dort steht aber
+    # kein Rechtstext (Kontaktseite). Vorher wurde die Kontaktseite als
+    # Impressum vermessen, mit KI fuenf Criticals, ohne KI ein Hinweis.
+    "fehllink": {
+        "/": """<!doctype html><html lang="de"><head><title>Fehllink GmbH</title></head><body>
+<main><h1>Fehllink GmbH</h1><p>Wir beraten.</p></main>
+<footer><a href="/kontakt">Impressum</a> <a href="/kontakt">Datenschutz</a></footer>
+</body></html>""",
+        "/kontakt": """<!doctype html><html lang="de"><head><title>Kontakt</title></head><body>
+<main><h1>Kontakt</h1><p>Rufen Sie uns an: 0341 123456. Wir freuen uns auf Sie.</p></main>
+</body></html>""",
+        "expect_present": ["führt zu keiner Impressumsseite", "führt zu keiner Datenschutzerklärung"],
+        "expect_absent": ["nicht abschliessend geprueft", "Kein Impressum-Link gefunden"],
+    },
 }
 
 _current_fixture = {"name": "sauber"}
