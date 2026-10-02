@@ -1370,3 +1370,17 @@
   border-color: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(16px);
 }
+
+/* Dashboard anordnen: Kacheln blenden sanft ein. Die Animation liegt auf dem
+   inneren Rahmen, nicht auf dem sortierbaren Knoten, damit sie dessen
+   Transform (dnd-kit) nicht überschreibt. */
+@keyframes anordnen-ein {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+.anordnen-kachel {
+  animation: anordnen-ein 0.22s ease-out backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .anordnen-kachel { animation: none; }
+}
