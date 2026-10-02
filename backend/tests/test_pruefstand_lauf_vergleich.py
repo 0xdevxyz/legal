@@ -23,7 +23,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from tools import pruefstand_vergleich as pv  # noqa: E402
+from tools import pruefstand_lauf_vergleich as pv  # noqa: E402
 
 WURZEL = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 

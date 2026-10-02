@@ -21,12 +21,18 @@ Bestand, kein Fehler des Scanners (siehe Bestandsaufnahme vom 06.08.2026).
 Befunde ohne Eurobetrag (Hinweise, Empfehlungen) ebenfalls nicht: sie kosten
 den Kunden keine Note und behaupten kein Risiko.
 
+Abgrenzung zu `pruefstand_vergleich.py` (PR #17): jenes stellt zwei Messungen
+DESSELBEN Codes mit und ohne KI nebeneinander, um die Befunde zu finden, die am
+KI-Budget haengen. Dieses stellt zwei LAEUFE ueber die Zeit nebeneinander (vor und
+nach einer Aenderung, Woche gegen Woche) und fuehrt die Verdachtsliste. Beide
+lesen dieselbe `pruefstand.json`.
+
 Nur Python-Standardbibliothek, damit es auf dem Server ohne Container laeuft.
 
 Aufruf:
-    python3 tools/pruefstand_vergleich.py ALT.json NEU.json
-    python3 tools/pruefstand_vergleich.py ALT.json NEU.json --streng
-    python3 tools/pruefstand_vergleich.py NEU.json          # nur Verdachtsliste
+    python3 tools/pruefstand_lauf_vergleich.py ALT.json NEU.json
+    python3 tools/pruefstand_lauf_vergleich.py ALT.json NEU.json --streng
+    python3 tools/pruefstand_lauf_vergleich.py NEU.json          # nur Verdachtsliste
 
 `--streng` setzt den Exitcode 1, wenn gegenueber ALT eine neue Verdachtsart
 auftritt oder der Score-Mittelwert um mehr als `--score-grenze` Punkte faellt.

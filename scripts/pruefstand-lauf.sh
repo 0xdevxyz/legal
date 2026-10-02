@@ -96,14 +96,14 @@ ln -sfn "$OUT" "$BASIS/letzter"
 
 if [ -z "$VORHER" ]; then
   echo "Erster Lauf, nichts zu vergleichen. Verdachtsliste:"
-  python3 "$HIER/../backend/tools/pruefstand_vergleich.py" "$OUT/pruefstand.json" \
+  python3 "$HIER/../backend/tools/pruefstand_lauf_vergleich.py" "$OUT/pruefstand.json" \
     > "$OUT/vergleich.txt" 2>&1
   cat "$OUT/vergleich.txt"
   exit 0
 fi
 
 echo "Vergleich mit $VORHER"
-python3 "$HIER/../backend/tools/pruefstand_vergleich.py" \
+python3 "$HIER/../backend/tools/pruefstand_lauf_vergleich.py" \
   "$VORHER/pruefstand.json" "$OUT/pruefstand.json" --streng \
   > "$OUT/vergleich.txt" 2>&1
 RC=$?
