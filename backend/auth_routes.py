@@ -39,6 +39,7 @@ from compliance_engine.jurisdictions import DEFAULT_JURISDICTION
 import konto_token
 from adressen import dashboard_url
 import passwort_richtlinie
+from herkunft import registrierung_festhalten
 import zweiter_faktor
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,10 @@ class RegisterRequest(BaseModel):
     # Fassung des Auftragsverarbeitungsvertrages (Art. 28 DSGVO). Ohne ihn
     # duerfte kein Kunde complyo auf seiner Website einsetzen.
     avv_version: Optional[str] = None
+    # utm-Parameter, mit denen der Besucher auf complyo.de ankam (Kanalmessung,
+    # Launchplan Woche 41). Ungeprueft vom Client; gefiltert wird in
+    # herkunft.bereinige (Positivliste, enges Zeichenmuster).
+    herkunft: Optional[dict] = None
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -235,6 +240,10 @@ async def register(request: Request, body: RegisterRequest):
             user['id'], user['email'], request,
             body.unternehmer_bestaetigt, body.agb_version, body.avv_version,
         )
+
+        # Herkunft des Kontos fuer die Kanalmessung. Best effort, nie ein Grund,
+        # eine Registrierung scheitern zu lassen.
+        await registrierung_festhalten(db_pool, user['id'], body.herkunft)
 
         # Bestaetigungsmail. `users.is_verified` stand seit dem ersten Schema in
         # der Tabelle und wurde von keiner Route je gesetzt — es gab keinen Weg,

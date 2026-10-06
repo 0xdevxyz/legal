@@ -28,6 +28,7 @@ import logging
 import uuid
 
 from database_service import DatabaseService
+from herkunft import kauf_festhalten
 
 logger = logging.getLogger(__name__)
 
@@ -603,6 +604,9 @@ async def verify_checkout_session(
         newly_activated = await _apply_plan_activation(
             conn, user_id, plan, customer_id, subscription_id, modules=session_modules
         )
+        # Tarif und Herkunft (utm) des Kaufs fuer die Kanalmessung. Best effort
+        # und idempotent, unabhaengig davon, ob die Freischaltung neu war.
+        await kauf_festhalten(conn, user_id, subscription_id, plan, _meta)
 
     if not newly_activated:
         return {"activated": True, "plan": plan, "already_active": True}
@@ -748,6 +752,11 @@ async def handle_checkout_completed(session):
 
         async with db_service.pool.acquire() as conn:
             await _apply_plan_activation(conn, user_id, plan, customer_id, subscription_id, modules=modules)
+
+            # Tarif und Herkunft (utm) des Kaufs fuer die Kanalmessung (Woche 41).
+            # Best effort: ein Fehler hier meldet sich nur im Log und loest
+            # keine Stripe-Wiederholung aus, die Freischaltung steht schon.
+            await kauf_festhalten(conn, user_id, subscription_id, plan, session['metadata'])
 
             # Unlock Domain falls vorhanden
             if domain:
