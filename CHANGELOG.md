@@ -7,6 +7,17 @@
 
 ---
 
+## [2026-10-07]
+
+### Backend: Kanalmessung für die Entscheidungsregel nach Woche 45
+- **Kaeufe je Kanal sind jetzt ohne Stripe-Zugriff auswertbar.** Die utm-Werte reisten bis in die Stripe-Metadaten, der Webhook schrieb sie aber nicht in die Datenbank, und die Registrierung schrieb sie nirgends hin. Neu: Migration `0037_kanal_herkunft` (Tabellen `registrierung_herkunft` und `kauf_herkunft`, beide kaskadierend mit `users`), `backend/herkunft.py` (Positivliste der fünf utm-Schlüssel, enges Zeichenmuster, `fullmatch` statt `$`), `herkunft` im Registrierungsaufruf und je ein Aufruf in `handle_checkout_completed` und `verify-checkout`
+- Beide Schreibstellen sind best effort (wie `protokolliere_vertragsannahme`): eine fehlende Tabelle oder ein Fehler blockiert weder die Registrierung noch die Freischaltung und löst keine Stripe-Wiederholung aus. `kauf_festhalten` läuft nach JEDER Freischaltung, auch wenn `_apply_plan_activation` False meldet, weil `customer.subscription.created` die Ledger-Zeile unter Umständen vor `checkout.session.completed` anlegt
+- Neu `backend/kanal_auswertung.py`: Wochenbericht in Markdown (Warteliste, Registrierungen, Käufe je `utm_source` und `utm_content`, Käufe je Tarif, Erstkontakt über die Warteliste per E-Mail-Abgleich, optional kumuliert seit Start). Nur lesend (Transaktion `READ ONLY`), keine Adressen in der Ausgabe, Wochen in Europe/Berlin, `subscriptions` (ohne Zeitzone) in der Datenbankzeit verglichen. Aufruf: `docker exec complyo-backend python kanal_auswertung.py --woche 2026-W42`
+- Tests: `test_kanal_auswertung.py` (Sollzahlen von Hand gerechnet), `test_herkunft.py`, `test_kanal_auswertung_db.py` (gegen ein echtes Schema aus `alembic upgrade head`, braucht `KANAL_TEST_DATABASE_URL`)
+
+### Frontend: Dashboard
+- `RegisterData` kennt `herkunft` (optional). Gesendet wird sie erst, wenn die Registrierungsseite `gemerkteHerkunft()` übergibt (`dashboard-react/src/lib/herkunft.ts` kommt mit PR #10)
+
 ## [2026-09-02]
 
 ### Frontend
