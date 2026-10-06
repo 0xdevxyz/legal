@@ -12,7 +12,8 @@
     "a11y": "node scripts/accessibility-analyzer.js",
     "test:a11y": "npx playwright test tests/e2e/axe-accessibility.spec.ts",
     "test:token": "node --experimental-strip-types --test src/lib/token-erneuerung.test.ts",
-    "test:layout": "node --experimental-strip-types --test src/lib/dashboard-layout.test.ts"
+    "test:layout": "node --experimental-strip-types --test src/lib/dashboard-layout.test.ts",
+    "test:zuordnung": "node --experimental-strip-types --test src/lib/scan-zuordnung.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
