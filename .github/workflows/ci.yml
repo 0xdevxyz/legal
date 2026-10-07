@@ -94,6 +94,14 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio pytest-cov httpx
 
+      # pip bringt nur den Playwright-Treiber mit, keinen Browser. Ohne diesen
+      # Schritt fielen 15 Tests in test_eigene_widgets_barrierefrei.py auf
+      # jedem Lauf um ("Executable doesn't exist"), seit mindestens dem 18.09.,
+      # und die Suite war auf main dauerhaft rot. --with-deps holt die
+      # System-Bibliotheken, die Chromium auf dem Ubuntu-Runner braucht.
+      - name: 🌐 Playwright-Browser
+        run: python -m playwright install --with-deps chromium
+
       # Ohne Migrationen prueft der Schema-Kontrakt gegen eine leere Datenbank
       # und meldet fehlende Tabellen, die es in der Produktion laengst gibt.
       # Mit ihnen prueft er, wozu er da ist: ob Code und Migrationen
