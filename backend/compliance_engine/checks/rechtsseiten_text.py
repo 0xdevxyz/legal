@@ -21,10 +21,21 @@ darunter "Betroffenenrechte fehlen".
    "www.datenschutz.sachsen.de" als Linktext nennt keine Erklaerung.
 2. `finde_eingebetteten_text`: steht der Text im Dokument, wird er gelesen,
    statt "keine Seite gefunden" zu melden.
+3. `ist_duenne_erklaerung`: eine Seite, die die Inhaltsschranke nicht besteht,
+   sich aber in Titel oder H1 als Datenschutzerklaerung ausweist und lang genug
+   ist, ist eine knappe Erklaerung und keine Nicht-Erklaerung. Gemessen am
+   07.10.2026 an einer Kundenseite (Ingenieurbuero): eine Standardvorlage mit
+   acht Abschnitten,
+   Ueberschrift "Datenschutzerklaerung", rund 5.000 Zeichen, aber weniger als
+   zwei der neun Merkmale der Schranke. Vorher las der Kunde dort kritisch
+   (5.000 EUR) "Datenschutz-Link fuehrt zu keiner Datenschutzerklaerung", eine
+   falsche Aussage.
 """
 import re
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 from urllib.parse import urlparse
+
+from bs4 import BeautifulSoup
 
 from .rechtsseiten_links import GeladeneRechtsseite
 
@@ -139,3 +150,58 @@ def finde_eingebetteten_text(soup, art: str,
 def eingebettete_seite(url: str, text: str) -> GeladeneRechtsseite:
     """Der Text aus dem Dokument im selben Rahmen wie eine geladene Seite."""
     return GeladeneRechtsseite(url=url, html=text, status=200)
+
+
+# --- Knappe Erklaerung -----------------------------------------------------
+
+# Ab dieser Laenge des Inhaltstextes (ohne Menue und Fusszeile, in Zeichen)
+# gilt eine Seite mit passender Ueberschrift als knappe Erklaerung.
+#
+# Herleitung, keine Schaetzung: im Pruefstand vom 07.10.2026 (24 Kundenseiten,
+# 19 mit lesbarer Datenschutzerklaerung) ist der kuerzeste Text, der die
+# Schranke besteht, 2.182 Zeichen lang, der naechste 2.851. Die Schwelle liegt
+# bei rund der Haelfte davon. Darunter ist eine Seite mit der Ueberschrift
+# "Datenschutzerklaerung" ein Platzhalter oder ein Verweis, keine Erklaerung.
+# Nur Datenschutz: beim Impressum zeigt der Bestand keinen Fall, die Schranke
+# dort (Stichwort plus E-Mail oder PLZ) verlangt ohnehin nur wenig.
+DUENN_MINDESTENS = {"datenschutz": 1000}
+
+_TITEL_TRENNER = re.compile(r"\s+[|\u2013\u2014\u00b7\u2022:]\s+|\s+-\s+")
+_KOPF_UND_FUSS = ["script", "style", "noscript", "template", "svg", "nav", "header", "footer"]
+
+
+def seiten_ueberschriften(soup: BeautifulSoup) -> List[str]:
+    """Alle H1 und der Anfang des Titels (vor dem Seitennamen)."""
+    liste = [h.get_text(" ", strip=True) for h in soup.find_all("h1")]
+    titel = soup.title.get_text(" ", strip=True) if soup.title else ""
+    if titel:
+        liste.append(_TITEL_TRENNER.split(titel)[0])
+    return [t for t in liste if t]
+
+
+def inhaltstext(html: str) -> str:
+    """Der Fliesstext ohne Menue, Kopf- und Fusszeile."""
+    suppe = BeautifulSoup(html or "", "html.parser")
+    for tag in suppe(_KOPF_UND_FUSS):
+        tag.decompose()
+    return suppe.get_text(" ", strip=True)
+
+
+def ist_duenne_erklaerung(html: str, art: str) -> bool:
+    """Weist sich die Seite als Rechtsseite aus und ist sie lang genug?
+
+    Beides ist Pflicht. Die Ueberschrift allein trifft auch einen Platzhalter
+    ("Datenschutzerklaerung folgt"), die Laenge allein jede Kontakt- oder
+    Behoerdenseite, die das Wort Datenschutz nennt. Die Ueberschrift prueft
+    dieselbe Regel wie `finde_eingebetteten_text`: "Datenschutz-Einstellungen"
+    (Cookie-Dialog) ist keine Erklaerung, "Datenschutz- und Transparenz-
+    beauftragter" (Behoerde) ebenfalls nicht.
+    """
+    mindestens = DUENN_MINDESTENS.get(art)
+    if not mindestens or not html:
+        return False
+    suppe = BeautifulSoup(html, "html.parser")
+    muster = _ARTEN[art]["ueberschrift"]
+    if not any(muster.search(t) for t in seiten_ueberschriften(suppe)):
+        return False
+    return len(inhaltstext(html)) >= mindestens

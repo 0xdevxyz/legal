@@ -7,6 +7,14 @@
 
 ---
 
+## [2026-10-07]
+
+### Backend: knappe Datenschutzerklärung und unsichere Muster-Treffer (gestapelt auf #18)
+- **Eine knappe Datenschutzerklärung galt als „keine Datenschutzerklärung".** Im Prüfstand fiel eine Standardvorlage (Titel und H1 „Datenschutzerklärung", acht Abschnitte, rund 5.000 Zeichen) durch die Inhaltsschranke, weil weniger als zwei der neun Merkmale im Text standen; der Kunde las kritisch (5.000 €) „Datenschutz-Link führt zu keiner Datenschutzerklärung", obwohl die Erklärung existiert. Neu: Eine Seite, die die Schranke nicht besteht, sich aber in H1 oder Titel als Datenschutzerklärung ausweist und mindestens 1.000 Zeichen Inhaltstext hat (`rechtsseiten_text.ist_duenne_erklaerung`, Schwelle aus dem kürzesten gemessenen vollständigen Text, 2.182 Zeichen, halbiert), wird gelesen und normal bewertet; dazu ein Hinweis (info, 0 €) „Datenschutzerklärung gefunden, aber sehr knapp" mit den gemessenen Stichworten. Die Schranke selbst bleibt streng, Gegenproben: Behördenseite, Cookie-Einstellungen, Platzhalter, Startseite bleiben „keine Erklärung"
+- Merkmal „personenbezogene Daten" der Schranke traf nur die Grundform, nicht „personenbezogener/-en Daten"
+- **Ein Muster-Treffer unter der Feldschwelle wurde zu „fehlt".** `_calculate_match_confidence` vergibt den Längenbonus nur für Werte von 10 bis 200 Zeichen; ein langer Satz ohne Punkt (201 bis 500 Zeichen) bleibt bei 0,6, die Feldschwelle liegt bei 0,65 bis 0,8. Der Validator gab `found=False` als Feststellung weiter: „Beschwerderecht fehlt", „Betroffenenrechte fehlen" und „Telefonnummer fehlt im Impressum" (kritisch) auf Seiten, die die Angabe enthalten. Neu `HybridValidator._ist_unsicher`: ein Treffer, der unter der eigenen Feldschwelle bleibt, geht zur KI oder, ohne KI, in „nicht abschließend geprüft"
+- Wächter: `backend/tests/test_rechtsseiten_duenn.py`, `backend/tests/test_validator_grenzfall.py` (alle ohne KI und ohne Netz)
+
 ## [2026-10-02]
 
 ### Backend: Rechtsseiten-Links, hinter denen keine Rechtsseite steht
