@@ -97,10 +97,15 @@ jobs:
       # pip bringt nur den Playwright-Treiber mit, keinen Browser. Ohne diesen
       # Schritt fielen 15 Tests in test_eigene_widgets_barrierefrei.py auf
       # jedem Lauf um ("Executable doesn't exist"), seit mindestens dem 18.09.,
-      # und die Suite war auf main dauerhaft rot. --with-deps holt die
-      # System-Bibliotheken, die Chromium auf dem Ubuntu-Runner braucht.
+      # und die Suite war auf main dauerhaft rot.
+      #
+      # Bewusst OHNE --with-deps: Playwright 1.40 verlangt dabei das Paket
+      # libasound2, das es auf Ubuntu 24.04 nur noch als libasound2t64 gibt,
+      # und apt bricht mit "has no installation candidate" ab (Run
+      # 37614084986). Die System-Bibliotheken braucht der Schritt nicht, der
+      # Runner bringt sie fuer das vorinstallierte Google Chrome bereits mit.
       - name: 🌐 Playwright-Browser
-        run: python -m playwright install --with-deps chromium
+        run: python -m playwright install chromium
 
       # Ohne Migrationen prueft der Schema-Kontrakt gegen eine leere Datenbank
       # und meldet fehlende Tabellen, die es in der Produktion laengst gibt.
