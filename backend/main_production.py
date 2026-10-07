@@ -1832,6 +1832,9 @@ async def get_latest_scan(current_user: dict = Depends(get_current_user)):
             
             # Parse scan_data (JSONB)
             scan_dict = dict(scan)
+            # Gespeicherte Scans tragen noch Eurobetraege je Befund; nach
+            # draussen gehen sie nicht mehr (compliance_engine/rangstufe.py).
+            from compliance_engine.rangstufe import ohne_eurobetraege, rang_anreichern
             if scan_dict.get('scan_data'):
                 # ✅ FIX: scan_data ist ein String, muss erst geparst werden
                 if isinstance(scan_dict['scan_data'], str):
@@ -1849,17 +1852,16 @@ async def get_latest_scan(current_user: dict = Depends(get_current_user)):
                     "scan_id": scan_dict['scan_id'],
                     "url": scan_dict['url'],
                     "compliance_score": scan_dict['compliance_score'],
-                    "total_risk_euro": scan_dict['total_risk_euro'],
                     "critical_issues": scan_dict['critical_issues'],
                     "warning_issues": scan_dict['warning_issues'],
                     "total_issues": scan_dict['total_issues'],
                     "scan_timestamp": scan_dict['scan_timestamp'].isoformat(),
                     "scan_duration_ms": scan_dict['scan_duration_ms'],
-                    "issues": scan_dict.get('issues', []),
+                    "issues": rang_anreichern(ohne_eurobetraege(scan_dict.get('issues', []))),
                     "recommendations": scan_dict.get('recommendations', []),
                     "pillar_scores": scan_dict.get('pillar_scores', []),
                     # ✅ NEU: Issue-Gruppen für professionelle UX
-                    "issue_groups": scan_dict.get('issue_groups', []),
+                    "issue_groups": ohne_eurobetraege(scan_dict.get('issue_groups', [])),
                     "grouping_stats": scan_dict.get('grouping_stats', {})
                 }
             }

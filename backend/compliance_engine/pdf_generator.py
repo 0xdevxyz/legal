@@ -258,8 +258,6 @@ class ComplianceReportGenerator:
         except:
             score = 0
         
-        risk = analysis_data.get('total_risk_euro', analysis_data.get('risk_euro', 0))
-        
         score_color = self._get_score_color(score)
         
         score_style = ParagraphStyle(
@@ -268,29 +266,21 @@ class ComplianceReportGenerator:
             textColor=score_color
         )
         
+        # Nur der Score. Die zweite Spalte mit einem geschaetzten Eurobetrag
+        # ist am 07.10.2026 entfallen: ein Betrag ohne Bussgeldpraxis dahinter
+        # ist keine Aussage, die ein Pruefbericht tragen darf.
         score_data = [
-            [
-                Paragraph("Compliance-Score", self.styles['SubHeading']),
-                Paragraph("Geschätztes Bußgeld-Risiko", self.styles['SubHeading'])
-            ],
-            [
-                Paragraph(f"{score:.0f}%", score_style),
-                Paragraph(self._format_euro(risk), self.styles['RiskAmount'])
-            ],
-            [
-                Paragraph(self._get_score_label(score), self.styles['ScoreLabel']),
-                Paragraph("bei Nicht-Compliance", self.styles['ScoreLabel'])
-            ]
+            [Paragraph("Compliance-Score", self.styles['SubHeading'])],
+            [Paragraph(f"{score:.0f}%", score_style)],
+            [Paragraph(self._get_score_label(score), self.styles['ScoreLabel'])],
         ]
         
-        score_table = Table(score_data, colWidths=[8*cm, 8*cm])
+        score_table = Table(score_data, colWidths=[16*cm])
         score_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#F0FDF4') if score >= 80 else (colors.HexColor('#FEF3C7') if score >= 50 else colors.HexColor('#FEF2F2'))),
-            ('BACKGROUND', (1, 0), (1, -1), colors.HexColor('#FEF2F2')),
             ('BOX', (0, 0), (0, -1), 1, colors.HexColor('#E2E8F0')),
-            ('BOX', (1, 0), (1, -1), 1, colors.HexColor('#E2E8F0')),
             ('TOPPADDING', (0, 0), (-1, -1), 15),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 15),
         ]))
@@ -482,7 +472,7 @@ class ComplianceReportGenerator:
             title = issue.get('title', 'Unbekanntes Problem')
             description = issue.get('description', '')
             recommendation = issue.get('recommendation', '')
-            risk = issue.get('risk_euro', 0)
+            rang = issue.get('rang_label')
             
             issue_data = [
                 [Paragraph(f"<font color='#{color.hexval()[2:]}'>{idx}.</font> {self._sicher(title)}", self.styles['IssueTitle'])],
@@ -492,8 +482,8 @@ class ComplianceReportGenerator:
             if recommendation:
                 issue_data.append([Paragraph(f"<b>Empfehlung:</b> {self._sicher(recommendation, 200)}", self.styles['BodyText'])])
             
-            if risk:
-                issue_data.append([Paragraph(f"<b>Risiko:</b> {self._format_euro(risk)}", self.styles['BodyText'])])
+            if rang:
+                issue_data.append([Paragraph(f"<b>Einstufung:</b> {self._sicher(str(rang), 40)}", self.styles['BodyText'])])
             
             issue_table = Table(issue_data, colWidths=[16*cm])
             issue_table.setStyle(TableStyle([

@@ -84,7 +84,6 @@ class EmailService:
                     # If it's not valid JSON, create a minimal structure
                     analysis_data = {
                         'compliance_score': 45,
-                        'estimated_risk_euro': '5000-15000',
                         'findings': {},
                         'url': 'N/A'
                     }
@@ -304,7 +303,6 @@ datenschutz@complyo.de • https://complyo.de/datenschutz
         Compliance report delivery email template
         """
         compliance_score = analysis_data.get('compliance_score', 0)
-        risk_level = analysis_data.get('estimated_risk_euro', 'Unbekannt')
         findings_count = len(analysis_data.get('findings', {}))
         
         template = Template("""
@@ -331,9 +329,6 @@ datenschutz@complyo.de • https://complyo.de/datenschutz
             <ul style="list-style: none; padding: 0;">
                 <li style="padding: 8px 0; border-bottom: 1px solid #eee;">
                     <strong>Compliance-Score:</strong> {{ compliance_score }}%
-                </li>
-                <li style="padding: 8px 0; border-bottom: 1px solid #eee;">
-                    <strong>Geschätztes Risiko:</strong> {{ risk_level }} EUR
                 </li>
                 <li style="padding: 8px 0;">
                     <strong>Gefundene Probleme:</strong> {{ findings_count }} Bereiche
@@ -383,7 +378,6 @@ datenschutz@complyo.de • https://complyo.de/datenschutz
         return template.render(
             name=name,
             compliance_score=compliance_score,
-            risk_level=risk_level,
             findings_count=findings_count,
             frontend_url=self.frontend_url
         )
@@ -393,7 +387,6 @@ datenschutz@complyo.de • https://complyo.de/datenschutz
         Plain text version of report email
         """
         compliance_score = analysis_data.get('compliance_score', 0)
-        risk_level = analysis_data.get('estimated_risk_euro', 'Unbekannt')
         findings_count = len(analysis_data.get('findings', {}))
         
         return f"""
@@ -403,7 +396,6 @@ Ihre Website-Analyse ist abgeschlossen! Hier sind die wichtigsten Ergebnisse:
 
 📊 ANALYSE-ZUSAMMENFASSUNG:
 • Compliance-Score: {compliance_score}%
-• Geschätztes Risiko: {risk_level} EUR
 • Gefundene Probleme: {findings_count} Bereiche
 
 ⚡ NÄCHSTE SCHRITTE:

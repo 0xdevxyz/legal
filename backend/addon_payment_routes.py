@@ -92,7 +92,9 @@ MONTHLY_ADDONS = {
         },
         "stripe_price_id": os.getenv("STRIPE_PRICE_COMPLOAI_GUARD"),
         "badge": "NEW",
-        "discount_text": "Spare bis zu 50.000€ Bußgeld",
+        # Bis 07.10.2026 stand hier eine Werbeaussage mit einem bezifferten
+        # Bussgeld, das sich nicht belegen laesst (compliance_engine/rangstufe.py).
+        "discount_text": "Pflichten aus der KI-Verordnung im Blick",
         "compatible_plans": ["starter", "professional", "business", "enterprise"]
     },
     "priority_support": {

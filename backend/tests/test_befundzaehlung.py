@@ -68,13 +68,13 @@ class TestHinweiseSindKeineBefunde:
         )])
         assert bereiche["cookies"]["issues_count"] == 0
         assert bereiche["cookies"]["detected"] is False
-        assert bereiche["cookies"]["risk_max"] == 0
+        assert "risk_max" not in bereiche["cookies"]
         # Verschwinden soll sie trotzdem nicht.
         assert bereiche["cookies"]["hinweise_count"] == 1
 
     def test_hinweis_treibt_kein_risiko(self):
         bereiche, _ = aggregiere([befund("media_accessibility", "info")])
-        assert bereiche["barrierefreiheit"]["risk_max"] == 0
+        assert "risk_max" not in bereiche["barrierefreiheit"]
 
 
 class TestJederBefundGenauEinmal:
@@ -127,12 +127,17 @@ class TestSchweregradKommtVomBefund:
 
 
 class TestKategorieWirdNichtGeraten:
-    def test_matrix_wird_nach_der_eigenen_kategorie_gefragt(self):
-        _, rechner = aggregiere([befund("cookie", "warning", "Irgendein Titel",
-                                        "Ein Text ganz ohne einschlaegige Stichwoerter.")])
-        assert rechner.gefragte_kategorien == ["cookies"]
+    def test_kategorie_kommt_aus_dem_befund_nicht_aus_dem_text(self):
+        # Seit dem 07.10.2026 fragt die Vorschau die Risikomatrix fuer
+        # Befund-Dicts gar nicht mehr (kein Eurobetrag). Die Kategorie kommt
+        # weiterhin aus dem Befund selbst: ein Text ohne Stichwoerter landet
+        # trotzdem im richtigen Bereich.
+        bereiche, rechner = aggregiere([befund("cookie", "warning", "Irgendein Titel",
+                                               "Ein Text ganz ohne einschlaegige Stichwoerter.")])
+        assert bereiche["cookies"]["detected"] is True
+        assert rechner.gefragte_kategorien == []
 
     def test_saubere_seite_ergibt_keinen_bereich(self):
         bereiche, _ = aggregiere([])
         assert all(b["detected"] is False for b in bereiche.values())
-        assert all(b["risk_max"] == 0 for b in bereiche.values())
+        assert all("risk_max" not in b and "risk_range" not in b for b in bereiche.values())
