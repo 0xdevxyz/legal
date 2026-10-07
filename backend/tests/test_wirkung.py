@@ -2,13 +2,16 @@
 Wächter für die Wirksamkeitsüberwachung.
 
 Das Widget meldet von fremden Domains, ohne Anmeldung. Genau dort entscheidet
-sich, ob complyo ein Messwerkzeug ist oder ein Trackingskript. Drei Zusagen:
+sich, ob complyo ein Messwerkzeug ist oder ein Trackingskript. Vier Zusagen:
 
   1. Es werden keine personenbezogenen Daten verarbeitet — die Tabelle hat
      schlicht keine Spalte, in die ein Besucher passen würde.
   2. Abfrageparameter und Anker werden abgeschnitten. In ihnen stehen
      Suchbegriffe, Warenkorb-Inhalte und Tracking-Kennungen.
   3. Eine kaputte Statistik darf nie eine Kundenseite beeinträchtigen.
+  4. Das Widget legt nichts auf dem Gerät des Besuchers ab. Das ist eine eigene
+     Frage neben Zusage 1: auch ein Merker ohne Personenbezug ist ein
+     Schreibzugriff auf das Endgerät.
 """
 import os
 import re
@@ -35,6 +38,17 @@ def _nur_code(quelltext: str) -> str:
     """
     ohne_docstrings = re.sub(r'"""[\s\S]*?"""', "", quelltext)
     return "\n".join(re.sub(r"#.*$", "", z) for z in ohne_docstrings.splitlines())
+
+
+def _nur_js_code(quelltext: str) -> str:
+    """Block- und Zeilenkommentare aus JavaScript entfernen.
+
+    Der Kommentar darf den Merker beim Namen nennen, der Code nicht. Ein
+    Zeilenkommentar zählt nur, wenn vor `//` weder Doppelpunkt noch Wortzeichen
+    steht, damit `http://localhost` im Code bleibt.
+    """
+    ohne_block = re.sub(r"/\*[\s\S]*?\*/", "", quelltext)
+    return "\n".join(re.sub(r"(?<![:\w])//.*$", "", z) for z in ohne_block.splitlines())
 
 
 class TestDatensparsamkeit:
@@ -146,11 +160,64 @@ class TestStoertNie:
         block = js[js.index("function melde()"):js.index("function load()")]
         assert "catch" in block
 
-    def test_nur_einmal_je_seite_und_sitzung(self):
-        """Ein Besucher, der blaettert, erzeugt keine zehn Meldungen derselben Seite."""
+    def test_hoechstens_eine_meldung_je_seitenaufruf(self):
+        """Ein einzelner Seitenaufruf meldet einmal, auch bei doppeltem Aufruf.
+
+        Je Sitzung zu deduplizieren war der Grund fuer den Merker im
+        sessionStorage. Das Flag lebt nur im Arbeitsspeicher des Aufrufs.
+        """
         js = _lese("widgets", "a11y_remediation.js")
-        block = js[js.index("function melde()"):js.index("function load()")]
-        assert "sessionStorage" in block
+        code = _nur_js_code(js)
+        block = code[code.index("function melde()"):code.index("function load()")]
+        assert "var gemeldet = false;" in code
+        assert "if (gemeldet) return;" in block
+        assert "gemeldet = true;" in block
+        assert len(re.findall(r"setTimeout\(melde\b", code)) == 1, (
+            "melde() hat mehr als eine Aufrufstelle: ein Seitenaufruf koennte "
+            "mehrfach melden.")
+
+
+class TestNichtsAufDemGeraet:
+    """Zusage 4: kein Cookie, kein localStorage, kein sessionStorage.
+
+    Am 07.10.2026 beim Nachmessen von steinhau.de gefunden: Cookies leer,
+    localStorage leer, und genau ein Eintrag von complyo in sessionStorage,
+    gesetzt vor jeder Einwilligung. Er diente nur dazu, eine Meldung je
+    Sitzung und Seite zu unterdruecken.
+
+    Gelesen wird NUR a11y_remediation.js, die Datei mit dem Melder.
+    accessibility-v6.js schreibt Einstellungen des Besuchers in localStorage;
+    alle sechs Aufrufer von savePreferences() haengen an Bedienelementen der
+    Werkzeugleiste (gelesen am 07.10.2026), nicht an der Initialisierung. Dieser
+    Waechter deckt diese Datei nicht ab.
+    """
+
+    VERBOTEN = ("sessionStorage", "localStorage", "document.cookie", "cookieStore",
+                "indexedDB", "caches.open")
+
+    def test_waechter_liest_die_richtige_datei(self):
+        """Ein gruener Waechter ueber eine leere Datei waere nichts wert."""
+        code = _nur_js_code(_lese("widgets", "a11y_remediation.js"))
+        assert "function melde()" in code and "function load()" in code
+        assert "sendBeacon" in code
+        assert len(code) > 5000, "Zu wenig Code gelesen: stimmt der Kommentar-Filter?"
+
+    def test_widget_beschreibt_keinen_browserspeicher(self):
+        code = _nur_js_code(_lese("widgets", "a11y_remediation.js"))
+        for verboten in self.VERBOTEN:
+            assert verboten not in code, (
+                f"a11y_remediation.js benutzt {verboten}. Das ist ein Zugriff "
+                f"auf das Endgeraet des Besuchers vor jeder Einwilligung.")
+
+    def test_meldung_haengt_nicht_am_speicher(self):
+        """Sperrt der Browser den Speicher, muss trotzdem gemeldet werden.
+
+        Vorher brach melde() dann stillschweigend ab: gemessen 0 Meldungen bei
+        gesperrtem Speicher, obwohl das Widget lief.
+        """
+        code = _nur_js_code(_lese("widgets", "a11y_remediation.js"))
+        block = code[code.index("function melde()"):code.index("function load()")]
+        assert "catch (e) { return; }" not in block
 
 
 class TestVerdrahtung:
