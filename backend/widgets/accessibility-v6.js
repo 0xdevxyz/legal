@@ -47,7 +47,7 @@
   }
   'use strict';
   
-  const WIDGET_VERSION = '1.0.0';
+  const WIDGET_VERSION = '1.0.5';
   const _currentScript = document.currentScript || (function() {
     const scripts = document.getElementsByTagName('script');
     return scripts[scripts.length - 1];
@@ -821,7 +821,7 @@
               </div>
             </details>
             <div class="complyo-footer-info">
-              <span class="complyo-version">Complyo Widget v${WIDGET_VERSION}</span>
+              <span class="complyo-version" title="Complyo Widget v${WIDGET_VERSION}">v${WIDGET_VERSION}</span>
             </div>
           </div>
         </div>
@@ -2194,8 +2194,10 @@
           align-items: center;
         }
 
+        /* Groesse siehe Ausnahmen unter "Widget NIEMALS durch body-Styles
+           beeinflussen": dort setzt ein revert !important jede Schrift im
+           Widget zurueck, eine Groesse hier allein bliebe wirkungslos. */
         .complyo-version {
-          font-size: 11px;
           color: var(--c-text-muted);
         }
 
@@ -2763,6 +2765,16 @@
         
         #complyo-a11y-widget .complyo-tile-label {
           font-size: 11px !important;
+        }
+
+        /* Die Versionsnummer ist nur ein Vermerk fuer den Support, deshalb so
+           klein wie lesbar. Die fruehere Angabe 11px stand nur oben bei
+           .complyo-version und verlor gegen das revert hier: gemessen wurden
+           16px. Farbe bleibt --c-text-muted, 4,63:1 auf --c-surface-2; auch
+           kleine Schrift braucht 4,5:1 (WCAG 1.4.3). */
+        #complyo-a11y-widget .complyo-version {
+          font-size: 9px !important;
+          line-height: 1 !important;
         }
         
         #complyo-a11y-widget .complyo-panel-header h3 {
