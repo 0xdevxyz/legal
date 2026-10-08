@@ -522,15 +522,23 @@ async def get_last_scan(
             if not scan:
                 raise HTTPException(status_code=404, detail="No scan history found")
             
+            # Gespeicherte Scans tragen noch Eurobetraege je Befund; nach
+            # draussen gehen sie nicht mehr (compliance_engine/rangstufe.py).
+            from compliance_engine.rangstufe import ohne_eurobetraege
+            daten = scan['scan_data']
+            if isinstance(daten, str):
+                try:
+                    daten = json.loads(daten)
+                except Exception:
+                    daten = {}
             return {
                 "success": True,
                 "scan": {
                     "scan_id": scan['scan_id'],
-                    "data": scan['scan_data'],
+                    "data": ohne_eurobetraege(daten),
                     "compliance_score": scan['compliance_score'],
                     "critical_issues": scan['critical_issues'],
                     "warning_issues": scan['warning_issues'],
-                    "total_risk_euro": scan['total_risk_euro'],
                     "scan_timestamp": scan['scan_timestamp'].isoformat()
                 }
             }

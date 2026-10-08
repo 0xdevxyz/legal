@@ -114,7 +114,7 @@ export interface FixPackage {
       hard: number;
     };
     by_feature: Record<string, number>;
-    total_risk_euro: number;
+    total_risk_euro?: number;
     recommendation: string;
   };
 }
@@ -245,12 +245,6 @@ export function FixWizard({
             <p className="text-blue-100 text-lg">
               {summary.auto_fixable} davon automatisch lösbar
             </p>
-          </div>
-          <div className="text-right">
-            <div className="text-4xl font-bold text-yellow-300">
-              €{summary.total_risk_euro.toLocaleString()}
-            </div>
-            <p className="text-blue-200 text-sm">Potentielles Bußgeld-Risiko</p>
           </div>
         </div>
       </div>

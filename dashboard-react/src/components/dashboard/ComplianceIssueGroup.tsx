@@ -19,7 +19,7 @@ interface IssueGroup {
   severity: string;
   solution_type: string;
   has_unified_solution: boolean;
-  total_risk_euro: number;
+  total_risk_euro?: number;
   completed_count: number;
   total_count: number;
   title: string;
@@ -224,18 +224,7 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
 
           {/* Right: Stats & Action */}
           <div className="flex flex-col items-end gap-2">
-            {/* Risiko */}
-            <div className="text-right">
-              <div className="text-xs text-zinc-500 uppercase tracking-wider">Geschätztes Risiko</div>
-              <div className="text-xl font-bold text-red-400">
-                {new Intl.NumberFormat('de-DE', {
-                  style: 'currency',
-                  currency: 'EUR',
-                  maximumFractionDigits: 0
-                }).format(group.total_risk_euro)}
-              </div>
-            </div>
-
+            {/* Kein geschätzter Eurobetrag je Gruppe mehr (07.10.2026). */}
             {/* Issue Count */}
             <div className={`px-3 py-1 rounded-lg ${colors.badge} text-sm font-semibold`}>
               {group.total_count} {group.total_count === 1 ? 'Problem' : 'Probleme'}

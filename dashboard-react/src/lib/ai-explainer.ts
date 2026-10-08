@@ -95,9 +95,7 @@ export function explainInSimpleTerms(issue: ComplianceIssue): SimpleExplanation 
   return {
     simple: issue.description || 'Dieses Problem sollte behoben werden.',
     why: issue.legal_basis || 'Gesetzliche Anforderung',
-    risk: issue.risk_euro_max
-      ? `Bußgeldrahmen bis ${issue.risk_euro_max} €, abhängig vom Einzelfall`
-      : 'Abmahnung oder Bußgeld möglich, abhängig vom Einzelfall',
+    risk: 'Abmahnung oder Bußgeld möglich, abhängig vom Einzelfall',
     fix: issue.solution?.steps?.[0] || 'Bitte Dokumentation prüfen',
     urgency: issue.severity === 'critical' ? 'high' : issue.severity === 'warning' ? 'medium' : 'low',
     estimatedTime: 'Unbekannt'
@@ -167,9 +165,9 @@ function calculatePriority(issue: ComplianceIssue, explanation: SimpleExplanatio
   if (explanation.urgency === 'high') priority += 100;
   if (explanation.urgency === 'medium') priority += 50;
   
-  // Risk weight
-  const risk = issue.risk_euro_max || 0;
-  priority += Math.min(risk / 100, 50); // Max 50 points from risk
+  // Rangstufe statt Eurobetrag (07.10.2026)
+  if (issue.rang === 'sofort') priority += 50;
+  else if (issue.rang === 'als_naechstes') priority += 30;
   
   // Auto-fixable bonus
   if (issue.auto_fixable) priority += 25;
