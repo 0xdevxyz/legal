@@ -15,7 +15,11 @@ from compliance_engine.sicherer_abruf import sichere_session
 from compliance_engine.rechtsgrundlagen import ANBIETERKENNZEICHNUNG, grundlage
 from compliance_engine.checks.rechtsseiten_links import (
     ist_seitenlink, attrappen, attrappen_satz, lade_rechtsseite,
+    seitenlink_art, ART_ANKER,
     PROBLEM_KEIN_RECHTSTEXT, PROBLEM_NICHT_ERREICHBAR,
+)
+from compliance_engine.checks.rechtsseiten_text import (
+    fremder_host_ohne_klartext, finde_eingebetteten_text, eingebettete_seite,
 )
 
 logger = logging.getLogger(__name__)
@@ -92,7 +96,7 @@ def _nach_guete(links):
     return sorted(links, key=_linkguete, reverse=True)
 
 
-def _find_impressum_links(soup: BeautifulSoup) -> List:
+def _find_impressum_links(soup: BeautifulSoup, basis_url: str = None) -> List:
     """
     Verbesserte Suche nach Impressum-Links
     Findet auch Links in modernen JS-Frameworks (React, Vue, Next.js)
@@ -114,6 +118,10 @@ def _find_impressum_links(soup: BeautifulSoup) -> List:
         # mailto:, tel:, javascript: und leere Ziele fuehren zu keiner Seite;
         # ein so beschrifteter Link ist kein Rechtsseiten-Kandidat.
         if not ist_seitenlink(a_tag.get('href')):
+            continue
+        # Ein Link auf einen fremden Host ist nur dann das Impressum, wenn sein
+        # Text es beim Namen nennt (siehe rechtsseiten_text.py).
+        if fremder_host_ohne_klartext(a_tag, basis_url):
             continue
         href = a_tag.get('href', '').lower()
         link_text = a_tag.get_text(strip=True).lower()
@@ -425,13 +433,21 @@ async def check_impressum_compliance(url: str, soup: BeautifulSoup, session=None
     impressum_html: str | None = None
     impressum_found: bool = False
 
-    all_impressum_links = _find_impressum_links(soup)
+    all_impressum_links = _find_impressum_links(soup, url)
+    # Steht der Text im Dokument (Overlay, Abschnitt), wird er gelesen, statt
+    # "kein Impressum-Link" zu melden. Fuehrt der beste Link nur auf einen Anker
+    # der eigenen Seite, ist der Abschnitt selbst die genauere Quelle als die
+    # ganze Seite.
+    eingebettet = None
+    if (not all_impressum_links
+            or seitenlink_art(all_impressum_links[0].get('href')) == ART_ANKER):
+        eingebettet = finde_eingebetteten_text(soup, 'impressum', _looks_like_impressum)
     
     logger.info(f"🔍 Impressum-Links gefunden: {len(all_impressum_links)}")
     for link in all_impressum_links[:3]:
         logger.info(f"   → {link.get('href', 'N/A')}: {link.get_text(strip=True)[:50]}")
     
-    if not all_impressum_links:
+    if not all_impressum_links and not eingebettet:
         impressum_url_exists = await _check_impressum_url_exists(url, session)
         if impressum_url_exists:
             logger.info("✅ Impressum per Direkt-URL-Check gefunden — kein Issue")
@@ -533,15 +549,19 @@ async def check_impressum_compliance(url: str, soup: BeautifulSoup, session=None
         try:
             from ..hybrid_validator import HybridValidator
             
-            impressum_link = all_impressum_links[0]
-            impressum_href = impressum_link.get('href', '')
-            
             from urllib.parse import urljoin
-            impressum_url = urljoin(url, impressum_href)
+            if eingebettet:
+                impressum_href, impressum_url = '', url
+            else:
+                impressum_href = all_impressum_links[0].get('href', '')
+                impressum_url = urljoin(url, impressum_href)
             
-            if session:
-                geladen = await lade_rechtsseite(url, impressum_href, soup, session,
-                                                 _looks_like_impressum)
+            if session or eingebettet:
+                if eingebettet:
+                    geladen = eingebettete_seite(url, eingebettet)
+                else:
+                    geladen = await lade_rechtsseite(url, impressum_href, soup, session,
+                                                     _looks_like_impressum)
                 if not geladen.ok:
                     # Kein stiller Durchlauf: bis zum 02.10.2026 fing ein
                     # except jede Stoerung ab und das Impressum galt als
