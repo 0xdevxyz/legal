@@ -155,7 +155,7 @@ export const Orientierungsband: React.FC = () => {
     if (kritisch > 0) {
       return {
         titel: `${kritisch} ${kritisch === 1 ? 'kritischer Punkt wartet' : 'kritische Punkte warten'}`,
-        begruendung: 'Kritisch heißt: hier droht konkret ein Bußgeld oder eine Abmahnung. Der Assistent geht sie der Reihe nach mit Ihnen durch.',
+        begruendung: 'Kritisch heißt: eine gesetzliche Pflicht ist nicht erfüllt. Der Assistent geht die Punkte der Reihe nach mit Ihnen durch.',
         knopf: 'Schritt für Schritt beheben',
         icon: AlertTriangle,
         ton: 'handeln',
@@ -204,9 +204,11 @@ export const Orientierungsband: React.FC = () => {
           )}
         </div>
 
-        {/* Frage 3: genau ein nächster Schritt */}
+        {/* Frage 3: genau ein nächster Schritt. flex-wrap plus Mindestbreite
+            des Textes: auf dem Handy rutscht der Knopf unter den Text, statt
+            den Text auf Wortbreite zusammenzudrücken. */}
         <div
-          className={`flex items-start gap-4 rounded-xl p-4 border ${
+          className={`flex flex-wrap items-start gap-4 rounded-xl p-4 border ${
             ruhig
               ? 'bg-emerald-50 dark:bg-emerald-500/5 border-emerald-200 dark:border-emerald-500/25'
               : 'bg-[#25bac8]/5 border-[#25bac8]/30'
@@ -218,7 +220,7 @@ export const Orientierungsband: React.FC = () => {
           >
             <Symbol className="w-5 h-5" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-[12rem]">
             <p className="font-bold text-gray-900 dark:text-white">{schritt.titel}</p>
             <p className="text-sm text-gray-600 dark:text-zinc-400 mt-0.5 leading-relaxed">
               {schritt.begruendung}

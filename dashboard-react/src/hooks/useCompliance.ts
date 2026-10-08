@@ -11,12 +11,15 @@ import type { ComplianceAnalysis } from '@/types/api';
  *   bestehenden invalidateQueries-Aufrufe weiter greifen.
  * @param onKennung Meldet die Kennung, unter der der entkoppelte Weg den
  *   Fortschritt fuehrt. Sie ersetzt das Client-Token, sobald der Auftrag
- *   angenommen ist.
+ *   angenommen ist. Die Seite wird mitgemeldet, fuer die dieser Abruf lief:
+ *   der Scan dauert Minuten, und bis die Kennung da ist, kann der Nutzer die
+ *   Seite gewechselt haben. Ohne die Angabe liefe das Panel der neuen Seite
+ *   mit der Kennung des fremden Scans.
  */
 export const useComplianceAnalysis = (
   url: string | null,
   scanTokenRef?: { current: string | null },
-  onKennung?: (kennung: string) => void,
+  onKennung?: (kennung: string, url: string) => void,
 ) => {
   return useQuery<ComplianceAnalysis>({
     queryKey: ['compliance-analysis', url],
@@ -35,7 +38,7 @@ export const useComplianceAnalysis = (
           trimmedUrl,
           undefined,
           scanTokenRef?.current ?? undefined,
-          onKennung,
+          onKennung ? (kennung) => onKennung(kennung, trimmedUrl) : undefined,
         );
 
         return result;

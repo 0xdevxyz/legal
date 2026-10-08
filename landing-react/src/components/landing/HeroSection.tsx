@@ -171,11 +171,9 @@ export default function HeroSection() {
               </div>
             </div>
             
-            {/* Floating Badge */}
-            <div className="absolute -bottom-4 -right-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-3 rounded-xl shadow-xl transform rotate-3">
-              <div className="text-sm font-semibold">€50.000</div>
-              <div className="text-xs opacity-90">Bußgeld vermieden</div>
-            </div>
+            {/* Der Badge mit der Behauptung, 50.000 Euro seien vermieden
+                worden, ist am 07.10.2026 entfallen: eine Erfolgsangabe ohne
+                Fall dahinter. */}
           </div>
         </div>
       </div>
