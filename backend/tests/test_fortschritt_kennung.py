@@ -74,15 +74,22 @@ class TestFrontendUebernimmtDieKennung:
 
     def test_hook_reicht_die_kennung_durch(self):
         s = fquelle("hooks", "useCompliance.ts")
-        assert "onKennung?: (kennung: string) => void" in s
-        assert "onKennung," in s
+        # Seit dem Seitenwechsel-Fix (PR 20) meldet der Hook die Seite mit, fuer
+        # die der Abruf lief; die Kennung geht weiter unveraendert an analyzeWebsite.
+        assert "onKennung?: (kennung: string, url: string) => void" in s
+        assert "onKennung(kennung, trimmedUrl)" in s
 
     def test_rescan_zeichnet_bei_neuer_kennung_neu(self):
         """Eine Ref allein loest kein Rendern aus — das Panel haette die
         Kennung sonst nie zu sehen bekommen."""
         s = fquelle("components", "dashboard", "WebsiteAnalysis.tsx")
-        assert "const [scanToken, setScanToken] = useState<string | null>(null)" in s
-        assert "<ScanProgressPanel url={currentWebsite.url} token={scanToken} />" in s
+        # Die Kennung liegt als ZUSTAND vor (der Lauf traegt Seite und Token), und
+        # das Panel bekommt sie von dort, nie aus der Ref. Der Lauf haengt an der
+        # Seite, fuer die er gestartet wurde: wer waehrend des Scans die Seite
+        # wechselt, soll unter der neuen nicht den Fortschritt der alten sehen.
+        assert "useState<{ url: string; token: string | null } | null>(null)" in s
+        assert "setScanLauf((alt) =>" in s  # die Kennung des Servers ersetzt das Client-Token
+        assert "<ScanProgressPanel url={scanLauf!.url} token={scanToken} />" in s
         assert "token={scanTokenRef.current}" not in s
 
     def test_panel_pollt_den_fortschrittspfad(self):

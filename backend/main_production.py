@@ -1284,8 +1284,9 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
         
         # Save quick scan to database
         async with db_pool.acquire() as connection:
-            scan_id = f"quick_{current_user['id']}_{int(datetime.datetime.now().timestamp())}"
-            await connection.execute(
+            scan_id = f"quick_{current_user['id']}_{int(datetime.datetime.now().timestamp())}_{_uuid.uuid4().hex[:8]}"
+            # RETURNING statt "neuester Scan des Nutzers", siehe analyze_website_v2.
+            new_scan = await connection.fetchrow(
                 """
                 INSERT INTO scan_history (
                     scan_id, user_id, url, scan_duration_ms, compliance_score, total_risk_euro,
@@ -1294,6 +1295,7 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
                     legal_score, cookie_score, jurisdiction
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                           $11, $12, $13, $14, $15, $16)
+                RETURNING id
                 """,
                 scan_id,
                 int(current_user["id"]),
@@ -1307,10 +1309,6 @@ async def quick_analyze_website(request: AnalyzeRequest, current_user: dict = De
                 json.dumps(scan_result, default=str),  # Store full scan result as JSONB
                 # Saeulenwerte und Rechtsraum, siehe scan_persistenz.py.
                 *werte_fuer_insert(scan_result)
-            )
-            new_scan = await connection.fetchrow(
-                "SELECT id FROM scan_history WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", 
-                current_user["id"]
             )
         
         return {
@@ -1416,8 +1414,15 @@ async def fuehre_v2_scan_aus(
                 logger.error(f"analyze_website_v2: cannot convert user_id '{user_id_raw}' to int")
                 raise HTTPException(status_code=400, detail="Ungültige Benutzer-ID im Token")
 
-            scan_id = f"scan_{user_id_value}_{int(datetime.datetime.now().timestamp())}"
-            await connection.execute(
+            # Eindeutig auch bei zwei Scans desselben Kontos in derselben Sekunde:
+            # scan_id ist in scan_history nicht UNIQUE, ein gemeinsamer Wert liesse
+            # Berichte und KI-Fixes auf den falschen Scan zeigen.
+            scan_id = f"scan_{user_id_value}_{int(datetime.datetime.now().timestamp())}_{_uuid.uuid4().hex[:8]}"
+            # RETURNING statt nachtraeglichem "neuester Scan des Nutzers": laufen
+            # zwei Scans gleichzeitig (Seite waehrend der Analyse gewechselt, der
+            # alte Scan laeuft serverseitig weiter), bekam der fertige Scan sonst
+            # die Kennung des anderen zurueck.
+            new_scan = await connection.fetchrow(
                 """
                 INSERT INTO scan_history (
                     scan_id, user_id, url, scan_duration_ms, compliance_score, total_risk_euro,
@@ -1426,6 +1431,7 @@ async def fuehre_v2_scan_aus(
                     legal_score, cookie_score, jurisdiction
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
                           $12, $13, $14, $15, $16, $17)
+                RETURNING id, scan_id
                 """,
                 scan_id,
                 user_id_value,
@@ -1442,7 +1448,6 @@ async def fuehre_v2_scan_aus(
                 *werte_fuer_insert(scan_result)
             )
             user_id_int = user_id_value
-            new_scan = await connection.fetchrow("SELECT id, scan_id FROM scan_history WHERE user_id = $1 ORDER BY scan_timestamp DESC LIMIT 1", user_id_int)
             
             tracked_site = await connection.fetchrow(
                 "SELECT id FROM tracked_websites WHERE user_id = $1 AND url = $2",

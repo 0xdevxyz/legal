@@ -10,6 +10,7 @@ from datetime import datetime
 from uuid import UUID
 import asyncpg
 import json
+import re
 import traceback
 import logging
 from dependencies import get_current_user
@@ -58,6 +59,15 @@ def _kritische_aus_pillar_scores(wert: Any) -> int:
         except (ValueError, TypeError):
             return 0
     return 0
+
+def _adresskern(url: str) -> str:
+    """Adresse ohne Schema, ``www.`` und abschliessende Schraegstriche, klein.
+
+    Muss zum regexp_replace in ``save_website`` passen: dieselbe Seite steht mal
+    als ``https://x.de``, mal als ``https://www.x.de/`` in scan_history.
+    """
+    return re.sub(r"^https?://(www\.)?|/+$", "", (url or "").strip().lower())
+
 
 # Pydantic Models
 class WebsiteCreate(BaseModel):
@@ -214,7 +224,37 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                 """, user_id)
                 
                 is_primary = (website_count == 0)
-                
+
+                # War die Seite schon gescannt, bevor sie getrackt wurde (Scan auf der
+                # Startseite, Onboarding), gehoeren Wert und Datum des letzten Scans an
+                # die neue Zeile. Sonst steht sie mit dem Platzhalter 0 und scan_count 1
+                # als "geprueft mit 0" im Portfolio, obwohl Scans vorliegen: am
+                # 06.10.2026 zeigte zahnarztpraxis-mittweida.de 0 bei drei Scans bis 73.
+                # Nur beim Platzhalter (0): ein mitgesendeter echter Wert bleibt.
+                start_score = data.score
+                start_datum = datetime.utcnow()
+                start_anzahl = 1
+                if not data.score:
+                    try:
+                        konto = int(user_id)
+                    except (ValueError, TypeError):
+                        konto = None
+                    vorher = None
+                    if konto is not None:
+                        vorher = await conn.fetchrow("""
+                            SELECT compliance_score, scan_timestamp,
+                                   COUNT(*) OVER () AS anzahl
+                            FROM scan_history
+                            WHERE user_id = $1
+                              AND regexp_replace(lower(url), '^https?://(www\\.)?|/+$', '', 'g') = $2
+                            ORDER BY scan_timestamp DESC
+                            LIMIT 1
+                        """, konto, _adresskern(data.url))
+                    if vorher and vorher["compliance_score"] is not None:
+                        start_score = int(round(float(vorher["compliance_score"])))
+                        start_datum = vorher["scan_timestamp"] or start_datum
+                        start_anzahl = int(vorher["anzahl"] or 1)
+
                 # Create new website
                 # jurisdiction mit anlegen — ein beim Anlegen mitgesendeter Override
                 # ging bisher verloren. NULL = kein Override (Account-Default gilt).
@@ -223,11 +263,11 @@ async def save_website(data: WebsiteCreate, user=Depends(get_current_user)):
                         user_id, url, last_score, last_scan_date,
                         scan_count, is_primary, jurisdiction
                     )
-                    VALUES ($1, $2, $3, $4, 1, $5, $6)
+                    VALUES ($1, $2, $3, $4, $7, $5, $6)
                     RETURNING
                         id, url, last_score, last_scan_date,
                         scan_count, is_primary, jurisdiction
-                """, user_id, data.url, data.score, datetime.utcnow(), is_primary, site_jurisdiction)
+                """, user_id, data.url, start_score, start_datum, is_primary, site_jurisdiction, start_anzahl)
                 
                 # Update user_limits.websites_count
                 await conn.execute("""
