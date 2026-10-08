@@ -16,6 +16,7 @@ import logging
 from ssrf_protection import validate_url, SSRFError
 from compliance_engine.privacy_transfer_findings import detect_transfers
 from compliance_engine.sicherer_abruf import sichere_session
+from compliance_engine.grundsystem import erkenne_grundsystem
 
 logger = logging.getLogger(__name__)
 
@@ -394,11 +395,17 @@ class CookieScanner:
                 request_urls=scripts + iframes + links,
             )
 
+            # Grundsystem (WordPress, Joomla, ...) mitgeben: die Ersteinrichtung
+            # zeigt danach den passenden Weg (Plugin oder Schnipsel) statt
+            # immer derselben drei Kacheln.
+            detected_cms = erkenne_grundsystem(html_content)
+
             return {
                 'url': url,
                 'detected_services': list(detected['services']),
                 'confidence': detected['confidence'],
                 'privacy_findings': privacy_findings,
+                'detected_cms': detected_cms,
                 'scripts': scripts[:20],  # Limit for response size
                 'iframes': iframes[:20],
                 'scan_timestamp': self._get_timestamp()

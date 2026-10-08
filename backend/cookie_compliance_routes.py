@@ -33,6 +33,8 @@ from agency_report_generator import AgencyReportGenerator
 from compliance_engine.data_processing_countries import country_processing_info
 from dependencies import rate_limit, require_admin, get_client_ip as _client_ip_geprueft
 from compliance_engine.sicherer_abruf import sichere_session
+from compliance_engine.grundsystem import einrichtungsweg, PLUGIN_PAKETE
+from fastapi.responses import FileResponse
 
 
 def _enrich_third_country(service: dict) -> dict:
@@ -1991,6 +1993,77 @@ async def delete_expired_consents(
         print(f"Error deleting expired consents: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete")
 
+# ============================================================================
+# Grundsystem und Plugin-Pakete (Ersteinrichtung nach CMS)
+# ============================================================================
+
+PLUGIN_VERZEICHNIS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plugins")
+
+
+@router.get("/api/cookie-compliance/plugin/{cms}", dependencies=[Depends(rate_limit("plugin_download", 20, 60))])
+async def plugin_herunterladen(cms: str):
+    """
+    Liefert das fertige Plugin-Paket fuer WordPress oder Joomla.
+
+    Oeffentlich und ohne Anmeldung: das Paket enthaelt kein Geheimnis, die
+    Site-ID traegt der Kunde im Plugin selbst ein (bzw. das Plugin leitet sie
+    aus der Domain ab, nach derselben Regel wie license_check.url_to_site_id).
+    GET ist nicht CSRF-pflichtig, eine EXEMPT-Ausnahme ist nicht noetig.
+
+    Die Zips werden mit scripts/plugins-paketieren.py aus wordpress-plugin/ und
+    joomla-plugin/ gebaut; tests/test_grundsystem_einrichtung.py prueft, dass
+    sie zum Quellstand passen.
+    """
+    paket = PLUGIN_PAKETE.get((cms or "").lower())
+    if not paket:
+        raise HTTPException(status_code=404, detail="Fuer dieses Grundsystem gibt es kein Plugin-Paket")
+    pfad = os.path.join(PLUGIN_VERZEICHNIS, paket["datei"])
+    if not os.path.isfile(pfad):
+        logger.error(f"[Plugin] Paket fehlt im Image: {pfad}")
+        raise HTTPException(status_code=503, detail="Plugin-Paket ist derzeit nicht verfuegbar")
+    return FileResponse(
+        pfad,
+        media_type="application/zip",
+        filename=paket["datei"],
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@router.get("/api/cookie-compliance/grundsystem")
+async def grundsystem_der_eigenen_website(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db_pool: asyncpg.Pool = Depends(get_db_connection)
+):
+    """
+    Grundsystem der registrierten Website aus dem letzten Hauptscan, damit der
+    Integrations-Tab auch ohne frischen Cookie-Scan den richtigen Weg zeigt.
+    Kein neuer Abruf der Kundenseite, keine neue Spalte: der Hauptscan legt
+    detected_cms bereits in scan_history.scan_data ab.
+    """
+    user = await get_current_user_required(credentials)
+    user_id = await get_user_id_from_token(user)
+
+    detected = None
+    try:
+        row = await db_pool.fetchrow(
+            """SELECT scan_data FROM scan_history
+               WHERE user_id = $1
+               ORDER BY created_at DESC
+               LIMIT 1""",
+            user_id,
+        )
+        if row and row["scan_data"]:
+            daten = row["scan_data"]
+            if isinstance(daten, str):
+                daten = json.loads(daten)
+            detected = (daten or {}).get("detected_cms")
+    except Exception as e:
+        logger.warning(f"[Grundsystem] Letzter Scan nicht lesbar fuer user {user_id}: {e}")
+
+    return {"success": True, **einrichtungsweg(detected)}
+
+
 @router.post("/api/cookie-compliance/scan", dependencies=[Depends(rate_limit("cookie_scan", 5, 60))])
 async def scan_website(
     request: Request,
@@ -2127,6 +2200,10 @@ async def scan_website(
             f"[Scan] DONE site_id={site_id} config_updated={config_updated} "
             f"total_found={len(matched_services)} privacy_findings={len(privacy_findings)}"
         )
+        # Grundsystem und Einrichtungsweg: WordPress und Joomla bekommen das
+        # fertige Plugin, alles andere den Schnipsel mit dem passenden Hinweis.
+        grundsystem = einrichtungsweg(scan_result.get('detected_cms'))
+
         return {
             "success": True,
             "url": url,
@@ -2134,6 +2211,7 @@ async def scan_website(
             "detected_services": matched_services,
             "total_found": len(matched_services),
             "privacy_findings": privacy_findings,
+            **grundsystem,
             "privacy_findings_count": len(privacy_findings),
             "privacy_risk_euro": privacy_risk_euro,
             "config_updated": config_updated,

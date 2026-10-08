@@ -43,6 +43,9 @@ ERLAUBT = {
     # --- Betriebszustand
     ("GET", "/"), ("GET", "/health"), ("GET", "/metrics"),
     ("GET", "/api/cookie-compliance/health"),
+    # Plugin-Pakete fuer WordPress/Joomla: GPL-Code ohne Geheimnis, die Site-ID
+    # traegt der Kunde im Plugin ein. Rate-Limit 20/min, GET, kein CSRF noetig.
+    ("GET", "/api/cookie-compliance/plugin/{cms}"),
     # --- Das Widget laeuft auf fremden Domains und hat dort keine Anmeldung
     ("GET", "/api/widgets/cookie-compliance.js"),
     ("GET", "/api/widgets/privacy-manager.js"),

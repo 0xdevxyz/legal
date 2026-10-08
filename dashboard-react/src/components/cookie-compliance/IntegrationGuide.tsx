@@ -16,19 +16,50 @@ import {
   CheckCircle2,
   ChevronRight,
   AlertTriangle,
+  Download,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { API_BASE as PLUGIN_API_BASE, Grundsystem, integrationsTab, pluginSchritte } from '@/lib/grundsystem';
 
 interface IntegrationGuideProps {
   siteId: string;
   config: any;
+  /** Erkanntes Grundsystem (aus Cookie-Scan oder letztem Hauptscan); waehlt den Tab vor. */
+  grundsystem?: Grundsystem | null;
 }
 
-const IntegrationGuide: React.FC<IntegrationGuideProps> = ({ siteId, config }) => {
+/** Download und Schritte fuer das fertige Plugin (WordPress, Joomla). */
+const PluginBlock: React.FC<{ cmsKey: 'wordpress' | 'joomla'; cmsName: string; siteId: string }> = ({ cmsKey, cmsName, siteId }) => (
+  <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg space-y-3">
+    <p className="text-sm font-semibold text-green-400">Empfohlen: fertiges Plugin</p>
+    <a
+      href={`${PLUGIN_API_BASE}/api/cookie-compliance/plugin/${cmsKey}`}
+      download
+      className="inline-flex items-center gap-2 rounded-md bg-green-500 hover:bg-green-600 text-white text-sm font-medium px-4 py-2 transition-colors"
+    >
+      <Download className="w-4 h-4" />
+      Plugin für {cmsName} herunterladen
+    </a>
+    <ol className="space-y-2">
+      {pluginSchritte({ detected_cms: cmsName, cms_key: cmsKey, einrichtung: 'plugin', plugin_download_pfad: null, anleitung: '' }, siteId).map((s, i) => (
+        <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <span className="w-6 h-6 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center flex-shrink-0 font-semibold text-xs mt-0.5">{i + 1}</span>
+          <span>{s}</span>
+        </li>
+      ))}
+    </ol>
+    <p className="text-xs text-gray-600 dark:text-gray-400">
+      Das Plugin bindet Blocker und Banner in der richtigen Reihenfolge ein und holt die Konfiguration aus diesem Dashboard.
+    </p>
+  </div>
+);
+
+const IntegrationGuide: React.FC<IntegrationGuideProps> = ({ siteId, config, grundsystem = null }) => {
   const [copied, setCopied] = useState(false);
+  const startTab = integrationsTab(grundsystem);
   
   const API_BASE = 'https://api.complyo.de';
   
@@ -172,10 +203,20 @@ export default function Document() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="wordpress" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 bg-white/50 dark:bg-gray-900/50">
+          {grundsystem?.detected_cms && (
+            <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+              Erkanntes Grundsystem Ihrer Website: <strong className="text-gray-900 dark:text-white">{grundsystem.detected_cms}</strong>
+              {grundsystem.einrichtung === 'plugin' ? ' · fertiges Plugin verfügbar' : ''}
+            </p>
+          )}
+          {/* key: wenn die Erkennung nach dem ersten Render eintrifft, startet der Tab neu beim passenden System */}
+          <Tabs key={startTab} defaultValue={startTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-5 bg-white/50 dark:bg-gray-900/50">
               <TabsTrigger value="wordpress" className="data-[state=active]:bg-orange-500">
                 WordPress
+              </TabsTrigger>
+              <TabsTrigger value="joomla" className="data-[state=active]:bg-orange-500">
+                Joomla
               </TabsTrigger>
               <TabsTrigger value="html" className="data-[state=active]:bg-orange-500">
                 HTML
@@ -194,6 +235,8 @@ export default function Document() {
                 <FileCode className="w-5 h-5 text-orange-400" />
                 <h4 className="font-semibold text-gray-900 dark:text-white">WordPress Installation</h4>
               </div>
+              <PluginBlock cmsKey="wordpress" cmsName="WordPress" siteId={siteId} />
+              <p className="text-sm font-semibold text-gray-900 dark:text-white mt-4">Alternative ohne Plugin: Schnipsel im Theme</p>
               <ol className="space-y-3">
                 {[
                   'Gehen Sie zu Design → Theme-Editor',
@@ -218,6 +261,31 @@ export default function Document() {
               </div>
             </TabsContent>
             
+            {/* Joomla */}
+            <TabsContent value="joomla" className="space-y-4 mt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <FileCode className="w-5 h-5 text-orange-400" />
+                <h4 className="font-semibold text-gray-900 dark:text-white">Joomla Installation</h4>
+              </div>
+              <PluginBlock cmsKey="joomla" cmsName="Joomla" siteId={siteId} />
+              <p className="text-sm font-semibold text-gray-900 dark:text-white mt-4">Alternative ohne Plugin: Schnipsel im Template</p>
+              <ol className="space-y-3">
+                {[
+                  'Gehen Sie zu System → Templates → Site-Templates',
+                  'Öffnen Sie die index.php Ihres aktiven Templates',
+                  'Fügen Sie den Code direkt nach dem öffnenden <head> ein, vor <jdoc:include type="head" />',
+                  'Speichern Sie die Änderungen'
+                ].map((step, idx) => (
+                  <li key={idx} className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-orange-500/20 text-orange-400 font-semibold flex-shrink-0 mt-0.5">
+                      {idx + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </TabsContent>
+
             {/* HTML */}
             <TabsContent value="html" className="space-y-4 mt-6">
               <div className="flex items-center gap-2 mb-4">

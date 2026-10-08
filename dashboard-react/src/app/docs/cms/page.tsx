@@ -23,8 +23,15 @@ export default function CmsIntegrationPage() {
           {/* WordPress */}
           <section className="dark:bg-zinc-900 bg-white border dark:border-zinc-800 border-gray-200 rounded-2xl p-6">
             <h2 className="text-2xl font-bold dark:text-white text-gray-900 mb-3">WordPress</h2>
+            <p className="dark:text-zinc-400 text-gray-600 mb-3">
+              <strong className="dark:text-white text-gray-900">Empfohlen: das Complyo-Plugin.</strong>{' '}
+              <a href="https://api.complyo.de/api/cookie-compliance/plugin/wordpress" className="text-green-400 underline">complyo-compliance.zip herunterladen</a>,
+              im WordPress-Backend unter Plugins, Installieren, Plugin hochladen einspielen und aktivieren.
+              Das Plugin bindet Cookie-Blocker, Banner und Barrierefreiheits-Widget in der richtigen Reihenfolge ein
+              und leitet die Site-ID aus Ihrer Domain ab (prüfbar unter Einstellungen, Complyo).
+            </p>
             <p className="dark:text-zinc-400 text-gray-600 mb-1">
-              Fügen Sie das Script-Tag direkt im Theme-Editor oder via Plugin in den{' '}
+              Ohne Plugin: Fügen Sie das Script-Tag direkt im Theme-Editor in den{' '}
               <code className="text-green-400 dark:bg-zinc-800 bg-gray-100 px-1 rounded">&lt;head&gt;</code> ein.
               Alternativ können Sie die PHP-Funktion in der{' '}
               <code className="text-green-400 dark:bg-zinc-800 bg-gray-100 px-1 rounded">functions.php</code> Ihres
@@ -39,6 +46,25 @@ export default function CmsIntegrationPage() {
             <p className="dark:text-zinc-500 text-gray-500 text-sm mt-4 mb-1">PHP (functions.php):</p>
             <pre className="dark:bg-zinc-800 bg-gray-100 rounded-lg p-4 text-sm text-green-400 overflow-x-auto my-3">
               <code>{phpSnippet}</code>
+            </pre>
+          </section>
+
+          {/* Joomla */}
+          <section className="dark:bg-zinc-900 bg-white border dark:border-zinc-800 border-gray-200 rounded-2xl p-6">
+            <h2 className="text-2xl font-bold dark:text-white text-gray-900 mb-3">Joomla</h2>
+            <p className="dark:text-zinc-400 text-gray-600 mb-3">
+              <strong className="dark:text-white text-gray-900">Empfohlen: das Complyo-System-Plugin.</strong>{' '}
+              <a href="https://api.complyo.de/api/cookie-compliance/plugin/joomla" className="text-green-400 underline">plg_system_complyo.zip herunterladen</a>,
+              unter System, Installieren, Erweiterungen hochladen, dann unter Plugins das System-Plugin „Complyo"
+              aktivieren und die Site-ID eintragen.
+            </p>
+            <p className="dark:text-zinc-400 text-gray-600 mb-1">
+              Ohne Plugin: Fügen Sie das Snippet in der{' '}
+              <code className="text-green-400 dark:bg-zinc-800 bg-gray-100 px-1 rounded">index.php</code> Ihres Templates direkt nach dem öffnenden{' '}
+              <code className="text-green-400 dark:bg-zinc-800 bg-gray-100 px-1 rounded">&lt;head&gt;</code> ein.
+            </p>
+            <pre className="dark:bg-zinc-800 bg-gray-100 rounded-lg p-4 text-sm text-green-400 overflow-x-auto my-3">
+              <code>{htmlSnippet}</code>
             </pre>
           </section>
 

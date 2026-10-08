@@ -3,12 +3,13 @@
 import React, { useState } from 'react';
 import {
   Globe, Settings, Code, CheckCircle, ChevronRight, ChevronLeft,
-  X, Lock, Sparkles, Loader2, Copy, AlertCircle,
+  X, Lock, Sparkles, Loader2, Copy, AlertCircle, Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { apiClient } from '@/lib/api-client';
+import { API_BASE, Grundsystem, istGrundsystem, pluginDownloadUrl, pluginSchritte } from '@/lib/grundsystem';
 
 interface CookieSetupWizardProps {
   websiteUrl?: string;
@@ -16,6 +17,8 @@ interface CookieSetupWizardProps {
   siteId?: string;
   onComplete: () => void;
   onSkip: () => void;
+  /** Erkanntes Grundsystem nach dem Scan, damit die Seite es an den Integrations-Tab weiterreicht. */
+  onGrundsystem?: (g: Grundsystem | null) => void;
 }
 
 const STEPS = [
@@ -30,6 +33,7 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
   siteId = '',
   onComplete,
   onSkip,
+  onGrundsystem,
 }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [scanning, setScanning] = useState(false);
@@ -48,6 +52,7 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
       }) as any;
       setScanResult(data);
       if (data.success) {
+        onGrundsystem?.(istGrundsystem(data) ? data : null);
         setTimeout(() => setCurrentStep(2), 600);
       }
     } catch {
@@ -62,7 +67,6 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
   // Snippet einbaute, bekam kein Banner und keine Einwilligungsprotokolle,
   // hielt sich aber fuer abgedeckt. Der Blocker muss VOR dem Banner laden,
   // sonst laufen fremde Skripte vor der Einwilligung an.
-  const API_BASE = 'https://api.complyo.de';
   const integrationCode = `<!-- Complyo Cookie Compliance & Auto-Blocking -->
 <!-- Schritt 1: Cookie-Blocker (laedt ZUERST, blockiert Skripte) -->
 <script
@@ -85,6 +89,26 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
   };
 
   const canAdvance = currentStep === 1 ? !!scanResult?.success : true;
+
+  // Grundsystem aus dem Scan: WordPress und Joomla bekommen das fertige
+  // Plugin, alle anderen den Schnipsel mit dem Hinweis fuer ihr System.
+  const grundsystem: Grundsystem | null = istGrundsystem(scanResult) ? scanResult : null;
+  const pluginUrl = pluginDownloadUrl(grundsystem);
+  const cmsName = grundsystem?.detected_cms || null;
+  const cmsKey = grundsystem?.cms_key || 'html';
+
+  const codeBlock = (
+    <div className="bg-gray-950 rounded-lg p-4 border border-gray-200 dark:border-gray-700 relative group">
+      <pre className="text-xs text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap pr-8">{integrationCode}</pre>
+      <button
+        onClick={handleCopy}
+        className="absolute top-3 right-3 p-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+        title="Code kopieren"
+      >
+        {copied ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+      </button>
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -203,6 +227,12 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                               ))}
                             </div>
                           )}
+                          {cmsName && (
+                            <p className="text-xs text-gray-700 dark:text-gray-300 mt-2">
+                              Grundsystem: <strong>{cmsName}</strong>
+                              {pluginUrl ? ' · fertiges Plugin verfügbar' : ''}
+                            </p>
+                          )}
                           <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Weiter zum nächsten Schritt →</p>
                         </>
                       ) : (
@@ -269,42 +299,83 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
             </div>
           )}
 
-          {/* Step 3: Integration */}
+          {/* Step 3: Integration, je nach erkanntem Grundsystem */}
           {currentStep === 3 && (
             <div className="space-y-4">
               <div className="text-center">
                 <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
                   <CheckCircle className="w-8 h-8 text-green-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Alles bereit! Code einbinden.</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {cmsName ? `Erkannt: ${cmsName}` : 'Alles bereit! Code einbinden.'}
+                </h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Fügen Sie diesen Schnipsel in den <code className="text-orange-400 bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">&lt;head&gt;</code> jeder Seite ein.
+                  {pluginUrl
+                    ? 'Für Ihr System gibt es ein fertiges Plugin: hochladen, aktivieren, fertig.'
+                    : <>Fügen Sie diesen Schnipsel in den <code className="text-orange-400 bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">&lt;head&gt;</code> jeder Seite ein.</>}
                 </p>
               </div>
 
-              <div className="bg-gray-950 rounded-lg p-4 border border-gray-200 dark:border-gray-700 relative group">
-                <pre className="text-xs text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap pr-8">{integrationCode}</pre>
-                <button
-                  onClick={handleCopy}
-                  className="absolute top-3 right-3 p-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-                  title="Code kopieren"
-                >
-                  {copied ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { name: 'WordPress', hint: 'Im Theme-Editor in header.php einfügen' },
-                  { name: 'Webflow', hint: 'Unter Site Settings → Custom Code → Head' },
-                  { name: 'HTML', hint: 'Direkt vor dem </head>-Tag einfügen' },
-                ].map((p) => (
-                  <div key={p.name} className="p-3 bg-gray-100/50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 text-center">
-                    <p className="text-xs font-medium text-gray-900 dark:text-white mb-1">{p.name}</p>
-                    <p className="text-xs text-gray-500 leading-tight">{p.hint}</p>
+              {pluginUrl ? (
+                <>
+                  <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg space-y-3">
+                    <a
+                      href={pluginUrl}
+                      download
+                      className="inline-flex items-center justify-center w-full gap-2 rounded-md bg-green-500 hover:bg-green-600 text-white text-sm font-medium px-4 py-2 transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      Plugin für {cmsName} herunterladen
+                    </a>
+                    <ol className="space-y-2">
+                      {pluginSchritte(grundsystem, siteId).map((s, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300">
+                          <span className="w-5 h-5 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center flex-shrink-0 font-semibold">{i + 1}</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ol>
                   </div>
-                ))}
-              </div>
+                  <details>
+                    <summary className="cursor-pointer text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                      Alternativ ohne Plugin: Schnipsel von Hand in den &lt;head&gt; einbauen
+                    </summary>
+                    <div className="mt-2">{codeBlock}</div>
+                  </details>
+                </>
+              ) : (
+                <>
+                  {codeBlock}
+
+                  {grundsystem?.anleitung && (
+                    <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                      <p className="text-xs text-blue-300">
+                        <strong className="text-blue-200">{cmsName || 'HTML'}:</strong> {grundsystem.anleitung}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { key: 'wordpress', name: 'WordPress', hint: 'Im Theme-Editor in header.php einfügen' },
+                      { key: 'webflow', name: 'Webflow', hint: 'Unter Site Settings → Custom Code → Head' },
+                      { key: 'html', name: 'HTML', hint: 'Direkt vor dem </head>-Tag einfügen' },
+                    ].map((p) => (
+                      <div
+                        key={p.key}
+                        className={`p-3 rounded-lg border text-center ${p.key === cmsKey
+                          ? 'bg-orange-500/10 border-orange-500/50'
+                          : 'bg-gray-100/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'}`}
+                      >
+                        <p className="text-xs font-medium text-gray-900 dark:text-white mb-1">
+                          {p.name}{p.key === cmsKey && cmsName ? ' · erkannt' : ''}
+                        </p>
+                        <p className="text-xs text-gray-500 leading-tight">{p.hint}</p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
 
               <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
                 <p className="text-xs text-orange-300">
