@@ -53,12 +53,12 @@ export default function BannerAutomatik({ config, onSave }: BannerAutomatikProps
           <ShieldCheck className="w-5 h-5" aria-hidden="true" />
           Banner-Automatik
           {wirktJetzt && (
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="text-xs text-gray-700 dark:text-zinc-300">
               Für diese Website aktiv
             </Badge>
           )}
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-gray-600 dark:text-zinc-400">
           Der Banner erscheint nur, wenn auf Ihrer Seite etwas zu entscheiden ist. Beim Laden prüft das
           Widget im Browser des Besuchers, ob Cookies, Browser-Speicher, fremde Server oder zurückgehaltene
           Dienste im Spiel sind. Taucht nichts davon auf und hat der Scan keinen Dienst gefunden, bleibt der
@@ -83,7 +83,7 @@ export default function BannerAutomatik({ config, onSave }: BannerAutomatikProps
             onCheckedChange={aendern}
           />
         </div>
-        <p className="text-xs text-gray-500" role="status" aria-live="polite">
+        <p className="text-xs text-gray-600 dark:text-gray-400" role="status" aria-live="polite">
           {fehler
             ? 'Speichern fehlgeschlagen. Die Einstellung wurde nicht geändert.'
             : 'Die Automatik wirkt nur, wenn der Scan abgeschlossen ist und keinen Dienst gefunden hat. Websites mit Google Tag Manager oder selbst eingetragenen Diensten sind ausgenommen.'}
