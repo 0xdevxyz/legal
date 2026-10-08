@@ -207,7 +207,10 @@ class TestLeadMails:
             "compliance_score": 72, "estimated_risk_euro": "2000-4000",
             "findings": {"a": 1, "b": 2}})
         html = liste[0]["html"]
-        assert "72 %" in html and "2000-4000 EUR" in html
+        assert "72 %" in html
+        # Seit dem 07.10.2026 (#27) nennt kein Kundentext mehr einen Betrag als
+        # Rechtsfolge; ein mitgegebener Euro-Wert bleibt in der Mail ungenannt.
+        assert "2000-4000" not in html and "EUR" not in html
         assert "DSGVO-konform" not in html
 
 

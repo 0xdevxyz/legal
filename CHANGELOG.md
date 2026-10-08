@@ -7,6 +7,40 @@
 
 ---
 
+## [2026-10-07]
+
+### Backend: keine Bußgeldbeträge je Befund mehr, Rangstufe statt Euro
+- **Entscheidung:** complyo beziffert keine Rechtsfolge mehr, die sich nicht belegen lässt. „Anschrift fehlt im Impressum: 2.000 €“ war eine erfundene Zahl; es gibt keine Bußgeldpraxis je Pflichtangabe, und Abmahnkosten hängen am Streitwert. Für einen Compliance-Anbieter ist so eine Angabe in der Kundenansicht selbst ein Risiko nach § 5 UWG
+- Neu `backend/compliance_engine/rangstufe.py`: `rang_bestimmen` leitet aus Wichtigkeit (`severity`, `is_missing`) und Dringlichkeit (bekannte Abmahnwelle aus `abmahnwellen.py`, Stichwort plus gleiche Säule) vier Stufen ab: **Sofort**, **Als Nächstes**, **Einplanen**, **Hinweis**, jede mit einem Satz Begründung. `ohne_eurobetraege` entfernt alle Euro-Schlüssel rekursiv aus Antworten
+- `ComplianceIssue` (`public_routes.py`): `risk_euro_min/max`, `risk_range` bleiben im Schema, stehen aber auf `None`; neu `rang`, `rang_label`, `rang_begruendung`. `estimated_risk_euro` und `riskAmount` der `AnalysisResponse` sind optional und leer. Die Vorschau (`/api/analyze-preview`) liefert je Bereich nur noch Schwere und Zählungen, kein `risk_min/max/range`, kein `total_risk_*`, kein `rahmen_*`
+- `/api/scans/latest` und `/api/v2/websites/{id}/scan`: gespeicherte Befunde werden beim Lesen von Euro-Schlüsseln befreit und mit Rangstufe angereichert; `issue_groups` ohne `total_risk_euro`
+- Dashboard-Kennzahl `totalRiskEuro` steht auf 0 (Feld bleibt für ältere Clients); Cookie-Scan-Antworten ohne `privacy_risk_euro`
+- E-Mail-Report und beide PDF-Generatoren ohne „Geschätztes Risiko“ / „Geschätztes Bußgeld-Risiko“; der PDF-Befund zeigt die Einstufung statt eines Betrags; Patch-Paket ohne „Risiko-Reduktion €“; KI-Review-Prompt fragt kein Euro-Risiko mehr ab
+- `priority_engine`: der Euro-Bonus entfällt, ein fehlendes Pflichtelement wiegt stattdessen schwerer
+- Wächter `backend/tests/test_keine_bussgeldzahlen.py`: Rang-Matrix, Euro-Filter, Vorschau ohne Betrag, und ein Quelltext-Wächter über Backend, Dashboard und Landing gegen bezifferte Bußgeld-Aussagen (Abmahn-Radar, Ratgeber, AGB und Admin ausgenommen)
+
+### Frontend: Rangstufe statt „Bis zu X € Bußgeld“
+- Dashboard: Befundkarte zeigt die Rangstufe als Badge mit Begründung im Tooltip; Gruppenkopf, Assistent, Fix-Wizard und Deep-Cookie-Scanner ohne Eurobeträge; `ai-explainer` priorisiert nach Rang; Orientierungsband sagt „eine gesetzliche Pflicht ist nicht erfüllt“ statt „hier droht konkret ein Bußgeld“
+- Landing: der Scanner zeigt statt „Typische Abmahnkosten X bis Y €“ und Bußgeldrahmen nur noch Befunde und Bereiche („Sofort handeln“ bei kritischen Befunden); `SCAN_SCHEMA` 5, ältere gespeicherte Ergebnisse werden verworfen
+- Landing-Hero: Badge „€50.000 Bußgeld vermieden“ entfernt, eine Erfolgsbehauptung ohne Fall dahinter
+
+### Offen
+- `total_risk_euro` in `scan_history` wird weiter beschrieben (jetzt 0), die Spalte bleibt; `risk_calculator.py` und `compliance_risk_matrix` sind intern noch vorhanden, aber ohne Ausgabe
+
+## [2026-10-02]
+
+### Backend: Rechtsseiten-Links, hinter denen keine Rechtsseite steht
+- **Ein Footer-Link „Impressum" mit `mailto:`, `tel:` oder `javascript:` als Ziel galt als Impressumsseite.** Der Abruf warf, das `except` schwieg, das Impressum zählte als geprüft: null Befunde für eine Seite, auf der kein Besucher ein Impressum erreicht. Dasselbe für die Datenschutzerklärung. Neues Modul `backend/compliance_engine/checks/rechtsseiten_links.py`: solche Links sind keine Kandidaten mehr (`ist_seitenlink`), der Befund „Kein Impressum-Link gefunden" nennt den Attrappen-Link beim Namen
+- **Der Inhalt hinter einem Link wurde nie angesehen, bevor er als Rechtstext geprüft wurde.** Eine Kontaktseite, ein Impressum-Generator eines Drittanbieters oder die Startseite (bei `#impressum` ohne Abschnitt) landeten im Hybrid-Validator. Ohne KI stand dann „7 Angaben nicht abschließend geprüft" (info, 0 €), mit KI fünf kritische Befunde: welches von beiden ein Kunde sah, hing am KI-Budget. `lade_rechtsseite` wendet die vorhandene Inhaltsschranke (`_looks_like_impressum` / `_looks_like_datenschutz`) jetzt auf jeden Kandidaten an; neue Befunde „Impressum-Link führt zu keiner Impressumsseite", „Impressum-Seite nicht erreichbar" (HTTP-Status), „Inhaltsprüfung des Impressums nicht möglich" (info), analog für die Datenschutzerklärung
+- Einseiter mit `#impressum` und echtem Abschnitt bleiben ohne „fehlt"-Befund; der Abschnitt wird aus der vorliegenden Seite geprüft, ohne zweiten Abruf
+- Direkt-URL-Fallback (`_check_impressum_url_exists`, `_check_datenschutz_url_exists`): die Catch-all-Seite selbst zählt nicht als Rechtstext, Inhaltsprüfung auf Fließtext statt rohem HTML
+- Wächter: `backend/tests/test_rechtsseiten_attrappen.py` (alle Fälle ohne KI, damit das Ergebnis nicht an einem fremden Dienst hängt)
+
+### Backend: Prüfstand ohne KI messen
+- `tools/pruefstand.py --ki aus` fährt den Bestand ohne einen einzigen KI-Aufruf (über `ai_budget.ki_aus()`, derselbe Weg wie der stündliche Probescan); der Lauf vermerkt den Modus in `pruefstand.json`
+- Neu `tools/pruefstand_vergleich.py`: zwei Läufe je Befundtitel oder je Seite gegenüberstellen. Der Vergleich `--ki an` gegen `--ki aus` auf demselben Code zeigt, welche Befunde am KI-Budget hängen und nicht an der Website
+- `tools/ground_truth_validation.py`: drei neue Fixtures `attrappe` (mailto/javascript im Footer), `einseiter` (Anker auf echte Abschnitte) und `fehllink` (Link auf Kontaktseite)
+
 ## [2026-09-02]
 
 ### Frontend

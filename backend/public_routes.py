@@ -16,6 +16,7 @@ Anmeldung gilt der kleinste.
 """
 
 from fastapi import APIRouter, HTTPException, Request, Depends
+from compliance_engine.rangstufe import rang_bestimmen, ohne_eurobetraege  # Rangstufe statt Eurobetrag
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
@@ -93,9 +94,16 @@ class ComplianceIssue(BaseModel):
     severity: str
     title: str
     description: str
-    risk_euro_min: float
-    risk_euro_max: float
-    risk_range: str
+    # Eurobetraege je Befund verlassen das Backend nicht mehr (07.10.2026,
+    # siehe compliance_engine/rangstufe.py). Die Felder bleiben im Schema,
+    # damit aeltere Clients nicht brechen, und stehen immer auf None.
+    risk_euro_min: Optional[float] = None
+    risk_euro_max: Optional[float] = None
+    risk_range: Optional[str] = None
+    # Rangstufe statt Betrag: sofort | als_naechstes | einplanen | hinweis
+    rang: Optional[str] = None
+    rang_label: Optional[str] = None
+    rang_begruendung: Optional[str] = None
     legal_basis: str
     location: IssueLocation
     solution: IssueSolution
@@ -122,7 +130,7 @@ class AnalysisResponse(BaseModel):
     success: bool
     url: str
     compliance_score: int
-    estimated_risk_euro: str
+    estimated_risk_euro: Optional[str] = None
     issues: List[ComplianceIssue]  # Changed from list to List[ComplianceIssue]
     positive_checks: Optional[List[Dict[str, Any]]] = []  # NEW: Was funktioniert bereits
     pillar_scores: Optional[List[PillarScore]] = []  # NEW: Säulen-Scores
@@ -133,7 +141,7 @@ class AnalysisResponse(BaseModel):
     pages_scanned: Optional[Dict[str, Any]] = None  # Mehrseiten-Scan: welche Seiten geprueft wurden
     is_placeholder: Optional[bool] = False  # v4.0: Platzhalter-/Baustellenseite
     scan_notice: Optional[str] = None  # v4.0: Hinweis (z.B. Maintenance/Go-Live)
-    riskAmount: str
+    riskAmount: Optional[str] = None
     score: int
     scan_duration_ms: Optional[int] = None
     timestamp: str
@@ -342,9 +350,7 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                             severity=issue.get('severity'),  # ✅ Original-Severity beibehalten!
                             title=issue.get('title', issue.get('description', ''))[:100],
                             description=issue.get('description', ''),
-                            risk_euro_min=issue.get('risk_euro', 1000),
-                            risk_euro_max=issue.get('risk_euro', 1000),
-                            risk_range=f"{issue.get('risk_euro', 1000):,}€".replace(',', '.'),
+                            **rang_bestimmen(issue),
                             legal_basis=issue.get('legal_basis', 'Gesetzliche Anforderung'),
                             location=IssueLocation(
                                 area=_determine_issue_area(issue.get('category', 'compliance')),
@@ -386,9 +392,9 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                             severity=risk_data['severity'],
                             title=issue_text[:100],  # Truncate long titles
                             description=issue_text,
-                            risk_euro_min=risk_data['risk_min'],
-                            risk_euro_max=risk_data['risk_max'],
-                            risk_range=risk_data['risk_range'],
+                            **rang_bestimmen({"severity": risk_data['severity'],
+                                              "category": risk_data['category'],
+                                              "title": issue_text}),
                             legal_basis=risk_data['legal_basis'],
                             location=IssueLocation(
                                 area=_determine_issue_area(risk_data['category']),
@@ -404,11 +410,6 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                             ),
                         )
                         structured_issues.append(structured_issue)
-            
-            # Calculate total risk
-            total_risk_data = await risk_calculator.calculate_total_risk(
-                [i.description for i in structured_issues]
-            )
             
             # Generate unique scan_id
             import uuid
@@ -427,7 +428,7 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                         'description': issue.description,
                         'category': issue.category,
                         'severity': issue.severity,
-                        'risk_euro_max': issue.risk_euro_max,
+                        'rang': issue.rang,
                         'auto_fixable': issue.auto_fixable
                     }
                     for issue in structured_issues
@@ -558,8 +559,9 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                                     'severity': i.severity,
                                     'title': i.title,
                                     'description': i.description,
-                                    'risk_euro_min': i.risk_euro_min,
-                                    'risk_euro_max': i.risk_euro_max,
+                                    'rang': i.rang,
+                                    'rang_label': i.rang_label,
+                                    'rang_begruendung': i.rang_begruendung,
                                     'recommendation': i.recommendation,
                                     'legal_basis': i.legal_basis,
                                     'auto_fixable': i.auto_fixable,
@@ -586,7 +588,7 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                             'score_hinweis': scan_result.get('score_hinweis'),
                         }),
                         overall_compliance_score,
-                        total_risk_data.get('total_risk_max', 0),
+                        0,  # total_risk_euro: Spalte bleibt, es wird kein Betrag mehr gefuehrt
                         critical_issues_count,
                         warning_issues_count,
                         len(structured_issues),
@@ -658,7 +660,8 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 # Don't fail the request if DB save fails
             
             # ✅ FIX: Stelle sicher, dass issue_groups immer eine Liste ist
-            issue_groups = scan_result.get("issue_groups", [])
+            # Gruppen tragen die Rohbefunde samt total_risk_euro; auch dort kein Betrag mehr.
+            issue_groups = ohne_eurobetraege(scan_result.get("issue_groups", []))
             if not isinstance(issue_groups, list):
                 issue_groups = []
             
@@ -675,7 +678,6 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 success=True,
                 url=scan_result.get("url", url),
                 compliance_score=overall_compliance_score,  # ✅ Durchschnitt statt Scanner-Score
-                estimated_risk_euro=total_risk_data['total_risk_range'],
                 issues=structured_issues,
                 positive_checks=positive_checks,
                 pillar_scores=pillar_scores,  # ✅ NEU: Säulen-Scores
@@ -686,7 +688,6 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 pages_scanned=scan_result.get("pages_scanned"),
                 is_placeholder=scan_result.get("is_placeholder", False),
                 scan_notice=scan_result.get("scan_notice"),
-                riskAmount=total_risk_data['total_risk_range'],
                 score=overall_compliance_score,  # ✅ Durchschnitt statt Scanner-Score
                 scan_duration_ms=scan_result.get("scan_duration_ms"),
                 timestamp=datetime.now().isoformat()
@@ -781,16 +782,13 @@ def _minimal_response_from_scan(url: str, scan_result: Dict[str, Any]) -> "Analy
         title = (i.get("title") or i.get("description") or "")[:100]
         slug = "-".join("".join(c if c.isalnum() or c.isspace() else "" for c in title.lower()).split()[:4])
         sev = i.get("severity", "warning")
-        risk = i.get("risk_euro", 1000) or 0
         issues.append(ComplianceIssue(
             id=f"{cat}-{slug}"[:50],
             category=cat,
             severity=sev,
             title=title,
             description=i.get("description", ""),
-            risk_euro_min=risk,
-            risk_euro_max=risk,
-            risk_range=f"{risk:,}€".replace(",", "."),
+            **rang_bestimmen(i),
             legal_basis=i.get("legal_basis", "Gesetzliche Anforderung"),
             location=IssueLocation(
                 area=_determine_issue_area(cat),
@@ -817,13 +815,10 @@ def _minimal_response_from_scan(url: str, scan_result: Dict[str, Any]) -> "Analy
         ))
 
     overall = scan_result.get("compliance_score", 0)
-    risk_total = scan_result.get("total_risk_euro", 0) or 0
-    risk_str = f"{risk_total:,}€".replace(",", ".")
     return AnalysisResponse(
         success=True,
         url=scan_result.get("url", url),
         compliance_score=overall,
-        estimated_risk_euro=risk_str,
         issues=issues,
         positive_checks=[],
         pillar_scores=pillar_scores,
@@ -833,7 +828,6 @@ def _minimal_response_from_scan(url: str, scan_result: Dict[str, Any]) -> "Analy
         detected_cms=scan_result.get("detected_cms"),
         is_placeholder=scan_result.get("is_placeholder", False),
         scan_notice=scan_result.get("scan_notice"),
-        riskAmount=risk_str,
         score=overall,
         scan_duration_ms=scan_result.get("scan_duration_ms"),
         timestamp=datetime.now().isoformat(),
@@ -2008,9 +2002,9 @@ async def _generate_mock_analysis(url: str, risk_calculator) -> AnalysisResponse
             severity=risk_data['severity'],
             title=issue_text[:100],
             description=issue_text,
-            risk_euro_min=risk_data['risk_min'],
-            risk_euro_max=risk_data['risk_max'],
-            risk_range=risk_data['risk_range'],
+            **rang_bestimmen({"severity": risk_data['severity'],
+                              "category": risk_data['category'],
+                              "title": issue_text}),
             legal_basis=risk_data['legal_basis'],
             location=IssueLocation(
                 area=_determine_issue_area(risk_data['category']),
@@ -2021,9 +2015,6 @@ async def _generate_mock_analysis(url: str, risk_calculator) -> AnalysisResponse
         )
         structured_issues.append(structured_issue)
     
-    # Calculate total risk
-    total_risk_data = await risk_calculator.calculate_total_risk(selected_issues)
-    
     # FIXED: Deterministischer scan_duration basierend auf URL
     scan_duration = seeded_value(url + "duration", 2000, 4000)
     
@@ -2031,14 +2022,12 @@ async def _generate_mock_analysis(url: str, risk_calculator) -> AnalysisResponse
         success=True,
         url=url,
         compliance_score=score,
-        estimated_risk_euro=total_risk_data['total_risk_range'],
         issues=structured_issues,
         # `scan_result` gibt es in dieser Funktion nicht — sie ist der
         # RUECKFALL, wenn der echte Scan scheitert. Das Sicherheitsnetz
         # riss also selbst: NameError statt Ersatzantwort. Ein Mock hat
         # kein Scanergebnis, also False.
         has_accessibility_widget=False,
-        riskAmount=total_risk_data['total_risk_range'],
         score=score,
         scan_duration_ms=scan_duration,
         timestamp=datetime.now().isoformat()
@@ -2143,32 +2132,18 @@ async def fuehre_preview_scan_aus(url: str) -> Dict[str, Any]:
                 risk_calculator
             )
             
-            # Gesamt-Risiko: NICHT aufsummieren.
-            #
-            # Bis 03.09.2026 stand hier sum() ueber alle Kategorien. Die leere
-            # Platzhalterseite example.com kam damit auf 91.800 EUR - eine Zahl,
-            # die weder der Abmahn- noch der Bussgeldpraxis entspricht und die
-            # ausgerechnet einen Compliance-Anbieter nach Paragraph 5 UWG
-            # angreifbar macht. Innerhalb einer Kategorie wurde laengst nicht
-            # mehr addiert; der Fehler sass nur noch an der Kategoriegrenze.
-            from risk_calculator import gesamtrisiko_aus_kategorien
-            gesamt = gesamtrisiko_aus_kategorien(risk_categories)
-            total_risk_min = gesamt["risk_min"]
-            total_risk_max = gesamt["risk_max"]
-            
+            # Kein Gesamtrisiko in Euro mehr. Bis 03.09.2026 stand hier eine
+            # Summe (91.800 EUR fuer example.com), danach eine gedeckelte
+            # Schaetzung. Beides war eine Aussage ueber Rechtsfolgen, die sich
+            # nicht belegen laesst; seit dem 07.10.2026 zaehlt die Vorschau nur
+            # noch Bereiche und Befunde, siehe compliance_engine/rangstufe.py.
             return {
                 "success": True,
                 "url": url,
                 "score": scan_result.get("compliance_score", 50),
                 "risk_categories": risk_categories,
-                "total_risk_range": gesamt["risk_range"],
-                "total_risk_min": total_risk_min,
-                "total_risk_max": total_risk_max,
-                "rahmen_max": gesamt["rahmen_max"],
-                "rahmen_range": gesamt["rahmen_range"],
-                "risk_bereiche_betroffen": gesamt["bereiche_betroffen"],
-                "risk_bereiche_kritisch": gesamt["bereiche_kritisch"],
-                "risk_gedeckelt": gesamt["gedeckelt"],
+                "risk_bereiche_betroffen": sum(1 for c in risk_categories if c["detected"]),
+                "risk_bereiche_kritisch": sum(1 for c in risk_categories if c["severity"] == "critical"),
                 # Gezaehlt wird, was ein Verstoss ist. `issues` enthaelt auch
                 # Hinweise und Entwarnungen ("Kein Cookie-Banner erforderlich");
                 # deren Zahl als "Befunde" auszuweisen, hat auf complyo.de aus
@@ -2473,7 +2448,7 @@ async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict
         "preise":           {"label": "Preisangaben", "icon": "💰"},
     }
     gesammelt = {
-        bid: {"befunde": 0, "kritisch": 0, "hinweise": 0, "min": [], "max": []}
+        bid: {"befunde": 0, "kritisch": 0, "hinweise": 0}
         for bid in bereiche
     }
 
@@ -2484,11 +2459,9 @@ async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict
             risk_data = await risk_calculator.calculate_issue_risk(issue)
             bereich = _bereich_fuer(risk_data.get("category", ""))
             schwere = risk_data.get("severity", "warning")
-            text = issue
         else:
             bereich = _bereich_fuer(issue.get("category", ""))
             schwere = (issue.get("severity") or "warning").lower()
-            text = issue.get("description") or issue.get("title") or ""
 
         eintrag = gesammelt[bereich]
         if schwere not in ("critical", "warning"):
@@ -2499,37 +2472,15 @@ async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict
         if schwere == "critical":
             eintrag["kritisch"] += 1
 
-        risk_data = await risk_calculator.calculate_issue_risk(
-            text, category=_MATRIXKATEGORIE_JE_BEREICH.get(bereich, bereich)
-        )
-        eintrag["min"].append(risk_data["risk_min"])
-        eintrag["max"].append(risk_data["risk_max"])
-
     result = []
     for bid, meta in bereiche.items():
         e = gesammelt[bid]
-        # Risiko-Aggregation: NICHT aufsummieren.
-        #
-        # Aus 48 Cookie-Verstoessen auf einer Website werden keine 48 Verfahren,
-        # sondern eines. Das Aufsummieren der Einzelrisiken hat frueher Betraege
-        # bis in den zweistelligen Millionenbereich erzeugt - fuer die Zielgruppe
-        # (KMU) unglaubwuerdig und als Werbeaussage angreifbar.
-        #
-        # Modell: hoechstes Einzelrisiko der Kategorie als Basis, plus einen
-        # unterlinearen Zuschlag fuer die Anzahl der Fundstellen (viele Verstoesse
-        # erhoehen Wahrscheinlichkeit und Bussgeldzumessung, aber nicht linear).
-        # Zuschlag gedeckelt bei +50 %.
+        # Kein Eurobetrag je Bereich mehr (07.10.2026): die Betraege waren
+        # Schaetzungen ohne Bussgeldpraxis dahinter, siehe
+        # compliance_engine/rangstufe.py. Die Schwere bleibt.
         if e["befunde"]:
-            eskalation = 1.0 + min(0.5, 0.05 * (e["befunde"] - 1))
-            risk_min = int(max(e["min"]) * eskalation)
-            risk_max = int(max(e["max"]) * eskalation)
-            # Der gesetzliche Rahmen OHNE Zuschlag. risk_max traegt den
-            # Fundstellen-Zuschlag und ist damit eine Schaetzung; der Rahmen ist
-            # eine Tatsache aus der Matrix (Art. 83 DSGVO).
-            rahmen_max = int(max(e["max"]))
             schwere = "critical" if e["kritisch"] else "warning"
         else:
-            risk_min = risk_max = rahmen_max = 0
             schwere = "info"
 
         result.append({
@@ -2538,13 +2489,6 @@ async def _aggregate_risk_categories(issues: list, risk_calculator) -> List[Dict
             "icon": meta["icon"],
             "detected": e["befunde"] > 0,
             "severity": schwere,
-            "risk_min": risk_min,
-            "risk_max": risk_max,
-            "rahmen_max": rahmen_max,
-            "risk_range": (
-                f"{int(risk_min):,}€ - {int(risk_max):,}€".replace(",", ".")
-                if e["befunde"] else None
-            ),
             "issues_count": e["befunde"],
             "critical_count": e["kritisch"],
             # Hinweise sind keine Verstoesse: Entwarnungen ("Kein Cookie-Banner

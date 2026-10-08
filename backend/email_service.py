@@ -280,9 +280,6 @@ datenschutz@complyo.de • https://complyo.de/datenschutz
         if analysis_data.get('compliance_score') is not None:
             zeilen.append(("Compliance-Score",
                            f"{mail_layout.escape(str(analysis_data['compliance_score']))} %"))
-        if analysis_data.get('estimated_risk_euro'):
-            zeilen.append(("Geschätztes Risiko",
-                           f"{mail_layout.escape(str(analysis_data['estimated_risk_euro']))} EUR"))
         if analysis_data.get('findings'):
             zeilen.append(("Bereiche mit Befunden", str(len(analysis_data['findings']))))
 
@@ -324,8 +321,6 @@ datenschutz@complyo.de • https://complyo.de/datenschutz
         zeilen = []
         if analysis_data.get('compliance_score') is not None:
             zeilen.append(f"• Compliance-Score: {analysis_data['compliance_score']}%")
-        if analysis_data.get('estimated_risk_euro'):
-            zeilen.append(f"• Geschätztes Risiko: {analysis_data['estimated_risk_euro']} EUR")
         if analysis_data.get('findings'):
             zeilen.append(f"• Bereiche mit Befunden: {len(analysis_data['findings'])}")
         zusammenfassung = "\n".join(zeilen) or (

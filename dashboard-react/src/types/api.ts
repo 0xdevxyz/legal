@@ -17,10 +17,16 @@ export interface ComplianceIssue {
   severity: 'critical' | 'warning' | 'info';
   title: string;
   description: string;
-  risk_euro?: number;
-  risk_euro_min: number;
-  risk_euro_max: number;
-  risk_range: string;
+  // Eurobetraege je Befund liefert das Backend seit dem 07.10.2026 nicht
+  // mehr (erfundene Rechtsfolge, siehe backend/compliance_engine/rangstufe.py).
+  risk_euro?: number | null;
+  risk_euro_min?: number | null;
+  risk_euro_max?: number | null;
+  risk_range?: string | null;
+  // Rangstufe statt Betrag
+  rang?: 'sofort' | 'als_naechstes' | 'einplanen' | 'hinweis';
+  rang_label?: string;
+  rang_begruendung?: string;
   recommendation?: string;
   legal_basis: string;
   location: IssueLocation;
@@ -62,7 +68,7 @@ export interface IssueGroup {
   severity: 'critical' | 'warning' | 'info';
   solution_type: string;
   has_unified_solution: boolean;
-  total_risk_euro: number;
+  total_risk_euro?: number;
   completed_count: number;
   total_count: number;
   title: string;
@@ -110,7 +116,7 @@ export interface ComplianceAnalysis {
   scan_timestamp: string;
   scan_duration_ms: number;
   compliance_score: number;
-  total_risk_euro: number;
+  total_risk_euro?: number;
   critical_issues: number;
   warning_issues: number;
   total_issues: number;
