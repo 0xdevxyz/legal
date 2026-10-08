@@ -79,6 +79,10 @@
         
         // Bannerless Mode
         bannerless_mode: false,
+
+        // Selbstabschaltung: der Server erlaubt, den Banner wegzulassen, wenn die
+        // Seite beim Laden keinen Anlass zeigt (siehe pruefeAnlass)
+        bannerAutoAusErlaubt: false,
         
         // Services
         services: [],
@@ -781,6 +785,9 @@
 
             // Phase 6 features
             this.config.bannerless_mode = serverConfig.bannerless_mode || false;
+            // Nur ein ausdrückliches true schaltet ab. Fehlt das Feld (älterer Server,
+            // Standardkonfiguration), bleibt der Banner wie bisher.
+            this.config.bannerAutoAusErlaubt = serverConfig.banner_auto_aus_erlaubt === true;
             this.config.age_verification_enabled = serverConfig.age_verification_enabled || false;
             this.config.age_verification_min_age = serverConfig.age_verification_min_age || 16;
             this.config.geo_restriction_enabled = serverConfig.geo_restriction_enabled || false;
@@ -932,6 +939,35 @@
                 return; // Kein Banner, kein Floating-Button
             }
             
+            // Selbstabschaltung. Die Bedingung "keine Dienste" steht oben schon in
+            // hasTrackingServices; dazu muss der Server es ausdrücklich erlauben
+            // (Scan abgeschlossen, Kunde hat den Banner nicht erzwungen). Wer schon
+            // eingewilligt hat, bleibt auf dem normalen Weg, und die Altersprüfung
+            // ist keine Frage der Einwilligung und wird nie weggelassen.
+            if (!hasTrackingServices && this.config.bannerAutoAusErlaubt === true &&
+                !this.config.age_verification_enabled && !this.consent) {
+                const befund = await this.pruefeAnlass();
+                this.bannerAnlass = befund;
+                if (!befund.anlass) {
+                    console.log('[Complyo] ✅ Kein Anlass für einen Banner gefunden, er bleibt weg.');
+                    const autoConsent = {
+                        necessary: true,
+                        functional: false,
+                        analytics: false,
+                        marketing: false,
+                        services: [],
+                        timestamp: new Date().toISOString(),
+                        auto: true,
+                        ohneAnlass: true
+                    };
+                    this.consent = autoConsent;
+                    this.applyConsent(autoConsent);
+                    this.beobachteAnlass();
+                    return;
+                }
+                console.log('[Complyo] Anlass für den Banner:', befund.gruende.join(', '));
+            }
+
             // ✅ Phase 6: Check if reconsent is required due to config changes
             if (this.consent) {
                 const needsReconsent = await this.checkReconsentRequired();
@@ -960,6 +996,213 @@
             }, 500);
         }
         
+        // ====================================================================
+        // Selbstabschaltung: Anlass für einen Banner
+        // ====================================================================
+        //
+        // Der Banner fragt nach Einwilligung. Wo es nichts einzuwilligen gibt, ist
+        // die Frage Lärm, und der Satz "Wir benötigen Ihre Einwilligung, bevor Sie
+        // unsere Website weiter besuchen können" stimmt nicht. Am 07.10.2026 auf
+        // steinhau.de gemessen: keine Cookies, kein Browser-Speicher, kein fremder
+        // Host, trotzdem Banner mit Absatz zur Übermittlung in die USA.
+        //
+        // Der Server erlaubt die Abschaltung nur bei abgeschlossenem Scan ohne
+        // Dienst und ohne erzwungenen Banner (banner_auto_aus_erlaubt). Das reicht
+        // nicht: der Scan liest nur HTML und kennt nur den Katalog. Deshalb prüft
+        // die Seite sich hier selbst, im Browser des Besuchers, nach dem Laden:
+        //   * hat der Blocker etwas zurückgehalten?
+        //   * gibt es Cookies, die nicht von Complyo stammen?
+        //   * liegt etwas in localStorage oder sessionStorage?
+        //   * wurde etwas von einem fremden Host geladen?
+        // Jeder Treffer und jede Unsicherheit heißt: Banner wie bisher.
+        //
+        // Grenze der Prüfung, kein Versehen: HttpOnly-Cookies sind für Skripte
+        // unsichtbar, WebSockets und Worker tauchen nicht im Resource-Timing auf,
+        // und was erst nach langer Zeit entsteht, sieht nur die Beobachtung
+        // (beobachteAnlass), und auch die nur eine Weile.
+        //
+        // Die Prüfung schreibt nichts in den Browser des Besuchers. Sie sähe sonst
+        // selbst aus wie das, was sie ausschließen soll.
+
+        /** Liefert eine Funktion, die für einen Hostnamen sagt, ob er zur Seite oder zu Complyo gehört. */
+        eigeneHosts() {
+            const seite = String(location.hostname || '').replace(/^www\./i, '').toLowerCase();
+            return (host) => {
+                const h = String(host || '').toLowerCase();
+                return h === seite || h.endsWith('.' + seite) ||
+                       h === 'complyo.de' || h.endsWith('.complyo.de');
+            };
+        }
+
+        /** Wartet bis zum Ende des Ladens plus Nachlauf, höchstens aber maxMs. */
+        warteBisGeladen(nachlaufMs, maxMs) {
+            return new Promise((resolve) => {
+                let fertig = false;
+                const los = () => { if (!fertig) { fertig = true; resolve(); } };
+                setTimeout(los, maxMs);
+                if (document.readyState === 'complete') {
+                    setTimeout(los, nachlaufMs);
+                } else {
+                    window.addEventListener('load', () => setTimeout(los, nachlaufMs), { once: true });
+                }
+            });
+        }
+
+        /**
+         * Sammelt, was auf dieser Seite für einen Banner spricht. Rein lesend.
+         * Leere Liste heißt: kein Anlass gefunden.
+         */
+        sammleAnlass() {
+            const gruende = [];
+            const istEigen = this.eigeneHosts();
+
+            // 1. Der Blocker hat etwas zurückgehalten: ein bekannter Dienst wollte laden.
+            try {
+                const n = document.querySelectorAll('[data-complyo-blocked="true"]').length;
+                if (n > 0) gruende.push('blocker:' + n);
+            } catch (e) { gruende.push('unsicher:blocker'); }
+
+            // 2. Cookies, die nicht von Complyo stammen.
+            try {
+                document.cookie.split(';')
+                    .map((c) => c.split('=')[0].trim())
+                    .filter((name) => name && !/^complyo/i.test(name))
+                    .forEach((name) => gruende.push('cookie:' + name));
+            } catch (e) { gruende.push('unsicher:cookie'); }
+
+            // 3. Browser-Speicher. Ist er gesperrt, kann dort nichts liegen, was wir lesen könnten.
+            ['localStorage', 'sessionStorage'].forEach((art) => {
+                try {
+                    const speicher = window[art];
+                    for (let i = 0; i < speicher.length; i++) {
+                        const schluessel = speicher.key(i);
+                        // Complyos eigene Einträge zählen nicht; ebenso die Emoji-Erkennung von
+                        // WordPress, die nur ein Testergebnis ablegt.
+                        if (!schluessel || /^complyo/i.test(schluessel) ||
+                            schluessel === 'wpEmojiSettingsSupports') continue;
+                        gruende.push(art + ':' + schluessel);
+                    }
+                } catch (e) { /* gesperrt */ }
+            });
+
+            // 4. Fremde Hosts, aus dem Resource-Timing und aus dem DOM.
+            const fremd = new Set();
+            const merke = (url) => {
+                if (!url) return;
+                try {
+                    const u = new URL(url, location.href);
+                    if (u.protocol !== 'http:' && u.protocol !== 'https:') return;
+                    if (!istEigen(u.hostname)) fremd.add(u.hostname);
+                } catch (e) { /* unlesbare Adresse */ }
+            };
+            let eintraege = [];
+            try {
+                eintraege = performance.getEntriesByType('resource');
+            } catch (e) { gruende.push('unsicher:timing'); }
+            // Der Puffer fasst standardmäßig 250 Einträge. Ist er voll, fehlen spätere
+            // Ressourcen, und eine saubere Liste wäre nichts wert.
+            if (eintraege.length >= 250) gruende.push('unsicher:timing-voll');
+            eintraege.forEach((e) => merke(e.name));
+            try {
+                document.querySelectorAll(
+                    'script[src], iframe[src], img[src], video[src], audio[src], source[src], ' +
+                    'embed[src], object[data], ' +
+                    'link[rel~="stylesheet"][href], link[rel~="preload"][href], ' +
+                    'link[rel~="preconnect"][href], link[rel~="dns-prefetch"][href], ' +
+                    'link[rel~="icon"][href], link[rel~="modulepreload"][href], link[rel~="prefetch"][href]'
+                ).forEach((el) => merke(el.getAttribute('src') || el.getAttribute('data') || el.getAttribute('href')));
+            } catch (e) { gruende.push('unsicher:dom'); }
+            fremd.forEach((h) => gruende.push('host:' + h));
+
+            return gruende;
+        }
+
+        /** Wartet das Laden ab und prüft dann. Gibt { anlass, gruende, geprueft } zurück. */
+        async pruefeAnlass() {
+            await this.warteBisGeladen(2500, 8000);
+            const gruende = this.sammleAnlass();
+            return { anlass: gruende.length > 0, gruende, geprueft: new Date().toISOString() };
+        }
+
+        /**
+         * Läuft weiter, nachdem der Banner weggelassen wurde. Entsteht später doch
+         * etwas, zeigt sich der Banner dann: ein neuer fremder Host, ein vom Blocker
+         * zurückgehaltener Dienst, ein Cookie oder Speichereintrag.
+         */
+        beobachteAnlass() {
+            if (this._anlassBeobachtung) return;
+            const aufraeumen = [];
+            let gemeldet = false;
+            const stoppen = () => aufraeumen.forEach((f) => { try { f(); } catch (e) { /* egal */ } });
+            const meldeAnlass = (grund) => {
+                if (gemeldet) return;
+                gemeldet = true;
+                stoppen();
+                this._anlassBeobachtung = null;
+                this.zeigeBannerNachtraeglich(grund);
+            };
+            this._anlassBeobachtung = { stoppen };
+
+            // a) Ressourcen, die neu dazukommen
+            try {
+                const istEigen = this.eigeneHosts();
+                const beobachter = new PerformanceObserver((liste) => {
+                    liste.getEntries().forEach((e) => {
+                        try {
+                            const u = new URL(e.name);
+                            if ((u.protocol === 'http:' || u.protocol === 'https:') && !istEigen(u.hostname)) {
+                                meldeAnlass('host:' + u.hostname);
+                            }
+                        } catch (err) { /* unlesbar */ }
+                    });
+                });
+                beobachter.observe({ type: 'resource' });
+                aufraeumen.push(() => beobachter.disconnect());
+            } catch (e) { /* Browser ohne PerformanceObserver: die Termine unten bleiben */ }
+
+            // b) Der Blocker hält später noch etwas zurück
+            try {
+                const mo = new MutationObserver(() => {
+                    if (document.querySelector('[data-complyo-blocked="true"]')) meldeAnlass('blocker');
+                });
+                mo.observe(document.documentElement, {
+                    subtree: true, attributes: true, attributeFilter: ['data-complyo-blocked']
+                });
+                aufraeumen.push(() => mo.disconnect());
+            } catch (e) { /* ohne MutationObserver: die Termine unten bleiben */ }
+
+            // c) Cookies und Speicher später noch einmal ansehen
+            const nochmal = () => {
+                const gruende = this.sammleAnlass();
+                if (gruende.length) meldeAnlass(gruende[0]);
+            };
+            [8000, 20000, 45000].forEach((ms) => {
+                const t = setTimeout(nochmal, ms);
+                aufraeumen.push(() => clearTimeout(t));
+            });
+
+            // d) Nach der ersten Handlung des Besuchers: Klicks und Eingaben lösen oft erst etwas aus
+            ['pointerdown', 'keydown'].forEach((art) => {
+                const handler = () => { setTimeout(nochmal, 1500); };
+                document.addEventListener(art, handler, { once: true, passive: true });
+                aufraeumen.push(() => document.removeEventListener(art, handler));
+            });
+        }
+
+        /** Der Banner erscheint doch, weil nach der ersten Prüfung ein Anlass entstanden ist. */
+        zeigeBannerNachtraeglich(grund) {
+            console.log('[Complyo] Anlass für den Banner nachträglich entstanden:', grund);
+            this.bannerAnlass = {
+                anlass: true,
+                gruende: [grund],
+                nachtraeglich: true,
+                geprueft: new Date().toISOString()
+            };
+            this.consent = null;
+            this.render();
+            setTimeout(() => { this.setupSettingsLinks(); }, 500);
+        }
+
         // ====================================================================
         // Consent Management
         // ====================================================================

@@ -86,7 +86,24 @@ Die Spalten `requires_reconsent`, `bannerless_mode`, `tcf_enabled`, `tcf_vendors
   `GET /geo-check` (Z. 2789, `CF-IPCountry`, Cache `geo_ip_cache` aus Alembic 0007, eae3b40).
   Live: `{"country_code":"DE","cached":true}`. Rückfall bei Fehler ist `DE` (Banner zeigen).
 - **Consent-Forwarding:** `GET /forwarding/{site_id}`, `POST /forwarding`.
-- **Bannerlos:** `GET /bannerless/{site_id}`.
+- **Bannerlos:** `GET /bannerless/{site_id}`. Hinweis (08.10.2026): `bannerless_mode` steht nicht
+  im SELECT von `GET /config/{site_id}`, das Widget bekommt den Wert nie. Der Modus ist über die
+  öffentliche Konfiguration nicht erreichbar. Die Selbstabschaltung (nächster Punkt) läuft deshalb
+  über ein eigenes Feld.
+- **Banner-Automatik (Selbstabschaltung):** Der Banner bleibt weg, wenn es nichts einzuwilligen gibt.
+  Zwei Schranken, beide nötig. (1) Server: `banner_anlass.banner_auto_aus_erlaubt` gibt in
+  `GET /config/{site_id}` und `GET /my-config` das Feld `banner_auto_aus_erlaubt` aus: Scan
+  abgeschlossen, keine Dienste, `banner_erzwingen = false`, kein Tag Manager, keine eigenen Dienste
+  (`cookie_custom_services`). (2) Browser: `cookie_banner_v2.js`, `sammleAnlass()`, prüft nach dem
+  Laden Blocker-Treffer (`data-complyo-blocked`), Cookies, localStorage/sessionStorage und fremde
+  Hosts (Resource-Timing plus DOM); voller Ressourcen-Puffer (250) oder jede Unsicherheit heißt
+  Banner. `beobachteAnlass()` zeigt den Banner nachträglich, wenn später etwas entsteht.
+  Die Prüfung schreibt nichts in den Browser. Grund für die zweite Schranke: der normale Scan liest
+  nur HTML und speichert nur Katalogtreffer, `services = []` heißt also nicht "keine Cookies".
+  Opt-out je Website: Spalte `banner_erzwingen` (Alembic 0037), im Dashboard unter Erweitert, "Banner
+  immer anzeigen". Die Spalte wird getrennt vom großen SELECT gelesen (fehlende Migration darf die
+  Konfiguration nicht mit 500 beantworten). Tests: `test_banner_anlass.py`,
+  `test_banner_anlass_browser.py`.
 - **Re-Consent-Check:** öffentlich `GET /reconsent-check/{site_id}?config_hash=`, live 200.
 - **Revisionen:** `GET /revisions/{site_id}` (Z. 3355) liest jetzt `cookie_banner_revisions`
   (7b7cd13); Trigger `trigger_banner_revision` legt je Änderung einen Schnappschuss an (live 13).
