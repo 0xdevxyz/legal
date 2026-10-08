@@ -361,6 +361,8 @@ class ComplianceIssue:
 | `ai_solution_cache` | Gecachte KI-Antworten |
 | `legal_updates` | Gesetzesänderungen (klassifiziert) |
 | `staging_deployments` | Preview-Deployments |
+| `registrierung_herkunft` | utm-Herkunft eines neuen Kontos (Kanalmessung, Migration 0037, kaskadiert mit `users`) |
+| `kauf_herkunft` | Tarif und utm-Herkunft je Abo aus den Checkout-Metadaten (Migration 0037, vom Webhook geschrieben) |
 
 ---
 
