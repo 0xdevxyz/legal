@@ -97,8 +97,11 @@ class LegalNewsNotificationService:
     ) -> List[Dict[str, Any]]:
         """Ermittelt alle Nutzer, die von dieser Änderung betroffen sein könnten"""
         users = await conn.fetch("""
+            -- u.firebase_uid stand hier bis 08.10.2026; die Spalte gibt es
+            -- in users nicht, die Abfrage brach ab, bevor sie einen Nutzer
+            -- fand. Gebraucht wurde sie nirgends.
             SELECT 
-                u.id, u.email, u.firebase_uid,
+                u.id, u.email,
                 COALESCE(ulns.email_enabled, TRUE) as email_enabled,
                 COALESCE(ulns.min_severity, 'medium') as min_severity,
                 COALESCE(ulns.notify_areas, ARRAY['dsgvo', 'ttdsg', 'cookie', 'impressum', 'barrierefreiheit', 'ai_act']) as notify_areas,
@@ -152,11 +155,15 @@ class LegalNewsNotificationService:
         elif news['severity'] == 'warning':
             action_deadline = datetime.now() + timedelta(days=14)
         
+        # sent_at ausdruecklich NULL: die Spalte hat live die Vorbelegung
+        # now() (Schema vom November 2025). Ohne das stuende jede neue
+        # Benachrichtigung als "versendet um" da, bevor eine Mail rausging.
         notification_id = await conn.fetchval("""
             INSERT INTO legal_change_notifications (
                 user_id, legal_news_id, notification_type, severity,
-                status, confirmation_token, action_required, action_deadline
-            ) VALUES ($1, $2, 'email', $3, 'pending', $4, $5, $6)
+                status, confirmation_token, action_required, action_deadline,
+                sent_at
+            ) VALUES ($1, $2, 'email', $3, 'pending', $4, $5, $6, NULL)
             RETURNING id
         """, 
             user['id'], 
@@ -470,8 +477,24 @@ Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin | datenschutz@complyo.de
             return []
     
     async def send_daily_digest(self) -> Dict[str, Any]:
-        """Versendet tägliche Digest-E-Mails"""
-        results = {"users_processed": 0, "emails_sent": 0, "errors": []}
+        """Zaehlt, wer einen Tagesdigest bekaeme. Verschickt NICHTS.
+
+        Stand 08.10.2026: Eine Digest-Mail gibt es nicht. Die Methode zaehlt
+        nur die Konten mit digest_frequency='daily' und offenen
+        Benachrichtigungen; emails_sent bleibt immer 0. Aufgerufen wird sie
+        nur von cronjobs/legal_news_cronjob.py --mode digest, und dieser
+        Cronjob steht in keiner Crontab (install_crontab.sh kennt ihn nicht).
+
+        Was das bedeutet, sobald Benachrichtigungen entstehen: was nicht sofort
+        geht (_should_send_instant: nicht 'critical' und Konto nicht auf
+        'instant'), steht im Dashboard, kommt aber nie per Mail. Heute betrifft
+        das keine Meldung, weil process_new_legal_changes nur 'critical' und
+        'warning' aufgreift und news_service._classify_news 'warning' nie
+        vergibt. Ob es einen Digest geben soll, ist eine Produktentscheidung;
+        bis dahin sagt das Ergebnis es ausdruecklich (versand).
+        """
+        results = {"users_processed": 0, "emails_sent": 0, "errors": [],
+                   "versand": "nicht_umgesetzt"}
         
         try:
             async with self.db_pool.acquire() as conn:

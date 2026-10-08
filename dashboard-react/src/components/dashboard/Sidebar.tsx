@@ -151,8 +151,11 @@ export const Sidebar: React.FC = () => {
     staleTime: 60_000,
     retry: false,
   });
+  // Offen ist, was weder bestaetigt noch verworfen ist: 'pending' (noch keine
+  // Mail) und 'sent'. critical_pending ist eine Teilmenge davon; aufaddiert
+  // zaehlte jede kritische Meldung doppelt und jede versendete gar nicht.
   const unreadCount: number =
-    ((notifData as any)?.pending ?? 0) + ((notifData as any)?.critical_pending ?? 0);
+    ((notifData as any)?.pending ?? 0) + ((notifData as any)?.sent ?? 0);
 
   const planLabel = (plan?: string) => {
     switch (plan) {
