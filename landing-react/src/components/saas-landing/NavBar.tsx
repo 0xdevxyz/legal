@@ -3,12 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { Menu, X } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 
-// "Preise" ist vorerst raus. Der Anker /#preise zeigte auf die Preistabelle
-// der alten Startseite; seit dort die Early-Access-Seite steht, ginge er ins
-// Leere. Auf /produkt umzubiegen waere schlimmer: dort stehen die Buchen-
-// Knoepfe, und die fuehren mit Stripe im Testmodus in einen Checkout, der
-// echte Karten ablehnt. Zurueck, sobald der Verkauf offen ist.
+// "Preise" ist seit dem Launch zurueck: Stripe ist live, und "/" traegt
+// wieder die Preistabelle (Anker #preise in PricingSection).
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de';
+
 const LINKS = [
+  { label: 'Preise', href: '/#preise' },
   { label: 'BFSG-Check', href: '/bfsg-check/' },
   { label: 'DSGVO-Check', href: '/dsgvo-website-check/' },
   { label: 'Barrierefreiheit', href: '/barrierefreiheit-website-testen/' },
@@ -45,16 +45,21 @@ export default function NavBar() {
             ))}
           </div>
 
-          {/* Der Zugang zum Backoffice ist raus, solange der Verkauf nicht
-              offen ist: der Weg fuehrte in ein Dashboard, das noch niemand
-              gebucht haben kann. Bestehende Zugaenge erreichen es weiterhin
-              direkt unter app.complyo.de. Zurueck, wenn Stripe live ist. */}
+          {/* Seit dem Launch: Anmelden fuer Kunden, Hauptknopf ist der kostenlose
+              Scan. Die Warteliste bleibt ueber den Abschnitt #anmeldung unter
+              der Preistabelle erreichbar. */}
           <div className="hidden lg:flex items-center gap-4">
             <a
-              href="/#anmeldung"
+              href={APP_URL + '/login'}
+              className="text-sm font-medium text-gray-600 hover:text-akzent-700 transition-colors"
+            >
+              Anmelden
+            </a>
+            <a
+              href="/#scanner"
               className="text-sm bg-akzent-400 hover:bg-akzent-500 text-gray-900 font-semibold px-4 py-2 rounded-lg transition-colors"
             >
-              Platz sichern
+              Kostenlos scannen
             </a>
           </div>
 
@@ -87,11 +92,18 @@ export default function NavBar() {
             ))}
             <div className="pt-3 mt-2 border-t border-gray-100 space-y-2">
               <a
-                href="/#anmeldung"
+                href="/#scanner"
                 onClick={() => setOpen(false)}
                 className="block text-sm text-center bg-akzent-400 text-gray-900 font-semibold rounded-lg px-4 py-2.5"
               >
-                Platz sichern
+                Kostenlos scannen
+              </a>
+              <a
+                href={APP_URL + '/login'}
+                onClick={() => setOpen(false)}
+                className="block text-sm text-center text-gray-600 font-medium rounded-lg px-4 py-2.5"
+              >
+                Anmelden
               </a>
             </div>
           </div>

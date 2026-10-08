@@ -47,7 +47,7 @@
   }
   'use strict';
   
-  const WIDGET_VERSION = '1.0.0';
+  const WIDGET_VERSION = '1.0.5';
   const _currentScript = document.currentScript || (function() {
     const scripts = document.getElementsByTagName('script');
     return scripts[scripts.length - 1];
@@ -302,6 +302,68 @@
       // Sicherheitsnetz: ein paar verzögerte Durchläufe für spät injizierte Buttons
       setTimeout(apply, 800);
       setTimeout(apply, 2500);
+
+      // Fokus nicht verdecken (siehe fokusVersatz): bei jedem Fokuswechsel
+      // neu setzen. Dazu transitionend/animationend, solange ein
+      // Seitenelement den Fokus hat: Seiten, die beim Scrollen per
+      // transform nachgleiten (panoart360.de: "main" mit 0.4s), schieben
+      // das Element erst NACH dem Fokus unter den Knopf, ohne dass ein
+      // scroll-Ereignis folgt. Die eigenen Uebergaenge zaehlen nicht.
+      document.addEventListener('focusin', onScrollResize, true);
+      document.addEventListener('focusout', onScrollResize, true);
+      const nachUebergang = (e) => {
+        const ziel = document.activeElement;
+        if (!ziel || ziel === document.body || this.container.contains(ziel)) return;
+        if (e.target && e.target.nodeType === 1 && this.container.contains(e.target)) return;
+        onScrollResize();
+      };
+      document.addEventListener('transitionend', nachUebergang, true);
+      document.addEventListener('animationend', nachUebergang, true);
+    }
+
+    // WCAG 2.4.11: der Knopf liegt fest unten rechts UEBER der Kundenseite.
+    // Auf panoart360.de deckte er am 29.09.2026 die Links "Fb" und "X" in
+    // der Ecke so ab, dass elementFromPoint in der Mitte des fokussierten
+    // Links den Knopf traf: der Fokus war verdeckt, und das auf jeder Seite
+    // mit Bedienelementen in der Ecke.
+    //
+    // scroll-padding auf <html> hilft dort nicht: Elemente in fixierten
+    // Leisten und die letzten Links einer Seite lassen sich nicht aus der
+    // Ecke scrollen, und das Widget haette dafuer das Wurzelelement des
+    // Kunden umgestellt. Stattdessen weicht der Knopf aus: liegt das
+    // fokussierte Element unter ihm, rueckt er darueber, sobald der Fokus
+    // weiterzieht, zurueck.
+    //
+    // Gerechnet wird ab der Grundposition, nicht ab der gerade gezeigten:
+    // bottom gleitet (transition), und wer die Zwischenstellung misst,
+    // schaukelt sich zwischen oben und unten auf. Rect und berechnetes
+    // bottom/right stammen aus demselben Moment, ihre Differenz zur
+    // Grundposition ist daher stimmig, auch mitten im Uebergang.
+    //
+    // Nicht ausgewichen wird, wenn der Knopf dafuer oben aus dem Bild
+    // muesste: dann ist das Element so hoch, dass er ohnehin nur eine Ecke
+    // davon verdeckt, und 2.4.11 verlangt, dass es nicht GANZ verdeckt ist.
+    fokusVersatz(widget, grundRight, grundBottom) {
+      const ziel = document.activeElement;
+      if (!ziel || ziel === document.body || ziel === document.documentElement
+          || widget.contains(ziel)) return 0;
+      const knopf = widget.querySelector('.complyo-toggle-btn');
+      if (!knopf) return 0;
+      const ABSTAND = 8;
+      const k = knopf.getBoundingClientRect();
+      const z = ziel.getBoundingClientRect();
+      if (!k.width || !z.width || !z.height) return 0;
+      const cs = getComputedStyle(widget);
+      const dy = (parseFloat(cs.bottom) || 0) - grundBottom;
+      const dx = (parseFloat(cs.right) || 0) - grundRight;
+      const oben = k.top + dy, unten = k.bottom + dy;
+      const links = k.left + dx, rechts = k.right + dx;
+      const ueberlappt = z.right > links && z.left < rechts
+                      && z.bottom > oben && z.top < unten;
+      if (!ueberlappt) return 0;
+      const hoch = Math.ceil(unten - z.top + ABSTAND);
+      if (oben - hoch < ABSTAND) return 0;
+      return hoch;
     }
 
     positionWidget() {
@@ -321,19 +383,24 @@
       }
       this._positioned = true;
 
+      let right = 20;
+      let bottom = 20;
       if (topBtn) {
         const r = topBtn.getBoundingClientRect();
         // Links neben den Button, Unterkanten bündig
-        const right = Math.max(Math.round(vw - r.left + GAP), 20);
-        const bottom = Math.max(Math.round(vh - r.bottom), 0);
-        widget.style.right = right + 'px';
-        widget.style.bottom = bottom + 'px';
-        widget.dataset.complyoDodge = '1';
-      } else {
-        widget.style.right = '20px';
-        widget.style.bottom = '20px';
-        widget.dataset.complyoDodge = '0';
+        right = Math.max(Math.round(vw - r.left + GAP), 20);
+        bottom = Math.max(Math.round(vh - r.bottom), 0);
       }
+      widget.dataset.complyoDodge = topBtn ? '1' : '0';
+      const versatz = this.fokusVersatz(widget, right, bottom);
+      widget.dataset.complyoFokusVersatz = String(versatz);
+      // Mit important: die Sichtbarkeitsregel weiter unten setzt
+      // "bottom: 20px !important; right: 20px !important" auf den Container,
+      // und dagegen verlor ein schlichtes style.bottom. Das Ausweichen vor
+      // dem Scroll-to-Top-Knopf hat deshalb seit 279bb6a nie gewirkt;
+      // aufgefallen ist es erst am 29.09.2026 beim Fokus-Ausweichen.
+      widget.style.setProperty('right', right + 'px', 'important');
+      widget.style.setProperty('bottom', (bottom + versatz) + 'px', 'important');
     }
 
     // Sucht den fixierten "nach oben"-Button des Themes in der unteren rechten Ecke.
@@ -754,7 +821,7 @@
               </div>
             </details>
             <div class="complyo-footer-info">
-              <span class="complyo-version">Complyo Widget v${WIDGET_VERSION}</span>
+              <span class="complyo-version" title="Complyo Widget v${WIDGET_VERSION}">v${WIDGET_VERSION}</span>
             </div>
           </div>
         </div>
@@ -1691,28 +1758,39 @@
       this.updateAllTiles();
     }
     
+    // Der Knopf verschwindet, solange das Bedienfeld offen ist. Stand der
+    // Fokus auf ihm, fiel er damit ins Leere: kein Element trug ihn mehr,
+    // und nichts war zu sehen (WCAG 2.4.3/2.4.7). Deshalb zieht der Fokus
+    // beim Oeffnen auf "Schliessen" und beim Schliessen zurueck auf den
+    // Knopf. Zurueck nur, wenn er im Bedienfeld stand: Escape schliesst
+    // auch, wenn der Nutzer gerade ganz woanders auf der Seite ist.
     togglePanel() {
-      this.isOpen = !this.isOpen;
+      if (this.isOpen) {
+        this.closePanel();
+        return;
+      }
+      this.isOpen = true;
       const panel = this.container.querySelector('.complyo-panel');
       const toggleBtn = this.container.querySelector('.complyo-toggle-btn');
       
       if (panel) {
-        panel.hidden = !this.isOpen;
+        panel.hidden = false;
       }
       if (toggleBtn) {
-        toggleBtn.setAttribute('aria-expanded', this.isOpen);
-        toggleBtn.style.display = this.isOpen ? 'none' : 'flex';
+        toggleBtn.setAttribute('aria-expanded', 'true');
+        toggleBtn.style.display = 'none';
       }
-      
-      if (this.isOpen) {
-        this.trackAnalytics('widget_open', true);
-      }
+      const closeBtn = panel && panel.querySelector('.complyo-close-btn');
+      if (closeBtn) closeBtn.focus();
+
+      this.trackAnalytics('widget_open', true);
     }
     
     closePanel() {
       this.isOpen = false;
       const panel = this.container.querySelector('.complyo-panel');
       const toggleBtn = this.container.querySelector('.complyo-toggle-btn');
+      const fokusImPanel = !!panel && panel.contains(document.activeElement);
 
       if (panel) {
         panel.hidden = true;
@@ -1720,6 +1798,7 @@
       if (toggleBtn) {
         toggleBtn.setAttribute('aria-expanded', 'false');
         toggleBtn.style.display = 'flex';
+        if (fokusImPanel) toggleBtn.focus();
       }
     }
     
@@ -1807,14 +1886,13 @@
              die Schrift darauf wird dunkel (--c-on-accent-solid,
              14,06:1) — vorher war sie weiss und waere verschwunden.
 
-             --c-accent-border ist der Fokusrahmen. Er war ein blasses
-             Blau mit 1,4:1 gegen Weiss und damit kaum zu sehen; in einem
-             Barrierefreiheits-Widget ist das die falsche Stelle zum
-             Sparen. Jetzt die dunkle Stufe. */
+             --c-focus-ring und --c-focus-halo sind der Fokusrahmen,
+             zweifarbig, siehe Abschnitt FOKUS. */
           --c-accent: #00706c;
           --c-accent-hover: #005754;
           --c-accent-tint: #ebfffe;
-          --c-accent-border: #00706c;
+          --c-focus-ring: #111827;
+          --c-focus-halo: #ffffff;
           --c-accent-solid: #00fff7;
           --c-accent-solid-hover: #00ccc5;
           --c-on-accent-solid: #111827;
@@ -1859,9 +1937,37 @@
           box-shadow: 0 6px 16px rgba(0, 255, 247, 0.4);
         }
 
-        .complyo-toggle-btn:focus-visible {
-          outline: 3px solid var(--c-accent-border);
-          outline-offset: 2px;
+        /* ===== FOKUS ===== */
+        /* Jedes Bedienelement des Widgets zeigt seinen Fokus, auch wenn die
+           Kundenseite ihn abschaltet. Auf panoart360.de steht im Theme
+           "button:active, button:focus { outline: none !important }", ein
+           gaengiger Reset. Die fruehere Regel ohne !important verlor
+           dagegen, und der Knopf war per Tastatur fokussiert, ohne dass man
+           es sah (WCAG 2.4.7, gemessen 29.09.2026). Das trifft jede Seite
+           mit so einem Reset, also viele.
+
+           Deshalb !important UND die Kennung im Selektor: stehen sich zwei
+           !important gegenueber, entscheidet die Spezifitaet, und
+           #complyo-a11y-widget schlaegt jeden Seitenselektor ohne Kennung.
+           Das Widget haengt an <html>, nicht an <body>, "body *"-Regeln
+           erreichen es ohnehin nicht.
+
+           Zweifarbig, weil das Widget auf beliebigem Grund sitzt: der dunkle
+           Ring traegt auf hellem Grund (17,7:1 gegen Weiss), der weisse Saum
+           innen und aussen auf dunklem. Eine Farbe allein verschwindet auf
+           einem Grund ihrer Helligkeit. Der Saum ist box-shadow, der Ring
+           outline: im Kontrastmodus (forced-colors) faellt box-shadow weg,
+           outline bleibt. Die Regler (.complyo-slider) setzen outline: none,
+           auch das wird hier ueberstimmt. */
+        #complyo-a11y-widget button:focus-visible,
+        #complyo-a11y-widget a:focus-visible,
+        #complyo-a11y-widget input:focus-visible,
+        #complyo-a11y-widget select:focus-visible,
+        #complyo-a11y-widget summary:focus-visible,
+        #complyo-a11y-widget [tabindex]:not([tabindex="-1"]):focus-visible {
+          outline: 3px solid var(--c-focus-ring) !important;
+          outline-offset: 2px !important;
+          box-shadow: 0 0 0 7px var(--c-focus-halo) !important;
         }
         
         /* ===== PANEL ===== */
@@ -2008,11 +2114,6 @@
           box-shadow: 0 2px 8px rgba(17, 24, 39, 0.06);
         }
 
-        .complyo-feature-tile:focus-visible {
-          outline: 3px solid var(--c-accent-border);
-          outline-offset: 2px;
-        }
-
         .complyo-feature-tile.active {
           background: var(--c-accent-tint);
           border-color: var(--c-accent);
@@ -2093,8 +2194,10 @@
           align-items: center;
         }
 
+        /* Groesse siehe Ausnahmen unter "Widget NIEMALS durch body-Styles
+           beeinflussen": dort setzt ein revert !important jede Schrift im
+           Widget zurueck, eine Groesse hier allein bliebe wirkungslos. */
         .complyo-version {
-          font-size: 11px;
           color: var(--c-text-muted);
         }
 
@@ -2662,6 +2765,16 @@
         
         #complyo-a11y-widget .complyo-tile-label {
           font-size: 11px !important;
+        }
+
+        /* Die Versionsnummer ist nur ein Vermerk fuer den Support, deshalb so
+           klein wie lesbar. Die fruehere Angabe 11px stand nur oben bei
+           .complyo-version und verlor gegen das revert hier: gemessen wurden
+           16px. Farbe bleibt --c-text-muted, 4,63:1 auf --c-surface-2; auch
+           kleine Schrift braucht 4,5:1 (WCAG 1.4.3). */
+        #complyo-a11y-widget .complyo-version {
+          font-size: 9px !important;
+          line-height: 1 !important;
         }
         
         #complyo-a11y-widget .complyo-panel-header h3 {

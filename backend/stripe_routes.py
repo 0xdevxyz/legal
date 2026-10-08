@@ -24,6 +24,7 @@ from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 from typing import Optional, List
 import json
+import re
 import logging
 import uuid
 
@@ -254,6 +255,29 @@ class CheckoutRequest(BaseModel):
     domain: Optional[str] = None  # Domain für Domain-Lock
     success_url: str
     cancel_url: str
+    # utm-Parameter, mit denen der Kaeufer auf complyo.de ankam. Optional und
+    # ungeprueft vom Client; gefiltert wird in _herkunft_metadaten.
+    herkunft: Optional[dict] = None
+
+
+# Herkunft eines Kaufs (28.09.2026). Die Entscheidungsregel nach Woche 45
+# zaehlt Kaeufe je Kanal; bis dahin kam kein Kanal im Kaufweg an. Die Werte
+# stammen aus der Adresszeile eines Fremden und landen in Stripe-Metadaten,
+# deshalb Positivliste und enges Zeichenmuster. Alles andere faellt still weg:
+# eine fehlende Herkunft darf nie einen Kauf verhindern.
+_HERKUNFT_SCHLUESSEL = ("utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term")
+_HERKUNFT_MUSTER = re.compile(r"^[A-Za-z0-9_.:-]{1,120}$")
+
+
+def _herkunft_metadaten(herkunft) -> dict:
+    if not isinstance(herkunft, dict):
+        return {}
+    ergebnis = {}
+    for schluessel in _HERKUNFT_SCHLUESSEL:
+        wert = herkunft.get(schluessel)
+        if isinstance(wert, str) and _HERKUNFT_MUSTER.match(wert):
+            ergebnis[schluessel] = wert
+    return ergebnis
 
 class PortalRequest(BaseModel):
     return_url: str
@@ -403,6 +427,9 @@ async def create_checkout_session(
             'modules': json.dumps(checkout_modules),
         }
         
+        # Herkunft (utm) fuer die Auswertung je Kanal, siehe _herkunft_metadaten
+        checkout_metadata.update(_herkunft_metadaten(request.herkunft))
+
         # Domain hinzufügen falls vorhanden
         if request.domain:
             checkout_metadata['domain'] = request.domain

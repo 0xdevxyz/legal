@@ -973,17 +973,14 @@ const normalizeIssue = (issue: any): ComplianceIssue | null => {
 
   // String-Issues zu Objects konvertieren
   if (typeof issue === 'string') {
-    const riskEuro = 1000;
     return {
       id: `issue_${Math.random().toString(36).substr(2, 9)}`,
       category: 'compliance',
       severity: 'warning' as const,
       title: issue.substring(0, 100),
       description: issue,
-      risk_euro: riskEuro,
-      risk_euro_min: riskEuro,
-      risk_euro_max: riskEuro * 2,
-      risk_range: `${riskEuro}€ - ${riskEuro * 2}€`,
+      rang: 'einplanen' as const,
+      rang_label: 'Einplanen',
       recommendation: 'Bitte korrigieren Sie diesen Punkt',
       legal_basis: 'DSGVO, DDG',
       location: {
@@ -1000,17 +997,17 @@ const normalizeIssue = (issue: any): ComplianceIssue | null => {
 
   // Object-Issues validieren und Defaults setzen
   if (typeof issue === 'object') {
-    const riskEuro = Math.max(0, issue.risk_euro ?? issue.risk_euro_min ?? 0);
     return {
       id: issue.id || `issue_${Math.random().toString(36).substr(2, 9)}`,
       category: issue.category || 'compliance',
       severity: normalizeSeverity(issue.severity),
       title: issue.title || 'Compliance-Problem',
       description: issue.description || '',
-      risk_euro: riskEuro,
-      risk_euro_min: issue.risk_euro_min ?? riskEuro,
-      risk_euro_max: issue.risk_euro_max ?? (riskEuro * 2),
-      risk_range: issue.risk_range || `${riskEuro}€ - ${riskEuro * 2}€`,
+      // Kein Betrag mehr, auch kein erfundener Vorgabewert (bis 07.10.2026
+      // stand hier 1.000 bis 2.000 EUR fuer jeden Befund ohne Zahl).
+      rang: issue.rang,
+      rang_label: issue.rang_label,
+      rang_begruendung: issue.rang_begruendung,
       recommendation: issue.recommendation || '',
       legal_basis: issue.legal_basis || '',
       location: issue.location || {

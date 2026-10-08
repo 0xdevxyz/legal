@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, Cookie, FileText, Eye, AlertTriangle, CheckCircle, Search, TrendingUp, Euro } from 'lucide-react';
 import { complianceApi } from '@/lib/api';
+import { herkunftAusSuche, mitHerkunft } from '@/lib/herkunft';
 
 
 /**
@@ -42,7 +43,7 @@ export default function WebsiteScanner() {
   const [isScanning, setIsScanning] = useState(false);
   // Hochzaehlen, sobald sich die Form von scanData aendert - sonst zeigt ein
   // alter Eintrag aus dem localStorage stillschweigend falsche Werte an.
-  const SCAN_SCHEMA = 4;
+  const SCAN_SCHEMA = 5; // 5: keine Kostenspanne mehr im Ergebnis (07.10.2026)
 
   const [scanResult, setScanResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,10 +56,10 @@ export default function WebsiteScanner() {
         const parsed = JSON.parse(stored);
         // Nur Ergebnisse im aktuellen Format wiederherstellen.
         //
-        // Aeltere Eintraege tragen das Feld fineRisk statt kostenRisikoMax.
-        // Ohne diese Pruefung waere kostenRisikoMax undefined -> 0 -> die
-        // Anzeige meldete einem wiederkehrenden Besucher "Keine Gefahr",
-        // obwohl sein Scan Befunde hatte.
+        // Aeltere Eintraege tragen andere Felder (fineRisk, spaeter eine
+        // Kostenspanne). Ohne diese Pruefung meldete die Anzeige einem
+        // wiederkehrenden Besucher "Keine Gefahr", obwohl sein Scan Befunde
+        // hatte.
         if (parsed?.results && parsed.schema === SCAN_SCHEMA) {
           setScanResult(parsed.results);
           setUrl(parsed.url || '');
@@ -237,19 +238,10 @@ export default function WebsiteScanner() {
         };
       });
 
-      // Risiko rechnet das Backend, nicht die Landing.
-      //
-      // Hier stand bis 03.09.2026 eine zweite, eigene Summenbildung ueber alle
-      // Kategorien. Zwei Rechenwege fuer dieselbe Zahl heisst: irgendwann
-      // stimmen sie nicht mehr ueberein, und keiner merkt es. Das Backend
-      // liefert die Werte jetzt fertig (gesamtrisiko_aus_kategorien) und
-      // trennt dabei zwei Dinge, die vorher vermengt waren:
-      //   kostenRisiko - was eine Abmahnung den Betrieb realistisch kostet
-      //   rahmenMax    - was das Gesetz im Hoechstfall zulaesst (Tatsache)
-      const kostenRisikoMin: number = apiData.total_risk_min ?? 0;
-      const kostenRisikoMax: number = apiData.total_risk_max ?? 0;
-      const kostenRisikoText: string | null = apiData.total_risk_range ?? null;
-      const rahmenMax: number = apiData.rahmen_max ?? apiData.risk_rahmen_max ?? 0;
+      // Kein Kostenrisiko mehr (07.10.2026). Bis dahin lieferte das Backend
+      // eine Spanne "typische Abmahnkosten" und einen Bussgeldrahmen; beides
+      // ist eine Aussage ueber Rechtsfolgen, die sich je Website nicht belegen
+      // laesst. Die Landing zeigt, was gemessen ist: Befunde und Bereiche.
       const bereicheBetroffen: number = apiData.risk_bereiche_betroffen ?? 0;
       // Befunde und Hinweise sind zweierlei: ein Hinweis wie "Kein
       // Cookie-Banner erforderlich" ist eine Entwarnung, kein Verstoß.
@@ -267,10 +259,6 @@ export default function WebsiteScanner() {
       const transformedResult = {
         url: normalizedUrl,
         overallScore: backendScore,
-        kostenRisikoMin,
-        kostenRisikoMax,
-        kostenRisikoText,
-        rahmenMax,
         bereicheBetroffen,
         befundeGesamt,
         kritischeBefunde,
@@ -544,36 +532,25 @@ export default function WebsiteScanner() {
                   </div>
                 </div>
 
-                {/* Kostenrisiko und gesetzlicher Rahmen — bewusst zwei Zahlen.
-                    Hier stand eine einzige, aufsummierte Zahl ("Geschätztes
-                    Risikopotenzial"), die für eine leere Platzhalterseite auf
-                    91.800 € kam. Was ein Betrieb tatsächlich zahlt, ist die
-                    Abmahnung; der Bußgeldrahmen ist etwas anderes und wird
-                    jetzt als das gezeigt, was er ist: eine Obergrenze im
-                    Gesetz, keine Prognose. */}
+                {/* Einstufung ohne Eurobetrag (07.10.2026). Hier stand eine
+                    Spanne "typische Abmahnkosten" samt gesetzlichem
+                    Bußgeldrahmen. Beides ist eine Aussage über Rechtsfolgen,
+                    die sich je Website nicht belegen lässt, und damit für
+                    einen Compliance-Anbieter selbst eine Angriffsfläche nach
+                    § 5 UWG. Gezeigt wird, was gemessen ist: Befunde. */}
                 {(() => {
-                  const min = scanResult.kostenRisikoMin ?? 0;
-                  const max = scanResult.kostenRisikoMax ?? 0;
-                  const rahmen = scanResult.rahmenMax ?? 0;
-                  // Die Einstufung folgt den Befunden, nicht dem Score.
-                  //
-                  // Hier stand `score < 60` — eine Schwelle, die mit
-                  // Abmahnbarkeit nichts zu tun hat. Eine Seite, deren Punkte
-                  // ausschließlich an Barrierefreiheits-Warnungen hingen,
-                  // bekam damit "Abmahngefahr" aufgedruckt, obwohl das BFSG
-                  // von Marktüberwachungsbehörden durchgesetzt wird und nicht
-                  // per Abmahnung. Umgekehrt wäre ein kritischer Befund bei 61
-                  // Punkten als bloßer "Handlungsbedarf" durchgegangen.
                   const befunde = scanResult.befundeGesamt ?? 0;
                   const kritisch = scanResult.kritischeBefunde ?? 0;
-                  const isGreen = befunde === 0 || max === 0;
+                  const bereiche = scanResult.bereicheBetroffen ?? 0;
+                  const hinweise = scanResult.hinweiseGesamt ?? 0;
+                  const isGreen = befunde === 0;
                   const isRed = kritisch > 0;
                   const bgClass = isGreen ? 'bg-green-50 border-green-200' : isRed ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200';
                   const textClass = isGreen ? 'text-green-900' : isRed ? 'text-red-900' : 'text-yellow-900';
                   const numClass = isGreen ? 'text-green-600' : isRed ? 'text-red-600' : 'text-yellow-600';
                   const subClass = isGreen ? 'text-green-700' : isRed ? 'text-red-700' : 'text-yellow-700';
-                  const label = isGreen ? 'Keine Gefahr' : isRed ? 'Abmahngefahr' : 'Handlungsbedarf';
-                  const euro = (n: number) => n.toLocaleString('de-DE');
+                  const label = isGreen ? 'Keine Befunde' : isRed ? 'Sofort handeln' : 'Handlungsbedarf';
+                  const bereichWort = bereiche === 1 ? 'Bereich' : 'Bereichen';
                   return (
                     <div className={`rounded-xl p-6 border-2 ${bgClass}`}>
                       <div className="flex items-center gap-3 mb-2">
@@ -585,29 +562,24 @@ export default function WebsiteScanner() {
                       </div>
                       {isGreen ? (
                         <>
-                          <div className={`text-3xl font-bold ${numClass}`}>0€</div>
+                          <div className={`text-3xl font-bold ${numClass}`}>0</div>
                           <p className={`text-sm mt-1 ${subClass}`}>
                             Keine automatisiert erkennbaren Verstöße
-                            {(scanResult.hinweiseGesamt ?? 0) > 0
-                              ? ` — ${scanResult.hinweiseGesamt} Hinweis${scanResult.hinweiseGesamt === 1 ? '' : 'e'} ohne Handlungsbedarf`
+                            {hinweise > 0
+                              ? `, ${hinweise} Hinweis${hinweise === 1 ? '' : 'e'} ohne Handlungsbedarf`
                               : ''}
                           </p>
                         </>
                       ) : (
                         <>
-                          <div className={`text-3xl font-bold flex items-center gap-1 ${numClass}`}>
-                            <Euro className="w-6 h-6" />{euro(min)} – {euro(max)}
+                          <div className={`text-3xl font-bold ${numClass}`}>
+                            {isRed ? `${kritisch} kritisch` : `${befunde} ${befunde === 1 ? 'Befund' : 'Befunde'}`}
                           </div>
                           <p className={`text-sm mt-1 ${subClass}`}>
-                            Typische Abmahnkosten (Streitwert + Anwaltskosten)
+                            {isRed
+                              ? `${kritisch} von ${befunde} Befunden betreffen eine gesetzliche Pflicht, verteilt auf ${bereiche} ${bereichWort}.`
+                              : `${befunde} Befunde in ${bereiche} ${bereichWort}, keine fehlende Pflichtangabe.`}
                           </p>
-                          {rahmen > 0 && (
-                            <p className="text-xs text-gray-600 mt-3 pt-3 border-t border-black/10">
-                              Gesetzlicher Bußgeldrahmen daneben: bis {euro(rahmen)} €.
-                              Das ist die Obergrenze im Gesetz, keine Prognose für
-                              Ihren Betrieb.
-                            </p>
-                          )}
                         </>
                       )}
                     </div>
@@ -691,7 +663,10 @@ export default function WebsiteScanner() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <a
-                  href={`${process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de'}/register?plan=free`}
+                  href={mitHerkunft(
+                    `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de'}/register?plan=free`,
+                    herkunftAusSuche(typeof window === 'undefined' ? '' : window.location.search),
+                  )}
                   className="px-8 py-4 bg-white text-akzent-800 font-semibold rounded-xl hover:shadow-2xl transition-all transform hover:scale-105 inline-flex items-center justify-center gap-2"
                 >
                   <TrendingUp className="w-5 h-5" />

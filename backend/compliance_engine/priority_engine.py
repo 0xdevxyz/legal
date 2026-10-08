@@ -156,12 +156,11 @@ class PriorityEngine:
         severity = issue.get('severity', 'info')
         base_score = self.risk_weights.get(severity, 20)
         
-        # Berücksichtige Euro-Risiko
-        risk_euro_max = issue.get('risk_euro_max', 0)
-        if risk_euro_max > 0:
-            # Logarithmische Skalierung: €1000 = +20, €10000 = +40, €50000 = +50
-            euro_bonus = min(50, (risk_euro_max / 1000) * 2)
-            base_score = min(100, base_score + euro_bonus)
+        # Frueher kam hier ein Bonus aus dem Eurobetrag des Befunds dazu.
+        # Der Betrag war erfunden (siehe rangstufe.py); ein fehlendes
+        # Pflichtelement wiegt stattdessen schwerer als ein Teilmangel.
+        if issue.get('is_missing'):
+            base_score = min(100, base_score + 20)
         
         return base_score
     
