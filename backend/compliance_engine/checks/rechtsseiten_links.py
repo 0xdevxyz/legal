@@ -126,6 +126,11 @@ class GeladeneRechtsseite:
     problem: Optional[str] = None
     status: Optional[int] = None
     fehler: Optional[str] = None
+    # Wahr, wenn die Seite die Inhaltsschranke NICHT bestanden hat, sich aber
+    # selbst als Rechtsseite ausweist und lang genug ist (siehe
+    # rechtsseiten_text.ist_duenne_erklaerung). Sie wird dann gelesen und
+    # bewertet, der Befund sagt "knapp" statt "keine Erklaerung".
+    duenn: bool = False
 
     @property
     def ok(self) -> bool:
@@ -167,6 +172,7 @@ async def lade_rechtsseite(
     session: aiohttp.ClientSession,
     sieht_aus_wie: Callable[[str], bool],
     timeout_s: int = 10,
+    duenn_aus_wie: Optional[Callable[[str], bool]] = None,
 ) -> GeladeneRechtsseite:
     """
     Holt die Rechtsseite hinter einem Link und prueft, ob dort der Rechtstext
@@ -176,6 +182,10 @@ async def lade_rechtsseite(
     Hand hat: kein Abruf, nur die Inhaltsschranke. Auf einem Einseiter mit
     Impressumsabschnitt ist das richtig; auf einer Seite ohne den Abschnitt
     ist der Anker eine Attrappe mit Umweg.
+
+    `duenn_aus_wie` bekommt das rohe HTML und entscheidet, ob eine Seite, die
+    die Inhaltsschranke nicht besteht, trotzdem eine knappe Erklaerung ist.
+    Ohne die Funktion bleibt es bei "ganz oder gar nicht".
     """
     art = seitenlink_art(href)
     ziel = urljoin(basis_url, href)
@@ -213,6 +223,12 @@ async def lade_rechtsseite(
     gerendert = await _im_browser_nachladen(ziel, html)
     if gerendert and sieht_aus_wie(_fliesstext(gerendert)):
         return GeladeneRechtsseite(url=ziel, html=gerendert, status=200)
+
+    if duenn_aus_wie:
+        for kandidat in (html, gerendert):
+            if kandidat and duenn_aus_wie(kandidat):
+                logger.info(f"Rechtsseite ist knapp, wird trotzdem gelesen: {ziel}")
+                return GeladeneRechtsseite(url=ziel, html=kandidat, status=200, duenn=True)
 
     logger.info(f"Rechtsseiten-Link fuehrt zu keinem Rechtstext: {ziel}")
     return GeladeneRechtsseite(url=ziel, status=200, problem=PROBLEM_KEIN_RECHTSTEXT)

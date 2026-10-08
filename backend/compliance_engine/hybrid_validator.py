@@ -106,6 +106,23 @@ class HybridValidator:
         self.uncertain_threshold = 0.6  # < 0.6 Confidence → KI-Check
         self.confident_threshold = 0.85  # >= 0.85 → Pattern ist sicher
     
+    def _ist_unsicher(self, validation) -> bool:
+        """Darf aus diesem Musterergebnis ein "fehlt" werden? Nein, wenn es unsicher ist.
+
+        Unsicher ist ein Ergebnis unter der Unsicherheitsschwelle (0,6) UND ein
+        Treffer, den das Muster gefunden hat, der aber unter der eigenen Schwelle
+        des Feldes (`min_confidence`, 0,65 bis 0,7) bleibt. Der zweite Fall lief
+        bis zum 07.10.2026 als "Grenzfall" mit `found=False` durch und wurde zum
+        kritischen Befund "... fehlt". Gemessen am Pruefstand vom selben Tag an
+        zwei Kundenseiten: Der Text enthielt einen eigenen Abschnitt "Beschwerderecht
+        bei der Aufsichtsbehoerde", der Scanner meldete trotzdem kritisch
+        "Beschwerderecht fehlt". Ein Muster, das etwas fand und sich nicht sicher
+        ist, hat nichts Fehlendes festgestellt; es geht zur KI oder, ohne KI, in
+        die Liste der nicht abschliessend geprueften Angaben.
+        """
+        return (validation.confidence < self.uncertain_threshold
+                or not validation.found)
+
     async def validate_field(
         self,
         field_name: str,
@@ -152,7 +169,7 @@ class HybridValidator:
                 processing_time_ms=processing_time
             )
         
-        elif validation.confidence < self.uncertain_threshold:
+        elif self._ist_unsicher(validation):
             # ❓ UNSICHER: KI-Check nötig
 
             if not self.api_key:
@@ -668,7 +685,7 @@ Antworte NUR mit den nummerierten Blöcken, keine zusätzlichen Erläuterungen."
                     confidence=validation.confidence, value=validation.extracted_value,
                     method_used=ValidationMethod.PATTERN_ONLY,
                 )
-            elif validation.confidence < self.uncertain_threshold:
+            elif self._ist_unsicher(validation):
                 unsichere_felder[field_name] = validation
             else:
                 results_by_field[field_name] = HybridValidationResult(
