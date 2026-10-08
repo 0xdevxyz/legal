@@ -92,9 +92,15 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
       if (data?.success && data.colors) {
         setConfig((prev: any) => ({ ...prev, ...data.colors }));
         setColorPreset('custom');
+        // Zu helle Knopffarben kommen vom Backend bereits abgedunkelt (4,5:1
+        // gegen weisse Schrift); die Anpassung wird hier genannt, nicht versteckt.
+        const angepasst: Array<{ von: string; zu: string }> = Array.isArray(data.angepasst) ? data.angepasst : [];
+        const hinweis = angepasst.length
+          ? ` Für lesbare Knöpfe abgedunkelt: ${angepasst.map((a) => `${a.von} → ${a.zu}`).join(', ')}.`
+          : '';
         setExtractMsg(
           data.scraped
-            ? { type: 'success', text: `Farben von ${url} übernommen — zum Übernehmen speichern.` }
+            ? { type: 'success', text: `Farben von ${url} übernommen — zum Übernehmen speichern.${hinweis}` }
             : { type: 'info', text: 'Keine eindeutigen Markenfarben gefunden — Standardvorschlag beibehalten.' }
         );
       } else {
@@ -309,6 +315,9 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                   />
                 </div>
               ))}
+              <p className="text-xs text-gray-500 dark:text-gray-500">
+                Die Primärfarbe trägt auch der Knopf des Barrierefreiheits-Widgets. Zu helle Töne werden dort für lesbare Schrift automatisch abgedunkelt (mindestens 4,5:1).
+              </p>
             </div>
           </CardContent>
         </Card>

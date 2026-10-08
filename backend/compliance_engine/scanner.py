@@ -1828,32 +1828,12 @@ class ComplianceScanner:
         Erkennt das Grundsystem (CMS) aus HTML-Signaturen und HTTP-Headern.
         Wichtig auch bei Platzhalter-/Fehlerseiten: das darunterliegende System
         (z.B. WordPress) bestimmt, welche Compliance-Pflichten nach Go-Live gelten.
+
+        Die Signaturen liegen in compliance_engine.grundsystem, damit der
+        Cookie-Scan dieselbe Erkennung benutzt (Ersteinrichtung nach Grundsystem).
         """
-        html = str(soup).lower()
-        headers = {k.lower(): str(v).lower() for k, v in (headers or {}).items()}
-
-        # Generator-Meta auslesen
-        generator = ""
-        gen_tag = soup.find("meta", attrs={"name": re.compile(r"generator", re.I)})
-        if gen_tag and gen_tag.get("content"):
-            generator = gen_tag.get("content", "").lower()
-
-        signatures = [
-            ("WordPress", ["wp-content", "wp-includes", "/wp-json", "wp-emoji", "wordpress"]),
-            ("Shopify",   ["cdn.shopify.com", "shopify.theme", "x-shopify"]),
-            ("Wix",       ["static.wixstatic.com", "wix.com", "_wix"]),
-            ("Jimdo",     ["jimdo", "jimstatic.com"]),
-            ("Typo3",     ["typo3", "/typo3conf/"]),
-            ("Joomla",    ["/media/jui/", "joomla", "com_content"]),
-            ("Drupal",    ["drupal-settings-json", "/sites/default/files", "drupal"]),
-            ("Webflow",   ["webflow", "assets.website-files.com"]),
-            ("Squarespace", ["squarespace", "static1.squarespace.com"]),
-        ]
-        haystack = html + " " + generator + " " + " ".join(headers.values())
-        for name, markers in signatures:
-            if any(m in haystack for m in markers):
-                return name
-        return None
+        from compliance_engine.grundsystem import erkenne_grundsystem
+        return erkenne_grundsystem(str(soup), headers)
 
     @staticmethod
     def _detect_placeholder(soup) -> "tuple[bool, str]":

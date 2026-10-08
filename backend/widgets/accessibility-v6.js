@@ -483,6 +483,75 @@
       return v;
     }
 
+    // Markenfarbe des Kunden auf das Widget uebertragen. Die Token kommen
+    // fertig vom Server (compliance_engine/markenfarben.py: Schriftrolle auf
+    // 4,5:1 gegen Weiss abgedunkelt, Knopfschrift je nach Flaeche weiss oder
+    // dunkel). Hier passiert nur noch: Hex pruefen (nichts anderes kommt in
+    // den Stil), Token auf das Wurzelelement setzen (schlaegt das Stylesheet),
+    // Schatten in der Markenfarbe, und die Messung gegen den Seitenhintergrund,
+    // die nur im Browser moeglich ist: faellt der Knopf mit der Seite zusammen
+    // (unter 3:1, WCAG 1.4.11), bekommt er einen Ring in der Farbe, die
+    // besser kontrastiert.
+    applyBrandColors(container) {
+      const f = this.config.farben;
+      if (!f || typeof f !== 'object') return;
+      const HEX = /^#[0-9a-f]{6}$/i;
+      const token = {
+        '--c-accent': f.accent,
+        '--c-accent-hover': f.accent_hover,
+        '--c-accent-tint': f.accent_tint,
+        '--c-accent-border': f.accent_border,
+        '--c-accent-solid': f.accent_solid,
+        '--c-accent-solid-hover': f.accent_solid_hover,
+        '--c-on-accent-solid': f.on_accent_solid,
+      };
+      let gesetzt = 0;
+      for (const name of Object.keys(token)) {
+        const wert = token[name];
+        if (typeof wert === 'string' && HEX.test(wert)) {
+          container.style.setProperty(name, wert.toLowerCase());
+          gesetzt++;
+        }
+      }
+      if (!gesetzt || !HEX.test(f.accent_solid || '')) return;
+      const btn = container.querySelector('.complyo-toggle-btn');
+      if (!btn) return;
+      const solid = this._mfRgb(f.accent_solid);
+      btn.style.boxShadow = '0 4px 12px rgba(' + solid.join(', ') + ', 0.35)';
+      const seite = this._mfSeitenhintergrund();
+      if (this._mfKontrast(solid, seite) < 3) {
+        const ring = this._mfKontrast([255, 255, 255], seite) >= this._mfKontrast([17, 24, 39], seite) ? '#ffffff' : '#111827';
+        btn.style.border = '2px solid ' + ring;
+        btn.dataset.complyoRing = ring;
+      }
+    }
+
+    _mfRgb(hex) { return [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)); }
+
+    _mfLeuchtdichte(rgb) {
+      const k = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+      return 0.2126 * k(rgb[0]) + 0.7152 * k(rgb[1]) + 0.0722 * k(rgb[2]);
+    }
+
+    _mfKontrast(a, b) {
+      const l1 = this._mfLeuchtdichte(a), l2 = this._mfLeuchtdichte(b);
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    }
+
+    // Hintergrund der Seite hinter dem Knopf: body, sonst html, sonst Weiss.
+    _mfSeitenhintergrund() {
+      try {
+        const kandidaten = [document.body, document.documentElement];
+        for (let i = 0; i < kandidaten.length; i++) {
+          const el = kandidaten[i];
+          if (!el) continue;
+          const m = getComputedStyle(el).backgroundColor.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/);
+          if (m && (m[4] === undefined || parseFloat(m[4]) > 0.5)) return [+m[1], +m[2], +m[3]];
+        }
+      } catch (e) { /* Messung ist Zugabe, nie Blocker */ }
+      return [255, 255, 255];
+    }
+
     // 🔒 Prüft, ob für diese Website noch eine aktive Lizenz besteht.
     // Fail-open: bei Fehlern/Demo wird das Widget normal angezeigt.
     async checkLicense() {
@@ -495,6 +564,9 @@
         // Optionale zentrale Rechts-Konfig aus dem Dashboard übernehmen.
         // Script-Attribute haben Vorrang (nur leere Felder werden gefüllt).
         const L = this.config.legal;
+        // Markenfarbe des Kunden (Primaerfarbe des Banners), fertig als Token.
+        const farben = data.config && data.config.accessibility && data.config.accessibility.farben;
+        if (farben && typeof farben === 'object') this.config.farben = farben;
         if (!L.statementUrl && data.accessibility_statement_url) L.statementUrl = data.accessibility_statement_url;
         if (!L.feedback && data.accessibility_feedback) L.feedback = data.accessibility_feedback;
         const license = data.license;
@@ -938,6 +1010,7 @@
       
       // Widget an <html> anhängen statt <body>, damit body.style.filter das Widget nicht beeinflusst
       // (CSS filter auf parent erstellt neuen containing block für position:fixed)
+      this.applyBrandColors(container);
       document.documentElement.appendChild(container);
       this.container = container;
 
