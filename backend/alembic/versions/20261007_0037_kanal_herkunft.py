@@ -38,7 +38,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = "0037_kanal_herkunft"
-down_revision: Union[str, None] = "0036_ki_erlaubnis"
+down_revision: Union[str, None] = "0037_banner_erzwingen"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
