@@ -183,6 +183,12 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
     info: 'ℹ️'
   };
 
+  const rangKlassen: Record<string, string> = {
+    sofort: 'bg-red-100 text-red-800',
+    als_naechstes: 'bg-orange-100 text-orange-800',
+    einplanen: 'bg-yellow-100 text-yellow-800',
+    hinweis: 'bg-gray-100 text-gray-700',
+  };
   const severityLabels = {
     critical: 'Kritisch',
     warning: 'Warnung',
@@ -440,10 +446,14 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
           </div>
         </div>
         
-        {/* Risiko-Badge */}
-        {issue.risk_euro_max && (
-          <div className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold">
-            Bis zu {issue.risk_euro_max}€ Bußgeld
+        {/* Rangstufe statt Eurobetrag. Bis 07.10.2026 stand hier ein Betrag
+            je Befund, den keine Bußgeldpraxis trägt. */}
+        {issue.rang_label && (
+          <div
+            className={`px-3 py-1 rounded-full text-sm font-semibold ${rangKlassen[issue.rang ?? 'einplanen']}`}
+            title={issue.rang_begruendung}
+          >
+            {issue.rang_label}
           </div>
         )}
       </div>

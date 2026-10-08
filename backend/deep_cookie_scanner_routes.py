@@ -21,6 +21,8 @@ from compliance_engine.deep_cookie_scanner import DeepCookieScanner
 
 import json
 import logging
+
+from compliance_engine.rangstufe import ohne_eurobetraege as _ohne_euro
 from dataclasses import asdict
 from dependencies import rate_limit
 
@@ -391,9 +393,8 @@ async def get_scan_status(
             "requests": _as_obj(scan["requests"], []),
             "categorized": _as_obj(scan["categorized"], {}),
             "scan_duration_seconds": scan["scan_duration_seconds"],
-            "privacy_findings": privacy_findings,
+            "privacy_findings": _ohne_euro(privacy_findings),
             "privacy_findings_count": len(privacy_findings),
-            "privacy_risk_euro": sum(f.get("risk_euro", 0) for f in privacy_findings),
         })
 
     return response
