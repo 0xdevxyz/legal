@@ -400,12 +400,24 @@ class CookieScanner:
             # immer derselben drei Kacheln.
             detected_cms = erkenne_grundsystem(html_content)
 
+            # Markenfarben fuer den Banner-Vorschlag. Das externe CSS ist hier
+            # schon geladen (fuer die Font-Erkennung); dort stehen bei
+            # CMS-Seiten die CSS-Variablen mit den Markenfarben, die der
+            # Designer-Knopf (nur HTML) bisher nicht sah.
+            brand_colors = None
+            try:
+                from website_crawler import WebsiteCrawler
+                brand_colors = WebsiteCrawler().extract_brand_colors(soup, html_content + '\n' + external_css)
+            except Exception as e:
+                logger.warning(f"Markenfarben nicht lesbar fuer {url}: {e}")
+
             return {
                 'url': url,
                 'detected_services': list(detected['services']),
                 'confidence': detected['confidence'],
                 'privacy_findings': privacy_findings,
                 'detected_cms': detected_cms,
+                'brand_colors': brand_colors,
                 'scripts': scripts[:20],  # Limit for response size
                 'iframes': iframes[:20],
                 'scan_timestamp': self._get_timestamp()

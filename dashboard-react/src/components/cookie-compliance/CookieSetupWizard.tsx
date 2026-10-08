@@ -291,6 +291,38 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                 </div>
               )}
 
+              {scanResult?.farben_quelle === 'website' && scanResult?.farben && (
+                <div className="p-3 bg-gray-100/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-medium text-gray-900 dark:text-white">
+                      {scanResult.farben_gespeichert
+                        ? 'Bannerfarben aus Ihrer Website übernommen'
+                        : 'Farbvorschlag aus Ihrer Website (bestehende Farben bleiben)'}
+                    </p>
+                    <div className="flex gap-1" aria-label="Farbvorschau">
+                      {(['primary_color', 'accent_color', 'text_color', 'bg_color'] as const).map((k) => (
+                        <span
+                          key={k}
+                          title={`${k}: ${scanResult.farben[k]}`}
+                          className="w-5 h-5 rounded border border-gray-300 dark:border-gray-600"
+                          style={{ backgroundColor: scanResult.farben[k] }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  {Array.isArray(scanResult.farben_angepasst) && scanResult.farben_angepasst.length > 0 && (
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                      Für lesbare Knöpfe abgedunkelt: {scanResult.farben_angepasst.map((a: any) => `${a.von} → ${a.zu}`).join(', ')} (Kontrast mindestens 4,5:1).
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    {scanResult.farben_gespeichert
+                      ? 'Anpassen jederzeit im Tab „Design".'
+                      : 'Übernehmen im Tab „Design" über „Farben von Website übernehmen".'}
+                  </p>
+                </div>
+              )}
+
               <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                 <p className="text-xs text-blue-300">
                   Im Tab <strong className="text-blue-200">„Services"</strong> können Sie weitere Services manuell hinzufügen oder entfernen. Das Banner-Design lässt sich im Tab <strong className="text-blue-200">„Design"</strong> anpassen.

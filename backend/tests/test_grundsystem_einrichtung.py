@@ -297,3 +297,129 @@ def test_grundsystem_route_braucht_anmeldung(monkeypatch):
     monkeypatch.setattr(modul, "db_pool", MagicMock())
     monkeypatch.setattr(modul, "get_current_user_required", AsyncMock(side_effect=HTTPException(status_code=401)))
     assert client.get("/api/cookie-compliance/grundsystem").status_code == 401
+
+
+# ============================================================================
+# 7) Markenfarben beim ersten Scan: Vorschlag, Lesbarkeit, Speichern nur beim Anlegen
+# ============================================================================
+
+from compliance_engine.markenfarben import abdunkeln_bis_lesbar, farbvorschlag, kontrast  # noqa: E402
+
+
+class TestMarkenfarben:
+    def test_kontrast_wie_im_dashboard(self):
+        assert round(kontrast("#000000", "#ffffff"), 1) == 21.0
+        assert round(kontrast("#7c3aed", "#ffffff"), 2) == round(kontrast("#ffffff", "#7c3aed"), 2)
+
+    def test_dunkle_farbe_bleibt(self):
+        assert abdunkeln_bis_lesbar("#1d4ed8") == "#1d4ed8"
+
+    def test_cyan_wird_dunkle_stufe_im_selben_ton(self):
+        """#00fff7 (complyo-Akzent) hat 1,3:1 gegen Weiss; als Knopfhintergrund unlesbar."""
+        neu = abdunkeln_bis_lesbar("#00fff7")
+        assert neu != "#00fff7"
+        assert kontrast(neu, "#ffffff") >= 4.5
+        import colorsys
+        def ton(h):
+            r, g, b = (int(h[i:i + 2], 16) / 255 for i in (1, 3, 5))
+            return colorsys.rgb_to_hls(r, g, b)[0]
+        assert abs(ton(neu) - ton("#00fff7")) < 0.02
+
+    def test_ohne_treffer_standard(self):
+        v = farbvorschlag({"scraped": False, "primary_color": "#7c3aed"})
+        assert v["quelle"] == "standard"
+        assert v["angepasst"] == []
+        assert farbvorschlag(None)["quelle"] == "standard"
+
+    def test_vorschlag_weist_anpassung_aus(self):
+        v = farbvorschlag({"scraped": True, "primary_color": "#ffeb3b", "accent_color": "#0f766e",
+                           "text_color": "#333333", "bg_color": "#ffffff"})
+        assert v["quelle"] == "website"
+        assert v["farben"]["accent_color"] == "#0f766e"
+        assert kontrast(v["farben"]["primary_color"], "#ffffff") >= 4.5
+        assert [a["feld"] for a in v["angepasst"]] == ["primary_color"]
+        assert v["angepasst"][0]["von"] == "#ffeb3b"
+
+    def test_ungueltige_werte_fallen_auf_standard(self):
+        v = farbvorschlag({"scraped": True, "primary_color": "rot", "accent_color": None})
+        assert v["farben"]["primary_color"] == "#7c3aed"
+
+
+def _scanner_mit_farben(scraped=True):
+    scanner = MagicMock()
+    scanner.scan_website = AsyncMock(return_value={
+        "url": "https://kunde.de", "detected_services": [], "confidence": {},
+        "privacy_findings": [], "detected_cms": None,
+        "brand_colors": {"scraped": scraped, "primary_color": "#1d4ed8", "accent_color": "#1e40af",
+                         "text_color": "#111827", "bg_color": "#ffffff"},
+    })
+    return scanner
+
+
+def test_neue_konfiguration_startet_mit_markenfarben(monkeypatch):
+    modul, client = _client()
+    pool = MagicMock()
+    pool.fetch = AsyncMock(return_value=[])
+    pool.fetchrow = AsyncMock(return_value=None)          # noch keine Config -> INSERT
+    pool.execute = AsyncMock(return_value="INSERT 0 1")
+    monkeypatch.setattr(modul, "db_pool", pool)
+    monkeypatch.setattr(modul, "get_current_user_optional", AsyncMock(return_value=None))
+    monkeypatch.setattr(modul, "cookie_scanner", _scanner_mit_farben())
+
+    daten = client.post("/api/cookie-compliance/scan", json={"url": "https://kunde.de"}).json()
+    assert daten["farben_quelle"] == "website"
+    assert daten["farben_gespeichert"] is True
+    assert daten["farben"]["primary_color"] == "#1d4ed8"
+    sql, *args = pool.execute.await_args.args
+    assert "primary_color, accent_color, text_color, bg_color" in sql
+    assert args[-4:] == ["#1d4ed8", "#1e40af", "#111827", "#ffffff"]
+
+
+def test_bestehende_konfiguration_behaelt_ihre_farben(monkeypatch):
+    modul, client = _client()
+    pool = MagicMock()
+    pool.fetch = AsyncMock(return_value=[])
+    pool.fetchrow = AsyncMock(return_value={"id": 1})     # Config existiert -> UPDATE
+    pool.execute = AsyncMock(return_value="UPDATE 1")
+    monkeypatch.setattr(modul, "db_pool", pool)
+    monkeypatch.setattr(modul, "get_current_user_optional", AsyncMock(return_value=None))
+    monkeypatch.setattr(modul, "cookie_scanner", _scanner_mit_farben())
+
+    daten = client.post("/api/cookie-compliance/scan", json={"url": "https://kunde.de"}).json()
+    assert daten["farben_quelle"] == "website"
+    assert daten["farben_gespeichert"] is False
+    sql = pool.execute.await_args.args[0]
+    assert "primary_color" not in sql
+
+
+def test_ohne_markenfarben_bleibt_insert_wie_bisher(monkeypatch):
+    modul, client = _client()
+    pool = MagicMock()
+    pool.fetch = AsyncMock(return_value=[])
+    pool.fetchrow = AsyncMock(return_value=None)
+    pool.execute = AsyncMock(return_value="INSERT 0 1")
+    monkeypatch.setattr(modul, "db_pool", pool)
+    monkeypatch.setattr(modul, "get_current_user_optional", AsyncMock(return_value=None))
+    monkeypatch.setattr(modul, "cookie_scanner", _scanner_mit_farben(scraped=False))
+
+    daten = client.post("/api/cookie-compliance/scan", json={"url": "https://kunde.de"}).json()
+    assert daten["farben_quelle"] == "standard"
+    assert daten["farben_gespeichert"] is False
+    sql, *args = pool.execute.await_args.args
+    assert "primary_color" not in sql and len(args) == 4
+
+
+def test_scanner_dienst_liest_farben_auch_aus_externem_css(monkeypatch):
+    """Die CSS-Variable steht im Stylesheet, nicht im HTML. Vorher sah der
+    Designer-Knopf nur das HTML und fand nichts."""
+    import asyncio
+    import cookie_scanner_service as css_modul
+    dienst = css_modul.CookieScannerService() if hasattr(css_modul, "CookieScannerService") else css_modul.cookie_scanner
+    html = '<html><head><link rel="stylesheet" href="/s.css"></head><body><h1>Kunde</h1></body></html>'
+    monkeypatch.setattr(dienst, "_fetch_html", AsyncMock(return_value=html))
+    monkeypatch.setattr(dienst, "_fetch_stylesheet_css", AsyncMock(return_value=":root{--brand-color:#1d4ed8;--accent-color:#1e40af;} .x{color:#1d4ed8}"))
+    monkeypatch.setattr(css_modul, "validate_url", lambda u: u)
+    ergebnis = asyncio.run(dienst.scan_website("https://kunde.de"))
+    assert ergebnis.get("error") is None, ergebnis
+    assert ergebnis["brand_colors"]["scraped"] is True
+    assert ergebnis["brand_colors"]["primary_color"] == "#1d4ed8"
