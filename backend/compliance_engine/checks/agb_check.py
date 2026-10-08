@@ -17,6 +17,7 @@ import aiohttp
 import ssl
 import certifi
 from compliance_engine.sicherer_abruf import sichere_session
+from compliance_engine.checks.rechtsseiten_links import ist_seitenlink
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,10 @@ def _find_agb_links(soup: BeautifulSoup) -> List:
 
     all_links = []
     for a_tag in soup.find_all('a', href=True):
+        # mailto:, tel:, javascript: und leere Ziele fuehren zu keiner Seite;
+        # ein so beschrifteter Link ist kein Rechtsseiten-Kandidat.
+        if not ist_seitenlink(a_tag.get('href')):
+            continue
         href = a_tag.get('href', '').lower()
         link_text = a_tag.get_text(strip=True).lower()
         aria_label = (a_tag.get('aria-label') or '').lower()

@@ -27,6 +27,20 @@
 ### Offen
 - `total_risk_euro` in `scan_history` wird weiter beschrieben (jetzt 0), die Spalte bleibt; `risk_calculator.py` und `compliance_risk_matrix` sind intern noch vorhanden, aber ohne Ausgabe
 
+## [2026-10-02]
+
+### Backend: Rechtsseiten-Links, hinter denen keine Rechtsseite steht
+- **Ein Footer-Link „Impressum" mit `mailto:`, `tel:` oder `javascript:` als Ziel galt als Impressumsseite.** Der Abruf warf, das `except` schwieg, das Impressum zählte als geprüft: null Befunde für eine Seite, auf der kein Besucher ein Impressum erreicht. Dasselbe für die Datenschutzerklärung. Neues Modul `backend/compliance_engine/checks/rechtsseiten_links.py`: solche Links sind keine Kandidaten mehr (`ist_seitenlink`), der Befund „Kein Impressum-Link gefunden" nennt den Attrappen-Link beim Namen
+- **Der Inhalt hinter einem Link wurde nie angesehen, bevor er als Rechtstext geprüft wurde.** Eine Kontaktseite, ein Impressum-Generator eines Drittanbieters oder die Startseite (bei `#impressum` ohne Abschnitt) landeten im Hybrid-Validator. Ohne KI stand dann „7 Angaben nicht abschließend geprüft" (info, 0 €), mit KI fünf kritische Befunde: welches von beiden ein Kunde sah, hing am KI-Budget. `lade_rechtsseite` wendet die vorhandene Inhaltsschranke (`_looks_like_impressum` / `_looks_like_datenschutz`) jetzt auf jeden Kandidaten an; neue Befunde „Impressum-Link führt zu keiner Impressumsseite", „Impressum-Seite nicht erreichbar" (HTTP-Status), „Inhaltsprüfung des Impressums nicht möglich" (info), analog für die Datenschutzerklärung
+- Einseiter mit `#impressum` und echtem Abschnitt bleiben ohne „fehlt"-Befund; der Abschnitt wird aus der vorliegenden Seite geprüft, ohne zweiten Abruf
+- Direkt-URL-Fallback (`_check_impressum_url_exists`, `_check_datenschutz_url_exists`): die Catch-all-Seite selbst zählt nicht als Rechtstext, Inhaltsprüfung auf Fließtext statt rohem HTML
+- Wächter: `backend/tests/test_rechtsseiten_attrappen.py` (alle Fälle ohne KI, damit das Ergebnis nicht an einem fremden Dienst hängt)
+
+### Backend: Prüfstand ohne KI messen
+- `tools/pruefstand.py --ki aus` fährt den Bestand ohne einen einzigen KI-Aufruf (über `ai_budget.ki_aus()`, derselbe Weg wie der stündliche Probescan); der Lauf vermerkt den Modus in `pruefstand.json`
+- Neu `tools/pruefstand_vergleich.py`: zwei Läufe je Befundtitel oder je Seite gegenüberstellen. Der Vergleich `--ki an` gegen `--ki aus` auf demselben Code zeigt, welche Befunde am KI-Budget hängen und nicht an der Website
+- `tools/ground_truth_validation.py`: drei neue Fixtures `attrappe` (mailto/javascript im Footer), `einseiter` (Anker auf echte Abschnitte) und `fehllink` (Link auf Kontaktseite)
+
 ## [2026-09-02]
 
 ### Frontend

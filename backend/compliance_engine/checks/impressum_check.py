@@ -12,6 +12,10 @@ import re
 import logging
 import aiohttp
 from compliance_engine.sicherer_abruf import sichere_session
+from compliance_engine.checks.rechtsseiten_links import (
+    ist_seitenlink, attrappen, attrappen_satz, lade_rechtsseite,
+    PROBLEM_KEIN_RECHTSTEXT, PROBLEM_NICHT_ERREICHBAR,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +110,10 @@ def _find_impressum_links(soup: BeautifulSoup) -> List:
     ]
     
     for a_tag in soup.find_all('a', href=True):
+        # mailto:, tel:, javascript: und leere Ziele fuehren zu keiner Seite;
+        # ein so beschrifteter Link ist kein Rechtsseiten-Kandidat.
+        if not ist_seitenlink(a_tag.get('href')):
+            continue
         href = a_tag.get('href', '').lower()
         link_text = a_tag.get_text(strip=True).lower()
         aria_label = (a_tag.get('aria-label') or '').lower()
@@ -123,6 +131,61 @@ def _find_impressum_links(soup: BeautifulSoup) -> List:
     # Beste Kandidaten zuerst — sonst entscheidet die Reihenfolge im
     # Quelltext darueber, welche Seite als Impressum geprueft wird.
     return _nach_guete(all_links)
+
+
+
+def _rechtsseiten_befund(geladen) -> Dict[str, Any]:
+    """Befund fuer einen Impressum-Link, hinter dem kein Impressum steht."""
+    if geladen.problem == PROBLEM_NICHT_ERREICHBAR:
+        return asdict(ImpressumIssue(
+            category='impressum',
+            severity='critical',
+            title='Impressum-Seite nicht erreichbar',
+            description=(
+                f'Der Impressum-Link führt zu {geladen.url}, die Seite antwortet aber '
+                f'mit HTTP {geladen.status}. Ein Impressum muss leicht erkennbar und '
+                'unmittelbar erreichbar sein.'
+            ),
+            risk_euro=3000,
+            recommendation='Stellen Sie sicher, dass die verlinkte Impressumsseite erreichbar ist (HTTP 200).',
+            legal_basis='DDG §5 Abs. 1',
+            auto_fixable=False,
+            is_missing=True,
+        ))
+    if geladen.problem == PROBLEM_KEIN_RECHTSTEXT:
+        return asdict(ImpressumIssue(
+            category='impressum',
+            severity='critical',
+            title='Impressum-Link führt zu keiner Impressumsseite',
+            description=(
+                f'Der Link "Impressum" führt zu {geladen.url}. Dort steht aber kein '
+                'Impressum: es fehlen Betreibername mit Anschrift oder E-Mail-Adresse. '
+                'Für Besucher ist das Impressum damit nicht erreichbar.'
+            ),
+            risk_euro=3000,
+            recommendation=(
+                'Verlinken Sie das Impressum auf eine eigene, direkt erreichbare Seite '
+                'mit allen Pflichtangaben nach § 5 DDG.'
+            ),
+            legal_basis='DDG §5',
+            auto_fixable=False,
+            is_missing=True,
+        ))
+    return asdict(ImpressumIssue(
+        category='impressum',
+        severity='info',
+        title='Inhaltsprüfung des Impressums nicht möglich',
+        description=(
+            f'Der Impressum-Link führt zu {geladen.url}, die Seite ließ sich aber nicht '
+            f'laden ({geladen.fehler or "unbekannter Fehler"}). Die Vollständigkeit nach '
+            '§ 5 DDG ist damit NICHT bestätigt.'
+        ),
+        risk_euro=0,
+        recommendation='Prüfen Sie die Erreichbarkeit des Impressums und wiederholen Sie den Scan.',
+        legal_basis='DDG §5',
+        auto_fixable=False,
+        is_missing=False,
+    ))
 
 
 async def check_impressum_compliance_smart(url: str, html: str = None, session=None) -> List[Dict[str, Any]]:
@@ -240,7 +303,12 @@ async def _check_impressum_url_exists(base_url: str, session=None) -> bool:
         if not result or result[0] != 200:
             continue
         # 2. Inhalt muss wie ein Impressum aussehen (Soft-404-/Catch-all-sicher)
-        if _looks_like_impressum(result[1]):
+        # Eine Catch-all-Domain liefert fuer jeden Pfad dieselbe Seite; die ist
+        # kein Rechtstext, auch wenn 'Impressum' und eine E-Mail darin stehen.
+        if probe and probe[0] == 200 and result[1].strip() == probe[1].strip():
+            continue
+        from ..hybrid_validator import zu_fliesstext
+        if _looks_like_impressum(zu_fliesstext(result[1])):
             logger.info(f"✅ Impressum-URL mit validem Inhalt gefunden: {candidate_url}")
             return True
         logger.info(f"↪️ {candidate_url} liefert 200, aber Inhalt ist kein Impressum — ignoriert")
@@ -368,11 +436,17 @@ async def check_impressum_compliance(url: str, soup: BeautifulSoup, session=None
             logger.info("✅ Impressum per Direkt-URL-Check gefunden — kein Issue")
             impressum_found = True
         else:
+            # Steht "Impressum" im Footer, fuehrt aber zu mailto: oder einem
+            # Skript, soll der Kunde genau das lesen, nicht nur "fehlt".
+            _attrappen = attrappen(soup, text_keywords=(
+                'impressum', 'imprint', 'legal notice', 'anbieterkennzeichnung',
+            ))
             issues.append(asdict(ImpressumIssue(
                 category='impressum',
                 severity='critical',
                 title='Kein Impressum-Link gefunden',
-                description='Es wurde kein Link zum Impressum gefunden. Ein Impressum ist gesetzlich verpflichtend für alle geschäftsmäßigen Telemedien.',
+                description=('Es wurde kein Link zum Impressum gefunden. Ein Impressum ist gesetzlich verpflichtend für alle geschäftsmäßigen Telemedien.'
+                             + attrappen_satz(_attrappen)),
                 risk_euro=3000,
                 recommendation='Fügen Sie einen deutlich sichtbaren Impressum-Link im Footer hinzu.',
                 legal_basis='DDG §5 (Digitale-Dienste-Gesetz)',
@@ -465,143 +539,164 @@ async def check_impressum_compliance(url: str, soup: BeautifulSoup, session=None
             impressum_url = urljoin(url, impressum_href)
             
             if session:
+                geladen = await lade_rechtsseite(url, impressum_href, soup, session,
+                                                 _looks_like_impressum)
+                if not geladen.ok:
+                    # Kein stiller Durchlauf: bis zum 02.10.2026 fing ein
+                    # except jede Stoerung ab und das Impressum galt als
+                    # geprueft, obwohl kein Besucher es erreicht.
+                    issues.append(_rechtsseiten_befund(geladen))
+                else:
+                    impressum_html = geladen.html
                 try:
-                    async with session.get(impressum_url, timeout=10) as response:
-                        if response.status == 200:
-                            impressum_html = await response.text()
-                            
-                            validator = HybridValidator()
-                            analysis = await validator.validate_page(
-                                page_type="impressum",
-                                text_content=impressum_html,
-                                url=impressum_url
-                            )
-                            
-                            # critical: Pflichtfelder jeder Rechtsform.
-                            # warning: rechtsform-/umsatzabhaengige Angaben (USt-IdNr,
-                            # Handelsregister) — nicht jede Firma braucht beide, aber
-                            # ihr Fehlen ist ein haeufiger Abmahnpunkt und wird jetzt
-                            # sichtbar gemacht statt verworfen.
-                            critical_fields = {
-                                "firmenname": (2000, "Firmenname/Name fehlt im Impressum",
-                                               "Die Angabe des vollständigen Firmennamens fehlt im Impressum."),
-                                "adresse": (2000, "Anschrift fehlt im Impressum",
-                                            "Die vollständige Postanschrift fehlt im Impressum."),
-                                "plz_ort": (2000, "PLZ/Ort fehlen im Impressum",
-                                            "Postleitzahl und Ort fehlen in der Anschrift des Impressums."),
-                                "email": (1500, "E-Mail-Adresse fehlt im Impressum",
-                                          "Es fehlt eine E-Mail-Adresse für Kontaktaufnahme."),
-                                "telefon": (1500, "Telefonnummer fehlt im Impressum",
-                                            "Es fehlt eine Telefonnummer für Kontaktaufnahme."),
-                            }
-                            # Beide Angaben sind BEDINGT geschuldet. Bis zum
-                            # 09.09.2026 stand die Bedingung nur im Befundtext
-                            # ("Falls Ihr Unternehmen...", "Für eingetragene
-                            # Gesellschaften...") und der Befund feuerte
-                            # trotzdem bei jedem. Im Bestandsdurchlauf traf das
-                            # 16 von 24 Seiten beim Handelsregister und 13 von
-                            # 24 bei der USt-IdNr — fast durchweg Freiberufler
-                            # und Einzelunternehmer, die beides nicht haben.
-                            _rechtsformen = erkenne_rechtsform(impressum_html)
-                            warning_fields = {
-                                # § 5 Abs. 1 Nr. 6 DDG: anzugeben, SOFERN
-                                # vorhanden. Ob ein Betrieb eine USt-IdNr
-                                # besitzt, ist von aussen nicht feststellbar —
-                                # also ein Hinweis, keine Beanstandung.
-                                "ust_id": (0, "USt-IdNr nicht gefunden (nur Pflicht, falls vorhanden)",
-                                           "Im Impressum steht keine Umsatzsteuer-Identifikationsnummer. "
-                                           "Das ist nur dann ein Mangel, wenn Ihr Betrieb eine besitzt: "
-                                           "dann ist die Angabe nach § 5 Abs. 1 Nr. 6 DDG Pflicht. "
-                                           "Kleinunternehmer und viele Freiberufler haben keine.",
-                                           "info"),
-                            }
-                            if im_handelsregister(_rechtsformen):
-                                warning_fields["handelsregister"] = (
-                                    1000, "Handelsregister-Angabe nicht gefunden",
-                                    "Im Impressum wurde kein Handelsregister-Eintrag (Registergericht + Nummer) "
-                                    "gefunden. Für Ihre erkannte Rechtsform ist die Angabe nach "
-                                    "§ 5 Abs. 1 Nr. 4 DDG Pflicht.",
-                                    "warning")
-                            for field_result in analysis["results"]:
-                                fname = field_result["field"]
-                                if field_result["found"]:
-                                    continue
-                                # Ein Feld, das niemand nachgesehen hat, ist kein
-                                # Mangel. Faellt die KI-Zweitmeinung aus (Budget
-                                # gesperrt, Redis weg, kein Schluessel), traegt das
-                                # Ergebnis nur noch die Vermutung des Musters —
-                                # und genau diese Felder waren dem Muster ja
-                                # unsicher. Am 09.09.2026 im Bestandsdurchlauf
-                                # gemessen: neun von 24 Seiten bekamen dadurch
-                                # "Anschrift fehlt im Impressum", kritisch,
-                                # 2.000 EUR, ohne dass etwas fehlte.
-                                if field_result.get("unverifiziert"):
-                                    continue
-                                if fname in critical_fields:
-                                    risk, title, desc = critical_fields[fname]
-                                    severity = "critical"
-                                elif fname in warning_fields:
-                                    risk, title, desc, severity = warning_fields[fname]
-                                else:
-                                    continue
-                                issues.append(asdict(ImpressumIssue(
-                                    category='impressum',
-                                    severity=severity,
-                                    title=title,
-                                    description=desc,
-                                    risk_euro=risk,
-                                    recommendation=f'Ergänzen Sie die Angabe ({fname}) im Impressum.',
-                                    legal_basis='DDG §5',
-                                    auto_fixable=False,
-                                    is_missing=False
-                                )))
-                            
-                            # Was nicht geprueft werden konnte, gehoert in den Bericht.
-                            #
-                            # Seit dem 09.09.2026 uebergeht die Schleife oben Felder, deren
-                            # KI-Zweitmeinung ausgefallen ist, statt sie als Mangel zu melden.
-                            # Das allein waere nur die andere Haelfte des Fehlers: der Kunde saehe
-                            # eine bessere Note und wuesste nicht, dass ein Teil ungeprueft blieb.
-                            # "Geprueft und nichts gefunden" und "nicht geprueft" duerfen sich
-                            # nicht gleich lesen.
-                            _ungeprueft = [f["field"] for f in analysis["results"] if f.get("unverifiziert")]
-                            if _ungeprueft:
-                                issues.append(asdict(ImpressumIssue(
-                                    category='impressum',
-                                    severity='info',
-                                    title='Impressum: {} Angabe(n) nicht abschliessend geprueft'.format(len(_ungeprueft)),
-                                    description=(
-                                        'Diese Angaben liessen sich maschinell nicht sicher feststellen und '
-                                        'wurden deshalb weder als vorhanden noch als fehlend gewertet: '
-                                        + ', '.join(_ungeprueft) + '. '
-                                        'Bitte pruefen Sie sie von Hand. Ein spaeterer Scan kann hier zu '
-                                        'einem eindeutigen Ergebnis kommen.'
-                                    ),
-                                    risk_euro=0,
-                                    recommendation='Sehen Sie die genannten Angaben selbst nach.',
-                                    legal_basis='DDG §5',
-                                    auto_fixable=False,
-                                    is_missing=False,
-                                )))
-
-                            if analysis["quality"] in ["poor", "insufficient"]:
-                                issues.append(asdict(ImpressumIssue(
-                                    category='impressum',
-                                    severity='warning',
-                                    title='Impressum unvollständig',
-                                    description=f'Das Impressum wurde gefunden, ist aber unvollständig (Qualität: {analysis["quality"]}). Mehrere Pflichtangaben fehlen oder sind unzureichend.',
-                                    risk_euro=3000,
-                                    recommendation='Vervollständigen Sie Ihr Impressum mit allen Pflichtangaben nach DDG §5.',
-                                    legal_basis='DDG §5',
-                                    auto_fixable=True,
-                                    is_missing=False
-                                )))
-                            
-                            logger.info(f"✅ Deep-Analyse abgeschlossen: {analysis['quality']} ({len(issues)} Issues)")
+                    if geladen.ok:
+                        validator = HybridValidator()
+                        analysis = await validator.validate_page(
+                            page_type="impressum",
+                            text_content=impressum_html,
+                            url=impressum_url
+                        )
                         
+                        # critical: Pflichtfelder jeder Rechtsform.
+                        # warning: rechtsform-/umsatzabhaengige Angaben (USt-IdNr,
+                        # Handelsregister) — nicht jede Firma braucht beide, aber
+                        # ihr Fehlen ist ein haeufiger Abmahnpunkt und wird jetzt
+                        # sichtbar gemacht statt verworfen.
+                        critical_fields = {
+                            "firmenname": (2000, "Firmenname/Name fehlt im Impressum",
+                                           "Die Angabe des vollständigen Firmennamens fehlt im Impressum."),
+                            "adresse": (2000, "Anschrift fehlt im Impressum",
+                                        "Die vollständige Postanschrift fehlt im Impressum."),
+                            "plz_ort": (2000, "PLZ/Ort fehlen im Impressum",
+                                        "Postleitzahl und Ort fehlen in der Anschrift des Impressums."),
+                            "email": (1500, "E-Mail-Adresse fehlt im Impressum",
+                                      "Es fehlt eine E-Mail-Adresse für Kontaktaufnahme."),
+                            "telefon": (1500, "Telefonnummer fehlt im Impressum",
+                                        "Es fehlt eine Telefonnummer für Kontaktaufnahme."),
+                        }
+                        # Beide Angaben sind BEDINGT geschuldet. Bis zum
+                        # 09.09.2026 stand die Bedingung nur im Befundtext
+                        # ("Falls Ihr Unternehmen...", "Für eingetragene
+                        # Gesellschaften...") und der Befund feuerte
+                        # trotzdem bei jedem. Im Bestandsdurchlauf traf das
+                        # 16 von 24 Seiten beim Handelsregister und 13 von
+                        # 24 bei der USt-IdNr — fast durchweg Freiberufler
+                        # und Einzelunternehmer, die beides nicht haben.
+                        _rechtsformen = erkenne_rechtsform(impressum_html)
+                        warning_fields = {
+                            # § 5 Abs. 1 Nr. 6 DDG: anzugeben, SOFERN
+                            # vorhanden. Ob ein Betrieb eine USt-IdNr
+                            # besitzt, ist von aussen nicht feststellbar —
+                            # also ein Hinweis, keine Beanstandung.
+                            "ust_id": (0, "USt-IdNr nicht gefunden (nur Pflicht, falls vorhanden)",
+                                       "Im Impressum steht keine Umsatzsteuer-Identifikationsnummer. "
+                                       "Das ist nur dann ein Mangel, wenn Ihr Betrieb eine besitzt: "
+                                       "dann ist die Angabe nach § 5 Abs. 1 Nr. 6 DDG Pflicht. "
+                                       "Kleinunternehmer und viele Freiberufler haben keine.",
+                                       "info"),
+                        }
+                        if im_handelsregister(_rechtsformen):
+                            warning_fields["handelsregister"] = (
+                                1000, "Handelsregister-Angabe nicht gefunden",
+                                "Im Impressum wurde kein Handelsregister-Eintrag (Registergericht + Nummer) "
+                                "gefunden. Für Ihre erkannte Rechtsform ist die Angabe nach "
+                                "§ 5 Abs. 1 Nr. 4 DDG Pflicht.",
+                                "warning")
+                        for field_result in analysis["results"]:
+                            fname = field_result["field"]
+                            if field_result["found"]:
+                                continue
+                            # Ein Feld, das niemand nachgesehen hat, ist kein
+                            # Mangel. Faellt die KI-Zweitmeinung aus (Budget
+                            # gesperrt, Redis weg, kein Schluessel), traegt das
+                            # Ergebnis nur noch die Vermutung des Musters —
+                            # und genau diese Felder waren dem Muster ja
+                            # unsicher. Am 09.09.2026 im Bestandsdurchlauf
+                            # gemessen: neun von 24 Seiten bekamen dadurch
+                            # "Anschrift fehlt im Impressum", kritisch,
+                            # 2.000 EUR, ohne dass etwas fehlte.
+                            if field_result.get("unverifiziert"):
+                                continue
+                            if fname in critical_fields:
+                                risk, title, desc = critical_fields[fname]
+                                severity = "critical"
+                            elif fname in warning_fields:
+                                risk, title, desc, severity = warning_fields[fname]
+                            else:
+                                continue
+                            issues.append(asdict(ImpressumIssue(
+                                category='impressum',
+                                severity=severity,
+                                title=title,
+                                description=desc,
+                                risk_euro=risk,
+                                recommendation=f'Ergänzen Sie die Angabe ({fname}) im Impressum.',
+                                legal_basis='DDG §5',
+                                auto_fixable=False,
+                                is_missing=False
+                            )))
+                        
+                        # Was nicht geprueft werden konnte, gehoert in den Bericht.
+                        #
+                        # Seit dem 09.09.2026 uebergeht die Schleife oben Felder, deren
+                        # KI-Zweitmeinung ausgefallen ist, statt sie als Mangel zu melden.
+                        # Das allein waere nur die andere Haelfte des Fehlers: der Kunde saehe
+                        # eine bessere Note und wuesste nicht, dass ein Teil ungeprueft blieb.
+                        # "Geprueft und nichts gefunden" und "nicht geprueft" duerfen sich
+                        # nicht gleich lesen.
+                        _ungeprueft = [f["field"] for f in analysis["results"] if f.get("unverifiziert")]
+                        if _ungeprueft:
+                            issues.append(asdict(ImpressumIssue(
+                                category='impressum',
+                                severity='info',
+                                title='Impressum: {} Angabe(n) nicht abschliessend geprueft'.format(len(_ungeprueft)),
+                                description=(
+                                    'Diese Angaben liessen sich maschinell nicht sicher feststellen und '
+                                    'wurden deshalb weder als vorhanden noch als fehlend gewertet: '
+                                    + ', '.join(_ungeprueft) + '. '
+                                    'Bitte pruefen Sie sie von Hand. Ein spaeterer Scan kann hier zu '
+                                    'einem eindeutigen Ergebnis kommen.'
+                                ),
+                                risk_euro=0,
+                                recommendation='Sehen Sie die genannten Angaben selbst nach.',
+                                legal_basis='DDG §5',
+                                auto_fixable=False,
+                                is_missing=False,
+                            )))
+
+                        if analysis["quality"] in ["poor", "insufficient"]:
+                            issues.append(asdict(ImpressumIssue(
+                                category='impressum',
+                                severity='warning',
+                                title='Impressum unvollständig',
+                                description=f'Das Impressum wurde gefunden, ist aber unvollständig (Qualität: {analysis["quality"]}). Mehrere Pflichtangaben fehlen oder sind unzureichend.',
+                                risk_euro=3000,
+                                recommendation='Vervollständigen Sie Ihr Impressum mit allen Pflichtangaben nach DDG §5.',
+                                legal_basis='DDG §5',
+                                auto_fixable=True,
+                                is_missing=False
+                            )))
+                        
+                        logger.info(f"✅ Deep-Analyse abgeschlossen: {analysis['quality']} ({len(issues)} Issues)")
+
                 except Exception as e:
                     logger.warning(f"⚠️ Deep-Analyse fehlgeschlagen: {e}")
-        
+                    issues.append(asdict(ImpressumIssue(
+                        category='impressum',
+                        severity='info',
+                        title='Inhaltsprüfung des Impressums nicht möglich',
+                        description=(
+                            'Das Impressum wurde gefunden, konnte aber nicht inhaltlich '
+                            'geprüft werden (Analyse fehlgeschlagen). Die Vollständigkeit '
+                            'nach § 5 DDG ist damit NICHT bestätigt.'
+                        ),
+                        risk_euro=0,
+                        recommendation='Wiederholen Sie den Scan; bei wiederholtem Auftreten Support kontaktieren.',
+                        legal_basis='DDG §5',
+                        auto_fixable=False,
+                        is_missing=False,
+                    )))
+
         except ImportError:
             logger.warning("⚠️ HybridValidator nicht verfügbar - überspringe Deep-Analyse")
 
