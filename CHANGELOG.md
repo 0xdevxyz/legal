@@ -7,6 +7,21 @@
 
 ---
 
+## [2026-10-08]
+
+### Backend: Rechtsänderungs-Benachrichtigungen bekommen ihr Schema
+- **Befund:** `legal_notification_service.py` benutzte in `legal_change_notifications` sechs Spalten (legal_news_id, severity, confirmation_token, action_required, action_deadline, confirmed_at), die es live nie gab; die Tabelle hat das Schema vom November 2025 und 0 Zeilen. `/confirm/<token>` lief in `column "confirmation_token" does not exist`, das Dashboard-Menü zählte immer 0. Dahinter ein zweiter Fehler: die Nutzerabfrage las `u.firebase_uid`, die Spalte hat `users` nicht
+- Migration `0037b_rechtsaenderung_quittung`: ergänzt die sechs Spalten (NULL-fähig oder mit Vorbelegung), Unique-Index auf den Token, Indizes auf `legal_news_id` und `(user_id, status)`. Bestehende Spalten und Fremdschlüssel bleiben unberührt. Geprüft gegen Postgres 16 mit Baseline: upgrade, downgrade, upgrade
+- `u.firebase_uid` aus der Abfrage entfernt; neue Benachrichtigungen setzen `sent_at` ausdrücklich auf NULL (live Vorbelegung `now()`)
+- `POST /api/legal-notifications/process-new` nur noch mit `require_admin`; vorher genügte die Anmeldung, und mit dem Schema verschickt der Aufruf Mails an alle bestätigten Konten
+- `/stats`: `critical_pending` und `action_required` wieder aus den Spalten statt `0::bigint`. Dashboard-Menü zählt `pending + sent` statt `pending + critical_pending`
+- `send_daily_digest` als „zählt nur, verschickt nichts“ dokumentiert, Ergebnis trägt `versand: "nicht_umgesetzt"`; kein Digest gebaut
+- Wächter `backend/tests/test_rechtsaenderung_schema.py`: Spalten aus Dienst und Routen gegen Baseline plus Migrationen, mit Gegenproben
+
+### Offen
+- Kein Cron ruft `legal_news_cronjob.py`; eingeschaltet würden heute 5 Stichwort-„critical“-Meldungen als `[DRINGEND]` an 4 Konten gehen, zwei davon ohne Bezug zu Websites. Entscheidung über Einstufung und Einschalten steht aus
+- Scheitert eine Mail, wird sie nie erneut versucht
+
 ## [2026-10-07]
 
 ### Backend: Kanalmessung für die Entscheidungsregel nach Woche 45
