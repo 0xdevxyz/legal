@@ -11,9 +11,8 @@ import PlatzZaehler from './PlatzZaehler';
 // unter "/" als Startseite und unter "/early-access" als Anzeigenziel. Wuerde
 // beides dieselbe Kennung schreiben, liesse sich hinterher nicht mehr trennen,
 // was die bezahlten Anzeigen gebracht haben und was ohnehin gekommen waere.
-const PLAETZE = 100;
-const PREIS_EARLY = '49 €';
-const PREIS_REGULAER = '89 €';
+// Angebotswerte an einer Stelle, auch die Startseite liest sie.
+import { PLAETZE, PREIS_EARLY, PREIS_REGULAER } from './angebot';
 
 const SAEULEN = [
   {
@@ -45,7 +44,7 @@ const FAQ = [
   },
   {
     q: 'Wann geht es los?',
-    a: 'Ein festes Datum steht noch nicht. Sobald die Plätze freigeschaltet werden, bekommst du eine Mail – vor allen anderen. Bis dahin entsteht dir keinerlei Verpflichtung: der Eintrag ist keine Bestellung.',
+    a: 'Complyo ist buchbar. Mit bestätigtem Platz buchst du Pro mit derselben E-Mail-Adresse, der Nachlass wird im Checkout automatisch abgezogen. Der Eintrag selbst ist keine Bestellung und verpflichtet zu nichts.',
   },
   {
     q: 'Ist mein Platz sicher?',

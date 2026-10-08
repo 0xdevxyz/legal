@@ -33,3 +33,11 @@ def dashboard_url() -> str:
 
 def startseite_url() -> str:
     return os.getenv("FRONTEND_URL", "https://complyo.de").rstrip("/")
+
+
+def api_url() -> str:
+    """Links, die das Backend selbst beantwortet (Bestaetigen, Verwerfen).
+
+    complyo.de gibt /api/ an die Landing weiter und endet dort in 404.
+    """
+    return os.getenv("PUBLIC_API_BASE", "https://api.complyo.de").rstrip("/")

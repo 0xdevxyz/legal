@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, Cookie, FileText, Eye, AlertTriangle, CheckCircle, Search, TrendingUp, Euro } from 'lucide-react';
 import { complianceApi } from '@/lib/api';
+import { herkunftAusSuche, mitHerkunft } from '@/lib/herkunft';
 
 
 /**
@@ -662,7 +663,10 @@ export default function WebsiteScanner() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <a
-                  href={`${process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de'}/register?plan=free`}
+                  href={mitHerkunft(
+                    `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de'}/register?plan=free`,
+                    herkunftAusSuche(typeof window === 'undefined' ? '' : window.location.search),
+                  )}
                   className="px-8 py-4 bg-white text-akzent-800 font-semibold rounded-xl hover:shadow-2xl transition-all transform hover:scale-105 inline-flex items-center justify-center gap-2"
                 >
                   <TrendingUp className="w-5 h-5" />

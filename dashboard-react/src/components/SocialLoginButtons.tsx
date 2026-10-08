@@ -6,6 +6,7 @@ import { firebaseAuth, isFirebaseEnabled } from '@/lib/firebase';
 import { getApiBaseUrl } from '@/lib/api-utils';
 import { setAccessToken } from '@/lib/auth-refresh';
 import { apiClient } from '@/lib/api-client';
+import { gemerkteHerkunft } from '@/lib/herkunft';
 
 const API_BASE = getApiBaseUrl();
 
@@ -61,6 +62,7 @@ export default function SocialLoginButtons({ plan = 'pro', modules = [], mode = 
           plan,
           modules,
           billing_period: 'monthly',
+          herkunft: gemerkteHerkunft(),
           success_url: `${window.location.origin}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${window.location.origin}/register`,
         });

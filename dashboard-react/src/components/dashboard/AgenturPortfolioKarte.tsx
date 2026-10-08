@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Layers, ArrowRight, AlertCircle } from 'lucide-react';
 import { getTrackedWebsites, type TrackedWebsite } from '@/lib/api';
@@ -38,25 +39,22 @@ function anzeigename(w: TrackedWebsite): string {
 export const AgenturPortfolioKarte: React.FC = () => {
   const router = useRouter();
   const { user } = useAuth();
-  const [websites, setWebsites] = useState<TrackedWebsite[] | null>(null);
-  const [fehler, setFehler] = useState(false);
-
   const istAgentur = user?.plan_type === 'agency' || user?.plan_type === 'expert';
 
-  useEffect(() => {
-    if (!istAgentur) return;
-    let abgebrochen = false;
-    getTrackedWebsites()
-      .then((liste) => {
-        if (!abgebrochen) setWebsites(liste);
-      })
-      .catch(() => {
-        if (!abgebrochen) setFehler(true);
-      });
-    return () => {
-      abgebrochen = true;
-    };
-  }, [istAgentur]);
+  // Als Abfrage unter dem Schluessel der Kennzahlen, nicht als einmaliges Laden
+  // beim Oeffnen: jeder fertige Scan macht `dashboard-metrics` ungueltig (Startseite
+  // und Rescan tun das bereits) und frischt damit auch diese Karte auf. Vorher
+  // blieb die Liste auf dem Stand vor dem Scan stehen, und eine eben gescannte
+  // Seite zeigte weiter ihren Platzhalter 0 (rru-chemnitz.de am 06.10.2026: in der
+  // Datenbank 55, in der Karte 0). `frisch`, weil getTrackedWebsites sonst eine
+  // gebuendelte, bis zu 1,5 s alte Antwort liefert.
+  const { data, isError: fehler } = useQuery<TrackedWebsite[]>({
+    queryKey: ['dashboard-metrics', 'portfolio'],
+    queryFn: () => getTrackedWebsites({ frisch: true }),
+    enabled: istAgentur,
+    staleTime: 0,
+  });
+  const websites = data ?? null;
 
   const { geprueft, ungeprueft, schnitt } = useMemo(() => {
     const alle = websites ?? [];

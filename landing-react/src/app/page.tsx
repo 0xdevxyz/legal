@@ -1,34 +1,38 @@
 import type { Metadata } from 'next';
-import EarlyAccessKampagne from '@/components/kampagne/EarlyAccessKampagne';
+import EarlyAccessLanding from '@/components/saas-landing/EarlyAccessLanding';
+import WartelisteAbschnitt from '@/components/kampagne/WartelisteAbschnitt';
 
 /**
- * Startseite.
+ * Startseite: Hero, Website-Scanner, Preistabelle, darunter die Warteliste.
  *
- * Seit 02.09.2026 steht hier die Early-Access-Seite statt der Produktseite mit
- * Preistabelle. Grund: Stripe laeuft auf Testschluesseln (sk_test_/pk_test_),
- * jeder Klick auf "Pro buchen" landete in einem Checkout, in dem echte Karten
- * abgelehnt werden. Eine Warteliste ist die ehrliche Ansage, solange nicht
- * kassiert werden kann.
+ * Vom 02.09. bis zum Launch stand hier die Early-Access-Seite, weil Stripe auf
+ * Testschluesseln lief und jeder Kaufversuch an einer echten Karte scheiterte.
+ * Stripe ist seit 14.09.2026 live, elf Kaufwege legen Live-Sitzungen an, der
+ * Webhook-Pfad ist seit 15.09. geprueft. Damit gehoert der Verkauf zurueck
+ * auf "/".
  *
- * Die alte Startseite ist NICHT geloescht: sie liegt unveraendert in
- * components/saas-landing/EarlyAccessLanding.tsx und ist unter /produkt
- * erreichbar. Zurueckdrehen heisst, hier wieder EarlyAccessLanding zu
- * rendern und die Metadaten aus /produkt hierher zu holen.
+ * Was beim Zurueckdrehen mitgezogen wurde (test_startseite_indexierung.py
+ * haelt es fest):
+ * - robots index:true und canonical "/" bleiben HIER. /produkt behaelt
+ *   noindex und zeigt kanonisch auf sich selbst; zwei indexierbare Seiten mit
+ *   demselben Inhalt wuerden um dieselben Begriffe konkurrieren.
+ * - Die Kampagnenkennung "startseite" bleibt, jetzt am Wartelisten-Abschnitt.
+ *   /early-access traegt weiter "ea100-bfsg", sonst misst die Anzeige sich
+ *   selbst.
  *
- * Anders als /early-access ist diese Seite indexierbar. Ein noindex auf "/"
- * wuerde complyo.de aus der Suche nehmen — der Preisvorteil steht damit
- * oeffentlich, das ist die bewusste Folge der Entscheidung.
+ * Die Kampagnenseite ist nicht geloescht: components/kampagne/
+ * EarlyAccessKampagne.tsx liegt unveraendert unter /early-access.
  */
 export const metadata: Metadata = {
   title: 'Complyo – Website-Compliance prüfen, reparieren, nachweisen',
   description:
-    'BFSG, Cookies, Datenschutz und Rechtstexte in einem Scan. Befunde werden behoben und im Browser nachgemessen. Jetzt für den Early Access vormerken lassen.',
+    'BFSG, Cookies, Datenschutz und Rechtstexte in einem Scan. Befunde werden im Werkzeug behoben und im Browser nachgemessen. Scan kostenlos, Pro ab 89 € im Monat.',
   robots: { index: true, follow: true },
   alternates: { canonical: '/' },
   openGraph: {
     title: 'Complyo – Website-Compliance prüfen, reparieren, nachweisen',
     description:
-      'Ein Scan für Barrierefreiheit, Cookies, Datenschutz und Rechtstexte. Befunde werden behoben und nachgemessen. Early Access für die ersten 100.',
+      'Ein Scan für Barrierefreiheit, Cookies, Datenschutz und Rechtstexte. Befunde werden behoben und nachgemessen, mit Prüfprotokoll.',
     url: 'https://complyo.de',
     type: 'website',
   },
@@ -37,6 +41,10 @@ export const metadata: Metadata = {
 export default function Page() {
   // Eigene Kennung: organische Besucher der Startseite duerfen sich in der
   // Auswertung nicht mit dem bezahlten Anzeigen-Traffic von /early-access
-  // vermischen, sonst misst die Kampagne sich selbst.
-  return <EarlyAccessKampagne kampagne="startseite" />;
+  // vermischen.
+  return (
+    <EarlyAccessLanding>
+      <WartelisteAbschnitt kampagne="startseite" />
+    </EarlyAccessLanding>
+  );
 }
