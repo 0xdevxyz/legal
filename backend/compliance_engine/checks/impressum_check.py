@@ -12,6 +12,7 @@ import re
 import logging
 import aiohttp
 from compliance_engine.sicherer_abruf import sichere_session
+from compliance_engine.rechtsgrundlagen import ANBIETERKENNZEICHNUNG, grundlage
 from compliance_engine.checks.rechtsseiten_links import (
     ist_seitenlink, attrappen, attrappen_satz, lade_rechtsseite,
     PROBLEM_KEIN_RECHTSTEXT, PROBLEM_NICHT_ERREICHBAR,
@@ -148,7 +149,7 @@ def _rechtsseiten_befund(geladen) -> Dict[str, Any]:
             ),
             risk_euro=3000,
             recommendation='Stellen Sie sicher, dass die verlinkte Impressumsseite erreichbar ist (HTTP 200).',
-            legal_basis='DDG §5 Abs. 1',
+            legal_basis=grundlage(ANBIETERKENNZEICHNUNG, detail='Abs. 1'),
             auto_fixable=False,
             is_missing=True,
         ))
@@ -165,9 +166,9 @@ def _rechtsseiten_befund(geladen) -> Dict[str, Any]:
             risk_euro=3000,
             recommendation=(
                 'Verlinken Sie das Impressum auf eine eigene, direkt erreichbare Seite '
-                'mit allen Pflichtangaben nach § 5 DDG.'
+                f'mit allen Pflichtangaben nach {grundlage(ANBIETERKENNZEICHNUNG)}.'
             ),
-            legal_basis='DDG §5',
+            legal_basis=grundlage(ANBIETERKENNZEICHNUNG),
             auto_fixable=False,
             is_missing=True,
         ))
@@ -178,11 +179,11 @@ def _rechtsseiten_befund(geladen) -> Dict[str, Any]:
         description=(
             f'Der Impressum-Link führt zu {geladen.url}, die Seite ließ sich aber nicht '
             f'laden ({geladen.fehler or "unbekannter Fehler"}). Die Vollständigkeit nach '
-            '§ 5 DDG ist damit NICHT bestätigt.'
+            f'{grundlage(ANBIETERKENNZEICHNUNG)} ist damit NICHT bestätigt.'
         ),
         risk_euro=0,
         recommendation='Prüfen Sie die Erreichbarkeit des Impressums und wiederholen Sie den Scan.',
-        legal_basis='DDG §5',
+        legal_basis=grundlage(ANBIETERKENNZEICHNUNG),
         auto_fixable=False,
         is_missing=False,
     ))
@@ -688,11 +689,11 @@ async def check_impressum_compliance(url: str, soup: BeautifulSoup, session=None
                         description=(
                             'Das Impressum wurde gefunden, konnte aber nicht inhaltlich '
                             'geprüft werden (Analyse fehlgeschlagen). Die Vollständigkeit '
-                            'nach § 5 DDG ist damit NICHT bestätigt.'
+                            f'nach {grundlage(ANBIETERKENNZEICHNUNG)} ist damit NICHT bestätigt.'
                         ),
                         risk_euro=0,
                         recommendation='Wiederholen Sie den Scan; bei wiederholtem Auftreten Support kontaktieren.',
-                        legal_basis='DDG §5',
+                        legal_basis=grundlage(ANBIETERKENNZEICHNUNG),
                         auto_fixable=False,
                         is_missing=False,
                     )))
