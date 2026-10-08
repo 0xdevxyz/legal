@@ -126,3 +126,75 @@ def farbvorschlag(brand_colors: Optional[Dict[str, Any]]) -> Dict[str, Any]:
             })
 
     return {"farben": farben, "quelle": "website", "angepasst": angepasst}
+
+
+# ---------------------------------------------------------------------------
+# Barrierefreiheits-Widget: Token aus der Primaerfarbe des Banners
+# ---------------------------------------------------------------------------
+
+def _dunkler(farbe: str, faktor: float) -> str:
+    r, g, b = _hex_zu_rgb(farbe)
+    h, l, s = colorsys.rgb_to_hls(r / 255.0, g / 255.0, b / 255.0)
+    rr, gg, bb = colorsys.hls_to_rgb(h, l * faktor, s)
+    return _rgb_zu_hex(rr * 255, gg * 255, bb * 255)
+
+
+def _mit_weiss_mischen(farbe: str, anteil_weiss: float) -> str:
+    r, g, b = _hex_zu_rgb(farbe)
+    return _rgb_zu_hex(
+        r + (255 - r) * anteil_weiss,
+        g + (255 - g) * anteil_weiss,
+        b + (255 - b) * anteil_weiss,
+    )
+
+
+def widget_farbtoken(primary: Optional[str]) -> Optional[Dict[str, Any]]:
+    """
+    Leitet die Farbtoken des Barrierefreiheits-Widgets aus der Primaerfarbe des
+    Cookie-Banners ab, mit denselben zwei Rollen wie im Widget-CSS
+    (accessibility-v6.js): Schriftrolle auf weissem Panel und Flaechenrolle
+    fuer den Knopf.
+
+    Regeln, jede messbar:
+    - Schriftrolle (accent): die Primaerfarbe, bei Bedarf im selben Ton
+      abgedunkelt, bis 4,5:1 gegen Weiss stehen.
+    - Flaechenrolle (accent_solid): die reine Primaerfarbe, wenn darauf weisse
+      ODER dunkle Schrift 4,5:1 erreicht; die Schriftfarbe wird entsprechend
+      gewaehlt. Erreicht keine von beiden den Wert (mittlere Graustufen),
+      faellt der Knopf auf die dunkle Stufe mit weisser Schrift zurueck.
+    - Hover eine Stufe dunkler, Tint eine helle Mischung mit Weiss.
+
+    None, wenn keine gueltige Hex-Farbe uebergeben wurde: dann bleibt das
+    Widget im complyo-Standard.
+    """
+    if not primary:
+        return None
+    try:
+        _hex_zu_rgb(primary)
+    except ValueError:
+        return None
+    p = primary.strip().lower()
+    if len(p) == 4:
+        p = "#" + "".join(c * 2 for c in p[1:])
+
+    accent = abdunkeln_bis_lesbar(p, "#ffffff")
+    if kontrast(p, "#ffffff") >= MINDESTKONTRAST:
+        solid, on_solid = p, "#ffffff"
+    elif kontrast(p, "#111827") >= MINDESTKONTRAST:
+        solid, on_solid = p, "#111827"
+    else:
+        solid, on_solid = accent, "#ffffff"
+
+    return {
+        "quelle": "banner",
+        "primary_color": p,
+        "accent": accent,
+        "accent_hover": _dunkler(accent, 0.8),
+        "accent_tint": _mit_weiss_mischen(accent, 0.9),
+        "accent_border": accent,
+        "accent_solid": solid,
+        "accent_solid_hover": _dunkler(solid, 0.85),
+        "on_accent_solid": on_solid,
+        "kontrast_knopf": round(kontrast(solid, on_solid), 2),
+        "kontrast_schrift": round(kontrast(accent, "#ffffff"), 2),
+    }

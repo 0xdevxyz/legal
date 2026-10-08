@@ -419,6 +419,16 @@ async def get_widget_config(site_id: str, request: Request):
                     "accentColor": row["accent_color"] or "#8b5cf6",
                     "language": row.get("language") or "de",
                 })
+                # Das Barrierefreiheits-Widget folgt der Primaerfarbe des
+                # Banners (die seit dem ersten Scan aus der Kundenseite kommt).
+                # Die Token kommen fertig und lesbar gemacht aus
+                # compliance_engine.markenfarben; ohne gesetzte Farbe bleibt
+                # das Widget im complyo-Standard.
+                if row["primary_color"]:
+                    from compliance_engine.markenfarben import widget_farbtoken
+                    token = widget_farbtoken(row["primary_color"])
+                    if token:
+                        default_config["accessibility"]["farben"] = token
         except Exception as e:
             _logger.warning(f"[Widget Config] Could not load config for {site_id}: {e}")
 

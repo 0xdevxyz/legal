@@ -315,6 +315,9 @@ const CookieBannerDesigner: React.FC<CookieBannerDesignerProps> = ({
                   />
                 </div>
               ))}
+              <p className="text-xs text-gray-500 dark:text-gray-500">
+                Die Primärfarbe trägt auch der Knopf des Barrierefreiheits-Widgets. Zu helle Töne werden dort für lesbare Schrift automatisch abgedunkelt (mindestens 4,5:1).
+              </p>
             </div>
           </CardContent>
         </Card>
