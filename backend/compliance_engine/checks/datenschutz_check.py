@@ -19,6 +19,7 @@ from compliance_engine.checks.rechtsseiten_links import (
 )
 from compliance_engine.checks.rechtsseiten_text import (
     fremder_host_ohne_klartext, finde_eingebetteten_text, eingebettete_seite,
+    ist_duenne_erklaerung, inhaltstext, seiten_ueberschriften,
 )
 
 logger = logging.getLogger(__name__)
@@ -241,11 +242,41 @@ async def check_datenschutz_compliance_smart(url: str, html: str = None, session
         return await check_datenschutz_compliance(url, soup, session)
 
 
+# Die neun Merkmale der Inhaltsschranke: Anzeigename und Muster. Die Schranke
+# verlangt mindestens zwei; der Befund "Erklaerung knapp" nennt, welche davon
+# im Text vorkommen und welche nicht.
+#
+# 07.10.2026: "personenbezogene daten" war als fester Text eingetragen und traf
+# nur die Grundform. Im Fliesstext steht fast immer eine gebeugte Form
+# ("Verarbeitung personenbezogener Daten", "Ihre personenbezogenen Daten"). Das
+# Muster `personenbezogen\w*\s+daten` trifft alle. Ohne diese Korrektur lag
+# eine Erklaerung auf Standardvorlage (Ingenieurbuero) bei null von neun Merkmalen.
+_DS_MERKMALE = (
+    ('Verantwortlicher', r'verantwortlich'),
+    ('personenbezogene Daten', r'personenbezogen\w*\s+daten'),
+    ('Rechtsgrundlage', r'rechtsgrundlage'),
+    ('Art. 6 DSGVO', r'art\. 6'),
+    ('Betroffenenrechte', r'betroffenenrechte'),
+    ('Auskunftsrecht', r'auskunftsrecht'),
+    ('Speicherdauer', r'speicherdauer'),
+    ('Verarbeitung', r'verarbeitung'),
+    ('Aufsichtsbehörde', r'aufsichtsbehörde'),
+)
+
+
+def _ds_merkmale(text: str) -> "tuple[List[str], List[str]]":
+    """(vorhandene, fehlende) Merkmale aus `_DS_MERKMALE` im Text."""
+    low = (text or '').lower()
+    da = [name for name, rx in _DS_MERKMALE if re.search(rx, low)]
+    fehlt = [name for name, _ in _DS_MERKMALE if name not in da]
+    return da, fehlt
+
+
 def _looks_like_datenschutz(text: str) -> bool:
     """
     Inhalts-Heuristik gegen Soft-404 / Catch-all: Sieht der Seitentext wirklich
     wie eine Datenschutzerklärung aus? Erfordert einen DSGVO-Schlüsselbegriff UND
-    mindestens ein typisches inhaltliches Pflichtmerkmal.
+    mindestens zwei der neun Merkmale aus `_DS_MERKMALE`.
     """
     if not text:
         return False
@@ -255,12 +286,47 @@ def _looks_like_datenschutz(text: str) -> bool:
     ))
     if not keyword:
         return False
-    markers = (
-        'verantwortlich', 'personenbezogene daten', 'rechtsgrundlage',
-        'art. 6', 'betroffenenrechte', 'auskunftsrecht', 'speicherdauer',
-        'verarbeitung', 'aufsichtsbehörde',
-    )
-    return sum(1 for m in markers if m in low) >= 2
+    return len(_ds_merkmale(text)[0]) >= 2
+
+
+def _duenn_aus_wie(html: str) -> bool:
+    """Knappe Erklaerung: Ueberschrift der Rechtsseite und genug Text."""
+    return ist_duenne_erklaerung(html, 'datenschutz')
+
+
+def _duenn_befund(geladen) -> Dict[str, Any]:
+    """Hinweis fuer eine Erklaerung, die die Schranke nicht besteht, aber eine ist.
+
+    Ein Hinweis, keine Beanstandung: gemessen ist nur, welche Stichworte im
+    Text vorkommen. Ob die Angaben nach Art. 13/14 DSGVO inhaltlich vollstaendig
+    sind, entscheidet diese Stichwortsuche nicht.
+    """
+    text = inhaltstext(geladen.html)
+    da, fehlt = _ds_merkmale(text)
+    soup = BeautifulSoup(geladen.html, 'html.parser')
+    kopf = seiten_ueberschriften(soup)
+    return asdict(DatenschutzIssue(
+        category='datenschutz',
+        severity='info',
+        title='Datenschutzerklärung gefunden, aber sehr knapp',
+        description=(
+            f'Unter {geladen.url} steht eine Seite mit der Überschrift "{(kopf[0] if kopf else "Datenschutzerklärung")[:60]}" '
+            f'({len(text)} Zeichen Text). Eine Stichwortsuche findet darin {len(da)} von '
+            f'{len(_DS_MERKMALE)} typischen Merkmalen '
+            f'({", ".join(da) if da else "keines"}); nicht gefunden wurden: '
+            f'{", ".join(fehlt)}. Das ist ein Hinweis auf eine Standardvorlage oder eine '
+            'sehr kurze Erklärung, keine Feststellung eines Mangels.'
+        ),
+        risk_euro=0,
+        recommendation=(
+            'Prüfen Sie von Hand, ob die Erklärung Verantwortlichen, Zwecke, '
+            'Rechtsgrundlagen, Speicherdauer, Betroffenenrechte und das Beschwerderecht '
+            'bei einer Aufsichtsbehörde nennt (Art. 13/14 DSGVO).'
+        ),
+        legal_basis='DSGVO Art. 13/14',
+        auto_fixable=False,
+        is_missing=False,
+    ))
 
 
 async def _fetch_candidate_text(candidate_url: str, session, ssl_context) -> "tuple[int, str] | None":
@@ -280,47 +346,34 @@ async def _fetch_candidate_text(candidate_url: str, session, ssl_context) -> "tu
 
 async def _check_datenschutz_url_exists(base_url: str, session=None) -> bool:
     """
-    Prüft direkt bekannte Datenschutz-Pfade per HTTP-Request.
-    Fallback für clientseitig gerenderte Seiten (Next.js, React SPA).
+    Sucht die Datenschutzerklärung ohne Link: Standardpfade und Sitemap,
+    parallel (siehe rechtsseiten_wege). Fallback für clientseitig gerenderte
+    Seiten (Next.js, React SPA) und Menüs, die die Startseite nicht verlinkt.
 
     ⚠️ Soft-404-Guard (v4.0): HTTP 200 allein ist KEIN Nachweis. Catch-all-Probe
     + Inhaltsprüfung verhindern, dass Parking-/Catch-all-Seiten fälschlich als
     "Datenschutz vorhanden" zählen.
     """
-    from urllib.parse import urlparse
     import ssl
     import certifi
 
-    parsed = urlparse(base_url)
-    base = f"{parsed.scheme}://{parsed.netloc}"
-
     ssl_context = ssl.create_default_context(cafile=certifi.where())
 
-    probe = await _fetch_candidate_text(base + '/__complyo_probe_404__', session, ssl_context)
-    is_catch_all = bool(probe and probe[0] == 200 and len(probe[1].strip()) > 200)
-    if is_catch_all:
-        logger.info("⚠️ Catch-all-Domain erkannt — prüfe Datenschutz-Inhalt strikt")
+    from ..hybrid_validator import zu_fliesstext
+    from .rechtsseiten_wege import finde_rechtsseite
 
-    candidate_paths = [
-        '/datenschutz', '/datenschutzerklaerung', '/privacy', '/privacy-policy',
-        '/dsgvo', '/data-protection', '/datenschutz-erklaerung'
-    ]
+    async def hole(adresse):
+        return await _fetch_candidate_text(adresse, session, ssl_context)
 
-    for path in candidate_paths:
-        candidate_url = base + path
-        result = await _fetch_candidate_text(candidate_url, session, ssl_context)
-        if not result or result[0] != 200:
-            continue
-        # Eine Catch-all-Domain liefert fuer jeden Pfad dieselbe Seite; die ist
-        # kein Rechtstext, auch wenn 'Impressum' und eine E-Mail darin stehen.
-        if probe and probe[0] == 200 and result[1].strip() == probe[1].strip():
-            continue
-        from ..hybrid_validator import zu_fliesstext
-        if _looks_like_datenschutz(zu_fliesstext(result[1])):
-            logger.info(f"✅ Datenschutz-URL mit validem Inhalt gefunden: {candidate_url}")
-            return True
-        logger.info(f"↪️ {candidate_url} liefert 200, aber Inhalt ist keine Datenschutzerklärung — ignoriert")
-
+    # Standardpfade (auch .html und /rechtliches/), dann die Sitemap, parallel und
+    # mit Catch-all-Schutz. Gilt als vorhanden, was die Inhaltsschranke besteht oder
+    # sich als knappe Erklaerung ausweist.
+    fund = await finde_rechtsseite(
+        base_url, "datenschutz", hole,
+        lambda text: _looks_like_datenschutz(zu_fliesstext(text)) or _duenn_aus_wie(text))
+    if fund:
+        logger.info(f"✅ Datenschutz-URL mit validem Inhalt gefunden: {fund}")
+        return True
     return False
 
 
@@ -546,13 +599,16 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
                     geladen = eingebettete_seite(url, eingebettet)
                 else:
                     geladen = await lade_rechtsseite(url, datenschutz_href, soup, session,
-                                                     _looks_like_datenschutz)
+                                                     _looks_like_datenschutz,
+                                                     duenn_aus_wie=_duenn_aus_wie)
                 if not geladen.ok:
                     # Kein stiller Durchlauf, siehe rechtsseiten_links.
                     issues.append(_rechtsseiten_befund(geladen))
                 else:
                     datenschutz_html = geladen.html
                     ds_page_text = datenschutz_html
+                    if geladen.duenn:
+                        issues.append(_duenn_befund(geladen))
                 try:
                     if geladen.ok:
                         # Deep-Analyse mit Hybrid-Validator
