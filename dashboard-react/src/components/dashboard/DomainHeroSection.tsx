@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import ScanProgressPanel from './ScanProgressPanel';
+import { darfStartseitenScanUebernehmen } from '@/lib/scan-zuordnung';
 
 interface DomainHeroSectionProps {
   onAnalyze?: (url: string) => void;
@@ -141,6 +142,11 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
       const urlObj = new URL(normalizedUrl);
       const domain = urlObj.hostname;
 
+      // Die Seite, die beim Start gewaehlt war, festhalten: der Scan dauert, und
+      // der Nutzer kann waehrenddessen eine andere waehlen. Beim Fertigwerden
+      // entscheidet der Vergleich damit, ob das Ergebnis noch angezeigt werden darf.
+      const seiteBeiStart = useDashboardStore.getState().currentWebsite?.url ?? null;
+
       // Call API
       // Client erzeugt das Fortschritts-Token — es muss VOR der Anfrage
       // existieren, damit das Panel vom ersten Moment an pollen kann.
@@ -154,26 +160,42 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
       // dann auf sie umschwenken, sonst pollt es das tote Client-Token.
       const result = await analyzeWebsite(domain, legalUpdateId, token, setScanToken);
 
-      // Update store with website
-      setCurrentWebsite({
-        id: Date.now().toString(),
-        url: domain,
-        name: domain,
-        lastScan: new Date().toISOString(),
-        complianceScore: result.compliance_score || 0,
-        status: 'completed' as const
-      });
+      // Hat der Nutzer waehrend des Scans eine ANDERE Seite gewaehlt (SiteSwitcher,
+      // Projektkarte), gehoert das Ergebnis nicht mehr in den Vordergrund: es
+      // wuerde deren Anzeige ueberschreiben und die Auswahl zurueckdrehen. Es
+      // liegt in der Historie und erscheint, sobald die gescannte Seite wieder
+      // gewaehlt ist.
+      const imVordergrund = darfStartseitenScanUebernehmen(
+        seiteBeiStart,
+        domain,
+        useDashboardStore.getState().currentWebsite?.url,
+      );
 
-      // Update store with analysis data (Issues)
-      const { setAnalysisData } = useDashboardStore.getState();
-      setAnalysisData(result);
+      if (imVordergrund) {
+        // Update store with website
+        setCurrentWebsite({
+          id: Date.now().toString(),
+          url: domain,
+          name: domain,
+          lastScan: new Date().toISOString(),
+          complianceScore: result.compliance_score || 0,
+          status: 'completed' as const
+        });
 
-      // ✅ v4.0: Hinweis bei nicht-produktiven Seiten (Platzhalter/Baustelle) auf erstem Screen
-      if ((result as any)?.scan_notice) {
-        setScanNotice({ text: (result as any).scan_notice, cms: (result as any).detected_cms });
-      } else {
-        setScanNotice(null);
+        // Update store with analysis data (Issues)
+        const { setAnalysisData } = useDashboardStore.getState();
+        setAnalysisData(result);
+
+        // ✅ v4.0: Hinweis bei nicht-produktiven Seiten (Platzhalter/Baustelle) auf erstem Screen
+        if ((result as any)?.scan_notice) {
+          setScanNotice({ text: (result as any).scan_notice, cms: (result as any).detected_cms });
+        } else {
+          setScanNotice(null);
+        }
       }
+
+      // Der neue Scan ist der letzte des Kontos, auch wenn er nicht angezeigt wird.
+      queryClient.invalidateQueries({ queryKey: ['latest-scan'] });
 
       // Die Kennzahlen-Kacheln zeigen das GESAMTE Portfolio (alle getrackten
       // Websites). Ein einzelner Scan darf sie deshalb nicht ueberschreiben —

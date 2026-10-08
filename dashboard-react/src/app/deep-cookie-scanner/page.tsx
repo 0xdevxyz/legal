@@ -38,7 +38,6 @@ interface ScanResult {
   error?: string;
   privacy_findings?: PrivacyFinding[];
   privacy_findings_count?: number;
-  privacy_risk_euro?: number;
 }
 
 interface PrivacyFinding {
@@ -46,7 +45,7 @@ interface PrivacyFinding {
   name: string;
   transmits: string;
   severity: string;
-  risk_euro: number;
+  risk_euro?: number | null;
   description: string;
   recommendation: string;
   legal_basis: string;
@@ -332,7 +331,6 @@ export default function DeepCookieScannerPage() {
                     </div>
                     <p className="text-sm text-red-300 mb-4">
                       Drittlandtransfer ohne Einwilligung — kein Cookie-Banner hilft hier.
-                      {currentScan.privacy_risk_euro ? ` Geschätztes Risiko: bis ${currentScan.privacy_risk_euro.toLocaleString('de-DE')} €.` : ''}
                     </p>
                     <div className="space-y-3">
                       {currentScan.privacy_findings.map((f) => (
@@ -340,11 +338,6 @@ export default function DeepCookieScannerPage() {
                           <div className="flex flex-wrap items-center gap-2 mb-1">
                             <span className="font-semibold text-red-100">{f.name}</span>
                             <span className="text-xs bg-orange-500/20 text-orange-200 px-2 py-0.5 rounded">überträgt: {f.transmits}</span>
-                            {f.risk_euro ? (
-                              <span className="text-xs border border-red-400/50 text-red-200 px-2 py-0.5 rounded">
-                                bis {Number(f.risk_euro).toLocaleString('de-DE')} €
-                              </span>
-                            ) : null}
                           </div>
                           <p className="text-sm text-red-100 mb-2">{f.description}</p>
                           <p className="text-sm text-green-200"><b>Lösung:</b> {f.recommendation}</p>

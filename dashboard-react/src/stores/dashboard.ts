@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { DashboardState, Website } from '@/types/dashboard';
 import { ComplianceAnalysis, LegalNews, ComplianceIssue } from '@/types/api';
+import { ergebnisPasstZurSeite } from '@/lib/scan-zuordnung';
 
 export interface RescanContext {
   legal_update_id: number;
@@ -76,10 +77,28 @@ export const useDashboardStore = create<DashboardStore>()(
     setCurrentWebsite: (website) => {
       // Keine localStorage-Persistenz mehr — die getrackte Website kommt aus der DB
       // (/api/v2/websites). In-Memory-State genügt für die laufende Session.
+      //
+      // Das Analyseergebnis gehoert zu GENAU einer Seite. Wechselt die Seite,
+      // darf das alte nicht stehen bleiben: Ueberschrift, Gauge, KI-Fix und
+      // PDF-Bericht lesen es hier und setzen voraus, dass es zur aktuellen Seite
+      // passt. Wer die Seite mitten in einer Analyse wechselte, sah sonst die
+      // Issues der alten unter dem Namen der neuen.
+      const { analysisData } = get();
+      if (analysisData && !ergebnisPasstZurSeite(analysisData, website?.url)) {
+        return set({ currentWebsite: website, analysisData: null });
+      }
       return set({ currentWebsite: website });
     },
 
     setAnalysisData: (data) => {
+      // Ein Ergebnis einer anderen Seite als der gewaehlten wird nicht
+      // abgelegt: ein Scan, der erst nach einem Seitenwechsel fertig wird, haette
+      // sonst die Anzeige der neuen Seite ueberschrieben. Leeren (undefined/null)
+      // geht immer.
+      const { currentWebsite } = get();
+      if (data && currentWebsite && !ergebnisPasstZurSeite(data, currentWebsite.url)) {
+        return;
+      }
       // Bewusst KEINE localStorage-Persistenz: Scan-Ergebnisse leben in der DB
       // (scan_history, geladen via /api/scans/latest). localStorage war nur ein
       // fragiler Cache (Quota). In-Memory-State für die laufende Session genügt.

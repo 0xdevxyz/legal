@@ -12,7 +12,8 @@ import { useStartAIFix, useBookExpert, useComplianceAnalysis, useLatestScan, use
 import { formatRelativeTime } from '@/lib/utils';
 import { SkeletonWebsiteAnalysis } from '@/components/ui/Skeleton';
 import { ScoreAnimation, SuccessAnimation } from '@/components/ui/SuccessAnimation';
-import type { ComplianceIssue } from '@/types/api';
+import type { ComplianceAnalysis, ComplianceIssue } from '@/types/api';
+import { darfScanUebernehmen, ersteZurSeite, ergebnisPasstZurSeite, gleicheSeite } from '@/lib/scan-zuordnung';
 import { ComplianceIssueCard } from './ComplianceIssueCard';
 import { ComplianceIssueGroup } from './ComplianceIssueGroup';
 import { ActiveJobsPanel } from './ActiveJobsPanel';
@@ -70,25 +71,41 @@ export const WebsiteAnalysis: React.FC = () => {
   // Dasselbe Token als Zustand: das Panel muss neu zeichnen, wenn der
   // entkoppelte Weg die Kennung des Servers nachreicht. Eine Ref allein loest
   // kein Rendern aus, das Panel haette weiter das tote Client-Token gepollt.
-  const [scanToken, setScanToken] = useState<string | null>(null);
-  const [istNeuScan, setIstNeuScan] = useState(false);
+  //
+  // Der Lauf haengt an der Seite, fuer die er gestartet wurde. Wechselt der
+  // Nutzer waehrend der Analyse die Seite, laeuft der Scan serverseitig weiter;
+  // das Panel gehoert aber zur alten Seite und darf nicht unter der neuen
+  // stehen (dort zeigte es deren Adresse mit dem Fortschritt des fremden Scans).
+  const [scanLauf, setScanLauf] = useState<{ url: string; token: string | null } | null>(null);
+  const laeuftFuerAktuelleSeite = !!scanLauf && gleicheSeite(scanLauf.url, currentWebsite?.url);
+  const istNeuScan = laeuftFuerAktuelleSeite;
+  const scanToken = laeuftFuerAktuelleSeite ? scanLauf!.token : null;
+  // Die Kennung des Servers gilt nur fuer den Lauf, der sie angefordert hat.
+  const uebernehmeKennung = React.useCallback((kennung: string, url: string) => {
+    setScanLauf((alt) => (alt && gleicheSeite(alt.url, url) ? { ...alt, token: kennung } : alt));
+  }, []);
 
   // ✅ FIX: Zuerst aus Store lesen, dann ggf. neu laden
   const { data: fetchedAnalysisData, refetch, isLoading } = useComplianceAnalysis(
     currentWebsite?.url || null, // ← CRITICAL FIX: null statt undefined
     scanTokenRef,
-    setScanToken,
+    uebernehmeKennung,
   );
   
   // Priorität: DB (latestScan) > Fetched > Store (localStorage-Cache).
   // Bei Agentur NICHT den global letzten Scan bevorzugen — sonst überschreibt er
   // beim Seitenwechsel die per-Domain-Analyse der aktiven Seite.
-  const analysisData = isAgency
-    ? (fetchedAnalysisData || storedAnalysisData)
-    : (latestScanData || fetchedAnalysisData || storedAnalysisData);
+  //
+  // Jede Quelle muss zur gewaehlten Seite passen. `latest-scan` ist der letzte
+  // Scan des Kontos, egal welcher Seite, und der Store haelt das, was zuletzt
+  // hineingeschrieben wurde: nach einem Seitenwechsel waren das die Issues der
+  // alten Seite unter dem Namen der neuen.
+  const analysisData: ComplianceAnalysis | null = isAgency
+    ? ersteZurSeite([fetchedAnalysisData, storedAnalysisData], currentWebsite?.url)
+    : ersteZurSeite([latestScanData, fetchedAnalysisData, storedAnalysisData], currentWebsite?.url);
   
   // ✅ FIX: Gesamter Loading-State berücksichtigt auch latestScan
-  const isActuallyLoading = isLoading || (isLoadingLatestScan && !fetchedAnalysisData && !storedAnalysisData);
+  const isActuallyLoading = isLoading || (isLoadingLatestScan && !analysisData);
   
   // Wenn neue Daten vom Hook kommen, in Store speichern
   React.useEffect(() => {
@@ -101,10 +118,16 @@ export const WebsiteAnalysis: React.FC = () => {
   React.useEffect(() => {
     
     if (latestScanData && !storedAnalysisData && !fetchedAnalysisData) {
-      setAnalysisData(latestScanData);
-      
+      // Ist schon eine Seite gewaehlt (Agentur: aktive Seite, sonst nach einem
+      // Wechsel), darf der letzte Scan des Kontos sie nicht verdraengen. Er
+      // gehoert einer anderen Seite, sobald deren Adresse abweicht.
+      const gewaehlt = useDashboardStore.getState().currentWebsite;
+      if (gewaehlt && !ergebnisPasstZurSeite(latestScanData, gewaehlt.url)) return;
+
       // ✅ WICHTIG: Auch die Website-URL im Store setzen, damit der Score angezeigt wird
       const { setCurrentWebsite, updateMetrics } = useDashboardStore.getState();
+      // Erst die Seite, dann das Ergebnis: der Store lehnt ein Ergebnis ab, das
+      // nicht zur gerade gewaehlten Seite passt.
       setCurrentWebsite({
         id: latestScanData.scan_id || Date.now().toString(),
         url: latestScanData.url,
@@ -113,6 +136,7 @@ export const WebsiteAnalysis: React.FC = () => {
         complianceScore: latestScanData.compliance_score || 0,
         status: 'completed' as const
       });
+      setAnalysisData(latestScanData);
       
       // Bewusst KEIN updateMetrics: die Kennzahlen-Kacheln zeigen das gesamte
       // Portfolio. Der Score dieses einen Scans steht in currentWebsite (oben
@@ -130,14 +154,21 @@ export const WebsiteAnalysis: React.FC = () => {
       return;
     }
 
+    // Die Seite, fuer die DIESER Scan laeuft, jetzt festhalten. Alles unten
+    // arbeitet damit und nie mit dem, was beim Fertigwerden gerade gewaehlt ist:
+    // der Scan laeuft bis zu mehreren Minuten, und wer waehrenddessen die Seite
+    // wechselt, bekam das Ergebnis sonst unter der neuen angezeigt.
+    const gescannteUrl = currentWebsite.url;
+    const gescannteSeite = currentWebsite;
+    const analyseSchluessel = ['compliance-analysis', gescannteUrl];
+
     // Token VOR der Anfrage erzeugen, damit das Fortschrittspanel vom ersten
     // Moment an pollen kann.
     scanTokenRef.current =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
         : `scan-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-    setScanToken(scanTokenRef.current);
-    setIstNeuScan(true);
+    setScanLauf({ url: gescannteUrl, token: scanTokenRef.current });
 
     try {
       // Cache komplett leeren vor dem Rescan
@@ -145,25 +176,44 @@ export const WebsiteAnalysis: React.FC = () => {
       setAnalysisData(undefined as any);
 
       // React Query Cache für diese URL invalidieren
-      await queryClient.invalidateQueries({ queryKey: ['compliance-analysis', currentWebsite.url] });
+      await queryClient.invalidateQueries({ queryKey: analyseSchluessel });
       await queryClient.invalidateQueries({ queryKey: ['latest-scan'] });
-      
-      const result = await refetch();
-      
-      // Update Dashboard Store mit den Ergebnissen
-      if (result.data) {
-        const { setAnalysisData, setCurrentWebsite } = useDashboardStore.getState();
-        setAnalysisData(result.data);
 
-        const newScore = result.data.compliance_score || 0;
-        const oldScore = currentWebsite.complianceScore || 0;
+      const gestartetUm = Date.now();
+      await refetch();
+
+      // NICHT `result.data` von refetch(): das ist der Stand der Abfrage, die der
+      // Hook JETZT beobachtet. Wurde die Seite inzwischen gewechselt, ist das die
+      // Abfrage der neuen Seite, und ihr Inhalt (oder ihr Fehlen) ist nicht das
+      // Ergebnis dieses Scans. Der Scan der alten Seite landet unter ihrem
+      // Schluessel im Zwischenspeicher, dort lesen wir ihn.
+      const zustand = queryClient.getQueryState<ComplianceAnalysis>(analyseSchluessel);
+      const ergebnis =
+        zustand && zustand.status === 'success' && zustand.dataUpdatedAt >= gestartetUm
+          ? zustand.data
+          : undefined;
+
+      if (ergebnis) {
+        // Der Scan liegt jetzt in der Historie: Portfolio-Kennzahlen neu holen,
+        // gleich fuer welche Seite er lief.
+        queryClient.invalidateQueries({ queryKey: ['dashboard-metrics'] });
+        queryClient.invalidateQueries({ queryKey: ['latest-scan'] });
+
+        const { setAnalysisData, setCurrentWebsite, currentWebsite: jetzt } = useDashboardStore.getState();
+
+        // Ist der Nutzer weitergezogen, bleibt das Ergebnis an seiner Seite
+        // (Zwischenspeicher, Verlauf) und die Anzeige der neuen unberuehrt.
+        if (!darfScanUebernehmen(gescannteUrl, jetzt?.url)) {
+          return;
+        }
+
+        setAnalysisData(ergebnis);
+
+        const newScore = ergebnis.compliance_score || 0;
+        const oldScore = gescannteSeite.complianceScore || 0;
 
         // Der neue Score gehoert an DIESE Seite, nicht in die Portfolio-Kachel.
-        setCurrentWebsite({ ...currentWebsite, complianceScore: newScore, lastScan: new Date().toISOString() });
-
-        // Portfolio-Kennzahlen neu vom Server holen — der Scan liegt jetzt in
-        // der Historie und faellt damit korrekt in Durchschnitt und Summe.
-        queryClient.invalidateQueries({ queryKey: ['dashboard-metrics'] });
+        setCurrentWebsite({ ...(jetzt ?? gescannteSeite), complianceScore: newScore, lastScan: new Date().toISOString() });
 
         // ✅ Success-Animation bei Score-Verbesserung
         if (newScore > oldScore && newScore >= 100) {
@@ -174,7 +224,9 @@ export const WebsiteAnalysis: React.FC = () => {
     } catch (error) {
       console.error('Rescan failed:', error);
     } finally {
-      setIstNeuScan(false);
+      // Nur den eigenen Lauf beenden: lief inzwischen ein Scan einer anderen
+      // Seite an, soll dessen Panel stehen bleiben.
+      setScanLauf((alt) => (alt && gleicheSeite(alt.url, gescannteUrl) ? null : alt));
     }
   };
 
@@ -236,7 +288,6 @@ export const WebsiteAnalysis: React.FC = () => {
             severity,
             title: issue.substring(0, 100),
             description: issue,
-            risk_euro: severity === 'critical' ? 5000 : severity === 'warning' ? 1000 : 0,
             recommendation: 'Bitte korrigieren Sie diesen Punkt',
             legal_basis: severity === 'critical' ? 'DSGVO, DDG, TDDDG' : 'Best Practice',
             auto_fixable: category === 'impressum' || category === 'datenschutz' || category === 'cookies'
@@ -263,7 +314,6 @@ export const WebsiteAnalysis: React.FC = () => {
     : [];
   
   const complianceScore = analysisData?.compliance_score ?? currentWebsite?.complianceScore ?? 0;
-  const totalRisk = analysisData?.total_risk_euro || (analysisData as any)?.estimated_risk_euro || '0€';
 
   // 4 Säulen (SSOT v3.0 — identisch zum Backend ScoreCalculator):
   //  - Sicherheit (CSP/HSTS/Header) = DSGVO Art. 32 → fällt in "gdpr"
@@ -509,7 +559,7 @@ export const WebsiteAnalysis: React.FC = () => {
               Startseite — vorher lief hier nur ein Spinner ohne Auskunft. */}
           {istNeuScan && (
             <div className="mt-5">
-              <ScanProgressPanel url={currentWebsite.url} token={scanToken} />
+              <ScanProgressPanel url={scanLauf!.url} token={scanToken} />
             </div>
           )}
         </div>
@@ -876,6 +926,22 @@ export const WebsiteAnalysis: React.FC = () => {
             <Globe className="mx-auto mb-4 h-12 w-12 text-gray-600 dark:text-gray-400" />
             <p className="text-gray-700 dark:text-gray-300 mb-4">Keine Website analysiert</p>
             <p className="text-gray-600 dark:text-gray-400 text-sm">Geben Sie eine Website-URL ein, um eine Compliance-Analyse zu starten.</p>
+          </div>
+        )}
+
+        {/* Gewaehlte Seite ohne eigenes Ergebnis: ehrlich leer statt des Standes
+            einer anderen Seite. */}
+        {currentWebsite && !analysisData && !isActuallyLoading && !istNeuScan && (
+          <div className="text-center py-8">
+            <Globe className="mx-auto mb-4 h-12 w-12 text-gray-600 dark:text-gray-400" />
+            <p className="text-gray-700 dark:text-gray-300 mb-2">
+              Für {currentWebsite.name || currentWebsite.url} liegt in dieser Sitzung noch keine Analyse vor.
+            </p>
+            <p className="text-gray-600 dark:text-gray-400 text-sm">
+              {scanLauf && !laeuftFuerAktuelleSeite
+                ? `Die Analyse von ${scanLauf.url} läuft weiter; ihr Ergebnis erscheint dort, nicht hier. Mit „Neu scannen“ starten Sie diese Seite.`
+                : 'Mit „Neu scannen“ starten Sie die Prüfung dieser Seite.'}
+            </p>
           </div>
         )}
 

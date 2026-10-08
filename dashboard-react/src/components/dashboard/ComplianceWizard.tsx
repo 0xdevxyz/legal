@@ -311,8 +311,8 @@ export const ComplianceWizard: React.FC<ComplianceWizardProps> = ({
                     Warnung: Kritisches Problem
                   </h4>
                   <p className="text-sm text-red-200/80 mb-3">
-                    Dieses Problem ist als kritisch eingestuft. Das Überspringen kann zu rechtlichen Konsequenzen führen.
-                    Geschätztes Risiko: <strong>{new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(currentStep.issue.risk_euro || 0)}</strong>
+                    Dieses Problem ist als kritisch eingestuft: eine gesetzliche Pflicht ist betroffen.
+                    {currentStep.issue.rang_begruendung ? ` ${currentStep.issue.rang_begruendung}` : ''}
                   </p>
                   <div className="flex gap-2">
                     <button

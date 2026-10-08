@@ -10,8 +10,9 @@ Strategie:
 import aiohttp
 import os
 import re
+import time
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
@@ -106,6 +107,23 @@ class HybridValidator:
         self.uncertain_threshold = 0.6  # < 0.6 Confidence → KI-Check
         self.confident_threshold = 0.85  # >= 0.85 → Pattern ist sicher
     
+    def _ist_unsicher(self, validation) -> bool:
+        """Darf aus diesem Musterergebnis ein "fehlt" werden? Nein, wenn es unsicher ist.
+
+        Unsicher ist ein Ergebnis unter der Unsicherheitsschwelle (0,6) UND ein
+        Treffer, den das Muster gefunden hat, der aber unter der eigenen Schwelle
+        des Feldes (`min_confidence`, 0,65 bis 0,7) bleibt. Der zweite Fall lief
+        bis zum 07.10.2026 als "Grenzfall" mit `found=False` durch und wurde zum
+        kritischen Befund "... fehlt". Gemessen am Pruefstand vom selben Tag an
+        zwei Kundenseiten: Der Text enthielt einen eigenen Abschnitt "Beschwerderecht
+        bei der Aufsichtsbehoerde", der Scanner meldete trotzdem kritisch
+        "Beschwerderecht fehlt". Ein Muster, das etwas fand und sich nicht sicher
+        ist, hat nichts Fehlendes festgestellt; es geht zur KI oder, ohne KI, in
+        die Liste der nicht abschliessend geprueften Angaben.
+        """
+        return (validation.confidence < self.uncertain_threshold
+                or not validation.found)
+
     async def validate_field(
         self,
         field_name: str,
@@ -152,7 +170,7 @@ class HybridValidator:
                 processing_time_ms=processing_time
             )
         
-        elif validation.confidence < self.uncertain_threshold:
+        elif self._ist_unsicher(validation):
             # ❓ UNSICHER: KI-Check nötig
 
             if not self.api_key:
@@ -465,6 +483,59 @@ Antworte NUR im angegebenen Format, keine zusätzlichen Erläuterungen."""
                 "reasoning": f"Parse error: {str(e)}"
             }
     
+    # Der gebuendelte Aufruf liest die Seite in Auszuegen von je rund 6.000
+    # Zeichen. Bis zum 08.10.2026 bekam die KI nur die ersten 6.000 Zeichen der
+    # Seite und antwortete fuer alles, was weiter hinten steht, mit "nicht
+    # gefunden": zu Recht, bezogen auf den Auszug. Der Validator gab das als
+    # Feststellung ueber die ganze Seite weiter. Gemessen am Pruefstand vom
+    # 08.10.2026 gegen von Hand etikettierte Seiten: "Beschwerderecht fehlt" auf
+    # einer Seite mit eigenem Abschnitt "11. Beschwerderecht bei der
+    # Aufsichtsbehoerde" (Seitentext 9.700 Zeichen), dasselbe auf einer zweiten,
+    # "Rechtsgrundlagen fehlen" bei einer dritten (31.000 Zeichen, Art. 6 steht
+    # nach Zeichen 6.000). Von 21 gefundenen Datenschutzerklaerungen sind 15
+    # laenger als der Auszug.
+    #
+    # Kappung (08.10.2026 an 19 etikettierten Erklaerungen gemessen, 4 gegen 8):
+    # Mit 4 Auszuegen (rund 23.000 Zeichen) bleiben 7 von 19 Seiten ungelesen, weil
+    # sie laenger sind; mit 8 deckt es alles ab (die laengste hat 42.500 Zeichen).
+    # Genauigkeit und Trefferquote aendern sich nicht, zwei Feldergebnisse einer
+    # Seite werden von "nicht geprueft" zu "gefunden". Kosten: 55 gegen 63 Calls,
+    # 0,193 gegen 0,214 EUR fuer die 19 Seiten, im Mittel 1,1 Cent je Seite, die
+    # teuerste (8 Calls) 3 Cent. Ein Feld ist nach dem ersten Auszug erledigt, der
+    # es enthaelt: die meisten Seiten brauchen weit weniger Calls als Auszuege.
+    _BATCH_ZEICHEN = 6000
+    _BATCH_UEBERLAPP = 400
+    _BATCH_MAX_AUSSCHNITTE = 8
+    # Laufzeitgrenze: ein Call dauert rund 4 Sekunden, die laengste Seite brauchte
+    # 32 Sekunden. Danach wird nicht weitergelesen, der Rest gilt als nicht geprueft.
+    _BATCH_MAX_SEKUNDEN = 45.0
+
+    def _batch_ausschnitte(self, text: str) -> Tuple[List[str], bool]:
+        """Zerlegt den Text in aufeinanderfolgende Auszuege.
+
+        Schneidet an Wortgrenzen, mit etwas Ueberlappung, damit ein Satz an der
+        Naht in einem der beiden Auszuege ganz steht. Mehr als
+        `_BATCH_MAX_AUSSCHNITTE` werden nicht gelesen (Kostengrenze); der zweite
+        Rueckgabewert sagt, ob damit der ganze Text abgedeckt ist.
+        """
+        if len(text) <= self._BATCH_ZEICHEN:
+            return [text], True
+        teile: List[str] = []
+        start = 0
+        abgedeckt = 0
+        while start < len(text) and len(teile) < self._BATCH_MAX_AUSSCHNITTE:
+            ende = min(len(text), start + self._BATCH_ZEICHEN)
+            if ende < len(text):
+                leer = text.rfind(" ", start + self._BATCH_ZEICHEN - 300, ende)
+                if leer != -1:
+                    ende = leer
+            teile.append(text[start:ende])
+            abgedeckt = ende
+            if ende >= len(text):
+                break
+            start = ende - self._BATCH_UEBERLAPP
+        return teile, abgedeckt >= len(text)
+
     async def _ai_validate_fields_batch(
         self,
         unsichere_felder: Dict[str, ContentValidation],
@@ -473,7 +544,68 @@ Antworte NUR im angegebenen Format, keine zusätzlichen Erläuterungen."""
         user_id: Optional[str],
     ) -> Dict[str, Dict[str, Any]]:
         """
-        EIN OpenRouter-Call fuer ALLE unsicheren Felder einer Seite.
+        KI-Zweitmeinung fuer alle unsicheren Felder einer Seite, ausschnittsweise.
+
+        Je Auszug EIN OpenRouter-Call fuer die Felder, die noch nicht gefunden
+        sind (statt je Feld und Auszug einer). Ein Feld ist erledigt, sobald ein
+        Auszug es enthaelt. "Nicht gefunden" gilt nur, wenn die KI die GANZE
+        Seite gesehen hat: bei laengeren Seiten als `_BATCH_MAX_AUSSCHNITTE`
+        Auszuege oder wenn ein Call scheitert, kommt das Ergebnis mit
+        `unvollstaendig`, und der Aufrufer wertet es als nicht geprueft statt
+        als fehlend.
+
+        Bei einem Fehler im ersten Call: leeres Dict, der Aufrufer faellt je Feld
+        aufs Pattern-Ergebnis zurueck (wie zuvor, fail-open).
+        """
+        ausschnitte, vollstaendig = self._batch_ausschnitte(text_content)
+        offen = dict(unsichere_felder)
+        ergebnisse: Dict[str, Dict[str, Any]] = {}
+        letzte_antwort: Dict[str, Dict[str, Any]] = {}
+        beantwortet = 0
+        beginn = time.monotonic()
+
+        for nr, teil in enumerate(ausschnitte, start=1):
+            if not offen:
+                break
+            if nr > 1 and time.monotonic() - beginn > self._BATCH_MAX_SEKUNDEN:
+                logger.warning(f"⏱️ KI-Zweitmeinung nach {nr - 1} von {len(ausschnitte)} Auszuegen abgebrochen (Zeitgrenze)")
+                break
+            antwort = await self._ai_batch_ausschnitt(
+                offen, teil, page_type, user_id, nr, len(ausschnitte))
+            if not antwort:
+                if nr == 1:
+                    return {}
+                break
+            beantwortet += 1
+            for feld in list(offen):
+                r = antwort.get(feld)
+                if r is None:
+                    continue  # Parse-Luecke: das Feld bleibt offen
+                if r["found"]:
+                    ergebnisse[feld] = r
+                    del offen[feld]
+                else:
+                    letzte_antwort[feld] = r
+
+        alles_gesehen = vollstaendig and beantwortet == len(ausschnitte)
+        for feld in offen:
+            r = letzte_antwort.get(feld)
+            if r is None:
+                continue
+            ergebnisse[feld] = r if alles_gesehen else {**r, "unvollstaendig": True}
+        return ergebnisse
+
+    async def _ai_batch_ausschnitt(
+        self,
+        unsichere_felder: Dict[str, ContentValidation],
+        text_content: str,
+        page_type: str,
+        user_id: Optional[str],
+        ausschnitt_nr: int = 1,
+        ausschnitte_gesamt: int = 1,
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        EIN OpenRouter-Call fuer ALLE uebergebenen Felder an EINEM Textauszug.
 
         Vorher rief validate_page pro unsicherem Feld einen eigenen
         _ai_validate_field-Call auf — bei einer Seite mit vielen Grenzfaellen
@@ -482,10 +614,10 @@ Antworte NUR im angegebenen Format, keine zusätzlichen Erläuterungen."""
         Prompt fuer alle Felder ersetzt das 1:1 funktional, kostet aber nur
         noch einen Bruchteil.
 
-        Bei Fehler: leeres Dict, Aufrufer faellt pro Feld aufs Pattern-Ergebnis
-        zurueck (gleiches Fail-open wie beim bisherigen Einzel-Call).
+        Bei Fehler: leeres Dict.
         """
-        prompt = self._create_batch_validation_prompt(unsichere_felder, text_content, page_type)
+        prompt = self._create_batch_validation_prompt(
+            unsichere_felder, text_content, page_type, ausschnitt_nr, ausschnitte_gesamt)
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -541,15 +673,26 @@ Antworte NUR im angegebenen Format, keine zusätzlichen Erläuterungen."""
         unsichere_felder: Dict[str, ContentValidation],
         text_content: str,
         page_type: str,
+        ausschnitt_nr: int = 1,
+        ausschnitte_gesamt: int = 1,
     ) -> str:
         """Ein Prompt fuer mehrere Felder statt einem Prompt je Feld.
 
         Der Textauszug wird einmal fuer alle Felder gemeinsam genommen (statt
-        je Feld um den eigenen Treffer herum ausgeschnitten) — bei den ueblichen
-        Impressum-/Datenschutz-Seitenlaengen deckt das alle Felder ab und
-        bleibt trotzdem deutlich guenstiger als N einzelne 3000-Zeichen-Ausschnitte.
+        je Feld um den eigenen Treffer herum ausgeschnitten). Laengere Seiten
+        kommen als mehrere aufeinanderfolgende Auszuege, siehe
+        `_ai_validate_fields_batch`; der Prompt sagt der KI, dass sie nur einen
+        Teil sieht, damit "nein" heisst "nicht in DIESEM Auszug".
         """
-        text_sample = text_content[: self._AUSSCHNITT_ZEICHEN * 2]
+        text_sample = text_content[: self._BATCH_ZEICHEN]
+        if ausschnitte_gesamt > 1:
+            auszug_hinweis = (
+                f"\n**Hinweis:** Das ist Auszug {ausschnitt_nr} von {ausschnitte_gesamt} einer "
+                f"längeren Seite. Die anderen Auszüge siehst du nicht. Antworte FOUND: no nur, wenn "
+                f"die Angabe in DIESEM Auszug fehlt.\n"
+            )
+        else:
+            auszug_hinweis = ""
 
         felder_block = []
         antwort_bloecke = []
@@ -575,7 +718,7 @@ Antworte NUR im angegebenen Format, keine zusätzlichen Erläuterungen."""
 **Aufgabe:** Prüfe im folgenden Text-Auszug ALLE unten aufgeführten Felder — jedes für sich — und antworte für JEDES Feld in einem eigenen, nummerierten Block.
 
 **Kontext:** {page_type.upper()}-Seite
-
+{auszug_hinweis}
 **Text-Auszug:**
 ```
 {text_sample}
@@ -668,7 +811,7 @@ Antworte NUR mit den nummerierten Blöcken, keine zusätzlichen Erläuterungen."
                     confidence=validation.confidence, value=validation.extracted_value,
                     method_used=ValidationMethod.PATTERN_ONLY,
                 )
-            elif validation.confidence < self.uncertain_threshold:
+            elif self._ist_unsicher(validation):
                 unsichere_felder[field_name] = validation
             else:
                 results_by_field[field_name] = HybridValidationResult(
@@ -724,6 +867,9 @@ Antworte NUR mit den nummerierten Blöcken, keine zusätzlichen Erläuterungen."
                                 confidence=ai_result["confidence"], value=ai_result["value"],
                                 method_used=ValidationMethod.AI_ASSISTED,
                                 ai_reasoning=ai_result.get("reasoning"),
+                                # Die KI hat nicht die ganze Seite gesehen: ihr "nein"
+                                # gilt dem Auszug, nicht der Seite.
+                                unverifiziert=bool(ai_result.get("unvollstaendig")),
                             )
 
         # Urspruengliche Feldreihenfolge wiederherstellen
