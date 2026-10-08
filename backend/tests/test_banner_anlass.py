@@ -251,10 +251,11 @@ class TestMigration:
         assert "ADD COLUMN IF NOT EXISTS banner_erzwingen BOOLEAN NOT NULL DEFAULT false" in q
         assert "DROP COLUMN IF EXISTS banner_erzwingen" in q
 
-    def test_haengt_an_0036(self):
-        """Die Kette im Ganzen (ein Kopf, Namenslänge) prüft test_migrationskette.py."""
+    def test_haengt_an_0037b(self):
+        """Folgt auf 0037b (PR #31), damit die Kette einen Kopf behält; Merge-Reihenfolge #31 vor #35.
+        Die Kette im Ganzen (ein Kopf, Namenslänge) prüft test_migrationskette.py."""
         q = self._datei()
-        assert 'down_revision: Union[str, None] = "0036_ki_erlaubnis"' in q
+        assert 'down_revision: Union[str, None] = "0037b_rechtsaenderung_quittung"' in q
         assert 'revision: str = "0037_banner_erzwingen"' in q
 
 
