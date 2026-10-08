@@ -346,47 +346,34 @@ async def _fetch_candidate_text(candidate_url: str, session, ssl_context) -> "tu
 
 async def _check_datenschutz_url_exists(base_url: str, session=None) -> bool:
     """
-    Prüft direkt bekannte Datenschutz-Pfade per HTTP-Request.
-    Fallback für clientseitig gerenderte Seiten (Next.js, React SPA).
+    Sucht die Datenschutzerklärung ohne Link: Standardpfade und Sitemap,
+    parallel (siehe rechtsseiten_wege). Fallback für clientseitig gerenderte
+    Seiten (Next.js, React SPA) und Menüs, die die Startseite nicht verlinkt.
 
     ⚠️ Soft-404-Guard (v4.0): HTTP 200 allein ist KEIN Nachweis. Catch-all-Probe
     + Inhaltsprüfung verhindern, dass Parking-/Catch-all-Seiten fälschlich als
     "Datenschutz vorhanden" zählen.
     """
-    from urllib.parse import urlparse
     import ssl
     import certifi
 
-    parsed = urlparse(base_url)
-    base = f"{parsed.scheme}://{parsed.netloc}"
-
     ssl_context = ssl.create_default_context(cafile=certifi.where())
 
-    probe = await _fetch_candidate_text(base + '/__complyo_probe_404__', session, ssl_context)
-    is_catch_all = bool(probe and probe[0] == 200 and len(probe[1].strip()) > 200)
-    if is_catch_all:
-        logger.info("⚠️ Catch-all-Domain erkannt — prüfe Datenschutz-Inhalt strikt")
+    from ..hybrid_validator import zu_fliesstext
+    from .rechtsseiten_wege import finde_rechtsseite
 
-    candidate_paths = [
-        '/datenschutz', '/datenschutzerklaerung', '/privacy', '/privacy-policy',
-        '/dsgvo', '/data-protection', '/datenschutz-erklaerung'
-    ]
+    async def hole(adresse):
+        return await _fetch_candidate_text(adresse, session, ssl_context)
 
-    for path in candidate_paths:
-        candidate_url = base + path
-        result = await _fetch_candidate_text(candidate_url, session, ssl_context)
-        if not result or result[0] != 200:
-            continue
-        # Eine Catch-all-Domain liefert fuer jeden Pfad dieselbe Seite; die ist
-        # kein Rechtstext, auch wenn 'Impressum' und eine E-Mail darin stehen.
-        if probe and probe[0] == 200 and result[1].strip() == probe[1].strip():
-            continue
-        from ..hybrid_validator import zu_fliesstext
-        if _looks_like_datenschutz(zu_fliesstext(result[1])) or _duenn_aus_wie(result[1]):
-            logger.info(f"✅ Datenschutz-URL mit validem Inhalt gefunden: {candidate_url}")
-            return True
-        logger.info(f"↪️ {candidate_url} liefert 200, aber Inhalt ist keine Datenschutzerklärung — ignoriert")
-
+    # Standardpfade (auch .html und /rechtliches/), dann die Sitemap, parallel und
+    # mit Catch-all-Schutz. Gilt als vorhanden, was die Inhaltsschranke besteht oder
+    # sich als knappe Erklaerung ausweist.
+    fund = await finde_rechtsseite(
+        base_url, "datenschutz", hole,
+        lambda text: _looks_like_datenschutz(zu_fliesstext(text)) or _duenn_aus_wie(text))
+    if fund:
+        logger.info(f"✅ Datenschutz-URL mit validem Inhalt gefunden: {fund}")
+        return True
     return False
 
 
