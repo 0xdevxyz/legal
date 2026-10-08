@@ -14,6 +14,7 @@ Heuristik zurueck).
 """
 import argparse
 import asyncio
+import contextlib
 import json
 import os
 import sys
@@ -21,17 +22,34 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import asyncpg
+
+def ki_schalter(ki: str):
+    """
+    Kontext fuer einen Lauf mit oder ohne KI-Zweitmeinung.
+
+    "aus" misst, was der Scanner ohne fremden Dienst feststellt: Muster,
+    axe, deklarative Regeln. Unsichere Pflichtangaben erscheinen dann als
+    "nicht abschliessend geprueft" (info, 0 EUR) statt als Befund. Erst der
+    Vergleich zweier Laeufe (an/aus, pruefstand_vergleich.py) zeigt, welche
+    Befunde am KI-Budget haengen und nicht an der Website.
+    """
+    if ki == "aus":
+        from compliance_engine import ai_budget
+        return ai_budget.ki_aus()
+    return contextlib.nullcontext()
 
 
-async def eine_seite(url: str, sem: asyncio.Semaphore) -> dict:
+async def eine_seite(url: str, sem: asyncio.Semaphore, ki: str = "an") -> dict:
     from compliance_engine.scanner import ComplianceScanner
     async with sem:
-        try:
-            async with ComplianceScanner() as s:
-                r = await s.scan_website(url)
-        except Exception as e:
-            return {"url": url, "fehler": f"{type(e).__name__}: {e}"}
+        # Der Schalter sitzt in einer contextvar; jede gather()-Aufgabe hat
+        # ihre eigene Kopie, der Kontext bleibt also auf diese Seite begrenzt.
+        with ki_schalter(ki):
+            try:
+                async with ComplianceScanner() as s:
+                    r = await s.scan_website(url)
+            except Exception as e:
+                return {"url": url, "fehler": f"{type(e).__name__}: {e}"}
 
     if r.get("error"):
         return {"url": url, "fehler": r.get("error_message", "nicht scanbar")}
@@ -59,7 +77,11 @@ async def main():
     ap.add_argument("--datei", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--parallel", type=int, default=3)
+    ap.add_argument("--ki", choices=("an", "aus"), default="an",
+                    help="aus: kein KI-Aufruf, nur Muster/axe/Regeln (kostet keine Token)")
     args = ap.parse_args()
+
+    import asyncpg
 
     urls = [z.strip() for z in open(args.datei) if z.strip() and not z.startswith("#")]
     urls = [u if u.startswith("http") else f"https://{u}" for u in urls]
@@ -70,12 +92,13 @@ async def main():
     await dcr.declarative_check_registry.get_active_checks(force_refresh=True)
 
     sem = asyncio.Semaphore(args.parallel)
-    ergebnisse = await asyncio.gather(*(eine_seite(u, sem) for u in urls))
+    ergebnisse = await asyncio.gather(*(eine_seite(u, sem, args.ki) for u in urls))
 
     os.makedirs(args.out, exist_ok=True)
     ziel = os.path.join(args.out, "pruefstand.json")
     with open(ziel, "w", encoding="utf-8") as f:
-        json.dump({"gemessen": datetime.now().isoformat(), "seiten": ergebnisse},
+        json.dump({"gemessen": datetime.now().isoformat(), "ki": args.ki,
+                   "seiten": ergebnisse},
                   f, ensure_ascii=False, indent=1)
 
     ok = [e for e in ergebnisse if "issues" in e]
@@ -89,4 +112,5 @@ async def main():
             print(f"  {e['score']:>3}/100  {n:>3} Befunde ({krit} kritisch)  {e['url']}")
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

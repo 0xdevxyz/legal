@@ -106,18 +106,10 @@ async def get_dashboard_metrics(user: Dict[str, Any] = Depends(get_current_user)
                 avg_score = 0
                 total_critical = 0
 
-            # Risikosumme gibt es nur in scan_history — score_history fuehrt sie
-            # nicht. Auf die verfolgten URLs eingegrenzt, damit wenigstens keine
-            # entfernte Seite mehr mitzaehlt.
-            total_risk = await conn.fetchval("""
-                SELECT COALESCE(SUM(letzte.total_risk_euro), 0) FROM (
-                    SELECT DISTINCT ON (h.url) h.total_risk_euro
-                    FROM scan_history h
-                    JOIN tracked_websites t ON t.url = h.url AND t.user_id = h.user_id
-                    WHERE h.user_id = $1
-                    ORDER BY h.url, h.scan_timestamp DESC
-                ) AS letzte
-            """, user_id) or 0
+            # Keine Risikosumme in Euro mehr (07.10.2026): die Betraege je
+            # Befund waren Schaetzungen ohne Bussgeldpraxis dahinter. Das Feld
+            # bleibt fuer aeltere Clients und steht auf 0.
+            total_risk = 0
             
             # Get scans this month
             from datetime import datetime, timedelta
@@ -230,7 +222,6 @@ async def get_dashboard_stats(user_id: int = 1):
                     scan_id,
                     url,
                     compliance_score,
-                    total_risk_euro,
                     critical_issues,
                     warning_issues,
                     scan_timestamp

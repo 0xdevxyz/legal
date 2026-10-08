@@ -288,7 +288,6 @@ export const WebsiteAnalysis: React.FC = () => {
             severity,
             title: issue.substring(0, 100),
             description: issue,
-            risk_euro: severity === 'critical' ? 5000 : severity === 'warning' ? 1000 : 0,
             recommendation: 'Bitte korrigieren Sie diesen Punkt',
             legal_basis: severity === 'critical' ? 'DSGVO, DDG, TDDDG' : 'Best Practice',
             auto_fixable: category === 'impressum' || category === 'datenschutz' || category === 'cookies'
@@ -315,7 +314,6 @@ export const WebsiteAnalysis: React.FC = () => {
     : [];
   
   const complianceScore = analysisData?.compliance_score ?? currentWebsite?.complianceScore ?? 0;
-  const totalRisk = analysisData?.total_risk_euro || (analysisData as any)?.estimated_risk_euro || '0€';
 
   // 4 Säulen (SSOT v3.0 — identisch zum Backend ScoreCalculator):
   //  - Sicherheit (CSP/HSTS/Header) = DSGVO Art. 32 → fällt in "gdpr"

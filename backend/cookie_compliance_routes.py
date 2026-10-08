@@ -2121,7 +2121,9 @@ async def scan_website(
         # damit der Scanner bei extern geladenen Google Fonts & Co. nicht länger
         # fälschlich "keine relevanten Cookies" meldet.
         privacy_findings = scan_result.get('privacy_findings', [])
-        privacy_risk_euro = sum(f.get('risk_euro', 0) for f in privacy_findings)
+        # Kein Eurobetrag nach draussen (compliance_engine/rangstufe.py).
+        from compliance_engine.rangstufe import ohne_eurobetraege
+        privacy_findings = ohne_eurobetraege(privacy_findings)
 
         logger.warning(
             f"[Scan] DONE site_id={site_id} config_updated={config_updated} "
@@ -2135,7 +2137,6 @@ async def scan_website(
             "total_found": len(matched_services),
             "privacy_findings": privacy_findings,
             "privacy_findings_count": len(privacy_findings),
-            "privacy_risk_euro": privacy_risk_euro,
             "config_updated": config_updated,
             "scan_timestamp": scan_result.get('scan_timestamp'),
             "raw_detection": {

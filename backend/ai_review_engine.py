@@ -212,7 +212,6 @@ GESCANNTES ISSUE:
 - Severity: {issue.get('severity', '')}
 - Beschreibung: {issue.get('description', '')}
 - Empfehlung: {issue.get('recommendation', '')}
-- Risiko (€): {issue.get('risk_euro_max', 0)}
 - Rechtsgrundlage: {issue.get('legal_basis', '')}
 
 AUFGABE:
@@ -220,8 +219,7 @@ Prüfe jeden Aspekt dieses Issues auf:
 1. Ist der Titel präzise und spezifisch für diese Website? (kein generisches "Problem gefunden")
 2. Ist die Beschreibung verständlich und konkret?
 3. Ist die Severity korrekt kalibriert? (critical = Bußgeld/Abmahnung direkt möglich, warning = potenziell, info = Empfehlung)
-4. Ist das Risiko (€) realistisch für das konkrete Problem?
-5. Ist die Empfehlung umsetzbar und spezifisch für {url}?
+4. Ist die Empfehlung umsetzbar und spezifisch für {url}?
 
 Antworte NUR mit diesem JSON (ändere nur Felder die wirklich falsch/zu generisch sind, behalte gut formulierte Felder unverändert):
 {{
@@ -229,7 +227,6 @@ Antworte NUR mit diesem JSON (ändere nur Felder die wirklich falsch/zu generisc
   "description": "...",
   "recommendation": "...",
   "severity": "critical|warning|info",
-  "risk_euro_max": <Zahl>,
   "legal_basis": "...",
   "review_note": "Kurze interne Notiz was du geändert hast (max 1 Satz)"
 }}"""

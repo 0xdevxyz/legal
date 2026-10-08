@@ -155,7 +155,7 @@ export const Orientierungsband: React.FC = () => {
     if (kritisch > 0) {
       return {
         titel: `${kritisch} ${kritisch === 1 ? 'kritischer Punkt wartet' : 'kritische Punkte warten'}`,
-        begruendung: 'Kritisch heißt: hier droht konkret ein Bußgeld oder eine Abmahnung. Der Assistent geht sie der Reihe nach mit Ihnen durch.',
+        begruendung: 'Kritisch heißt: eine gesetzliche Pflicht ist nicht erfüllt. Der Assistent geht die Punkte der Reihe nach mit Ihnen durch.',
         knopf: 'Schritt für Schritt beheben',
         icon: AlertTriangle,
         ton: 'handeln',
