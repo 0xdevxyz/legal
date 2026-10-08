@@ -333,7 +333,7 @@ Nicht relevant für mich: {dismiss_url}
 
 Benachrichtigungseinstellungen: {self.frontend_url}/settings
 
-Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin | datenschutz@complyo.de
+Yvonne Weishar · Complyo, Koburger Straße 198, 04416 Markkleeberg | datenschutz@complyo.de
         """
     
     async def _send_email(

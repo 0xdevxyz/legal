@@ -42,9 +42,9 @@ type Anbieterangaben = {
 export const ANBIETER: Anbieterangaben = {
   name: 'Yvonne Weishar',
   geschaeftsbezeichnung: 'Complyo',
-  strasse: 'Pappelallee 64',
-  plz: '10437',
-  ort: 'Berlin',
+  strasse: 'Koburger Straße 198',
+  plz: '04416',
+  ort: 'Markkleeberg',
   land: 'Deutschland',
   email: 'info@complyo.de',
   datenschutzEmail: 'datenschutz@complyo.de',
@@ -52,10 +52,10 @@ export const ANBIETER: Anbieterangaben = {
   ustIdNr: 'DE405368946',
 };
 
-/** "10437 Berlin" */
+/** "04416 Markkleeberg" */
 export const ANBIETER_ANSCHRIFT = ANBIETER.plz + ' ' + ANBIETER.ort;
 
-/** "Pappelallee 64, 10437 Berlin" — für Fließtext, etwa den Geltungsbereich der AGB. */
+/** "Koburger Straße 198, 04416 Markkleeberg" — für Fließtext, etwa den Geltungsbereich der AGB. */
 export const ANBIETER_ANSCHRIFT_EINZEILIG = ANBIETER.strasse + ', ' + ANBIETER_ANSCHRIFT;
 
 /**
