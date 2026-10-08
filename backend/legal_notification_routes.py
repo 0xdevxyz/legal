@@ -3,6 +3,7 @@ API Routes für Legal News Benachrichtigungen
 Nutzer-Bestätigungsflow und Notification-Management
 """
 
+from fastapi.responses import RedirectResponse
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Optional
@@ -16,6 +17,7 @@ from database_service import db_service
 # Wirkung hier: alle vier Endpunkte antworteten dauerhaft mit
 # 503 "Notification Service nicht verfuegbar".
 import legal_notification_service as _dienst
+from adressen import dashboard_url
 
 router = APIRouter(prefix="/api/legal-notifications", tags=["Legal Notifications"])
 
@@ -80,18 +82,23 @@ async def get_pending_notifications(
     ]
 
 
+# Beide Endpunkte werden aus der Mail angeklickt, also im Browser geoeffnet.
+# Sie antworteten mit JSON, und der Knopf in der Mail zeigte ohnehin auf eine
+# Frontend-Seite, die es nicht gibt. Jetzt: erledigen und ins Dashboard
+# weiterleiten, das Ergebnis steht im Parameter "rechtsaenderung".
+def _zurueck_ins_dashboard(ergebnis: str) -> RedirectResponse:
+    return RedirectResponse(
+        url=f"{dashboard_url()}/dashboard?rechtsaenderung={ergebnis}", status_code=303)
+
+
 @router.get("/confirm/{token}")
 async def confirm_notification(token: str):
     """Bestätigt eine Benachrichtigung (Nutzer hat zur Kenntnis genommen)"""
     if not _dienst.legal_notification_service:
         raise HTTPException(status_code=503, detail="Notification Service nicht verfügbar")
-    
+
     result = await _dienst.legal_notification_service.confirm_notification(token)
-    
-    if not result["success"]:
-        raise HTTPException(status_code=400, detail=result.get("error", "Fehler bei Bestätigung"))
-    
-    return result
+    return _zurueck_ins_dashboard("bestaetigt" if result["success"] else "ungueltig")
 
 
 @router.get("/dismiss/{token}")
@@ -99,13 +106,9 @@ async def dismiss_notification(token: str):
     """Markiert eine Benachrichtigung als nicht relevant"""
     if not _dienst.legal_notification_service:
         raise HTTPException(status_code=503, detail="Notification Service nicht verfügbar")
-    
+
     result = await _dienst.legal_notification_service.dismiss_notification(token)
-    
-    if not result["success"]:
-        raise HTTPException(status_code=400, detail=result.get("error", "Fehler beim Verwerfen"))
-    
-    return result
+    return _zurueck_ins_dashboard("verworfen" if result["success"] else "ungueltig")
 
 
 @router.get("/settings")
