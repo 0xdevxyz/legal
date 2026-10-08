@@ -12,6 +12,15 @@ import re
 import logging
 import aiohttp
 from compliance_engine.sicherer_abruf import sichere_session
+from compliance_engine.checks.rechtsseiten_links import (
+    ist_seitenlink, attrappen, attrappen_satz, lade_rechtsseite,
+    seitenlink_art, ART_ANKER,
+    PROBLEM_KEIN_RECHTSTEXT, PROBLEM_NICHT_ERREICHBAR,
+)
+from compliance_engine.checks.rechtsseiten_text import (
+    fremder_host_ohne_klartext, finde_eingebetteten_text, eingebettete_seite,
+    ist_duenne_erklaerung, inhaltstext, seiten_ueberschriften,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +96,7 @@ def _nach_guete(links):
     return sorted(links, key=_linkguete, reverse=True)
 
 
-def _find_datenschutz_links(soup: BeautifulSoup) -> List:
+def _find_datenschutz_links(soup: BeautifulSoup, basis_url: str = None) -> List:
     """
     Verbesserte Suche nach Datenschutz-Links
     Findet auch Links in modernen JS-Frameworks (React, Vue, Next.js)
@@ -106,6 +115,15 @@ def _find_datenschutz_links(soup: BeautifulSoup) -> List:
     ]
     
     for a_tag in soup.find_all('a', href=True):
+        # mailto:, tel:, javascript: und leere Ziele fuehren zu keiner Seite;
+        # ein so beschrifteter Link ist kein Rechtsseiten-Kandidat.
+        if not ist_seitenlink(a_tag.get('href')):
+            continue
+        # Ein Link auf einen fremden Host ist nur dann die Erklaerung, wenn sein
+        # Text sie beim Namen nennt: "www.datenschutz.sachsen.de" ist die
+        # Landesbehoerde, nicht die Datenschutzerklaerung dieser Website.
+        if fremder_host_ohne_klartext(a_tag, basis_url):
+            continue
         href = a_tag.get('href', '').lower()
         link_text = a_tag.get_text(strip=True).lower()
         aria_label = (a_tag.get('aria-label') or '').lower()
@@ -123,6 +141,62 @@ def _find_datenschutz_links(soup: BeautifulSoup) -> List:
     # Beste Kandidaten zuerst: der erste Treffer war auf complyo.de die
     # Produktseite /dsgvo-website-check/, nicht die Datenschutzerklaerung.
     return _nach_guete(all_links)
+
+
+
+def _rechtsseiten_befund(geladen) -> Dict[str, Any]:
+    """Befund fuer einen Datenschutz-Link, hinter dem keine Erklaerung steht."""
+    if geladen.problem == PROBLEM_NICHT_ERREICHBAR:
+        return asdict(DatenschutzIssue(
+            category='datenschutz',
+            severity='critical',
+            title='Datenschutzerklärung nicht erreichbar',
+            description=(
+                f'Der Datenschutz-Link führt zu {geladen.url}, die Seite antwortet aber '
+                f'mit HTTP {geladen.status}. Die Informationspflichten nach Art. 13/14 '
+                'DSGVO sind damit nicht erfüllt.'
+            ),
+            risk_euro=5000,
+            recommendation='Stellen Sie sicher, dass die verlinkte Datenschutzerklärung erreichbar ist (HTTP 200).',
+            legal_basis='DSGVO Art. 13-14',
+            auto_fixable=False,
+            is_missing=True,
+        ))
+    if geladen.problem == PROBLEM_KEIN_RECHTSTEXT:
+        return asdict(DatenschutzIssue(
+            category='datenschutz',
+            severity='critical',
+            title='Datenschutz-Link führt zu keiner Datenschutzerklärung',
+            description=(
+                f'Der Link "Datenschutz" führt zu {geladen.url}. Dort steht aber keine '
+                'Datenschutzerklärung: es fehlen Angaben zu Verantwortlichem, '
+                'Verarbeitung, Rechtsgrundlage oder Betroffenenrechten. Für Besucher '
+                'ist die Erklärung damit nicht erreichbar.'
+            ),
+            risk_euro=5000,
+            recommendation=(
+                'Verlinken Sie die Datenschutzerklärung auf eine eigene, direkt '
+                'erreichbare Seite mit allen Pflichtangaben nach Art. 13/14 DSGVO.'
+            ),
+            legal_basis='DSGVO Art. 13-14',
+            auto_fixable=False,
+            is_missing=True,
+        ))
+    return asdict(DatenschutzIssue(
+        category='datenschutz',
+        severity='info',
+        title='Inhaltsprüfung der Datenschutzerklärung nicht möglich',
+        description=(
+            f'Der Datenschutz-Link führt zu {geladen.url}, die Seite ließ sich aber '
+            f'nicht laden ({geladen.fehler or "unbekannter Fehler"}). Die Vollständigkeit '
+            'nach Art. 13/14 DSGVO ist damit NICHT bestätigt.'
+        ),
+        risk_euro=0,
+        recommendation='Prüfen Sie die Erreichbarkeit der Datenschutzerklärung und wiederholen Sie den Scan.',
+        legal_basis='DSGVO Art. 13/14',
+        auto_fixable=False,
+        is_missing=False,
+    ))
 
 
 async def check_datenschutz_compliance_smart(url: str, html: str = None, session=None) -> List[Dict[str, Any]]:
@@ -168,11 +242,41 @@ async def check_datenschutz_compliance_smart(url: str, html: str = None, session
         return await check_datenschutz_compliance(url, soup, session)
 
 
+# Die neun Merkmale der Inhaltsschranke: Anzeigename und Muster. Die Schranke
+# verlangt mindestens zwei; der Befund "Erklaerung knapp" nennt, welche davon
+# im Text vorkommen und welche nicht.
+#
+# 07.10.2026: "personenbezogene daten" war als fester Text eingetragen und traf
+# nur die Grundform. Im Fliesstext steht fast immer eine gebeugte Form
+# ("Verarbeitung personenbezogener Daten", "Ihre personenbezogenen Daten"). Das
+# Muster `personenbezogen\w*\s+daten` trifft alle. Ohne diese Korrektur lag
+# eine Erklaerung auf Standardvorlage (Ingenieurbuero) bei null von neun Merkmalen.
+_DS_MERKMALE = (
+    ('Verantwortlicher', r'verantwortlich'),
+    ('personenbezogene Daten', r'personenbezogen\w*\s+daten'),
+    ('Rechtsgrundlage', r'rechtsgrundlage'),
+    ('Art. 6 DSGVO', r'art\. 6'),
+    ('Betroffenenrechte', r'betroffenenrechte'),
+    ('Auskunftsrecht', r'auskunftsrecht'),
+    ('Speicherdauer', r'speicherdauer'),
+    ('Verarbeitung', r'verarbeitung'),
+    ('Aufsichtsbehörde', r'aufsichtsbehörde'),
+)
+
+
+def _ds_merkmale(text: str) -> "tuple[List[str], List[str]]":
+    """(vorhandene, fehlende) Merkmale aus `_DS_MERKMALE` im Text."""
+    low = (text or '').lower()
+    da = [name for name, rx in _DS_MERKMALE if re.search(rx, low)]
+    fehlt = [name for name, _ in _DS_MERKMALE if name not in da]
+    return da, fehlt
+
+
 def _looks_like_datenschutz(text: str) -> bool:
     """
     Inhalts-Heuristik gegen Soft-404 / Catch-all: Sieht der Seitentext wirklich
     wie eine Datenschutzerklärung aus? Erfordert einen DSGVO-Schlüsselbegriff UND
-    mindestens ein typisches inhaltliches Pflichtmerkmal.
+    mindestens zwei der neun Merkmale aus `_DS_MERKMALE`.
     """
     if not text:
         return False
@@ -182,12 +286,47 @@ def _looks_like_datenschutz(text: str) -> bool:
     ))
     if not keyword:
         return False
-    markers = (
-        'verantwortlich', 'personenbezogene daten', 'rechtsgrundlage',
-        'art. 6', 'betroffenenrechte', 'auskunftsrecht', 'speicherdauer',
-        'verarbeitung', 'aufsichtsbehörde',
-    )
-    return sum(1 for m in markers if m in low) >= 2
+    return len(_ds_merkmale(text)[0]) >= 2
+
+
+def _duenn_aus_wie(html: str) -> bool:
+    """Knappe Erklaerung: Ueberschrift der Rechtsseite und genug Text."""
+    return ist_duenne_erklaerung(html, 'datenschutz')
+
+
+def _duenn_befund(geladen) -> Dict[str, Any]:
+    """Hinweis fuer eine Erklaerung, die die Schranke nicht besteht, aber eine ist.
+
+    Ein Hinweis, keine Beanstandung: gemessen ist nur, welche Stichworte im
+    Text vorkommen. Ob die Angaben nach Art. 13/14 DSGVO inhaltlich vollstaendig
+    sind, entscheidet diese Stichwortsuche nicht.
+    """
+    text = inhaltstext(geladen.html)
+    da, fehlt = _ds_merkmale(text)
+    soup = BeautifulSoup(geladen.html, 'html.parser')
+    kopf = seiten_ueberschriften(soup)
+    return asdict(DatenschutzIssue(
+        category='datenschutz',
+        severity='info',
+        title='Datenschutzerklärung gefunden, aber sehr knapp',
+        description=(
+            f'Unter {geladen.url} steht eine Seite mit der Überschrift "{(kopf[0] if kopf else "Datenschutzerklärung")[:60]}" '
+            f'({len(text)} Zeichen Text). Eine Stichwortsuche findet darin {len(da)} von '
+            f'{len(_DS_MERKMALE)} typischen Merkmalen '
+            f'({", ".join(da) if da else "keines"}); nicht gefunden wurden: '
+            f'{", ".join(fehlt)}. Das ist ein Hinweis auf eine Standardvorlage oder eine '
+            'sehr kurze Erklärung, keine Feststellung eines Mangels.'
+        ),
+        risk_euro=0,
+        recommendation=(
+            'Prüfen Sie von Hand, ob die Erklärung Verantwortlichen, Zwecke, '
+            'Rechtsgrundlagen, Speicherdauer, Betroffenenrechte und das Beschwerderecht '
+            'bei einer Aufsichtsbehörde nennt (Art. 13/14 DSGVO).'
+        ),
+        legal_basis='DSGVO Art. 13/14',
+        auto_fixable=False,
+        is_missing=False,
+    ))
 
 
 async def _fetch_candidate_text(candidate_url: str, session, ssl_context) -> "tuple[int, str] | None":
@@ -207,41 +346,34 @@ async def _fetch_candidate_text(candidate_url: str, session, ssl_context) -> "tu
 
 async def _check_datenschutz_url_exists(base_url: str, session=None) -> bool:
     """
-    Prüft direkt bekannte Datenschutz-Pfade per HTTP-Request.
-    Fallback für clientseitig gerenderte Seiten (Next.js, React SPA).
+    Sucht die Datenschutzerklärung ohne Link: Standardpfade und Sitemap,
+    parallel (siehe rechtsseiten_wege). Fallback für clientseitig gerenderte
+    Seiten (Next.js, React SPA) und Menüs, die die Startseite nicht verlinkt.
 
     ⚠️ Soft-404-Guard (v4.0): HTTP 200 allein ist KEIN Nachweis. Catch-all-Probe
     + Inhaltsprüfung verhindern, dass Parking-/Catch-all-Seiten fälschlich als
     "Datenschutz vorhanden" zählen.
     """
-    from urllib.parse import urlparse
     import ssl
     import certifi
 
-    parsed = urlparse(base_url)
-    base = f"{parsed.scheme}://{parsed.netloc}"
-
     ssl_context = ssl.create_default_context(cafile=certifi.where())
 
-    probe = await _fetch_candidate_text(base + '/__complyo_probe_404__', session, ssl_context)
-    if probe and probe[0] == 200 and len(probe[1].strip()) > 200:
-        logger.info("⚠️ Catch-all-Domain erkannt — prüfe Datenschutz-Inhalt strikt")
+    from ..hybrid_validator import zu_fliesstext
+    from .rechtsseiten_wege import finde_rechtsseite
 
-    candidate_paths = [
-        '/datenschutz', '/datenschutzerklaerung', '/privacy', '/privacy-policy',
-        '/dsgvo', '/data-protection', '/datenschutz-erklaerung'
-    ]
+    async def hole(adresse):
+        return await _fetch_candidate_text(adresse, session, ssl_context)
 
-    for path in candidate_paths:
-        candidate_url = base + path
-        result = await _fetch_candidate_text(candidate_url, session, ssl_context)
-        if not result or result[0] != 200:
-            continue
-        if _looks_like_datenschutz(result[1]):
-            logger.info(f"✅ Datenschutz-URL mit validem Inhalt gefunden: {candidate_url}")
-            return True
-        logger.info(f"↪️ {candidate_url} liefert 200, aber Inhalt ist keine Datenschutzerklärung — ignoriert")
-
+    # Standardpfade (auch .html und /rechtliches/), dann die Sitemap, parallel und
+    # mit Catch-all-Schutz. Gilt als vorhanden, was die Inhaltsschranke besteht oder
+    # sich als knappe Erklaerung ausweist.
+    fund = await finde_rechtsseite(
+        base_url, "datenschutz", hole,
+        lambda text: _looks_like_datenschutz(zu_fliesstext(text)) or _duenn_aus_wie(text))
+    if fund:
+        logger.info(f"✅ Datenschutz-URL mit validem Inhalt gefunden: {fund}")
+        return True
     return False
 
 
@@ -326,23 +458,35 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
     # nicht auf der Startseite).
     ds_page_text = None
     
-    datenschutz_links = _find_datenschutz_links(soup)
+    datenschutz_links = _find_datenschutz_links(soup, url)
+    # Steht der Text im Dokument (Overlay, Abschnitt), wird er gelesen, statt
+    # "keine Datenschutzerklaerung" zu melden. Fuehrt der beste Link nur auf
+    # einen Anker der eigenen Seite, ist der Abschnitt selbst die genauere
+    # Quelle als die ganze Seite.
+    eingebettet = None
+    if (not datenschutz_links
+            or seitenlink_art(datenschutz_links[0].get('href')) == ART_ANKER):
+        eingebettet = finde_eingebetteten_text(soup, 'datenschutz', _looks_like_datenschutz)
     
     logger.info(f"🔍 Datenschutz-Links gefunden: {len(datenschutz_links)}")
     for link in datenschutz_links[:3]:
         logger.info(f"   → {link.get('href', 'N/A')}: {link.get_text(strip=True)[:50]}")
     
-    if not datenschutz_links:
+    if not datenschutz_links and not eingebettet:
         datenschutz_url_exists = await _check_datenschutz_url_exists(url, session)
         if datenschutz_url_exists:
             logger.info("✅ Datenschutz per Direkt-URL-Check gefunden — kein Issue")
             return issues
         # ✅ HAUPTELEMENT FEHLT: Generiere alle Sub-Issues mit is_missing=True
+        _attrappen = attrappen(soup, text_keywords=(
+            'datenschutz', 'privacy', 'dsgvo', 'data protection',
+        ))
         issues.append(asdict(DatenschutzIssue(
             category='datenschutz',
             severity='critical',
             title='Keine Datenschutzerklärung gefunden',
-            description='Es wurde kein Link zur Datenschutzerklärung gefunden. Eine Datenschutzerklärung ist nach DSGVO verpflichtend.',
+            description=('Es wurde kein Link zur Datenschutzerklärung gefunden. Eine Datenschutzerklärung ist nach DSGVO verpflichtend.'
+                         + attrappen_satz(_attrappen)),
             risk_euro=5000,
             recommendation='Fügen Sie eine umfassende Datenschutzerklärung hinzu, die alle Pflichtangaben nach Art. 13-14 DSGVO enthält.',
             legal_basis='DSGVO Art. 13-14, DSGVO Art. 83 (Bußgeld bis 20 Mio. € oder 4% des Jahresumsatzes)',
@@ -441,144 +585,154 @@ async def check_datenschutz_compliance(url: str, soup: BeautifulSoup, session=No
         try:
             from ..hybrid_validator import HybridValidator
             
-            # Hole Datenschutz-URL
-            datenschutz_link = datenschutz_links[0]
-            datenschutz_href = datenschutz_link.get('href', '')
-            
-            # Erstelle absolute URL
+            # Hole Datenschutz-URL (oder lies den Text aus dem Dokument)
             from urllib.parse import urljoin
-            datenschutz_url = urljoin(url, datenschutz_href)
+            if eingebettet:
+                datenschutz_href, datenschutz_url = '', url
+            else:
+                datenschutz_href = datenschutz_links[0].get('href', '')
+                datenschutz_url = urljoin(url, datenschutz_href)
             
             # Fetche Datenschutz-Seite
-            if session:
+            if session or eingebettet:
+                if eingebettet:
+                    geladen = eingebettete_seite(url, eingebettet)
+                else:
+                    geladen = await lade_rechtsseite(url, datenschutz_href, soup, session,
+                                                     _looks_like_datenschutz,
+                                                     duenn_aus_wie=_duenn_aus_wie)
+                if not geladen.ok:
+                    # Kein stiller Durchlauf, siehe rechtsseiten_links.
+                    issues.append(_rechtsseiten_befund(geladen))
+                else:
+                    datenschutz_html = geladen.html
+                    ds_page_text = datenschutz_html
+                    if geladen.duenn:
+                        issues.append(_duenn_befund(geladen))
                 try:
-                    async with session.get(datenschutz_url, timeout=10) as response:
-                        if response.status == 200:
-                            datenschutz_html = await response.text()
-                            ds_page_text = datenschutz_html
-                            
-                            # Deep-Analyse mit Hybrid-Validator
-                            validator = HybridValidator()
-                            analysis = await validator.validate_page(
-                                page_type="datenschutz",
-                                text_content=datenschutz_html,
-                                url=datenschutz_url
-                            )
-                            
-                            # Generiere Issues nur für tatsächlich fehlende kritische Felder
-                            critical_fields = {
-                                "verantwortlicher": {
-                                    "title": "Verantwortlicher fehlt",
-                                    "description": "Die Angabe des Verantwortlichen fehlt in der Datenschutzerklärung.",
-                                    "risk": 3000,
-                                    "basis": "DSGVO Art. 13 Abs. 1 lit. a"
-                                },
-                                "zwecke": {
-                                    "title": "Zwecke der Datenverarbeitung fehlen",
-                                    "description": "Die Zwecke der Datenverarbeitung sind nicht angegeben.",
-                                    "risk": 3000,
-                                    "basis": "DSGVO Art. 13 Abs. 1 lit. c"
-                                },
-                                "rechtsgrundlage": {
-                                    "title": "Rechtsgrundlagen fehlen",
-                                    "description": "Die Rechtsgrundlagen für die Datenverarbeitung fehlen.",
-                                    "risk": 3000,
-                                    "basis": "DSGVO Art. 13 Abs. 1 lit. c"
-                                },
-                                "speicherdauer": {
-                                    "title": "Speicherdauer fehlt",
-                                    "description": "Die Angabe der Speicherdauer fehlt.",
-                                    "risk": 2000,
-                                    "basis": "DSGVO Art. 13 Abs. 2 lit. a"
-                                },
-                                "betroffenenrechte": {
-                                    "title": "Betroffenenrechte fehlen",
-                                    "description": "Die Information über Betroffenenrechte fehlt.",
-                                    "risk": 2500,
-                                    "basis": "DSGVO Art. 13 Abs. 2 lit. b"
-                                },
-                                "beschwerderecht": {
-                                    "title": "Beschwerderecht fehlt",
-                                    "description": "Der Hinweis auf das Beschwerderecht fehlt.",
-                                    "risk": 2000,
-                                    "basis": "DSGVO Art. 13 Abs. 2 lit. d"
-                                }
-                            }
-                            
-                            for field_result in analysis["results"]:
-                                field_name = field_result["field"]
-                                
-                                # Ein Feld, das niemand nachgesehen hat, ist kein
-                                # Mangel. Faellt die KI-Zweitmeinung aus (Budget
-                                # gesperrt, Redis weg, kein Schluessel), traegt
-                                # das Ergebnis nur noch die Vermutung des
-                                # Musters — und unsicher war das Muster bei
-                                # genau diesen Feldern. Am 09.09.2026 im
-                                # Bestandsdurchlauf gemessen: der Befund
-                                # "Zwecke der Datenverarbeitung fehlen" traf
-                                # 20 von 24 Seiten ohne KI und 5 von 24 mit ihr.
-                                if field_result.get("unverifiziert"):
-                                    continue
-
-                                if not field_result["found"] and field_name in critical_fields:
-                                    field_info = critical_fields[field_name]
-                                    
-                                    issues.append(asdict(DatenschutzIssue(
-                                        category='datenschutz',
-                                        severity='critical',
-                                        title=field_info["title"],
-                                        description=field_info["description"],
-                                        risk_euro=field_info["risk"],
-                                        recommendation=f'Ergänzen Sie die Angabe zu: {field_name}',
-                                        legal_basis=field_info["basis"],
-                                        auto_fixable=False,
-                                        is_missing=False  # Link existiert, nur Inhalt fehlt
-                                    )))
-                            
-                            # Was nicht geprueft werden konnte, gehoert in den Bericht.
-                            #
-                            # Seit dem 09.09.2026 uebergeht die Schleife oben Felder, deren
-                            # KI-Zweitmeinung ausgefallen ist, statt sie als Mangel zu melden.
-                            # Das allein waere nur die andere Haelfte des Fehlers: der Kunde saehe
-                            # eine bessere Note und wuesste nicht, dass ein Teil ungeprueft blieb.
-                            # "Geprueft und nichts gefunden" und "nicht geprueft" duerfen sich
-                            # nicht gleich lesen.
-                            _ungeprueft = [f["field"] for f in analysis["results"] if f.get("unverifiziert")]
-                            if _ungeprueft:
-                                issues.append(asdict(DatenschutzIssue(
-                                    category='datenschutz',
-                                    severity='info',
-                                    title='Datenschutzerklärung: {} Angabe(n) nicht abschliessend geprueft'.format(len(_ungeprueft)),
-                                    description=(
-                                        'Diese Angaben liessen sich maschinell nicht sicher feststellen und '
-                                        'wurden deshalb weder als vorhanden noch als fehlend gewertet: '
-                                        + ', '.join(_ungeprueft) + '. '
-                                        'Bitte pruefen Sie sie von Hand. Ein spaeterer Scan kann hier zu '
-                                        'einem eindeutigen Ergebnis kommen.'
-                                    ),
-                                    risk_euro=0,
-                                    recommendation='Sehen Sie die genannten Angaben selbst nach.',
-                                    legal_basis='DSGVO Art. 13',
-                                    auto_fixable=False,
-                                    is_missing=False,
-                                )))
-
-                            # Qualitäts-Warnung bei niedriger Qualität
-                            if analysis["quality"] in ["poor", "insufficient"]:
-                                issues.append(asdict(DatenschutzIssue(
-                                    category='datenschutz',
-                                    severity='warning',
-                                    title='Datenschutzerklärung unvollständig',
-                                    description=f'Die Datenschutzerklärung wurde gefunden, ist aber unvollständig (Qualität: {analysis["quality"]}). Mehrere Pflichtangaben fehlen.',
-                                    risk_euro=5000,
-                                    recommendation='Vervollständigen Sie Ihre Datenschutzerklärung mit allen Pflichtangaben nach DSGVO Art. 13-14.',
-                                    legal_basis='DSGVO Art. 13-14',
-                                    auto_fixable=True,
-                                    is_missing=False
-                                )))
-                            
-                            logger.info(f"✅ Deep-Analyse abgeschlossen: {analysis['quality']} ({len(issues)} Issues)")
+                    if geladen.ok:
+                        # Deep-Analyse mit Hybrid-Validator
+                        validator = HybridValidator()
+                        analysis = await validator.validate_page(
+                            page_type="datenschutz",
+                            text_content=datenschutz_html,
+                            url=datenschutz_url
+                        )
                         
+                        # Generiere Issues nur für tatsächlich fehlende kritische Felder
+                        critical_fields = {
+                            "verantwortlicher": {
+                                "title": "Verantwortlicher fehlt",
+                                "description": "Die Angabe des Verantwortlichen fehlt in der Datenschutzerklärung.",
+                                "risk": 3000,
+                                "basis": "DSGVO Art. 13 Abs. 1 lit. a"
+                            },
+                            "zwecke": {
+                                "title": "Zwecke der Datenverarbeitung fehlen",
+                                "description": "Die Zwecke der Datenverarbeitung sind nicht angegeben.",
+                                "risk": 3000,
+                                "basis": "DSGVO Art. 13 Abs. 1 lit. c"
+                            },
+                            "rechtsgrundlage": {
+                                "title": "Rechtsgrundlagen fehlen",
+                                "description": "Die Rechtsgrundlagen für die Datenverarbeitung fehlen.",
+                                "risk": 3000,
+                                "basis": "DSGVO Art. 13 Abs. 1 lit. c"
+                            },
+                            "speicherdauer": {
+                                "title": "Speicherdauer fehlt",
+                                "description": "Die Angabe der Speicherdauer fehlt.",
+                                "risk": 2000,
+                                "basis": "DSGVO Art. 13 Abs. 2 lit. a"
+                            },
+                            "betroffenenrechte": {
+                                "title": "Betroffenenrechte fehlen",
+                                "description": "Die Information über Betroffenenrechte fehlt.",
+                                "risk": 2500,
+                                "basis": "DSGVO Art. 13 Abs. 2 lit. b"
+                            },
+                            "beschwerderecht": {
+                                "title": "Beschwerderecht fehlt",
+                                "description": "Der Hinweis auf das Beschwerderecht fehlt.",
+                                "risk": 2000,
+                                "basis": "DSGVO Art. 13 Abs. 2 lit. d"
+                            }
+                        }
+                        
+                        for field_result in analysis["results"]:
+                            field_name = field_result["field"]
+                            
+                            # Ein Feld, das niemand nachgesehen hat, ist kein
+                            # Mangel. Faellt die KI-Zweitmeinung aus (Budget
+                            # gesperrt, Redis weg, kein Schluessel), traegt
+                            # das Ergebnis nur noch die Vermutung des
+                            # Musters — und unsicher war das Muster bei
+                            # genau diesen Feldern. Am 09.09.2026 im
+                            # Bestandsdurchlauf gemessen: der Befund
+                            # "Zwecke der Datenverarbeitung fehlen" traf
+                            # 20 von 24 Seiten ohne KI und 5 von 24 mit ihr.
+                            if field_result.get("unverifiziert"):
+                                continue
+
+                            if not field_result["found"] and field_name in critical_fields:
+                                field_info = critical_fields[field_name]
+                                
+                                issues.append(asdict(DatenschutzIssue(
+                                    category='datenschutz',
+                                    severity='critical',
+                                    title=field_info["title"],
+                                    description=field_info["description"],
+                                    risk_euro=field_info["risk"],
+                                    recommendation=f'Ergänzen Sie die Angabe zu: {field_name}',
+                                    legal_basis=field_info["basis"],
+                                    auto_fixable=False,
+                                    is_missing=False  # Link existiert, nur Inhalt fehlt
+                                )))
+                        
+                        # Was nicht geprueft werden konnte, gehoert in den Bericht.
+                        #
+                        # Seit dem 09.09.2026 uebergeht die Schleife oben Felder, deren
+                        # KI-Zweitmeinung ausgefallen ist, statt sie als Mangel zu melden.
+                        # Das allein waere nur die andere Haelfte des Fehlers: der Kunde saehe
+                        # eine bessere Note und wuesste nicht, dass ein Teil ungeprueft blieb.
+                        # "Geprueft und nichts gefunden" und "nicht geprueft" duerfen sich
+                        # nicht gleich lesen.
+                        _ungeprueft = [f["field"] for f in analysis["results"] if f.get("unverifiziert")]
+                        if _ungeprueft:
+                            issues.append(asdict(DatenschutzIssue(
+                                category='datenschutz',
+                                severity='info',
+                                title='Datenschutzerklärung: {} Angabe(n) nicht abschliessend geprueft'.format(len(_ungeprueft)),
+                                description=(
+                                    'Diese Angaben liessen sich maschinell nicht sicher feststellen und '
+                                    'wurden deshalb weder als vorhanden noch als fehlend gewertet: '
+                                    + ', '.join(_ungeprueft) + '. '
+                                    'Bitte pruefen Sie sie von Hand. Ein spaeterer Scan kann hier zu '
+                                    'einem eindeutigen Ergebnis kommen.'
+                                ),
+                                risk_euro=0,
+                                recommendation='Sehen Sie die genannten Angaben selbst nach.',
+                                legal_basis='DSGVO Art. 13',
+                                auto_fixable=False,
+                                is_missing=False,
+                            )))
+
+                        # Qualitäts-Warnung bei niedriger Qualität
+                        if analysis["quality"] in ["poor", "insufficient"]:
+                            issues.append(asdict(DatenschutzIssue(
+                                category='datenschutz',
+                                severity='warning',
+                                title='Datenschutzerklärung unvollständig',
+                                description=f'Die Datenschutzerklärung wurde gefunden, ist aber unvollständig (Qualität: {analysis["quality"]}). Mehrere Pflichtangaben fehlen.',
+                                risk_euro=5000,
+                                recommendation='Vervollständigen Sie Ihre Datenschutzerklärung mit allen Pflichtangaben nach DSGVO Art. 13-14.',
+                                legal_basis='DSGVO Art. 13-14',
+                                auto_fixable=True,
+                                is_missing=False
+                            )))
+                        
+                        logger.info(f"✅ Deep-Analyse abgeschlossen: {analysis['quality']} ({len(issues)} Issues)")
+
                 except Exception as e:
                     logger.warning(f"⚠️ Deep-Analyse fehlgeschlagen: {e}")
                     # Kein Silent-Pass: Der Nutzer erfaehrt, dass die inhaltliche

@@ -852,7 +852,6 @@ Support: support@complyo.de | +49 (0) 123 456789
 | Automatisch behebbar | {summary.get('auto_fixable', 0)} |
 | Widget-Fixes | {summary.get('widget_fixable', 0)} |
 | Manuell zu beheben | {summary.get('manual_only', 0)} |
-| Geschätztes Risiko | €{summary.get('total_risk_euro', 0):,} |
 
 ---
 
@@ -1291,7 +1290,6 @@ class Complyo_Accessibility {{
                 <h2>Status</h2>
                 <p><strong>Aktiv:</strong> ✅ Barrierefreiheits-Fixes sind aktiviert</p>
                 <p><strong>Behobene Probleme:</strong> {summary.get('auto_fixable', 0)}</p>
-                <p><strong>Risiko-Reduktion:</strong> €{summary.get('total_risk_euro', 0):,}</p>
                 
                 <h3>Aktive Features</h3>
                 <ul>

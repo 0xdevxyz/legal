@@ -171,11 +171,6 @@ class ComplianceReportGenerator:
         content.append(Paragraph("Compliance-Score", self.styles['ComplyoHeading']))
         content.append(Paragraph(f"{score}%", self.styles['ComplianceScore']))
         
-        # Risk assessment
-        risk = analysis_data.get('estimated_risk_euro', 'Unbekannt')
-        content.append(Paragraph("Geschätztes Risiko", self.styles['ComplyoHeading']))
-        content.append(Paragraph(f"{risk} EUR", self.styles['RiskLevel']))
-        content.append(Spacer(1, 0.5*inch))
         
         # Report details
         report_data = [
@@ -216,7 +211,6 @@ class ComplianceReportGenerator:
         
         # Key metrics table
         score = analysis_data.get('compliance_score', 0)
-        risk = analysis_data.get('estimated_risk_euro', 'Unbekannt')
         findings = analysis_data.get('findings', {})
         critical_issues = len([f for f in findings.values() if f.get('severity') == 'critical'])
         total_issues = len(findings)
@@ -226,7 +220,6 @@ class ComplianceReportGenerator:
             ['Compliance-Score', f'{score}%', self._get_score_assessment(score)],
             ['Kritische Probleme', str(critical_issues), self._get_critical_assessment(critical_issues)],
             ['Gesamte Probleme', str(total_issues), self._get_total_assessment(total_issues)],
-            ['Geschätztes Risiko', f'{risk} EUR', self._get_risk_assessment(risk)]
         ]
         
         summary_table = Table(summary_data, colWidths=[4*cm, 3*cm, 5*cm])
@@ -489,16 +482,6 @@ class ComplianceReportGenerator:
             return "Extensive"
         else:
             return "Comprehensive"
-    
-    def _get_risk_assessment(self, risk: str) -> str:
-        if "0-1000" in str(risk):
-            return "Low Risk"
-        elif "1000-5000" in str(risk):
-            return "Medium Risk"
-        elif "5000-15000" in str(risk):
-            return "High Risk"
-        else:
-            return "Critical Risk"
     
     def _get_severity_color(self, severity: str) -> str:
         colors_map = {
