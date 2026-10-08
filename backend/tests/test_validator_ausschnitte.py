@@ -105,6 +105,16 @@ def test_sehr_langer_text_wird_gekappt_und_ist_nicht_vollstaendig():
     assert len(teile) == hv._BATCH_MAX_AUSSCHNITTE and voll is False
 
 
+def test_die_laengste_erklaerung_des_bestands_wird_ganz_gelesen():
+    """42.500 Zeichen (die laengste der 19 etikettierten Erklaerungen) brauchen acht Auszuege.
+
+    Mit der alten Kappung von vier blieb sie zur Haelfte ungelesen, und vier Felder
+    endeten als "nicht abschliessend geprueft".
+    """
+    teile, voll = HybridValidator()._batch_ausschnitte(_text(42600))
+    assert voll is True and len(teile) == 8
+
+
 def test_die_naht_schneidet_kein_wort_durch():
     hv = HybridValidator()
     text = _text(20000)
@@ -213,3 +223,35 @@ def test_prompt_sagt_der_ki_dass_sie_nur_einen_auszug_sieht():
     assert "Auszug 2 von 4" in p and "DIESEM Auszug" in p
     einzel = hv._create_batch_validation_prompt(_felder("zwecke"), "text", "datenschutz")
     assert "Auszug 1 von" not in einzel
+
+
+# --- Zeitgrenze ---------------------------------------------------------------------
+
+def test_zeitgrenze_bricht_das_weiterlesen_ab_und_macht_fehlend_zu_nicht_geprueft(monkeypatch):
+    """Eine sehr langsame KI darf die Pruefung nicht beliebig dehnen."""
+    import compliance_engine.hybrid_validator as modul
+
+    uhr = {"jetzt": 1000.0}
+    monkeypatch.setattr(modul.time, "monotonic", lambda: uhr["jetzt"])
+    aufrufe = []
+
+    async def ersatz(hv, offen, teil, page_type, user_id, nr=1, von=1):
+        aufrufe.append(nr)
+        uhr["jetzt"] += 30.0          # jeder Call "dauert" 30 Sekunden
+        return {f: {"found": False, "confidence": 0.9, "value": "x", "reasoning": "Test"} for f in offen}
+
+    monkeypatch.setattr(HybridValidator, "_ai_batch_ausschnitt", ersatz)
+    r = _batch(_text(30000), _felder("beschwerderecht"))
+    assert aufrufe == [1, 2], f"nach 60 Sekunden haette Schluss sein muessen: {aufrufe}"
+    assert r["beschwerderecht"]["found"] is False and r["beschwerderecht"]["unvollstaendig"] is True
+
+
+def test_ohne_zeitdruck_wird_alles_gelesen(monkeypatch):
+    k = _KI({"beschwerderecht": "GIBTESNICHT"})
+
+    async def ersatz(hv, offen, teil, page_type, user_id, nr=1, von=1):
+        return await k(hv, offen, teil, page_type, user_id, nr, von)
+
+    monkeypatch.setattr(HybridValidator, "_ai_batch_ausschnitt", ersatz)
+    r = _batch(_text(30000), _felder("beschwerderecht"))
+    assert len(k.aufrufe) == 6 and not r["beschwerderecht"].get("unvollstaendig")

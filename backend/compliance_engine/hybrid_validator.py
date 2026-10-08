@@ -10,6 +10,7 @@ Strategie:
 import aiohttp
 import os
 import re
+import time
 import logging
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
@@ -493,9 +494,21 @@ Antworte NUR im angegebenen Format, keine zusätzlichen Erläuterungen."""
     # "Rechtsgrundlagen fehlen" bei einer dritten (31.000 Zeichen, Art. 6 steht
     # nach Zeichen 6.000). Von 21 gefundenen Datenschutzerklaerungen sind 15
     # laenger als der Auszug.
+    #
+    # Kappung (08.10.2026 an 19 etikettierten Erklaerungen gemessen, 4 gegen 8):
+    # Mit 4 Auszuegen (rund 23.000 Zeichen) bleiben 7 von 19 Seiten ungelesen, weil
+    # sie laenger sind; mit 8 deckt es alles ab (die laengste hat 42.500 Zeichen).
+    # Genauigkeit und Trefferquote aendern sich nicht, zwei Feldergebnisse einer
+    # Seite werden von "nicht geprueft" zu "gefunden". Kosten: 55 gegen 63 Calls,
+    # 0,193 gegen 0,214 EUR fuer die 19 Seiten, im Mittel 1,1 Cent je Seite, die
+    # teuerste (8 Calls) 3 Cent. Ein Feld ist nach dem ersten Auszug erledigt, der
+    # es enthaelt: die meisten Seiten brauchen weit weniger Calls als Auszuege.
     _BATCH_ZEICHEN = 6000
     _BATCH_UEBERLAPP = 400
-    _BATCH_MAX_AUSSCHNITTE = 4
+    _BATCH_MAX_AUSSCHNITTE = 8
+    # Laufzeitgrenze: ein Call dauert rund 4 Sekunden, die laengste Seite brauchte
+    # 32 Sekunden. Danach wird nicht weitergelesen, der Rest gilt als nicht geprueft.
+    _BATCH_MAX_SEKUNDEN = 45.0
 
     def _batch_ausschnitte(self, text: str) -> Tuple[List[str], bool]:
         """Zerlegt den Text in aufeinanderfolgende Auszuege.
@@ -549,9 +562,13 @@ Antworte NUR im angegebenen Format, keine zusätzlichen Erläuterungen."""
         ergebnisse: Dict[str, Dict[str, Any]] = {}
         letzte_antwort: Dict[str, Dict[str, Any]] = {}
         beantwortet = 0
+        beginn = time.monotonic()
 
         for nr, teil in enumerate(ausschnitte, start=1):
             if not offen:
+                break
+            if nr > 1 and time.monotonic() - beginn > self._BATCH_MAX_SEKUNDEN:
+                logger.warning(f"⏱️ KI-Zweitmeinung nach {nr - 1} von {len(ausschnitte)} Auszuegen abgebrochen (Zeitgrenze)")
                 break
             antwort = await self._ai_batch_ausschnitt(
                 offen, teil, page_type, user_id, nr, len(ausschnitte))
