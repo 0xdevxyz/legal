@@ -281,47 +281,33 @@ async def _fetch_candidate_text(candidate_url: str, session, ssl_context) -> "tu
 
 async def _check_impressum_url_exists(base_url: str, session=None) -> bool:
     """
-    Prüft direkt bekannte Impressum-Pfade per HTTP-Request.
-    Fallback für clientseitig gerenderte Seiten (Next.js, React SPA).
+    Sucht das Impressum ohne Link: Standardpfade und Sitemap, parallel
+    (siehe rechtsseiten_wege). Fallback für clientseitig gerenderte Seiten
+    (Next.js, React SPA) und Menüs, die die Startseite nicht verlinkt.
 
     ⚠️ Soft-404-Guard (v4.0): HTTP 200 allein zählt NICHT als Nachweis. Erst:
     1. Catch-all-Probe gegen eine Nonsense-URL — liefert die ebenfalls 200,
        ist die Domain ein Catch-all und URL-Existenz wertlos → False.
     2. Inhaltsprüfung: Die Seite muss tatsächlich wie ein Impressum aussehen.
     """
-    from urllib.parse import urlparse
     import ssl
     import certifi
 
-    parsed = urlparse(base_url)
-    base = f"{parsed.scheme}://{parsed.netloc}"
-
     ssl_context = ssl.create_default_context(cafile=certifi.where())
 
-    # 1. Catch-all-Probe: Nonsense-Pfad, der niemals existieren sollte
-    probe = await _fetch_candidate_text(base + '/__complyo_probe_404__', session, ssl_context)
-    is_catch_all = bool(probe and probe[0] == 200 and len(probe[1].strip()) > 200)
-    if is_catch_all:
-        logger.info("⚠️ Catch-all-Domain erkannt (Nonsense-URL liefert 200) — URL-Existenz unzuverlässig, prüfe Inhalt strikt")
+    from ..hybrid_validator import zu_fliesstext
+    from .rechtsseiten_wege import finde_rechtsseite
 
-    candidate_paths = ['/impressum', '/imprint', '/legal-notice', '/legal', '/ueber-uns/impressum', '/about/imprint']
+    async def hole(adresse):
+        return await _fetch_candidate_text(adresse, session, ssl_context)
 
-    for path in candidate_paths:
-        candidate_url = base + path
-        result = await _fetch_candidate_text(candidate_url, session, ssl_context)
-        if not result or result[0] != 200:
-            continue
-        # 2. Inhalt muss wie ein Impressum aussehen (Soft-404-/Catch-all-sicher)
-        # Eine Catch-all-Domain liefert fuer jeden Pfad dieselbe Seite; die ist
-        # kein Rechtstext, auch wenn 'Impressum' und eine E-Mail darin stehen.
-        if probe and probe[0] == 200 and result[1].strip() == probe[1].strip():
-            continue
-        from ..hybrid_validator import zu_fliesstext
-        if _looks_like_impressum(zu_fliesstext(result[1])):
-            logger.info(f"✅ Impressum-URL mit validem Inhalt gefunden: {candidate_url}")
-            return True
-        logger.info(f"↪️ {candidate_url} liefert 200, aber Inhalt ist kein Impressum — ignoriert")
-
+    # Standardpfade (auch .html und /rechtliches/), dann die Sitemap, parallel und
+    # mit Catch-all-Schutz. Der Inhalt muss wie ein Impressum aussehen (Soft-404).
+    fund = await finde_rechtsseite(
+        base_url, "impressum", hole, lambda text: _looks_like_impressum(zu_fliesstext(text)))
+    if fund:
+        logger.info(f"✅ Impressum-URL mit validem Inhalt gefunden: {fund}")
+        return True
     return False
 
 
