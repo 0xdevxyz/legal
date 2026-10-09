@@ -28,6 +28,15 @@ Für einen Anbieter, der Datenschutz verkauft, ist das keine Formalie: ein
 Messwerkzeug, das nebenbei Besucher verfolgt, wäre das Ende der
 Glaubwürdigkeit. Die Tabelle hat schlicht keine Spalte, in die ein Besucher
 passen würde.
+
+Auch auf dem Gerät des Besuchers bleibt nichts zurück: kein Cookie, kein Eintrag
+in localStorage oder sessionStorage. Das ist eine eigene Frage neben den
+personenbezogenen Daten (§ 25 TDDDG regelt den Zugriff auf das Endgerät für
+sich). Bis zur Melder-Fassung a11y-2026-10-07 stand dort ein Merker im
+sessionStorage, der weitere Meldungen derselben Seite je Sitzung unterdrückte.
+Seither meldet jeder Seitenaufruf, und `aufrufe` zählt Seitenaufrufe statt
+Sitzungen je Pfad. Die Tabelle schreibt die Fassung mit, damit der Bruch in der
+Zählung sichtbar bleibt.
 """
 import logging
 from typing import Any, Dict, List, Optional
@@ -67,7 +76,11 @@ CREATE INDEX IF NOT EXISTS idx_wirkung_site ON accessibility_wirkung (site_id);
 #
 # Wer die Fassung im Widget hochzaehlt, traegt sie hier ein. Dass das nicht
 # vergessen wird, sichert tests/test_wirkung_plausibel.py.
-MELDER_FASSUNGEN = frozenset({"a11y-2026-09-25"})
+#
+# Die älteren Fassungen bleiben drin: Kundenseiten liefern das Widget teils
+# stundenlang aus dem Zwischenspeicher, und deren Meldungen sollen nicht zu
+# "unbekannt" werden.
+MELDER_FASSUNGEN = frozenset({"a11y-2026-09-25", "a11y-2026-10-07"})
 
 
 class Zaehler(BaseModel):

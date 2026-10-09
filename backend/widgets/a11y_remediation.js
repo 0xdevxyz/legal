@@ -85,7 +85,12 @@
 
   // Fassung dieses Melders. Hochzaehlen, sobald sich aendert, WIE gezaehlt
   // wird — nicht bei jeder Textaenderung.
-  var MELDER_FASSUNG = 'a11y-2026-09-25';
+  //
+  // a11y-2026-10-07: `aufrufe` zaehlt jeden Seitenaufruf. Vorher nur den ersten
+  // je Sitzung und Pfad, weil ein Merker im sessionStorage weitere Meldungen
+  // unterdrueckte. Zeilen mit aelterer Fassung sind bei `aufrufe` nicht
+  // vergleichbar.
+  var MELDER_FASSUNG = 'a11y-2026-10-07';
 
   function leereMenge() { return Object.create(null); }
 
@@ -557,8 +562,22 @@
   // Deshalb braucht sie auch keine Einwilligung: sie verarbeitet keine
   // personenbezogenen Daten.
   //
-  // Einmal je Seite und Sitzung. Ein Besucher, der zehnmal blaettert, erzeugt
-  // zehn Pfade, aber keine zehn Meldungen derselben Seite.
+  // Und sie legt nichts auf dem Geraet des Besuchers ab: kein Cookie, kein
+  // Eintrag in localStorage oder sessionStorage. Das ist eine eigene Frage
+  // neben den personenbezogenen Daten. Das Speichern von Informationen im
+  // Endgeraet regelt § 25 TDDDG fuer sich, und ein Messwerkzeug gehoert nicht
+  // zu dem, was der Besucher angefordert hat. Bis 07.10.2026 stand hier ein
+  // Merker im sessionStorage. Beim Nachmessen von steinhau.de war er der einzige
+  // Eintrag von complyo vor der Einwilligung. Ob die Ausnahme fuer unbedingt
+  // erforderliche Zugriffe getragen haette, blieb offen; ohne Merker stellt sich
+  // die Frage nicht. tests/test_wirkung.py haelt fest, dass diese Datei keinen
+  // Browser-Speicher beschreibt.
+  //
+  // Einmal je Seitenaufruf. Wer blaettert oder neu laedt, meldet bei jedem
+  // Aufruf erneut. Das schadet nicht: der Server schreibt je (Website, Pfad)
+  // eine Zeile fort und zaehlt nur `aufrufe` hoch. Ohne Merker meldet das
+  // Widget auch dann, wenn der Browser den Speicher sperrt; vorher ging in
+  // diesem Fall keine einzige Meldung raus.
   //
   // Soll fuer dokument_fixes: nur die Arten, die dieses Widget selbst unter
   // `dokument_fixes` anwendet. Ein 'struktur'-Eintrag steckt zwar in docFixes,
@@ -573,14 +592,14 @@
     return n;
   }
 
+  // Nur im Arbeitsspeicher dieses Seitenaufrufs. Verhindert, dass ein einzelner
+  // Aufruf doppelt meldet, etwa wenn das Skript zweimal eingebunden ist.
+  var gemeldet = false;
+
   function melde() {
-    var pfad;
-    try {
-      pfad = location.pathname.slice(0, 200);
-      var schluessel = 'complyo_wirkung_' + siteId + pfad;
-      if (sessionStorage.getItem(schluessel)) return;
-      sessionStorage.setItem(schluessel, '1');
-    } catch (e) { return; }   // Speicher gesperrt: dann eben keine Meldung
+    if (gemeldet) return;
+    gemeldet = true;
+    var pfad = location.pathname.slice(0, 200);
 
     var daten = {
       pfad: pfad,
