@@ -6,6 +6,9 @@ import {
 import WartelistenFormular from './WartelistenFormular';
 import Erklaervideo from '@/components/Erklaervideo';
 import PlatzZaehler from './PlatzZaehler';
+import { useHerkunft, mitHerkunft } from '@/lib/herkunft';
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de';
 
 // Die Kennung kommt von aussen, weil dieselbe Seite an zwei Stellen steht:
 // unter "/" als Startseite und unter "/early-access" als Anzeigenziel. Wuerde
@@ -67,6 +70,10 @@ export default function EarlyAccessKampagne({
 }) {
   const [bestaetigt, setBestaetigt] = useState<boolean | null>(null);
   const [platz, setPlatz] = useState<string | null>(null);
+  // Die Kanal-Kurzlinks landen hier. Jeder Weg zum Kauf traegt die Herkunft
+  // weiter, sonst zaehlt der Kauf fuer keinen Kanal.
+  const herkunft = useHerkunft();
+  const proBuchen = mitHerkunft(APP_URL + '/register?plan=pro', herkunft);
 
   // Rueckkehr aus der Bestaetigungsmail. Der Endpunkt leitet seit der
   // Kampagne auf DIESE Seite zurueck statt auf die Startseite — wer ueber eine
@@ -96,9 +103,15 @@ export default function EarlyAccessKampagne({
                 </p>
                 <p className="text-sm text-green-800 mt-0.5">
                   {platz
-                    ? `Der Preis von ${PREIS_EARLY} im ersten Jahr ist für dich vorgemerkt. Wir melden uns, sobald es losgeht.`
-                    : 'Du stehst auf der Liste. Die 100 vergünstigten Plätze waren zu diesem Zeitpunkt bereits vergeben – wir melden uns trotzdem zum Start.'}
+                    ? `Buche Pro mit derselben E-Mail-Adresse, dann gilt ${PREIS_EARLY} statt ${PREIS_REGULAER} für zwölf Monate. Der Nachlass wird im Checkout automatisch abgezogen.`
+                    : `Du stehst auf der Liste. Die ${PLAETZE} vergünstigten Plätze waren zu diesem Zeitpunkt bereits vergeben, Pro kostet ${PREIS_REGULAER} im Monat.`}
                 </p>
+                <a
+                  href={proBuchen}
+                  className="inline-flex items-center gap-2 mt-3 bg-akzent-400 hover:bg-akzent-500 text-gray-900 font-semibold text-sm px-4 py-2 rounded-lg transition-colors"
+                >
+                  Pro buchen
+                </a>
               </div>
             </div>
           )}
@@ -140,6 +153,13 @@ export default function EarlyAccessKampagne({
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
             <WartelistenFormular kampagne={kampagne} id="anmeldung" />
           </div>
+          <p className="text-sm text-gray-600 mt-4">
+            Schon entschieden?{' '}
+            <a href={proBuchen} className="font-semibold text-akzent-800 underline underline-offset-2 hover:text-akzent-900">
+              Pro direkt buchen
+            </a>
+            . Der Early-Access-Preis gilt mit bestätigtem Platz, sonst {PREIS_REGULAER} im Monat.
+          </p>
             </div>
 
             <div className="w-full max-w-[520px] mx-auto lg:mx-0 lg:justify-self-end">
