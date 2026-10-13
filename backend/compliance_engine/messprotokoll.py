@@ -129,19 +129,34 @@ def _uebersetzt(rule_id: str, help_text: str, description: str) -> Tuple[str, st
         return (help_text or rule_id, description or "")
 
 
-def positive_checks(saetze: Iterable[Dict[str, Any]], *, seiten_gesamt: int) -> List[Dict[str, Any]]:
+def verletzte_regeln(issues: Iterable[Any]) -> set:
+    """axe-Regelkennungen, zu denen ein Befund vorliegt (metadata.axe_rule_id)."""
+    kennungen = set()
+    for issue in issues:
+        meta = _lies(issue, "metadata") or {}
+        if isinstance(meta, dict) and meta.get("axe_rule_id"):
+            kennungen.add(meta["axe_rule_id"])
+    return kennungen
+
+
+def positive_checks(saetze: Iterable[Dict[str, Any]], *, seiten_gesamt: int,
+                    ausser: Iterable[str] = ()) -> List[Dict[str, Any]]:
     """Fasst die Protokollsaetze aller Seiten je Regel zusammen.
 
     Jeder Eintrag sagt, auf wie vielen der geprueften Seiten die Regel lief
     und wie viele Elemente dabei gemessen wurden. Rechtspflichten (WCAG-Tags)
-    stehen vor Best-Practice-Regeln.
+    stehen vor Best-Practice-Regeln. `ausser` nennt Regeln, zu denen auf
+    irgendeiner Seite ein Befund vorliegt: eine Regel, die auf der Startseite
+    bestand und auf /kontakt verletzt ist, hat eine Abweichung und gehoert
+    nicht in die Liste "keine Abweichung gefunden".
     """
+    ausgeschlossen = set(ausser or ())
     je_regel: Dict[str, Dict[str, Any]] = {}
     for satz in saetze:
         seite = satz.get("page_url") or ""
         for regel in satz.get("regeln") or []:
             rid = regel.get("id")
-            if not rid:
+            if not rid or rid in ausgeschlossen:
                 continue
             eintrag = je_regel.setdefault(rid, {
                 "help": regel.get("help", ""),

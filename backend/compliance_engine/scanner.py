@@ -630,7 +630,10 @@ class ComplianceScanner:
         neue, neue_saetze = _messprotokoll.ziehe(neue)
         alle_saetze = list(ergebnis.pop("messprotokoll", None) or []) + neue_saetze
         ergebnis["positive_checks"] = _messprotokoll.positive_checks(
-            alle_saetze, seiten_gesamt=len(geprueft)
+            alle_saetze, seiten_gesamt=len(geprueft),
+            ausser=_messprotokoll.verletzte_regeln(
+                list(ergebnis.get("issues") or []) + list(neue)
+            ),
         )
 
         if not neue:
@@ -1143,7 +1146,10 @@ class ComplianceScanner:
                 # und messprotokoll.py. positive_checks sind geprüfte Regeln
                 # ohne Abweichung, keine aus Abwesenheit geschlossenen Erfolge.
                 "bfsg_einordnung": einordnung,
-                "positive_checks": _messprotokoll.positive_checks(protokoll_saetze, seiten_gesamt=1),
+                "positive_checks": _messprotokoll.positive_checks(
+                    protokoll_saetze, seiten_gesamt=1,
+                    ausser=_messprotokoll.verletzte_regeln(issues),
+                ),
                 "messprotokoll": protokoll_saetze,
                 # Der Rechtsraum gehoert an die Zahl, nicht in die Fussnote.
                 #
