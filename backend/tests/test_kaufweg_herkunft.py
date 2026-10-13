@@ -92,6 +92,21 @@ class TestOberflaeche:
         text = _datei("landing-react/src/components/saas-landing/PricingSection.tsx")
         assert "mitHerkunft(plan.href, herkunft)" in text
 
+    def test_herkunft_ueberlebt_den_seitenwechsel(self):
+        """Die Kurzlinks landen auf /early-access (Entscheidung 07.10.2026).
+        Ohne gemerkte Herkunft verlor ein Wechsel ueber 'Preise' auf die
+        Startseite den Kanal."""
+        text = _datei("landing-react/src/lib/herkunft.ts")
+        assert "sessionStorage.setItem" in text
+        assert "setHerkunft(aktuelleHerkunft())" in text
+        scanner = _datei("landing-react/src/components/landing/WebsiteScanner.tsx")
+        assert "aktuelleHerkunft()" in scanner
+
+    def test_kampagnenseite_fuehrt_mit_herkunft_zum_kauf(self):
+        text = _datei("landing-react/src/components/kampagne/EarlyAccessKampagne.tsx")
+        assert "mitHerkunft(APP_URL + '/register?plan=pro', herkunft)" in text
+        assert "sobald es losgeht" not in text, "Bestaetigung verspricht noch einen Start, der schon war"
+
     def test_keine_sepa_zusage_auf_der_preisseite(self):
         """SEPA ist im Live-Konto nicht freigeschaltet (14.09.2026). Die Zeile
         unter der Preistabelle versprach es trotzdem."""
