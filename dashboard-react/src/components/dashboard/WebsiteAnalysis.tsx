@@ -26,6 +26,7 @@ import { OptimizationModeLock } from './OptimizationModeLock';
 import { ComplianceWizard } from './ComplianceWizard';
 import QuickWins from './QuickWins';
 import { ManualChecksSection } from './ManualChecksSection';
+import { BfsgEinordnungKasten, GepruefteRegeln } from './BfsgEinordnung';
 import ScanProgressPanel from './ScanProgressPanel';
 import apiClient from '@/lib/api';
 
@@ -321,10 +322,13 @@ export const WebsiteAnalysis: React.FC = () => {
   const pillars = [
     {
       id: 'accessibility',
-      name: 'Barrierefreiheit',
+      // Beschriftung folgt der BFSG-Einordnung (bfsg_einordnung.py): "(BFSG)",
+      // "(WCAG 2.1 AA)" oder "(WCAG 2.1 AA, BFSG-Einordnung offen)". Die
+      // Punkte zaehlen in jedem Fall voll; nur die Rechtsfolge wird benannt.
+      name: (analysisData as any)?.bfsg_einordnung?.saeulen_beschriftung || 'Barrierefreiheit',
       icon: Eye,
       color: 'blue',
-      description: 'gemessen gegen WCAG 2.1 AA',
+      description: (analysisData as any)?.bfsg_einordnung?.saeulen_beschreibung || 'gemessen gegen WCAG 2.1 AA',
       keywords: ['accessibility', 'wcag', 'aria', 'barrierefreiheit', 'barriere', 'alt-text', 'alt_text', 'kontrast', 'contrast', 'tastat']
     },
     {
@@ -775,6 +779,12 @@ export const WebsiteAnalysis: React.FC = () => {
                     {isExpanded && issueCount > 0 && (
                       <div className="border-t dark:border-zinc-800/50 border-gray-200 p-6 bg-black/20 animate-slide-down">
                         <div className="space-y-4">
+                          {/* BFSG-Einordnung vor den Befunden: erst die Rechtsfolge, dann die Messung */}
+                          {pillar.id === 'accessibility' && (
+                            <ErrorBoundary componentName="BfsgEinordnungKasten">
+                              <BfsgEinordnungKasten einordnung={(analysisData as any)?.bfsg_einordnung} />
+                            </ErrorBoundary>
+                          )}
                           {/* ✨ NEU: Gruppierte Issues (wenn vorhanden) */}
                           {(() => {
                             const issueGroups = (analysisData as any)?.issue_groups || [];
@@ -858,7 +868,11 @@ export const WebsiteAnalysis: React.FC = () => {
                           
                           {/* 🚀 BARRIEREFREIHEIT: Eine einzige, klare Widget-Karte (nicht doppelt!) */}
                           {pillar.id === 'accessibility' && analysisData && (
-                            <div className="mt-6">
+                            <div className="mt-6 space-y-4">
+                              {/* Messprotokoll: geprüfte Regeln ohne Abweichung */}
+                              <ErrorBoundary componentName="GepruefteRegeln">
+                                <GepruefteRegeln checks={(analysisData as any)?.positive_checks || []} />
+                              </ErrorBoundary>
                               {/* ✅ EINZIGE Widget-Integration Card - mit korrektem Status */}
                               <ErrorBoundary componentName="WidgetIntegrationCard">
                                 <WidgetIntegrationCard
@@ -897,10 +911,23 @@ export const WebsiteAnalysis: React.FC = () => {
                     
                     {/* Leerer Zustand wenn keine Issues */}
                     {isExpanded && issueCount === 0 && (
-                      <div className="border-t dark:border-zinc-800/50 border-gray-200 p-6 bg-black/20 text-center">
-                        <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-3" />
-                        <p className="text-gray-700 dark:text-zinc-300 font-medium">Keine Issues gefunden</p>
-                        <p className="text-zinc-500 text-sm mt-1">Diese Kategorie ist vollständig compliant! 🎉</p>
+                      <div className="border-t dark:border-zinc-800/50 border-gray-200 p-6 bg-black/20 space-y-4">
+                        {pillar.id === 'accessibility' && (
+                          <ErrorBoundary componentName="BfsgEinordnungKasten">
+                            <BfsgEinordnungKasten einordnung={(analysisData as any)?.bfsg_einordnung} />
+                          </ErrorBoundary>
+                        )}
+                        <div className="text-center">
+                          <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-3" />
+                          <p className="text-gray-700 dark:text-zinc-300 font-medium">Keine Abweichung gefunden</p>
+                          {/* Messung, kein Zustand: die Automatik deckt nur einen Teil der Kriterien ab. */}
+                          <p className="text-zinc-500 text-sm mt-1">In dieser Kategorie hat die automatische Prüfung keine Abweichung gefunden. Sie deckt nur einen Teil der Anforderungen ab, siehe „Manuell prüfen“.</p>
+                        </div>
+                        {pillar.id === 'accessibility' && (
+                          <ErrorBoundary componentName="GepruefteRegeln">
+                            <GepruefteRegeln checks={(analysisData as any)?.positive_checks || []} standardOffen />
+                          </ErrorBoundary>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1011,7 +1038,7 @@ const VerdictHeader: React.FC<{
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold">
         {positiveChecks.length > 0 && (
           <span className="px-2.5 py-1 rounded-full bg-green-500/15 text-green-500 border border-green-500/30">
-            ✓ {positiveChecks.length} bestanden
+            ✓ {positiveChecks.length} Regeln geprüft, keine Abweichung
           </span>
         )}
         {kritisch.length > 0 && (

@@ -1368,6 +1368,13 @@ async def fuehre_v2_scan_aus(
         # die EINZIGE Frist: zua-zwickau.de brauchte 389 s, und der Kunde bekam
         # statt eines Teilergebnisses einen 504 ohne jeden Befund.
         SCANNER_FRIST = 265.0
+        # Unternehmensprofil (Beschaeftigte, Umsatz, B2C, Online-Vertrag) fuer
+        # die BFSG-Einordnung der Barrierefreiheitsbefunde. Fehlt es, bleibt
+        # die Einordnung offen; der Scan laeuft unveraendert.
+        from compliance_engine import unternehmensprofil as _profil
+        unternehmensprofil = await _profil.lade(
+            db_pool, current_user.get("id") or current_user.get("user_id")
+        )
         async with ComplianceScanner() as scanner:
             scan_result = await asyncio.wait_for(
                 scanner.scan_website_multipage(
@@ -1375,6 +1382,7 @@ async def fuehre_v2_scan_aus(
                     max_seiten=seitenbudget,
                     progress_token=scan_token,
                     zeitbudget=SCANNER_FRIST,
+                    unternehmensprofil=unternehmensprofil,
                 ),
                 timeout=SCANNER_FRIST + 35.0
             )

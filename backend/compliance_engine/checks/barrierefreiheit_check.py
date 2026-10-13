@@ -209,6 +209,14 @@ async def _run_axe_core_safe(url: str, timeout: float = 35.0) -> Optional[List[D
                     },
                 })
 
+        # Messprotokoll: die Regeln ohne Abweichung reisen als Eintrag im
+        # Befundformat mit und werden im Scanner vor der Bewertung wieder
+        # herausgezogen (messprotokoll.ziehe). Siehe messprotokoll.py.
+        bestanden = getattr(result, "bestanden", None) or []
+        if bestanden:
+            from compliance_engine import messprotokoll
+            axe_issues.append(messprotokoll.marker(url, bestanden))
+
         return axe_issues
     except ImportError:
         logger.warning("⚠️ axe-core/Playwright nicht verfügbar – Scan läuft heuristisch weiter")
