@@ -63,6 +63,10 @@ except ImportError:
 from compliance_engine.score_calculator import ScoreCalculator, PillarStatus
 from compliance_engine.sicherer_abruf import sichere_session
 from compliance_engine.context import ScanContext
+from compliance_engine import messprotokoll as _messprotokoll
+# Rechtsraum-Wissen "de", deshalb neben pflichten_katalog.py und nicht im
+# Pruefkern (siehe tests/test_rechtsraum_waechter.py).
+import bfsg_einordnung as _bfsg
 from compliance_engine.jurisdictions import (
     DEFAULT_JURISDICTION,
     active_checks,
@@ -491,6 +495,7 @@ class ComplianceScanner:
     async def scan_website_multipage(
         self, url: str, max_seiten: int = 10, progress_token: "Optional[str]" = None,
         zeitbudget: "Optional[float]" = None,
+        unternehmensprofil: "Optional[Dict[str, Any]]" = None,
     ) -> Dict[str, Any]:
         """
         Prueft Startseite plus die rechtlich relevantesten Unterseiten.
@@ -517,7 +522,9 @@ class ComplianceScanner:
         def _restzeit() -> float:
             return gesamtbudget - (datetime.now() - beginn).total_seconds()
 
-        ergebnis = await self.scan_website(url, progress_token=progress_token)
+        ergebnis = await self.scan_website(
+            url, progress_token=progress_token, unternehmensprofil=unternehmensprofil,
+        )
         if max_seiten <= 0 or ergebnis.get("scan_status") == "error" or ergebnis.get("error"):
             return ergebnis
 
@@ -617,6 +624,15 @@ class ComplianceScanner:
             geprueft.append(seite.url)
             neue.extend(liste)
 
+        # Messprotokoll der Unterseiten mit dem der Startseite zusammenfuehren;
+        # die Rohsaetze bleiben nicht im Ergebnis (scan_data wuerde sonst je
+        # Seite um die ganze Regelliste wachsen).
+        neue, neue_saetze = _messprotokoll.ziehe(neue)
+        alle_saetze = list(ergebnis.pop("messprotokoll", None) or []) + neue_saetze
+        ergebnis["positive_checks"] = _messprotokoll.positive_checks(
+            alle_saetze, seiten_gesamt=len(geprueft)
+        )
+
         if not neue:
             ergebnis["pages_scanned"] = {
                 "total": len(geprueft), "urls": geprueft,
@@ -644,6 +660,9 @@ class ComplianceScanner:
         # bleibt erhalten, die Anzahl merken wir uns separat.
         vor_dedup = len(alle)
         alle = dedupe_issues(alle)
+        # Unterseiten-Befunde tragen die Einordnung der Startseite nach;
+        # fuer die Startseiten-Befunde ist der Aufruf idempotent.
+        alle = _bfsg.anwenden(alle, ergebnis.get("bfsg_einordnung"))
 
         # Ungeprüfte Säulen aus dem Erst-Scan durchreichen: scheiterte dort z.B.
         # der axe-Check, lag für die Säule KEINE Evidenz vor (Status UNVERIFIED).
@@ -697,6 +716,7 @@ class ComplianceScanner:
         url: str,
         progress_token: "Optional[str]" = None,
         jurisdiction: str = DEFAULT_JURISDICTION,
+        unternehmensprofil: "Optional[Dict[str, Any]]" = None,
     ) -> Dict[str, Any]:
         """Vollstaendiger Compliance-Scan einer Website.
 
@@ -711,7 +731,10 @@ class ComplianceScanner:
         Befunde, die ihm die Verletzung des deutschen
         Barrierefreiheitsstaerkungsgesetzes vorwarfen.
         """
-        kontext = ScanContext(url=url, jurisdiction=jurisdiction, session=self.session)
+        kontext = ScanContext(
+            url=url, jurisdiction=jurisdiction, session=self.session,
+            unternehmensprofil=unternehmensprofil,
+        )
         aktive_pruefungen = set(active_checks(kontext.jurisdiction))
         logger.info(
             "Rechtsraum %s: %d Pruefungen aktiv", kontext.jurisdiction,
@@ -948,6 +971,11 @@ class ComplianceScanner:
             # leere Liste bedeutet "gilt hier nicht" und wird ueber
             # active_pillars ohnehin nicht gewertet.
             barriere_issues = nach_name.get("barrierefreiheit", [])
+            # Messprotokoll (axe-Regeln ohne Abweichung) vor der Bewertung
+            # herausziehen: es ist Beleg, kein Befund. Siehe messprotokoll.py.
+            protokoll_saetze: "List[Dict[str, Any]]" = []
+            if isinstance(barriere_issues, list):
+                barriere_issues, protokoll_saetze = _messprotokoll.ziehe(barriere_issues)
             impressum_issues = nach_name.get("impressum", [])
             datenschutz_issues = nach_name.get("datenschutz", [])
             cookie_issues = nach_name.get("cookie", [])
@@ -1046,6 +1074,24 @@ class ComplianceScanner:
             # sonst kostet ein Mangel doppelt und steht zweimal im Report.
             issues = dedupe_issues(issues)
 
+            # BFSG-Einordnung: Unternehmensprofil (Beschaeftigte, Umsatz, B2C,
+            # Online-Vertrag) plus Seitenmerkmale entscheiden, ob an den
+            # Barrierefreiheitsbefunden eine BFSG-Pflicht haengt. Die Messung
+            # bleibt; Betrag und Rechtsgrundlage folgen der Einordnung.
+            from compliance_engine.checks.barrierefreiheit_check import _bfsg_anwendungsbereich
+            try:
+                _seitenmerkmale = bool(_bfsg_anwendungsbereich(soup))
+            except Exception:  # pragma: no cover - Heuristik darf den Scan nie kippen
+                _seitenmerkmale = False
+            # Nur im Rechtsraum "de": das BFSG ist deutsches Recht. Ein
+            # niederlaendischer Kunde bekommt keine Einordnung (None) und
+            # unveraenderte Befunde.
+            einordnung = (
+                _bfsg.einordnen(kontext.unternehmensprofil, seitenmerkmale=_seitenmerkmale)
+                if kontext.jurisdiction == "de" else None
+            )
+            issues = _bfsg.anwenden(issues, einordnung)
+
             # ✅ v4.0 Klassifizierung: Bearbeitungsaufwand pro Issue (für Hinweise/Priorisierung)
             for _issue in issues:
                 if not _issue.effort:
@@ -1093,6 +1139,12 @@ class ComplianceScanner:
                     for pillar, score in _pillar_scores.items()
                 ],
                 "pillar_status": _pillar_status,
+                # BFSG-Einordnung und Messprotokoll, siehe bfsg_einordnung.py
+                # und messprotokoll.py. positive_checks sind geprüfte Regeln
+                # ohne Abweichung, keine aus Abwesenheit geschlossenen Erfolge.
+                "bfsg_einordnung": einordnung,
+                "positive_checks": _messprotokoll.positive_checks(protokoll_saetze, seiten_gesamt=1),
+                "messprotokoll": protokoll_saetze,
                 # Der Rechtsraum gehoert an die Zahl, nicht in die Fussnote.
                 #
                 # Gemessen am 23.09.2026 auf panoart360.de: im Profil "de" 50
@@ -1134,6 +1186,7 @@ class ComplianceScanner:
                     issues, _pillar_scores, _pillar_status,
                     is_shop=detect_shop(soup),
                     has_widget=has_accessibility_widget,
+                    einordnung=einordnung,
                 ),
                 "ai_act_report": self._build_ai_act_report(
                     ai_act_issues if not isinstance(ai_act_issues, Exception) else []
@@ -1166,7 +1219,8 @@ class ComplianceScanner:
     
     @staticmethod
     def _build_bfsg_report(issues, pillar_scores, pillar_status,
-                           is_shop: bool, has_widget: bool) -> Dict[str, Any]:
+                           is_shop: bool, has_widget: bool,
+                           einordnung: "Optional[Dict[str, Any]]" = None) -> Dict[str, Any]:
         """
         Phase 7.1: Expliziter BFSG-Report für den Lead-Magnet.
 
@@ -1189,8 +1243,14 @@ class ComplianceScanner:
                 "Das BFSG gilt seit 28.06.2025. Marktüberwachungsbehörden können "
                 "Dienste untersagen; Bußgelder bis 100.000 € (§ 37 BFSG)."
             ),
-            "likely_in_scope": is_shop,
+            "likely_in_scope": is_shop or (einordnung or {}).get("status") == _bfsg.GREIFT,
+            # Einordnung nach Profil und Seitenmerkmalen (bfsg_einordnung.py).
+            # Liegt ein Profil vor, ist sie die massgebliche Aussage; die
+            # Shop-Heuristik darunter bleibt fuer den Vorschau-Scan ohne Konto.
+            "einordnung": einordnung,
             "scope_note": (
+                (einordnung or {}).get("text")
+                if (einordnung or {}).get("profil_vorhanden") else
                 "Auf dieser Website wurden Shop-/E-Commerce-Merkmale erkannt — "
                 "elektronischer Geschäftsverkehr für Verbraucher fällt in den "
                 "BFSG-Anwendungsbereich (§ 1 Abs. 3 Nr. 5 BFSG). "
@@ -1201,6 +1261,7 @@ class ComplianceScanner:
                 "gilt, hängt von Ihren Dienstleistungen ab (z. B. Terminbuchung, "
                 "Kundenkonto, Verträge online) — bitte selbst prüfen."
             ),
+            "saeulen_beschriftung": (einordnung or {}).get("saeulen_beschriftung"),
             "score": round(pillar_scores.get("accessibility", 0)),
             "status": pillar_status.get("accessibility"),
             "critical_issues": len([i for i in a11y_issues if i.severity == "critical"]),

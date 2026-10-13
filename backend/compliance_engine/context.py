@@ -7,7 +7,7 @@ Parameter (url, session, ...) zu verteilen. Stufe 1 unterstützt die Profile
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import aiohttp
 
@@ -27,12 +27,18 @@ class ScanContext:
         jurisdiction: Rechtsraum-Profil, z.B. "de" | "eu" (Stufe 1).
         language: Ausgabesprache der Issue-Texte ("de" | "en").
         session: Geteilte aiohttp-Session des Scanners (optional).
+        unternehmensprofil: Antworten aus company_profiles (employees, revenue,
+            b2c, online_shop, digital_service, ...). None beim oeffentlichen
+            Vorschau-Scan. Daraus ordnet bfsg_einordnung.py die
+            Barrierefreiheitsbefunde ein; ohne Profil bleibt die Einordnung
+            offen, die Messung laeuft unveraendert.
     """
 
     url: str
     jurisdiction: str = DEFAULT_JURISDICTION
     language: str = ""  # leer = aus Jurisdiction-Profil ableiten
     session: Optional[aiohttp.ClientSession] = field(default=None, repr=False)
+    unternehmensprofil: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):
         self.jurisdiction = normalize_jurisdiction(self.jurisdiction)

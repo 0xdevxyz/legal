@@ -150,6 +150,12 @@ class AxeScanResult:
     # Laeuft im selben Lauf, weil sie denselben geoeffneten Baum braucht.
     struktur_fixes: Optional[Dict[str, Any]] = None
 
+    # Regeln, die auf dieser Seite liefen und keine Abweichung zeigten
+    # (axe `passes`): Kennung, Hilfetext, Beschreibung, Tags, Zahl der
+    # geprueften Elemente. Bis zum 13.10.2026 blieb davon nur die Zahl
+    # uebrig; der Pruefnachweis braucht die Liste (messprotokoll.py).
+    bestanden: List[Dict[str, Any]] = field(default_factory=list)
+
     # Hat die Seite waehrend der Messung das complyo-Widget geladen?
     #
     # Nur im Wirkungsscan interessant (dort ist die Sperre aus). Er kann damit
@@ -166,6 +172,7 @@ class AxeScanResult:
             "passes": self.passes,
             "incomplete": self.incomplete,
             "inapplicable": self.inapplicable,
+            "bestanden": self.bestanden,
             "kontrast_fixes": self.kontrast_fixes,
             "struktur_fixes": self.struktur_fixes,
             "total_violations": self.total_violations,
@@ -646,6 +653,19 @@ class AxeScanner:
                 wcag_criteria=wcag_criteria
             ))
         
+        bestanden = [
+            {
+                "id": p.get("id", ""),
+                "help": p.get("help", ""),
+                "description": p.get("description", ""),
+                "help_url": p.get("helpUrl", ""),
+                "tags": list(p.get("tags") or []),
+                "nodes": len(p.get("nodes") or []),
+            }
+            for p in raw_results.get("passes", [])
+            if p.get("id")
+        ]
+
         return AxeScanResult(
             url=url,
             timestamp=datetime.now().isoformat(),
@@ -655,7 +675,8 @@ class AxeScanner:
             inapplicable=len(raw_results.get("inapplicable", [])),
             total_violations=len(violations),
             by_impact=by_impact,
-            by_wcag=by_wcag
+            by_wcag=by_wcag,
+            bestanden=bestanden,
         )
     
     def _create_empty_result(self, url: str, error: str) -> AxeScanResult:

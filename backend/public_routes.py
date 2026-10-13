@@ -132,7 +132,8 @@ class AnalysisResponse(BaseModel):
     compliance_score: int
     estimated_risk_euro: Optional[str] = None
     issues: List[ComplianceIssue]  # Changed from list to List[ComplianceIssue]
-    positive_checks: Optional[List[Dict[str, Any]]] = []  # NEW: Was funktioniert bereits
+    positive_checks: Optional[List[Dict[str, Any]]] = []  # Messprotokoll: geprüfte Regeln ohne Abweichung
+    bfsg_einordnung: Optional[Dict[str, Any]] = None  # BFSG nach Profil: applies | check | not_indicated
     pillar_scores: Optional[List[PillarScore]] = []  # NEW: Säulen-Scores
     issue_groups: Optional[List[Dict[str, Any]]] = []  # ✅ NEU: Gruppierte Issues
     grouping_stats: Optional[Dict[str, Any]] = {}  # ✅ NEU: Gruppierungs-Statistiken
@@ -259,10 +260,14 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 _fortschritt.starte(request.scan_token)
             else:
                 request.scan_token = None
+            # Unternehmensprofil fuer die BFSG-Einordnung (bfsg_einordnung.py).
+            from compliance_engine import unternehmensprofil as _profil
+            unternehmensprofil = await _profil.lade(db_pool, user_id)
             async with ComplianceScanner() as scanner:
                 scan_result, website_structure = await asyncio.gather(
                     scanner.scan_website_multipage(
-                        url, max_seiten=seitenbudget, progress_token=request.scan_token
+                        url, max_seiten=seitenbudget, progress_token=request.scan_token,
+                        unternehmensprofil=unternehmensprofil,
                     ),
                     crawler.crawl_website(url),
                     return_exceptions=True
@@ -445,12 +450,10 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
             except Exception as e:
                 logger.warning(f"Priority Engine Fehler (nicht kritisch): {e}")
             
-            # Prepare response
-            # Generate positive checks
-            positive_checks = _generate_positive_checks(
-                structured_issues, 
-                scan_result.get("compliance_score", 50)
-            )
+            # Bestandenes kommt aus dem Messprotokoll des Scanners (axe-Regeln,
+            # die liefen und keine Abweichung zeigten), nicht mehr aus der
+            # Abwesenheit von Befunden. Siehe compliance_engine/messprotokoll.py.
+            positive_checks = scan_result.get("positive_checks") or []
             
             # ✅ AI Review Pass: Prüft und verfeinert ALLE Issues + generiert individuelle Lösungen
             if OPENROUTER_API_KEY and len(structured_issues) > 0:
@@ -680,6 +683,7 @@ async def analyze_website_public(request: AnalyzeRequest, http_request: Request,
                 compliance_score=overall_compliance_score,  # ✅ Durchschnitt statt Scanner-Score
                 issues=structured_issues,
                 positive_checks=positive_checks,
+                bfsg_einordnung=scan_result.get("bfsg_einordnung"),
                 pillar_scores=pillar_scores,  # ✅ NEU: Säulen-Scores
                 issue_groups=issue_groups,  # ✅ NEU: Gruppierte Issues (immer Liste)
                 grouping_stats=grouping_stats,  # ✅ NEU: Gruppierungs-Statistiken (immer Dict)
@@ -820,7 +824,8 @@ def _minimal_response_from_scan(url: str, scan_result: Dict[str, Any]) -> "Analy
         url=scan_result.get("url", url),
         compliance_score=overall,
         issues=issues,
-        positive_checks=[],
+        positive_checks=scan_result.get("positive_checks") or [],
+        bfsg_einordnung=scan_result.get("bfsg_einordnung"),
         pillar_scores=pillar_scores,
         issue_groups=[],
         grouping_stats={},
@@ -908,166 +913,6 @@ def _determine_issue_area(category: str) -> str:
         'security': 'HTTP-Header/Server',
     }
     return area_mapping.get(category, 'Unbekannter Bereich')
-
-def _generate_positive_checks(structured_issues: list, compliance_score: int) -> list:
-    """Generiert positive Checks basierend auf fehlenden Issues"""
-    all_categories = {
-        'impressum': 'Impressum vorhanden und vollständig',
-        'datenschutz': 'Datenschutzerklärung vollständig',
-        'cookies': 'Cookie-Banner korrekt implementiert',
-        'barrierefreiheit': 'Barrierefreiheit-Tools implementiert',
-        'https': 'HTTPS-Verschlüsselung aktiv',
-        'responsive': 'Mobile-optimierte Darstellung',
-    }
-    
-    # Extrahiere vorhandene Issue-Kategorien
-    # Sicherer Zugriff: dict oder Pydantic-Objekt
-    issue_categories = {
-        issue.get('category') if isinstance(issue, dict) else issue.category 
-        for issue in structured_issues
-    }
-    
-    # Generiere positive Checks für nicht-vorhandene Issues
-    positive_checks = []
-    for category, description in all_categories.items():
-        if category not in issue_categories:
-            positive_checks.append({
-                'category': category,
-                'title': description,
-                'status': 'compliant',
-                'icon': '✅'
-            })
-    
-    # Füge weitere positive Checks basierend auf Score hinzu
-    if compliance_score >= 50:
-        positive_checks.append({
-            'category': 'general',
-            'title': 'Grundlegende Compliance-Anforderungen erfüllt',
-            'status': 'compliant',
-            'icon': '✅'
-        })
-    
-    return positive_checks
-
-async def _generate_ai_solution(issue_title: str, issue_description: str, category: str, url: str, retry_count: int = 0) -> Optional[str]:
-    """
-    Generiert individuelle KI-Lösung mit intelligentem Caching
-    
-    Flow:
-    1. Prüfe Cache (Exact + Fuzzy Match)
-    2. Bei Cache-Miss: OpenRouter API
-    3. Speichere neue Lösung im Cache
-    """
-    
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 1️⃣ VERSUCHE CACHE-LOOKUP ZUERST
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    if solution_cache:
-        try:
-            cached = await solution_cache.get_cached_solution(
-                category=category,
-                title=issue_title,
-                description=issue_description,
-                use_fuzzy=True
-            )
-            
-            if cached:
-                # ✅ Cache Hit - Spare API Call!
-                match_type = cached.get('match_type', 'exact')
-                usage = cached.get('usage_count', 0)
-                success = cached.get('success_rate', 0.0)
-                
-                prefix = f"🎯 **Bewährte Lösung** ({usage}x erfolgreich umgesetzt, {success:.0%} Success Rate)\n\n"
-                
-                if match_type == 'fuzzy':
-                    similarity = cached.get('similarity', 0.0)
-                    prefix = f"🎯 **Ähnliche bewährte Lösung** ({similarity:.0%} Match, {usage}x verwendet)\n\n"
-                
-                return prefix + cached['solution']
-        except Exception as e:
-            logger.error(f"❌ Cache lookup failed: {e} - Falling back to API")
-    
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 2️⃣ CACHE MISS - Nutze OpenRouter API
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    if not OPENROUTER_API_KEY:
-        logger.warning("⚠️ No OPENROUTER_API_KEY - skipping AI solution")
-        return None
-    
-    # Rate Limit Handling: Max 3 Retries mit exponential backoff
-    MAX_RETRIES = 3
-    BACKOFF_SECONDS = [2, 5, 10]  # 2s, 5s, 10s
-    
-    try:
-        prompt = f"""Du bist ein Experte für Website-Compliance und Barrierefreiheit.
-
-WEBSITE: {url}
-PROBLEM: {issue_title}
-DETAILS: {issue_description}
-KATEGORIE: {category}
-
-Erstelle eine **praxisnahe, individuell auf dieses Problem zugeschnittene Lösung**.
-
-WICHTIG:
-- Beziehe dich konkret auf die Website {url}
-- Gib spezifische, umsetzbare Schritte
-- Füge passende Code-Beispiele hinzu
-- Erkläre anfängerfreundlich
-
-Format:
-1. Kurze Analyse des Problems (2-3 Sätze)
-2. Konkrete Lösungsschritte (3-5 Punkte)
-3. Code-Beispiel (falls relevant)
-4. Hinweis zur Überprüfung
-
-Antworte auf Deutsch, maximal 300 Wörter."""
-
-        # Ueber ki_zugang, damit der Aufruf am Budget haengt (siehe ki_zugang.py).
-        # Diese Stelle erzeugt eine Loesung JE BEFUND auf einem oeffentlichen
-        # Pfad - dieselbe Vervielfacher-Form wie der Vorfall vom 04.09.2026.
-        # Der Cache davor bleibt die erste Bremse, das Budget die zweite.
-        import ki_zugang
-        try:
-            antwort = await ki_zugang.chat(
-                model=SOLUTION_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                zweck="Compliance Scanner",
-                max_tokens=800,
-                temperature=0.7,
-                timeout=15,
-                versuche=MAX_RETRIES,
-            )
-        except ki_zugang.BudgetErschoepft as e:
-            logger.warning(f"KI-Loesung ohne KI (Budget): {e}")
-            return None
-
-        if not antwort.erfolg or not antwort.inhalt:
-            logger.error(f"❌ KI-Loesung fehlgeschlagen: {antwort.fehler}")
-            return None
-
-        ai_solution = antwort.inhalt
-        logger.info(f"✅ KI-Lösung generiert für: {issue_title[:50]}...")
-
-        if solution_cache and ai_solution:
-            try:
-                await solution_cache.store_solution(
-                    category=category,
-                    title=issue_title,
-                    description=issue_description,
-                    solution=ai_solution,
-                    model=SOLUTION_MODEL
-                )
-            except Exception as e:
-                logger.error(f"❌ Failed to cache solution: {e}")
-
-        return ai_solution
-
-    except asyncio.TimeoutError:
-        logger.error(f"❌ KI-Lösung Timeout für: {issue_title[:50]}")
-        return None
-    except Exception as e:
-        logger.error(f"❌ KI-Lösung Generation failed: {e}")
-        return None
 
 def _recommendation_to_steps(recommendation: str) -> List[str]:
     """Zerlegt einen Empfehlungstext in einzelne, nummerierte Handlungsschritte.
