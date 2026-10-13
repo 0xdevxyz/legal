@@ -127,6 +127,43 @@ CREATE INDEX IF NOT EXISTS idx_wirkungsscan_site
 """
 
 
+def _verlaufszeile(z) -> Dict[str, Any]:
+    """Eine Messung fuer den Verlauf — die Zahlen reisen mit ihrer Zuschreibung.
+
+    Die Auslieferungszahl (`mit_widget`) und die Differenz (`behoben`) stehen
+    nur dann in der Zeile, wenn die Messung beobachtet hat, dass das Skript
+    im zweiten Lauf angefordert wurde. Ohne diese Beobachtung ist der
+    Unterschied Messrauschen zweier verschieden geladener Seiten, und eine
+    Zeile "47 behoben" haette eine Wirkung behauptet, die niemand gemessen hat
+    (siehe `wirkungsscan()`, dort steht derselbe Grundsatz fuer eine einzelne
+    Messung).
+
+    `widget_geladen` ist dreiwertig: True, False oder None. Messungen vor dem
+    20.09.2026 haben die Beobachtung nicht gespeichert; None heisst
+    "unbekannt", nicht "nein", und wird auch nicht aus der Lage zurueckgerechnet:
+    die Lage dieser Zeilen stammt aus der Fassung, die aus dem Unterschied auf
+    ein laufendes Widget schloss.
+    """
+    roh = z["widget_geladen"]
+    if isinstance(roh, bool) or roh is None:
+        geladen = roh
+    else:
+        geladen = {"true": True, "false": False}.get(str(roh).strip().lower())
+
+    zeile: Dict[str, Any] = {
+        "ohne_widget": z["ohne_widget"],
+        "widget_geladen": geladen,
+        # Die Lage unbeobachteter Zeilen stammt aus der fehlerhaften Fassung
+        # (siehe oben) und wird nicht weitergereicht.
+        "lage": z["lage"] if geladen is not None else "unbekannt",
+        "gemessen_am": z["gemessen_am"].strftime("%Y-%m-%d %H:%M"),
+    }
+    if geladen is True:
+        zeile["mit_widget"] = z["mit_widget"]
+        zeile["behoben"] = max(0, z["ohne_widget"] - z["mit_widget"])
+    return zeile
+
+
 @router.get("/{site_id}/verlauf")
 async def verlauf(site_id: str,
                   user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
@@ -146,7 +183,8 @@ async def verlauf(site_id: str,
         if site_id not in {derive_site_id(z["url"]) for z in eigene}:
             raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Website")
         zeilen = await conn.fetch(
-            """SELECT ohne_widget, mit_widget, lage, gemessen_am
+            """SELECT ohne_widget, mit_widget, lage, gemessen_am,
+                      ergebnis->>'widget_geladen' AS widget_geladen
                FROM accessibility_wirkungsscan
                WHERE site_id = $1 ORDER BY gemessen_am DESC LIMIT 30""",
             site_id)
@@ -154,13 +192,7 @@ async def verlauf(site_id: str,
     return {
         "success": True,
         "site_id": site_id,
-        "messungen": [
-            {"ohne_widget": z["ohne_widget"], "mit_widget": z["mit_widget"],
-             "behoben": max(0, z["ohne_widget"] - z["mit_widget"]),
-             "lage": z["lage"],
-             "gemessen_am": z["gemessen_am"].strftime("%Y-%m-%d %H:%M")}
-            for z in zeilen
-        ],
+        "messungen": [_verlaufszeile(z) for z in zeilen],
     }
 
 

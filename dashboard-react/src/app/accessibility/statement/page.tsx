@@ -2,6 +2,7 @@
 
 import StatementGenerator from '@/components/accessibility/StatementGenerator';
 import NachweisLinks from '@/components/accessibility/NachweisLinks';
+import WirkungsAnzeige from '@/components/accessibility/WirkungsAnzeige';
 
 export default function AccessibilityStatementPage() {
   return (
@@ -13,6 +14,7 @@ export default function AccessibilityStatementPage() {
         {' '}— dort verbinden Sie auch Ihr GitHub-Repository für den Ein-Klick-Pull-Request.
       </div>
       <NachweisLinks />
+      <WirkungsAnzeige />
       <StatementGenerator />
     </main>
   );
