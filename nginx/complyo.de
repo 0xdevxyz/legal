@@ -136,6 +136,11 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
+    # Das API-Schema beschreibt jede Route samt Admin-Wegen und war am
+    # 13.10.2026 ohne Anmeldung abrufbar. Das Backend liefert es nach dem
+    # naechsten Build selbst nicht mehr aus; bis dahin sperrt das hier.
+    location = /openapi.json { return 404; }
+
     location / {
         # CORS preflight
         if ($request_method = OPTIONS) {
