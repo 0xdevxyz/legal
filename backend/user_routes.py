@@ -207,12 +207,9 @@ async def export_user_data(current_user: dict = Depends(get_current_user)):
 @router.get("/health")
 async def user_health():
     """Health check for user service"""
-    return {
-        "status": "healthy",
-        "service": "user",
-        "db_pool_initialized": db_pool is not None,
-        "auth_service_initialized": auth_service is not None
-    }
+    # Nur der Gesamtzustand, keine Angabe zu einzelnen Diensten (ohne Anmeldung).
+    bereit = db_pool is not None and auth_service is not None
+    return {"status": "healthy" if bereit else "degraded"}
 
 
 class UpdateProfileRequest(BaseModel):

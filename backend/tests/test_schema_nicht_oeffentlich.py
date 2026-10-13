@@ -17,6 +17,16 @@ Der Test liest `main_production.py` statt es zu importieren: die Import-Kette
 braucht Datenbank und Schluessel und scheitert in der Testumgebung. Er liest
 genau diese eine Datei, denn dort wird die App erzeugt und `/health` definiert.
 Eine zweite App-Erzeugung an anderer Stelle sahe er nicht.
+
+Zweiter Teil (13.10.2026, nach dem Schliessen des Schemas): dieselbe Landkarte
+steckte auch in den kleinen Betriebsrouten. `/api/auth/health`,
+`/api/user/health`, `/api/v2/fixes/health`, `/api/cookie-compliance/health`
+und `/` nannten ohne Anmeldung, welche Dienste initialisiert sind, wie viele
+Cookie-Dienste aktiv sind, ob KI konfiguriert ist und in welcher Umgebung das
+Backend laeuft; die Cookie-Route gab bei einem Fehler `str(e)` heraus.
+`POST /api/auth/admin/reset-master-password` hing nur an einem Schluessel in
+der URL und war ohne `ADMIN_KEY` tot. Diese Teile lesen jede Python-Datei des
+Backends ausser Tests und zaehlen, wie viele sie wirklich gesehen haben.
 """
 
 import ast
@@ -94,3 +104,103 @@ class TestHealthOhneEinzelwerte:
             schluessel = {k.value for k in d.keys if isinstance(k, ast.Constant)}
             zu_viel = schluessel - HEALTH_ERLAUBT
             assert not zu_viel, f"/health nennt ohne Anmeldung: {sorted(zu_viel)}"
+
+
+# ---------------------------------------------------------------------------
+# Teil 2: alle Routen des Backends
+# ---------------------------------------------------------------------------
+
+METHODEN = {"get", "post", "put", "delete", "patch"}
+
+# Was eine Betriebsroute ohne Anmeldung nennen darf: den Gesamtzustand.
+# Keine Teildienste (`*_initialized`), keine Zahlen (`active_services`), keine
+# Konfiguration (`ai_enabled`, `environment`), keine Fehlertexte (`error`).
+BETRIEB_ERLAUBT = {"status", "success", "timestamp", "service"}
+
+# Diese Dateien verlangen Anmeldung fuer jede Route; dort darf es mehr sein.
+BETRIEB_AUSNAHME_DATEIEN = {"admin_routes.py"}
+
+
+def _backend_dateien():
+    """Alle Python-Dateien des Backends ausser Tests und Sicherungen."""
+    treffer = []
+    for ordner, unterordner, namen in os.walk(BACKEND):
+        unterordner[:] = [
+            u for u in unterordner
+            if u not in ("tests", "__pycache__", "node_modules") and not u.startswith(".")
+        ]
+        treffer.extend(os.path.join(ordner, n) for n in namen if n.endswith(".py"))
+    return treffer
+
+
+def _routen(pfad):
+    """(Methode, Pfad, Funktion) je Funktion mit @x.get("/pfad") und Verwandten."""
+    with open(pfad, encoding="utf-8") as f:
+        baum = ast.parse(f.read())
+    for n in ast.walk(baum):
+        if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for d in n.decorator_list:
+            if (
+                isinstance(d, ast.Call)
+                and isinstance(d.func, ast.Attribute)
+                and d.func.attr in METHODEN
+                and d.args
+                and isinstance(d.args[0], ast.Constant)
+                and isinstance(d.args[0].value, str)
+            ):
+                yield d.func.attr.upper(), d.args[0].value, n
+
+
+def _alle_routen():
+    dateien = _backend_dateien()
+    routen = []
+    for datei in dateien:
+        for methode, pfad, funktion in _routen(datei):
+            routen.append((os.path.basename(datei), methode, pfad, funktion))
+    return dateien, routen
+
+
+class TestKeineSchluesselRouteInDerUrl:
+    def test_keine_route_nimmt_admin_key_oder_setzt_das_master_passwort_zurueck(self):
+        dateien, routen = _alle_routen()
+        # Zaehlprobe: ein Waechter, der kaum etwas liest, beweist nichts.
+        assert len(dateien) >= 200, f"nur {len(dateien)} Backend-Dateien gelesen"
+        assert len(routen) >= 250, f"nur {len(routen)} Routen gefunden"
+        verstoesse = []
+        for datei, methode, pfad, funktion in routen:
+            namen = [a.arg for a in funktion.args.args + funktion.args.kwonlyargs]
+            if "admin_key" in namen:
+                verstoesse.append(f"{datei}: {methode} {pfad} nimmt admin_key")
+            if "reset-master-password" in pfad:
+                verstoesse.append(f"{datei}: {methode} {pfad}")
+        assert not verstoesse, "Schluessel in der URL ist kein Zugangsschutz:\n" + "\n".join(verstoesse)
+
+
+class TestOeffentlicheBetriebsrouten:
+    def test_health_und_wurzel_nennen_nur_den_gesamtzustand(self):
+        _dateien, routen = _alle_routen()
+        betrieb = [
+            (datei, pfad, funktion)
+            for datei, methode, pfad, funktion in routen
+            if methode == "GET"
+            and datei not in BETRIEB_AUSNAHME_DATEIEN
+            and (pfad.endswith("/health") or (datei == "main_production.py" and pfad == "/"))
+        ]
+        # auth, user, fixes, cookie, public, main /health, main /
+        assert len(betrieb) >= 7, f"nur {len(betrieb)} Betriebsrouten gefunden: {[(d, p) for d, p, _ in betrieb]}"
+        verstoesse = []
+        for datei, pfad, funktion in betrieb:
+            rueckgaben = [
+                r.value for r in ast.walk(funktion)
+                if isinstance(r, ast.Return) and isinstance(r.value, ast.Dict)
+            ]
+            assert rueckgaben, f"{datei}: {pfad} gibt kein Dict zurueck, der Test prueft dann nichts"
+            for d in rueckgaben:
+                schluessel = {
+                    k.value if isinstance(k, ast.Constant) else "<dynamisch>" for k in d.keys
+                }
+                zu_viel = schluessel - BETRIEB_ERLAUBT
+                if zu_viel:
+                    verstoesse.append(f"{datei}: GET {pfad} nennt {sorted(zu_viel)}")
+        assert not verstoesse, "Ohne Anmeldung nur den Gesamtzustand:\n" + "\n".join(verstoesse)

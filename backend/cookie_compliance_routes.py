@@ -2478,20 +2478,20 @@ async def health_check(db_pool: asyncpg.Pool = Depends(get_db_connection)):
     """
     try:
         # Test database connection
-        result = await db_pool.fetchval("SELECT COUNT(*) FROM cookie_services WHERE is_active = true")
+        await db_pool.fetchval("SELECT COUNT(*) FROM cookie_services WHERE is_active = true")
         
         return {
             "success": True,
             "status": "healthy",
-            "active_services": result,
             "timestamp": datetime.now().isoformat()
         }
         
     except Exception as e:
+        # Die Meldung kann Verbindungsdaten enthalten: ins Log, nicht in die Antwort.
+        print(f"Cookie-Health fehlgeschlagen: {e}")
         return {
             "success": False,
             "status": "unhealthy",
-            "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
 

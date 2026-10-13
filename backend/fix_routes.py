@@ -542,11 +542,10 @@ async def download_fix(
 async def health_check():
     """Health check für Fix-Service"""
     # Nutze globale Referenzen (gesetzt in main_production.py startup)
+    # Nur der Gesamtzustand, keine Angabe zu einzelnen Diensten (ohne Anmeldung).
+    bereit = fix_generator is not None and db_pool is not None
     return {
-        "status": "healthy",
-        "service": "fix-generator",
-        "fix_generator_initialized": fix_generator is not None,
-        "db_pool_initialized": db_pool is not None,
+        "status": "healthy" if bereit else "degraded",
         "timestamp": datetime.now().isoformat()
     }
 

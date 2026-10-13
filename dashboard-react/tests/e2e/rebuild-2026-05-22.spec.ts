@@ -10,11 +10,11 @@ test.describe('P1: Backend Auth', () => {
     expect(body.status).toBe('healthy');
   });
 
-  test('GET /api/auth/health returns auth service initialized', async ({ request }) => {
+  test('GET /api/auth/health returns healthy when the auth service is ready', async ({ request }) => {
     const r = await request.get(`${API_BASE}/api/auth/health`);
     expect(r.status()).toBe(200);
     const body = await r.json();
-    expect(body.auth_service_initialized).toBe(true);
+    expect(body.status).toBe('healthy');
   });
 
   test('POST /api/auth/refresh-cookie without cookie returns 204', async ({ request }) => {

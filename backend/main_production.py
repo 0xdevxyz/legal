@@ -990,17 +990,9 @@ def verify_password(plain: str, hashed: str) -> bool:
 # API Routes
 @app.get("/")
 async def root():
-    return {
-        "status": "online",
-        "service": "complyo-backend",
-        "version": "2.2.0",
-        "ai_enabled": bool(OPENROUTER_API_KEY),
-        "environment": ENVIRONMENT,
-        "features": {  # NEU
-            "enhanced_scanning": True,
-            "smart_fixes": True
-        }
-    }
+    # Ohne Anmeldung nur "laeuft": Version, Umgebung und ob KI konfiguriert ist
+    # (ai_enabled) gehoeren nicht nach aussen.
+    return {"status": "online"}
 
 @app.get("/health")
 async def health_check():
