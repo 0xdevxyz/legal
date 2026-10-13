@@ -207,6 +207,23 @@ def test_positive_checks_fassen_seiten_zusammen():
     assert nach_id["image-alt"]["status"] == mp.STATUS
 
 
+def test_regel_mit_verstoss_steht_nicht_im_protokoll():
+    """axe fuehrt eine Regel mit teils bestandenen Elementen in passes UND
+    violations. Live am 13.10.2026: 'color-contrast: keine Abweichung' neben
+    einem kritischen Kontrastbefund. Beide Sperren greifen: je Seite beim
+    Marker, siteweit bei der Zusammenfassung."""
+    saetze = [
+        {"page_url": "https://a.de/", "regeln": _normiert(REGELN_A)},
+        {"page_url": "https://a.de/kontakt", "regeln": _normiert(REGELN_B)},
+    ]
+    befund = {"category": "barrierefreiheit", "severity": "critical", "title": "Bild ohne Alt-Text",
+              "metadata": {"source": "axe-core", "axe_rule_id": "image-alt"}}
+    assert mp.verletzte_regeln([befund, _issue("x")]) == {"image-alt"}
+    pc = mp.positive_checks(saetze, seiten_gesamt=2, ausser=mp.verletzte_regeln([befund]))
+    assert "image-alt" not in {p["id"] for p in pc}
+    assert {p["id"] for p in pc} == {"region", "label"}
+
+
 def test_wortwahl_keine_zustandsbehauptung():
     pc = mp.positive_checks([{"page_url": "u", "regeln": _normiert(REGELN_A)}], seiten_gesamt=1)
     for p in pc:
