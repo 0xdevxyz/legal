@@ -43,8 +43,8 @@ LOGO_URL = "https://complyo.de/logo-dark-trim.png"   # 852x287, dunkle Schrift
 ANBIETER = {
     "geschaeftsbezeichnung": "Complyo",
     "name": "Yvonne Weishar",
-    "strasse": "Pappelallee 64",
-    "plz_ort": "10437 Berlin",
+    "strasse": "Koburger Straße 198",
+    "plz_ort": "04416 Markkleeberg",
     "email": "info@complyo.de",
     "homepage": "complyo.de",
 }

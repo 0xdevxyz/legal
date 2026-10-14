@@ -262,7 +262,7 @@ zusenden dürfen. Widerruf jederzeit möglich unter datenschutz@complyo.de
 Falls Sie diese E-Mail nicht angefordert haben, können Sie sie einfach ignorieren.
 
 ---
-Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin • Compliance Made Simple
+Yvonne Weishar · Complyo, Koburger Straße 198, 04416 Markkleeberg • Compliance Made Simple
 datenschutz@complyo.de • https://complyo.de/datenschutz
         """
 
@@ -345,7 +345,7 @@ Rechtsgrundlage für diese Mail ist Ihre Einwilligung (Art. 6 Abs. 1 lit. a DSGV
 Widerruf jederzeit unter datenschutz@complyo.de.
 
 ---
-Yvonne Weishar · Complyo, Pappelallee 64, 10437 Berlin
+Yvonne Weishar · Complyo, Koburger Straße 198, 04416 Markkleeberg
 support@complyo.de • {self.frontend_url}
         """
 
