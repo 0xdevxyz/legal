@@ -25,6 +25,7 @@ interface IssueGroup {
   title: string;
   description: string;
   icon: string;
+  legal_basis?: string;
 }
 
 interface ComplianceIssueGroupProps {
@@ -218,6 +219,11 @@ export const ComplianceIssueGroup: React.FC<ComplianceIssueGroupProps> = ({
                 <p className="text-sm text-gray-600 dark:text-zinc-400 mt-1">
                   {group.description}
                 </p>
+                {group.legal_basis && (
+                  <p className="text-xs text-gray-500 dark:text-zinc-500 mt-1">
+                    Rechtsgrundlage: {group.legal_basis}
+                  </p>
+                )}
               </div>
             </div>
           </div>

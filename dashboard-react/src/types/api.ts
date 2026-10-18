@@ -111,6 +111,7 @@ export interface IssueGroup {
   title: string;
   description: string;
   icon: string;
+  legal_basis?: string; // Rechtsgrundlage der Karte, seit 18.10.2026 vom Backend gesetzt
 }
 
 // Grouping statistics
