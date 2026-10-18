@@ -1,6 +1,6 @@
 'use client';
-import React, { useRef, useState } from 'react';
-import { Volume2, VolumeX } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Pause, Play, Volume2, VolumeX } from 'lucide-react';
 
 // Wortlaut der Erzaehlung der Fassung vom 18.09.2026 (sieben Bloecke; die Bloecke
 // vier bis sechs sind echte Aufnahmen aus dem angemeldeten Backoffice, Kundendomains
@@ -29,9 +29,37 @@ export const TRANSKRIPT = [
     'offene Punkte eingeschlossen. Prüfen Sie Ihre Website.',
 ];
 
+// Gemeinsamer Stil der beiden Bedienknoepfe auf dem Video. Der Fokusrahmen
+// ist Pflicht, nicht Kuer: die Knoepfe liegen auf bewegtem Bild, ein nur
+// durch Browser-Standard markierter Fokus geht dort unter (WCAG 2.4.7).
+const KNOPF =
+  'inline-flex items-center gap-1.5 bg-white/90 hover:bg-white text-gray-700 text-xs ' +
+  'font-semibold px-3 py-2 rounded-full shadow-md border border-gray-200 transition-colors ' +
+  'focus:outline-none focus-visible:ring-2 focus-visible:ring-akzent-700 focus-visible:ring-offset-2';
+
 export default function Erklaervideo() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(true);
+  // Spiegelt den echten Zustand des video-Elements (play/pause-Ereignisse),
+  // nicht die Absicht des letzten Klicks. So stimmt die Beschriftung auch,
+  // wenn der Browser das Abspielen selbst verweigert oder anhaelt.
+  const [playing, setPlaying] = useState(false);
+
+  // Kein autoPlay-Attribut: das Video startet erst hier, und nur, wenn die
+  // Person keine reduzierte Bewegung eingestellt hat (WCAG 2.2.2 und 2.3.3).
+  // Mit prefers-reduced-motion bleibt das Poster stehen, der Knopf startet.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const reduziert =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduziert) return;
+    v.muted = true;
+    v.play().catch(() => {
+      // Autoplay verweigert: Poster bleibt, die Knoepfe uebernehmen.
+    });
+  }, []);
 
   const toggleSound = () => {
     const v = videoRef.current;
@@ -40,10 +68,20 @@ export default function Erklaervideo() {
       v.currentTime = 0;
       v.muted = false;
       setMuted(false);
-      v.play();
+      v.play().catch(() => {});
     } else {
       v.muted = true;
       setMuted(true);
+    }
+  };
+
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) {
+      v.play().catch(() => {});
+    } else {
+      v.pause();
     }
   };
 
@@ -60,12 +98,13 @@ export default function Erklaervideo() {
         <video
           ref={videoRef}
           className="block w-full h-auto"
-          autoPlay
           muted
           loop
           playsInline
           preload="metadata"
           poster="/videos/complyo-erklaervideo-poster.jpg"
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
           aria-label="Erklärvideo: Wie complyo Websites gegen Barrierefreiheit, Datenschutz, Cookie-Einwilligung und Pflichttexte prüft, Reparaturen zur Freigabe vorschlägt, täglich neue Rechtspflichten meldet und für jede geprüfte Website ein öffentliches Prüfprotokoll erstellt. Das vollständige Transkript steht unter dem Video."
         >
           <source src="/videos/complyo-erklaervideo.mp4" type="video/mp4" />
@@ -79,15 +118,28 @@ export default function Erklaervideo() {
             default
           />
         </video>
-        <button
-          type="button"
-          onClick={toggleSound}
-          aria-label={muted ? 'Ton einschalten und Video von vorn abspielen' : 'Ton ausschalten'}
-          className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 bg-white/90 hover:bg-white text-gray-700 text-xs font-semibold px-3 py-2 rounded-full shadow-md border border-gray-200 transition-colors"
-        >
-          {muted ? <Volume2 className="w-4 h-4" aria-hidden="true" /> : <VolumeX className="w-4 h-4" aria-hidden="true" />}
-          {muted ? 'Mit Ton abspielen' : 'Stumm'}
-        </button>
+        <div className="absolute bottom-3 right-3 flex items-center gap-2">
+          {/* Pause-Bedienelement fuer das selbststartende Video (WCAG 2.2.2,
+              Stufe A: Bewegtbild ueber fuenf Sekunden muss anhaltbar sein). */}
+          <button
+            type="button"
+            onClick={togglePlay}
+            aria-label={playing ? 'Video anhalten' : 'Video abspielen'}
+            className={KNOPF}
+          >
+            {playing ? <Pause className="w-4 h-4" aria-hidden="true" /> : <Play className="w-4 h-4" aria-hidden="true" />}
+            {playing ? 'Pause' : 'Abspielen'}
+          </button>
+          <button
+            type="button"
+            onClick={toggleSound}
+            aria-label={muted ? 'Ton einschalten und Video von vorn abspielen' : 'Ton ausschalten'}
+            className={KNOPF}
+          >
+            {muted ? <Volume2 className="w-4 h-4" aria-hidden="true" /> : <VolumeX className="w-4 h-4" aria-hidden="true" />}
+            {muted ? 'Mit Ton abspielen' : 'Stumm'}
+          </button>
+        </div>
       </div>
 
       {/* Textalternative fuer alle, die das Video nicht ansehen oder
