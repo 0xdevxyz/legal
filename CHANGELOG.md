@@ -7,6 +7,12 @@
 
 ---
 
+## [2026-10-19]
+
+### Infrastruktur: Backend-Tests seit dem 08.10. rot durch pydantic 2.14
+- **`import mcp_server` brach mit `ImportError: cannot import name 'eval_type_backport' from 'pydantic._internal._typing_extra'`**, elf Tests in `tests/test_mcp_allowlist.py` fielen um. `fastapi-mcp==0.3.4` zieht `mcp>=1.8.1`; pip fällt wegen `httpx`/`mcp-types` auf mcp 1.12.4 zurück, und dessen `func_metadata` importiert ein privates pydantic-Symbol, das pydantic 2.14.0 (veröffentlicht 08.10.2026, 14:34 UTC, sechs Stunden nach dem letzten grünen main-Lauf) entfernt hat. Kein Code im Repo hat sich geändert
+- `backend/requirements.txt`: `pydantic>=2.5.0,<2.14`. Lokal nachgestellt: mcp 1.12.4 mit pydantic 2.14.1 bricht, mit 2.13.5 importiert. Der Pin fällt, sobald mcp auf eine Version gehoben wird, die ohne das private Symbol auskommt
+
 ## [2026-10-07]
 
 ### Backend: knappe Datenschutzerklärung und unsichere Muster-Treffer (gestapelt auf #18)
