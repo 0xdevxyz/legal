@@ -32,8 +32,8 @@ const ARTICLES = [
 
 export default function Page() {
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
-      <div className="container mx-auto px-4 py-12 max-w-3xl">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-white">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-3xl">
         <Link
           href="/"
           className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
@@ -53,7 +53,7 @@ export default function Page() {
             <Link
               key={a.href}
               href={a.href}
-              className="block bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow group"
+              className="block bg-white rounded-xl border border-gray-200 p-6 hover:border-gray-400 transition-colors group"
             >
               <h2 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-akzent-800 transition-colors">
                 {a.title}

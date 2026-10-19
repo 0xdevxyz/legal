@@ -50,9 +50,9 @@ export default function Erklaervideo() {
   return (
     <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
       <div className="bg-gray-50 border-b border-gray-100 px-5 py-3 flex items-center gap-2">
-        <div className="w-3 h-3 rounded-full bg-red-400" />
-        <div className="w-3 h-3 rounded-full bg-yellow-400" />
-        <div className="w-3 h-3 rounded-full bg-green-400" />
+        <div className="w-3 h-3 rounded-full bg-gray-300" />
+        <div className="w-3 h-3 rounded-full bg-gray-300" />
+        <div className="w-3 h-3 rounded-full bg-gray-300" />
         <span className="ml-3 text-xs text-gray-500">complyo – in 72 Sekunden erklärt</span>
       </div>
 

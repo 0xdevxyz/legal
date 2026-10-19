@@ -36,34 +36,34 @@ export default function AgenturAbschnitt() {
     <section
       id="agentur"
       aria-labelledby="agentur-titel"
-      className="py-16 bg-gray-50 scroll-mt-16"
+      className="py-16 bg-white scroll-mt-16"
     >
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="rounded-2xl bg-gray-900 text-white p-8 sm:p-10 grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12 items-center">
+        <div className="rounded-2xl bg-gray-50 border border-gray-200 text-gray-900 p-8 sm:p-10 grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12 items-center">
           <div className="lg:col-span-3">
-            <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-3 py-1 mb-4">
-              <Building2 className="w-3.5 h-3.5 text-akzent-400" aria-hidden="true" />
-              <span className="text-xs font-semibold uppercase tracking-wide">Für Agenturen</span>
+            <div className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 mb-4">
+              <Building2 className="w-3.5 h-3.5 text-gray-600" aria-hidden="true" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-gray-600">Für Agenturen</span>
             </div>
             <h2 id="agentur-titel" className="font-heading text-2xl sm:text-3xl font-extrabold mb-3">
               Du betreust fremde Websites? Dann brauchst du keinen Platz auf der Liste.
             </h2>
-            <p className="text-gray-300 leading-relaxed mb-6">
+            <p className="text-gray-600 leading-relaxed mb-6">
               Der Agentur-Tarif ist sofort buchbar: {AGENTUR_PROJEKTE} Projekte mit dem vollen
               Pro-Funktionsumfang, eine Übersicht über alle Domains, Prüfnachweis je Kunde.
               Der Early-Access-Nachlass gilt für Pro im Monatsabo, nicht für den Agentur-Tarif.
             </p>
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
               {LEISTUNGEN.map((l) => (
-                <li key={l} className="flex items-start gap-2.5 text-sm text-gray-200">
-                  <Check className="w-4 h-4 text-akzent-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                <li key={l} className="flex items-start gap-2.5 text-sm text-gray-700">
+                  <Check className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
                   <span>{l}</span>
                 </li>
               ))}
             </ul>
           </div>
 
-          <div className="lg:col-span-2 bg-white text-gray-900 rounded-2xl p-6">
+          <div className="lg:col-span-2 bg-white text-gray-900 rounded-2xl p-6 border-2 border-akzent-400">
             <p className="text-sm text-gray-500 mb-1">Agentur</p>
             <div className="flex items-baseline gap-1">
               <span className="text-4xl font-extrabold">{AGENTUR_PREIS_MONAT}</span>
@@ -72,7 +72,7 @@ export default function AgenturAbschnitt() {
             <p className="text-xs text-gray-500 mt-1 mb-6">oder {AGENTUR_PREIS_JAHR} im Jahr</p>
             <a
               href={buchen}
-              className="inline-flex items-center justify-center gap-2 w-full bg-akzent-400 hover:bg-akzent-500 text-gray-900 font-semibold px-5 py-3 rounded-xl transition-colors shadow-md shadow-akzent-100"
+              className="inline-flex items-center justify-center gap-2 w-full bg-gray-900 hover:bg-gray-800 text-white font-semibold px-5 py-3 rounded-xl transition-colors"
             >
               Agentur buchen
               <ArrowRight className="w-4 h-4" aria-hidden="true" />

@@ -16,21 +16,16 @@ import { herkunftAusSuche, mitHerkunft } from '@/lib/herkunft';
  * Admin- und Dashboard-Dateien woertlich vor und landen ueber die im
  * Stylesheet. Wer dort aufraeumt, haette hier farblose Kacheln.
  *
- * dunkel = Kachelreihe auf #111827, hell = Auswertung auf Weiss.
+ * Seit 19.10.2026 einfarbig: alle Saeulen in Grau, die Farbe traegt nur noch der
+ * Befund (rot, gelb, gruen). Die Schluessel bleiben, weil die Saeulen sie tragen.
  */
 const KACHELFARBEN: Record<string, {
   dunkelFlaeche: string; dunkelIcon: string; hellFlaeche: string; hellIcon: string;
-}> = {
-  akzent: { dunkelFlaeche: 'bg-akzent-900', dunkelIcon: 'text-akzent-400', hellFlaeche: 'bg-akzent-100', hellIcon: 'text-akzent-700' },
-  green:  { dunkelFlaeche: 'bg-green-900',  dunkelIcon: 'text-green-400',  hellFlaeche: 'bg-green-100',  hellIcon: 'text-green-600' },
-  purple: { dunkelFlaeche: 'bg-purple-900', dunkelIcon: 'text-purple-400', hellFlaeche: 'bg-purple-100', hellIcon: 'text-purple-600' },
-  orange: { dunkelFlaeche: 'bg-orange-900', dunkelIcon: 'text-orange-400', hellFlaeche: 'bg-orange-100', hellIcon: 'text-orange-600' },
-  red:    { dunkelFlaeche: 'bg-red-900',    dunkelIcon: 'text-red-400',    hellFlaeche: 'bg-red-100',    hellIcon: 'text-red-600' },
-  yellow: { dunkelFlaeche: 'bg-yellow-900', dunkelIcon: 'text-yellow-400', hellFlaeche: 'bg-yellow-100', hellIcon: 'text-yellow-600' },
-  indigo: { dunkelFlaeche: 'bg-indigo-900', dunkelIcon: 'text-indigo-400', hellFlaeche: 'bg-indigo-100', hellIcon: 'text-indigo-600' },
-  teal:   { dunkelFlaeche: 'bg-teal-900',   dunkelIcon: 'text-teal-400',   hellFlaeche: 'bg-teal-100',   hellIcon: 'text-teal-600' },
-  gray:   { dunkelFlaeche: 'bg-gray-800',   dunkelIcon: 'text-gray-400',   hellFlaeche: 'bg-gray-100',   hellIcon: 'text-gray-600' },
-};
+}> = Object.fromEntries(
+  ['akzent', 'green', 'purple', 'orange', 'red', 'yellow', 'indigo', 'teal', 'gray'].map((k) => [
+    k, { dunkelFlaeche: 'bg-gray-100', dunkelIcon: 'text-gray-900', hellFlaeche: 'bg-gray-100', hellIcon: 'text-gray-700' },
+  ]),
+);
 
 const kachel = (farbe: string) => KACHELFARBEN[farbe] ?? KACHELFARBEN.gray;
 
@@ -344,19 +339,19 @@ export default function WebsiteScanner() {
   };
 
   return (
-    <section id="scanner" className="py-20 bg-[#111827]">
+    <section id="scanner" className="py-20 bg-gray-50 border-y border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 bg-akzent-400 text-gray-900 px-4 py-2 rounded-full text-sm font-semibold mb-4">
+          <div className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-full text-sm font-semibold mb-4">
             <Search className="w-4 h-4" />
             Kostenloser Website-Check
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
+          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
             Was findet der Check auf Ihrer Website?
           </h2>
-          <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-            Prüfen Sie Ihre Website <span className="font-semibold text-akzent-400">kostenlos</span> auf die 4 wichtigsten Compliance-Säulen
+          <p className="text-xl text-gray-500 max-w-3xl mx-auto">
+            Prüfen Sie Ihre Website <span className="font-semibold text-gray-900">kostenlos</span> auf die 4 wichtigsten Compliance-Säulen
           </p>
         </div>
 
@@ -372,13 +367,13 @@ export default function WebsiteScanner() {
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="ihre-website.de"
                 aria-label="Website-URL für kostenlosen Compliance-Check eingeben"
-                className="flex-1 px-6 py-4 rounded-xl border-2 border-gray-600 bg-gray-800 text-white focus:border-akzent-400 focus:ring-4 focus:ring-akzent-800 outline-none text-lg placeholder-gray-400"
+                className="flex-1 px-6 py-4 rounded-xl border-2 border-gray-200 bg-white text-gray-900 focus:border-akzent-600 focus:ring-4 focus:ring-akzent-100 outline-none text-lg placeholder-gray-400"
                 required
               />
               <button
                 type="submit"
                 disabled={isScanning}
-                className="px-8 py-4 bg-akzent-400 hover:bg-akzent-300 text-gray-900 font-semibold rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 whitespace-nowrap"
+                className="px-8 py-4 bg-gray-900 hover:bg-gray-800 text-white font-semibold rounded-xl transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 {isScanning ? (
                   <>
@@ -393,21 +388,21 @@ export default function WebsiteScanner() {
                 )}
               </button>
             </div>
-            <p className="text-sm text-gray-400 mt-2 text-center sm:text-left">
+            <p className="text-sm text-gray-500 mt-2 text-center sm:text-left">
               ✓ Mit oder ohne https:// · ✓ Mit oder ohne www. · ✓ Einfach complyo.de eingeben
             </p>
           </form>
 
           {/* Error Message */}
           {error && (
-            <div className="bg-red-900/20 border-2 border-red-500 rounded-xl p-6 mb-8">
+            <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-8">
               <div className="flex items-start gap-4">
-                <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-1" />
+                <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
                 <div className="flex-1">
-                  <h3 className="text-lg font-bold text-red-400 mb-2">
+                  <h3 className="text-lg font-bold text-red-800 mb-2">
                     Scan fehlgeschlagen
                   </h3>
-                  <p className="text-red-200 text-sm leading-relaxed mb-4">
+                  <p className="text-red-700 text-sm leading-relaxed mb-4">
                     {error}
                   </p>
                   <button
@@ -433,15 +428,15 @@ export default function WebsiteScanner() {
               return (
                 <div
                   key={pillar.id}
-                  className="bg-gray-800 rounded-xl p-6 border-2 border-gray-700 hover:border-akzent-400 hover:shadow-lg transition-all"
+                  className="bg-white rounded-xl p-6 border border-gray-200 hover:border-gray-400 transition-colors"
                 >
                   <div className={`w-12 h-12 ${kachel(pillar.color).dunkelFlaeche} bg-opacity-50 rounded-lg flex items-center justify-center mb-4`}>
                     <Icon className={`w-6 h-6 ${kachel(pillar.color).dunkelIcon}`} />
                   </div>
-                  <h3 className="text-lg font-bold text-white mb-2">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">
                     {pillar.name}
                   </h3>
-                  <p className="text-sm text-gray-300">
+                  <p className="text-sm text-gray-500">
                     {pillar.description}
                   </p>
                 </div>
@@ -650,7 +645,7 @@ export default function WebsiteScanner() {
             </div>
 
             {/* CTA */}
-            <div className="bg-gradient-to-r from-akzent-700 to-akzent-900 rounded-2xl p-8 text-center text-white">
+            <div className="bg-gray-900 rounded-2xl p-8 text-center text-white">
               <h3 className="text-2xl font-bold mb-4">
                 {(scanResult.befundeGesamt ?? 0) === 0
                   ? 'Sauber. Und morgen?'
@@ -667,7 +662,7 @@ export default function WebsiteScanner() {
                     `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de'}/register?plan=free`,
                     herkunftAusSuche(typeof window === 'undefined' ? '' : window.location.search),
                   )}
-                  className="px-8 py-4 bg-white text-akzent-800 font-semibold rounded-xl hover:shadow-2xl transition-all transform hover:scale-105 inline-flex items-center justify-center gap-2"
+                  className="px-8 py-4 bg-white text-gray-900 font-semibold rounded-xl hover:shadow-2xl transition-all transform hover:scale-105 inline-flex items-center justify-center gap-2"
                 >
                   <TrendingUp className="w-5 h-5" />
                   {(scanResult.befundeGesamt ?? 0) === 0

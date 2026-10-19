@@ -43,13 +43,13 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
   };
 
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-white">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
 
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-4xl">
         <Link
           href="/"
           className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
@@ -65,7 +65,7 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
           <ul className="mt-6 grid gap-3 sm:grid-cols-2">
             {bullets.map((b) => (
               <li key={b} className="flex items-start gap-2 text-gray-700">
-                <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                <CheckCircle2 className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
                 <span>{b}</span>
               </li>
             ))}
@@ -73,13 +73,13 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
 
           <div className="mt-6 flex flex-wrap gap-4 text-sm text-gray-600">
             <span className="inline-flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-akzent-700" /> Ergebnis in unter einer Minute
+              <Clock className="w-4 h-4 text-gray-400" /> Ergebnis in unter einer Minute
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Lock className="w-4 h-4 text-akzent-700" /> Keine Anmeldung nötig
+              <Lock className="w-4 h-4 text-gray-400" /> Keine Anmeldung nötig
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-akzent-700" /> Kostenlos
+              <ShieldCheck className="w-4 h-4 text-gray-400" /> Kostenlos
             </span>
           </div>
         </div>
@@ -90,7 +90,7 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
 
         <div className="space-y-10">
           {sections.map((s) => (
-            <section key={s.heading} className="bg-white rounded-xl shadow-lg p-8">
+            <section key={s.heading} className="bg-white rounded-xl border border-gray-200 p-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">{s.heading}</h2>
               <div className="space-y-4 text-gray-700 leading-relaxed">
                 {s.body.map((p, i) => (
@@ -100,7 +100,7 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
             </section>
           ))}
 
-          <section className="bg-white rounded-xl shadow-lg p-8">
+          <section className="bg-white rounded-xl border border-gray-200 p-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Häufige Fragen</h2>
             <dl className="space-y-6">
               {faq.map(({ q, a }) => (
@@ -113,7 +113,7 @@ export default function CheckPage({ h1, lead, bullets, sections, faq, related }:
           </section>
 
           {related.length > 0 && (
-            <section className="bg-white rounded-xl shadow-lg p-8">
+            <section className="bg-white rounded-xl border border-gray-200 p-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Weitere Prüfungen</h2>
               <ul className="space-y-2">
                 {related.map(({ href, label }) => (

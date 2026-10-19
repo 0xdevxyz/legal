@@ -59,7 +59,7 @@ export default function NavBar() {
             </a>
             <a
               href="/#anmeldung"
-              className="text-sm bg-akzent-400 hover:bg-akzent-500 text-gray-900 font-semibold px-4 py-2 rounded-lg transition-colors"
+              className="text-sm bg-gray-900 hover:bg-gray-800 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
             >
               Platz sichern
             </a>
@@ -96,7 +96,7 @@ export default function NavBar() {
               <a
                 href="/#anmeldung"
                 onClick={() => setOpen(false)}
-                className="block text-sm text-center bg-akzent-400 text-gray-900 font-semibold rounded-lg px-4 py-2.5"
+                className="block text-sm text-center bg-gray-900 text-white font-semibold rounded-lg px-4 py-2.5"
               >
                 Platz sichern
               </a>

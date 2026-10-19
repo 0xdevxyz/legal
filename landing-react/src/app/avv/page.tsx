@@ -32,8 +32,8 @@ const STAND = '10. September 2026';
 
 export default function AVVPage() {
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-white">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-4xl">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
           <Link href="/" className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors">
             <ArrowLeft className="w-4 h-4" />
@@ -42,7 +42,7 @@ export default function AVVPage() {
 
           <AnbieterUnvollstaendig seite="Die Parteien dieses Vertrages" />
 
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-8 mb-8">
             <div className="flex items-center gap-3 mb-4">
               <ShieldCheck className="w-8 h-8 text-akzent-700" />
               <h1 className="text-4xl font-bold text-gray-900">Auftragsverarbeitungsvertrag</h1>
@@ -50,7 +50,7 @@ export default function AVVPage() {
             <p className="text-gray-600">Nach Art. 28 DSGVO · Stand: {STAND}</p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-8 space-y-8 text-sm leading-relaxed text-gray-700">
+          <div className="bg-white rounded-xl border border-gray-200 p-8 space-y-8 text-sm leading-relaxed text-gray-700">
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Parteien</h2>
               <p>
