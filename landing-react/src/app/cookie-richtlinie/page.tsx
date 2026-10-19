@@ -7,8 +7,8 @@ import { ArrowLeft, Cookie, Mail, Settings } from 'lucide-react';
 
 export default function CookieRichtliniePage() {
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-nacht-950 via-nacht-950 to-nacht-900">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -16,26 +16,26 @@ export default function CookieRichtliniePage() {
         >
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
+            className="inline-flex items-center gap-2 text-akzent-400 hover:text-akzent-300 mb-8 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Startseite
           </Link>
 
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="bg-nacht-800 border border-nacht-700 rounded-xl p-8 mb-8">
             <div className="flex items-center gap-3 mb-4">
               <Cookie className="w-8 h-8 text-yellow-500" />
-              <h1 className="text-4xl font-bold text-gray-900">Cookie-Richtlinie</h1>
+              <h1 className="text-4xl font-bold text-gray-50">Cookie-Richtlinie</h1>
             </div>
-            <p className="text-gray-600">
+            <p className="text-gray-300">
               Stand: 1. September 2026
             </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-8 space-y-8">
+          <div className="bg-nacht-800 border border-nacht-700 rounded-xl p-8 space-y-8">
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">1. Was sind Cookies?</h2>
-              <div className="space-y-4 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">1. Was sind Cookies?</h2>
+              <div className="space-y-4 text-gray-200 text-sm leading-relaxed">
                 <p>
                   Cookies sind kleine Textdateien, die beim Besuch einer Website auf Ihrem Endgerät gespeichert
                   und beim erneuten Aufruf wieder ausgelesen werden können. Sie dienen unterschiedlichen Zwecken,
@@ -51,8 +51,8 @@ export default function CookieRichtliniePage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">2. Rechtsgrundlage</h2>
-              <div className="space-y-4 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">2. Rechtsgrundlage</h2>
+              <div className="space-y-4 text-gray-200 text-sm leading-relaxed">
                 <p>
                   Das Speichern und Auslesen von Cookies ist nach § 25 TDDDG nur mit Ihrer Einwilligung zulässig,
                   es sei denn, der Zugriff ist unbedingt erforderlich, um einen von Ihnen ausdrücklich gewünschten
@@ -68,8 +68,8 @@ export default function CookieRichtliniePage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">3. Welche Arten von Cookies gibt es?</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">3. Welche Arten von Cookies gibt es?</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   <strong>Technisch notwendige Cookies</strong> ermöglichen grundlegende Funktionen der Website,
                   etwa das Speichern Ihrer Cookie-Einwilligung. Ohne sie funktioniert die Website nicht
@@ -87,19 +87,19 @@ export default function CookieRichtliniePage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">4. Welche Cookies verwenden wir?</h2>
-              <p className="text-gray-700 text-sm leading-relaxed mb-4">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">4. Welche Cookies verwenden wir?</h2>
+              <p className="text-gray-200 text-sm leading-relaxed mb-4">
                 Die folgende Übersicht zeigt die auf dieser Website eingesetzten Cookies. Analyse- und
                 Marketing-Cookies werden ausschließlich nach Ihrer Einwilligung gesetzt.
               </p>
 
-              <h3 className="font-semibold text-gray-900 mb-2">Technisch notwendig</h3>
+              <h3 className="font-semibold text-gray-50 mb-2">Technisch notwendig</h3>
               <div className="overflow-x-auto mb-6">
-                <table className="w-full text-xs text-left text-gray-700 border border-gray-200 rounded-lg">
+                <table className="w-full text-xs text-left text-gray-200 border border-nacht-700 rounded-lg">
                   <caption className="sr-only">
                     Technisch notwendige Cookies dieser Website mit Name, Typ, Speicherdauer und Zweck
                   </caption>
-                  <thead className="bg-gray-50 text-gray-900">
+                  <thead className="bg-nacht-900 text-gray-50">
                     <tr>
                       <th scope="col" className="px-3 py-2 font-semibold">Name</th>
                       <th scope="col" className="px-3 py-2 font-semibold">Typ</th>
@@ -124,13 +124,13 @@ export default function CookieRichtliniePage() {
                 </table>
               </div>
 
-              <h3 className="font-semibold text-gray-900 mb-2">Analyse / Statistik (nur mit Einwilligung)</h3>
+              <h3 className="font-semibold text-gray-50 mb-2">Analyse / Statistik (nur mit Einwilligung)</h3>
               <div className="overflow-x-auto mb-6">
-                <table className="w-full text-xs text-left text-gray-700 border border-gray-200 rounded-lg">
+                <table className="w-full text-xs text-left text-gray-200 border border-nacht-700 rounded-lg">
                   <caption className="sr-only">
                     Analyse-Cookies, die erst nach Einwilligung gesetzt werden, mit Anbieter, Zweck und Speicherdauer
                   </caption>
-                  <thead className="bg-gray-50 text-gray-900">
+                  <thead className="bg-nacht-900 text-gray-50">
                     <tr>
                       <th scope="col" className="px-3 py-2 font-semibold">Anbieter</th>
                       <th scope="col" className="px-3 py-2 font-semibold">Zweck</th>
@@ -147,13 +147,13 @@ export default function CookieRichtliniePage() {
                 </table>
               </div>
 
-              <h3 className="font-semibold text-gray-900 mb-2">Marketing (nur mit Einwilligung)</h3>
+              <h3 className="font-semibold text-gray-50 mb-2">Marketing (nur mit Einwilligung)</h3>
               <div className="overflow-x-auto">
-                <table className="w-full text-xs text-left text-gray-700 border border-gray-200 rounded-lg">
+                <table className="w-full text-xs text-left text-gray-200 border border-nacht-700 rounded-lg">
                   <caption className="sr-only">
                     Marketing-Cookies, die erst nach Einwilligung gesetzt werden, mit Anbieter, Zweck und Speicherdauer
                   </caption>
-                  <thead className="bg-gray-50 text-gray-900">
+                  <thead className="bg-nacht-900 text-gray-50">
                     <tr>
                       <th scope="col" className="px-3 py-2 font-semibold">Anbieter</th>
                       <th scope="col" className="px-3 py-2 font-semibold">Zweck</th>
@@ -172,15 +172,15 @@ export default function CookieRichtliniePage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">5. Einwilligung verwalten und widerrufen</h2>
-              <div className="space-y-4 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">5. Einwilligung verwalten und widerrufen</h2>
+              <div className="space-y-4 text-gray-200 text-sm leading-relaxed">
                 <p>
                   Sie können Ihre Cookie-Einstellungen jederzeit ändern oder Ihre Einwilligung widerrufen. Löschen
                   Sie dazu die gespeicherte Einwilligung (z. B. durch Leeren der Website-Daten in Ihrem Browser);
                   beim nächsten Besuch erscheint das Cookie-Banner erneut und Sie können Ihre Auswahl anpassen.
                 </p>
                 <div className="bg-akzent-50 p-4 rounded-lg flex items-start gap-3">
-                  <Settings className="w-5 h-5 text-akzent-700 mt-0.5 flex-shrink-0" />
+                  <Settings className="w-5 h-5 text-akzent-400 mt-0.5 flex-shrink-0" />
                   <p>
                     Zusätzlich können Sie in den Einstellungen Ihres Browsers das Speichern von Cookies generell
                     einschränken oder blockieren. Bitte beachten Sie, dass dann möglicherweise nicht alle Funktionen
@@ -191,20 +191,20 @@ export default function CookieRichtliniePage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">6. Ihre Rechte</h2>
-              <div className="space-y-4 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">6. Ihre Rechte</h2>
+              <div className="space-y-4 text-gray-200 text-sm leading-relaxed">
                 <p>
                   Ihnen stehen die Rechte aus der DSGVO zu, insbesondere auf Auskunft (Art. 15), Berichtigung
                   (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18), Datenübertragbarkeit
                   (Art. 20) sowie das Widerspruchsrecht (Art. 21) und der Widerruf einer erteilten Einwilligung
                   (Art. 7 Abs. 3). Weitere Informationen finden Sie in unserer{' '}
-                  <Link href="/datenschutz" className="text-akzent-700 underline">Datenschutzerklärung</Link>.
+                  <Link href="/datenschutz" className="text-akzent-400 underline">Datenschutzerklärung</Link>.
                 </p>
                 <div className="bg-akzent-50 p-4 rounded-lg flex items-center gap-3">
-                  <Mail className="w-5 h-5 text-akzent-700 flex-shrink-0" />
+                  <Mail className="w-5 h-5 text-akzent-400 flex-shrink-0" />
                   <p>
                     <strong>Kontakt:</strong>{' '}
-                    <a href="mailto:datenschutz@complyo.de" className="text-akzent-700 underline">
+                    <a href="mailto:datenschutz@complyo.de" className="text-akzent-400 underline">
                       datenschutz@complyo.de
                     </a>
                   </p>
@@ -213,15 +213,15 @@ export default function CookieRichtliniePage() {
             </section>
           </div>
 
-          <div className="mt-8 text-center text-sm text-gray-600">
+          <div className="mt-8 text-center text-sm text-gray-300">
             <div className="flex justify-center gap-6">
-              <Link href="/datenschutz" className="hover:text-akzent-700 transition-colors">
+              <Link href="/datenschutz" className="hover:text-akzent-300 transition-colors">
                 Datenschutz
               </Link>
-              <Link href="/impressum" className="hover:text-akzent-700 transition-colors">
+              <Link href="/impressum" className="hover:text-akzent-300 transition-colors">
                 Impressum
               </Link>
-              <Link href="/agb" className="hover:text-akzent-700 transition-colors">
+              <Link href="/agb" className="hover:text-akzent-300 transition-colors">
                 AGB
               </Link>
             </div>

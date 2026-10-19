@@ -19,8 +19,8 @@ export default function ImpressumPage() {
   const anschrift = ANBIETER.plz + ' ' + ANBIETER.ort;
 
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-nacht-950 via-nacht-950 to-nacht-900">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -28,7 +28,7 @@ export default function ImpressumPage() {
         >
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
+            className="inline-flex items-center gap-2 text-akzent-400 hover:text-akzent-300 mb-8 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Startseite
@@ -36,42 +36,42 @@ export default function ImpressumPage() {
 
           <AnbieterUnvollstaendig seite="Das Impressum" />
 
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">Impressum</h1>
-            <p className="text-gray-600">Angaben gemäß § 5 DDG</p>
+          <div className="bg-nacht-800 border border-nacht-700 rounded-xl p-8 mb-8">
+            <h1 className="text-4xl font-bold text-gray-50 mb-4">Impressum</h1>
+            <p className="text-gray-300">Angaben gemäß § 5 DDG</p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-8 space-y-8">
+          <div className="bg-nacht-800 border border-nacht-700 rounded-xl p-8 space-y-8">
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Anbieter</h2>
-              <div className="flex items-start gap-3 text-gray-700">
-                <MapPin className="w-5 h-5 text-akzent-700 mt-1 flex-shrink-0" />
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">Anbieter</h2>
+              <div className="flex items-start gap-3 text-gray-200">
+                <MapPin className="w-5 h-5 text-akzent-400 mt-1 flex-shrink-0" />
                 <div>
                   <p className="font-semibold">{ANBIETER.name || 'Name fehlt'}</p>
-                  <p className="text-gray-600">{ANBIETER.geschaeftsbezeichnung}</p>
+                  <p className="text-gray-300">{ANBIETER.geschaeftsbezeichnung}</p>
                   <p className="mt-2">{ANBIETER.strasse}</p>
                   <p>{anschrift}</p>
                   <p>{ANBIETER.land}</p>
                 </div>
               </div>
-              <p className="text-sm text-gray-500 mt-4">
+              <p className="text-sm text-gray-400 mt-4">
                 Einzelunternehmen. Eine Eintragung im Handelsregister besteht nicht.
               </p>
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Kontakt</h2>
-              <div className="space-y-3 text-gray-700">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">Kontakt</h2>
+              <div className="space-y-3 text-gray-200">
                 <div className="flex items-center gap-3">
-                  <Mail className="w-5 h-5 text-akzent-700 flex-shrink-0" />
-                  <a href={'mailto:' + ANBIETER.email} className="hover:text-akzent-700 transition-colors">
+                  <Mail className="w-5 h-5 text-akzent-400 flex-shrink-0" />
+                  <a href={'mailto:' + ANBIETER.email} className="hover:text-akzent-300 transition-colors">
                     {ANBIETER.email}
                   </a>
                 </div>
                 {ANBIETER.telefon && (
                   <div className="flex items-center gap-3">
-                    <Phone className="w-5 h-5 text-akzent-700 flex-shrink-0" />
-                    <a href={'tel:' + ANBIETER.telefon.replace(/[^+0-9]/g, '')} className="hover:text-akzent-700 transition-colors">
+                    <Phone className="w-5 h-5 text-akzent-400 flex-shrink-0" />
+                    <a href={'tel:' + ANBIETER.telefon.replace(/[^+0-9]/g, '')} className="hover:text-akzent-300 transition-colors">
                       {ANBIETER.telefon}
                     </a>
                   </div>
@@ -80,9 +80,9 @@ export default function ImpressumPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Umsatzsteuer</h2>
-              <div className="flex items-start gap-3 text-gray-700">
-                <Receipt className="w-5 h-5 text-akzent-700 mt-1 flex-shrink-0" />
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">Umsatzsteuer</h2>
+              <div className="flex items-start gap-3 text-gray-200">
+                <Receipt className="w-5 h-5 text-akzent-400 mt-1 flex-shrink-0" />
                 <p>
                   Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG:{' '}
                   <span className="font-medium">{ANBIETER.ustIdNr || 'fehlt'}</span>
@@ -91,26 +91,26 @@ export default function ImpressumPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">
                 Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV
               </h2>
-              <div className="flex items-start gap-3 text-gray-700">
-                <User className="w-5 h-5 text-akzent-700 mt-1 flex-shrink-0" />
+              <div className="flex items-start gap-3 text-gray-200">
+                <User className="w-5 h-5 text-akzent-400 mt-1 flex-shrink-0" />
                 <div>
                   <p>{ANBIETER.name || 'Name fehlt'}</p>
                   <p>{ANBIETER.strasse}</p>
                   <p>{anschrift}</p>
                 </div>
               </div>
-              <p className="text-sm text-gray-500 mt-4">
+              <p className="text-sm text-gray-400 mt-4">
                 Gilt für die redaktionellen Beiträge im{' '}
-                <Link href="/ratgeber" className="text-akzent-700 hover:underline">Ratgeber</Link>.
+                <Link href="/ratgeber" className="text-akzent-400 underline underline-offset-2 hover:text-akzent-300">Ratgeber</Link>.
               </p>
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Streitbeilegung</h2>
-              <p className="text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">Streitbeilegung</h2>
+              <p className="text-gray-200 text-sm leading-relaxed">
                 complyo schließt Verträge ausschließlich mit Unternehmern im Sinne des § 14 BGB.
                 Verbraucherschlichtungsverfahren nach dem VSBG kommen daher nicht in Betracht.
                 Zur Teilnahme an einem Streitbeilegungsverfahren vor einer Verbraucherschlichtungs&shy;stelle
@@ -119,10 +119,10 @@ export default function ImpressumPage() {
             </section>
           </div>
 
-          <div className="mt-8 text-center text-sm text-gray-600">
+          <div className="mt-8 text-center text-sm text-gray-300">
             <div className="flex justify-center gap-6">
-              <Link href="/agb" className="hover:text-akzent-700 transition-colors">AGB</Link>
-              <Link href="/datenschutz" className="hover:text-akzent-700 transition-colors">Datenschutz</Link>
+              <Link href="/agb" className="hover:text-akzent-300 transition-colors">AGB</Link>
+              <Link href="/datenschutz" className="hover:text-akzent-300 transition-colors">Datenschutz</Link>
             </div>
           </div>
         </motion.div>

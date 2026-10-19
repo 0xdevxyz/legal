@@ -109,8 +109,8 @@ const RECHTE = [
 
 export default function DatenschutzPage() {
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-nacht-950 via-nacht-950 to-nacht-900">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -118,7 +118,7 @@ export default function DatenschutzPage() {
         >
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
+            className="inline-flex items-center gap-2 text-akzent-400 hover:text-akzent-300 mb-8 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Startseite
@@ -126,21 +126,21 @@ export default function DatenschutzPage() {
 
           <AnbieterUnvollstaendig seite="Der Verantwortliche in dieser Erklärung" />
 
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="bg-nacht-800 border border-nacht-700 rounded-xl p-8 mb-8">
             <div className="flex items-center gap-3 mb-4">
-              <Shield className="w-8 h-8 text-akzent-700" />
-              <h1 className="text-4xl font-bold text-gray-900">Datenschutzerklärung</h1>
+              <Shield className="w-8 h-8 text-akzent-400" />
+              <h1 className="text-4xl font-bold text-gray-50">Datenschutzerklärung</h1>
             </div>
-            <p className="text-gray-600">
+            <p className="text-gray-300">
               Stand:{' '}
               23. September 2026
             </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-8 space-y-8">
+          <div className="bg-nacht-800 border border-nacht-700 rounded-xl p-8 space-y-8">
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">1. Datenschutz auf einen Blick</h2>
-              <div className="space-y-4 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">1. Datenschutz auf einen Blick</h2>
+              <div className="space-y-4 text-gray-200 text-sm leading-relaxed">
                 <p>
                   Die folgenden Hinweise geben einen Überblick darüber, was mit Ihren personenbezogenen Daten
                   geschieht, wenn Sie diese Website besuchen. Personenbezogene Daten sind alle Daten, mit denen Sie
@@ -155,12 +155,12 @@ export default function DatenschutzPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">2. Verantwortliche Stelle</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">2. Verantwortliche Stelle</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p className="font-semibold">
                   Verantwortlicher im Sinne der Datenschutz-Grundverordnung ist:
                 </p>
-                <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="bg-nacht-900 p-4 rounded-lg">
                   <p className="font-semibold">{ANBIETER.name || 'Name fehlt'}</p>
                   <p>{ANBIETER.geschaeftsbezeichnung}</p>
                   <p className="mt-2">{ANBIETER.strasse}</p>
@@ -171,7 +171,7 @@ export default function DatenschutzPage() {
                       Telefon:{' '}
                       <a
                         href={'tel:' + ANBIETER.telefon.replace(/[^+0-9]/g, '')}
-                        className="text-akzent-700 underline"
+                        className="text-akzent-400 underline"
                       >
                         {ANBIETER.telefon}
                       </a>
@@ -179,7 +179,7 @@ export default function DatenschutzPage() {
                   )}
                   <p className={ANBIETER.telefon ? '' : 'mt-3'}>
                     E-Mail:{' '}
-                    <a href={'mailto:' + ANBIETER.datenschutzEmail} className="text-akzent-700 underline">
+                    <a href={'mailto:' + ANBIETER.datenschutzEmail} className="text-akzent-400 underline">
                       {ANBIETER.datenschutzEmail}
                     </a>
                   </p>
@@ -192,13 +192,13 @@ export default function DatenschutzPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">
                 3. Verarbeitungen im Einzelnen: Zwecke, Rechtsgrundlagen und Speicherdauer
               </h2>
-              <div className="space-y-6 text-gray-700 text-sm leading-relaxed">
+              <div className="space-y-6 text-gray-200 text-sm leading-relaxed">
                 {VERARBEITUNGEN.map((v) => (
                   <div key={v.titel} className="border-l-4 border-akzent-400 pl-4">
-                    <h3 className="font-semibold text-gray-900 mb-2">{v.titel}</h3>
+                    <h3 className="font-semibold text-gray-50 mb-2">{v.titel}</h3>
                     <dl className="space-y-1">
                       <div>
                         <dt className="inline font-semibold">Verarbeitete Daten: </dt>
@@ -221,7 +221,7 @@ export default function DatenschutzPage() {
                 ))}
                 <p>
                   Welche Cookies im Einzelnen gesetzt werden, steht in der{' '}
-                  <Link href="/cookie-richtlinie" className="text-akzent-700 underline">
+                  <Link href="/cookie-richtlinie" className="text-akzent-400 underline">
                     Cookie-Richtlinie
                   </Link>
                   . Ihre Einwilligung können Sie dort jederzeit ändern oder widerrufen.
@@ -230,8 +230,8 @@ export default function DatenschutzPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">4. Empfänger Ihrer Daten</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">4. Empfänger Ihrer Daten</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   Die Plattform selbst läuft auf Servern in Deutschland. Dienstleister, die uns beim Betrieb
                   unterstützen, erhalten Zugriff nur, soweit das für ihre Aufgabe erforderlich ist, und sind über
@@ -271,8 +271,8 @@ export default function DatenschutzPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">5. Ihre Rechte</h2>
-              <div className="space-y-4 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">5. Ihre Rechte</h2>
+              <div className="space-y-4 text-gray-200 text-sm leading-relaxed">
                 <p>Ihnen stehen jederzeit die folgenden Rechte zu:</p>
                 <ul className="list-disc list-outside space-y-2 ml-6">
                   {RECHTE.map(([recht, erklaerung]) => (
@@ -283,11 +283,11 @@ export default function DatenschutzPage() {
                 </ul>
                 <p>
                   Zur Ausübung genügt eine formlose Nachricht an{' '}
-                  <a href={'mailto:' + ANBIETER.datenschutzEmail} className="text-akzent-700 underline">
+                  <a href={'mailto:' + ANBIETER.datenschutzEmail} className="text-akzent-400 underline">
                     {ANBIETER.datenschutzEmail}
                   </a>
                   . Auskunft, Export und Löschung Ihrer Kontodaten können Sie außerdem selbst über die{' '}
-                  <Link href="/gdpr" className="text-akzent-700 underline">
+                  <Link href="/gdpr" className="text-akzent-400 underline">
                     DSGVO-Datenverwaltung
                   </Link>{' '}
                   auslösen.
@@ -296,10 +296,10 @@ export default function DatenschutzPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">
                 6. Beschwerderecht bei der Aufsichtsbehörde
               </h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   Sind Sie der Ansicht, dass die Verarbeitung Ihrer Daten gegen die Datenschutz-Grundverordnung
                   verstößt, können Sie sich nach Art. 77 DSGVO bei einer Aufsichtsbehörde beschweren — unabhängig
@@ -313,7 +313,7 @@ export default function DatenschutzPage() {
                     href="https://www.datenschutzkonferenz-online.de/datenschutzaufsichtsbehoerden.html"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-akzent-700 underline"
+                    className="text-akzent-400 underline"
                   >
                     datenschutzkonferenz-online.de
                   </a>
@@ -323,8 +323,8 @@ export default function DatenschutzPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">7. SSL- und TLS-Verschlüsselung</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">7. SSL- und TLS-Verschlüsselung</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   Diese Website nutzt aus Sicherheitsgründen durchgehend eine TLS-Verschlüsselung. Sie erkennen
                   eine verschlüsselte Verbindung daran, dass die Adresszeile Ihres Browsers mit „https://" beginnt.
@@ -336,25 +336,25 @@ export default function DatenschutzPage() {
           </div>
 
           <div className="mt-8 bg-akzent-50 rounded-xl p-6 text-center">
-            <p className="text-gray-700 text-sm mb-3">Möchten Sie Ihre Daten verwalten oder löschen?</p>
+            <p className="text-gray-200 text-sm mb-3">Möchten Sie Ihre Daten verwalten oder löschen?</p>
             <Link
               href="/gdpr"
-              className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 font-semibold transition-colors"
+              className="inline-flex items-center gap-2 text-akzent-400 hover:text-akzent-300 font-semibold transition-colors"
             >
               <Shield className="w-5 h-5" />
               Zur DSGVO-Datenverwaltung
             </Link>
           </div>
 
-          <div className="mt-8 text-center text-sm text-gray-600">
+          <div className="mt-8 text-center text-sm text-gray-300">
             <div className="flex justify-center gap-6">
-              <Link href="/impressum" className="hover:text-akzent-700 transition-colors">
+              <Link href="/impressum" className="hover:text-akzent-300 transition-colors">
                 Impressum
               </Link>
-              <Link href="/cookie-richtlinie" className="hover:text-akzent-700 transition-colors">
+              <Link href="/cookie-richtlinie" className="hover:text-akzent-300 transition-colors">
                 Cookie-Richtlinie
               </Link>
-              <Link href="/agb" className="hover:text-akzent-700 transition-colors">
+              <Link href="/agb" className="hover:text-akzent-300 transition-colors">
                 AGB
               </Link>
             </div>

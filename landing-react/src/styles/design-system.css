@@ -116,8 +116,11 @@ body {
   font-family: var(--font-sans);
   font-size: var(--font-size-base);
   line-height: 1.6;
-  color: var(--dark);
-  background-color: var(--white);
+  /* Seit 19.10.2026 dunkel: Grund nacht-950, Schrift gray-200. Die
+     Tailwind-Klassen der Seiten setzen das im Detail, hier steht nur der
+     Rueckfall fuer alles ohne eigene Klasse. */
+  color: #e5e7eb;
+  background-color: #050607;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -342,54 +345,8 @@ code, pre {
   }
 }
 
-/* Dark Mode */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: 222 47% 7%;
-    --foreground: 213 31% 91%;
-  }
-}
-
-.dark {
-  --background: 222 47% 7%;
-  --foreground: 213 31% 91%;
-  --white: #0f172a;
-  --gray-50: #1e293b;
-  --gray-100: #1e293b;
-  --gray-200: #334155;
-  --gray-300: #475569;
-  --dark: #f1f5f9;
-  --dark-800: #f1f5f9;
-  --dark-700: #e2e8f0;
-}
-
-.dark body {
-  background-color: #0f172a;
-  color: #e2e8f0;
-}
-
-.dark .bg-white {
-  background-color: #1e293b !important;
-}
-
-.dark .text-gray-900,
-.dark .text-gray-800,
-.dark .text-gray-700 {
-  color: #e2e8f0 !important;
-}
-
-.dark .text-gray-600,
-.dark .text-gray-500 {
-  color: #94a3b8 !important;
-}
-
-.dark .border-gray-200,
-.dark .border-gray-100 {
-  border-color: #334155 !important;
-}
-
-.dark .bg-gray-50,
-.dark .bg-gray-100 {
-  background-color: #1e293b !important;
-}
+/* Der fruehere .dark-Block (Overrides mit !important auf .text-gray-900,
+   .bg-white usw.) ist am 19.10.2026 entfallen. Die Seite ist seitdem
+   durchgehend dunkel ueber ihre eigenen Tailwind-Klassen; der Block
+   faerbte den dunklen Text auf den Akzentknoepfen weiss (1,02:1). */
 

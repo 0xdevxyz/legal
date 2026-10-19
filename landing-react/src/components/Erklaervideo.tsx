@@ -48,12 +48,12 @@ export default function Erklaervideo() {
   };
 
   return (
-    <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
-      <div className="bg-gray-50 border-b border-gray-100 px-5 py-3 flex items-center gap-2">
+    <div className="relative bg-nacht-800 rounded-2xl shadow-2xl border border-nacht-700 overflow-hidden">
+      <div className="bg-nacht-900 border-b border-nacht-700 px-5 py-3 flex items-center gap-2">
         <div className="w-3 h-3 rounded-full bg-red-400" />
         <div className="w-3 h-3 rounded-full bg-yellow-400" />
         <div className="w-3 h-3 rounded-full bg-green-400" />
-        <span className="ml-3 text-xs text-gray-500">complyo – in 72 Sekunden erklärt</span>
+        <span className="ml-3 text-xs text-gray-400">complyo – in 72 Sekunden erklärt</span>
       </div>
 
       <div className="relative">
@@ -83,7 +83,7 @@ export default function Erklaervideo() {
           type="button"
           onClick={toggleSound}
           aria-label={muted ? 'Ton einschalten und Video von vorn abspielen' : 'Ton ausschalten'}
-          className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 bg-white/90 hover:bg-white text-gray-700 text-xs font-semibold px-3 py-2 rounded-full shadow-md border border-gray-200 transition-colors"
+          className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 bg-nacht-900/90 hover:bg-nacht-800 text-gray-200 text-xs font-semibold px-3 py-2 rounded-full shadow-md border border-nacht-700 transition-colors"
         >
           {muted ? <Volume2 className="w-4 h-4" aria-hidden="true" /> : <VolumeX className="w-4 h-4" aria-hidden="true" />}
           {muted ? 'Mit Ton abspielen' : 'Stumm'}
@@ -93,11 +93,11 @@ export default function Erklaervideo() {
       {/* Textalternative fuer alle, die das Video nicht ansehen oder
           hoeren koennen oder wollen (WCAG 1.2.3). Zugeklappt, damit
           sie den Hero nicht auseinanderzieht. */}
-      <details className="border-t border-gray-100 px-5 py-3 text-left">
-        <summary className="cursor-pointer text-xs font-semibold text-gray-700 hover:text-akzent-800">
+      <details className="border-t border-nacht-700 px-5 py-3 text-left">
+        <summary className="cursor-pointer text-xs font-semibold text-gray-200 hover:text-akzent-300">
           Transkript des Videos anzeigen
         </summary>
-        <div className="mt-3 space-y-2 text-xs leading-relaxed text-gray-600">
+        <div className="mt-3 space-y-2 text-xs leading-relaxed text-gray-300">
           {TRANSKRIPT.map((absatz, i) => (
             <p key={i}>{absatz}</p>
           ))}

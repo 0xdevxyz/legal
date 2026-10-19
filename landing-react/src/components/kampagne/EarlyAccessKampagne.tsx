@@ -85,21 +85,21 @@ export default function EarlyAccessKampagne({
   }, []);
 
   return (
-    <main id="inhalt" tabIndex={-1} className="font-sans antialiased bg-white">
+    <main id="inhalt" tabIndex={-1} className="font-sans antialiased bg-nacht-950 text-gray-200">
 
       {/* ---------------------------------------------------------------- */}
       <section className="relative pt-16 pb-14 overflow-hidden">
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-bl from-akzent-200 via-akzent-50 to-transparent rounded-full blur-3xl opacity-70 pointer-events-none" />
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-bl from-akzent-800/40 via-akzent-900/10 to-transparent rounded-full blur-3xl opacity-70 pointer-events-none" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
           {bestaetigt === true && (
-            <div className="mb-8 bg-green-50 border border-green-200 rounded-2xl p-5 flex items-start gap-3" role="status">
-              <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="mb-8 bg-green-950/40 border border-green-800 rounded-2xl p-5 flex items-start gap-3" role="status">
+              <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
               <div>
-                <p className="font-semibold text-green-900">
+                <p className="font-semibold text-green-200">
                   {platz ? `Bestätigt – du hast Platz ${platz}.` : 'E-Mail bestätigt.'}
                 </p>
-                <p className="text-sm text-green-800 mt-0.5">
+                <p className="text-sm text-green-300 mt-0.5">
                   {platz
                     ? `Der Preis von ${PREIS_EARLY} im ersten Jahr ist für dich vorgemerkt. Wir melden uns, sobald es losgeht.`
                     : 'Du stehst auf der Liste. Die 100 vergünstigten Plätze waren zu diesem Zeitpunkt bereits vergeben – wir melden uns trotzdem zum Start.'}
@@ -108,9 +108,9 @@ export default function EarlyAccessKampagne({
             </div>
           )}
           {bestaetigt === false && (
-            <div className="mb-8 bg-amber-50 border border-amber-200 rounded-2xl p-5" role="alert">
-              <p className="font-semibold text-amber-900">Dieser Bestätigungslink gilt nicht mehr.</p>
-              <p className="text-sm text-amber-800 mt-0.5">
+            <div className="mb-8 bg-amber-950/40 border border-amber-800 rounded-2xl p-5" role="alert">
+              <p className="font-semibold text-amber-200">Dieser Bestätigungslink gilt nicht mehr.</p>
+              <p className="text-sm text-amber-300 mt-0.5">
                 Links laufen nach sieben Tagen ab. Trag dich unten einfach noch einmal ein.
               </p>
             </div>
@@ -128,21 +128,21 @@ export default function EarlyAccessKampagne({
           </div>
 
           <h1 className="font-heading text-4xl sm:text-5xl font-extrabold leading-[1.1] mb-5">
-            <span className="text-gray-500">Seit Juni 2025 gilt das BFSG.</span>{' '}
-            <span className="text-gray-900">Complyo findet die Lücken auf deiner Website – und schließt sie.</span>
+            <span className="text-gray-400">Seit Juni 2025 gilt das BFSG.</span>{' '}
+            <span className="text-gray-50">Complyo findet die Lücken auf deiner Website – und schließt sie.</span>
           </h1>
 
-          <p className="text-lg text-gray-600 leading-relaxed mb-3">
+          <p className="text-lg text-gray-300 leading-relaxed mb-3">
             Barrierefreiheit, Cookies, Datenschutz und Rechtstexte: ein Scan zeigt, was nicht
             stimmt. Die Reparatur passiert im Werkzeug, und jede Änderung wird danach im Browser
             nachgemessen – damit du belegen kannst, was du getan hast.
           </p>
 
-          <p className="text-lg text-gray-900 font-semibold leading-relaxed mb-8">
+          <p className="text-lg text-gray-50 font-semibold leading-relaxed mb-8">
             Die ersten {PLAETZE} zahlen {PREIS_EARLY} statt {PREIS_REGULAER} im Monat – das ganze erste Jahr.
           </p>
 
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+          <div className="bg-nacht-800 rounded-2xl border border-nacht-700 p-6">
             <WartelistenFormular kampagne={kampagne} id="anmeldung" />
           </div>
             </div>
@@ -155,24 +155,24 @@ export default function EarlyAccessKampagne({
       </section>
 
       {/* ---------------------------------------------------------------- */}
-      <section className="py-16 bg-gray-50">
+      <section className="py-16 bg-nacht-900">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="font-heading text-3xl font-extrabold text-gray-900 mb-3">
+          <h2 className="font-heading text-3xl font-extrabold text-gray-50 mb-3">
             Vier Bereiche, ein Scan
           </h2>
-          <p className="text-gray-600 mb-10 max-w-2xl leading-relaxed">
+          <p className="text-gray-300 mb-10 max-w-2xl leading-relaxed">
             Die meisten Werkzeuge prüfen eines davon und liefern eine Liste. Complyo prüft alle
             vier und arbeitet die Befunde ab.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {SAEULEN.map(({ icon: Icon, titel, text }) => (
-              <div key={titel} className="bg-white rounded-2xl border border-gray-200 p-6">
-                <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-akzent-400 mb-3">
-                  <Icon className="w-5 h-5 text-gray-900" aria-hidden="true" />
+              <div key={titel} className="bg-nacht-800 rounded-2xl border border-nacht-700 p-6">
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-akzent-400/10 border border-akzent-400/30 mb-3">
+                  <Icon className="w-5 h-5 text-akzent-300" aria-hidden="true" />
                 </div>
-                <h3 className="font-bold text-gray-900 mb-1.5">{titel}</h3>
-                <p className="text-sm text-gray-600 leading-relaxed">{text}</p>
+                <h3 className="font-bold text-gray-50 mb-1.5">{titel}</h3>
+                <p className="text-sm text-gray-300 leading-relaxed">{text}</p>
               </div>
             ))}
           </div>
@@ -182,25 +182,25 @@ export default function EarlyAccessKampagne({
       {/* ---------------------------------------------------------------- */}
       <section className="py-16">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="rounded-2xl border-2 border-akzent-600 p-8">
-            <div className="inline-flex items-center gap-2 bg-akzent-400 rounded-full px-3 py-1 mb-4">
-              <Gauge className="w-4 h-4 text-gray-900" aria-hidden="true" />
-              <span className="text-xs font-semibold text-gray-900 uppercase tracking-wide">
+          <div className="rounded-2xl border-2 border-akzent-500/70 p-8">
+            <div className="inline-flex items-center gap-2 bg-akzent-400/10 border border-akzent-400/30 rounded-full px-3 py-1 mb-4">
+              <Gauge className="w-4 h-4 text-akzent-300" aria-hidden="true" />
+              <span className="text-xs font-semibold text-akzent-300 uppercase tracking-wide">
                 Nachgemessen, nicht behauptet
               </span>
             </div>
 
-            <h2 className="font-heading text-2xl sm:text-3xl font-extrabold text-gray-900 mb-4">
+            <h2 className="font-heading text-2xl sm:text-3xl font-extrabold text-gray-50 mb-4">
               289 Pflicht-Verstöße gefunden. 32 blieben übrig.
             </h2>
 
-            <p className="text-gray-600 leading-relaxed mb-4">
+            <p className="text-gray-300 leading-relaxed mb-4">
               Gemessen an 24 echten Kundenwebsites im August 2026, in einem Durchlauf: Complyo hat
               89 Prozent der automatisiert prüfbaren Pflicht-Verstöße nach WCAG 2.1 AA behoben.
               Nachgemessen wurde im Browser, nach der Reparatur.
             </p>
 
-            <p className="text-sm text-gray-500 leading-relaxed">
+            <p className="text-sm text-gray-400 leading-relaxed">
               Was diese Zahl nicht sagt: Ein automatischer Test erfasst je nach Studie ein Drittel
               bis die Hälfte aller Barrieren. Ob eine Bildbeschreibung inhaltlich taugt oder sich
               eine Seite mit dem Screenreader gut bedienen lässt, beurteilt ein Mensch. Complyo
@@ -220,14 +220,14 @@ export default function EarlyAccessKampagne({
       {/* ---------------------------------------------------------------- */}
       <section className="py-16">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="font-heading text-3xl font-extrabold text-gray-900 mb-10">
+          <h2 className="font-heading text-3xl font-extrabold text-gray-50 mb-10">
             Häufige Fragen
           </h2>
           <dl className="space-y-8">
             {FAQ.map(({ q, a }) => (
               <div key={q}>
-                <dt className="font-bold text-gray-900 mb-2">{q}</dt>
-                <dd className="text-gray-600 leading-relaxed">{a}</dd>
+                <dt className="font-bold text-gray-50 mb-2">{q}</dt>
+                <dd className="text-gray-300 leading-relaxed">{a}</dd>
               </div>
             ))}
           </dl>
@@ -235,21 +235,21 @@ export default function EarlyAccessKampagne({
       </section>
 
       {/* ---------------------------------------------------------------- */}
-      <section className="py-16 bg-gray-50">
+      <section className="py-16 bg-nacht-900">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-akzent-400 mb-4">
-            <ArrowDown className="w-5 h-5 text-gray-900" aria-hidden="true" />
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-akzent-400/10 border border-akzent-400/30 mb-4">
+            <ArrowDown className="w-5 h-5 text-akzent-300" aria-hidden="true" />
           </div>
-          <h2 className="font-heading text-3xl font-extrabold text-gray-900 mb-3">
+          <h2 className="font-heading text-3xl font-extrabold text-gray-50 mb-3">
             Platz sichern, {PREIS_EARLY} statt {PREIS_REGULAER}
           </h2>
-          <p className="text-gray-600 mb-8 leading-relaxed">
+          <p className="text-gray-300 mb-8 leading-relaxed">
             Eine E-Mail-Adresse, ein Bestätigungsklick. Keine Zahlungsdaten, keine Bestellung.
           </p>
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 text-left">
+          <div className="bg-nacht-800 rounded-2xl border border-nacht-700 p-6 text-left">
             <WartelistenFormular kampagne={kampagne} id="anmeldung-unten" />
           </div>
-          <p className="text-xs text-gray-500 mt-6">
+          <p className="text-xs text-gray-400 mt-6">
             Alle Preise netto zzgl. gesetzlicher Umsatzsteuer.
           </p>
         </div>

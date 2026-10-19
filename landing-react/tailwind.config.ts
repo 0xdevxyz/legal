@@ -42,6 +42,21 @@ const config: Config = {
           800: "#005754",
           900: "#003D3B"
         },
+        // Schwarz/Grau-Grund seit dem 19.10.2026. Die Seite steht auf
+        // nacht-950, Abschnitte wechseln nach nacht-900, Karten liegen auf
+        // nacht-800 mit nacht-700-Rand. Schrift: gray-50 Ueberschriften,
+        // gray-200/300 Fliesstext, gray-400 Nebentext (7,6:1 auf nacht-950),
+        // gray-500 nur fuer Kleingedrucktes (4,6:1). Die Akzentfarbe traegt
+        // auf dunklem Grund auch als Schrift (akzent-400 auf nacht-950:
+        // 16,5:1), bleibt aber sparsam: Knoepfe, Links, Fokus, und der
+        // Rahmen um die Preistabelle.
+        nacht: {
+          950: "#050607",
+          900: "#0B0D11",
+          800: "#15181E",
+          700: "#232831",
+          600: "#323944"
+        },
         complyo: {
           akzent: "#00FFF7",
           purple: "#8b5cf6",

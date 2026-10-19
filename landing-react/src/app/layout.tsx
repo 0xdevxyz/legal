@@ -54,13 +54,13 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="de" className={`scroll-smooth light ${dmSans.variable} ${instrumentSans.variable}`}>
+    <html lang="de" className={`scroll-smooth ${dmSans.variable} ${instrumentSans.variable}`}>
       <head>
         <link rel="icon" type="image/png" href="/favicon-dark.png" media="(prefers-color-scheme: dark)" />
         <link rel="icon" type="image/png" href="/favicon-light.png" media="(prefers-color-scheme: light)" />
         <link rel="apple-touch-icon" href="/favicon-dark.png" />
         <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
-        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#050607" media="(prefers-color-scheme: light)" />
       </head>
       <body className={`${dmSans.className} antialiased`}>
         {/* Erster fokussierbarer Punkt der Seite: ohne ihn muss sich jeder
@@ -68,7 +68,7 @@ export default function RootLayout({
             arbeiten (WCAG 2.4.1). Sichtbar nur bei Fokus. */}
         <a
           href="#inhalt"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-akzent-800 focus:shadow-lg focus:outline focus:outline-2 focus:outline-akzent-700"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-nacht-800 focus:px-4 focus:py-2 focus:text-akzent-300 focus:shadow-lg focus:outline focus:outline-2 focus:outline-akzent-400"
         >
           Zum Inhalt springen
         </a>

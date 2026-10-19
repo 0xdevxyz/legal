@@ -179,15 +179,15 @@ export default function WartelistenFormular({
     return (
       <div
         id={id}
-        className="bg-green-50 border border-green-200 rounded-2xl p-6 flex items-start gap-3"
+        className="bg-green-950/40 border border-green-800 rounded-2xl p-6 flex items-start gap-3"
         role="status"
       >
-        <CheckCircle2 className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+        <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
         <div>
-          <p className="font-semibold text-green-900">
+          <p className="font-semibold text-green-200">
             {schonDrin ? 'Diese Adresse steht schon auf der Liste.' : 'Fast geschafft – bitte E-Mail bestätigen.'}
           </p>
-          <p className="text-sm text-green-800 mt-1 leading-relaxed">
+          <p className="text-sm text-green-300 mt-1 leading-relaxed">
             {schonDrin
               ? 'Wir melden uns unter dieser Adresse, sobald es losgeht. Du musst nichts weiter tun.'
               : 'Wir haben dir eine Mail geschickt. Der Platz ist erst mit dem Klick darin reserviert – ohne Bestätigung dürfen wir dich nicht anschreiben.'}
@@ -225,7 +225,7 @@ export default function WartelistenFormular({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="deine@firma.de"
-            className="w-full px-4 py-3.5 rounded-xl border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-akzent-700 focus:border-akzent-700"
+            className="w-full px-4 py-3.5 rounded-xl bg-nacht-900 border border-nacht-600 text-gray-50 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-akzent-400 focus:border-akzent-400"
           />
         </div>
         <button
@@ -246,44 +246,44 @@ export default function WartelistenFormular({
 
       {TURNSTILE_SITEKEY && <div ref={turnstileBox} className="pt-1" />}
       {turnstileError && (
-        <p className="text-sm text-red-600 flex items-center gap-1.5">
+        <p className="text-sm text-red-400 flex items-center gap-1.5">
           <AlertCircle className="w-4 h-4" aria-hidden="true" />
           Bitte bestätige kurz, dass du kein Bot bist.
         </p>
       )}
 
-      <label className="flex items-start gap-2.5 text-sm text-gray-600 cursor-pointer">
+      <label className="flex items-start gap-2.5 text-sm text-gray-300 cursor-pointer">
         <input
           type="checkbox"
           checked={consent}
           onChange={(e) => { setConsent(e.target.checked); setConsentError(false); }}
-          className="mt-0.5 w-4 h-4 rounded border-gray-300 text-akzent-700 focus:ring-akzent-700"
+          className="mt-0.5 w-4 h-4 rounded border-nacht-600 bg-nacht-900 text-akzent-400 focus:ring-akzent-400"
         />
         <span>
           Ich möchte zum Start benachrichtigt werden und bin damit einverstanden, dass complyo
           meine E-Mail-Adresse dafür speichert. Widerruf jederzeit über den Abmeldelink in jeder
           Mail. Näheres in der{' '}
-          <a href="/datenschutz" className="text-akzent-700 underline hover:text-akzent-800">
+          <a href="/datenschutz" className="text-akzent-400 underline hover:text-akzent-300">
             Datenschutzerklärung
           </a>
           .
         </span>
       </label>
       {consentError && (
-        <p className="text-sm text-red-600 flex items-center gap-1.5" role="alert">
+        <p className="text-sm text-red-400 flex items-center gap-1.5" role="alert">
           <AlertCircle className="w-4 h-4" aria-hidden="true" />
           Ohne diese Einwilligung dürfen wir dir nicht schreiben.
         </p>
       )}
 
       {formState === 'error' && (
-        <p className="text-sm text-red-600 flex items-center gap-1.5" role="alert">
+        <p className="text-sm text-red-400 flex items-center gap-1.5" role="alert">
           <AlertCircle className="w-4 h-4" aria-hidden="true" />
           {fehlerText || 'Das hat nicht geklappt – deine Adresse wurde nicht gespeichert. Bitte versuch es noch einmal.'}
         </p>
       )}
 
-      <p className="text-xs text-gray-500 flex items-center gap-1.5">
+      <p className="text-xs text-gray-400 flex items-center gap-1.5">
         <Lock className="w-3.5 h-3.5" aria-hidden="true" />
         Kein Newsletter, keine Weitergabe an Dritte. Nur die Nachricht zum Start.
       </p>

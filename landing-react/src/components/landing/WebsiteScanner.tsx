@@ -16,20 +16,21 @@ import { herkunftAusSuche, mitHerkunft } from '@/lib/herkunft';
  * Admin- und Dashboard-Dateien woertlich vor und landen ueber die im
  * Stylesheet. Wer dort aufraeumt, haette hier farblose Kacheln.
  *
- * dunkel = Kachelreihe auf #111827, hell = Auswertung auf Weiss.
+ * dunkel = Kachelreihe auf nacht-900, hell = Auswertung auf nacht-800
+ * (seit 19.10.2026 ebenfalls dunkel; die Namen sind geblieben).
  */
 const KACHELFARBEN: Record<string, {
   dunkelFlaeche: string; dunkelIcon: string; hellFlaeche: string; hellIcon: string;
 }> = {
-  akzent: { dunkelFlaeche: 'bg-akzent-900', dunkelIcon: 'text-akzent-400', hellFlaeche: 'bg-akzent-100', hellIcon: 'text-akzent-700' },
-  green:  { dunkelFlaeche: 'bg-green-900',  dunkelIcon: 'text-green-400',  hellFlaeche: 'bg-green-100',  hellIcon: 'text-green-600' },
-  purple: { dunkelFlaeche: 'bg-purple-900', dunkelIcon: 'text-purple-400', hellFlaeche: 'bg-purple-100', hellIcon: 'text-purple-600' },
-  orange: { dunkelFlaeche: 'bg-orange-900', dunkelIcon: 'text-orange-400', hellFlaeche: 'bg-orange-100', hellIcon: 'text-orange-600' },
-  red:    { dunkelFlaeche: 'bg-red-900',    dunkelIcon: 'text-red-400',    hellFlaeche: 'bg-red-100',    hellIcon: 'text-red-600' },
-  yellow: { dunkelFlaeche: 'bg-yellow-900', dunkelIcon: 'text-yellow-400', hellFlaeche: 'bg-yellow-100', hellIcon: 'text-yellow-600' },
-  indigo: { dunkelFlaeche: 'bg-indigo-900', dunkelIcon: 'text-indigo-400', hellFlaeche: 'bg-indigo-100', hellIcon: 'text-indigo-600' },
-  teal:   { dunkelFlaeche: 'bg-teal-900',   dunkelIcon: 'text-teal-400',   hellFlaeche: 'bg-teal-100',   hellIcon: 'text-teal-600' },
-  gray:   { dunkelFlaeche: 'bg-gray-800',   dunkelIcon: 'text-gray-400',   hellFlaeche: 'bg-gray-100',   hellIcon: 'text-gray-600' },
+  akzent: { dunkelFlaeche: 'bg-akzent-900', dunkelIcon: 'text-akzent-400', hellFlaeche: 'bg-akzent-900/60', hellIcon: 'text-akzent-300' },
+  green:  { dunkelFlaeche: 'bg-green-900',  dunkelIcon: 'text-green-400',  hellFlaeche: 'bg-green-900/50',  hellIcon: 'text-green-400' },
+  purple: { dunkelFlaeche: 'bg-purple-900', dunkelIcon: 'text-purple-400', hellFlaeche: 'bg-purple-900/50', hellIcon: 'text-purple-400' },
+  orange: { dunkelFlaeche: 'bg-orange-900', dunkelIcon: 'text-orange-400', hellFlaeche: 'bg-orange-900/50', hellIcon: 'text-orange-400' },
+  red:    { dunkelFlaeche: 'bg-red-900',    dunkelIcon: 'text-red-400',    hellFlaeche: 'bg-red-900/50',    hellIcon: 'text-red-400' },
+  yellow: { dunkelFlaeche: 'bg-yellow-900', dunkelIcon: 'text-yellow-400', hellFlaeche: 'bg-yellow-900/50', hellIcon: 'text-yellow-400' },
+  indigo: { dunkelFlaeche: 'bg-indigo-900', dunkelIcon: 'text-indigo-400', hellFlaeche: 'bg-indigo-900/50', hellIcon: 'text-indigo-400' },
+  teal:   { dunkelFlaeche: 'bg-teal-900',   dunkelIcon: 'text-teal-400',   hellFlaeche: 'bg-teal-900/50',   hellIcon: 'text-teal-400' },
+  gray:   { dunkelFlaeche: 'bg-nacht-800',   dunkelIcon: 'text-gray-400',   hellFlaeche: 'bg-nacht-700',   hellIcon: 'text-gray-300' },
 };
 
 const kachel = (farbe: string) => KACHELFARBEN[farbe] ?? KACHELFARBEN.gray;
@@ -329,10 +330,10 @@ export default function WebsiteScanner() {
   };
 
   const getScoreColor = (score: number) => {
-    if (score == null) return 'text-gray-400 bg-gray-100';
-    if (score >= 80) return 'text-green-600 bg-green-100';
-    if (score >= 60) return 'text-yellow-600 bg-yellow-100';
-    return 'text-red-600 bg-red-100';
+    if (score == null) return 'text-gray-400 bg-nacht-700';
+    if (score >= 80) return 'text-green-400 bg-green-950/60';
+    if (score >= 60) return 'text-yellow-400 bg-yellow-900/50';
+    return 'text-red-400 bg-red-950/50';
   };
 
   const getRiskLevel = (score: number, befunde?: number) => {
@@ -344,7 +345,7 @@ export default function WebsiteScanner() {
   };
 
   return (
-    <section id="scanner" className="py-20 bg-[#111827]">
+    <section id="scanner" className="py-20 bg-nacht-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-12">
@@ -372,7 +373,7 @@ export default function WebsiteScanner() {
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="ihre-website.de"
                 aria-label="Website-URL für kostenlosen Compliance-Check eingeben"
-                className="flex-1 px-6 py-4 rounded-xl border-2 border-gray-600 bg-gray-800 text-white focus:border-akzent-400 focus:ring-4 focus:ring-akzent-800 outline-none text-lg placeholder-gray-400"
+                className="flex-1 px-6 py-4 rounded-xl border-2 border-nacht-600 bg-nacht-800 text-white focus:border-akzent-400 focus:ring-4 focus:ring-akzent-800 outline-none text-lg placeholder-gray-400"
                 required
               />
               <button
@@ -433,7 +434,7 @@ export default function WebsiteScanner() {
               return (
                 <div
                   key={pillar.id}
-                  className="bg-gray-800 rounded-xl p-6 border-2 border-gray-700 hover:border-akzent-400 hover:shadow-lg transition-all"
+                  className="bg-nacht-800 rounded-xl p-6 border-2 border-nacht-700 hover:border-akzent-400 hover:shadow-lg transition-all"
                 >
                   <div className={`w-12 h-12 ${kachel(pillar.color).dunkelFlaeche} bg-opacity-50 rounded-lg flex items-center justify-center mb-4`}>
                     <Icon className={`w-6 h-6 ${kachel(pillar.color).dunkelIcon}`} />
@@ -457,56 +458,56 @@ export default function WebsiteScanner() {
             {(scanResult.bfsg || scanResult.aiAct) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {scanResult.bfsg && (
-                  <div className={`rounded-2xl p-6 border-2 shadow-xl ${scanResult.bfsg.critical_issues > 0 ? 'bg-red-50 border-red-300' : 'bg-white border-gray-200'}`}>
+                  <div className={`rounded-2xl p-6 border-2 shadow-xl ${scanResult.bfsg.critical_issues > 0 ? 'bg-red-950/40 border-red-800' : 'bg-nacht-800 border-nacht-700'}`}>
                     <div className="flex items-center gap-2 mb-3">
                       <span className="text-2xl">♿</span>
-                      <h3 className="text-lg font-bold text-gray-900">BFSG-Check</h3>
-                      <span className="ml-auto text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-800">
+                      <h3 className="text-lg font-bold text-gray-50">BFSG-Check</h3>
+                      <span className="ml-auto text-xs font-semibold px-2 py-1 rounded-full bg-amber-950/60 text-amber-300">
                         gilt seit 28.06.2025
                       </span>
                     </div>
-                    <p className="text-sm text-gray-700 mb-3">{scanResult.bfsg.scope_note}</p>
+                    <p className="text-sm text-gray-200 mb-3">{scanResult.bfsg.scope_note}</p>
                     <div className="flex items-center gap-4 text-sm">
-                      <span className={`font-bold ${scanResult.bfsg.critical_issues > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      <span className={`font-bold ${scanResult.bfsg.critical_issues > 0 ? 'text-red-400' : 'text-green-400'}`}>
                         {scanResult.bfsg.critical_issues} kritische Probleme
                       </span>
-                      <span className="text-gray-600">{scanResult.bfsg.warning_issues} Warnungen</span>
+                      <span className="text-gray-300">{scanResult.bfsg.warning_issues} Warnungen</span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-3">{scanResult.bfsg.enforcement_note}</p>
+                    <p className="text-xs text-gray-400 mt-3">{scanResult.bfsg.enforcement_note}</p>
                   </div>
                 )}
                 {scanResult.aiAct && scanResult.aiAct.ai_systems_detected > 0 && (
-                  <div className={`rounded-2xl p-6 border-2 shadow-xl ${scanResult.aiAct.action_needed ? 'bg-red-50 border-red-300' : 'bg-white border-gray-200'}`}>
+                  <div className={`rounded-2xl p-6 border-2 shadow-xl ${scanResult.aiAct.action_needed ? 'bg-red-950/40 border-red-800' : 'bg-nacht-800 border-nacht-700'}`}>
                     <div className="flex items-center gap-2 mb-3">
                       <span className="text-2xl">🤖</span>
-                      <h3 className="text-lg font-bold text-gray-900">AI-Act-Transparenz</h3>
-                      <span className="ml-auto text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-800">
+                      <h3 className="text-lg font-bold text-gray-50">AI-Act-Transparenz</h3>
+                      <span className="ml-auto text-xs font-semibold px-2 py-1 rounded-full bg-amber-950/60 text-amber-300">
                         Art. 50 KI-VO
                       </span>
                     </div>
-                    <p className="text-sm text-gray-700 mb-3">
+                    <p className="text-sm text-gray-200 mb-3">
                       {scanResult.aiAct.ai_systems_detected} KI-/Chat-System(e) erkannt
                       {scanResult.aiAct.providers?.length > 0 && (
                         <>: {scanResult.aiAct.providers.map((p: any) => p.provider).join(', ')}</>
                       )}
                     </p>
-                    <p className={`text-sm font-semibold ${scanResult.aiAct.action_needed ? 'text-red-600' : 'text-green-600'}`}>
+                    <p className={`text-sm font-semibold ${scanResult.aiAct.action_needed ? 'text-red-400' : 'text-green-400'}`}>
                       {scanResult.aiAct.action_needed
                         ? 'Transparenzhinweis fehlt offenbar — Handlungsbedarf'
                         : 'Kein unmittelbarer Handlungsbedarf erkannt'}
                     </p>
-                    <p className="text-xs text-gray-500 mt-3">{scanResult.aiAct.fines_note}</p>
+                    <p className="text-xs text-gray-400 mt-3">{scanResult.aiAct.fines_note}</p>
                   </div>
                 )}
               </div>
             )}
 
             {/* Overall Score Card */}
-            <div className="bg-white rounded-2xl p-8 border-2 border-gray-200 shadow-xl">
+            <div className="bg-nacht-950 rounded-2xl p-8 border-2 border-nacht-700 shadow-xl">
               <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                 {/* Score */}
                 <div className="text-center md:text-left">
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                  <h3 className="text-2xl font-bold text-gray-50 mb-2">
                     Ergebnis für {scanResult.url}
                   </h3>
                   <div className="flex items-center gap-4">
@@ -515,13 +516,13 @@ export default function WebsiteScanner() {
                       <span className="text-3xl">/100</span>
                     </div>
                     <div>
-                      <div className="text-lg font-semibold text-gray-700">Compliance-Score</div>
+                      <div className="text-lg font-semibold text-gray-200">Compliance-Score</div>
                       <div className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold ${
                         getRiskLevel(scanResult.overallScore, scanResult.befundeGesamt).color === 'red' 
-                          ? 'bg-red-100 text-red-700' 
+                          ? 'bg-red-900/50 text-red-300' 
                           : getRiskLevel(scanResult.overallScore, scanResult.befundeGesamt).color === 'yellow'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-green-100 text-green-700'
+                          ? 'bg-yellow-900/50 text-yellow-300'
+                          : 'bg-green-900/50 text-green-300'
                       }`}>
                         {getRiskLevel(scanResult.overallScore, scanResult.befundeGesamt).label === 'HOCH' && (
                           <AlertTriangle className="w-4 h-4" />
@@ -545,18 +546,18 @@ export default function WebsiteScanner() {
                   const hinweise = scanResult.hinweiseGesamt ?? 0;
                   const isGreen = befunde === 0;
                   const isRed = kritisch > 0;
-                  const bgClass = isGreen ? 'bg-green-50 border-green-200' : isRed ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200';
-                  const textClass = isGreen ? 'text-green-900' : isRed ? 'text-red-900' : 'text-yellow-900';
-                  const numClass = isGreen ? 'text-green-600' : isRed ? 'text-red-600' : 'text-yellow-600';
-                  const subClass = isGreen ? 'text-green-700' : isRed ? 'text-red-700' : 'text-yellow-700';
+                  const bgClass = isGreen ? 'bg-green-950/40 border-green-800' : isRed ? 'bg-red-950/40 border-red-800' : 'bg-yellow-950/40 border-yellow-800';
+                  const textClass = isGreen ? 'text-green-200' : isRed ? 'text-red-200' : 'text-yellow-200';
+                  const numClass = isGreen ? 'text-green-400' : isRed ? 'text-red-400' : 'text-yellow-400';
+                  const subClass = isGreen ? 'text-green-300' : isRed ? 'text-red-300' : 'text-yellow-300';
                   const label = isGreen ? 'Keine Befunde' : isRed ? 'Sofort handeln' : 'Handlungsbedarf';
                   const bereichWort = bereiche === 1 ? 'Bereich' : 'Bereichen';
                   return (
                     <div className={`rounded-xl p-6 border-2 ${bgClass}`}>
                       <div className="flex items-center gap-3 mb-2">
                         {isGreen
-                          ? <CheckCircle className="w-6 h-6 text-green-600" />
-                          : <AlertTriangle className={`w-6 h-6 ${isRed ? 'text-red-600' : 'text-yellow-600'}`} />
+                          ? <CheckCircle className="w-6 h-6 text-green-400" />
+                          : <AlertTriangle className={`w-6 h-6 ${isRed ? 'text-red-400' : 'text-yellow-400'}`} />
                         }
                         <h4 className={`text-lg font-bold ${textClass}`}>{label}</h4>
                       </div>
@@ -604,15 +605,15 @@ export default function WebsiteScanner() {
                 const m = meta[key] ?? { icon: Shield, color: 'gray', description: '' };
                 const Icon = m.icon;
                 return (
-                  <div key={key} className="bg-white rounded-xl p-6 border-2 border-gray-200">
+                  <div key={key} className="bg-nacht-950 rounded-xl p-6 border-2 border-nacht-700">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 ${kachel(m.color).hellFlaeche} rounded-lg flex items-center justify-center`}>
                           <Icon className={`w-5 h-5 ${kachel(m.color).hellIcon}`} />
                         </div>
                         <div>
-                          <h4 className="font-bold text-gray-900">{pillarData.label ?? key}</h4>
-                          <p className="text-sm text-gray-600">{m.description}</p>
+                          <h4 className="font-bold text-gray-50">{pillarData.label ?? key}</h4>
+                          <p className="text-sm text-gray-300">{m.description}</p>
                         </div>
                       </div>
                       <div className={`text-2xl font-bold ${getScoreColor(pillarData.score)}`}>
@@ -628,19 +629,19 @@ export default function WebsiteScanner() {
                       ) : (
                         <>
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">Gefundene Verstöße:</span>
-                            <span className="font-semibold text-gray-900">{pillarData.issues}</span>
+                            <span className="text-gray-300">Gefundene Verstöße:</span>
+                            <span className="font-semibold text-gray-50">{pillarData.issues}</span>
                           </div>
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">Davon kritisch:</span>
-                            <span className="font-semibold text-red-600">{pillarData.critical}</span>
+                            <span className="text-gray-300">Davon kritisch:</span>
+                            <span className="font-semibold text-red-400">{pillarData.critical}</span>
                           </div>
                         </>
                       )}
                       {(pillarData.hinweise ?? 0) > 0 && (
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Hinweise (kein Verstoß):</span>
-                          <span className="font-semibold text-gray-500">{pillarData.hinweise}</span>
+                          <span className="text-gray-300">Hinweise (kein Verstoß):</span>
+                          <span className="font-semibold text-gray-400">{pillarData.hinweise}</span>
                         </div>
                       )}
                     </div>
@@ -667,7 +668,7 @@ export default function WebsiteScanner() {
                     `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de'}/register?plan=free`,
                     herkunftAusSuche(typeof window === 'undefined' ? '' : window.location.search),
                   )}
-                  className="px-8 py-4 bg-white text-akzent-800 font-semibold rounded-xl hover:shadow-2xl transition-all transform hover:scale-105 inline-flex items-center justify-center gap-2"
+                  className="px-8 py-4 bg-akzent-400 text-gray-900 font-semibold rounded-xl hover:shadow-2xl transition-all transform hover:scale-105 inline-flex items-center justify-center gap-2"
                 >
                   <TrendingUp className="w-5 h-5" />
                   {(scanResult.befundeGesamt ?? 0) === 0
@@ -676,7 +677,7 @@ export default function WebsiteScanner() {
                 </a>
                 <button
                   onClick={() => { setScanResult(null); setUrl(''); localStorage.removeItem('last_scan_data'); }}
-                  className="px-8 py-4 bg-white/20 hover:bg-white/30 text-white font-semibold rounded-xl transition-all"
+                  className="px-8 py-4 bg-nacht-950/20 hover:bg-nacht-950/30 text-white font-semibold rounded-xl transition-all"
                 >
                   Neue Website scannen
                 </button>

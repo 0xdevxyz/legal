@@ -10,15 +10,15 @@ export default function Error({
   reset: () => void
 }) {
   return (
-    <main className="min-h-screen bg-white text-gray-900 flex items-center justify-center px-4">
+    <main className="min-h-screen bg-nacht-950 text-gray-50 flex items-center justify-center px-4">
       <div className="max-w-md w-full text-center">
         <div className="mb-6 flex justify-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+          <div className="w-16 h-16 bg-red-950/50 rounded-full flex items-center justify-center">
             <AlertTriangle className="w-8 h-8 text-red-500" />
           </div>
         </div>
         <h1 className="text-2xl font-bold mb-3">Etwas ist schiefgelaufen</h1>
-        <p className="text-gray-500 mb-8">
+        <p className="text-gray-400 mb-8">
           Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut oder kehren Sie zur Startseite zurueck.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -31,7 +31,7 @@ export default function Error({
           </button>
           <a
             href="/"
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-nacht-700 hover:bg-nacht-600 rounded-lg font-medium transition-colors"
           >
             <Home className="w-4 h-4" />
             Zur Startseite

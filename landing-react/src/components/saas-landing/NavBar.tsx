@@ -28,11 +28,11 @@ export default function NavBar() {
   }, []);
 
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-white/95 backdrop-blur-md shadow-sm border-b border-gray-100' : 'bg-white'}`}>
+    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-nacht-950/90 backdrop-blur-md shadow-sm border-b border-nacht-700' : 'bg-nacht-950'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <a href="/" className="flex items-center flex-shrink-0" aria-label="complyo — zur Startseite">
-            <Logo size="sm" variant="light" />
+            <Logo size="sm" variant="dark" />
           </a>
 
           <div className="hidden lg:flex items-center gap-7">
@@ -40,7 +40,7 @@ export default function NavBar() {
               <a
                 key={link.href}
                 href={link.href}
-                className="text-sm font-medium text-gray-600 hover:text-akzent-700 transition-colors"
+                className="text-sm font-medium text-gray-300 hover:text-akzent-300 transition-colors"
               >
                 {link.label}
               </a>
@@ -53,7 +53,7 @@ export default function NavBar() {
           <div className="hidden lg:flex items-center gap-4">
             <a
               href={APP_URL + '/login'}
-              className="text-sm font-medium text-gray-600 hover:text-akzent-700 transition-colors"
+              className="text-sm font-medium text-gray-300 hover:text-akzent-300 transition-colors"
             >
               Anmelden
             </a>
@@ -66,7 +66,7 @@ export default function NavBar() {
           </div>
 
           <button
-            className="lg:hidden p-2 text-gray-600"
+            className="lg:hidden p-2 text-gray-300"
             onClick={() => setOpen(!open)}
             aria-label={open ? 'Menü schließen' : 'Menü öffnen'}
             aria-expanded={open}
@@ -80,19 +80,19 @@ export default function NavBar() {
           <div
             id="mobile-menue"
             hidden={!open}
-            className="lg:hidden border-t border-gray-100 py-4 space-y-1"
+            className="lg:hidden border-t border-nacht-700 py-4 space-y-1"
           >
             {LINKS.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
-                className="block px-2 py-2 text-sm font-medium text-gray-600 hover:text-akzent-700 transition-colors"
+                className="block px-2 py-2 text-sm font-medium text-gray-300 hover:text-akzent-300 transition-colors"
               >
                 {link.label}
               </a>
             ))}
-            <div className="pt-3 mt-2 border-t border-gray-100 space-y-2">
+            <div className="pt-3 mt-2 border-t border-nacht-700 space-y-2">
               <a
                 href="/#anmeldung"
                 onClick={() => setOpen(false)}
@@ -103,7 +103,7 @@ export default function NavBar() {
               <a
                 href={APP_URL + '/login'}
                 onClick={() => setOpen(false)}
-                className="block text-sm text-center text-gray-600 font-medium rounded-lg px-4 py-2.5"
+                className="block text-sm text-center text-gray-300 font-medium rounded-lg px-4 py-2.5"
               >
                 Anmelden
               </a>

@@ -36,12 +36,12 @@ export default function AgenturAbschnitt() {
     <section
       id="agentur"
       aria-labelledby="agentur-titel"
-      className="py-16 bg-gray-50 scroll-mt-16"
+      className="py-16 bg-nacht-900 scroll-mt-16"
     >
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="rounded-2xl bg-gray-900 text-white p-8 sm:p-10 grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12 items-center">
+        <div className="rounded-2xl bg-nacht-800 border border-nacht-700 text-white p-8 sm:p-10 grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12 items-center">
           <div className="lg:col-span-3">
-            <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-3 py-1 mb-4">
+            <div className="inline-flex items-center gap-2 bg-nacht-950/10 rounded-full px-3 py-1 mb-4">
               <Building2 className="w-3.5 h-3.5 text-akzent-400" aria-hidden="true" />
               <span className="text-xs font-semibold uppercase tracking-wide">Für Agenturen</span>
             </div>
@@ -63,21 +63,21 @@ export default function AgenturAbschnitt() {
             </ul>
           </div>
 
-          <div className="lg:col-span-2 bg-white text-gray-900 rounded-2xl p-6">
-            <p className="text-sm text-gray-500 mb-1">Agentur</p>
+          <div className="lg:col-span-2 bg-nacht-900 text-gray-50 rounded-2xl border border-akzent-400/50 p-6">
+            <p className="text-sm text-gray-400 mb-1">Agentur</p>
             <div className="flex items-baseline gap-1">
               <span className="text-4xl font-extrabold">{AGENTUR_PREIS_MONAT}</span>
-              <span className="text-sm text-gray-500">/Monat</span>
+              <span className="text-sm text-gray-400">/Monat</span>
             </div>
-            <p className="text-xs text-gray-500 mt-1 mb-6">oder {AGENTUR_PREIS_JAHR} im Jahr</p>
+            <p className="text-xs text-gray-400 mt-1 mb-6">oder {AGENTUR_PREIS_JAHR} im Jahr</p>
             <a
               href={buchen}
-              className="inline-flex items-center justify-center gap-2 w-full bg-akzent-400 hover:bg-akzent-500 text-gray-900 font-semibold px-5 py-3 rounded-xl transition-colors shadow-md shadow-akzent-100"
+              className="inline-flex items-center justify-center gap-2 w-full bg-akzent-400 hover:bg-akzent-500 text-gray-900 font-semibold px-5 py-3 rounded-xl transition-colors shadow-md shadow-akzent-900/50"
             >
               Agentur buchen
               <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </a>
-            <p className="text-xs text-gray-500 mt-4 leading-relaxed">
+            <p className="text-xs text-gray-400 mt-4 leading-relaxed">
               Preis zzgl. MwSt., monatlich kündbar, Zahlung per Karte und den im Checkout
               angezeigten Bezahlarten. Das Angebot richtet sich ausschließlich an Unternehmer
               im Sinne des § 14 BGB; ein Verkauf an Verbraucher findet nicht statt.

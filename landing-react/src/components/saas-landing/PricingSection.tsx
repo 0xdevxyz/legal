@@ -108,28 +108,31 @@ export default function PricingSection() {
   // Kanal zugeordnet werden kann. Siehe lib/herkunft.ts.
   const herkunft = useHerkunft();
   return (
-    <section id="preise" className="bg-gray-50 py-20 scroll-mt-16">
+    <section id="preise" className="bg-nacht-900 py-20 scroll-mt-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         <div className="text-center max-w-2xl mx-auto mb-14">
-          <span className="text-xs font-semibold text-akzent-800 uppercase tracking-wide">Preise</span>
-          <h2 className="font-heading text-3xl sm:text-4xl font-extrabold text-gray-900 mt-3 mb-4">
+          <span className="text-xs font-semibold text-akzent-300 uppercase tracking-wide">Preise</span>
+          <h2 className="font-heading text-3xl sm:text-4xl font-extrabold text-gray-50 mt-3 mb-4">
             Scannen ist kostenlos. Bezahlt wird erst das Beheben.
           </h2>
-          <p className="text-gray-500 leading-relaxed">
+          <p className="text-gray-400 leading-relaxed">
             Du siehst zuerst, was auf deiner Website nicht stimmt – vollständig und ohne Zahlungsdaten.
             Erst wenn du die Befunde abstellen willst, wird ein Tarif fällig.
           </p>
         </div>
 
+        {/* Der Akzent sitzt hier und sonst kaum: ein Rahmen um die Tarife,
+            innen Karten in Grau, nur die Pro-Karte traegt den vollen Rand. */}
+        <div className="rounded-3xl border border-akzent-400/40 p-4 sm:p-6 shadow-[0_0_80px_-30px_rgba(0,255,247,0.45)]">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 items-stretch">
           {PLANS.map((plan) => (
             <div
               key={plan.id}
               className={`relative flex flex-col rounded-2xl p-6 transition-shadow ${
                 plan.highlighted
-                  ? 'bg-white border-2 border-akzent-400 shadow-xl'
-                  : 'bg-white border border-gray-200 hover:shadow-md'
+                  ? 'bg-nacht-800 border-2 border-akzent-400 shadow-xl shadow-akzent-900/40'
+                  : 'bg-nacht-800 border border-nacht-700 hover:border-nacht-600'
               }`}
             >
               {plan.highlighted && (
@@ -138,26 +141,26 @@ export default function PricingSection() {
                 </div>
               )}
 
-              <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
-              <p className="text-sm text-gray-500 mt-1 mb-5 min-h-[40px]">{plan.description}</p>
+              <h3 className="text-lg font-bold text-gray-50">{plan.name}</h3>
+              <p className="text-sm text-gray-400 mt-1 mb-5 min-h-[40px]">{plan.description}</p>
 
               <div className="mb-1 flex items-baseline gap-1">
-                <span className="text-4xl font-extrabold text-gray-900">{plan.price}</span>
-                <span className="text-sm text-gray-500">{plan.period}</span>
+                <span className="text-4xl font-extrabold text-gray-50">{plan.price}</span>
+                <span className="text-sm text-gray-400">{plan.period}</span>
               </div>
-              <p className="text-xs text-gray-500 mb-6 min-h-[16px]">{plan.note ?? ''}</p>
+              <p className="text-xs text-gray-400 mb-6 min-h-[16px]">{plan.note ?? ''}</p>
               {plan.id === 'pro' && (
-                <p className="text-xs text-akzent-800 -mt-4 mb-6">
+                <p className="text-xs text-akzent-300 -mt-4 mb-6">
                   Early Access: die ersten {PLAETZE} bestätigten Plätze zahlen {PREIS_EARLY} für zwölf Monate.{' '}
                   {/* Absoluter Anker: die Preistabelle steht unter /produkt, die
                       Warteliste auf der Startseite. */}
-                  <a href="/#anmeldung" className="underline underline-offset-2 hover:text-akzent-900">Platz sichern</a>
+                  <a href="/#anmeldung" className="underline underline-offset-2 hover:text-akzent-200">Platz sichern</a>
                 </p>
               )}
 
               <ul className="space-y-3 mb-8 flex-1">
                 {plan.features.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-sm text-gray-600">
+                  <li key={i} className="flex items-start gap-2.5 text-sm text-gray-300">
                     <Check className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
                     <span>{feature}</span>
                   </li>
@@ -168,8 +171,8 @@ export default function PricingSection() {
                 href={mitHerkunft(plan.href, herkunft)}
                 className={`inline-flex items-center justify-center gap-2 w-full font-semibold px-5 py-3 rounded-xl transition-colors ${
                   plan.highlighted
-                    ? 'bg-akzent-400 hover:bg-akzent-500 text-gray-900 shadow-md shadow-akzent-100'
-                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200'
+                    ? 'bg-akzent-400 hover:bg-akzent-500 text-gray-900 shadow-md shadow-akzent-900/50'
+                    : 'bg-nacht-800 hover:bg-nacht-700 text-gray-200 border border-nacht-700'
                 }`}
               >
                 {plan.cta}
@@ -178,11 +181,12 @@ export default function PricingSection() {
             </div>
           ))}
         </div>
+        </div>
 
-        <div className="mt-8 rounded-2xl bg-gray-900 text-white p-8 flex flex-col lg:flex-row lg:items-center gap-6">
+        <div className="mt-8 rounded-2xl bg-nacht-800 border border-nacht-700 text-white p-8 flex flex-col lg:flex-row lg:items-center gap-6">
           <div className="flex-1">
-            <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-3 py-1 mb-3">
-              <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+            <div className="inline-flex items-center gap-2 bg-nacht-950/10 rounded-full px-3 py-1 mb-3">
+              <Sparkles className="w-3.5 h-3.5 text-akzent-300" />
               <span className="text-xs font-semibold uppercase tracking-wide">Expert-Paket</span>
             </div>
             <h3 className="text-2xl font-bold mb-2">Wir überarbeiten deine Website selbst.</h3>
@@ -202,20 +206,20 @@ export default function PricingSection() {
           </div>
           <a
             href="mailto:support@complyo.de?subject=Anfrage%20Expert-Paket"
-            className="inline-flex items-center justify-center gap-2 bg-white text-gray-900 font-semibold px-6 py-3.5 rounded-xl hover:bg-gray-100 transition-colors flex-shrink-0"
+            className="inline-flex items-center justify-center gap-2 bg-nacht-900 text-gray-50 font-semibold px-6 py-3.5 rounded-xl hover:bg-nacht-950 transition-colors flex-shrink-0"
           >
             Expert-Paket anfragen
             <ArrowRight className="w-4 h-4" />
           </a>
         </div>
 
-        <p className="text-center text-xs text-gray-500 mt-6">
+        <p className="text-center text-xs text-gray-400 mt-6">
           Alle Preise zzgl. MwSt. · Abos monatlich kündbar · Zahlung per Karte und den im Checkout angezeigten Bezahlarten
         </p>
         {/* Die Klarstellung gehoert dorthin, wo bestellt wird — nicht nur in die
             AGB. Nur so ist vor Vertragsschluss erkennbar, dass sich das Angebot
             an Unternehmer richtet. */}
-        <p className="text-center text-xs text-gray-500 mt-2">
+        <p className="text-center text-xs text-gray-400 mt-2">
           Unser Angebot richtet sich ausschließlich an Unternehmer im Sinne des § 14 BGB. Ein Verkauf an
           Verbraucher findet nicht statt.
         </p>

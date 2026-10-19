@@ -21,8 +21,8 @@ import AnbieterUnvollstaendig from '@/components/legal/AnbieterUnvollstaendig';
 
 export default function AGBPage() {
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-nacht-950 via-nacht-950 to-nacht-900">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -30,7 +30,7 @@ export default function AGBPage() {
         >
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
+            className="inline-flex items-center gap-2 text-akzent-400 hover:text-akzent-300 mb-8 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Startseite
@@ -38,18 +38,18 @@ export default function AGBPage() {
 
           <AnbieterUnvollstaendig seite="Der Geltungsbereich dieser AGB" />
 
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="bg-nacht-800 border border-nacht-700 rounded-xl p-8 mb-8">
             <div className="flex items-center gap-3 mb-4">
-              <FileText className="w-8 h-8 text-akzent-700" />
-              <h1 className="text-4xl font-bold text-gray-900">Allgemeine Geschäftsbedingungen</h1>
+              <FileText className="w-8 h-8 text-akzent-400" />
+              <h1 className="text-4xl font-bold text-gray-50">Allgemeine Geschäftsbedingungen</h1>
             </div>
-            <p className="text-gray-600">Stand: 10. September 2026</p>
+            <p className="text-gray-300">Stand: 10. September 2026</p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-8 space-y-8">
+          <div className="bg-nacht-800 border border-nacht-700 rounded-xl p-8 space-y-8">
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">1. Geltungsbereich</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">1. Geltungsbereich</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   (1) Diese Allgemeinen Geschäftsbedingungen (nachfolgend "AGB") gelten für alle Verträge zwischen {ANBIETER_VERTRAGSPARTEI} (nachfolgend "Anbieter" oder "wir") und unseren Kunden (nachfolgend "Kunde" oder "Sie") über die Nutzung der von uns angebotenen Software-as-a-Service (SaaS) Leistungen zur Website-Compliance, Barrierefreiheit und Datenschutz.
                 </p>
@@ -72,8 +72,8 @@ export default function AGBPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">2. Vertragsgegenstand und Leistungen</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">2. Vertragsgegenstand und Leistungen</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   (1) Der Anbieter stellt dem Kunden eine cloudbasierte Software-Plattform zur Verfügung, die folgende Leistungen umfasst:
                 </p>
@@ -88,8 +88,8 @@ export default function AGBPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">3. Vertragsschluss</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">3. Vertragsschluss</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   (1) Die Darstellung der Leistungen auf unserer Website stellt kein rechtlich bindendes Angebot dar, sondern eine unverbindliche Aufforderung zur Abgabe eines Angebots.
                 </p>
@@ -100,8 +100,8 @@ export default function AGBPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">4. Preise und Zahlungsbedingungen</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">4. Preise und Zahlungsbedingungen</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   (1) Die Preise für die Nutzung der Plattform richten sich nach der jeweils gültigen Preisliste auf unserer Website zum Zeitpunkt des Vertragsschlusses.
                 </p>
@@ -115,8 +115,8 @@ export default function AGBPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">5. Nutzungsrechte und -pflichten</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">5. Nutzungsrechte und -pflichten</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   (1) Der Anbieter räumt dem Kunden das nicht-exklusive, nicht übertragbare, zeitlich auf die Vertragslaufzeit beschränkte Recht ein, die Plattform für die eigenen geschäftlichen Zwecke zu nutzen.
                 </p>
@@ -127,8 +127,8 @@ export default function AGBPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">6. Datenschutz</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">6. Datenschutz</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   (1) Der Anbieter verarbeitet personenbezogene Daten des Kunden im Rahmen der Vertragsdurchführung gemäß den Bestimmungen der Datenschutz-Grundverordnung (DSGVO).
                 </p>
@@ -139,15 +139,15 @@ export default function AGBPage() {
                   (3) Soweit der Anbieter im Rahmen der Leistungserbringung personenbezogene Daten der Besucher der
                   Website des Kunden verarbeitet — insbesondere Einwilligungsprotokolle und die Verbindungsdaten,
                   die beim Laden der Widgets anfallen — handelt er als Auftragsverarbeiter des Kunden. Es gilt der{' '}
-                  <a href="/avv/" className="text-akzent-700 underline">Auftragsverarbeitungsvertrag nach Art. 28 DSGVO</a>,
+                  <a href="/avv/" className="text-akzent-400 underline">Auftragsverarbeitungsvertrag nach Art. 28 DSGVO</a>,
                   der mit der Registrierung in Textform geschlossen wird und Bestandteil dieses Vertrages ist.
                 </p>
               </div>
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">7. Kündigung</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">7. Kündigung</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   (1) Der Vertrag kann von beiden Seiten mit einer Frist von 30 Tagen zum Ende eines Abrechnungszeitraums gekündigt werden.
                 </p>
@@ -158,8 +158,8 @@ export default function AGBPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">8. Mitwirkungspflichten des Kunden</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">8. Mitwirkungspflichten des Kunden</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   (1) Der Kunde prüft von complyo erzeugte Texte, Befunde und Änderungsvorschläge vor
                   deren Veröffentlichung oder Übernahme auf inhaltliche Richtigkeit und Vollständigkeit.
@@ -181,8 +181,8 @@ export default function AGBPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">9. Beschaffenheit der Leistung, keine Rechtsberatung</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">9. Beschaffenheit der Leistung, keine Rechtsberatung</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   (1) complyo ist ein technisches Prüf- und Hinweissystem. Es misst Websites gegen
                   technisch prüfbare Kriterien, dokumentiert das Ergebnis und stellt Vorlagen und
@@ -212,8 +212,8 @@ export default function AGBPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">10. Gewährleistung</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">10. Gewährleistung</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   (1) complyo stellt die Software für die Dauer des Vertrages in dem Zustand bereit, der
                   sich aus der jeweils gültigen Leistungsbeschreibung ergibt. Eine ununterbrochene
@@ -231,8 +231,8 @@ export default function AGBPage() {
             </section>
 
             <section id="haftung">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">11. Haftung</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">11. Haftung</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   (1) complyo haftet unbeschränkt für Vorsatz und grobe Fahrlässigkeit, für Schäden aus
                   der Verletzung des Lebens, des Körpers oder der Gesundheit, im Umfang einer
@@ -268,8 +268,8 @@ export default function AGBPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">12. Verjährung</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">12. Verjährung</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   Ansprüche des Kunden gegen complyo verjähren in zwölf Monaten ab dem gesetzlichen
                   Verjährungsbeginn. Dies gilt nicht für Ansprüche aus Ziffer 11 Absatz 1; für diese
@@ -279,8 +279,8 @@ export default function AGBPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">13. Schlussbestimmungen</h2>
-              <div className="space-y-3 text-gray-700 text-sm leading-relaxed">
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">13. Schlussbestimmungen</h2>
+              <div className="space-y-3 text-gray-200 text-sm leading-relaxed">
                 <p>
                   (1) Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts.
                 </p>
@@ -302,21 +302,21 @@ export default function AGBPage() {
           </div>
 
           <div className="mt-8 bg-akzent-50 rounded-xl p-6">
-            <h3 className="font-semibold text-gray-900 mb-3">Fragen zu den AGB?</h3>
-            <p className="text-gray-700 text-sm">
+            <h3 className="font-semibold text-gray-50 mb-3">Fragen zu den AGB?</h3>
+            <p className="text-gray-200 text-sm">
               <strong>E-Mail:</strong>{' '}
-              <a href={'mailto:' + ANBIETER.email} className="text-akzent-700 underline">
+              <a href={'mailto:' + ANBIETER.email} className="text-akzent-400 underline">
                 {ANBIETER.email}
               </a>
             </p>
           </div>
 
-          <div className="mt-8 text-center text-sm text-gray-600">
+          <div className="mt-8 text-center text-sm text-gray-300">
             <div className="flex justify-center gap-6">
-              <Link href="/impressum" className="hover:text-akzent-700 transition-colors">
+              <Link href="/impressum" className="hover:text-akzent-300 transition-colors">
                 Impressum
               </Link>
-              <Link href="/datenschutz" className="hover:text-akzent-700 transition-colors">
+              <Link href="/datenschutz" className="hover:text-akzent-300 transition-colors">
                 Datenschutz
               </Link>
             </div>

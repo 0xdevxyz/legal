@@ -32,34 +32,34 @@ const STAND = '10. September 2026';
 
 export default function AVVPage() {
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-nacht-950 via-nacht-950 to-nacht-900">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-4xl">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-          <Link href="/" className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors">
+          <Link href="/" className="inline-flex items-center gap-2 text-akzent-400 hover:text-akzent-300 mb-8 transition-colors">
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Startseite
           </Link>
 
           <AnbieterUnvollstaendig seite="Die Parteien dieses Vertrages" />
 
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="bg-nacht-800 border border-nacht-700 rounded-xl p-8 mb-8">
             <div className="flex items-center gap-3 mb-4">
-              <ShieldCheck className="w-8 h-8 text-akzent-700" />
-              <h1 className="text-4xl font-bold text-gray-900">Auftragsverarbeitungsvertrag</h1>
+              <ShieldCheck className="w-8 h-8 text-akzent-400" />
+              <h1 className="text-4xl font-bold text-gray-50">Auftragsverarbeitungsvertrag</h1>
             </div>
-            <p className="text-gray-600">Nach Art. 28 DSGVO · Stand: {STAND}</p>
+            <p className="text-gray-300">Nach Art. 28 DSGVO · Stand: {STAND}</p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-8 space-y-8 text-sm leading-relaxed text-gray-700">
+          <div className="bg-nacht-800 border border-nacht-700 rounded-xl p-8 space-y-8 text-sm leading-relaxed text-gray-200">
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Parteien</h2>
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">Parteien</h2>
               <p>
                 Dieser Vertrag gilt zwischen dem Kunden (nachfolgend "Verantwortlicher") und {ANBIETER_VERTRAGSPARTEI} (nachfolgend "Auftragsverarbeiter"). Er wird mit der Registrierung eines Kundenkontos in Textform geschlossen (Art. 28 Abs. 9 DSGVO) und gilt für die gesamte Dauer der Nutzung der Plattform.
               </p>
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">§ 1 Gegenstand und Dauer</h2>
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">§ 1 Gegenstand und Dauer</h2>
               <p>
                 (1) Der Auftragsverarbeiter erbringt für den Verantwortlichen Leistungen zur Prüfung, Reparatur und Dokumentation der Website-Compliance. Dabei verarbeitet er personenbezogene Daten im Auftrag. Einzelheiten stehen in Anlage 1.
               </p>
@@ -69,7 +69,7 @@ export default function AVVPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">§ 2 Weisungsrecht</h2>
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">§ 2 Weisungsrecht</h2>
               <p>
                 (1) Der Auftragsverarbeiter verarbeitet personenbezogene Daten ausschließlich auf dokumentierte Weisung des Verantwortlichen. Die Nutzung der Plattform und ihrer Einstellungen gilt als Weisung; darüber hinausgehende Weisungen sind in Textform an {ANBIETER.datenschutzEmail} zu richten.
               </p>
@@ -82,14 +82,14 @@ export default function AVVPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">§ 3 Vertraulichkeit</h2>
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">§ 3 Vertraulichkeit</h2>
               <p>
                 Der Auftragsverarbeiter setzt zur Verarbeitung nur Personen ein, die zur Vertraulichkeit verpflichtet sind oder einer angemessenen gesetzlichen Verschwiegenheitspflicht unterliegen (Art. 28 Abs. 3 lit. b DSGVO), und macht sie mit den einschlägigen Vorgaben vertraut.
               </p>
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">§ 4 Technische und organisatorische Maßnahmen</h2>
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">§ 4 Technische und organisatorische Maßnahmen</h2>
               <p>
                 (1) Der Auftragsverarbeiter trifft die Maßnahmen nach Art. 32 DSGVO. Der Stand ist in Anlage 2 beschrieben.
               </p>
@@ -99,7 +99,7 @@ export default function AVVPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">§ 5 Unterauftragsverarbeiter</h2>
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">§ 5 Unterauftragsverarbeiter</h2>
               <p>
                 (1) Der Verantwortliche erteilt die allgemeine schriftliche Genehmigung zum Einsatz der in Anlage 3 genannten weiteren Auftragsverarbeiter (Art. 28 Abs. 2 Satz 2 DSGVO).
               </p>
@@ -112,7 +112,7 @@ export default function AVVPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">§ 6 Unterstützung des Verantwortlichen</h2>
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">§ 6 Unterstützung des Verantwortlichen</h2>
               <p>
                 (1) Der Auftragsverarbeiter unterstützt den Verantwortlichen bei der Beantwortung von Anträgen betroffener Personen (Art. 12 bis 23 DSGVO). Auskunft, Export und Löschung der im Auftrag verarbeiteten Daten sind über die Plattform selbst auslösbar.
               </p>
@@ -125,7 +125,7 @@ export default function AVVPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">§ 7 Löschung und Rückgabe</h2>
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">§ 7 Löschung und Rückgabe</h2>
               <p>
                 (1) Nach Ende des Hauptvertrages löscht der Auftragsverarbeiter die im Auftrag verarbeiteten Daten binnen 90 Tagen, soweit keine gesetzliche Aufbewahrungspflicht besteht. Der Verantwortliche kann innerhalb dieser Frist die Herausgabe in einem gängigen Format verlangen.
               </p>
@@ -138,7 +138,7 @@ export default function AVVPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">§ 8 Nachweise und Kontrollen</h2>
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">§ 8 Nachweise und Kontrollen</h2>
               <p>
                 (1) Der Auftragsverarbeiter stellt dem Verantwortlichen auf Anfrage die Informationen zur Verfügung, die zum Nachweis der Einhaltung der Pflichten aus Art. 28 DSGVO erforderlich sind, und ermöglicht Überprüfungen (Art. 28 Abs. 3 lit. h DSGVO).
               </p>
@@ -148,7 +148,7 @@ export default function AVVPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">§ 9 Schlussbestimmungen</h2>
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">§ 9 Schlussbestimmungen</h2>
               <p>
                 (1) Bei Widersprüchen zwischen diesem Vertrag und dem Hauptvertrag gehen die Regelungen dieses Vertrages vor, soweit es die Verarbeitung personenbezogener Daten im Auftrag betrifft.
               </p>
@@ -160,10 +160,10 @@ export default function AVVPage() {
               </p>
             </section>
 
-            <hr className="border-gray-200" />
+            <hr className="border-nacht-700" />
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Anlage 1 — Gegenstand der Verarbeitung</h2>
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">Anlage 1 — Gegenstand der Verarbeitung</h2>
               <div className="space-y-3">
                 <p><strong>Art und Zweck:</strong> Prüfung von Websites auf Barrierefreiheit, Datenschutz und Cookie-Einwilligung; Erzeugung und Auslieferung von Reparaturen und Rechtstexten; Protokollierung von Einwilligungen zum Nachweis nach Art. 7 Abs. 1 DSGVO; Betrieb der Widgets auf der Website des Verantwortlichen.</p>
                 <p><strong>Kategorien betroffener Personen:</strong> Besucher der Website des Verantwortlichen; Beschäftigte und Ansprechpartner des Verantwortlichen, soweit ihre Angaben auf der geprüften Website stehen oder für Rechtstexte eingegeben werden.</p>
@@ -179,7 +179,7 @@ export default function AVVPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Anlage 2 — Technische und organisatorische Maßnahmen</h2>
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">Anlage 2 — Technische und organisatorische Maßnahmen</h2>
               <ul className="list-disc pl-5 space-y-2">
                 <li><strong>Vertraulichkeit (Zutritt, Zugang, Zugriff):</strong> Server in einem Rechenzentrum in Deutschland mit Zutrittskontrolle des Betreibers. Zugang zur Verwaltung ausschließlich über SSH mit Schlüssel; keine Passwortanmeldung. Getrennte Konten je Anwendung, Container ohne Systemrechte.</li>
                 <li><strong>Trennung:</strong> Die Daten sind je Kundenkonto getrennt; jeder Zugriff auf eine Website-Kennung wird gegen die Websites des Kontos geprüft.</li>
@@ -189,59 +189,59 @@ export default function AVVPage() {
                 <li><strong>Belastbarkeit:</strong> Getrennte Prozesse für Scan und Auslieferung, Speicher- und Laufzeitgrenzen je Prüfung.</li>
                 <li><strong>Überprüfung:</strong> Automatisierte Testsuite mit über 2.000 Prüfungen, darunter Wächter für Mandantentrennung, öffentliche Endpunkte und Abrufsperren. Regelmäßige Prüfung der eingesetzten Fremdbibliotheken auf bekannte Schwachstellen.</li>
               </ul>
-              <p className="mt-3 text-gray-500">
+              <p className="mt-3 text-gray-400">
                 Der Stand dieser Maßnahmen wird fortgeschrieben. Maßgeblich ist die jeweils veröffentlichte Fassung.
               </p>
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Anlage 3 — Weitere Auftragsverarbeiter</h2>
+              <h2 className="text-2xl font-bold text-gray-50 mb-4">Anlage 3 — Weitere Auftragsverarbeiter</h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-gray-50">
-                      <th className="border border-gray-200 p-2">Dienstleister</th>
-                      <th className="border border-gray-200 p-2">Leistung</th>
-                      <th className="border border-gray-200 p-2">Ort der Verarbeitung</th>
-                      <th className="border border-gray-200 p-2">Grundlage</th>
+                    <tr className="bg-nacht-900">
+                      <th className="border border-nacht-700 p-2">Dienstleister</th>
+                      <th className="border border-nacht-700 p-2">Leistung</th>
+                      <th className="border border-nacht-700 p-2">Ort der Verarbeitung</th>
+                      <th className="border border-nacht-700 p-2">Grundlage</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td className="border border-gray-200 p-2">IONOS SE, Montabaur</td>
-                      <td className="border border-gray-200 p-2">Betrieb der Server</td>
-                      <td className="border border-gray-200 p-2">Deutschland</td>
-                      <td className="border border-gray-200 p-2">Art. 28 DSGVO</td>
+                      <td className="border border-nacht-700 p-2">IONOS SE, Montabaur</td>
+                      <td className="border border-nacht-700 p-2">Betrieb der Server</td>
+                      <td className="border border-nacht-700 p-2">Deutschland</td>
+                      <td className="border border-nacht-700 p-2">Art. 28 DSGVO</td>
                     </tr>
                     <tr>
-                      <td className="border border-gray-200 p-2">OpenRouter, Inc.</td>
-                      <td className="border border-gray-200 p-2">Vermittlung der Sprachmodell-Anfragen</td>
-                      <td className="border border-gray-200 p-2">USA</td>
-                      <td className="border border-gray-200 p-2">Standardvertragsklauseln, Art. 46 Abs. 2 lit. c DSGVO</td>
+                      <td className="border border-nacht-700 p-2">OpenRouter, Inc.</td>
+                      <td className="border border-nacht-700 p-2">Vermittlung der Sprachmodell-Anfragen</td>
+                      <td className="border border-nacht-700 p-2">USA</td>
+                      <td className="border border-nacht-700 p-2">Standardvertragsklauseln, Art. 46 Abs. 2 lit. c DSGVO</td>
                     </tr>
                     <tr>
-                      <td className="border border-gray-200 p-2">Anthropic PBC</td>
-                      <td className="border border-gray-200 p-2">Sprachmodell für Analyse und Textvorschläge</td>
-                      <td className="border border-gray-200 p-2">USA</td>
-                      <td className="border border-gray-200 p-2">Standardvertragsklauseln, Art. 46 Abs. 2 lit. c DSGVO</td>
+                      <td className="border border-nacht-700 p-2">Anthropic PBC</td>
+                      <td className="border border-nacht-700 p-2">Sprachmodell für Analyse und Textvorschläge</td>
+                      <td className="border border-nacht-700 p-2">USA</td>
+                      <td className="border border-nacht-700 p-2">Standardvertragsklauseln, Art. 46 Abs. 2 lit. c DSGVO</td>
                     </tr>
                     <tr>
-                      <td className="border border-gray-200 p-2">OpenAI, L.L.C.</td>
-                      <td className="border border-gray-200 p-2">Sprachmodell für Analyse und Textvorschläge</td>
-                      <td className="border border-gray-200 p-2">USA</td>
-                      <td className="border border-gray-200 p-2">Standardvertragsklauseln, Art. 46 Abs. 2 lit. c DSGVO</td>
+                      <td className="border border-nacht-700 p-2">OpenAI, L.L.C.</td>
+                      <td className="border border-nacht-700 p-2">Sprachmodell für Analyse und Textvorschläge</td>
+                      <td className="border border-nacht-700 p-2">USA</td>
+                      <td className="border border-nacht-700 p-2">Standardvertragsklauseln, Art. 46 Abs. 2 lit. c DSGVO</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
               <p className="mt-3">
-                An die Sprachmodelle werden ausschließlich Inhalte der geprüften Website und die für Rechtstexte eingegebenen Angaben übermittelt. Einwilligungsprotokolle, Zugangsdaten und Zahlungsdaten werden nicht übermittelt. Die Zahlungsabwicklung für den Hauptvertrag ist keine Auftragsverarbeitung für den Verantwortlichen und deshalb hier nicht aufgeführt; sie steht in der <Link href="/datenschutz" className="text-akzent-700 underline">Datenschutzerklärung</Link>.
+                An die Sprachmodelle werden ausschließlich Inhalte der geprüften Website und die für Rechtstexte eingegebenen Angaben übermittelt. Einwilligungsprotokolle, Zugangsdaten und Zahlungsdaten werden nicht übermittelt. Die Zahlungsabwicklung für den Hauptvertrag ist keine Auftragsverarbeitung für den Verantwortlichen und deshalb hier nicht aufgeführt; sie steht in der <Link href="/datenschutz" className="text-akzent-400 underline">Datenschutzerklärung</Link>.
               </p>
             </section>
 
-            <section className="border-t border-gray-200 pt-6">
-              <p className="text-gray-500">
-                Fragen zu diesem Vertrag: <a href={`mailto:${ANBIETER.datenschutzEmail}`} className="text-akzent-700 underline">{ANBIETER.datenschutzEmail}</a>
+            <section className="border-t border-nacht-700 pt-6">
+              <p className="text-gray-400">
+                Fragen zu diesem Vertrag: <a href={`mailto:${ANBIETER.datenschutzEmail}`} className="text-akzent-400 underline">{ANBIETER.datenschutzEmail}</a>
               </p>
             </section>
           </div>

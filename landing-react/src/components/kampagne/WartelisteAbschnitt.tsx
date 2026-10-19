@@ -62,13 +62,13 @@ export default function WartelisteAbschnitt({ kampagne }: { kampagne: string }) 
     >
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         {bestaetigt === true && (
-          <div className="mb-8 bg-green-50 border border-green-200 rounded-2xl p-5 flex items-start gap-3" role="status">
-            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="mb-8 bg-green-950/40 border border-green-800 rounded-2xl p-5 flex items-start gap-3" role="status">
+            <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
             <div>
-              <p className="font-semibold text-green-900">
+              <p className="font-semibold text-green-200">
                 {platz ? `Bestätigt, du hast Platz ${platz}.` : 'E-Mail bestätigt.'}
               </p>
-              <p className="text-sm text-green-800 mt-0.5">
+              <p className="text-sm text-green-300 mt-0.5">
                 {platz
                   ? `Buche Pro mit derselben E-Mail-Adresse, dann gilt ${PREIS_EARLY} statt ${PREIS_REGULAER} für zwölf Monate. Der Nachlass wird im Checkout automatisch abgezogen.`
                   : `Du stehst auf der Liste. Die ${PLAETZE} vergünstigten Plätze waren zu diesem Zeitpunkt bereits vergeben.`}
@@ -77,23 +77,23 @@ export default function WartelisteAbschnitt({ kampagne }: { kampagne: string }) 
           </div>
         )}
         {bestaetigt === false && (
-          <div className="mb-8 bg-amber-50 border border-amber-200 rounded-2xl p-5" role="alert">
-            <p className="font-semibold text-amber-900">Dieser Bestätigungslink gilt nicht mehr.</p>
-            <p className="text-sm text-amber-800 mt-0.5">
+          <div className="mb-8 bg-amber-950/40 border border-amber-800 rounded-2xl p-5" role="alert">
+            <p className="font-semibold text-amber-200">Dieser Bestätigungslink gilt nicht mehr.</p>
+            <p className="text-sm text-amber-300 mt-0.5">
               Links laufen nach sieben Tagen ab. Trag dich unten einfach noch einmal ein.
             </p>
           </div>
         )}
 
-        <div className="rounded-2xl border-2 border-akzent-600 p-8">
+        <div className="rounded-2xl border-2 border-akzent-500/70 p-8">
           <div className="mb-5">
             <PlatzZaehler gesamt={PLAETZE} />
           </div>
-          <h2 id="warteliste-titel" className="font-heading text-2xl sm:text-3xl font-extrabold text-gray-900 mb-3">
-            <span className="text-gray-500">Noch nicht buchen?</span>{' '}
+          <h2 id="warteliste-titel" className="font-heading text-2xl sm:text-3xl font-extrabold text-gray-50 mb-3">
+            <span className="text-gray-400">Noch nicht buchen?</span>{' '}
             Sichere dir den Early-Access-Preis.
           </h2>
-          <p className="text-gray-600 leading-relaxed mb-6">
+          <p className="text-gray-300 leading-relaxed mb-6">
             Die ersten {PLAETZE} bestätigten Plätze zahlen für Pro {PREIS_EARLY} statt {PREIS_REGULAER} im
             Monat, zwölf Monate lang. Der Platz zählt ab dem Klick in der Bestätigungsmail.
             Eine E-Mail-Adresse genügt, keine Zahlungsdaten, keine Bestellung.

@@ -28,7 +28,7 @@ export default function GDPRDataManagement() {
 
   return (
     <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-akzent-50 via-white to-purple-50">
-      <div className="container mx-auto px-4 py-12">
+      <div className="container mx-auto px-4 pt-28 pb-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -37,10 +37,10 @@ export default function GDPRDataManagement() {
         >
           {/* Header */}
           <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            <h1 className="text-4xl font-bold text-gray-50 mb-4">
               🛡️ DSGVO Datenverwaltung
             </h1>
-            <p className="text-xl text-gray-600">
+            <p className="text-xl text-gray-300">
               So üben Sie Ihre Rechte an Ihren personenbezogenen Daten aus
             </p>
           </div>
@@ -51,24 +51,24 @@ export default function GDPRDataManagement() {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="bg-white rounded-xl shadow-lg p-8"
+              className="bg-nacht-800 border border-nacht-700 rounded-xl p-8"
             >
               <div className="text-center mb-6">
                 <div className="w-16 h-16 bg-akzent-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">🔐</span>
                 </div>
-                <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                <h2 className="text-2xl font-semibold text-gray-50 mb-2">
                   Sie haben ein Complyo-Konto?
                 </h2>
-                <p className="text-gray-600">
+                <p className="text-gray-300">
                   Export und Löschantrag direkt im Dashboard
                 </p>
               </div>
 
               <div className="space-y-4 mb-6">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold text-gray-900 mb-2">So geht&apos;s:</h3>
-                  <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
+                <div className="bg-nacht-900 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-50 mb-2">So geht&apos;s:</h3>
+                  <ol className="text-sm text-gray-300 space-y-1 list-decimal list-inside">
                     <li>Im Dashboard anmelden</li>
                     <li>Einstellungen → Datenschutz öffnen</li>
                     <li>Daten als JSON exportieren (Art. 20) oder die Löschung Ihres Kontos beantragen (Art. 17)</li>
@@ -76,7 +76,7 @@ export default function GDPRDataManagement() {
                 </div>
 
                 <div className="bg-akzent-50 p-4 rounded-lg border border-akzent-200">
-                  <p className="text-sm text-akzent-900">
+                  <p className="text-sm text-akzent-200">
                     <strong>ℹ️ Hinweis:</strong> Löschanträge laufen zweistufig — nach
                     dem Antrag erhalten Sie eine Eingangs- und nach Ausführung eine
                     Löschbestätigung per E-Mail.
@@ -97,24 +97,24 @@ export default function GDPRDataManagement() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.4 }}
-              className="bg-white rounded-xl shadow-lg p-8"
+              className="bg-nacht-800 border border-nacht-700 rounded-xl p-8"
             >
               <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div className="w-16 h-16 bg-green-950/60 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">✉️</span>
                 </div>
-                <h3 className="text-2xl font-semibold text-gray-900 mb-2">
+                <h3 className="text-2xl font-semibold text-gray-50 mb-2">
                   Kein Konto? Per E-Mail anfragen
                 </h3>
-                <p className="text-gray-600">
+                <p className="text-gray-300">
                   Für Interessenten, Report-Empfänger und alle anderen Anfragen
                 </p>
               </div>
 
               <div className="space-y-4 mb-6">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h4 className="font-semibold text-gray-900 mb-2">Was Sie anfragen können:</h4>
-                  <ul className="text-sm text-gray-600 space-y-1">
+                <div className="bg-nacht-900 p-4 rounded-lg">
+                  <h4 className="font-semibold text-gray-50 mb-2">Was Sie anfragen können:</h4>
+                  <ul className="text-sm text-gray-300 space-y-1">
                     <li>• Auskunft über gespeicherte Daten (Art. 15)</li>
                     <li>• Berichtigung unrichtiger Daten (Art. 16)</li>
                     <li>• Löschung Ihrer Daten (Art. 17)</li>
@@ -146,51 +146,51 @@ export default function GDPRDataManagement() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.6 }}
-            className="mt-12 bg-gray-50 rounded-xl p-8"
+            className="mt-12 bg-nacht-900 rounded-xl p-8"
           >
-            <h3 className="text-2xl font-semibold text-gray-900 mb-6 text-center">
+            <h3 className="text-2xl font-semibold text-gray-50 mb-6 text-center">
               Ihre Rechte nach DSGVO
             </h3>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="text-center">
-                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <div className="w-12 h-12 bg-green-950/60 rounded-full flex items-center justify-center mx-auto mb-3">
                   <span className="text-xl">📋</span>
                 </div>
-                <h4 className="font-semibold text-gray-900 mb-2">Auskunft</h4>
-                <p className="text-sm text-gray-600">Artikel 15 - Recht auf Auskunft</p>
+                <h4 className="font-semibold text-gray-50 mb-2">Auskunft</h4>
+                <p className="text-sm text-gray-300">Artikel 15 - Recht auf Auskunft</p>
               </div>
 
               <div className="text-center">
                 <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-3">
                   <span className="text-xl">✏️</span>
                 </div>
-                <h4 className="font-semibold text-gray-900 mb-2">Berichtigung</h4>
-                <p className="text-sm text-gray-600">Artikel 16 - Recht auf Berichtigung</p>
+                <h4 className="font-semibold text-gray-50 mb-2">Berichtigung</h4>
+                <p className="text-sm text-gray-300">Artikel 16 - Recht auf Berichtigung</p>
               </div>
 
               <div className="text-center">
-                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <div className="w-12 h-12 bg-red-950/50 rounded-full flex items-center justify-center mx-auto mb-3">
                   <span className="text-xl">🗑️</span>
                 </div>
-                <h4 className="font-semibold text-gray-900 mb-2">Löschung</h4>
-                <p className="text-sm text-gray-600">Artikel 17 - Recht auf Löschung</p>
+                <h4 className="font-semibold text-gray-50 mb-2">Löschung</h4>
+                <p className="text-sm text-gray-300">Artikel 17 - Recht auf Löschung</p>
               </div>
 
               <div className="text-center">
                 <div className="w-12 h-12 bg-akzent-100 rounded-full flex items-center justify-center mx-auto mb-3">
                   <span className="text-xl">📥</span>
                 </div>
-                <h4 className="font-semibold text-gray-900 mb-2">Portabilität</h4>
-                <p className="text-sm text-gray-600">Artikel 20 - Datenübertragbarkeit</p>
+                <h4 className="font-semibold text-gray-50 mb-2">Portabilität</h4>
+                <p className="text-sm text-gray-300">Artikel 20 - Datenübertragbarkeit</p>
               </div>
             </div>
 
             <div className="mt-8 text-center">
-              <p className="text-gray-600">
+              <p className="text-gray-300">
                 Aufbewahrungsfrist: 24 Monate ab Erhebung. Bei Fragen zu Ihren
                 Datenschutzrechten wenden Sie sich an:
-                <a href="mailto:datenschutz@complyo.de" className="text-akzent-700 underline ml-1">
+                <a href="mailto:datenschutz@complyo.de" className="text-akzent-400 underline ml-1">
                   datenschutz@complyo.de
                 </a>
               </p>

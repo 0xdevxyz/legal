@@ -74,16 +74,16 @@ export default function ArticlePage({
   ];
 
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-nacht-950 via-nacht-950 to-nacht-900">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <div className="container mx-auto px-4 py-12 max-w-3xl">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-3xl">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
+          className="inline-flex items-center gap-2 text-akzent-400 hover:text-akzent-300 mb-8 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Zurück zur Startseite
@@ -91,9 +91,9 @@ export default function ArticlePage({
 
         <article>
           <header className="mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">{h1}</h1>
-            <p className="text-lg text-gray-700 leading-relaxed">{lead}</p>
-            <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-500">
+            <h1 className="text-4xl font-bold text-gray-50 mb-4">{h1}</h1>
+            <p className="text-lg text-gray-200 leading-relaxed">{lead}</p>
+            <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-400">
               <span className="inline-flex items-center gap-1.5">
                 <CalendarDays className="w-4 h-4" /> Stand: {updated}
               </span>
@@ -103,11 +103,11 @@ export default function ArticlePage({
             </div>
           </header>
 
-          <nav aria-label="Inhalt" className="bg-white rounded-xl shadow p-6 mb-10">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-3">
+          <nav aria-label="Inhalt" className="bg-nacht-800 border border-nacht-700 rounded-xl p-6 mb-10">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-3">
               Inhalt
             </h2>
-            <ol className="space-y-1.5 list-decimal list-inside text-akzent-700">
+            <ol className="space-y-1.5 list-decimal list-inside text-akzent-400">
               {sections.map((s) => (
                 <li key={s.heading}>
                   <a href={`#${anchor(s.heading)}`} className="hover:underline">
@@ -123,10 +123,10 @@ export default function ArticlePage({
               <section
                 key={s.heading}
                 id={anchor(s.heading)}
-                className="bg-white rounded-xl shadow-lg p-8 scroll-mt-8"
+                className="bg-nacht-800 border border-nacht-700 rounded-xl p-8 scroll-mt-8"
               >
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">{s.heading}</h2>
-                <div className="space-y-4 text-gray-700 leading-relaxed">
+                <h2 className="text-2xl font-bold text-gray-50 mb-4">{s.heading}</h2>
+                <div className="space-y-4 text-gray-200 leading-relaxed">
                   {s.body?.map((p, i) => (
                     <p key={i}>{p}</p>
                   ))}
@@ -153,32 +153,32 @@ export default function ArticlePage({
               <p className="mb-6 text-gray-800 leading-relaxed">{cta.text}</p>
               <Link
                 href={cta.href}
-                className="inline-flex items-center gap-2 bg-gray-900 text-white font-semibold px-6 py-3 rounded-lg hover:bg-gray-800 transition-colors"
+                className="inline-flex items-center gap-2 bg-gray-900 text-white font-semibold px-6 py-3 rounded-lg hover:bg-nacht-800 transition-colors"
               >
                 {cta.label}
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </section>
 
-            <section className="bg-white rounded-xl shadow-lg p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Häufige Fragen</h2>
+            <section className="bg-nacht-800 border border-nacht-700 rounded-xl p-8">
+              <h2 className="text-2xl font-bold text-gray-50 mb-6">Häufige Fragen</h2>
               <dl className="space-y-6">
                 {faq.map(({ q, a }) => (
                   <div key={q}>
-                    <dt className="font-semibold text-gray-900 mb-1">{q}</dt>
-                    <dd className="text-gray-700 leading-relaxed">{a}</dd>
+                    <dt className="font-semibold text-gray-50 mb-1">{q}</dt>
+                    <dd className="text-gray-200 leading-relaxed">{a}</dd>
                   </div>
                 ))}
               </dl>
             </section>
 
             {related.length > 0 && (
-              <section className="bg-white rounded-xl shadow-lg p-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Weiterlesen</h2>
+              <section className="bg-nacht-800 border border-nacht-700 rounded-xl p-8">
+                <h2 className="text-2xl font-bold text-gray-50 mb-4">Weiterlesen</h2>
                 <ul className="space-y-2">
                   {related.map(({ href, label }) => (
                     <li key={href}>
-                      <Link href={href} className="text-akzent-700 hover:text-akzent-800 hover:underline">
+                      <Link href={href} className="text-akzent-400 hover:text-akzent-300 hover:underline">
                         {label}
                       </Link>
                     </li>
@@ -193,7 +193,7 @@ export default function ArticlePage({
                 was er ist. */}
             <div
               role="note"
-              className="flex gap-3 rounded-xl border border-gray-200 bg-gray-50 p-5 text-sm text-gray-600"
+              className="flex gap-3 rounded-xl border border-nacht-700 bg-nacht-800 p-5 text-sm text-gray-300"
             >
               <Info className="w-5 h-5 flex-shrink-0 text-gray-400 mt-0.5" />
               <p>

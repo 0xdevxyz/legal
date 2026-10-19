@@ -4,7 +4,7 @@ import { Logo } from '@/components/Logo';
 
 export default function FooterSection() {
   return (
-    <footer className="bg-gray-900 text-gray-400 pt-16 pb-8">
+    <footer className="bg-nacht-950 border-t border-nacht-700 text-gray-400 pt-16 pb-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-14">
           <div className="lg:col-span-1">
@@ -16,7 +16,7 @@ export default function FooterSection() {
             </p>
             <a
               href="/#anmeldung"
-              className="inline-flex items-center gap-2 bg-akzent-400 hover:bg-akzent-200 text-gray-900 text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 bg-akzent-400 hover:bg-akzent-300 text-gray-900 text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
             >
               Platz sichern
             </a>

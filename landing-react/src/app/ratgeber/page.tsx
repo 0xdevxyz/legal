@@ -32,18 +32,18 @@ const ARTICLES = [
 
 export default function Page() {
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
-      <div className="container mx-auto px-4 py-12 max-w-3xl">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-nacht-950 via-nacht-950 to-nacht-900">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-3xl">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
+          className="inline-flex items-center gap-2 text-akzent-400 hover:text-akzent-300 mb-8 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Zurück zur Startseite
         </Link>
 
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">Ratgeber</h1>
-        <p className="text-lg text-gray-700 mb-10 leading-relaxed">
+        <h1 className="text-4xl font-bold text-gray-50 mb-4">Ratgeber</h1>
+        <p className="text-lg text-gray-200 mb-10 leading-relaxed">
           Praxisnahe Anleitungen zu Datenschutz, Cookie-Einwilligung und Barrierefreiheit – ohne
           Juristendeutsch, mit konkreten Prüfschritten.
         </p>
@@ -53,13 +53,13 @@ export default function Page() {
             <Link
               key={a.href}
               href={a.href}
-              className="block bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow group"
+              className="block bg-nacht-800 border border-nacht-700 rounded-xl p-6 hover:shadow-xl transition-shadow group"
             >
-              <h2 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-akzent-800 transition-colors">
+              <h2 className="text-xl font-bold text-gray-50 mb-2 group-hover:text-akzent-300 transition-colors">
                 {a.title}
               </h2>
-              <p className="text-gray-700 leading-relaxed mb-3">{a.teaser}</p>
-              <span className="inline-flex items-center gap-1.5 text-akzent-700 font-medium">
+              <p className="text-gray-200 leading-relaxed mb-3">{a.teaser}</p>
+              <span className="inline-flex items-center gap-1.5 text-akzent-400 font-medium">
                 Weiterlesen
                 <ArrowRight className="w-4 h-4" />
               </span>

@@ -34,8 +34,8 @@ export default function PlatzZaehler({ gesamt }: { gesamt: number }) {
     <div
       className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 border ${
         vergriffen
-          ? 'bg-gray-50 border-gray-200 text-gray-600'
-          : 'bg-orange-50 border-orange-100 text-orange-800'
+          ? 'bg-nacht-900 border-nacht-700 text-gray-300'
+          : 'bg-akzent-400/10 border-akzent-400/40 text-akzent-300'
       }`}
     >
       <Users className="w-4 h-4 flex-shrink-0" aria-hidden="true" />

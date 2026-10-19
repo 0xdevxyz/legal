@@ -17,7 +17,7 @@ export default function EarlyAccessLanding({ children }: { children?: React.Reac
   return (
     // Navigation und Fusszeile kommen aus dem Wurzel-Layout (Seitengeruest),
     // damit jede Seite dieselben Landmarks hat. Hier bleibt der Hauptinhalt.
-    <main id="inhalt" tabIndex={-1} className="font-sans antialiased bg-white">
+    <main id="inhalt" tabIndex={-1} className="font-sans antialiased bg-nacht-950">
       <HeroSection />
       <WebsiteScanner />
       <PricingSection />
