@@ -122,6 +122,20 @@ def chromium_messung():
     return haupt, rss / 1024
 
 
+def cgroup_mib():
+    """Speicher der Container-Gruppe in MiB (cgroup v2, sonst v1), None ausserhalb von Docker.
+
+    Das ist die Zahl, an der das Speicherlimit hängt. Die Summe der RSS-Werte
+    aller Chromium-Prozesse zählt geteilte Seiten mehrfach und liegt deutlich höher.
+    """
+    for pfad in ("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes"):
+        try:
+            return int(open(pfad).read().strip()) / 1048576
+        except Exception:
+            continue
+    return None
+
+
 async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--nutzer", type=int, default=100)
@@ -151,7 +165,7 @@ async def main():
     pool = FakePool(ids)
     await ps.starte()
 
-    spitze = {"browser": 0, "mib": 0.0}
+    spitze = {"browser": 0, "mib": 0.0, "cgroup": 0.0}
     verlauf = []
     fertig_flag = asyncio.Event()
 
@@ -161,6 +175,9 @@ async def main():
             b, mib = chromium_messung()
             spitze["browser"] = max(spitze["browser"], b)
             spitze["mib"] = max(spitze["mib"], mib)
+            cg = cgroup_mib()
+            if cg is not None:
+                spitze["cgroup"] = max(spitze["cgroup"], cg)
             verlauf.append((round(time.time() - t0), b, round(mib)))
             await asyncio.sleep(1)
 
@@ -198,7 +215,9 @@ async def main():
     print(f"Dauer je Pruefung (s):     Median {p(dauern, .5)}  P95 {p(dauern, .95)}  max {p(dauern, 1)}")
     print(f"Wartezeit bis Start (s):   Median {p(wartezeit, .5)}  P95 {p(wartezeit, .95)}  max {p(wartezeit, 1)}")
     print(f"SPITZE gleichzeitige Browser: {spitze['browser']}")
-    print(f"SPITZE Chromium gesamt:       {spitze['mib']:.0f} MiB")
+    print(f"SPITZE Chromium (Summe RSS):  {spitze['mib']:.0f} MiB")
+    if spitze["cgroup"]:
+        print(f"SPITZE Container (cgroup):    {spitze['cgroup']:.0f} MiB  (Grenze im Betrieb 2048)")
     print("Verlauf (Sekunde, Browser, MiB), jede 10. Sekunde: " + "; ".join(f"{a}s:{b}b/{c}M" for a, b, c in verlauf[::10]))
 
     fehler = []
@@ -210,8 +229,9 @@ async def main():
         fehler.append("Ergebnis nicht bei allen angewendet")
     if args.limit_browser and spitze["browser"] > args.limit_browser:
         fehler.append(f"Browser-Spitze {spitze['browser']} > {args.limit_browser}")
-    if args.limit_mib and spitze["mib"] > args.limit_mib:
-        fehler.append(f"Speicher-Spitze {spitze['mib']:.0f} MiB > {args.limit_mib}")
+    gemessen = spitze["cgroup"] or spitze["mib"]
+    if args.limit_mib and gemessen > args.limit_mib:
+        fehler.append(f"Speicher-Spitze {gemessen:.0f} MiB > {args.limit_mib}")
     if fehler:
         print("FEHLER: " + " | ".join(fehler))
         sys.exit(1)

@@ -36,6 +36,10 @@ KATALOG = [
     {"service_key": "facebook_pixel", "name": "FB Pixel", "domains": ["facebook.com", "connect.facebook.net"]},
     {"service_key": "facebook_plugin", "name": "FB Plugin", "domains": ["facebook.com"]},
     {"service_key": "hotjar", "name": "Hotjar", "domains": ["hotjar.com", "static.hotjar.com"]},
+    {"service_key": "firebase_auth", "name": "Firebase Auth", "domains": ["firebase.google.com", "www.gstatic.com"]},
+    {"service_key": "google_analytics_ua", "name": "GA UA", "domains": ["google-analytics.com"]},
+    {"service_key": "youtube_embedded", "name": "YouTube eingebettet", "domains": ["youtube.com", "youtube-nocookie.com", "ytimg.com"]},
+    {"service_key": "wordpress_emojis", "name": "WordPress Emojis", "domains": ["s.w.org"]},
     {"service_key": "matomo", "name": "Matomo", "domains": ["custom"]},
     {"service_key": "wordpress", "name": "WordPress", "domains": []},
 ]
@@ -158,6 +162,43 @@ class TestBewertung:
     def test_kaputte_eintraege_werfen_nicht(self):
         b = ps.bewerte([{}, {"url": None}, {"url": "::::"}], [{}], "https://kunde.de", INDEX, [])
         assert b["browser_keys"] == []
+
+
+class TestFundeAusDemLauf:
+    """Fälle aus dem Vergleichslauf an 26 Kundenseiten (19.10.2026)."""
+
+    def _lauf(self, urls, bekannt):
+        return ps.bewerte([{"url": u} for u in urls], [], "https://www.kunde.de/", INDEX, bekannt)
+
+    def test_www_gstatic_belegt_kein_firebase(self):
+        # breathhealingart.com bekam "Firebase Auth" wegen eines gstatic-Hosts.
+        assert zu("https://www.gstatic.com/recaptcha/releases/x/recaptcha__de.js")[0] == "breit"
+        assert self._lauf(["https://www.gstatic.com/x.js"], [])["neu"] == []
+
+    def test_firebase_ueber_eigenen_host_wird_erkannt(self):
+        assert zu("https://firebase.google.com/x")[:2] == ("eindeutig", "firebase_auth")
+
+    def test_ga4_und_ua_werden_am_pfad_getrennt(self):
+        assert zu("https://region1.google-analytics.com/g/collect?v=2")[:2] == ("eindeutig", "google_analytics_ga4")
+        assert zu("https://www.google-analytics.com/analytics.js")[:2] == ("eindeutig", "google_analytics_ua")
+        # Alles andere an dieser Domain bleibt mehrdeutig statt geraten.
+        assert zu("https://www.google-analytics.com/something")[0] == "mehrdeutig"
+
+    def test_emoji_request_ist_in_headless_kein_beleg(self):
+        # Ein Browser ohne Emoji-Schrift holt die Grafiken von s.w.org, Besucher meist nicht.
+        b = self._lauf(["https://s.w.org/images/core/emoji/15/72x72/1f600.png"], [])
+        assert b["neu"] == [] and b["browser_keys"] == []
+        assert b["nur_umgebungsabhaengig"] == {"wordpress_emojis": 1}
+
+    def test_eigene_widget_hosts_sind_kein_fremdhost(self):
+        b = self._lauf(["https://api.complyo.de/api/widgets/cookie-compliance.js", "https://complyo.de/x"], [])
+        assert b["unbekannte_fremdhosts"] == {}
+
+    def test_zweite_youtube_fassung_ist_nicht_neu(self):
+        b = self._lauf(["https://i.ytimg.com/vi/abc/hqdefault.jpg"], ["youtube"])
+        assert b["neu"] == [] and "youtube_embedded" in b["bestaetigt"]
+        # Ohne bekannten YouTube-Eintrag ist es dagegen neu.
+        assert self._lauf(["https://i.ytimg.com/vi/abc/hqdefault.jpg"], [])["neu"] == ["youtube_embedded"]
 
 
 # --------------------------------------------------------------------------
@@ -354,6 +395,34 @@ class TestLast:
         assert len(angenommen) >= 5
         await warte_fertig(angenommen)
         assert umgebung.m.spitze <= 2
+
+    async def test_anonyme_fuellen_die_schlange_nur_bis_drei_viertel(self, umgebung):
+        umgebung.monkeypatch.setattr(ps, "SCHLANGE_MAX", 8)
+        umgebung.m.dauer = 0.5
+        pool = FakePool(konfigurationen={f"s{i}-de": [] for i in range(30)})
+        await ps.starte()
+        anonym = [await ps.einreihen(f"s{i}-de", f"https://s{i}.de/", pool=pool, prio=ps.PRIO_ANONYM)
+                  for i in range(20)]
+        angenommen = [a for a in anonym if a["zustand"] != "voll"]
+        assert len(angenommen) < 8 + 2          # nicht bis zum Rand
+        # Für angemeldete Nutzer ist noch Platz.
+        nutzer = await ps.einreihen("s25-de", "https://s25.de/", pool=pool, prio=ps.PRIO_NUTZER)
+        assert nutzer["zustand"] in ("wartend", "laeuft")
+
+    async def test_gescheiterte_seite_wird_nicht_sofort_wiederholt(self, umgebung):
+        zaehler = []
+
+        async def kaputt(url, katalog):
+            zaehler.append(url)
+            raise RuntimeError("blockiert")
+        umgebung.monkeypatch.setattr(ps, "_browser_lauf", kaputt)
+        pool = FakePool(konfigurationen={"a-de": []})
+        await ps.starte()
+        await ps.einreihen("a-de", "https://a.de/", pool=pool)
+        await warte_fertig(["a-de"])
+        zweite = await ps.einreihen("a-de", "https://a.de/", pool=pool)
+        assert zweite == {"zustand": ps.FEHLGESCHLAGEN, "zwischengespeichert": True}
+        assert len(zaehler) == 1
 
     async def test_aus_schalter_nimmt_nichts_an(self, umgebung):
         umgebung.monkeypatch.setattr(ps, "AKTIV", False)
@@ -567,3 +636,71 @@ class TestBrowserWache:
         for _ in range(d.MAX_REQUESTS + 500):
             s._on_request(req)
         assert len(s.requests) == d.MAX_REQUESTS
+
+
+# --------------------------------------------------------------------------
+# Echter Browser, lokale Seiten (übersprungen, wenn kein Chromium startet)
+# --------------------------------------------------------------------------
+
+def _chromium_da():
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as pw:
+            pw.chromium.launch(headless=True).close()
+        return True
+    except Exception:
+        return False
+
+
+@pytest.fixture
+def lokaler_server(monkeypatch):
+    import http.server
+    import socketserver
+    import threading
+    monkeypatch.setenv("SSRF_PRUEFSTAND_LOOPBACK", "1")
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            if self.path.startswith("/weg"):
+                self.send_response(404)
+                self.end_headers()
+                return
+            if self.path.startswith("/schutz"):
+                self.send_response(403)
+                self.end_headers()
+                return
+            body = b"<html><body><h1>ok</h1></body></html>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+    srv = socketserver.ThreadingTCPServer(("127.0.0.1", 0), H)
+    srv.daemon_threads = True
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}"
+    srv.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not _chromium_da(), reason="kein Chromium in dieser Umgebung")
+class TestEchterBrowser:
+    async def test_geladene_seite_liefert_ergebnis(self, lokaler_server):
+        from compliance_engine.deep_cookie_scanner import DeepCookieScanner
+        r = await DeepCookieScanner(1, lokaler_server + "/").scan()
+        assert r.error is None and r.http_status == 200 and r.total_requests >= 1
+
+    async def test_nicht_geladene_seite_ist_ein_fehler_keine_saubere_seite(self, lokaler_server):
+        from compliance_engine.deep_cookie_scanner import DeepCookieScanner
+        # Nichts hört auf diesem Port: Verbindung scheitert.
+        r = await DeepCookieScanner(1, "http://127.0.0.1:9/").scan()
+        assert r.error and "nicht geladen" in r.error
+
+    async def test_fehler_und_schutzseiten_gelten_nicht_als_sauber(self, lokaler_server):
+        from compliance_engine.deep_cookie_scanner import DeepCookieScanner
+        for pfad, status in (("/weg", 404), ("/schutz", 403)):
+            r = await DeepCookieScanner(1, lokaler_server + pfad).scan()
+            assert r.error and str(status) in r.error

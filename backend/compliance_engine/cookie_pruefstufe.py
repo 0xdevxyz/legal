@@ -75,7 +75,11 @@ WOCHE_ABSTAND_S = 7 * 24 * 3600
 ERGEBNIS_TTL_S = 8 * 24 * 3600
 KATALOG_TTL_S = 600
 SPEICHER_MAX = 2000          # Ergebnisse im Prozess, älteste zuerst raus
-PRIO_NUTZER, PRIO_WOCHE = 0, 1
+# Reihenfolge: angemeldete Nutzer, anonyme Nutzer, Wochenlauf. Anonyme dürfen die
+# Schlange nur bis zu drei Vierteln füllen, damit ein Strom fremder Adressen
+# (der HTML-Scan ist ohne Konto erreichbar) angemeldeten Kunden nicht den Platz nimmt.
+PRIO_NUTZER, PRIO_ANONYM, PRIO_WOCHE = 0, 1, 2
+FEHLSCHLAG_SPERRE_S = 60
 
 WARTEND, LAEUFT, FERTIG, FEHLGESCHLAGEN = "wartend", "laeuft", "fertig", "fehlgeschlagen"
 
@@ -86,7 +90,25 @@ BREITE_DOMAINS = {
     "google.com", "googleapis.com", "gstatic.com", "amazonaws.com",
     "cloudfront.net", "cloudflare.com", "azureedge.net", "akamaihd.net",
     "fastly.net",
+    # Einzelne Hosts, die der Katalog einem Dienst zuschreibt, die aber viele
+    # bedienen: www.gstatic.com steht bei firebase_auth und lieferte im Lauf
+    # vom 19.10.2026 an breathhealingart.com "Firebase Auth" ohne Firebase.
+    "www.gstatic.com", "ssl.gstatic.com", "apis.google.com",
 }
+
+# Hosts, die von diesem Dienst selbst stammen: nie Fremdhost, nie Prüfliste.
+EIGENE_DIENSTHOSTS = {"complyo.de"}
+
+# Dienste, deren Aufruf von der Umgebung des Browsers abhängt. WordPress lädt die
+# Emoji-Grafiken von s.w.org nur, wenn der Browser keine Emoji-Schrift hat; ein
+# Headless-Chromium im Container hat keine, ein echter Besucher meist doch. Ein
+# Request allein belegt hier deshalb nichts; der HTML-Scan (das Skript steht im
+# Quelltext) bleibt die Quelle.
+UMGEBUNGSABHAENGIG = {"wordpress_emojis"}
+
+# Katalogeinträge, die denselben Dienst in zwei Fassungen führen. Ist einer
+# bekannt, ist der andere nicht "neu".
+GLEICHWERTIG = [{"youtube", "youtube_embedded"}]
 
 # Ausdrückliche Zuordnung dort, wo der Katalog nur den Host kennt, der Host aber
 # mehrere Dienste bedient: (Host-Endung, Pfad-Präfix, Abfrage-Präfix, Dienst).
@@ -94,6 +116,10 @@ BREITE_DOMAINS = {
 PFADREGELN: List[Tuple[str, str, str, str]] = [
     ("googletagmanager.com", "/gtag/js", "id=G-", "google_analytics_ga4"),
     ("googletagmanager.com", "/gtm.js", "id=GTM-", "google_tag_manager"),
+    # GA4 sendet an /g/collect (auch region1.google-analytics.com), das alte
+    # Universal Analytics an /collect, /j/collect und lädt /analytics.js.
+    ("google-analytics.com", "/g/collect", "", "google_analytics_ga4"),
+    ("google-analytics.com", "/analytics.js", "", "google_analytics_ua"),
     ("google.com", "/recaptcha", "", "google_recaptcha"),
     ("google.com", "/maps", "", "google_maps"),
     ("maps.googleapis.com", "/maps", "", "google_maps"),
@@ -196,6 +222,7 @@ def bewerte(
     mehrdeutig: Dict[str, List[str]] = {}
     breit: Dict[str, int] = {}
     unbekannt: Dict[str, int] = {}
+    umgebung: Dict[str, int] = {}
     eigene = 0
 
     for r in requests or []:
@@ -206,7 +233,12 @@ def bewerte(
         if ist_eigener_host(host, seitenhost):
             eigene += 1
             continue
+        if registrierbar(host) in EIGENE_DIENSTHOSTS:
+            continue
         status, dienst, kandidaten = zuordnen(url, katalog_index)
+        if status == "eindeutig" and dienst in UMGEBUNGSABHAENGIG:
+            umgebung[dienst] = umgebung.get(dienst, 0) + 1
+            continue
         if status == "eindeutig" and dienst:
             b = belege.setdefault(dienst, {"hosts": {}, "anzahl": 0})
             b["hosts"][host] = b["hosts"].get(host, 0) + 1
@@ -220,6 +252,11 @@ def bewerte(
 
     browser_keys = sorted(belege)
     bekannt = set(bekannte_keys or [])
+    # Zweite Fassung desselben Dienstes: gilt als bestätigt, nicht als neu.
+    gleichwertig_bekannt = {
+        k for k in browser_keys
+        for gruppe in GLEICHWERTIG if k in gruppe and (gruppe - {k}) & bekannt
+    }
     # Mehrdeutige Hosts bestätigen höchstens, was ohnehin schon bekannt ist.
     bestaetigt_mehrdeutig = sorted({k for ks in mehrdeutig.values() for k in ks if k in bekannt})
 
@@ -231,8 +268,9 @@ def bewerte(
 
     return {
         "browser_keys": browser_keys,
-        "bestaetigt": sorted(set(browser_keys) & bekannt),
-        "neu": sorted(set(browser_keys) - bekannt),
+        "bestaetigt": sorted((set(browser_keys) & bekannt) | gleichwertig_bekannt),
+        "neu": sorted(set(browser_keys) - bekannt - gleichwertig_bekannt),
+        "nur_umgebungsabhaengig": umgebung,
         "nur_html": sorted(bekannt - set(browser_keys) - set(bestaetigt_mehrdeutig)),
         "mehrdeutig": {h: ks for h, ks in sorted(mehrdeutig.items())[:30]},
         "breite_hosts": dict(sorted(breit.items(), key=lambda x: -x[1])[:20]),
@@ -445,6 +483,11 @@ async def einreihen(
         return {"zustand": j["zustand"], "bereits_im_auftrag": True,
                 "geschaetzte_wartezeit_s": _wartezeit_s(wartend_anzahl())}
 
+    if j and j["zustand"] == FEHLGESCHLAGEN and j.get("beendet") and jetzt - j["beendet"] < FEHLSCHLAG_SPERRE_S:
+        # Eine Seite, die gerade gescheitert ist (blockt Bots, antwortet nicht), nicht
+        # sofort wieder anfassen: hundert Klicks wären hundert verlorene Browser.
+        return {"zustand": FEHLGESCHLAGEN, "zwischengespeichert": True}
+
     if j and j["zustand"] == FERTIG and j.get("beendet") and jetzt - j["beendet"] < WIEDERHOLSPERRE_S:
         # Frisches Ergebnis. Fehlt nur noch die Anwendung, ohne neuen Browser nachholen.
         if anwenden_ja and not j.get("angewendet") and j.get("bewertung") and pool is not None:
@@ -456,8 +499,8 @@ async def einreihen(
                 logger.warning(f"Pruefstufe: Nachtraegliche Anwendung fuer {site_id} fehlgeschlagen: {e}")
         return {"zustand": FERTIG, "zwischengespeichert": True}
 
-    if _queue.full():
-        logger.warning(f"Pruefstufe: Schlange voll ({SCHLANGE_MAX}), {site_id} nicht angenommen")
+    if _queue.full() or (prio == PRIO_ANONYM and _queue.qsize() >= SCHLANGE_MAX * 3 // 4):
+        logger.warning(f"Pruefstufe: Schlange voll ({_queue.qsize()}/{SCHLANGE_MAX}), {site_id} nicht angenommen")
         return {"zustand": "voll"}
 
     job = {

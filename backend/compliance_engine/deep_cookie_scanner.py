@@ -76,6 +76,7 @@ class ScanResult:
     service_keys: List[str] = field(default_factory=list)
     scan_duration_seconds: int = 0
     error: Optional[str] = None
+    http_status: Optional[int] = None
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
@@ -145,6 +146,8 @@ class DeepCookieScanner:
         # service_key -> {service_key, name, category, provider}
         self.detected_services: Dict[str, dict] = {}
         self.start_time = None
+        self.navigation_fehler: Optional[str] = None
+        self.http_status: Optional[int] = None
 
     def _register_service(self, svc: dict) -> None:
         key = svc.get("service_key") or svc.get("name")
@@ -209,14 +212,20 @@ class DeepCookieScanner:
                     # nie Netzwerkruhe und liefen hier bei jedem Scan in den vollen Timeout.
                     # Netzwerkruhe bekommt danach eine begrenzte Chance — Tracker/Inhalte,
                     # die bis dahin nicht geladen sind, sieht der Scan eben nicht.
-                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    antwort = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    self.http_status = antwort.status if antwort else None
                     try:
                         # Tracker brauchen einen Moment zum Feuern — aber begrenzt.
                         await page.wait_for_load_state("networkidle", timeout=10000)
                     except Exception:
                         pass
                 except Exception as e:
-                    logger.warning(f"Navigation langsam/teilweise für {url}: {e}")
+                    # Die Seite wurde nicht geladen (Zertifikat, Zeitüberschreitung,
+                    # Verbindung). Ein Lauf ohne Seite sieht keine Fremdhosts und
+                    # sähe dadurch aus wie eine saubere Seite: das ist ein Fehler,
+                    # kein Ergebnis.
+                    logger.warning(f"Navigation fehlgeschlagen für {url}: {e}")
+                    self.navigation_fehler = str(e).splitlines()[0][:200]
 
                 # Lazy-Tracker durch Interaktion triggern
                 await self._simulate_user_interaction(page)
@@ -262,6 +271,21 @@ class DeepCookieScanner:
                 await context.close()
                 await browser.close()
                 browser = None
+
+            if self.navigation_fehler:
+                return ScanResult(
+                    scan_id=self.scan_id, url=self.url,
+                    scan_duration_seconds=int((datetime.utcnow() - self.start_time).total_seconds()),
+                    error=f"Seite nicht geladen: {self.navigation_fehler}",
+                )
+            if self.http_status is not None and self.http_status >= 400:
+                # Fehler- und Schutzseiten (Bot-Abwehr, 403, 5xx) laden keine
+                # Drittanbieter. Der Lauf sähe "sauber" aus, ohne es zu sein.
+                return ScanResult(
+                    scan_id=self.scan_id, url=self.url, http_status=self.http_status,
+                    scan_duration_seconds=int((datetime.utcnow() - self.start_time).total_seconds()),
+                    error=f"Seite antwortet mit HTTP {self.http_status}",
+                )
 
             return await self._compile_results()
 
@@ -389,4 +413,5 @@ class DeepCookieScanner:
             services_detected=services_detected,
             service_keys=service_keys,
             scan_duration_seconds=int((datetime.utcnow() - self.start_time).total_seconds()),
+            http_status=self.http_status,
         )

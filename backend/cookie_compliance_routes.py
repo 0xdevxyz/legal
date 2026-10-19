@@ -2307,6 +2307,8 @@ async def scan_website(
                 pruefstufe = await cookie_pruefstufe.einreihen(
                     site_id, scan_result.get('url') or url, pool=db_pool,
                     html_keys=service_keys_found, anwenden_ja=True,
+                    prio=(cookie_pruefstufe.PRIO_NUTZER if user_id
+                          else cookie_pruefstufe.PRIO_ANONYM),
                 )
             except Exception as e:
                 logger.warning(f"[Scan] Pruefstufe nicht einreihbar fuer {site_id}: {e}")
