@@ -18,9 +18,17 @@ import asyncio
 import re
 from datetime import datetime
 from urllib.parse import urlparse
+import ipaddress
 import logging
 
+from ssrf_protection import SSRFError, _pruefstand_erlaubt_loopback, validate_url
+
 logger = logging.getLogger(__name__)
+
+# Obergrenze der mitgeschnittenen Requests je Scan. Eine Seite mit Endlosschleife
+# (Polling, Tracker, die sich selbst nachladen) liesse die Liste sonst ohne
+# Ende wachsen, und bei vielen gleichzeitigen Scans ist das der Speicher.
+MAX_REQUESTS = 3000
 
 try:
     from playwright.async_api import async_playwright
@@ -162,6 +170,15 @@ class DeepCookieScanner:
 
         url = self.url if self.url.startswith(("http://", "https://")) else f"https://{self.url}"
 
+        # Dieselbe Schranke wie im HTML-Scan. Der Browser folgt Weiterleitungen
+        # und laedt Unterressourcen von sich aus; ohne diese Pruefung wuerde er
+        # jede Adresse oeffnen, die ihm jemand nennt, auch interne.
+        try:
+            url = validate_url(url)
+        except SSRFError as e:
+            logger.warning(f"Deep-Scan blockiert (SSRF) fuer '{self.url}': {e}")
+            return ScanResult(scan_id=self.scan_id, url=self.url, error="Ungueltige Adresse")
+
         try:
             async with async_playwright() as pw:
                 browser = await pw.chromium.launch(
@@ -179,6 +196,12 @@ class DeepCookieScanner:
 
                 # Alle ausgehenden Requests erfassen (XHR, Script, Img, Font, ...)
                 page.on("request", self._on_request)
+
+                # Interne Ziele nie anfassen (Weiterleitung oder Unterressource
+                # auf 127.0.0.1, 10.x, Metadaten-Dienst), und Video/Audio gar
+                # nicht erst laden: der Request wird mitgeschnitten, der Inhalt
+                # kostet nur Speicher und Zeit.
+                await page.route("**/*", self._route_wache)
 
                 # Navigieren (löst initiale Skripte/Tracker aus)
                 try:
@@ -238,6 +261,7 @@ class DeepCookieScanner:
 
                 await context.close()
                 await browser.close()
+                browser = None
 
             return await self._compile_results()
 
@@ -250,8 +274,49 @@ class DeepCookieScanner:
                 error=str(e),
             )
 
+    @staticmethod
+    def host_ist_intern(host: str) -> bool:
+        """Offensichtlich interne Hosts, ohne DNS (der Handler laeuft je Request).
+
+        Deckt Namen und IP-Literale ab. DNS-Rebinding faengt das nicht; die
+        erste Navigation geht deshalb zusaetzlich durch validate_url().
+        """
+        h = (host or "").lower().rstrip(".")
+        if not h:
+            return False
+        # Nur der Pruefstand (SSRF_PRUEFSTAND_LOOPBACK=1) darf Loopback scannen.
+        if _pruefstand_erlaubt_loopback() and (h == "localhost" or h in ("127.0.0.1", "[::1]", "::1")):
+            return False
+        if h in ("localhost", "metadata", "metadata.google", "metadata.google.internal") \
+                or h.endswith((".localhost", ".internal", ".local")):
+            return True
+        try:
+            a = ipaddress.ip_address(h.strip("[]"))
+        except ValueError:
+            return False
+        return not a.is_global
+
+    async def _route_wache(self, route):
+        try:
+            req = route.request
+            if self.host_ist_intern(urlparse(req.url).hostname or ""):
+                logger.warning(f"Deep-Scan: interner Zielhost blockiert: {req.url[:120]}")
+                await route.abort()
+            elif req.resource_type == "media":
+                await route.abort()
+            else:
+                await route.continue_()
+        except Exception:
+            # Die Route-Wache darf einen Scan nie haengen lassen.
+            try:
+                await route.continue_()
+            except Exception:
+                pass
+
     def _on_request(self, request):
         """Sync-Handler für page.on('request') — erfasst jeden Request + Dienst."""
+        if len(self.requests) >= MAX_REQUESTS:
+            return
         try:
             svc = self.matcher.match_url(request.url)
             self.requests.append(Request(
