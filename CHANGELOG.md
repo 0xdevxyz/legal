@@ -16,7 +16,7 @@
 - **Last:** Dedup je Seite, 10 Minuten Wiederholsperre, 60 Sekunden Sperre nach Fehlschlag, 75 s Zeitbudget je Auftrag, Anonyme nur bis drei Viertel der Schlange, Angemeldete vor Anonymen vor Wochenlauf. Wochenlauf (höchstens 6 Seiten pro Stunde, nur bei leerer Schlange) schreibt nur einen Bericht, ändert keinen Banner. Schalter: `COMPLYO_PRUEFSTUFE=0`, `COMPLYO_PRUEFSTUFE_WOCHE=0`, `COMPLYO_PRUEFSTUFE_ARBEITER`
 - `DeepCookieScanner` gehärtet (gilt auch für den Premium-Scan): URL durch `validate_url` vor dem Browserstart, Route-Wache gegen interne Ziele und Medien, Request-Deckel 3000, Seite nicht geladen oder HTTP >= 400 ist ein Fehler statt einer sauberen Seite (meyers.cafe mit ungültigem Zertifikat zeigte vorher „0 Dienste“)
 - Gemessen auf openclaw im Container mit 2-GiB-Grenze: 100 gleichzeitige Nutzer, alle 100 angenommen in 0,04 s, alle 100 fertig in 219 s (zwei Arbeiter), Container-Spitze 269 MiB; mit drei Arbeitern 151 s und 378 MiB. 25 echte Kundenseiten: Median 4,6 s, max 6,1 s je Seite
-- Tests `test_cookie_pruefstufe.py` (60), Lasttest `tools/pruefstufe_lasttest.py`, Vergleich `tools/pruefstufe_vergleich.py`; Gegenproben (Semaphor, Dedup, Teilstring, Überschreiben, Arbeiterzahl, breite Hosts) lassen je mindestens einen Test rot werden
+- Tests `test_cookie_pruefstufe.py` (62), Lasttest `tools/pruefstufe_lasttest.py`, Vergleich `tools/pruefstufe_vergleich.py`; Gegenproben (Semaphor, Dedup, Teilstring, Überschreiben, Arbeiterzahl, breite Hosts) lassen je mindestens einen Test rot werden
 - `GET /api/cookie-compliance/scan/capabilities` behauptet nicht mehr, Playwright fehle
 
 ### Offen
