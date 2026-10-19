@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, Cookie, FileText, Eye, AlertTriangle, CheckCircle, Search, TrendingUp, Euro } from 'lucide-react';
 import { complianceApi } from '@/lib/api';
-import { herkunftAusSuche, mitHerkunft } from '@/lib/herkunft';
+import { aktuelleHerkunft, mitHerkunft } from '@/lib/herkunft';
 
 
 /**
@@ -665,7 +665,7 @@ export default function WebsiteScanner() {
                 <a
                   href={mitHerkunft(
                     `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de'}/register?plan=free`,
-                    herkunftAusSuche(typeof window === 'undefined' ? '' : window.location.search),
+                    typeof window === 'undefined' ? new URLSearchParams() : aktuelleHerkunft(),
                   )}
                   className="px-8 py-4 bg-white text-akzent-800 font-semibold rounded-xl hover:shadow-2xl transition-all transform hover:scale-105 inline-flex items-center justify-center gap-2"
                 >
