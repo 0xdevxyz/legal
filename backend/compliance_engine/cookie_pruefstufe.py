@@ -5,10 +5,12 @@ bekannte Muster. Was ein Skript erst zur Laufzeit nachlädt, sieht er nicht.
 Diese Stufe öffnet die Seite einmal wie ein Besucher ohne Einwilligung, schneidet
 jeden Request mit und ordnet die Fremdhosts dem Dienstkatalog zu.
 
-**Warum sie hinter dem Scan sitzt und nicht darin.** Der Browser braucht 15 bis
-40 Sekunden und 150 bis 300 MiB. Liefe er im Request, hinge bei 100 gleichzeitigen
-Nutzern jede Antwort an einer Schlange von Browsern, und das 2-GiB-Limit des
-Backends wäre nach wenigen Minuten erreicht (so stand es 03.09.2026 beim
+**Warum sie hinter dem Scan sitzt und nicht darin.** Der Browser braucht je Seite
+rund 5 Sekunden (Median an 25 Kundenseiten, max 6) und gemessen 110 bis 150 MiB
+Container-Speicher (cgroup; die RSS-Summe der Chromium-Prozesse liegt wegen
+geteilter Seiten dreimal so hoch und täuscht). Liefe er im Request, hinge bei
+100 gleichzeitigen Nutzern jede Antwort an einer Schlange von Browsern, und das
+2-GiB-Limit des Backends wäre schnell erreicht (so stand es 03.09.2026 beim
 Preview-Scan, siehe scan_arbeiter.py). Deshalb:
 
 1. Der HTML-Scan antwortet wie bisher sofort. Die Prüfstufe kommt NACH der
@@ -108,7 +110,10 @@ UMGEBUNGSABHAENGIG = {"wordpress_emojis"}
 
 # Katalogeinträge, die denselben Dienst in zwei Fassungen führen. Ist einer
 # bekannt, ist der andere nicht "neu".
-GLEICHWERTIG = [{"youtube", "youtube_embedded"}]
+# Google Analytics steht als UA und GA4 getrennt im Katalog; eine Seite, die
+# analytics.js und gtag.js lädt, hat beides im Quelltext (bauschlosserei-claus.de,
+# physiomueller.de am 19.10.2026), und der HTML-Scan führt dann nur eines.
+GLEICHWERTIG = [{"youtube", "youtube_embedded"}, {"google_analytics_ua", "google_analytics_ga4"}]
 
 # Ausdrückliche Zuordnung dort, wo der Katalog nur den Host kennt, der Host aber
 # mehrere Dienste bedient: (Host-Endung, Pfad-Präfix, Abfrage-Präfix, Dienst).

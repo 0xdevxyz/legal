@@ -194,6 +194,11 @@ class TestFundeAusDemLauf:
         b = self._lauf(["https://api.complyo.de/api/widgets/cookie-compliance.js", "https://complyo.de/x"], [])
         assert b["unbekannte_fremdhosts"] == {}
 
+    def test_zweite_analytics_fassung_ist_nicht_neu(self):
+        # analytics.js (UA) neben gtag (GA4): ein Dienst, kein zweiter Fund.
+        b = self._lauf(["https://www.google-analytics.com/analytics.js"], ["google_analytics_ga4"])
+        assert b["neu"] == [] and "google_analytics_ua" in b["bestaetigt"]
+
     def test_zweite_youtube_fassung_ist_nicht_neu(self):
         b = self._lauf(["https://i.ytimg.com/vi/abc/hqdefault.jpg"], ["youtube"])
         assert b["neu"] == [] and "youtube_embedded" in b["bestaetigt"]
