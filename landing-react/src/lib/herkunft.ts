@@ -15,7 +15,15 @@ import { useEffect, useState } from 'react';
  * Deshalb reisen die Parameter mit auf die Registrierungsseite. Nur eine
  * feste Liste, nur harmlose Zeichen: was hier steht, landet spaeter in
  * Stripe-Metadaten und in der Datenbank.
+ *
+ * Seit 07.10.2026 merkt sich die Landing die Herkunft fuer die Sitzung.
+ * Anlass: die Kanal-Kurzlinks zeigen auch nach dem Launch auf /early-access
+ * (Entscheidung Daniel). Wer dort ankommt und ueber "Preise" auf die
+ * Startseite wechselt, hatte die utm-Parameter nicht mehr in der Adresszeile,
+ * und der Kauf lief ohne Kanal. Eine neue Herkunft in der Adresszeile
+ * ersetzt die gemerkte (letzter Kontakt zaehlt).
  */
+const ABLAGE = 'complyo_herkunft';
 const SCHLUESSEL = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'] as const;
 const MUSTER = /^[A-Za-z0-9_.:-]{1,120}$/;
 
@@ -39,11 +47,30 @@ export function mitHerkunft(href: string, herkunft: URLSearchParams): string {
   return href + (href.includes('?') ? '&' : '?') + s;
 }
 
+/**
+ * Herkunft dieses Besuchs: aus der Adresszeile, sonst die fuer die Sitzung
+ * gemerkte. Nur im Browser aufrufen.
+ */
+export function aktuelleHerkunft(): URLSearchParams {
+  const ausAdresse = herkunftAusSuche(window.location.search);
+  try {
+    if (ausAdresse.toString()) {
+      sessionStorage.setItem(ABLAGE, ausAdresse.toString());
+      return ausAdresse;
+    }
+    // Gemerktes erneut durch den Filter, die Ablage ist vom Browser aus
+    // beschreibbar.
+    return herkunftAusSuche(sessionStorage.getItem(ABLAGE) || '');
+  } catch {
+    return ausAdresse; // privates Fenster ohne Speicher
+  }
+}
+
 /** Liest die Herkunft nach dem ersten Rendern; auf dem Server ist sie leer. */
 export function useHerkunft(): URLSearchParams {
   const [herkunft, setHerkunft] = useState(() => new URLSearchParams());
   useEffect(() => {
-    setHerkunft(herkunftAusSuche(window.location.search));
+    setHerkunft(aktuelleHerkunft());
   }, []);
   return herkunft;
 }

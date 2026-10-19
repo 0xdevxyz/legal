@@ -28,10 +28,10 @@ from typing import Any, Dict, Optional
 # Betreiber-Stammdaten. Zentral pflegbar; bei Änderung der Rechtsform/Anschrift
 # hier anpassen. Quelle: bestehende Nennung in email_service.py / gdpr_api.py.
 # ─────────────────────────────────────────────────────────────────────────────
-# Eine Quelle: anbieter.py. Bis zum 10.09.2026 stand hier "Complyo GmbH,
-# Koburger Straße 198, 04416 Markkleeberg" — ein Name, den es nicht gibt, an
-# einer Anschrift, die nicht stimmt, geschrieben in die Datenschutzerklaerung
-# JEDES Kunden.
+# Eine Quelle: anbieter.py. Bis zum 10.09.2026 stand hier "Complyo GmbH" —
+# ein Name, den es nicht gibt, geschrieben in die Datenschutzerklaerung
+# JEDES Kunden. Die Anschrift (seit 01.10.2026 Markkleeberg) kommt ebenfalls
+# nur noch aus anbieter.py.
 from anbieter import (
     ABSENDER as _ABSENDER,
     ANSCHRIFT_EINZEILIG as _ANSCHRIFT,
