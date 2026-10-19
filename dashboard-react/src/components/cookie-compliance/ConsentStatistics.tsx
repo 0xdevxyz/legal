@@ -186,7 +186,7 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
                 </p>
                 <p className="text-xs text-gray-500">Banner angezeigt</p>
               </div>
-              <div className="p-3 bg-gray-700/50 rounded-lg">
+              <div className="p-3 bg-gray-200/50 dark:bg-gray-700/50 rounded-lg">
                 <Users className="w-6 h-6 text-gray-600 dark:text-gray-400" />
               </div>
             </div>
@@ -339,12 +339,12 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
               {/* Analytics */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-200">Statistik</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Statistik</span>
                   <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30">
                     {stats.categories?.analytics?.rate || 0}%
                   </Badge>
                 </div>
-                <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div className="h-2 bg-white dark:bg-gray-700 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-blue-500 rounded-full transition-all duration-500"
                     style={{ width: `${stats.categories?.analytics?.rate || 0}%` }}
@@ -355,12 +355,12 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
               {/* Marketing */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-200">Marketing</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Marketing</span>
                   <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30">
                     {stats.categories?.marketing?.rate || 0}%
                   </Badge>
                 </div>
-                <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div className="h-2 bg-white dark:bg-gray-700 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-purple-500 rounded-full transition-all duration-500"
                     style={{ width: `${stats.categories?.marketing?.rate || 0}%` }}
@@ -371,12 +371,12 @@ const ConsentStatistics: React.FC<ConsentStatisticsProps> = ({ siteId }) => {
               {/* Functional */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-200">Funktional</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Funktional</span>
                   <Badge className="bg-green-500/20 text-green-300 border-green-500/30">
                     {stats.categories?.functional?.rate || 0}%
                   </Badge>
                 </div>
-                <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div className="h-2 bg-white dark:bg-gray-700 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-green-500 rounded-full transition-all duration-500"
                     style={{ width: `${stats.categories?.functional?.rate || 0}%` }}

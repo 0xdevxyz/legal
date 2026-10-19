@@ -144,7 +144,7 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                         ? 'bg-green-500/20 border-green-500 text-green-400'
                         : isActive
                           ? 'bg-orange-500/20 border-orange-500 text-orange-400'
-                          : 'bg-gray-800 border-gray-700 text-gray-600'
+                          : 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600'
                     }`}>
                       {isDone ? <CheckCircle className="w-4 h-4" /> : step.id}
                     </div>
@@ -153,7 +153,7 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                     </span>
                   </div>
                   {idx < STEPS.length - 1 && (
-                    <div className={`flex-1 h-0.5 transition-all ${currentStep > step.id ? 'bg-green-500' : currentStep > step.id - 1 ? 'bg-orange-500' : 'bg-gray-700'}`} />
+                    <div className={`flex-1 h-0.5 transition-all ${currentStep > step.id ? 'bg-green-500' : currentStep > step.id - 1 ? 'bg-orange-500' : 'bg-white dark:bg-gray-700'}`} />
                   )}
                 </React.Fragment>
               );
@@ -189,7 +189,7 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && !scanning && url && runScan()}
-                    className="flex-1 bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500"
+                    className="flex-1 bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-500"
                   />
                 </div>
               )}
@@ -275,7 +275,7 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                         <p className="text-sm font-medium text-gray-900 dark:text-white">{s.name}</p>
                         <p className="text-xs text-gray-600 dark:text-gray-400 capitalize">{s.category}</p>
                       </div>
-                      <Badge variant="secondary" className="text-xs bg-gray-700 text-gray-700 dark:text-gray-300 flex-shrink-0">
+                      <Badge variant="secondary" className="text-xs bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex-shrink-0">
                         {s.category}
                       </Badge>
                     </div>
