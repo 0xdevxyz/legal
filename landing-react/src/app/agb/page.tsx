@@ -286,7 +286,7 @@ export default function AGBPage() {
                 </p>
                 <p>
                   (2) Ausschließlicher Gerichtsstand für alle Streitigkeiten aus und im Zusammenhang mit
-                  diesem Vertrag ist Berlin, sofern der Kunde Kaufmann, juristische Person des
+                  diesem Vertrag ist Markkleeberg, sofern der Kunde Kaufmann, juristische Person des
                   öffentlichen Rechts oder öffentlich-rechtliches Sondervermögen ist.
                 </p>
                 <p>

@@ -7,8 +7,8 @@ angelegt wurde, um die erfundenen Angaben von den Rechtsseiten zu nehmen. Im
 Backend blieb der alte Stand stehen — gemessen am 10.09.2026 an dreizehn
 Stellen in fuenf Dateien:
 
-  * `complyo_privacy_clause.py` schrieb "Complyo GmbH, Koburger Strasse 198,
-    04416 Markkleeberg" in die Datenschutzerklaerungen DER KUNDEN. Der Kunde
+  * `complyo_privacy_clause.py` schrieb "Complyo GmbH" in die
+    Datenschutzerklaerungen DER KUNDEN. Der Kunde
     nennt damit in seiner eigenen Erklaerung einen Auftragsverarbeiter, den es
     unter diesem Namen nicht gibt (Art. 13 DSGVO).
   * Die E-Mail-Fusszeilen, die Benachrichtigungen und die PDF-Berichte nannten
@@ -32,9 +32,9 @@ from __future__ import annotations
 # Pflichtangaben nach § 5 DDG. Deckungsgleich mit dem Impressum.
 NAME = "Yvonne Weishar"
 GESCHAEFTSBEZEICHNUNG = "Complyo"
-STRASSE = "Pappelallee 64"
-PLZ = "10437"
-ORT = "Berlin"
+STRASSE = "Koburger Straße 198"
+PLZ = "04416"
+ORT = "Markkleeberg"
 LAND = "Deutschland"
 EMAIL = "info@complyo.de"
 SUPPORT_EMAIL = "support@complyo.de"
@@ -42,7 +42,7 @@ DATENSCHUTZ_EMAIL = "datenschutz@complyo.de"
 TELEFON = "+49 173 8448941"
 UST_ID = "DE405368946"
 
-#: "Pappelallee 64, 10437 Berlin"
+#: "Koburger Straße 198, 04416 Markkleeberg"
 ANSCHRIFT_EINZEILIG = f"{STRASSE}, {PLZ} {ORT}"
 
 #: "Yvonne Weishar · Complyo" — kurze Nennung, etwa in einer E-Mail-Fusszeile.
