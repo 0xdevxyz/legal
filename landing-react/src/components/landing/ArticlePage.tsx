@@ -74,13 +74,13 @@ export default function ArticlePage({
   ];
 
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-white">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <div className="container mx-auto px-4 py-12 max-w-3xl">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-3xl">
         <Link
           href="/"
           className="inline-flex items-center gap-2 text-akzent-700 hover:text-akzent-800 mb-8 transition-colors"
@@ -103,7 +103,7 @@ export default function ArticlePage({
             </div>
           </header>
 
-          <nav aria-label="Inhalt" className="bg-white rounded-xl shadow p-6 mb-10">
+          <nav aria-label="Inhalt" className="bg-white rounded-xl border border-gray-200 p-6 mb-10">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-3">
               Inhalt
             </h2>
@@ -123,7 +123,7 @@ export default function ArticlePage({
               <section
                 key={s.heading}
                 id={anchor(s.heading)}
-                className="bg-white rounded-xl shadow-lg p-8 scroll-mt-8"
+                className="bg-white rounded-xl border border-gray-200 p-8 scroll-mt-8"
               >
                 <h2 className="text-2xl font-bold text-gray-900 mb-4">{s.heading}</h2>
                 <div className="space-y-4 text-gray-700 leading-relaxed">
@@ -148,9 +148,9 @@ export default function ArticlePage({
               </section>
             ))}
 
-            <section className="bg-akzent-400 rounded-xl shadow-lg p-8 text-gray-900">
+            <section className="bg-white rounded-xl border-2 border-akzent-400 p-8 text-gray-900">
               <h2 className="text-2xl font-bold mb-3">{cta.heading}</h2>
-              <p className="mb-6 text-gray-800 leading-relaxed">{cta.text}</p>
+              <p className="mb-6 text-gray-600 leading-relaxed">{cta.text}</p>
               <Link
                 href={cta.href}
                 className="inline-flex items-center gap-2 bg-gray-900 text-white font-semibold px-6 py-3 rounded-lg hover:bg-gray-800 transition-colors"
@@ -160,7 +160,7 @@ export default function ArticlePage({
               </Link>
             </section>
 
-            <section className="bg-white rounded-xl shadow-lg p-8">
+            <section className="bg-white rounded-xl border border-gray-200 p-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Häufige Fragen</h2>
               <dl className="space-y-6">
                 {faq.map(({ q, a }) => (
@@ -173,7 +173,7 @@ export default function ArticlePage({
             </section>
 
             {related.length > 0 && (
-              <section className="bg-white rounded-xl shadow-lg p-8">
+              <section className="bg-white rounded-xl border border-gray-200 p-8">
                 <h2 className="text-2xl font-bold text-gray-900 mb-4">Weiterlesen</h2>
                 <ul className="space-y-2">
                   {related.map(({ href, label }) => (

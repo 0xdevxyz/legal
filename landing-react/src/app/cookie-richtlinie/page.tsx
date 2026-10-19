@@ -7,8 +7,8 @@ import { ArrowLeft, Cookie, Mail, Settings } from 'lucide-react';
 
 export default function CookieRichtliniePage() {
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-white">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -22,7 +22,7 @@ export default function CookieRichtliniePage() {
             Zurück zur Startseite
           </Link>
 
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-8 mb-8">
             <div className="flex items-center gap-3 mb-4">
               <Cookie className="w-8 h-8 text-yellow-500" />
               <h1 className="text-4xl font-bold text-gray-900">Cookie-Richtlinie</h1>
@@ -32,7 +32,7 @@ export default function CookieRichtliniePage() {
             </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-8 space-y-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-8 space-y-8">
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4">1. Was sind Cookies?</h2>
               <div className="space-y-4 text-gray-700 text-sm leading-relaxed">
@@ -201,7 +201,7 @@ export default function CookieRichtliniePage() {
                   <Link href="/datenschutz" className="text-akzent-700 underline">Datenschutzerklärung</Link>.
                 </p>
                 <div className="bg-akzent-50 p-4 rounded-lg flex items-center gap-3">
-                  <Mail className="w-5 h-5 text-akzent-700 flex-shrink-0" />
+                  <Mail className="w-5 h-5 text-gray-400 flex-shrink-0" />
                   <p>
                     <strong>Kontakt:</strong>{' '}
                     <a href="mailto:datenschutz@complyo.de" className="text-akzent-700 underline">

@@ -27,8 +27,8 @@ export default function GDPRDataManagement() {
   );
 
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-akzent-50 via-white to-purple-50">
-      <div className="container mx-auto px-4 py-12">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-white">
+      <div className="container mx-auto px-4 pt-28 pb-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -51,7 +51,7 @@ export default function GDPRDataManagement() {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="bg-white rounded-xl shadow-lg p-8"
+              className="bg-white rounded-xl border border-gray-200 p-8"
             >
               <div className="text-center mb-6">
                 <div className="w-16 h-16 bg-akzent-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -86,7 +86,7 @@ export default function GDPRDataManagement() {
 
               <a
                 href="https://app.complyo.de/settings"
-                className="block w-full text-center bg-akzent-400 hover:bg-akzent-500 text-gray-900 font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+                className="block w-full text-center bg-gray-900 hover:bg-gray-800 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
               >
                 🔐 Zu den Dashboard-Einstellungen
               </a>
@@ -97,7 +97,7 @@ export default function GDPRDataManagement() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.4 }}
-              className="bg-white rounded-xl shadow-lg p-8"
+              className="bg-white rounded-xl border border-gray-200 p-8"
             >
               <div className="text-center mb-6">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">

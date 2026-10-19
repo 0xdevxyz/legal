@@ -231,7 +231,7 @@ export default function WartelistenFormular({
         <button
           type="submit"
           disabled={formState === 'loading'}
-          className="inline-flex items-center justify-center gap-2 bg-akzent-400 hover:bg-akzent-500 disabled:opacity-70 disabled:cursor-not-allowed text-gray-900 font-semibold px-6 py-3.5 rounded-xl transition-colors whitespace-nowrap"
+          className="inline-flex items-center justify-center gap-2 bg-gray-900 hover:bg-gray-800 text-white disabled:opacity-70 disabled:cursor-not-allowed font-semibold px-6 py-3.5 rounded-xl transition-colors whitespace-nowrap"
         >
           {formState === 'loading' ? (
             <>

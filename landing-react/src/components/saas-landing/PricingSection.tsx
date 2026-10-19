@@ -122,6 +122,9 @@ export default function PricingSection() {
           </p>
         </div>
 
+        {/* Der eine Ort fuer die Akzentfarbe als Flaeche: ein Rahmen um die
+            Tarife, innen Karten in Weiss und Grau, nur Pro traegt Rand und Knopf. */}
+        <div className="rounded-3xl border-2 border-akzent-400 bg-white p-4 sm:p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 items-stretch">
           {PLANS.map((plan) => (
             <div
@@ -158,7 +161,7 @@ export default function PricingSection() {
               <ul className="space-y-3 mb-8 flex-1">
                 {plan.features.map((feature, i) => (
                   <li key={i} className="flex items-start gap-2.5 text-sm text-gray-600">
-                    <Check className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                    <Check className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
                     <span>{feature}</span>
                   </li>
                 ))}
@@ -178,22 +181,23 @@ export default function PricingSection() {
             </div>
           ))}
         </div>
+        </div>
 
-        <div className="mt-8 rounded-2xl bg-gray-900 text-white p-8 flex flex-col lg:flex-row lg:items-center gap-6">
+        <div className="mt-8 rounded-2xl bg-white border border-gray-200 text-gray-900 p-8 flex flex-col lg:flex-row lg:items-center gap-6">
           <div className="flex-1">
-            <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-3 py-1 mb-3">
-              <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+            <div className="inline-flex items-center gap-2 bg-gray-100 rounded-full px-3 py-1 mb-3">
+              <Sparkles className="w-3.5 h-3.5 text-gray-600" />
               <span className="text-xs font-semibold uppercase tracking-wide">Expert-Paket</span>
             </div>
             <h3 className="text-2xl font-bold mb-2">Wir überarbeiten deine Website selbst.</h3>
-            <p className="text-gray-300 text-sm leading-relaxed max-w-2xl">
+            <p className="text-gray-600 text-sm leading-relaxed max-w-2xl">
               Kein Selbermachen: Wir setzen die Befunde auf deiner Seite um und übergeben sie mit Prüfnachweis.
               Einmalig 3.990 € netto, danach 29 € im Monat für laufende Updates, damit es auch so bleibt.
             </p>
             {/* Foerderhinweis bewusst im Konjunktiv: Programme aendern sich, und
                 eine Zusage auf der Preisseite waere ein Werbeversprechen. */}
-            <p className="text-gray-400 text-xs leading-relaxed max-w-2xl mt-3">
-              <span className="font-semibold text-gray-300">Förderfähig?</span>{' '}
+            <p className="text-gray-500 text-xs leading-relaxed max-w-2xl mt-3">
+              <span className="font-semibold text-gray-700">Förderfähig?</span>{' '}
               Für kleine und mittlere Unternehmen kann eine BAFA-Beratungsförderung
               in Frage kommen — in den neuen Bundesländern mit einem höheren
               Fördersatz als in den alten. Ob das für dich gilt und in welcher Höhe,
@@ -202,7 +206,7 @@ export default function PricingSection() {
           </div>
           <a
             href="mailto:support@complyo.de?subject=Anfrage%20Expert-Paket"
-            className="inline-flex items-center justify-center gap-2 bg-white text-gray-900 font-semibold px-6 py-3.5 rounded-xl hover:bg-gray-100 transition-colors flex-shrink-0"
+            className="inline-flex items-center justify-center gap-2 bg-gray-900 text-white font-semibold px-6 py-3.5 rounded-xl hover:bg-gray-800 transition-colors flex-shrink-0"
           >
             Expert-Paket anfragen
             <ArrowRight className="w-4 h-4" />
