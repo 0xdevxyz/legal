@@ -9,6 +9,15 @@
 
 ## [2026-10-19]
 
+### Frontend — Startseite wieder auf Early Access, Agentur-Tarif direkt buchbar
+- `/` zeigt wieder die Early-Access-Seite (`EarlyAccessKampagne`, Kennung `startseite`) statt der Produktseite mit Preistabelle. Anders als am 02.09. ist der Grund nicht Stripe (live seit 14.09.), sondern die Entscheidung: Inhaber einzelner Websites sichern sich vorn den Early-Access-Platz für Pro, nur Agenturen kaufen direkt
+- Neu `landing-react/src/components/kampagne/AgenturAbschnitt.tsx`: der Agentur-Tarif (599 € im Monat oder 5.990 € im Jahr, 25 Projekte) als eigener Abschnitt `#agentur` zwischen Nachweis-Kasten und FAQ, Knopf „Agentur buchen" nach `app.complyo.de/register?plan=agency` mit Herkunft (utm). Weil es der einzige Kaufweg auf der Seite ist, stehen Netto-Hinweis, Kündbarkeit, Bezahlarten und die Unternehmer-Klarstellung (§ 14 BGB) direkt am Knopf, nicht nur in den AGB. Der Abschnitt sagt ausdrücklich, dass der Early-Access-Nachlass nur für Pro im Monatsabo gilt; dieselbe Aussage als FAQ „Gilt der Early-Access-Preis auch für Agenturen?"
+- Agentur-Werte (`AGENTUR_PREIS_MONAT`, `AGENTUR_PREIS_JAHR`, `AGENTUR_PROJEKTE`) in `components/kampagne/angebot.ts`; `PricingSection` (unter `/produkt`) liest dieselben Werte statt eigener Zeichenketten
+- NavBar: „Preise" (`/#preise`, ginge auf der Kampagnenseite ins Leere) ersetzt durch „Für Agenturen" (`/#agentur`); Hauptknopf „Platz sichern" nach `/#anmeldung` statt „Kostenlos scannen" nach `/#scanner`. „Anmelden" bleibt, es gibt zahlende Kunden
+- `PricingSection`: der Early-Access-Hinweis an der Pro-Karte zeigt auf `/#anmeldung` statt `#anmeldung`; relativ zeigte er unter `/produkt` ins Leere
+- Metadaten unverändert in der Invariante: `/` indexierbar mit `canonical: /`, `/produkt` und `/early-access` auf `noindex`, Kennungen `startseite` und `ea100-bfsg` getrennt (`backend/tests/test_startseite_indexierung.py`)
+- `WartelisteAbschnitt` (Warteliste unter der Preistabelle, 28.09. bis 19.10.) bleibt im Repo, ist aber nicht mehr eingebunden. Wer die Produktseite wieder auf `/` legt, hängt ihn als `children` an `EarlyAccessLanding`
+
 ### Infrastruktur: Backend-Tests seit dem 08.10. rot durch pydantic 2.14
 - **`import mcp_server` brach mit `ImportError: cannot import name 'eval_type_backport' from 'pydantic._internal._typing_extra'`**, elf Tests in `tests/test_mcp_allowlist.py` fielen um. `fastapi-mcp==0.3.4` zieht `mcp>=1.8.1`; pip fällt wegen `httpx`/`mcp-types` auf mcp 1.12.4 zurück, und dessen `func_metadata` importiert ein privates pydantic-Symbol, das pydantic 2.14.0 (veröffentlicht 08.10.2026, 14:34 UTC, sechs Stunden nach dem letzten grünen main-Lauf) entfernt hat. Kein Code im Repo hat sich geändert
 - `backend/requirements.txt`: `pydantic>=2.5.0,<2.14`. Lokal nachgestellt: mcp 1.12.4 mit pydantic 2.14.1 bricht, mit 2.13.5 importiert. Der Pin fällt, sobald mcp auf eine Version gehoben wird, die ohne das private Symbol auskommt

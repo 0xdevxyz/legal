@@ -2,7 +2,9 @@
 import React from 'react';
 import { Check, ArrowRight, Sparkles } from 'lucide-react';
 import { useHerkunft, mitHerkunft } from '@/lib/herkunft';
-import { PLAETZE, PREIS_EARLY } from '@/components/kampagne/angebot';
+import {
+  PLAETZE, PREIS_EARLY, AGENTUR_PREIS_MONAT, AGENTUR_PREIS_JAHR, AGENTUR_PROJEKTE,
+} from '@/components/kampagne/angebot';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de';
 
@@ -86,14 +88,14 @@ const PLANS: Plan[] = [
   {
     id: 'agency',
     name: 'Agentur',
-    price: '599 €',
+    price: AGENTUR_PREIS_MONAT,
     period: '/Monat',
-    note: 'oder 5.990 € im Jahr',
+    note: `oder ${AGENTUR_PREIS_JAHR} im Jahr`,
     description: 'Für alle, die fremde Websites betreuen.',
     features: [
-      '25 Projekte inklusive',
+      `${AGENTUR_PROJEKTE} Projekte inklusive`,
       'Voller Pro-Funktionsumfang je Projekt',
-      'Erweiterbar um weitere 25 Projekte',
+      `Erweiterbar um weitere ${AGENTUR_PROJEKTE} Projekte`,
       'Zentrale Übersicht über alle Domains',
     ],
     cta: 'Agentur buchen',
@@ -147,7 +149,9 @@ export default function PricingSection() {
               {plan.id === 'pro' && (
                 <p className="text-xs text-akzent-800 -mt-4 mb-6">
                   Early Access: die ersten {PLAETZE} bestätigten Plätze zahlen {PREIS_EARLY} für zwölf Monate.{' '}
-                  <a href="#anmeldung" className="underline underline-offset-2 hover:text-akzent-900">Platz sichern</a>
+                  {/* Absoluter Anker: die Preistabelle steht unter /produkt, die
+                      Warteliste auf der Startseite. */}
+                  <a href="/#anmeldung" className="underline underline-offset-2 hover:text-akzent-900">Platz sichern</a>
                 </p>
               )}
 
