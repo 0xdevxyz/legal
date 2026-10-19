@@ -36,6 +36,61 @@ from compliance_engine.sicherer_abruf import sichere_session
 from compliance_engine.grundsystem import einrichtungsweg, PLUGIN_PAKETE
 from compliance_engine.markenfarben import farbvorschlag
 from fastapi.responses import FileResponse
+from banner_anlass import banner_auto_aus_erlaubt
+
+
+async def _banner_auto_aus_felder(pool, config: dict) -> None:
+    """Ergaenzt die Konfiguration um `banner_erzwingen` und `banner_auto_aus_erlaubt`.
+
+    Die Spalte wird bewusst GETRENNT vom grossen SELECT gelesen. Stuende sie
+    dort, bekaeme jede Website einen 500 statt ihrer Konfiguration, sobald das
+    Backend vor der Migration 0037 ausgerollt wird, und der Banner faellt
+    ueberall aus. So bleibt bei fehlender Spalte nur die Selbstabschaltung aus.
+
+    Jeder Fehler heisst: Banner bleibt. Eine Abschaltung, die auf einem
+    fehlgeschlagenen Lesevorgang beruht, waere genau die falsche Richtung.
+    """
+    config["banner_erzwingen"] = False
+    config["banner_auto_aus_erlaubt"] = False
+    site_id = config.get("site_id")
+    if not site_id:
+        return
+    try:
+        config["banner_erzwingen"] = bool(await pool.fetchval(
+            "SELECT banner_erzwingen FROM cookie_banner_configs WHERE site_id = $1",
+            site_id))
+        # Die Konfiguration laeuft bei jedem Seitenaufruf eines Besuchers. Die
+        # zweite Abfrage nur, wenn alles andere die Abschaltung schon zulaesst.
+        if not banner_auto_aus_erlaubt(config, 0):
+            return
+        eigene = int(await pool.fetchval(
+            "SELECT COUNT(*) FROM cookie_custom_services WHERE site_id = $1",
+            site_id) or 0)
+    except Exception as e:
+        config["banner_erzwingen"] = False
+        logger.warning(
+            "[Banner] Selbstabschaltung fuer %s nicht bewertbar, Banner bleibt: %s",
+            site_id, e)
+        return
+    config["banner_auto_aus_erlaubt"] = banner_auto_aus_erlaubt(config, eigene)
+
+
+async def _speichere_banner_erzwingen(pool, site_id: str, wert) -> None:
+    """Schreibt das Opt-out. `None` heisst: nicht angefasst.
+
+    Eigener Schreibvorgang statt eines weiteren Parameters im grossen UPDATE:
+    ein Dashboard, das das Feld nicht kennt, darf das Opt-out nicht ueberschreiben,
+    und eine fehlende Spalte darf das Speichern der uebrigen Einstellungen nicht
+    verhindern.
+    """
+    if wert is None:
+        return
+    try:
+        await pool.execute(
+            "UPDATE cookie_banner_configs SET banner_erzwingen = $2 WHERE site_id = $1",
+            site_id, bool(wert))
+    except Exception as e:
+        logger.warning("[Banner] banner_erzwingen nicht gespeichert: %s", e)
 
 
 def _enrich_third_country(service: dict) -> dict:
@@ -347,6 +402,9 @@ class BannerConfig(BaseModel):
     privacy_policy_url: Optional[str] = None
     cookie_policy_url: Optional[str] = None
     imprint_url: Optional[str] = None
+    # None = Dashboard kennt das Feld nicht oder hat es nicht angefasst: der
+    # gespeicherte Wert bleibt (siehe _speichere_banner_erzwingen).
+    banner_erzwingen: Optional[bool] = None
 
     class Config:
         extra = "allow"
@@ -369,6 +427,7 @@ class BannerConfigUpdate(BaseModel):
     cookie_lifetime_days: Optional[int] = None
     show_branding: Optional[bool] = None
     custom_logo_url: Optional[str] = None
+    banner_erzwingen: Optional[bool] = None
 
 class ServiceTemplate(BaseModel):
     service_key: str
@@ -894,7 +953,10 @@ async def get_my_config(
             config['consent_mode_default'] = json.loads(config['consent_mode_default'])
 
         config['scan_completed'] = config.get('scan_completed_at') is not None
-        
+
+        # Das Dashboard zeigt den Schalter "Banner immer anzeigen" mit dem Ist-Wert.
+        await _banner_auto_aus_felder(db_pool, config)
+
         # Convert datetime to ISO string
         for field in ['scan_completed_at', 'created_at', 'updated_at']:
             if config.get(field):
@@ -1019,7 +1081,9 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
                     "is_active": False,  # ✅ FIX: Default ist FALSE - Banner nur zeigen wenn im Backend konfiguriert!
                     "scan_completed": False,
                     "scan_completed_at": None,
-                    "last_scan_url": None
+                    "last_scan_url": None,
+                    "banner_erzwingen": False,
+                    "banner_auto_aus_erlaubt": False
                 },
                 "message": "Default configuration - no banner configured yet"
             }
@@ -1041,6 +1105,9 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
 
         # ✅ Füge scan_completed Status hinzu
         config['scan_completed'] = config.get('scan_completed_at') is not None
+
+        # Darf das Widget den Banner weglassen, wenn die Seite selbst nichts zeigt?
+        await _banner_auto_aus_felder(db_pool, config)
 
         # "Über Cookies"-Link: Wenn der Kunde keine eigene Cookie-Richtlinie-URL
         # gesetzt hat, auf die von Complyo gehostete öffentliche Seite zeigen.
@@ -1285,6 +1352,7 @@ async def create_or_update_config(
 
             # Reconsent-Hash nach dem eigentlichen Update pflegen (siehe oben)
             await _persist_config_hash()
+            await _speichere_banner_erzwingen(db_pool, config.site_id, config.banner_erzwingen)
 
             return {
                 "success": True,
@@ -1338,6 +1406,7 @@ async def create_or_update_config(
             
             # Erst-Save: Hash setzen (config_hash war NULL → kein Reconsent)
             await _persist_config_hash()
+            await _speichere_banner_erzwingen(db_pool, config.site_id, config.banner_erzwingen)
 
             return {
                 "success": True,
@@ -2513,20 +2582,20 @@ async def health_check(db_pool: asyncpg.Pool = Depends(get_db_connection)):
     """
     try:
         # Test database connection
-        result = await db_pool.fetchval("SELECT COUNT(*) FROM cookie_services WHERE is_active = true")
+        await db_pool.fetchval("SELECT COUNT(*) FROM cookie_services WHERE is_active = true")
         
         return {
             "success": True,
             "status": "healthy",
-            "active_services": result,
             "timestamp": datetime.now().isoformat()
         }
         
     except Exception as e:
+        # Die Meldung kann Verbindungsdaten enthalten: ins Log, nicht in die Antwort.
+        print(f"Cookie-Health fehlgeschlagen: {e}")
         return {
             "success": False,
             "status": "unhealthy",
-            "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
 

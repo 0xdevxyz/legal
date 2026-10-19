@@ -79,6 +79,8 @@ async def main():
             results = await send_daily_digest(db_pool)
             print(f"  Users processed: {results['users_processed']}")
             print(f"  Emails sent: {results['emails_sent']}")
+            if results.get('versand') == 'nicht_umgesetzt':
+                print("  HINWEIS: Digest-Versand ist nicht umgesetzt, es wurde nur gezaehlt")
             if results['errors']:
                 for error in results['errors']:
                     print(f"  ERROR: {error}")

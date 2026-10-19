@@ -21,6 +21,7 @@ import IntegrationGuide from '@/components/cookie-compliance/IntegrationGuide';
 import ConsentStatistics from '@/components/cookie-compliance/ConsentStatistics';
 import RevocationChart from '@/components/cookie-compliance/RevocationChart';
 import AdvancedSettings from '@/components/cookie-compliance/AdvancedSettings';
+import BannerAutomatik from '@/components/cookie-compliance/BannerAutomatik';
 import CookieSetupWizard from '@/components/cookie-compliance/CookieSetupWizard';
 import ScanMonitor from '@/components/cookie-compliance/ScanMonitor';
 import ABTestManager from '@/components/cookie-compliance/ABTestManager';
@@ -346,7 +347,16 @@ export default function CookieCompliancePage() {
           websiteUrl={websiteUrl}
           websiteLocked={websiteLocked && !isAgency}
           siteId={siteId}
-          onComplete={() => { setShowSetupWizard(false); loadConfig(); }}
+          onComplete={() => {
+            setShowSetupWizard(false);
+            // Nach dem Scan die Konfiguration DERSELBEN Website neu laden.
+            // loadConfig() fragt /my-config, und das ist die zuletzt angelegte
+            // Konfiguration des Kontos, egal welche Seite gerade gewählt ist:
+            // bei Agenturkonten sprang die Seite so auf eine fremde Website
+            // (Scan spedition-mahn.de, danach Farben von steinhau.de, 19.10.2026).
+            if (siteId) loadSiteConfig(siteId, websiteUrl);
+            else loadConfig();
+          }}
           onSkip={() => setShowSetupWizard(false)}
           onGrundsystem={(g) => { if (g) setGrundsystem(g); }}
         />
@@ -696,6 +706,9 @@ export default function CookieCompliancePage() {
               </TabsContent>
               
               <TabsContent value="advanced">
+                <div className="mb-6">
+                  <BannerAutomatik config={config} onSave={saveConfig} />
+                </div>
                 <AdvancedSettings
                   siteId={siteId}
                   config={config}

@@ -35,6 +35,9 @@ interface RegisterData {
   // Fassung des Auftragsverarbeitungsvertrages nach Art. 28 DSGVO, den der
   // Kunde mit der Registrierung in Textform mitschliesst.
   avv_version?: string;
+  // utm-Herkunft des Besuchers (Kanalmessung). Das Backend filtert sie ein
+  // zweites Mal; fehlt sie, bleibt das Konto ohne Herkunft.
+  herkunft?: Partial<Record<'utm_source' | 'utm_medium' | 'utm_campaign' | 'utm_content' | 'utm_term', string>>;
 }
 
 interface AuthContextType {

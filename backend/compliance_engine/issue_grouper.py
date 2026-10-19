@@ -13,6 +13,17 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
 
+from compliance_engine.jurisdictions import DEFAULT_JURISDICTION
+from compliance_engine.rechtsgrundlagen import (
+    AGB_KONTROLLE,
+    ANBIETERKENNZEICHNUNG,
+    BARRIEREFREIHEIT_TECHNISCH,
+    COOKIE_EINWILLIGUNG,
+    PREISANGABE,
+    WIDERRUF,
+    grundlage,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,6 +50,12 @@ class IssueGroup:
     title: str = ""
     description: str = ""
     icon: str = "📋"
+
+    # Rechtsgrundlage der Karte. Gemessen am 16.10.2026: 41 von 41 Gruppenkarten
+    # der letzten 40 Scans trugen keine, waehrend jeder Einzelbefund eine hatte
+    # (1.185 von 1.185). Startseite und Erklaervideo versprechen "jeder Befund
+    # mit Rechtsgrundlage"; die Karte ist das, was der Kunde zuerst sieht.
+    legal_basis: str = ""
 
 
 class IssueGrouper:
@@ -121,9 +138,63 @@ class IssueGrouper:
             }
         }
     
+    def _feste_rechtsgrundlage(self, category: str, jurisdiction: str) -> str:
+        """Rueckfall je Kategorie, wenn kein Mitglied der Gruppe eine traegt.
+
+        Nationale Anker kommen aus rechtsgrundlagen.py, damit der Rechtsraum
+        mitwandert; die DSGVO-Angaben gelten unionsweit. Quellen, geoeffnet am
+        18.10.2026: Art. 13 DSGVO (Informationspflicht bei Erhebung), § 5 DDG
+        (Allgemeine Informationspflichten), § 25 TDDDG (Schutz der Privatsphaere
+        bei Endeinrichtungen) mit Art. 6 Abs. 1 lit. a DSGVO (Einwilligung),
+        Art. 246a § 1 Abs. 2 EGBGB (Widerrufsbelehrung), § 3 PAngV (Gesamtpreis),
+        §§ 305 ff. BGB (AGB-Kontrolle).
+        """
+        if category == "datenschutz":
+            return "DSGVO Art. 13"
+        if category == "avv":
+            return "DSGVO Art. 28"
+        if category == "impressum":
+            return grundlage(ANBIETERKENNZEICHNUNG, jurisdiction)
+        if category in ("cookie", "cookies"):
+            return grundlage(COOKIE_EINWILLIGUNG, jurisdiction) + ", DSGVO Art. 6 Abs. 1 lit. a"
+        if category == "shop":
+            # Eine Shop-Gruppe mischt Widerruf, Preisangabe und AGB; genannt
+            # werden die drei Grundlagen, die shop_check.py selbst verwendet.
+            teile = [grundlage(t, jurisdiction) for t in (WIDERRUF, PREISANGABE, AGB_KONTROLLE)]
+            return ", ".join(t for t in teile if t)
+        if category == "accessibility":
+            return grundlage(BARRIEREFREIHEIT_TECHNISCH, jurisdiction, "Level A (1.1.1)")
+        return ""
+
+    def _rechtsgrundlage_der_gruppe(
+        self,
+        category: str,
+        parent: Optional[Dict[str, Any]],
+        members: List[Dict[str, Any]],
+        jurisdiction: str,
+    ) -> str:
+        """Die Gruppe uebernimmt die Rechtsgrundlage ihres Hauptbefunds.
+
+        Reihenfolge: Hauptbefund, dann das erste Mitglied mit Angabe, zuletzt
+        der feste Rueckfall je Kategorie. Nie leer fuer eine bekannte Kategorie;
+        eine unbekannte ohne jede Angabe wird protokolliert, nicht erfunden.
+        """
+        kandidaten = ([parent] if parent else []) + [m for m in members if m is not parent]
+        for issue in kandidaten:
+            basis = (issue.get("legal_basis") or "").strip()
+            if basis:
+                return basis
+        basis = self._feste_rechtsgrundlage(category, jurisdiction)
+        if not basis:
+            logger.warning(
+                "Gruppenkarte %r ohne Rechtsgrundlage: kein Mitglied traegt eine "
+                "und es gibt keinen Rueckfall fuer diese Kategorie", category)
+        return basis
+
     def group_issues(
         self,
-        issues: List[Dict[str, Any]]
+        issues: List[Dict[str, Any]],
+        jurisdiction: str = DEFAULT_JURISDICTION,
     ) -> Dict[str, Any]:
         """
         Gruppiert Issues intelligent
@@ -188,7 +259,9 @@ class IssueGrouper:
                     completed_count=0,
                     title=group_config.get("title", f"{category.title()} Issues"),
                     description=group_config.get("description", "Mehrere verwandte Probleme"),
-                    icon=group_config.get("icon", "📋")
+                    icon=group_config.get("icon", "📋"),
+                    legal_basis=self._rechtsgrundlage_der_gruppe(
+                        category, parent, category_issues, jurisdiction),
                 )
                 
                 groups.append(asdict(group))
@@ -221,7 +294,9 @@ class IssueGrouper:
                 completed_count=0,
                 title="Bild-Barrierefreiheit",
                 description=f"{len(alt_text_issues)} Bilder haben fehlende oder unzureichende Alt-Texte",
-                icon="🖼️"
+                icon="🖼️",
+                legal_basis=self._rechtsgrundlage_der_gruppe(
+                    "accessibility", None, alt_text_issues, jurisdiction),
             )
             
             groups.append(asdict(group))
@@ -298,8 +373,10 @@ class IssueGrouper:
         if not issues:
             return scan_results
         
-        # Gruppiere Issues
-        grouped_data = self.group_issues(issues)
+        # Gruppiere Issues; der Rechtsraum des Scans bestimmt den nationalen
+        # Anker der Rueckfall-Rechtsgrundlagen.
+        grouped_data = self.group_issues(
+            issues, scan_results.get("jurisdiction") or DEFAULT_JURISDICTION)
         
         # Füge zum Result hinzu
         scan_results["issue_groups"] = grouped_data["issue_groups"]

@@ -209,6 +209,20 @@ async def _run_axe_core_safe(url: str, timeout: float = 35.0) -> Optional[List[D
                     },
                 })
 
+        # Messprotokoll: die Regeln ohne Abweichung reisen als Eintrag im
+        # Befundformat mit und werden im Scanner vor der Bewertung wieder
+        # herausgezogen (messprotokoll.ziehe). Siehe messprotokoll.py.
+        # Eine Regel mit teils bestandenen, teils verletzten Elementen fuehrt
+        # axe in BEIDEN Listen. "color-contrast: keine Abweichung" neben einem
+        # kritischen Kontrastbefund (Nachmessung 13.10.2026) waere falsch:
+        # nur Regeln ohne Verstoss auf dieser Seite kommen ins Protokoll.
+        verletzt = {v.id for v in (getattr(result, "violations", None) or [])}
+        bestanden = [b for b in (getattr(result, "bestanden", None) or [])
+                     if b.get("id") not in verletzt]
+        if bestanden:
+            from compliance_engine import messprotokoll
+            axe_issues.append(messprotokoll.marker(url, bestanden))
+
         return axe_issues
     except ImportError:
         logger.warning("⚠️ axe-core/Playwright nicht verfügbar – Scan läuft heuristisch weiter")

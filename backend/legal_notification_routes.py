@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Optional
 
-from dependencies import get_current_user
+from dependencies import get_current_user, require_admin
 from database_service import db_service
 # Das Modul importieren, NICHT den Namen: `from x import singleton` bindet
 # den Wert im Augenblick des Imports — und das ist None, bevor
@@ -236,8 +236,8 @@ async def get_notification_stats(
                 COUNT(*) FILTER (WHERE status = 'sent') as sent,
                 COUNT(*) FILTER (WHERE status = 'confirmed') as confirmed,
                 COUNT(*) FILTER (WHERE status = 'dismissed') as dismissed,
-                0::bigint as critical_pending,
-                COUNT(*) FILTER (WHERE status IN ('pending', 'sent')) as action_required
+                COUNT(*) FILTER (WHERE severity = 'critical' AND status IN ('pending', 'sent')) as critical_pending,
+                COUNT(*) FILTER (WHERE action_required AND status IN ('pending', 'sent')) as action_required
             FROM legal_change_notifications
             WHERE user_id = $1
         """, user_id)
@@ -251,9 +251,16 @@ async def get_notification_stats(
 @router.post("/process-new")
 async def trigger_process_new_changes(
     background_tasks: BackgroundTasks,
-    current_user: dict = Depends(get_current_user)
+    admin: dict = Depends(require_admin)
 ):
-    """Manueller Trigger zum Verarbeiten neuer Gesetzesänderungen (Admin only)"""
+    """Manueller Trigger zum Verarbeiten neuer Gesetzesänderungen (nur Admin).
+
+    Bis 08.10.2026 stand "Admin only" nur hier im Text, geprueft wurde nur die
+    Anmeldung. Solange die Tabelle die Spalten nicht hatte, lief der Aufruf
+    ins Leere. Mit Migration 0037b legt er echte Benachrichtigungen an und
+    verschickt fuer jede 'critical'-Meldung der letzten sieben Tage sofort
+    eine Mail an jedes bestaetigte Konto. Das darf kein Kunde ausloesen.
+    """
     if not _dienst.legal_notification_service:
         raise HTTPException(status_code=503, detail="Notification Service nicht verfügbar")
     

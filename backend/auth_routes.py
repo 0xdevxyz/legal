@@ -39,6 +39,7 @@ from compliance_engine.jurisdictions import DEFAULT_JURISDICTION
 import konto_token
 from adressen import dashboard_url
 import passwort_richtlinie
+from herkunft import registrierung_festhalten
 import zweiter_faktor
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,10 @@ class RegisterRequest(BaseModel):
     # Fassung des Auftragsverarbeitungsvertrages (Art. 28 DSGVO). Ohne ihn
     # duerfte kein Kunde complyo auf seiner Website einsetzen.
     avv_version: Optional[str] = None
+    # utm-Parameter, mit denen der Besucher auf complyo.de ankam (Kanalmessung,
+    # Launchplan Woche 41). Ungeprueft vom Client; gefiltert wird in
+    # herkunft.bereinige (Positivliste, enges Zeichenmuster).
+    herkunft: Optional[dict] = None
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -235,6 +240,10 @@ async def register(request: Request, body: RegisterRequest):
             user['id'], user['email'], request,
             body.unternehmer_bestaetigt, body.agb_version, body.avv_version,
         )
+
+        # Herkunft des Kontos fuer die Kanalmessung. Best effort, nie ein Grund,
+        # eine Registrierung scheitern zu lassen.
+        await registrierung_festhalten(db_pool, user['id'], body.herkunft)
 
         # Bestaetigungsmail. `users.is_verified` stand seit dem ersten Schema in
         # der Tabelle und wurde von keiner Route je gesetzt — es gab keinen Weg,
@@ -1433,105 +1442,13 @@ async def zweiter_faktor_codes_neu(request: Request,
 @router.get("/health")
 async def auth_health():
     """Health check for auth service"""
-    return {
-        "status": "healthy",
-        "service": "authentication",
-        "auth_service_initialized": auth_service is not None,
-        "db_pool_initialized": db_pool is not None,
-        "oauth_service_initialized": oauth_service is not None,
-        "firebase_auth_initialized": firebase_verify_token is not None
-    }
+    # Nach aussen nur der Gesamtzustand. Welche Teildienste initialisiert sind,
+    # gehoert nicht in eine Antwort ohne Anmeldung. Der Statuscode bleibt 200:
+    # das Dashboard ruft die Route nur auf, um den CSRF-Cookie zu bekommen.
+    bereit = auth_service is not None and db_pool is not None
+    return {"status": "healthy" if bereit else "degraded"}
 
-@router.post("/admin/reset-master-password")
-@limiter.limit("3/hour")
-async def reset_master_password(request: Request, admin_key: str = Query(..., alias="admin_key")):
-    """
-    Admin Endpoint: Setzt das Passwort für master@complyo.de zurück
-
-    Query Parameter:
-    - admin_key: Admin-Schlüssel (muss als ADMIN_KEY env var gesetzt sein)
-    """
-    import bcrypt
-    
-    # Admin-Authentifizierung via Env-Var (kein Default-Wert!)
-    expected_key = os.getenv("ADMIN_KEY")
-    if not expected_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Admin key not configured"
-        )
-    # Zeitkonstanter Vergleich: ein == verraet ueber die Laufzeit, wie viele
-    # Zeichen stimmen. Das Rate-Limit von 3/Stunde macht den Angriff unpraktisch,
-    # aber der richtige Vergleich kostet nichts.
-    if not secrets.compare_digest(admin_key, expected_key):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unauthorized"
-        )
-
-    if auth_service is None or db_pool is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Services not initialized"
-        )
-
-    email = "master@complyo.de"
-    # Password must be provided via query param — never hardcoded
-    new_password = os.getenv("MASTER_RESET_PASSWORD")
-    if not new_password:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MASTER_RESET_PASSWORD env var not set"
-        )
-    
-    try:
-        # Prüfe ob User existiert
-        user = await auth_service.get_user_by_email(email)
-        
-        if not user:
-            # User erstellen
-            user = await auth_service.register_user(
-                email,
-                new_password,
-                "Master User",
-                "Complyo"
-            )
-            
-            # User Limits initialisieren
-            await init_user_limits(user['id'], 'expert')
-            
-            logger.info(f"Master user created: {email}")
-            return {
-                "success": True,
-                "message": "Master user created, password set from MASTER_RESET_PASSWORD env var",
-                "email": email,
-            }
-        else:
-            # Passwort zurücksetzen
-            password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-            async with db_pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    UPDATE users
-                    SET hashed_password = $1,
-                        is_active = TRUE,
-                        is_verified = TRUE
-                    WHERE email = $2
-                    """,
-                    password_hash, email
-                )
-
-            logger.info(f"Master user password reset: {email}")
-            return {
-                "success": True,
-                "message": "Password reset successfully, new password is in MASTER_RESET_PASSWORD env var",
-                "email": email,
-            }
-            
-    except Exception as e:
-        logger.error(f"Error resetting master password: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to reset password"
-        )
+# /admin/reset-master-password wurde am 13.10.2026 entfernt. Die Route hing nur
+# an einem Schluessel in der URL (nginx protokolliert die Query mit), war ohne
+# ADMIN_KEY ohnehin tot und stand im offenen API-Schema. Ein neues Passwort fuer
+# master@complyo.de setzt man direkt in der Datenbank.

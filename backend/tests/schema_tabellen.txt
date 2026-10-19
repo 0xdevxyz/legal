@@ -50,6 +50,7 @@ geo_ip_cache
 git_connected_repos
 git_credentials
 git_pull_requests
+kauf_herkunft
 knowledge_rule_review_queue
 lead_consents
 leads
@@ -67,6 +68,7 @@ oauth_providers
 oauth_states
 passwort_reset
 pflichten_events
+registrierung_herkunft
 rss_feed_sources
 rule_changelog
 scan_history

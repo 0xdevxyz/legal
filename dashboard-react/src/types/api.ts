@@ -51,11 +51,48 @@ export interface ComplianceIssue {
 }
 
 // Positive Check
+// Messprotokoll: eine Regel, die geprüft wurde und keine Abweichung zeigte.
+// Nie "erfüllt" oder "konform": die Automatik deckt nur einen Teil der
+// WCAG-Kriterien ab. Siehe backend/compliance_engine/messprotokoll.py.
 export interface PositiveCheck {
   category: string;
   title: string;
-  status: string;
+  status: string; // 'geprueft_ohne_abweichung'
   icon: string;
+  id?: string; // axe-Regelkennung
+  description?: string;
+  seiten?: number; // auf wie vielen Seiten die Regel lief
+  seiten_gesamt?: number;
+  elemente?: number; // geprüfte Elemente über alle Seiten
+  wcag?: string[]; // WCAG-Kriterien, z. B. "1.1.1"
+  rechtspflicht?: boolean; // WCAG-Regel (true) oder Best Practice (false)
+  help_url?: string;
+  wortlaut?: string; // "geprüft auf 3 von 4 Seiten (12 Elemente), keine Abweichung gefunden"
+}
+
+// BFSG-Einordnung der Barrierefreiheitsbefunde nach Unternehmensprofil.
+// Siehe backend/compliance_engine/bfsg_einordnung.py.
+export type BfsgStatus = 'applies' | 'check' | 'not_indicated';
+
+export interface BfsgKriterium {
+  schluessel: string;
+  label: string;
+  wert: string | null; // "ja" | "nein" | Profilwert | null (keine Angabe)
+}
+
+export interface BfsgEinordnung {
+  status: BfsgStatus;
+  label: string;
+  profil_vorhanden: boolean;
+  profil_pfad: string;
+  gruende: string[];
+  text: string;
+  kriterien: BfsgKriterium[];
+  saeulen_beschriftung: string;
+  saeulen_beschreibung: string;
+  rechtsgrundlage: string;
+  quelle: string;
+  hinweis: string;
 }
 
 // Issue Group structure
@@ -74,6 +111,7 @@ export interface IssueGroup {
   title: string;
   description: string;
   icon: string;
+  legal_basis?: string; // Rechtsgrundlage der Karte, seit 18.10.2026 vom Backend gesetzt
 }
 
 // Grouping statistics
@@ -121,7 +159,8 @@ export interface ComplianceAnalysis {
   warning_issues: number;
   total_issues: number;
   issues: ComplianceIssue[];
-  positive_checks?: PositiveCheck[]; // NEW: Was funktioniert bereits
+  positive_checks?: PositiveCheck[]; // Messprotokoll: geprüfte Regeln ohne Abweichung
+  bfsg_einordnung?: BfsgEinordnung | null; // BFSG nach Profil: applies | check | not_indicated
   has_accessibility_widget?: boolean; // ✅ NEU: Widget-Status vom Scanner
   detected_cms?: string | null; // v4.0: erkanntes Grundsystem (z.B. WordPress)
   is_placeholder?: boolean; // v4.0: Platzhalter-/Baustellenseite

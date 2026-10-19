@@ -7,7 +7,31 @@
 
 ---
 
+## [2026-10-08]
+
+### Backend: Rechtsänderungs-Benachrichtigungen bekommen ihr Schema
+- **Befund:** `legal_notification_service.py` benutzte in `legal_change_notifications` sechs Spalten (legal_news_id, severity, confirmation_token, action_required, action_deadline, confirmed_at), die es live nie gab; die Tabelle hat das Schema vom November 2025 und 0 Zeilen. `/confirm/<token>` lief in `column "confirmation_token" does not exist`, das Dashboard-Menü zählte immer 0. Dahinter ein zweiter Fehler: die Nutzerabfrage las `u.firebase_uid`, die Spalte hat `users` nicht
+- Migration `0037b_rechtsaenderung_quittung`: ergänzt die sechs Spalten (NULL-fähig oder mit Vorbelegung), Unique-Index auf den Token, Indizes auf `legal_news_id` und `(user_id, status)`. Bestehende Spalten und Fremdschlüssel bleiben unberührt. Geprüft gegen Postgres 16 mit Baseline: upgrade, downgrade, upgrade
+- `u.firebase_uid` aus der Abfrage entfernt; neue Benachrichtigungen setzen `sent_at` ausdrücklich auf NULL (live Vorbelegung `now()`)
+- `POST /api/legal-notifications/process-new` nur noch mit `require_admin`; vorher genügte die Anmeldung, und mit dem Schema verschickt der Aufruf Mails an alle bestätigten Konten
+- `/stats`: `critical_pending` und `action_required` wieder aus den Spalten statt `0::bigint`. Dashboard-Menü zählt `pending + sent` statt `pending + critical_pending`
+- `send_daily_digest` als „zählt nur, verschickt nichts“ dokumentiert, Ergebnis trägt `versand: "nicht_umgesetzt"`; kein Digest gebaut
+- Wächter `backend/tests/test_rechtsaenderung_schema.py`: Spalten aus Dienst und Routen gegen Baseline plus Migrationen, mit Gegenproben
+
+### Offen
+- Kein Cron ruft `legal_news_cronjob.py`; eingeschaltet würden heute 5 Stichwort-„critical“-Meldungen als `[DRINGEND]` an 4 Konten gehen, zwei davon ohne Bezug zu Websites. Entscheidung über Einstufung und Einschalten steht aus
+- Scheitert eine Mail, wird sie nie erneut versucht
+
 ## [2026-10-07]
+
+### Backend: Kanalmessung für die Entscheidungsregel nach Woche 45
+- **Kaeufe je Kanal sind jetzt ohne Stripe-Zugriff auswertbar.** Die utm-Werte reisten bis in die Stripe-Metadaten, der Webhook schrieb sie aber nicht in die Datenbank, und die Registrierung schrieb sie nirgends hin. Neu: Migration `0037_kanal_herkunft` (Tabellen `registrierung_herkunft` und `kauf_herkunft`, beide kaskadierend mit `users`), `backend/herkunft.py` (Positivliste der fünf utm-Schlüssel, enges Zeichenmuster, `fullmatch` statt `$`), `herkunft` im Registrierungsaufruf und je ein Aufruf in `handle_checkout_completed` und `verify-checkout`
+- Beide Schreibstellen sind best effort (wie `protokolliere_vertragsannahme`): eine fehlende Tabelle oder ein Fehler blockiert weder die Registrierung noch die Freischaltung und löst keine Stripe-Wiederholung aus. `kauf_festhalten` läuft nach JEDER Freischaltung, auch wenn `_apply_plan_activation` False meldet, weil `customer.subscription.created` die Ledger-Zeile unter Umständen vor `checkout.session.completed` anlegt
+- Neu `backend/kanal_auswertung.py`: Wochenbericht in Markdown (Warteliste, Registrierungen, Käufe je `utm_source` und `utm_content`, Käufe je Tarif, Erstkontakt über die Warteliste per E-Mail-Abgleich, optional kumuliert seit Start). Nur lesend (Transaktion `READ ONLY`), keine Adressen in der Ausgabe, Wochen in Europe/Berlin, `subscriptions` (ohne Zeitzone) in der Datenbankzeit verglichen. Aufruf: `docker exec complyo-backend python kanal_auswertung.py --woche 2026-W42`
+- Tests: `test_kanal_auswertung.py` (Sollzahlen von Hand gerechnet), `test_herkunft.py`, `test_kanal_auswertung_db.py` (gegen ein echtes Schema aus `alembic upgrade head`, braucht `KANAL_TEST_DATABASE_URL`)
+
+### Frontend: Dashboard
+- `RegisterData` kennt `herkunft` (optional). Gesendet wird sie erst, wenn die Registrierungsseite `gemerkteHerkunft()` übergibt (`dashboard-react/src/lib/herkunft.ts` kommt mit PR #10)
 
 ### Backend: knappe Datenschutzerklärung und unsichere Muster-Treffer (gestapelt auf #18)
 - **Eine knappe Datenschutzerklärung galt als „keine Datenschutzerklärung".** Im Prüfstand fiel eine Standardvorlage (Titel und H1 „Datenschutzerklärung", acht Abschnitte, rund 5.000 Zeichen) durch die Inhaltsschranke, weil weniger als zwei der neun Merkmale im Text standen; der Kunde las kritisch (5.000 €) „Datenschutz-Link führt zu keiner Datenschutzerklärung", obwohl die Erklärung existiert. Neu: Eine Seite, die die Schranke nicht besteht, sich aber in H1 oder Titel als Datenschutzerklärung ausweist und mindestens 1.000 Zeichen Inhaltstext hat (`rechtsseiten_text.ist_duenne_erklaerung`, Schwelle: die Hälfte des kürzesten gemessenen Textes, der die Schranke besteht, 2.182 Zeichen), wird gelesen und normal bewertet; dazu ein Hinweis (info, 0 €) „Datenschutzerklärung gefunden, aber sehr knapp" mit den gemessenen Stichworten. Die Schranke selbst bleibt streng, Gegenproben: Behördenseite, Cookie-Einstellungen, Platzhalter, Startseite bleiben „keine Erklärung"

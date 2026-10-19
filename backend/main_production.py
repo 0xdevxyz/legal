@@ -230,12 +230,18 @@ if ENVIRONMENT == "production":
         _log.getLogger(__name__).warning("UNLIMITED_FIXES=true is set in production — this bypasses fix quotas!")
 _docs_url = "/docs" if ENVIRONMENT != "production" else None
 _redoc_url = "/redoc" if ENVIRONMENT != "production" else None
+# Das Schema beschreibt jede Route samt Parametern und Datenmodellen. Am
+# 13.10.2026 war es ohne Anmeldung abrufbar (333 Pfade, 144 Modelle, darunter
+# alle Admin-Routen), obwohl /docs schon zu war. Ohne Schema bleiben auch
+# /docs und /redoc leer.
+_openapi_url = "/openapi.json" if ENVIRONMENT != "production" else None
 app = FastAPI(
     title="Complyo API",
     description="KI-gestützte Website-Compliance-Plattform",
     version="2.2.0",
     docs_url=_docs_url,
     redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
 )
 
 # Static files für CMP-Adapter
@@ -984,17 +990,9 @@ def verify_password(plain: str, hashed: str) -> bool:
 # API Routes
 @app.get("/")
 async def root():
-    return {
-        "status": "online",
-        "service": "complyo-backend",
-        "version": "2.2.0",
-        "ai_enabled": bool(OPENROUTER_API_KEY),
-        "environment": ENVIRONMENT,
-        "features": {  # NEU
-            "enhanced_scanning": True,
-            "smart_fixes": True
-        }
-    }
+    # Ohne Anmeldung nur "laeuft": Version, Umgebung und ob KI konfiguriert ist
+    # (ai_enabled) gehoeren nicht nach aussen.
+    return {"status": "online"}
 
 @app.get("/health")
 async def health_check():
@@ -1045,10 +1043,12 @@ async def health_check():
     checks["stripe"] = {"status": "configured" if os.getenv("STRIPE_SECRET_KEY") else "missing"}
 
     overall = "healthy" if checks["database"]["status"] == "up" else "degraded"
+    # Nach aussen nur der Gesamtzustand. Latenzen und die Angabe, welche
+    # Dienste konfiguriert sind, sehen die Gauges unter /metrics und
+    # /api/admin/system/health. Docker-Healthcheck, Verfuegbarkeitsmessung und
+    # Betriebswaechter werten nur den Statuscode aus.
     return {
         "status": overall,
-        "service": "complyo-backend",
-        "checks": checks,
         "timestamp": datetime.datetime.now().isoformat()
     }
 
@@ -1368,6 +1368,13 @@ async def fuehre_v2_scan_aus(
         # die EINZIGE Frist: zua-zwickau.de brauchte 389 s, und der Kunde bekam
         # statt eines Teilergebnisses einen 504 ohne jeden Befund.
         SCANNER_FRIST = 265.0
+        # Unternehmensprofil (Beschaeftigte, Umsatz, B2C, Online-Vertrag) fuer
+        # die BFSG-Einordnung der Barrierefreiheitsbefunde. Fehlt es, bleibt
+        # die Einordnung offen; der Scan laeuft unveraendert.
+        from compliance_engine import unternehmensprofil as _profil
+        unternehmensprofil = await _profil.lade(
+            db_pool, current_user.get("id") or current_user.get("user_id")
+        )
         async with ComplianceScanner() as scanner:
             scan_result = await asyncio.wait_for(
                 scanner.scan_website_multipage(
@@ -1375,6 +1382,7 @@ async def fuehre_v2_scan_aus(
                     max_seiten=seitenbudget,
                     progress_token=scan_token,
                     zeitbudget=SCANNER_FRIST,
+                    unternehmensprofil=unternehmensprofil,
                 ),
                 timeout=SCANNER_FRIST + 35.0
             )
