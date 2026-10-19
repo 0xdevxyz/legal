@@ -19,6 +19,29 @@ from compliance_engine.sicherer_abruf import sichere_session
 
 logger = logging.getLogger(__name__)
 
+# Standardpaletten der Plattformen zählen nie als Markenfarbe. WordPress schreibt
+# seine zwölf Preset-Farben als --wp--preset--color--* in jede Seite
+# (global-styles-inline-css), Elementor seine vier Kit-Standardwerte, und der
+# WordPress-Knopf hat #32373c. Als CSS-Variablen bekamen sie die höchste
+# Gewichtung und gewannen auf jeder WordPress-Seite: spedition-mahn.de bekam am
+# 19.10.2026 cyan-bluish-gray/pale-pink statt ihres Gelbs. Eigene Paletten eines
+# Themes (andere Werte, gleiche Variablennamen) bleiben erlaubt, gefiltert wird
+# nach Wert.
+PLATTFORM_STANDARDFARBEN = frozenset({
+    # WordPress-Kernpalette (wp-includes/theme.json); Schwarz und Weiß daraus
+    # bleiben erlaubt, sie sind neutral und liefern Text- und Hintergrundfarbe.
+    '#abb8c3', '#f78da7', '#cf2e2e', '#ff6900', '#fcb900', '#7bdcb5',
+    '#00d084', '#8ed1fc', '#0693e3', '#9b51e0',
+    # WordPress-Standardknopf (.wp-element-button)
+    '#32373c',
+    # Elementor-Kit-Standard (primary, secondary, text, accent)
+    '#6ec1e4', '#54595f', '#7a7a7a', '#61ce70',
+})
+
+# Style-Blöcke, die WordPress selbst ausgibt und die keine Kundenfarben tragen.
+WP_KERN_STYLE_IDS = frozenset({'global-styles-inline-css', 'classic-theme-styles-inline-css'})
+
+
 class WebsiteCrawler:
     def __init__(self, timeout: int = 30, db_pool: Optional[asyncpg.Pool] = None):
         self.timeout = timeout
@@ -492,6 +515,8 @@ class WebsiteCrawler:
             return '#{:02x}{:02x}{:02x}'.format(r, g, b)
 
         def _register(color: str, weight: int = 1) -> None:
+            if color in PLATTFORM_STANDARDFARBEN:
+                return
             color_freq[color] = color_freq.get(color, 0) + weight
 
         NEAR_WHITE = {'#ffffff', '#fefefe', '#fdfdfd', '#f9f9f9', '#f8f8f8', '#f5f5f5', '#f0f0f0', '#eeeeee'}
@@ -528,6 +553,28 @@ class WebsiteCrawler:
                 _register(_normalize_hex(h), weight=3)
             for rgb_m in rgb_pattern.finditer(style):
                 _register(_rgb_to_hex(int(rgb_m.group(1)), int(rgb_m.group(2)), int(rgb_m.group(3))), weight=3)
+
+        # 2b. Eigene <style>-Blöcke der Seite (Theme-Customizer, wp-custom-css,
+        #     handgeschriebenes CSS): bei klassischen WordPress-Themes stehen die
+        #     Kundenfarben genau dort. WordPress-Kernblöcke (Presets, Emoji,
+        #     Bildgrößen) bleiben außen vor.
+        for style_tag in soup.find_all('style'):
+            style_id = (style_tag.get('id') or '').strip()
+            if style_id in WP_KERN_STYLE_IDS:
+                continue
+            if style_id.startswith('wp-') and style_id != 'wp-custom-css':
+                continue
+            css_text = style_tag.string or style_tag.get_text() or ''
+            # Nur bunte Farben: Text- und Hintergrundwahl (Neutralfarben) bleibt
+            # wie bisher, sonst kippt ein Theme mit viel Grau den Banner auf #eeeeee.
+            for h in hex_pattern.findall(css_text):
+                farbe = _normalize_hex(h)
+                if not _is_neutral(farbe):
+                    _register(farbe, weight=3)
+            for rgb_m in rgb_pattern.finditer(css_text):
+                farbe = _rgb_to_hex(int(rgb_m.group(1)), int(rgb_m.group(2)), int(rgb_m.group(3)))
+                if not _is_neutral(farbe):
+                    _register(farbe, weight=3)
 
         # 3. Alle Hex-Farben im HTML (niedrigste Gewichtung)
         for h in hex_pattern.findall(html):
