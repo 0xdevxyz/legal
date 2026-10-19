@@ -325,10 +325,12 @@ class CookieScanner:
             'confidence_boost': ['Magento', '/mage/']
         },
         'prestashop': {
+            # '/modules/' allein trifft Elementor, WooCommerce und jedes Plugin mit
+            # Unterordner modules/ (19.10.2026: Fehltreffer auf WordPress-Seiten).
             'patterns': [
                 r'PrestaShop',
-                r'/modules/',
-                r'prestashop',
+                r'/themes/[^/"\']+/assets/css/theme\.css',
+                r'/modules/ps_[a-z_]+/',
             ],
             'confidence_boost': ['PrestaShop']
         },

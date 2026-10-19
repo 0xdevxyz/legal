@@ -102,3 +102,27 @@ def test_kommentarseite_erkennt_gravatar():
 def test_seite_ohne_wordpress_bleibt_frei():
     services, _ = _erkenne("<html><body><h1>Statische Seite</h1></body></html>")
     assert not {'wordpress', 'wordpress_emojis', 'gravatar'} & services
+
+
+ELEMENTOR_SEITE = """
+<html><head>
+<link rel='stylesheet' href='https://example.de/wp-content/plugins/elementor/assets/lib/modules/x.css' />
+<script src='https://example.de/wp-content/plugins/elementor/modules/page-templates/assets/js/frontend.js'></script>
+<link rel='stylesheet' href='https://example.de/wp-content/themes/logistica/modules/slider/slider.css' />
+</head><body></body></html>
+"""
+
+PRESTASHOP_SEITE = """
+<html><head><meta name="generator" content="PrestaShop" />
+<script src="/modules/ps_shoppingcart/ps_shoppingcart.js"></script></head><body></body></html>
+"""
+
+
+def test_plugin_ordner_modules_ist_kein_prestashop():
+    services, _ = _erkenne(ELEMENTOR_SEITE)
+    assert 'prestashop' not in services
+
+
+def test_echte_prestashop_seite_wird_erkannt():
+    services, _ = _erkenne(PRESTASHOP_SEITE)
+    assert 'prestashop' in services
