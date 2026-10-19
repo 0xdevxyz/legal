@@ -185,7 +185,7 @@ export default function GeoRestriction({ siteId, config, onSave }: GeoRestrictio
                       className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
                         selectedCountries.includes(country.code) 
                           ? 'bg-green-500/20 border border-green-500/50' 
-                          : 'bg-gray-800/50 hover:bg-gray-700/50'
+                          : 'bg-gray-100/50 dark:bg-gray-800/50 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
                       }`}
                     >
                       <Checkbox
@@ -211,7 +211,7 @@ export default function GeoRestriction({ siteId, config, onSave }: GeoRestrictio
                       className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
                         selectedCountries.includes(country.code) 
                           ? 'bg-green-500/20 border border-green-500/50' 
-                          : 'bg-gray-800/50 hover:bg-gray-700/50'
+                          : 'bg-gray-100/50 dark:bg-gray-800/50 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
                       }`}
                     >
                       <Checkbox

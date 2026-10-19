@@ -141,7 +141,7 @@ export default function ConsentModeSettings({ siteId, config, onSave }: ConsentM
                   placeholder="GTM-XXXXXXX"
                   value={gtmContainerId}
                   onChange={(e) => setGtmContainerId(e.target.value)}
-                  className="bg-gray-100 dark:bg-gray-800 border-gray-600 text-gray-900 dark:text-white"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
                 />
                 <p className="text-xs text-gray-500">
                   Optional: Wenn Sie GTM bereits eingebunden haben, lassen Sie dieses Feld leer.

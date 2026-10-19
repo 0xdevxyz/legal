@@ -133,7 +133,7 @@ export default function AgeVerification({ siteId, config, onSave }: AgeVerificat
               <div className="space-y-3">
                 <Label className="text-sm text-gray-700 dark:text-gray-300">Standard-Mindestalter</Label>
                 <Select value={String(minAge)} onValueChange={(v) => setMinAge(Number(v))}>
-                  <SelectTrigger className="bg-white dark:bg-gray-900 border-gray-600 text-gray-900 dark:text-white">
+                  <SelectTrigger className="bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
