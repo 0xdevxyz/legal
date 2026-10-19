@@ -183,6 +183,24 @@ class CookieScanner:
             ],
             'confidence_boost': ['wp-content/', 'wp-includes/', 'wordpress_']
         },
+        'wordpress_emojis': {
+            # Emoji-Grafiken und Erkennungsskript von s.w.org (Automattic, USA)
+            'patterns': [
+                r's\.w\.org',
+                r'wp-emoji-release\.min\.js',
+                r'_wpemojiSettings',
+            ],
+            'confidence_boost': [r's\.w\.org']
+        },
+        'gravatar': {
+            # Profilbilder zu E-Mail-Hashes von gravatar.com (Automattic, USA)
+            'patterns': [
+                r'secure\.gravatar\.com',
+                r'[0-2]\.gravatar\.com',
+                r'gravatar\.com/avatar/',
+            ],
+            'confidence_boost': [r'gravatar\.com/avatar/']
+        },
         'woocommerce': {
             'patterns': [
                 r'woocommerce',
