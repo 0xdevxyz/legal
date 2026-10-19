@@ -2,24 +2,22 @@ import type { Metadata } from 'next';
 import EarlyAccessLanding from '@/components/saas-landing/EarlyAccessLanding';
 
 /**
- * Die bisherige Startseite: Hero, Website-Scanner und Preistabelle.
+ * Die Produktseite: Hero, Website-Scanner und Preistabelle mit allen Tarifen.
  *
- * Am 02.09.2026 von "/" hierher verschoben, nicht geloescht. Die Preistabelle
- * verlinkt auf app.complyo.de/register?plan=..., und mit Stripe im Testmodus
- * fuehrt jeder Bezahltarif in einen Checkout, der echte Karten ablehnt.
- * Deshalb ist die Seite vorerst nicht verlinkt und auf noindex — sie soll
- * ansehbar bleiben, aber keine Kaufversuche mehr einsammeln.
- *
- * Sobald Stripe auf Live-Schluessel steht, gehoert dieser Inhalt zurueck auf
- * "/" (siehe Kommentar in src/app/page.tsx).
+ * Am 02.09.2026 von "/" hierher verschoben, vom 28.09. bis 19.10. wieder auf
+ * "/", seitdem erneut hier. Grund fuer den zweiten Umzug ist nicht mehr
+ * Stripe (live seit 14.09.), sondern die Entscheidung, Inhabern vorn die
+ * Warteliste zu zeigen und nur den Agentur-Tarif direkt zu verkaufen. Die
+ * Seite bleibt erreichbar, aber unverlinkt und auf noindex, damit sie nicht
+ * mit "/" um dieselben Begriffe konkurriert (siehe src/app/page.tsx und
+ * test_startseite_indexierung.py).
  */
 export const metadata: Metadata = {
   title: 'Complyo – Leistungsumfang und Preise',
   description:
     'Scan, KI-Reparatur und Prüfnachweis für DSGVO, TDDDG und Barrierefreiheit – Leistungsumfang und Tarife im Überblick.',
   // Kein Index, solange die Seite nicht die Startseite ist: sonst konkurriert
-  // sie mit "/" um dieselben Begriffe und sammelt Klicks auf Kaufwege ein,
-  // die derzeit nicht funktionieren.
+  // sie mit "/" um dieselben Begriffe.
   robots: { index: false, follow: true },
   alternates: { canonical: '/produkt/' },
 };

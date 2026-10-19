@@ -7,10 +7,11 @@ import PricingSection from './PricingSection';
 /**
  * Die Produktseite: Hero, Scanner, Preistabelle.
  *
- * Der Name stammt aus der Zeit vor dem 02.09.2026 und ist geblieben, weil
- * /produkt und "/" ihn importieren. `children` stehen nach der Preistabelle
- * im selben <main>: die Startseite haengt dort die Warteliste an, /produkt
- * nichts.
+ * Der Name stammt aus der Zeit vor dem 02.09.2026. Seit dem 19.10.2026
+ * importiert nur noch /produkt die Komponente; "/" zeigt die
+ * EarlyAccessKampagne. `children` stehen nach der Preistabelle im selben
+ * <main> (vom 28.09. bis 19.10. hing die Startseite dort die Warteliste an,
+ * WartelisteAbschnitt liegt dafuer weiter in components/kampagne/).
  */
 export default function EarlyAccessLanding({ children }: { children?: React.ReactNode }) {
   return (

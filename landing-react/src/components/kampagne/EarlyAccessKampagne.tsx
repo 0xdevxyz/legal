@@ -6,13 +6,14 @@ import {
 import WartelistenFormular from './WartelistenFormular';
 import Erklaervideo from '@/components/Erklaervideo';
 import PlatzZaehler from './PlatzZaehler';
+import AgenturAbschnitt from './AgenturAbschnitt';
 
 // Die Kennung kommt von aussen, weil dieselbe Seite an zwei Stellen steht:
 // unter "/" als Startseite und unter "/early-access" als Anzeigenziel. Wuerde
 // beides dieselbe Kennung schreiben, liesse sich hinterher nicht mehr trennen,
 // was die bezahlten Anzeigen gebracht haben und was ohnehin gekommen waere.
 // Angebotswerte an einer Stelle, auch die Startseite liest sie.
-import { PLAETZE, PREIS_EARLY, PREIS_REGULAER } from './angebot';
+import { PLAETZE, PREIS_EARLY, PREIS_REGULAER, AGENTUR_PREIS_MONAT, AGENTUR_PROJEKTE } from './angebot';
 
 const SAEULEN = [
   {
@@ -49,6 +50,10 @@ const FAQ = [
   {
     q: 'Ist mein Platz sicher?',
     a: `Der Platz zählt ab dem Klick im Bestätigungslink, nicht ab dem Ausfüllen. Die ersten ${PLAETZE} bestätigten Anmeldungen bekommen den Preis; der Zähler oben zeigt den echten Stand. Wer später kommt, bleibt auf der Liste, aber ohne den Nachlass.`,
+  },
+  {
+    q: 'Gilt der Early-Access-Preis auch für Agenturen?',
+    a: `Nein. Der Nachlass gilt für Pro im Monatsabo, also für eine Domain. Wer fremde Websites betreut, bucht den Agentur-Tarif direkt und ohne Warteliste: ${AGENTUR_PREIS_MONAT} im Monat für ${AGENTUR_PROJEKTE} Projekte mit vollem Pro-Funktionsumfang, monatlich kündbar.`,
   },
   {
     q: 'Was passiert mit meiner E-Mail-Adresse?',
@@ -206,7 +211,14 @@ export default function EarlyAccessKampagne({
       </section>
 
       {/* ---------------------------------------------------------------- */}
-      <section className="py-16 bg-gray-50">
+      {/* Agenturen stehen nicht auf der Warteliste: ihr Tarif ist buchbar,
+          waehrend Inhaber auf den Early-Access-Platz warten. Der Abschnitt
+          steht nach dem Nachweis und vor den Fragen, damit er dort auftaucht,
+          wo jemand entschieden hat, dass das Werkzeug taugt. */}
+      <AgenturAbschnitt />
+
+      {/* ---------------------------------------------------------------- */}
+      <section className="py-16">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="font-heading text-3xl font-extrabold text-gray-900 mb-10">
             Häufige Fragen
@@ -223,7 +235,7 @@ export default function EarlyAccessKampagne({
       </section>
 
       {/* ---------------------------------------------------------------- */}
-      <section className="py-16">
+      <section className="py-16 bg-gray-50">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-akzent-400 mb-4">
             <ArrowDown className="w-5 h-5 text-gray-900" aria-hidden="true" />
