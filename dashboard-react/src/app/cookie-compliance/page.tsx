@@ -333,7 +333,16 @@ export default function CookieCompliancePage() {
           websiteUrl={websiteUrl}
           websiteLocked={websiteLocked && !isAgency}
           siteId={siteId}
-          onComplete={() => { setShowSetupWizard(false); loadConfig(); }}
+          onComplete={() => {
+            setShowSetupWizard(false);
+            // Nach dem Scan die Konfiguration DERSELBEN Website neu laden.
+            // loadConfig() fragt /my-config, und das ist die zuletzt angelegte
+            // Konfiguration des Kontos, egal welche Seite gerade gewählt ist:
+            // bei Agenturkonten sprang die Seite so auf eine fremde Website
+            // (Scan spedition-mahn.de, danach Farben von steinhau.de, 19.10.2026).
+            if (siteId) loadSiteConfig(siteId, websiteUrl);
+            else loadConfig();
+          }}
           onSkip={() => setShowSetupWizard(false)}
         />
       )}
