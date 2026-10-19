@@ -25,6 +25,7 @@ import BannerAutomatik from '@/components/cookie-compliance/BannerAutomatik';
 import CookieSetupWizard from '@/components/cookie-compliance/CookieSetupWizard';
 import ScanMonitor from '@/components/cookie-compliance/ScanMonitor';
 import ABTestManager from '@/components/cookie-compliance/ABTestManager';
+import { Grundsystem, istGrundsystem } from '@/lib/grundsystem';
 
 export default function CookieCompliancePage() {
   const router = useRouter();
@@ -39,6 +40,8 @@ export default function CookieCompliancePage() {
   const [checkoutError, setCheckoutError] = useState('');
   const [quickStats, setQuickStats] = useState<any>(null);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
+  // Grundsystem der Website (WordPress, Joomla, ...): aus dem Wizard-Scan oder dem letzten Hauptscan.
+  const [grundsystem, setGrundsystem] = useState<Grundsystem | null>(null);
 
   const [websiteLocked, setWebsiteLocked] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState<string>('');
@@ -81,6 +84,17 @@ export default function CookieCompliancePage() {
 
   useEffect(() => {
     if (siteId) loadQuickStats(siteId);
+  }, [siteId]);
+
+  useEffect(() => {
+    // Ohne frischen Cookie-Scan: Grundsystem aus dem letzten Hauptscan holen,
+    // damit der Integrations-Tab den richtigen Weg vorwaehlt.
+    if (!siteId) return;
+    let aktiv = true;
+    httpApiClient.get('/api/cookie-compliance/grundsystem')
+      .then((d: any) => { if (aktiv && istGrundsystem(d)) setGrundsystem(d); })
+      .catch(() => { /* kein Scan vorhanden: Tab bleibt auf Standard */ });
+    return () => { aktiv = false; };
   }, [siteId]);
 
   const loadQuickStats = async (id: string) => {
@@ -344,6 +358,7 @@ export default function CookieCompliancePage() {
             else loadConfig();
           }}
           onSkip={() => setShowSetupWizard(false)}
+          onGrundsystem={(g) => { if (g) setGrundsystem(g); }}
         />
       )}
       {/* Header */}
@@ -702,7 +717,7 @@ export default function CookieCompliancePage() {
               </TabsContent>
               
               <TabsContent value="integration">
-                <IntegrationGuide siteId={siteId} config={config} />
+                <IntegrationGuide siteId={siteId} config={config} grundsystem={grundsystem} />
               </TabsContent>
               
               <TabsContent value="statistics">
