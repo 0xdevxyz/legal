@@ -709,3 +709,71 @@ class TestEchterBrowser:
         for pfad, status in (("/weg", 404), ("/schutz", 403)):
             r = await DeepCookieScanner(1, lokaler_server + pfad).scan()
             assert r.error and str(status) in r.error
+
+
+# --------------------------------------------------------------------------
+# Anbindung an den Banner-Scan (Route)
+# --------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestRouteAnbindung:
+    """Die Prüfstufe darf den HTML-Scan nie aufhalten oder zum Scheitern bringen."""
+
+    class Pool:
+        def __init__(self):
+            self.gespeichert = []
+
+        async def fetch(self, sql, *a):
+            return [{"service_key": "google_fonts", "name": "Google Fonts", "category": "functional",
+                     "description": "", "cookies": "[]"}]
+
+        async def fetchrow(self, sql, *a):
+            return {"id": 1}
+
+        async def execute(self, sql, *a):
+            self.gespeichert.append(a)
+            return "UPDATE 1"
+
+    def _licht(self):
+        return {"url": "https://kunde.de", "detected_services": ["google_fonts"],
+                "confidence": {"google_fonts": 0.9}, "privacy_findings": [], "detected_cms": None,
+                "brand_colors": None, "scripts": [], "iframes": [], "scan_timestamp": "x"}
+
+    async def _aufruf(self, einreihen_ersatz):
+        import cookie_compliance_routes as r
+        pool = self.Pool()
+
+        async def licht(url):
+            return self._licht()
+        with patch.object(r.cookie_scanner, "scan_website", licht), \
+             patch.object(ps, "einreihen", einreihen_ersatz):
+            return await r.scan_website(None, {"url": "kunde.de", "site_id": "kunde-de"}, None, pool), pool
+
+    async def test_antwort_traegt_den_stand_der_pruefstufe(self):
+        gesehen = {}
+
+        async def ersatz(site_id, url, **kw):
+            gesehen.update(site_id=site_id, url=url, **kw)
+            return {"zustand": "wartend", "position": 3}
+        antwort, _ = await self._aufruf(ersatz)
+        assert antwort["success"] is True
+        assert antwort["pruefstufe"] == {"zustand": "wartend", "position": 3}
+        assert gesehen["site_id"] == "kunde-de" and gesehen["html_keys"] == ["google_fonts"]
+        assert gesehen["anwenden_ja"] is True and gesehen["prio"] == ps.PRIO_ANONYM
+
+    async def test_ausfall_der_pruefstufe_laesst_den_scan_unberuehrt(self):
+        async def kaputt(site_id, url, **kw):
+            raise RuntimeError("Schlange kaputt")
+        antwort, pool = await self._aufruf(kaputt)
+        assert antwort["success"] is True
+        assert antwort["pruefstufe"] == {"zustand": "aus"}
+        assert [d["service_key"] for d in antwort["detected_services"]] == ["google_fonts"]
+
+    async def test_status_route_prueft_die_site_id(self):
+        import cookie_compliance_routes as r
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as e:
+            await r.pruefstufe_status("../../etc/passwd")
+        assert e.value.status_code == 400
+        ok = await r.pruefstufe_status("kunde-de")
+        assert ok["pruefstufe"]["zustand"] in ("unbekannt", "fertig", "wartend", "laeuft", "fehlgeschlagen")
