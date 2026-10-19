@@ -109,8 +109,8 @@ const RECHTE = [
 
 export default function DatenschutzPage() {
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-white">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -126,7 +126,7 @@ export default function DatenschutzPage() {
 
           <AnbieterUnvollstaendig seite="Der Verantwortliche in dieser Erklärung" />
 
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-8 mb-8">
             <div className="flex items-center gap-3 mb-4">
               <Shield className="w-8 h-8 text-akzent-700" />
               <h1 className="text-4xl font-bold text-gray-900">Datenschutzerklärung</h1>
@@ -137,7 +137,7 @@ export default function DatenschutzPage() {
             </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-8 space-y-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-8 space-y-8">
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4">1. Datenschutz auf einen Blick</h2>
               <div className="space-y-4 text-gray-700 text-sm leading-relaxed">

@@ -19,8 +19,8 @@ export default function ImpressumPage() {
   const anschrift = ANBIETER.plz + ' ' + ANBIETER.ort;
 
   return (
-    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-akzent-50">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+    <main id="inhalt" tabIndex={-1} className="min-h-screen bg-white">
+      <div className="container mx-auto px-4 pt-28 pb-12 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -36,16 +36,16 @@ export default function ImpressumPage() {
 
           <AnbieterUnvollstaendig seite="Das Impressum" />
 
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-8 mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">Impressum</h1>
             <p className="text-gray-600">Angaben gemäß § 5 DDG</p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-8 space-y-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-8 space-y-8">
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Anbieter</h2>
               <div className="flex items-start gap-3 text-gray-700">
-                <MapPin className="w-5 h-5 text-akzent-700 mt-1 flex-shrink-0" />
+                <MapPin className="w-5 h-5 text-gray-400 mt-1 flex-shrink-0" />
                 <div>
                   <p className="font-semibold">{ANBIETER.name || 'Name fehlt'}</p>
                   <p className="text-gray-600">{ANBIETER.geschaeftsbezeichnung}</p>
@@ -63,14 +63,14 @@ export default function ImpressumPage() {
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Kontakt</h2>
               <div className="space-y-3 text-gray-700">
                 <div className="flex items-center gap-3">
-                  <Mail className="w-5 h-5 text-akzent-700 flex-shrink-0" />
+                  <Mail className="w-5 h-5 text-gray-400 flex-shrink-0" />
                   <a href={'mailto:' + ANBIETER.email} className="hover:text-akzent-700 transition-colors">
                     {ANBIETER.email}
                   </a>
                 </div>
                 {ANBIETER.telefon && (
                   <div className="flex items-center gap-3">
-                    <Phone className="w-5 h-5 text-akzent-700 flex-shrink-0" />
+                    <Phone className="w-5 h-5 text-gray-400 flex-shrink-0" />
                     <a href={'tel:' + ANBIETER.telefon.replace(/[^+0-9]/g, '')} className="hover:text-akzent-700 transition-colors">
                       {ANBIETER.telefon}
                     </a>
@@ -82,7 +82,7 @@ export default function ImpressumPage() {
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Umsatzsteuer</h2>
               <div className="flex items-start gap-3 text-gray-700">
-                <Receipt className="w-5 h-5 text-akzent-700 mt-1 flex-shrink-0" />
+                <Receipt className="w-5 h-5 text-gray-400 mt-1 flex-shrink-0" />
                 <p>
                   Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG:{' '}
                   <span className="font-medium">{ANBIETER.ustIdNr || 'fehlt'}</span>
@@ -95,7 +95,7 @@ export default function ImpressumPage() {
                 Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV
               </h2>
               <div className="flex items-start gap-3 text-gray-700">
-                <User className="w-5 h-5 text-akzent-700 mt-1 flex-shrink-0" />
+                <User className="w-5 h-5 text-gray-400 mt-1 flex-shrink-0" />
                 <div>
                   <p>{ANBIETER.name || 'Name fehlt'}</p>
                   <p>{ANBIETER.strasse}</p>
@@ -104,7 +104,7 @@ export default function ImpressumPage() {
               </div>
               <p className="text-sm text-gray-500 mt-4">
                 Gilt für die redaktionellen Beiträge im{' '}
-                <Link href="/ratgeber" className="text-akzent-700 hover:underline">Ratgeber</Link>.
+                <Link href="/ratgeber" className="text-akzent-700 underline underline-offset-2 hover:text-akzent-800">Ratgeber</Link>.
               </p>
             </section>
 

@@ -22,6 +22,31 @@
 - Kein Cron ruft `legal_news_cronjob.py`; eingeschaltet würden heute 5 Stichwort-„critical“-Meldungen als `[DRINGEND]` an 4 Konten gehen, zwei davon ohne Bezug zu Websites. Entscheidung über Einstufung und Einschalten steht aus
 - Scheitert eine Mail, wird sie nie erneut versucht
 
+## [2026-10-19]
+
+### Frontend — Landing entfärbt: Schwarz, Grau, Weiß, Türkis nur noch punktuell
+- **Grund bleibt Weiß**, Überschriften Schwarz (gray-900), Subheadlines und Nebentext Grau (gray-500/600). Was bunt war, ist raus: die Farbverläufe hinter Hero und Video, das Orange im Hero („KI“, Blitz-Icon, Expert-Paket), die grünen Haken in allen Feature-Listen (jetzt gray-400), die farbigen Säulen-Kacheln im Scanner (`WebsiteScanner` KACHELFARBEN, jetzt eine Grau-Stufe für alle), die Ampel-Punkte am Videorahmen
+- **Knöpfe Schwarz:** alle Haupt-Knöpfe (Navigation, Wartelisten-Formular, Agentur, Scanner, Fußzeile, Fehlerseite, Mail-Bestätigung, GDPR) auf `bg-gray-900 text-white`. Einzige Ausnahme ist „Pro buchen“ in der Preistabelle
+- **Türkis nur noch an fünf Stellen:** Rahmen um die Preistabelle (`PricingSection`, `border-2 border-akzent-400`), Pro-Karte mit Badge und Knopf, Preis-Karte im Agentur-Abschnitt, Platzzähler-Pille, Unterstreichung unter „KI“ im Produkt-Hero. Dazu Links und Fokusrahmen in der dunklen Stufe wie bisher
+- Dunkle Blöcke sind hell: Fußzeile (`bg-gray-900` → Weiß mit Trennlinie, dunkles Logo), Expert-Paket und Agentur-Kasten (weiße bzw. hellgraue Karte mit Rand), Scanner-Abschnitt (`#111827` → gray-50) samt Eingabefeld und Kacheln, Mail-Bestätigung `verify-email`. Der Scanner-CTA nach dem Ergebnis bleibt ein schwarzer Kasten statt des Türkis-Verlaufs
+- Pillen („DSGVO · WCAG · Cookie Compliance“, „Nachgemessen, nicht behauptet“, „Kostenloser Website-Check“, „Für Agenturen“) als Grau-Umrandung statt Türkis-Fläche. Karten auf Ratgeber, Check-Seiten und Rechtstexten mit Rand statt Schatten; Artikel-CTA als weiße Karte mit Türkis-Rand statt Türkis-Fläche
+- Nebenbei: Unterseiten mit `container … py-12` begannen unter der fixierten Navigation („Zurück zur Startseite“ verdeckt), jetzt `pt-28`. Impressum: Ratgeber-Link im Fließtext dauerhaft unterstrichen (axe `link-in-text-block`). Scanner-Fehlerkasten auf hellen Grund angepasst
+- Nicht angefasst: `/admin`, Dashboard, Statusfarben der Befunde (rot, gelb, grün bleiben Bedeutung, nicht Dekoration)
+- Geprüft: `tsc`, `next build`; Screenshots Desktop 1440 und Mobil 390 für `/`, `/produkt/`, `/early-access/`, `/bfsg-check/`, `/ratgeber/`, `/impressum/`; axe-core 4.10 (WCAG 2 A/AA) auf allen sechs ohne Verstoß. Nicht gesehen: die Scanner-Auswertung nach einem Scan, sie braucht die API
+
+### Frontend — Startseite wieder auf Early Access, Agentur-Tarif direkt buchbar
+- `/` zeigt wieder die Early-Access-Seite (`EarlyAccessKampagne`, Kennung `startseite`) statt der Produktseite mit Preistabelle. Anders als am 02.09. ist der Grund nicht Stripe (live seit 14.09.), sondern die Entscheidung: Inhaber einzelner Websites sichern sich vorn den Early-Access-Platz für Pro, nur Agenturen kaufen direkt
+- Neu `landing-react/src/components/kampagne/AgenturAbschnitt.tsx`: der Agentur-Tarif (599 € im Monat oder 5.990 € im Jahr, 25 Projekte) als eigener Abschnitt `#agentur` zwischen Nachweis-Kasten und FAQ, Knopf „Agentur buchen" nach `app.complyo.de/register?plan=agency` mit Herkunft (utm). Weil es der einzige Kaufweg auf der Seite ist, stehen Netto-Hinweis, Kündbarkeit, Bezahlarten und die Unternehmer-Klarstellung (§ 14 BGB) direkt am Knopf, nicht nur in den AGB. Der Abschnitt sagt ausdrücklich, dass der Early-Access-Nachlass nur für Pro im Monatsabo gilt; dieselbe Aussage als FAQ „Gilt der Early-Access-Preis auch für Agenturen?"
+- Agentur-Werte (`AGENTUR_PREIS_MONAT`, `AGENTUR_PREIS_JAHR`, `AGENTUR_PROJEKTE`) in `components/kampagne/angebot.ts`; `PricingSection` (unter `/produkt`) liest dieselben Werte statt eigener Zeichenketten
+- NavBar: „Preise" (`/#preise`, ginge auf der Kampagnenseite ins Leere) ersetzt durch „Für Agenturen" (`/#agentur`); Hauptknopf „Platz sichern" nach `/#anmeldung` statt „Kostenlos scannen" nach `/#scanner`. „Anmelden" bleibt, es gibt zahlende Kunden
+- `PricingSection`: der Early-Access-Hinweis an der Pro-Karte zeigt auf `/#anmeldung` statt `#anmeldung`; relativ zeigte er unter `/produkt` ins Leere
+- Metadaten unverändert in der Invariante: `/` indexierbar mit `canonical: /`, `/produkt` und `/early-access` auf `noindex`, Kennungen `startseite` und `ea100-bfsg` getrennt (`backend/tests/test_startseite_indexierung.py`)
+- `WartelisteAbschnitt` (Warteliste unter der Preistabelle, 28.09. bis 19.10.) bleibt im Repo, ist aber nicht mehr eingebunden. Wer die Produktseite wieder auf `/` legt, hängt ihn als `children` an `EarlyAccessLanding`
+
+### Infrastruktur: Backend-Tests seit dem 08.10. rot durch pydantic 2.14
+- **`import mcp_server` brach mit `ImportError: cannot import name 'eval_type_backport' from 'pydantic._internal._typing_extra'`**, elf Tests in `tests/test_mcp_allowlist.py` fielen um. `fastapi-mcp==0.3.4` zieht `mcp>=1.8.1`; pip fällt wegen `httpx`/`mcp-types` auf mcp 1.12.4 zurück, und dessen `func_metadata` importiert ein privates pydantic-Symbol, das pydantic 2.14.0 (veröffentlicht 08.10.2026, 14:34 UTC, sechs Stunden nach dem letzten grünen main-Lauf) entfernt hat. Kein Code im Repo hat sich geändert
+- `backend/requirements.txt`: `pydantic>=2.5.0,<2.14`. Lokal nachgestellt: mcp 1.12.4 mit pydantic 2.14.1 bricht, mit 2.13.5 importiert. Der Pin fällt, sobald mcp auf eine Version gehoben wird, die ohne das private Symbol auskommt
+
 ## [2026-10-07]
 
 ### Backend: Kanalmessung für die Entscheidungsregel nach Woche 45

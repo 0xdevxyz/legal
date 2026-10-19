@@ -3,12 +3,14 @@ import React, { useState, useEffect } from 'react';
 import { Menu, X } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 
-// "Preise" ist seit dem Launch zurueck: Stripe ist live, und "/" traegt
-// wieder die Preistabelle (Anker #preise in PricingSection).
+// Seit dem 19.10.2026 steht auf "/" wieder die Early-Access-Seite. Ein
+// "Preise"-Link auf /#preise ginge ins Leere (die Preistabelle liegt unter
+// /produkt, bewusst unverlinkt). Stattdessen fuehrt "Für Agenturen" auf den
+// Agentur-Abschnitt der Startseite, den einzigen Kaufweg dort.
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de';
 
 const LINKS = [
-  { label: 'Preise', href: '/#preise' },
+  { label: 'Für Agenturen', href: '/#agentur' },
   { label: 'BFSG-Check', href: '/bfsg-check/' },
   { label: 'DSGVO-Check', href: '/dsgvo-website-check/' },
   { label: 'Barrierefreiheit', href: '/barrierefreiheit-website-testen/' },
@@ -45,9 +47,9 @@ export default function NavBar() {
             ))}
           </div>
 
-          {/* Seit dem Launch: Anmelden fuer Kunden, Hauptknopf ist der kostenlose
-              Scan. Die Warteliste bleibt ueber den Abschnitt #anmeldung unter
-              der Preistabelle erreichbar. */}
+          {/* Anmelden bleibt: Stripe ist live, es gibt zahlende Kunden mit
+              Zugang. Hauptknopf ist die Warteliste (Formular #anmeldung im
+              Hero der Startseite). */}
           <div className="hidden lg:flex items-center gap-4">
             <a
               href={APP_URL + '/login'}
@@ -56,10 +58,10 @@ export default function NavBar() {
               Anmelden
             </a>
             <a
-              href="/#scanner"
-              className="text-sm bg-akzent-400 hover:bg-akzent-500 text-gray-900 font-semibold px-4 py-2 rounded-lg transition-colors"
+              href="/#anmeldung"
+              className="text-sm bg-gray-900 hover:bg-gray-800 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
             >
-              Kostenlos scannen
+              Platz sichern
             </a>
           </div>
 
@@ -92,11 +94,11 @@ export default function NavBar() {
             ))}
             <div className="pt-3 mt-2 border-t border-gray-100 space-y-2">
               <a
-                href="/#scanner"
+                href="/#anmeldung"
                 onClick={() => setOpen(false)}
-                className="block text-sm text-center bg-akzent-400 text-gray-900 font-semibold rounded-lg px-4 py-2.5"
+                className="block text-sm text-center bg-gray-900 text-white font-semibold rounded-lg px-4 py-2.5"
               >
-                Kostenlos scannen
+                Platz sichern
               </a>
               <a
                 href={APP_URL + '/login'}
