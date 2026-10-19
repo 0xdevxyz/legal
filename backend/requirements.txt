@@ -24,7 +24,13 @@ passlib[bcrypt]==1.7.4
 prometheus-client>=0.20.0
 sentry-sdk[fastapi]>=2.0.0
 psutil==5.9.6
-pydantic>=2.5.0
+# pydantic unter 2.14: fastapi-mcp 0.3.4 zieht mcp 1.12.4 (pip faellt wegen
+# httpx/mcp-types dorthin zurueck), und dessen func_metadata importiert
+# pydantic._internal._typing_extra.eval_type_backport. pydantic 2.14.0
+# (08.10.2026) hat das Symbol entfernt; seitdem scheitert `import mcp_server`
+# und mit ihm tests/test_mcp_allowlist.py. Der Pin faellt, sobald mcp
+# angehoben wird.
+pydantic>=2.5.0,<2.14
 pydantic-settings>=2.5.2
 PyJWT==2.13.0
 python-dotenv>=1.2.2
