@@ -76,6 +76,9 @@ ERLAUBT = {
     ("GET", "/api/cookie-compliance/services/{service_key}"),
     ("GET", "/api/cookie-compliance/tcf/vendors"),
     ("GET", "/api/cookie-compliance/scan/capabilities"),
+    # Stand der Browser-Pruefung einer Website (Dienste und Fremdhosts, die jeder
+    # Besucher im Netzwerkmitschnitt derselben Seite sieht); rate-limitiert, site_id geprueft.
+    ("GET", "/api/cookie-compliance/scan/pruefstufe/{site_id}"),
     ("GET", "/gvl/vendors"), ("GET", "/gvl/purposes"),
     ("GET", "/act/requirements"), ("GET", "/act/requirements/{risk_category}"),
     ("GET", "/catalog"), ("GET", "/plans"),
