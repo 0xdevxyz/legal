@@ -88,7 +88,7 @@ def _multipage_lauf(monkeypatch, pillar_status_erst):
         "pillar_status": dict(pillar_status_erst),
     }
 
-    async def fake_scan(url, progress_token=None):
+    async def fake_scan(url, progress_token=None, unternehmensprofil=None):
         return dict(erst)
 
     async def fake_entdecke(url, html=None, session=None, max_seiten=10):
