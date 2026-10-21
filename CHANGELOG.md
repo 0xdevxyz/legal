@@ -7,6 +7,14 @@
 
 ---
 
+## [2026-10-21]
+
+### Tests — Backend-Tests auf main wieder grün
+- **Befund:** seit #30 (Commit 8f39b58, BFSG-Einordnung nach Unternehmensprofil) reicht `scan_website_multipage` das Schlüsselwort `unternehmensprofil` an `scan_website` durch. Die Attrappen `fake_scan` in `tests/test_scan_zeitbudget.py` und `tests/test_score_widget_bilanz.py` kannten es nicht: 5 Fehler mit `TypeError: unexpected keyword argument 'unternehmensprofil'` in jedem CI-Lauf, auch auf main. Attrappen um den Parameter ergänzt, kein Produktivcode berührt
+- Geprüft: beide Dateien lokal, 27 passed (vorher 5 failed)
+
+---
+
 ## [2026-10-08]
 
 ### Backend: Rechtsänderungs-Benachrichtigungen bekommen ihr Schema
