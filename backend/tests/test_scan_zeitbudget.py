@@ -147,7 +147,7 @@ class TestTeilergebnis:
         s._startseiten_html = "<html></html>"
         monkeypatch.setattr(ComplianceScanner, "MEHRSEITEN_MINDESTZEIT", 0.1)
 
-        async def fake_scan(url, progress_token=None):
+        async def fake_scan(url, progress_token=None, unternehmensprofil=None):
             return {"url": url, "issues": [], "compliance_score": 50,
                     "pillar_scores": [], "pillar_status": {}}
 
