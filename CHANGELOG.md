@@ -22,6 +22,12 @@
 - Kein Cron ruft `legal_news_cronjob.py`; eingeschaltet würden heute 5 Stichwort-„critical“-Meldungen als `[DRINGEND]` an 4 Konten gehen, zwei davon ohne Bezug zu Websites. Entscheidung über Einstufung und Einschalten steht aus
 - Scheitert eine Mail, wird sie nie erneut versucht
 
+## [2026-10-21]
+
+### Infrastruktur: eingecheckter node_modules-Symlink entfernt
+- Commit 691ccd3 (19.10., PR #44) hat `dashboard-react/node_modules` als Symlink auf einen Pfad des Entwicklerrechners (`/private/tmp/claude-501/…/scratchpad/legal/dashboard-react/node_modules`) eingecheckt. `.gitignore` führte nur `node_modules/`, und das trifft Verzeichnisse, nicht einen Symlink, der für git eine Datei ist. Auf jedem anderen Rechner zeigte der Link ins Leere; `npm ci` ersetzt ihn zwar, aber `git status` meldete danach eine gelöschte Datei
+- Symlink aus dem Index genommen, `.gitignore` um `node_modules` ohne Schrägstrich ergänzt
+
 ## [2026-10-19]
 
 ### Frontend — Landing entfärbt: Schwarz, Grau, Weiß, Türkis nur noch punktuell
