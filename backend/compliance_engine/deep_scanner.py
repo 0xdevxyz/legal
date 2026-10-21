@@ -15,6 +15,7 @@ import re
 
 # Import base scanner
 from compliance_engine.scanner import ComplianceScanner
+from compliance_engine.plugin_nutzung import hat_shop_funktion
 
 
 class DeepScanner:
@@ -158,8 +159,10 @@ class DeepScanner:
         """
         html_str = str(soup)
         
-        # WooCommerce
-        if 'woocommerce' in html_str.lower() or soup.find(class_=re.compile('woocommerce', re.I)):
+        # WooCommerce: die Dateien liegen auf jeder Seite, sobald das Plugin
+        # aktiv ist. Als Shop-System zaehlt es erst mit Produkten, Warenkorb
+        # oder Kasse (compliance_engine/plugin_nutzung.py).
+        if 'woocommerce' in html_str.lower() and hat_shop_funktion(html_str):
             return "WooCommerce"
         
         # Shopify
@@ -178,11 +181,15 @@ class DeepScanner:
         if 'shopware' in html_str.lower():
             return "Shopware"
         
-        # Generic shop indicators
+        # Generic shop indicators. Nur sichtbare Elemente: das Skript
+        # wc-cart-fragments (id="wc-cart-fragments-js") und die Stylesheets
+        # eines bloss installierten Shop-Plugins sind kein Warenkorb.
         cart_patterns = ['warenkorb', 'cart', 'basket', 'add-to-cart']
         for pattern in cart_patterns:
-            if soup.find(class_=re.compile(pattern, re.I)) or soup.find(id=re.compile(pattern, re.I)):
-                return "Generic E-Commerce"
+            rx = re.compile(pattern, re.I)
+            for el in soup.find_all(True, class_=rx) + soup.find_all(True, id=rx):
+                if el.name not in ('script', 'link', 'style'):
+                    return "Generic E-Commerce"
         
         return None
     

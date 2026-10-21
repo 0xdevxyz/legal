@@ -2226,6 +2226,22 @@ async def scan_website(
                     'confidence': scan_result['confidence'].get(row['service_key'], 0.5)
                 })
         
+        # Installiert, aber nicht genutzt (compliance_engine/plugin_nutzung.py):
+        # bleibt aus services, geht aber mit Namen und Grund an den Assistenten.
+        inaktive_dienste = []
+        inaktiv_roh = scan_result.get('inaktive_dienste') or {}
+        if inaktiv_roh:
+            namen = {
+                r['service_key']: r['name'] for r in await db_pool.fetch(
+                    "SELECT service_key, name FROM cookie_services WHERE service_key = ANY($1::text[])",
+                    list(inaktiv_roh.keys()),
+                )
+            }
+            inaktive_dienste = [
+                {'service_key': k, 'name': namen.get(k, k), 'grund': g}
+                for k, g in inaktiv_roh.items()
+            ]
+
         # Markenfarben der Website als Startwerte: nur beim ANLEGEN einer
         # Konfiguration. Eine bestehende behaelt ihre Farben (der Kunde kann
         # sie bewusst gewaehlt haben); sie bekommt den Vorschlag nur in der
@@ -2303,6 +2319,7 @@ async def scan_website(
             "site_id": site_id,
             "detected_services": matched_services,
             "total_found": len(matched_services),
+            "inaktive_dienste": inaktive_dienste,
             "privacy_findings": privacy_findings,
             **grundsystem,
             "farben": farben['farben'],

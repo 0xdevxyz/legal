@@ -17,6 +17,7 @@ from ssrf_protection import validate_url, SSRFError
 from compliance_engine.privacy_transfer_findings import detect_transfers
 from compliance_engine.sicherer_abruf import sichere_session
 from compliance_engine.grundsystem import erkenne_grundsystem
+from compliance_engine.plugin_nutzung import pruefe_nutzung
 
 logger = logging.getLogger(__name__)
 
@@ -437,6 +438,7 @@ class CookieScanner:
                 'confidence': detected['confidence'],
                 'privacy_findings': privacy_findings,
                 'detected_cms': detected_cms,
+                'inaktive_dienste': detected.get('inaktive_dienste', {}),
                 'brand_colors': brand_colors,
                 'scripts': scripts[:20],  # Limit for response size
                 'iframes': iframes[:20],
@@ -629,10 +631,23 @@ class CookieScanner:
                 confidence[service_key] = conf
                 
                 logger.info(f"Detected {service_key} with {matches} matches (confidence: {conf:.2f})")
-        
+
+        # Installiert ist nicht genutzt: Plugins, deren Dateien auf jeder Seite
+        # liegen (WooCommerce), brauchen einen Nachweis der Funktion, sonst
+        # stuende im Banner ein Dienst, dessen Cookies nie gesetzt werden.
+        inaktive_dienste: Dict[str, str] = {}
+        for service_key in sorted(detected_services):
+            grund = pruefe_nutzung(service_key, all_sources)
+            if grund:
+                detected_services.discard(service_key)
+                confidence.pop(service_key, None)
+                inaktive_dienste[service_key] = grund
+                logger.info(f"{service_key} installiert, aber ohne Nutzungsnachweis: nicht im Banner")
+
         return {
             'services': detected_services,
-            'confidence': confidence
+            'confidence': confidence,
+            'inaktive_dienste': inaktive_dienste,
         }
     
     def _get_timestamp(self) -> str:

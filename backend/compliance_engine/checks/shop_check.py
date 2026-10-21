@@ -19,6 +19,7 @@ import aiohttp
 import ssl
 import certifi
 from compliance_engine.sicherer_abruf import sichere_session
+from compliance_engine.plugin_nutzung import hat_shop_funktion
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,13 @@ def detect_shop(soup: BeautifulSoup) -> bool:
     """
     html_lower = str(soup).lower()
     matches = sum(1 for p in SHOP_PATTERNS if re.search(p, html_lower))
+    # 'woocommerce' steht auf jeder WordPress-Seite mit aktivem Plugin (CSS,
+    # JavaScript, Body-Klasse), und 'cart' trifft dessen Skript
+    # wc-cart-fragments. Ohne Produkte, Warenkorb oder Kasse zaehlen beide
+    # nicht, sonst bekaeme eine Vereinsseite mit installiertem Plugin und
+    # dem Wort 'kaufen' im Text fehlende AGB als kritischen Befund.
+    if re.search(r'woocommerce', html_lower) and not hat_shop_funktion(html_lower):
+        matches -= sum(1 for p in (r'woocommerce', r'\bcart\b') if re.search(p, html_lower))
     logger.info(f"Shop-Detection: {matches}/{SHOP_THRESHOLD} Patterns")
     return matches >= SHOP_THRESHOLD
 
