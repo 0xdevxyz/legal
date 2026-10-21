@@ -1062,11 +1062,16 @@
                 if (n > 0) gruende.push('blocker:' + n);
             } catch (e) { gruende.push('unsicher:blocker'); }
 
-            // 2. Cookies, die nicht von Complyo stammen.
+            // 2. Cookies, die nicht von Complyo stammen. Auf complyo.de selbst setzt
+            // das Backend das CSRF-Cookie `csrf_token` (essenziell, ohne Namenspräfix);
+            // es zählt dort als eigen. Auf Kundenseiten gilt die Ausnahme nicht: ein
+            // `csrf_token` aus deren eigenem Framework bleibt ein Anlass.
+            const complyoSelbst = /(^|\.)complyo\.de$/i.test(String(location.hostname || ''));
             try {
                 document.cookie.split(';')
                     .map((c) => c.split('=')[0].trim())
-                    .filter((name) => name && !/^complyo/i.test(name))
+                    .filter((name) => name && !/^complyo/i.test(name) &&
+                                      !(complyoSelbst && name === 'csrf_token'))
                     .forEach((name) => gruende.push('cookie:' + name));
             } catch (e) { gruende.push('unsicher:cookie'); }
 

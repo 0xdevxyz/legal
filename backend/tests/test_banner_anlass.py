@@ -299,6 +299,13 @@ class TestWidget:
         for kennung in ("unsicher:blocker", "unsicher:cookie", "unsicher:timing", "unsicher:dom"):
             assert kennung in m, kennung
 
+    def test_csrf_cookie_gilt_nur_auf_complyo_de_als_eigen(self):
+        """Das CSRF-Cookie der eigenen Startseite loeste den Banner aus. Auf Kundenseiten bleibt es ein Anlass."""
+        m = _methode(self._code(), "sammleAnlass")
+        assert "complyoSelbst && name === 'csrf_token'" in m
+        assert r"/(^|\.)complyo\.de$/i.test(String(location.hostname" in m
+        assert "name !== 'csrf_token'" not in m, "Die Ausnahme darf nicht fuer jede Seite gelten."
+
     def test_link_hinweise_ohne_abruf_zaehlen_nicht(self):
         """canonical, alternate und das WordPress-Entdeckungs-Link sind kein Abruf."""
         m = _methode(self._code(), "sammleAnlass")
