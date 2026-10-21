@@ -95,7 +95,7 @@ export default function EarlyAccessKampagne({
     <main id="inhalt" tabIndex={-1} className="font-sans antialiased bg-white">
 
       {/* ---------------------------------------------------------------- */}
-      <section className="relative pt-16 pb-14 overflow-hidden">
+      <section className="relative pt-28 pb-14 overflow-hidden">
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
           {bestaetigt === true && (

@@ -43,6 +43,9 @@
 - Die übrigen Seiten (Dashboard, Barrierefreiheit, Pflichten) lasen das aktive Projekt schon über `currentWebsite` im Store, den `ActiveSiteProvider` bei Agenturen synchron hält
 - Wächter `backend/tests/test_agentur_projektwechsel.py` (Quelltext-Prüfung wie `test_cookie_seite_gewaehlte_website.py`)
 
+### Frontend — Landing: mehr Luft unter der Navigation
+- Der Hero der Startseite begann mit `pt-16` (64 px) genau an der Unterkante der fixierten Navigation (`h-16`), die Überschrift klebte am Menü. Jetzt `pt-28` auf Startseite und `/produkt` (`EarlyAccessKampagne`, `saas-landing/HeroSection`), derselbe Abstand wie auf den Unterseiten seit dem 19.10.
+
 ## [2026-10-19]
 
 ### Frontend — Landing entfärbt: Schwarz, Grau, Weiß, Türkis nur noch punktuell
