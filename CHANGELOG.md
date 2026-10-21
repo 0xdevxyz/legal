@@ -22,6 +22,11 @@
 - Kein Cron ruft `legal_news_cronjob.py`; eingeschaltet würden heute 5 Stichwort-„critical“-Meldungen als `[DRINGEND]` an 4 Konten gehen, zwei davon ohne Bezug zu Websites. Entscheidung über Einstufung und Einschalten steht aus
 - Scheitert eine Mail, wird sie nie erneut versucht
 
+## [2026-10-21]
+
+### Frontend — Landing: mehr Luft unter der Navigation
+- Der Hero der Startseite begann mit `pt-16` (64 px) genau an der Unterkante der fixierten Navigation (`h-16`), die Überschrift klebte am Menü. Jetzt `pt-28` auf Startseite und `/produkt` (`EarlyAccessKampagne`, `saas-landing/HeroSection`), derselbe Abstand wie auf den Unterseiten seit dem 19.10.
+
 ## [2026-10-19]
 
 ### Frontend — Landing entfärbt: Schwarz, Grau, Weiß, Türkis nur noch punktuell

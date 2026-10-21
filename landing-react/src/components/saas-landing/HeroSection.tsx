@@ -6,7 +6,7 @@ import Erklaervideo from '@/components/Erklaervideo';
 
 export default function HeroSection() {
   return (
-    <section className="relative bg-white pt-24 pb-16 overflow-hidden">
+    <section className="relative bg-white pt-28 pb-16 overflow-hidden">
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center min-h-[580px]">
