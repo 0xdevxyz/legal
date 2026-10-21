@@ -19,6 +19,12 @@ os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost/test")
 os.environ.setdefault("STRIPE_WEBHOOK_SECRET_ADDONS", "whsec_test_nur_fuer_tests")
 os.environ.setdefault("STRIPE_SECRET_KEY", "sk_test_nur_fuer_tests")
 
+# Gerenderte Markenfarben (compliance_engine/markenfarben_gerendert.py)
+# starten im Scan einen Browser gegen die gescannte Adresse. In den
+# Routentests ist die Adresse erfunden; der Lauf wuerde nur Zeit kosten und
+# ins Netz gehen. Der Browserlauf hat seinen eigenen Test.
+os.environ.setdefault("COMPLYO_OHNE_BROWSER", "1")
+
 # Make backend package importable from tests/ subdirectory
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 

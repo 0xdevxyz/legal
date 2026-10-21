@@ -1188,6 +1188,24 @@ async def extract_colors(
                     )
                 html = await resp.text()
 
+        # Erst die gerenderte Seite: was der Besucher sieht (Knoepfe, Kopf,
+        # Flaechen), nicht was im CSS am haeufigsten steht. Faellt der Browser
+        # aus, bleibt der Quelltext-Extraktor darunter der Rueckfall.
+        from compliance_engine.markenfarben_gerendert import markenfarben_gerendert
+        gerendert = await markenfarben_gerendert(crawl_url)
+        if gerendert and gerendert.get('scraped'):
+            vorschlag = farbvorschlag(gerendert)
+            logger.info(f"✅ Farben gerendert fuer {payload.url}: {gerendert['primary_color']} / {gerendert['accent_color']}")
+            return {
+                "success": True,
+                "scraped": True,
+                "quelle": "gerendert",
+                "colors": vorschlag['farben'],
+                "angepasst": vorschlag['angepasst'],
+                "candidates": gerendert.get('raw_candidates', []),
+                "rollen": gerendert.get('rollen', {}),
+            }
+
         soup = BeautifulSoup(html, 'lxml')
         # Externe Stylesheets mitlesen: bei CMS-Seiten stehen die Markenfarben
         # als CSS-Variablen im Stylesheet, nicht im HTML. Dieselbe Quelle wie
@@ -1213,6 +1231,7 @@ async def extract_colors(
         return {
             "success": True,
             "scraped": True,
+            "quelle": "quelltext",
             # Lesbar gemacht wie beim Scan: zu helle Knopffarben abgedunkelt,
             # Anpassungen ausgewiesen (Designer zeigt sie an).
             "colors": vorschlag['farben'],
@@ -2230,6 +2249,17 @@ async def scan_website(
         # Konfiguration. Eine bestehende behaelt ihre Farben (der Kunde kann
         # sie bewusst gewaehlt haben); sie bekommt den Vorschlag nur in der
         # Antwort und im Designer per Knopf.
+        # Gerendert vor Quelltext: der Browser sieht die Knopf- und Kopffarbe,
+        # der Quelltext-Extraktor zaehlt nur, was im CSS am haeufigsten steht.
+        try:
+            from compliance_engine.markenfarben_gerendert import markenfarben_gerendert
+            gerendert = await markenfarben_gerendert(
+                url if url.startswith('http') else f'https://{url}', timeout_s=20.0
+            )
+            if gerendert and gerendert.get('scraped'):
+                scan_result['brand_colors'] = gerendert
+        except Exception as e:
+            logger.warning(f"[Scan] gerenderte Markenfarben uebersprungen: {e}")
         farben = farbvorschlag(scan_result.get('brand_colors'))
         farben_gespeichert = False
 
