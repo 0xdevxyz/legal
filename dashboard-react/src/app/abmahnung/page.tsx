@@ -13,10 +13,11 @@
  * nicht im Kleingedruckten.
  */
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getApiClient } from '@/lib/api-client';
 import { analyzeWebsite, getTrackedWebsites } from '@/lib/api';
+import { useActiveSite } from '@/contexts/ActiveSiteContext';
 import ScanProgressPanel from '@/components/dashboard/ScanProgressPanel';
 import {
   ShieldAlert, Loader2, AlertTriangle, CheckCircle2, HelpCircle, MinusCircle,
@@ -146,7 +147,12 @@ export default function AbmahnungPage() {
   });
 
   const websites = websitesQuery.data ?? [];
-  const gewaehlt = websiteUrl || websites.find((w) => w.is_primary)?.url || websites[0]?.url || '';
+  // Vorbelegt mit dem aktiven Projekt aus dem SiteSwitcher; eine Wahl hier
+  // gilt, bis links ein anderes Projekt gewaehlt wird.
+  const { activeSite } = useActiveSite();
+  useEffect(() => { setWebsiteUrl(''); }, [activeSite?.id]);
+  const aktivUrl = activeSite && websites.some((w) => w.url === activeSite.url) ? activeSite.url : '';
+  const gewaehlt = websiteUrl || aktivUrl || websites.find((w) => w.is_primary)?.url || websites[0]?.url || '';
 
   const eingabeFehlt = !datei && text.trim().length < 20;
   const laeuft = phase !== 'idle';

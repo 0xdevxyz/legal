@@ -5,6 +5,7 @@ import { AlertCircle, Loader2, CheckCircle2, AlertTriangle, Download, Plus } fro
 import Link from 'next/link';
 import axios from 'axios';
 import { apiClient } from '@/lib/api-client';
+import { useActiveSite } from '@/contexts/ActiveSiteContext';
 
 function errorDetail(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err)) {
@@ -60,6 +61,12 @@ interface ExportData {
 
 export default function DeepCookieScannerPage() {
   const [inputUrl, setInputUrl] = useState('');
+  // Das aktive Projekt aus dem SiteSwitcher steht vorab im Feld; wer ein
+  // anderes Projekt waehlt, bekommt dessen Adresse. Tippen bleibt moeglich.
+  const { activeSite } = useActiveSite();
+  useEffect(() => {
+    if (activeSite?.url) setInputUrl(activeSite.url);
+  }, [activeSite?.id, activeSite?.url]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentScan, setCurrentScan] = useState<ScanResult | null>(null);
   const [exportData, setExportData] = useState<ExportData | null>(null);

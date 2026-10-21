@@ -22,6 +22,15 @@
 - Kein Cron ruft `legal_news_cronjob.py`; eingeschaltet würden heute 5 Stichwort-„critical“-Meldungen als `[DRINGEND]` an 4 Konten gehen, zwei davon ohne Bezug zu Websites. Entscheidung über Einstufung und Einschalten steht aus
 - Scheitert eine Mail, wird sie nie erneut versucht
 
+## [2026-10-21]
+
+### Frontend — Dashboard: Unterseiten folgen dem aktiven Agentur-Projekt
+- **Befund:** links im SiteSwitcher rru-chemnitz gewählt, „Cookies" geöffnet, und die Seite arbeitete auf steinhau.de. `cookie-compliance/page.tsx` nahm in `loadAgencySites()` immer die Primärseite, die Abmahnprüfung und der Deep-Scanner bestimmten ihre Website ebenfalls selbst; keine der drei kannte `ActiveSiteContext`
+- Cookie-Seite: startet mit dem aktiven Projekt, ein Effekt auf `activeSite` lädt bei jedem Wechsel die Konfiguration des neuen Projekts (`loadSiteConfig`), und die eigene Auswahl oben rechts spiegelt sich per `setActiveSite` in den SiteSwitcher, damit die nächste Unterseite nicht wieder woanders steht
+- Abmahnprüfung: „Betroffene Website" vorbelegt mit dem aktiven Projekt, eine Wahl im Formular gilt bis zum nächsten Projektwechsel. Deep-Scanner: Adresse des aktiven Projekts steht vorab im Feld
+- Die übrigen Seiten (Dashboard, Barrierefreiheit, Pflichten) lasen das aktive Projekt schon über `currentWebsite` im Store, den `ActiveSiteProvider` bei Agenturen synchron hält
+- Wächter `backend/tests/test_agentur_projektwechsel.py` (Quelltext-Prüfung wie `test_cookie_seite_gewaehlte_website.py`)
+
 ## [2026-10-19]
 
 ### Frontend — Landing entfärbt: Schwarz, Grau, Weiß, Türkis nur noch punktuell
