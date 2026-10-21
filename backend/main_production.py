@@ -951,6 +951,15 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Scan-Arbeiter konnte nicht starten: {e}")
 
+    # Pruefstufe des Banner-Scans (Browser nach dem HTML-Scan, begrenzte Schlange).
+    # Ohne sie bleibt der Banner-Scan unveraendert; sie ist kein Fehlerfall, wenn sie fehlt.
+    try:
+        from compliance_engine import cookie_pruefstufe
+        cookie_pruefstufe.db_pool = db_pool
+        await cookie_pruefstufe.starte()
+    except Exception as e:
+        logger.error(f"Pruefstufe konnte nicht starten: {e}")
+
     # MCP Server – KI-Agenten-Integration (fastapi-mcp)
     from mcp_server import setup_mcp
     setup_mcp(app)
@@ -967,6 +976,11 @@ async def shutdown_event():
         print("✅ Scan-Arbeiter beendet")
     except Exception as e:
         print(f"⚠️ Scan-Arbeiter-Stopp fehlgeschlagen: {e}")
+    try:
+        from compliance_engine import cookie_pruefstufe
+        await cookie_pruefstufe.beende()
+    except Exception as e:
+        print(f"⚠️ Pruefstufe-Stopp fehlgeschlagen: {e}")
 
     # Stop Background Worker
     try:

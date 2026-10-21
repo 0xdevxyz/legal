@@ -21,6 +21,22 @@
 - Kosten: jeder Scan dauert bis zu 20 s länger (Browserstart plus Seitenladen). Die SSRF-Prüfung der Adresse bleibt beim Aufrufer, der Browser lädt nur, was `validate_scan_url` vorher durchgelassen hat
 - Geprüft: `tests/test_markenfarben_gerendert.py` (6 Bewertungstests ohne Browser, 1 Browsertest mit `set_content`, übersprungen ohne Playwright), dazu Plattformpalette, Widget-Markenfarbe, Grundsystem: 60 passed. Nicht geprüft: echte Kundenseiten, complyo.de und Kundendomains sind aus dieser Sitzung nicht erreichbar
 
+## [2026-10-20]
+
+### Backend: Prüfstufe im Browser für den Banner-Scan
+- **Befund:** Der Banner-Scan (`POST /api/cookie-compliance/scan`) liest nur HTML. Was ein Skript erst zur Laufzeit nachlädt, fehlt im Banner. Am 19.10.2026 an 26 Kundenseiten gemessen: bei 5 Seiten fehlten Dienste (Google Fonts über `fonts.gstatic.com` auf 2 Seiten, reCAPTCHA, Google Maps, Analytics), die der Browser lädt
+- `compliance_engine/cookie_pruefstufe.py`: nach dem HTML-Scan ein Auftrag in eine eigene Schlange (200, zwei Arbeiter, über den gemeinsamen Browser-Semaphor, nie zusätzlich). Der HTML-Scan antwortet wie bisher sofort; die Antwort trägt `pruefstufe` (Zustand, Position, geschätzte Wartezeit). `GET /api/cookie-compliance/scan/pruefstufe/{site_id}` liefert Stand und Bewertung
+- **Zuordnung streng:** nach Host (genaueste Domain), nicht nach Teilstring; mehrfach belegte Domains (google.com bei Maps, reCAPTCHA, DV360) und breite Hosts (googleapis.com, www.gstatic.com) nur über ausdrückliche Pfadregeln, sonst Prüfliste; Cookie-Namen allein fügen nichts hinzu; WordPress-Emojis nur aus dem HTML (Headless hat keine Emoji-Schrift, s.w.org würde sonst fälschlich belegen); eigene Widget-Hosts ausgenommen. Die Stufe fügt nur hinzu, sie entfernt nie
+- **Last:** Dedup je Seite, 10 Minuten Wiederholsperre, 60 Sekunden Sperre nach Fehlschlag, 75 s Zeitbudget je Auftrag, Anonyme nur bis drei Viertel der Schlange, Angemeldete vor Anonymen vor Wochenlauf. Wochenlauf (höchstens 6 Seiten pro Stunde, nur bei leerer Schlange) schreibt nur einen Bericht, ändert keinen Banner. Schalter: `COMPLYO_PRUEFSTUFE=0`, `COMPLYO_PRUEFSTUFE_WOCHE=0`, `COMPLYO_PRUEFSTUFE_ARBEITER`
+- `DeepCookieScanner` gehärtet (gilt auch für den Premium-Scan): URL durch `validate_url` vor dem Browserstart, Route-Wache gegen interne Ziele und Medien, Request-Deckel 3000, Seite nicht geladen oder HTTP >= 400 ist ein Fehler statt einer sauberen Seite (meyers.cafe mit ungültigem Zertifikat zeigte vorher „0 Dienste“)
+- Gemessen auf openclaw im Container mit 2-GiB-Grenze: 100 gleichzeitige Nutzer, alle 100 angenommen in 0,04 s, alle 100 fertig in 219 s (zwei Arbeiter), Container-Spitze 269 MiB; mit drei Arbeitern 151 s und 378 MiB. 25 echte Kundenseiten: Median 4,6 s, max 6,1 s je Seite
+- Tests `test_cookie_pruefstufe.py` (62), Lasttest `tools/pruefstufe_lasttest.py`, Vergleich `tools/pruefstufe_vergleich.py`; Gegenproben (Semaphor, Dedup, Teilstring, Überschreiben, Arbeiterzahl, breite Hosts) lassen je mindestens einen Test rot werden
+- `GET /api/cookie-compliance/scan/capabilities` behauptet nicht mehr, Playwright fehle
+
+### Offen
+- Die Prüfliste zeigt Katalog-Lücken: `use.fontawesome.com`, `maps.gstatic.com`, `yt3.ggpht.com`, `ativo.vamtam.com` fehlen im Katalog
+- Der Browser sieht nur den Zustand vor der Einwilligung: was ein funktionierender Banner blockiert, erscheint nicht (so soll es sein, gilt als Nachweis der Sperre); der HTML-Scan bleibt deshalb Quelle für einwilligungspflichtige Dienste
+
 ---
 
 ## [2026-10-08]

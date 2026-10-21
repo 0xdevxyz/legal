@@ -2343,10 +2343,27 @@ async def scan_website(
         # fertige Plugin, alles andere den Schnipsel mit dem passenden Hinweis.
         grundsystem = einrichtungsweg(scan_result.get('detected_cms'))
 
+        # Pruefstufe im Browser: NACH der Antwort-Vorbereitung und nur als
+        # Auftrag in eine begrenzte Schlange. Sie darf diesen Scan nie
+        # aufhalten oder scheitern lassen (compliance_engine/cookie_pruefstufe.py).
+        pruefstufe = {"zustand": "aus"}
+        if config_updated:
+            try:
+                from compliance_engine import cookie_pruefstufe
+                pruefstufe = await cookie_pruefstufe.einreihen(
+                    site_id, scan_result.get('url') or url, pool=db_pool,
+                    html_keys=service_keys_found, anwenden_ja=True,
+                    prio=(cookie_pruefstufe.PRIO_NUTZER if user_id
+                          else cookie_pruefstufe.PRIO_ANONYM),
+                )
+            except Exception as e:
+                logger.warning(f"[Scan] Pruefstufe nicht einreihbar fuer {site_id}: {e}")
+
         return {
             "success": True,
             "url": url,
             "site_id": site_id,
+            "pruefstufe": pruefstufe,
             "detected_services": matched_services,
             "total_found": len(matched_services),
             "inaktive_dienste": inaktive_dienste,
@@ -2370,6 +2387,24 @@ async def scan_website(
     except Exception as e:
         print(f"Error scanning website: {e}")
         raise HTTPException(status_code=500, detail="Scan failed")
+
+
+@router.get("/api/cookie-compliance/scan/pruefstufe/{site_id}",
+            dependencies=[Depends(rate_limit("cookie_pruefstufe_status", 60, 60))])
+async def pruefstufe_status(site_id: str):
+    """Stand der Browser-Pruefung zu einer Seite (wartend, laeuft, fertig, fehlgeschlagen).
+
+    Die Pruefung ergaenzt den Banner nur um Dienste, die der Browser eindeutig
+    gesehen hat. `neu` sind die ergaenzten, `mehrdeutig` und `unbekannte_fremdhosts`
+    die Pruefliste fuer den Menschen.
+    """
+    import re as _re
+    if not _re.fullmatch(r"[A-Za-z0-9._-]{1,120}", site_id):
+        raise HTTPException(status_code=400, detail="Ungueltige site_id")
+    from compliance_engine import cookie_pruefstufe
+    stand = await cookie_pruefstufe.status(site_id)
+    return {"success": True, "site_id": site_id,
+            "pruefstufe": stand or {"zustand": "unbekannt"}}
 
 
 @router.post("/api/cookie-compliance/monitor/check/{site_id}")
@@ -2497,6 +2532,14 @@ async def scan_website_deep(
         raise HTTPException(status_code=500, detail="Deep scan failed")
 
 
+def _pruefstufe_laeuft() -> bool:
+    try:
+        from compliance_engine import cookie_pruefstufe
+        return cookie_pruefstufe.laeuft()
+    except Exception:
+        return False
+
+
 @router.get("/api/cookie-compliance/scan/capabilities")
 async def get_scan_capabilities():
     """
@@ -2521,7 +2564,10 @@ async def get_scan_capabilities():
                 ]
             },
             "deep_scan": {
-                "available": False,  # Playwright not installed
+                # Seit der Pruefstufe laeuft der Browser nach dem Scan als begrenzter
+                # Hintergrundauftrag (cookie_pruefstufe); der Endpunkt /scan/deep
+                # selbst bleibt aus.
+                "available": _pruefstufe_laeuft(),
                 "description": "Headless Browser Scan mit vollstaendiger JS-Ausfuehrung",
                 "features": [
                     "Echtes Browser-Rendering",
