@@ -227,6 +227,15 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
                               ))}
                             </div>
                           )}
+                          {scanResult.inaktive_dienste?.length > 0 && (
+                            <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">
+                              Installiert, aber auf der Seite nicht genutzt und deshalb nicht im Banner:{' '}
+                              {scanResult.inaktive_dienste.map((d: any) => d.name).join(', ')}.{' '}
+                              <span title={scanResult.inaktive_dienste.map((d: any) => d.grund).join(' ')}>
+                                Sobald die Funktion genutzt wird, erkennt sie der nächste Scan.
+                              </span>
+                            </p>
+                          )}
                           {cmsName && (
                             <p className="text-xs text-gray-700 dark:text-gray-300 mt-2">
                               Grundsystem: <strong>{cmsName}</strong>

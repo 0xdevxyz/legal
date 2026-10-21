@@ -46,6 +46,14 @@
 ### Frontend — Landing: mehr Luft unter der Navigation
 - Der Hero der Startseite begann mit `pt-16` (64 px) genau an der Unterkante der fixierten Navigation (`h-16`), die Überschrift klebte am Menü. Jetzt `pt-28` auf Startseite und `/produkt` (`EarlyAccessKampagne`, `saas-landing/HeroSection`), derselbe Abstand wie auf den Unterseiten seit dem 19.10.
 
+### Backend — Cookie-Scan: ein installiertes Plugin ist kein genutzter Dienst
+- **Befund (rru-chemnitz.de):** der Scan meldete WooCommerce, die Seite hat keinen Shop. WooCommerce hängt CSS, JavaScript und die Body-Klasse `woocommerce-no-js` an jede Seite, sobald das Plugin aktiv ist; das Muster `woocommerce` in `DETECTION_PATTERNS` traf damit jede WordPress-Seite mit installiertem Plugin. Cookies setzt WooCommerce erst bei Warenkorb, Kasse oder Produktseite (`woocommerce_items_in_cart`, `wp_woocommerce_session_*`, `woocommerce_recently_viewed`)
+- Neu `backend/compliance_engine/plugin_nutzung.py`: je Dienst eine Liste von Nachweisen, dass die Funktion auf der Seite in Gebrauch ist (Produkt in den Warenkorb, Produkt-/Shop-/Kassenseiten-Klassen, Links auf Shop, Warenkorb, Kasse, Konto, oder ein beobachteter Warenkorb-Cookie). `_detect_services` nimmt einen erkannten Dienst ohne Nachweis aus `services` und meldet ihn in `inaktive_dienste` mit Grund
+- `POST /api/cookie-compliance/scan` gibt `inaktive_dienste` (Schlüssel, Name aus dem Katalog, Grund) zurück; der Einrichtungsassistent zeigt „Installiert, aber auf der Seite nicht genutzt und deshalb nicht im Banner: WooCommerce" mit dem Grund als Tooltip
+- `DeepScanner._detect_shop_system` nennt WooCommerce als Shop-System nur noch mit Shop-Funktion; vorher reichte das Wort im Quelltext. `shop_check.detect_shop` zählt `woocommerce` und `cart` (trifft dessen Skript `wc-cart-fragments`) ohne Shop-Funktion nicht mehr: eine Vereinsseite mit installiertem Plugin und dem Wort „kaufen" im Text kam sonst auf drei Treffer und bekam „AGB fehlen (Online-Shop erkannt)" als kritischen Befund
+- **Rechtlich:** WooCommerce-Cookies sind technisch notwendig (§ 25 Abs. 2 Nr. 2 TDDDG), brauchen keine Einwilligung, gehören aber in die Gruppe „Notwendig" des Banners und in die Datenschutzerklärung, sobald sie gesetzt werden können. Werden sie nie gesetzt, ist der Eintrag eine falsche Angabe über eine Verarbeitung, die nicht stattfindet. Deshalb: ohne Shop-Funktion nicht im Banner
+- Tests `backend/tests/test_plugin_nutzung.py`
+
 ## [2026-10-19]
 
 ### Frontend — Landing entfärbt: Schwarz, Grau, Weiß, Türkis nur noch punktuell
