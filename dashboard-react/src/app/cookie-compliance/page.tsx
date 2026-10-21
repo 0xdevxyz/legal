@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveSite } from '@/contexts/ActiveSiteContext';
 import apiClient from '@/lib/api';
 import { apiClient as httpApiClient } from '@/lib/api-client';
 
@@ -32,6 +33,10 @@ export default function CookieCompliancePage() {
   const { user } = useAuth();
   // Agentur/Expert verwalten mehrere Seiten → kein „1 Website pro Account"-Lock.
   const isAgency = user?.plan_type === 'agency' || user?.plan_type === 'expert';
+  // Das aktive Projekt aus dem SiteSwitcher links. Bei Agenturen gilt es
+  // auf jeder Unterseite; die Auswahl hier oben ist nur ein zweiter Griff
+  // an denselben Schalter.
+  const { activeSite, setActiveSite, sites: kontextSites } = useActiveSite();
   const [loading, setLoading] = useState(true);
   const [siteId, setSiteId] = useState<string>('');
   const [config, setConfig] = useState<any>(null);
@@ -85,6 +90,20 @@ export default function CookieCompliancePage() {
   useEffect(() => {
     if (siteId) loadQuickStats(siteId);
   }, [siteId]);
+
+  // Agentur: wechselt das Projekt links im SiteSwitcher, wechselt diese Seite
+  // mit. Befund 21.10.2026: Projekt rru-chemnitz gewaehlt, Cookies geoeffnet,
+  // und die Seite arbeitete auf steinhau.de, weil loadAgencySites() immer die
+  // Primaerseite nahm. Die Liste der Seiten muss schon geladen sein, sonst
+  // gibt es noch nichts zu wechseln; laeuft sie nach, holt der Effekt es nach.
+  useEffect(() => {
+    if (!isAgency || !activeSite || availableSites.length === 0) return;
+    const sid = generateSiteIdFromUrl(activeSite.url);
+    if (sid === 'unknown-site' || sid === siteId) return;
+    if (!availableSites.some((s) => s.site_id === sid)) return;
+    loadSiteConfig(sid, activeSite.url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAgency, activeSite?.id, availableSites.length]);
 
   useEffect(() => {
     // Ohne frischen Cookie-Scan: Grundsystem aus dem letzten Hauptscan holen,
@@ -221,7 +240,9 @@ export default function CookieCompliancePage() {
         return;
       }
 
-      const initial = list.find((s) => s.is_primary) || list[0];
+      // Erst das aktive Projekt, dann die Primaerseite, dann die erste.
+      const aktiv = activeSite ? generateSiteIdFromUrl(activeSite.url) : '';
+      const initial = list.find((s) => s.site_id === aktiv) || list.find((s) => s.is_primary) || list[0];
       await loadSiteConfig(initial.site_id, initial.url);
     } catch (error) {
       console.error('Error loading agency sites:', error);
@@ -393,7 +414,16 @@ export default function CookieCompliancePage() {
               {isAgency && availableSites.length > 0 && (
                 <div className="flex items-center gap-2">
                   <Globe className="w-4 h-4 text-blue-400" />
-                  <Select value={siteId} onValueChange={(v) => loadSiteConfig(v, availableSites.find((s) => s.site_id === v)?.url)}>
+                  <Select
+                    value={siteId}
+                    onValueChange={(v) => {
+                      loadSiteConfig(v, availableSites.find((s) => s.site_id === v)?.url);
+                      // Dieselbe Wahl in den SiteSwitcher spiegeln, damit die
+                      // naechste Unterseite nicht wieder woanders steht.
+                      const projekt = kontextSites.find((s) => generateSiteIdFromUrl(s.url) === v);
+                      if (projekt && projekt.id !== activeSite?.id) setActiveSite(projekt);
+                    }}
+                  >
                     <SelectTrigger className="w-[240px] h-9 text-sm">
                       <SelectValue placeholder="Website wählen" />
                     </SelectTrigger>

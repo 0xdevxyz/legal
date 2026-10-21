@@ -36,6 +36,13 @@
 - Commit 691ccd3 (19.10., PR #44) hat `dashboard-react/node_modules` als Symlink auf einen Pfad des Entwicklerrechners (`/private/tmp/claude-501/…/scratchpad/legal/dashboard-react/node_modules`) eingecheckt. `.gitignore` führte nur `node_modules/`, und das trifft Verzeichnisse, nicht einen Symlink, der für git eine Datei ist. Auf jedem anderen Rechner zeigte der Link ins Leere; `npm ci` ersetzt ihn zwar, aber `git status` meldete danach eine gelöschte Datei
 - Symlink aus dem Index genommen, `.gitignore` um `node_modules` ohne Schrägstrich ergänzt
 
+### Frontend — Dashboard: Unterseiten folgen dem aktiven Agentur-Projekt
+- **Befund:** links im SiteSwitcher rru-chemnitz gewählt, „Cookies" geöffnet, und die Seite arbeitete auf steinhau.de. `cookie-compliance/page.tsx` nahm in `loadAgencySites()` immer die Primärseite, die Abmahnprüfung und der Deep-Scanner bestimmten ihre Website ebenfalls selbst; keine der drei kannte `ActiveSiteContext`
+- Cookie-Seite: startet mit dem aktiven Projekt, ein Effekt auf `activeSite` lädt bei jedem Wechsel die Konfiguration des neuen Projekts (`loadSiteConfig`), und die eigene Auswahl oben rechts spiegelt sich per `setActiveSite` in den SiteSwitcher, damit die nächste Unterseite nicht wieder woanders steht
+- Abmahnprüfung: „Betroffene Website" vorbelegt mit dem aktiven Projekt, eine Wahl im Formular gilt bis zum nächsten Projektwechsel. Deep-Scanner: Adresse des aktiven Projekts steht vorab im Feld
+- Die übrigen Seiten (Dashboard, Barrierefreiheit, Pflichten) lasen das aktive Projekt schon über `currentWebsite` im Store, den `ActiveSiteProvider` bei Agenturen synchron hält
+- Wächter `backend/tests/test_agentur_projektwechsel.py` (Quelltext-Prüfung wie `test_cookie_seite_gewaehlte_website.py`)
+
 ## [2026-10-19]
 
 ### Frontend — Landing entfärbt: Schwarz, Grau, Weiß, Türkis nur noch punktuell
