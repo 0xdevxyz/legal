@@ -1,26 +1,50 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import { useAuth, ZweiterFaktorNoetig } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { LogIn, Loader2, AlertCircle, Lock, Mail, Eye, EyeOff, ArrowRight, CheckCircle2, ShieldCheck, KeyRound } from 'lucide-react';
 import SocialLoginButtons from '@/components/SocialLoginButtons';
-import { Logo } from '@/components/Logo';
+import { isFirebaseEnabled } from '@/lib/firebase';
 import { zielAusAdresse } from '@/lib/weiterleitung';
-// Gemeinsame Gestaltung mit der Registrierung. Vorher lagen Verlauf,
-// Partikelfeld und Kartenstil doppelt vor — heute gleich, in drei Monaten
-// nicht mehr. Eine Quelle, damit die beiden Seiten nicht auseinanderlaufen.
-import {
-    AuthBackground, AuthVertrauen, AUTH_KARTE, AUTH_VERLAUF, feldStil,
-} from '@/components/AuthBackground';
+import './login.css';
 
 const loadingMessages = [
-    "Sicherheitsprotokolle werden geladen...",
-    "Compliance-Daten werden abgerufen...",
-    "Ihre Identität wird verifiziert...",
-    "Dashboard wird vorbereitet...",
-    "Fast geschafft..."
+    'Sicherheitsprotokolle werden geladen...',
+    'Compliance-Daten werden abgerufen...',
+    'Ihre Identität wird verifiziert...',
+    'Dashboard wird vorbereitet...',
+    'Fast geschafft...',
 ];
+
+// Die drei Aussagen hinter den Punkten links. Jede beschreibt, was der Scan
+// tatsaechlich misst, keinen Zustand der Kundenseite.
+const AUSSAGEN = [
+    {
+        zeilen: ['Prüfen. Beheben.', 'Nachweisen.'],
+        text: ['Complyo misst, was Ihre Website heute tatsächlich lädt', 'und zeigt, was sich davon beheben lässt.'],
+    },
+    {
+        zeilen: ['Cookies im Griff.', 'Ohne Rätselraten.'],
+        text: ['Der Scan öffnet Ihre Seite im Browser und zeigt,', 'welche Dienste wirklich geladen werden.'],
+    },
+    {
+        zeilen: ['Barrierefreiheit,', 'Seite für Seite.'],
+        text: ['Die Prüfung nach WCAG zeigt, an welchen Stellen', 'Besucher auf Ihrer Website scheitern.'],
+    },
+];
+
+const MERKEN_SCHLUESSEL = 'complyo_login_email';
+
+function merkenLesen(): string {
+    try { return window.localStorage.getItem(MERKEN_SCHLUESSEL) || ''; } catch { return ''; }
+}
+function merkenSchreiben(email: string | null) {
+    try {
+        if (email) window.localStorage.setItem(MERKEN_SCHLUESSEL, email);
+        else window.localStorage.removeItem(MERKEN_SCHLUESSEL);
+    } catch { /* Speicher gesperrt: dann eben nicht merken */ }
+}
 
 export default function LoginPage() {
     const { login, isAuthenticated } = useAuth();
@@ -30,18 +54,37 @@ export default function LoginPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [merken, setMerken] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState(loadingMessages[0]);
     const [loadingProgress, setLoadingProgress] = useState(0);
-    const [emailFocused, setEmailFocused] = useState(false);
-    const [passwordFocused, setPasswordFocused] = useState(false);
     // Zweiter Faktor. `codeSchritt` schaltet die Karte um: statt E-Mail und
     // Passwort steht dann nur noch das Codefeld da. Passwort und Adresse
     // bleiben im Zustand, weil die Anmeldung beides zusammen mit dem Code
-    // schickt — der Nutzer soll nicht alles noch einmal tippen.
+    // schickt, der Nutzer soll nicht alles noch einmal tippen.
     const [codeSchritt, setCodeSchritt] = useState(false);
     const [code, setCode] = useState('');
-    const [codeFocused, setCodeFocused] = useState(false);
 
+    const [aussage, setAussage] = useState(0);
+    const [umgeschaltet, setUmgeschaltet] = useState(false);
+
+    // Das Video nur dort, wo Bewegung erlaubt ist. Das Standbild steht immer.
+    const [videoErlaubt, setVideoErlaubt] = useState(false);
+    const [videoBereit, setVideoBereit] = useState(false);
+    const videoRef = (v: HTMLVideoElement | null) => {
+        // Bei zwischengespeichertem Video feuert loadeddata, bevor React den
+        // Handler anhaengt, deshalb zusaetzlich der Stand beim Einhaengen.
+        if (v && v.readyState >= 2) setVideoBereit(true);
+    };
+
+    useEffect(() => {
+        const ruhe = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+        if (!ruhe?.matches) setVideoErlaubt(true);
+        const gemerkt = merkenLesen();
+        if (gemerkt) {
+            setFormData((f) => ({ ...f, email: gemerkt }));
+            setMerken(true);
+        }
+    }, []);
 
     useEffect(() => {
         if (!isSubmitting) return;
@@ -63,10 +106,8 @@ export default function LoginPage() {
     }, [isSubmitting]);
 
     // Schon angemeldet? Dann dorthin, wohin der Nutzer eigentlich wollte.
-    // Vorher stand hier fest `router.push('/')`: der `redirect`-Parameter, den
-    // Middleware und Anmeldewache setzen, wurde nie gelesen. `replace` statt
-    // `push`, damit "Zurueck" nicht wieder auf dieser Seite landet und von
-    // hier sofort erneut weitergeschickt wird.
+    // `replace` statt `push`, damit "Zurueck" nicht wieder auf dieser Seite
+    // landet und von hier sofort erneut weitergeschickt wird.
     useEffect(() => {
         if (isAuthenticated && !isSubmitting) {
             router.replace(zielAusAdresse());
@@ -80,12 +121,13 @@ export default function LoginPage() {
         setLoadingProgress(0);
         try {
             await login(formData.email, formData.password, codeSchritt ? code : undefined);
+            merkenSchreiben(merken ? formData.email : null);
             setLoadingProgress(100);
             setTimeout(() => router.replace(zielAusAdresse()), 500);
         } catch (error: any) {
             if (error instanceof ZweiterFaktorNoetig) {
                 // Passwort stimmt, es fehlt nur der zweite Faktor. Kein Fehler
-                // beim ersten Mal — nur ein Schritt weiter.
+                // beim ersten Mal, nur ein Schritt weiter.
                 setCodeSchritt(true);
                 setCode('');
                 setError(error.codeWarFalsch ? error.message : '');
@@ -97,285 +139,215 @@ export default function LoginPage() {
         }
     };
 
-    const emailHasValue = formData.email.length > 0;
-    const passwordHasValue = formData.password.length > 0;
+    const a = AUSSAGEN[aussage];
 
     return (
-        <main
-            role="main"
-            aria-label="Login"
-            className="on-dark min-h-screen flex items-center justify-center relative overflow-hidden"
-            style={{ background: AUTH_VERLAUF }}
-        >
-            <AuthBackground />
+        <main role="main" aria-label="Login" className="lg">
+            <div className="lg-plate" aria-hidden="true" />
+            {videoErlaubt && (
+                <video
+                    ref={videoRef}
+                    className={`lg-video${videoBereit ? ' is-ready' : ''}`}
+                    src="/login/loop.mp4"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="auto"
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    onLoadedData={() => setVideoBereit(true)}
+                />
+            )}
+            <div className="lg-shade lg-shade-l" aria-hidden="true" />
+            <div className="lg-shade lg-shade-t" aria-hidden="true" />
+            <div className="lg-shade lg-shade-b" aria-hidden="true" />
 
-            <div className="relative w-full max-w-md mx-4 z-10">
-                <div className="mb-8 text-center">
-                    <div className="flex justify-center mb-4">
-                        <Logo size="lg" variant="dark" />
-                    </div>
-                    <p className="text-sm" style={{ color: 'rgba(148,163,184,0.7)' }}>
-                        Legal Compliance Platform
-                    </p>
+            <section className="lg-hero" aria-label="Complyo">
+                <div className="lg-bar">
+                    <a href="https://complyo.de" className="lg-logo lg-in" style={{ ['--d' as any]: '.1s' }} aria-label="Complyo, zur Website">
+                        <Image src="/logo-light-trim.png" alt="Complyo" width={852} height={287} priority />
+                    </a>
+                    <a href="https://complyo.de" className="lg-back lg-in" style={{ ['--d' as any]: '.18s' }}>
+                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10H4m0 0 5-5m-5 5 5 5" /></svg>
+                        Zurück zur Website
+                    </a>
                 </div>
 
-                <section
-                    className="relative rounded-2xl p-8 overflow-hidden"
-                    style={AUTH_KARTE}
-                >
-                    <div className="absolute top-0 left-0 right-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(99,179,237,0.3), transparent)' }} />
-
-                    <div className="mb-7">
-                        <h1 className="text-2xl font-semibold text-white mb-1.5 tracking-tight">
-                            {codeSchritt ? 'Noch ein Schritt' : 'Willkommen zurück'}
-                        </h1>
-                        <p className="text-sm" style={{ color: 'rgba(148,163,184,0.6)' }}>
-                            {codeSchritt
-                                ? 'Bitte den sechsstelligen Code aus Ihrer Authenticator-App eingeben.'
-                                : 'Melden Sie sich an, um auf Ihr Dashboard zuzugreifen'}
+                <div className="lg-pitch">
+                    <div key={aussage} className={umgeschaltet ? 'is-sw' : undefined}>
+                        <h2 className="lg-title" aria-live="polite">
+                            {a.zeilen.map((z, i) => (
+                                <span className="lg-line" key={z}>
+                                    <span style={{ ['--d' as any]: `${0.5 + i * 0.12}s` }}>{z}</span>
+                                </span>
+                            ))}
+                        </h2>
+                        <p className="lg-sub lg-in" style={{ ['--d' as any]: '.85s' }}>
+                            {a.text[0]}<br />{a.text[1]}
                         </p>
                     </div>
+                    <div className="lg-dots lg-in" style={{ ['--d' as any]: '1s' }} role="group" aria-label="Aussage wählen">
+                        {AUSSAGEN.map((_, i) => (
+                            <button
+                                key={i}
+                                type="button"
+                                className={i === aussage ? 'is-active' : undefined}
+                                aria-label={`Aussage ${i + 1} von ${AUSSAGEN.length}`}
+                                aria-current={i === aussage ? 'true' : undefined}
+                                onClick={() => { setAussage(i); setUmgeschaltet(true); }}
+                            />
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            <section className="lg-card" aria-labelledby="lg-h1">
+                <div className="lg-form">
+                    <h1 id="lg-h1" className="lg-h1 lg-in" style={{ ['--d' as any]: '.45s' }}>
+                        {codeSchritt ? 'Noch ein Schritt' : 'Willkommen zurück!'}
+                    </h1>
+                    <p className="lg-lead lg-in" style={{ ['--d' as any]: '.52s' }}>
+                        {codeSchritt
+                            ? 'Bitte den sechsstelligen Code aus Ihrer Authenticator-App eingeben.'
+                            : 'Melden Sie sich an, um Ihre Website-Prüfung fortzusetzen.'}
+                    </p>
 
                     {error && (
-                        <div
-                            role="alert"
-                            aria-live="assertive"
-                            className="mb-5 p-3.5 rounded-xl flex items-start gap-3 text-sm animate-errorfade"
-                            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
-                        >
-                            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#f87171' }} />
-                            <span style={{ color: '#fca5a5' }}>{error}</span>
+                        <div role="alert" aria-live="assertive" className="lg-alert">
+                            <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" /><path d="M10 6v5M10 14h.01" /></svg>
+                            <span>{error}</span>
                         </div>
                     )}
 
-                    {isSubmitting && (
-                        <div className="mb-5 space-y-2.5">
-                            <div className="flex items-center gap-2.5">
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: '#60a5fa' }} />
-                                <span className="text-xs" style={{ color: '#60a5fa' }}>{loadingMessage}</span>
-                            </div>
-                            <div className="h-0.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                                <div
-                                    className="h-full rounded-full transition-all duration-300"
-                                    style={{
-                                        width: `${loadingProgress}%`,
-                                        background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
-                                        boxShadow: '0 0 8px rgba(59,130,246,0.5)',
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    {!codeSchritt && (
-                        <div className="mb-5">
-                            <SocialLoginButtons mode="login" />
-                        </div>
-                    )}
-
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                    <form onSubmit={handleSubmit} className="lg-fields">
                         {codeSchritt && (
                             <>
-                                <div
-                                    className="p-3.5 rounded-xl flex items-start gap-3 text-sm"
-                                    style={{ background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.18)' }}
-                                >
-                                    <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#34d399' }} />
-                                    <span style={{ color: 'rgba(148,163,184,0.85)' }}>
-                                        Angemeldet als <span className="text-white">{formData.email}</span>
-                                    </span>
-                                </div>
-
-                                <div className="relative">
-                                    <label
-                                        htmlFor="code"
-                                        className="block text-xs font-medium mb-2 transition-colors duration-200"
-                                        style={{ color: codeFocused ? '#60a5fa' : 'rgba(148,163,184,0.7)' }}
-                                    >
-                                        Code aus der App
-                                    </label>
-                                    <div className="relative">
-                                        <KeyRound
-                                            className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200"
-                                            style={{ color: codeFocused ? '#60a5fa' : 'rgba(100,116,139,0.7)' }}
-                                        />
-                                        <input
-                                            id="code"
-                                            /* one-time-code laesst iOS und Android den Code aus der
-                                               Zwischenablage bzw. der Mitteilung vorschlagen. */
-                                            autoComplete="one-time-code"
-                                            inputMode="text"
-                                            autoFocus
-                                            type="text"
-                                            placeholder="123456"
-                                            value={code}
-                                            onChange={(e) => setCode(e.target.value)}
-                                            onFocus={() => setCodeFocused(true)}
-                                            onBlur={() => setCodeFocused(false)}
-                                            required
-                                            disabled={isSubmitting}
-                                            className="w-full pl-10 pr-4 py-3 rounded-xl text-sm text-white placeholder-slate-600 outline-none transition-all duration-200 disabled:opacity-40 tracking-[0.3em]"
-                                            style={feldStil(codeFocused)}
-                                        />
-                                    </div>
-                                    <p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(100,116,139,0.75)' }}>
-                                        Kein Zugriff auf die App? Hier funktioniert auch einer Ihrer
-                                        Wiederherstellungscodes.
+                                <p className="lg-note">
+                                    Angemeldet als <strong>{formData.email}</strong>
+                                </p>
+                                <div className="lg-field">
+                                    <label htmlFor="code">Code aus der App</label>
+                                    <input
+                                        id="code"
+                                        /* one-time-code laesst iOS und Android den Code aus der
+                                           Zwischenablage bzw. der Mitteilung vorschlagen. */
+                                        autoComplete="one-time-code"
+                                        inputMode="text"
+                                        autoFocus
+                                        type="text"
+                                        placeholder="123456"
+                                        value={code}
+                                        onChange={(e) => setCode(e.target.value)}
+                                        required
+                                        disabled={isSubmitting}
+                                        className="lg-input lg-code"
+                                    />
+                                    <p className="lg-hint">
+                                        Kein Zugriff auf die App? Hier funktioniert auch einer Ihrer Wiederherstellungscodes.
                                     </p>
                                 </div>
                             </>
                         )}
 
-                        <div className="relative" hidden={codeSchritt}>
-                            <label
-                                htmlFor="email"
-                                className="block text-xs font-medium mb-2 transition-colors duration-200"
-                                style={{ color: emailFocused ? '#60a5fa' : 'rgba(148,163,184,0.7)' }}
-                            >
-                                E-Mail-Adresse
-                            </label>
-                            <div className="relative">
-                                <Mail
-                                    className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200"
-                                    style={{ color: emailFocused ? '#60a5fa' : 'rgba(100,116,139,0.7)' }}
-                                />
-                                <input
-                                    id="email"
-                                    autoComplete="username"
-                                    type="email"
-                                    placeholder="ihre@email.com"
-                                    value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    onFocus={() => setEmailFocused(true)}
-                                    onBlur={() => setEmailFocused(false)}
-                                    required={!codeSchritt}
-                                    disabled={isSubmitting}
-                                    className="w-full pl-10 pr-10 py-3 rounded-xl text-sm text-white placeholder-slate-600 outline-none transition-all duration-200 disabled:opacity-40"
-                                    style={feldStil(emailFocused)}
-                                />
-                                {emailHasValue && !isSubmitting && (
-                                    <CheckCircle2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#34d399' }} />
-                                )}
-                            </div>
+                        <div className="lg-field lg-in" style={{ ['--d' as any]: '.6s' }} hidden={codeSchritt}>
+                            <label htmlFor="email">E-Mail</label>
+                            <input
+                                id="email"
+                                autoComplete="username"
+                                type="email"
+                                placeholder="Ihre E-Mail-Adresse"
+                                value={formData.email}
+                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                required={!codeSchritt}
+                                disabled={isSubmitting}
+                                className="lg-input"
+                            />
                         </div>
 
-                        <div className="relative" hidden={codeSchritt}>
-                            <div className="flex items-center justify-between mb-2">
-                                <label
-                                    htmlFor="password"
-                                    className="block text-xs font-medium transition-colors duration-200"
-                                    style={{ color: passwordFocused ? '#60a5fa' : 'rgba(148,163,184,0.7)' }}
-                                >
-                                    Passwort
-                                </label>
-                                <a
-                                    href="/passwort-vergessen"
-                                    className="text-xs transition-colors duration-200 hover:opacity-80"
-                                    style={{ color: 'rgba(96,165,250,0.6)' }}
-                                >
-                                    Passwort vergessen?
-                                </a>
-                            </div>
-                            <div className="relative">
-                                <Lock
-                                    className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200"
-                                    style={{ color: passwordFocused ? '#60a5fa' : 'rgba(100,116,139,0.7)' }}
-                                />
+                        <div className="lg-field lg-in" style={{ ['--d' as any]: '.68s' }} hidden={codeSchritt}>
+                            <label htmlFor="password">Passwort</label>
+                            <div className="lg-pw">
                                 <input
                                     id="password"
                                     autoComplete="current-password"
                                     type={showPassword ? 'text' : 'password'}
-                                    placeholder="••••••••••••"
+                                    placeholder="Ihr Passwort"
                                     value={formData.password}
                                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                    onFocus={() => setPasswordFocused(true)}
-                                    onBlur={() => setPasswordFocused(false)}
                                     required={!codeSchritt}
                                     disabled={isSubmitting}
-                                    className="w-full pl-10 pr-10 py-3 rounded-xl text-sm text-white placeholder-slate-600 outline-none transition-all duration-200 disabled:opacity-40"
-                                    style={feldStil(passwordFocused)}
+                                    className="lg-input"
                                 />
-                                {passwordHasValue && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-3.5 top-1/2 -translate-y-1/2 transition-colors duration-200 hover:opacity-80"
-                                        style={{ color: 'rgba(100,116,139,0.7)' }}
-                                        tabIndex={-1}
-                                    >
-                                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                    </button>
-                                )}
+                                <button
+                                    type="button"
+                                    className="lg-eye"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    aria-label={showPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}
+                                    aria-pressed={showPassword}
+                                >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                        <path className={`lg-slash${showPassword ? ' is-on' : ''}`} d="M4 4l16 16" />
+                                    </svg>
+                                </button>
                             </div>
                         </div>
 
-                        <button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="w-full py-3 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2.5 transition-all duration-300 mt-2 group relative overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed"
-                            style={{
-                                background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
-                                boxShadow: isSubmitting ? 'none' : '0 4px 20px rgba(37,99,235,0.3)',
-                            }}
-                        >
-                            <div
-                                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                                style={{ background: 'linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%)' }}
-                            />
-                            <span className="relative flex items-center gap-2.5">
-                                {isSubmitting ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        Anmeldung läuft...
-                                    </>
-                                ) : (
-                                    <>
-                                        {codeSchritt ? <ShieldCheck className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
-                                        {codeSchritt ? 'Bestätigen' : 'Anmelden'}
-                                        <ArrowRight className="w-3.5 h-3.5 opacity-0 -ml-1 group-hover:opacity-100 group-hover:ml-0 transition-all duration-200" />
-                                    </>
-                                )}
-                            </span>
+                        <div className="lg-row lg-in" style={{ ['--d' as any]: '.76s' }} hidden={codeSchritt}>
+                            <label className="lg-check">
+                                <input
+                                    type="checkbox"
+                                    checked={merken}
+                                    onChange={(e) => setMerken(e.target.checked)}
+                                />
+                                <span className="lg-box" aria-hidden="true">
+                                    <svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" /></svg>
+                                </span>
+                                <span>E-Mail merken</span>
+                            </label>
+                            <a href="/passwort-vergessen" className="lg-link">Passwort vergessen?</a>
+                        </div>
+
+                        <button type="submit" disabled={isSubmitting} className="lg-submit lg-in" style={{ ['--d' as any]: '.84s' }}>
+                            {isSubmitting ? 'Anmeldung läuft...' : codeSchritt ? 'Bestätigen' : 'Anmelden'}
                         </button>
+
+                        {isSubmitting && (
+                            <div className="lg-status" role="status">
+                                <span>{loadingMessage}</span>
+                                <div className="lg-bar-track"><div style={{ width: `${loadingProgress}%` }} /></div>
+                            </div>
+                        )}
 
                         {codeSchritt && !isSubmitting && (
                             <button
                                 type="button"
+                                className="lg-textbtn"
                                 onClick={() => { setCodeSchritt(false); setCode(''); setError(''); }}
-                                className="w-full text-xs transition-colors duration-200 hover:opacity-80"
-                                style={{ color: 'rgba(148,163,184,0.6)' }}
                             >
                                 Zurück zur Anmeldung
                             </button>
                         )}
                     </form>
 
-                    <div className="mt-6 pt-5" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                        <p className="text-center text-xs" style={{ color: 'rgba(100,116,139,0.6)' }}>
-                            Noch kein Konto?{' '}
-                            <a
-                                href="/register"
-                                className="font-medium transition-colors duration-200 hover:opacity-80"
-                                style={{ color: '#60a5fa' }}
-                            >
-                                Jetzt registrieren
-                            </a>
-                        </p>
-                    </div>
-                </section>
+                    {!codeSchritt && isFirebaseEnabled && (
+                        <>
+                            <div className="lg-or lg-in" style={{ ['--d' as any]: '.92s' }}>
+                                <span>Oder weiter mit:</span>
+                            </div>
+                            <div className="lg-in" style={{ ['--d' as any]: '.98s' }}>
+                                <SocialLoginButtons mode="login" darstellung="pille" />
+                            </div>
+                        </>
+                    )}
 
-                <AuthVertrauen />
-            </div>
-
-            <style jsx>{`
-                @keyframes errorfade {
-                    from { opacity: 0; transform: translateY(-4px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                .animate-errorfade {
-                    animation: errorfade 0.2s ease-out forwards;
-                }
-            `}</style>
+                    <p className="lg-foot lg-in" style={{ ['--d' as any]: '1.04s' }}>
+                        Noch kein Konto? <a href="/register" className="lg-link lg-link-b">Jetzt registrieren</a>
+                    </p>
+                </div>
+            </section>
         </main>
     );
 }
