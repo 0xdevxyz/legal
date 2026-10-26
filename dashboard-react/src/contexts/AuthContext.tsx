@@ -95,14 +95,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // next-auth auf "loading" springt. Mit State kaeme er einen Render zu spaet
   // — genau der Render, in dem die Wache umleitet.
   const bekannterStatus = useRef<'authenticated' | 'unauthenticated' | null>(null);
+  // Die Abmeldung einer toten Sitzung genau einmal anstossen, nicht bei jedem
+  // Statuswechsel erneut (jede Abmeldung loest selbst wieder einen aus).
+  const abmeldungGestartet = useRef(false);
   if (status !== 'loading') bekannterStatus.current = status;
 
   // Laedt nur, solange noch nie feststand, wer angemeldet ist.
   const isLoading = status === 'loading' && bekannterStatus.current === null;
   // Eine Aktualisierung im Hintergrund meldet niemanden ab.
+  //
+  // Eine Sitzung, deren Token sich nicht mehr verlaengern laesst
+  // (RefreshAccessTokenError), zaehlt NICHT als angemeldet. Vorher blieb sie
+  // "authenticated", solange das Cookie lebte: Middleware und Anmeldeseite
+  // schickten sie von /login nach /, und hier sprang sie per Hartsprung
+  // zurueck auf /login. Ergebnis war eine Dauerschleife (26.10.2026,
+  // reproduziert mit einem Cookie mit Fehlerflag: ~40 Spruenge in 9 s).
+  const sessionAbgelaufen = (session as any)?.error === 'RefreshAccessTokenError';
   const isAuthenticated =
-    status === 'authenticated' ||
-    (status === 'loading' && bekannterStatus.current === 'authenticated');
+    !sessionAbgelaufen &&
+    (status === 'authenticated' ||
+      (status === 'loading' && bekannterStatus.current === 'authenticated'));
 
   const user: User | null = session?.user
     ? {
@@ -123,11 +135,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const sessionError = (session as any)?.error;
     if (sessionError === 'RefreshAccessTokenError') {
       import('@/lib/auth-refresh').then(({ clearAccessToken }) => clearAccessToken());
-      signOut({ redirect: false }).then(() => {
-        window.location.href = '/login';
-      });
+      if (!abmeldungGestartet.current) {
+        abmeldungGestartet.current = true;
+        // Kein Hartsprung: die Anmeldewache leitet auf /login um, sobald
+        // isAuthenticated falsch ist, und die Anmeldeseite selbst bleibt
+        // stehen. Der Hartsprung auf /login war die zweite Haelfte der Schleife.
+        signOut({ redirect: false }).catch(() => { /* Cookie bleibt, Seite zeigt trotzdem die Anmeldung */ });
+      }
+      // Bereit, damit die Wache nicht ewig "Wird geladen" zeigt.
+      setIsAuthReady(true);
       return;
     }
+    abmeldungGestartet.current = false;
 
     if (status === 'authenticated') {
       if (session?.accessToken) {

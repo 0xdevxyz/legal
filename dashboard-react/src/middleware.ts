@@ -5,7 +5,10 @@ import { istOeffentlich, istNurFuerGaeste } from "@/lib/oeffentliche-pfade";
 
 export default auth(function middleware(req) {
   const { nextUrl, auth: session } = req;
-  const isLoggedIn = !!session;
+  // Eine Sitzung mit Fehlerflag (Token nicht mehr verlaengerbar) ist keine
+  // Anmeldung. Sonst leitet die Middleware /login auf / um, waehrend der
+  // Client dieselbe Sitzung abmeldet und zurueck auf /login springt.
+  const isLoggedIn = !!session && !(session as any).error;
 
   const isPublic = istOeffentlich(nextUrl.pathname);
 

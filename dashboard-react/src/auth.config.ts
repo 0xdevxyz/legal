@@ -36,7 +36,7 @@ export const authConfig: NextAuthConfig = {
   },
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user;
+      const isLoggedIn = !!auth?.user && !(auth as any).error;
 
       // Die Liste steht in lib/oeffentliche-pfade. Dieser Rueckruf laeuft VOR
       // middleware.ts; solange beide ihre eigene Kopie hatten, war die dort
