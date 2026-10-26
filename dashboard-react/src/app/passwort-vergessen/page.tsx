@@ -14,13 +14,10 @@
  */
 
 import { useState } from 'react';
-import { Mail, Send, ArrowLeft } from 'lucide-react';
 import { KontoKarte, KontoKnopf, API_BASIS } from '@/components/konto/KontoKarte';
-import { feldStil } from '@/components/AuthBackground';
 
 export default function PasswortVergessenPage() {
     const [email, setEmail] = useState('');
-    const [fokussiert, setFokussiert] = useState(false);
     const [laeuft, setLaeuft] = useState(false);
     const [gesendet, setGesendet] = useState(false);
     const [fehler, setFehler] = useState('');
@@ -57,12 +54,10 @@ export default function PasswortVergessenPage() {
                 unterzeile="Falls ein Konto zu dieser Adresse besteht, liegt gleich eine Nachricht mit einem Link im Postfach. Der Link gilt eine Stunde und lässt sich einmal verwenden."
                 erfolg={`Anfrage für ${email} entgegengenommen.`}
                 fusszeile={
-                    <a href="/login" className="font-medium hover:opacity-80" style={{ color: '#60a5fa' }}>
-                        Zurück zur Anmeldung
-                    </a>
+                    <a href="/login" className="lg-link lg-link-b">Zurück zur Anmeldung</a>
                 }
             >
-                <p className="text-sm leading-relaxed" style={{ color: 'rgba(148,163,184,0.7)' }}>
+                <p className="lg-body">
                     Nichts angekommen? Dann sehen Sie bitte im Spam-Ordner nach. Kommt auch
                     dort nichts an, besteht zu dieser Adresse vermutlich kein Konto.
                 </p>
@@ -76,46 +71,27 @@ export default function PasswortVergessenPage() {
             unterzeile="Wir schicken Ihnen einen Link, mit dem Sie ein neues Passwort setzen können."
             fehler={fehler}
             fusszeile={
-                <a href="/login" className="font-medium hover:opacity-80 inline-flex items-center gap-1.5" style={{ color: '#60a5fa' }}>
-                    <ArrowLeft className="w-3 h-3" />
-                    Zurück zur Anmeldung
-                </a>
+                <a href="/login" className="lg-link lg-link-b">Zurück zur Anmeldung</a>
             }
         >
-            <form onSubmit={absenden} className="space-y-4">
-                <div className="relative">
-                    <label
-                        htmlFor="email"
-                        className="block text-xs font-medium mb-2 transition-colors duration-200"
-                        style={{ color: fokussiert ? '#60a5fa' : 'rgba(148,163,184,0.7)' }}
-                    >
-                        E-Mail-Adresse
-                    </label>
-                    <div className="relative">
-                        <Mail
-                            className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200"
-                            style={{ color: fokussiert ? '#60a5fa' : 'rgba(100,116,139,0.7)' }}
-                        />
-                        <input
-                            id="email"
-                            type="email"
-                            autoComplete="username"
-                            autoFocus
-                            placeholder="ihre@email.com"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            onFocus={() => setFokussiert(true)}
-                            onBlur={() => setFokussiert(false)}
-                            required
-                            disabled={laeuft}
-                            className="w-full pl-10 pr-4 py-3 rounded-xl text-sm text-white placeholder-slate-600 outline-none transition-all duration-200 disabled:opacity-40"
-                            style={feldStil(fokussiert)}
-                        />
-                    </div>
+            <form onSubmit={absenden}>
+                <div className="lg-field">
+                    <label htmlFor="email">E-Mail</label>
+                    <input
+                        id="email"
+                        type="email"
+                        autoComplete="username"
+                        autoFocus
+                        placeholder="Ihre E-Mail-Adresse"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        disabled={laeuft}
+                        className="lg-input"
+                    />
                 </div>
 
                 <KontoKnopf laeuft={laeuft} laeuftText="Wird gesendet...">
-                    <Send className="w-4 h-4" />
                     Link anfordern
                 </KontoKnopf>
             </form>

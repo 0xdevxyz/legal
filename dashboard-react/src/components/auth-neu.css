@@ -551,3 +551,35 @@
 @media (orientation: landscape) and (min-height: 521px) {
     .lg--reg .lg-form { padding-top: calc(44 * var(--u)); padding-bottom: calc(44 * var(--u)); }
 }
+
+/* ======================================================================
+ * Kontoseiten (Passwort vergessen/neu, E-Mail bestaetigen)
+ * ==================================================================== */
+.lg-body { margin: 0; font-size: calc(18 * var(--u)); line-height: 1.5; color: var(--text2); }
+.lg-konto { margin-top: calc(30 * var(--u)); }
+.lg-alert + .lg-konto { margin-top: calc(24 * var(--u)); }
+.lg-ok { border-color: #A7F3D0; background: #ECFDF5; color: #065F46; }
+.lg-note.is-warn { border: 1px solid #FECACA; background: #FEF2F2; color: #991B1B; }
+.lg-konto .lg-note { margin: calc(14 * var(--u)) 0 0; font-size: calc(15.5 * var(--u)); line-height: 1.5; }
+.lg-wait { display: flex; align-items: center; gap: calc(12 * var(--u)); }
+.lg-spinner { width: calc(22 * var(--u)); height: calc(22 * var(--u)); border: 2px solid var(--line); border-top-color: var(--amber); border-radius: 50%; animation: lg-spin .8s linear infinite; }
+@keyframes lg-spin { to { transform: rotate(360deg); } }
+.lg-konto .lg-submit { margin-top: calc(28 * var(--u)); }
+
+@media (orientation: portrait) {
+    .lg-body { font-size: calc(14 * var(--u)); }
+    .lg-konto { margin-top: calc(18 * var(--u)); }
+    .lg-konto .lg-note { font-size: calc(12 * var(--u)); }
+    .lg-konto .lg-submit { margin-top: calc(18 * var(--u)); }
+    .lg-spinner { width: calc(16 * var(--u)); height: calc(16 * var(--u)); }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+    .lg-body { font-size: calc(9.5 * var(--u)); }
+    .lg-konto { margin-top: calc(10 * var(--u)); }
+    .lg-konto .lg-note { font-size: calc(8.5 * var(--u)); margin-top: calc(6 * var(--u)); }
+    .lg-konto .lg-submit { margin-top: calc(10 * var(--u)); }
+    .lg-spinner { width: calc(12 * var(--u)); height: calc(12 * var(--u)); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lg-spinner { animation: none; border-top-color: var(--amber); }
+}

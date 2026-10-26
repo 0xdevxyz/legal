@@ -13,7 +13,6 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Loader2, MailCheck } from 'lucide-react';
 import { KontoKarte, API_BASIS, fehlertext } from '@/components/konto/KontoKarte';
 
 type Stand = 'laeuft' | 'fertig' | 'fehler' | 'kein-token';
@@ -52,9 +51,7 @@ function EmailBestaetigen() {
     }, [token]);
 
     const zurAnmeldung = (
-        <a href="/login" className="font-medium hover:opacity-80" style={{ color: '#60a5fa' }}>
-            Zur Anmeldung
-        </a>
+        <a href="/login" className="lg-link lg-link-b">Zur Anmeldung</a>
     );
 
     if (stand === 'kein-token') {
@@ -65,7 +62,7 @@ function EmailBestaetigen() {
                 fehler="Kein gültiger Bestätigungslink."
                 fusszeile={zurAnmeldung}
             >
-                <p className="text-sm leading-relaxed" style={{ color: 'rgba(148,163,184,0.7)' }}>
+                <p className="lg-body">
                     Melden Sie sich an und fordern Sie in den Einstellungen eine neue
                     Bestätigungsmail an.
                 </p>
@@ -76,8 +73,8 @@ function EmailBestaetigen() {
     if (stand === 'laeuft') {
         return (
             <KontoKarte titel="Einen Moment" unterzeile="Die Bestätigung wird geprüft.">
-                <div className="flex items-center gap-3 text-sm" style={{ color: 'rgba(148,163,184,0.7)' }}>
-                    <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#60a5fa' }} />
+                <div className="lg-body lg-wait" role="status">
+                    <span className="lg-spinner" aria-hidden="true" />
                     Wird geprüft...
                 </div>
             </KontoKarte>
@@ -92,7 +89,7 @@ function EmailBestaetigen() {
                 fehler={fehler}
                 fusszeile={zurAnmeldung}
             >
-                <p className="text-sm leading-relaxed" style={{ color: 'rgba(148,163,184,0.7)' }}>
+                <p className="lg-body">
                     Ein Bestätigungslink gilt 72 Stunden und lässt sich einmal verwenden. Melden
                     Sie sich an und fordern Sie in den Einstellungen eine neue Mail an. Ist Ihre
                     Adresse bereits bestätigt, brauchen Sie nichts weiter zu tun.
@@ -108,10 +105,7 @@ function EmailBestaetigen() {
             erfolg="Ihre E-Mail-Adresse ist bestätigt."
             fusszeile={zurAnmeldung}
         >
-            <div className="flex items-center gap-3 text-sm" style={{ color: 'rgba(148,163,184,0.7)' }}>
-                <MailCheck className="w-4 h-4" style={{ color: '#34d399' }} />
-                Sie können dieses Fenster schließen.
-            </div>
+            <p className="lg-body">Sie können dieses Fenster schließen.</p>
         </KontoKarte>
     );
 }
