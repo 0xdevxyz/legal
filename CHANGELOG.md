@@ -21,40 +21,6 @@
 - Kosten: jeder Scan dauert bis zu 20 s länger (Browserstart plus Seitenladen). Die SSRF-Prüfung der Adresse bleibt beim Aufrufer, der Browser lädt nur, was `validate_scan_url` vorher durchgelassen hat
 - Geprüft: `tests/test_markenfarben_gerendert.py` (6 Bewertungstests ohne Browser, 1 Browsertest mit `set_content`, übersprungen ohne Playwright), dazu Plattformpalette, Widget-Markenfarbe, Grundsystem: 60 passed. Nicht geprüft: echte Kundenseiten, complyo.de und Kundendomains sind aus dieser Sitzung nicht erreichbar
 
-## [2026-10-20]
-
-### Backend: Prüfstufe im Browser für den Banner-Scan
-- **Befund:** Der Banner-Scan (`POST /api/cookie-compliance/scan`) liest nur HTML. Was ein Skript erst zur Laufzeit nachlädt, fehlt im Banner. Am 19.10.2026 an 26 Kundenseiten gemessen: bei 5 Seiten fehlten Dienste (Google Fonts über `fonts.gstatic.com` auf 2 Seiten, reCAPTCHA, Google Maps, Analytics), die der Browser lädt
-- `compliance_engine/cookie_pruefstufe.py`: nach dem HTML-Scan ein Auftrag in eine eigene Schlange (200, zwei Arbeiter, über den gemeinsamen Browser-Semaphor, nie zusätzlich). Der HTML-Scan antwortet wie bisher sofort; die Antwort trägt `pruefstufe` (Zustand, Position, geschätzte Wartezeit). `GET /api/cookie-compliance/scan/pruefstufe/{site_id}` liefert Stand und Bewertung
-- **Zuordnung streng:** nach Host (genaueste Domain), nicht nach Teilstring; mehrfach belegte Domains (google.com bei Maps, reCAPTCHA, DV360) und breite Hosts (googleapis.com, www.gstatic.com) nur über ausdrückliche Pfadregeln, sonst Prüfliste; Cookie-Namen allein fügen nichts hinzu; WordPress-Emojis nur aus dem HTML (Headless hat keine Emoji-Schrift, s.w.org würde sonst fälschlich belegen); eigene Widget-Hosts ausgenommen. Die Stufe fügt nur hinzu, sie entfernt nie
-- **Last:** Dedup je Seite, 10 Minuten Wiederholsperre, 60 Sekunden Sperre nach Fehlschlag, 75 s Zeitbudget je Auftrag, Anonyme nur bis drei Viertel der Schlange, Angemeldete vor Anonymen vor Wochenlauf. Wochenlauf (höchstens 6 Seiten pro Stunde, nur bei leerer Schlange) schreibt nur einen Bericht, ändert keinen Banner. Schalter: `COMPLYO_PRUEFSTUFE=0`, `COMPLYO_PRUEFSTUFE_WOCHE=0`, `COMPLYO_PRUEFSTUFE_ARBEITER`
-- `DeepCookieScanner` gehärtet (gilt auch für den Premium-Scan): URL durch `validate_url` vor dem Browserstart, Route-Wache gegen interne Ziele und Medien, Request-Deckel 3000, Seite nicht geladen oder HTTP >= 400 ist ein Fehler statt einer sauberen Seite (meyers.cafe mit ungültigem Zertifikat zeigte vorher „0 Dienste“)
-- Gemessen auf openclaw im Container mit 2-GiB-Grenze: 100 gleichzeitige Nutzer, alle 100 angenommen in 0,04 s, alle 100 fertig in 219 s (zwei Arbeiter), Container-Spitze 269 MiB; mit drei Arbeitern 151 s und 378 MiB. 25 echte Kundenseiten: Median 4,6 s, max 6,1 s je Seite
-- Tests `test_cookie_pruefstufe.py` (62), Lasttest `tools/pruefstufe_lasttest.py`, Vergleich `tools/pruefstufe_vergleich.py`; Gegenproben (Semaphor, Dedup, Teilstring, Überschreiben, Arbeiterzahl, breite Hosts) lassen je mindestens einen Test rot werden
-- `GET /api/cookie-compliance/scan/capabilities` behauptet nicht mehr, Playwright fehle
-
-### Offen
-- Die Prüfliste zeigt Katalog-Lücken: `use.fontawesome.com`, `maps.gstatic.com`, `yt3.ggpht.com`, `ativo.vamtam.com` fehlen im Katalog
-- Der Browser sieht nur den Zustand vor der Einwilligung: was ein funktionierender Banner blockiert, erscheint nicht (so soll es sein, gilt als Nachweis der Sperre); der HTML-Scan bleibt deshalb Quelle für einwilligungspflichtige Dienste
-
----
-
-## [2026-10-08]
-
-### Backend: Rechtsänderungs-Benachrichtigungen bekommen ihr Schema
-- **Befund:** `legal_notification_service.py` benutzte in `legal_change_notifications` sechs Spalten (legal_news_id, severity, confirmation_token, action_required, action_deadline, confirmed_at), die es live nie gab; die Tabelle hat das Schema vom November 2025 und 0 Zeilen. `/confirm/<token>` lief in `column "confirmation_token" does not exist`, das Dashboard-Menü zählte immer 0. Dahinter ein zweiter Fehler: die Nutzerabfrage las `u.firebase_uid`, die Spalte hat `users` nicht
-- Migration `0037b_rechtsaenderung_quittung`: ergänzt die sechs Spalten (NULL-fähig oder mit Vorbelegung), Unique-Index auf den Token, Indizes auf `legal_news_id` und `(user_id, status)`. Bestehende Spalten und Fremdschlüssel bleiben unberührt. Geprüft gegen Postgres 16 mit Baseline: upgrade, downgrade, upgrade
-- `u.firebase_uid` aus der Abfrage entfernt; neue Benachrichtigungen setzen `sent_at` ausdrücklich auf NULL (live Vorbelegung `now()`)
-- `POST /api/legal-notifications/process-new` nur noch mit `require_admin`; vorher genügte die Anmeldung, und mit dem Schema verschickt der Aufruf Mails an alle bestätigten Konten
-- `/stats`: `critical_pending` und `action_required` wieder aus den Spalten statt `0::bigint`. Dashboard-Menü zählt `pending + sent` statt `pending + critical_pending`
-- `send_daily_digest` als „zählt nur, verschickt nichts“ dokumentiert, Ergebnis trägt `versand: "nicht_umgesetzt"`; kein Digest gebaut
-- Wächter `backend/tests/test_rechtsaenderung_schema.py`: Spalten aus Dienst und Routen gegen Baseline plus Migrationen, mit Gegenproben
-
-### Offen
-- Kein Cron ruft `legal_news_cronjob.py`; eingeschaltet würden heute 5 Stichwort-„critical“-Meldungen als `[DRINGEND]` an 4 Konten gehen, zwei davon ohne Bezug zu Websites. Entscheidung über Einstufung und Einschalten steht aus
-- Scheitert eine Mail, wird sie nie erneut versucht
-
-## [2026-10-21]
 
 ### Infrastruktur: eingecheckter node_modules-Symlink entfernt
 - Commit 691ccd3 (19.10., PR #44) hat `dashboard-react/node_modules` als Symlink auf einen Pfad des Entwicklerrechners (`/private/tmp/claude-501/…/scratchpad/legal/dashboard-react/node_modules`) eingecheckt. `.gitignore` führte nur `node_modules/`, und das trifft Verzeichnisse, nicht einen Symlink, der für git eine Datei ist. Auf jedem anderen Rechner zeigte der Link ins Leere; `npm ci` ersetzt ihn zwar, aber `git status` meldete danach eine gelöschte Datei
@@ -77,6 +43,22 @@
 - `DeepScanner._detect_shop_system` nennt WooCommerce als Shop-System nur noch mit Shop-Funktion; vorher reichte das Wort im Quelltext. `shop_check.detect_shop` zählt `woocommerce` und `cart` (trifft dessen Skript `wc-cart-fragments`) ohne Shop-Funktion nicht mehr: eine Vereinsseite mit installiertem Plugin und dem Wort „kaufen" im Text kam sonst auf drei Treffer und bekam „AGB fehlen (Online-Shop erkannt)" als kritischen Befund
 - **Rechtlich:** WooCommerce-Cookies sind technisch notwendig (§ 25 Abs. 2 Nr. 2 TDDDG), brauchen keine Einwilligung, gehören aber in die Gruppe „Notwendig" des Banners und in die Datenschutzerklärung, sobald sie gesetzt werden können. Werden sie nie gesetzt, ist der Eintrag eine falsche Angabe über eine Verarbeitung, die nicht stattfindet. Deshalb: ohne Shop-Funktion nicht im Banner
 - Tests `backend/tests/test_plugin_nutzung.py`
+
+## [2026-10-20]
+
+### Backend: Prüfstufe im Browser für den Banner-Scan
+- **Befund:** Der Banner-Scan (`POST /api/cookie-compliance/scan`) liest nur HTML. Was ein Skript erst zur Laufzeit nachlädt, fehlt im Banner. Am 19.10.2026 an 26 Kundenseiten gemessen: bei 5 Seiten fehlten Dienste (Google Fonts über `fonts.gstatic.com` auf 2 Seiten, reCAPTCHA, Google Maps, Analytics), die der Browser lädt
+- `compliance_engine/cookie_pruefstufe.py`: nach dem HTML-Scan ein Auftrag in eine eigene Schlange (200, zwei Arbeiter, über den gemeinsamen Browser-Semaphor, nie zusätzlich). Der HTML-Scan antwortet wie bisher sofort; die Antwort trägt `pruefstufe` (Zustand, Position, geschätzte Wartezeit). `GET /api/cookie-compliance/scan/pruefstufe/{site_id}` liefert Stand und Bewertung
+- **Zuordnung streng:** nach Host (genaueste Domain), nicht nach Teilstring; mehrfach belegte Domains (google.com bei Maps, reCAPTCHA, DV360) und breite Hosts (googleapis.com, www.gstatic.com) nur über ausdrückliche Pfadregeln, sonst Prüfliste; Cookie-Namen allein fügen nichts hinzu; WordPress-Emojis nur aus dem HTML (Headless hat keine Emoji-Schrift, s.w.org würde sonst fälschlich belegen); eigene Widget-Hosts ausgenommen. Die Stufe fügt nur hinzu, sie entfernt nie
+- **Last:** Dedup je Seite, 10 Minuten Wiederholsperre, 60 Sekunden Sperre nach Fehlschlag, 75 s Zeitbudget je Auftrag, Anonyme nur bis drei Viertel der Schlange, Angemeldete vor Anonymen vor Wochenlauf. Wochenlauf (höchstens 6 Seiten pro Stunde, nur bei leerer Schlange) schreibt nur einen Bericht, ändert keinen Banner. Schalter: `COMPLYO_PRUEFSTUFE=0`, `COMPLYO_PRUEFSTUFE_WOCHE=0`, `COMPLYO_PRUEFSTUFE_ARBEITER`
+- `DeepCookieScanner` gehärtet (gilt auch für den Premium-Scan): URL durch `validate_url` vor dem Browserstart, Route-Wache gegen interne Ziele und Medien, Request-Deckel 3000, Seite nicht geladen oder HTTP >= 400 ist ein Fehler statt einer sauberen Seite (meyers.cafe mit ungültigem Zertifikat zeigte vorher „0 Dienste“)
+- Gemessen auf openclaw im Container mit 2-GiB-Grenze: 100 gleichzeitige Nutzer, alle 100 angenommen in 0,04 s, alle 100 fertig in 219 s (zwei Arbeiter), Container-Spitze 269 MiB; mit drei Arbeitern 151 s und 378 MiB. 25 echte Kundenseiten: Median 4,6 s, max 6,1 s je Seite
+- Tests `test_cookie_pruefstufe.py` (62), Lasttest `tools/pruefstufe_lasttest.py`, Vergleich `tools/pruefstufe_vergleich.py`; Gegenproben (Semaphor, Dedup, Teilstring, Überschreiben, Arbeiterzahl, breite Hosts) lassen je mindestens einen Test rot werden
+- `GET /api/cookie-compliance/scan/capabilities` behauptet nicht mehr, Playwright fehle
+
+### Offen
+- Die Prüfliste zeigt Katalog-Lücken: `use.fontawesome.com`, `maps.gstatic.com`, `yt3.ggpht.com`, `ativo.vamtam.com` fehlen im Katalog
+- Der Browser sieht nur den Zustand vor der Einwilligung: was ein funktionierender Banner blockiert, erscheint nicht (so soll es sein, gilt als Nachweis der Sperre); der HTML-Scan bleibt deshalb Quelle für einwilligungspflichtige Dienste
 
 ## [2026-10-19]
 
@@ -102,6 +84,21 @@
 ### Infrastruktur: Backend-Tests seit dem 08.10. rot durch pydantic 2.14
 - **`import mcp_server` brach mit `ImportError: cannot import name 'eval_type_backport' from 'pydantic._internal._typing_extra'`**, elf Tests in `tests/test_mcp_allowlist.py` fielen um. `fastapi-mcp==0.3.4` zieht `mcp>=1.8.1`; pip fällt wegen `httpx`/`mcp-types` auf mcp 1.12.4 zurück, und dessen `func_metadata` importiert ein privates pydantic-Symbol, das pydantic 2.14.0 (veröffentlicht 08.10.2026, 14:34 UTC, sechs Stunden nach dem letzten grünen main-Lauf) entfernt hat. Kein Code im Repo hat sich geändert
 - `backend/requirements.txt`: `pydantic>=2.5.0,<2.14`. Lokal nachgestellt: mcp 1.12.4 mit pydantic 2.14.1 bricht, mit 2.13.5 importiert. Der Pin fällt, sobald mcp auf eine Version gehoben wird, die ohne das private Symbol auskommt
+
+## [2026-10-08]
+
+### Backend: Rechtsänderungs-Benachrichtigungen bekommen ihr Schema
+- **Befund:** `legal_notification_service.py` benutzte in `legal_change_notifications` sechs Spalten (legal_news_id, severity, confirmation_token, action_required, action_deadline, confirmed_at), die es live nie gab; die Tabelle hat das Schema vom November 2025 und 0 Zeilen. `/confirm/<token>` lief in `column "confirmation_token" does not exist`, das Dashboard-Menü zählte immer 0. Dahinter ein zweiter Fehler: die Nutzerabfrage las `u.firebase_uid`, die Spalte hat `users` nicht
+- Migration `0037b_rechtsaenderung_quittung`: ergänzt die sechs Spalten (NULL-fähig oder mit Vorbelegung), Unique-Index auf den Token, Indizes auf `legal_news_id` und `(user_id, status)`. Bestehende Spalten und Fremdschlüssel bleiben unberührt. Geprüft gegen Postgres 16 mit Baseline: upgrade, downgrade, upgrade
+- `u.firebase_uid` aus der Abfrage entfernt; neue Benachrichtigungen setzen `sent_at` ausdrücklich auf NULL (live Vorbelegung `now()`)
+- `POST /api/legal-notifications/process-new` nur noch mit `require_admin`; vorher genügte die Anmeldung, und mit dem Schema verschickt der Aufruf Mails an alle bestätigten Konten
+- `/stats`: `critical_pending` und `action_required` wieder aus den Spalten statt `0::bigint`. Dashboard-Menü zählt `pending + sent` statt `pending + critical_pending`
+- `send_daily_digest` als „zählt nur, verschickt nichts“ dokumentiert, Ergebnis trägt `versand: "nicht_umgesetzt"`; kein Digest gebaut
+- Wächter `backend/tests/test_rechtsaenderung_schema.py`: Spalten aus Dienst und Routen gegen Baseline plus Migrationen, mit Gegenproben
+
+### Offen
+- Kein Cron ruft `legal_news_cronjob.py`; eingeschaltet würden heute 5 Stichwort-„critical“-Meldungen als `[DRINGEND]` an 4 Konten gehen, zwei davon ohne Bezug zu Websites. Entscheidung über Einstufung und Einschalten steht aus
+- Scheitert eine Mail, wird sie nie erneut versucht
 
 ## [2026-10-07]
 
