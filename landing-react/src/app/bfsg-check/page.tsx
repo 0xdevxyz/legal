@@ -2,13 +2,13 @@ import type { Metadata } from 'next';
 import CheckPage from '@/components/landing/CheckPage';
 
 export const metadata: Metadata = {
-  title: 'BFSG-Check: Website auf Barrierefreiheitsstärkungsgesetz prüfen | Complyo',
+  title: 'BFSG-Check & Accessibility Checker für Ihre Website | Complyo',
   description:
-    'BFSG-Check kostenlos: Prüfen Sie, ob Ihre Website die Anforderungen des Barrierefreiheitsstärkungsgesetzes erfüllt. Ergebnis in unter einer Minute, ohne Anmeldung.',
-  keywords: 'BFSG-Check, BFSG Checker, BFSG Check, Barrierefreiheitsstärkungsgesetz Website',
+    'BFSG-Check und Accessibility Check kostenlos: Prüfen Sie, ob Ihre Website die Anforderungen des Barrierefreiheitsstärkungsgesetzes (BFSG) und WCAG erfüllt. Ergebnis in unter einer Minute, ohne Anmeldung.',
+  keywords: 'BFSG-Check, BFSG Checker, BFSG Check, Accessibility Checker, Accessibility Check, WCAG Test, Barrierefreiheitsstärkungsgesetz Website',
   alternates: { canonical: '/bfsg-check/' },
   openGraph: {
-    title: 'BFSG-Check: Website auf Barrierefreiheitsstärkungsgesetz prüfen',
+    title: 'BFSG-Check & Accessibility Checker für Ihre Website',
     description:
       'Prüfen Sie kostenlos, ob Ihre Website die BFSG-Anforderungen erfüllt. Ergebnis in unter einer Minute.',
     url: 'https://complyo.de/bfsg-check',
