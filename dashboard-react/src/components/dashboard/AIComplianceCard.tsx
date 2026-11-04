@@ -46,7 +46,7 @@ export const AIComplianceCard: React.FC = () => {
             <div className="text-xs text-gray-600 dark:text-zinc-400">AI-Systeme</div>
           </div>
           <div className="glass-card p-3 rounded-xl">
-            <div className="text-2xl font-bold text-[#25bac8]">
+            <div className="text-2xl font-bold text-[#A85F00] dark:text-[#FBAE05]">
               {aiStats ? `${aiStats.average_compliance_score}%` : '—'}
             </div>
             <div className="text-xs text-gray-600 dark:text-zinc-400">Compliance</div>
@@ -66,7 +66,7 @@ export const AIComplianceCard: React.FC = () => {
 
         <button
           onClick={() => router.push('/ai-compliance')}
-          className="w-full bg-[#25bac8] hover:bg-[#45d6e2] text-zinc-950 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all text-sm shadow-lg"
+          className="w-full bg-[#F59A08] hover:bg-[#FBAE05] text-zinc-950 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all text-sm shadow-lg"
         >
           Übersicht
           <ArrowRight className="w-4 h-4" />
@@ -92,7 +92,7 @@ export const AIComplianceCard: React.FC = () => {
 
       <div className="space-y-2.5 mb-4">
         <div className="flex items-start gap-2">
-          <Shield className="w-4 h-4 text-[#25bac8] flex-shrink-0 mt-0.5" />
+          <Shield className="w-4 h-4 text-[#A85F00] dark:text-[#FBAE05] flex-shrink-0 mt-0.5" />
           <div>
             <div className="text-xs font-medium text-gray-900 dark:text-white">Risiko-Klassifizierung</div>
             <div className="text-xs text-zinc-500">High, Limited, Minimal</div>
@@ -100,7 +100,7 @@ export const AIComplianceCard: React.FC = () => {
         </div>
 
         <div className="flex items-start gap-2">
-          <FileText className="w-4 h-4 text-[#25bac8] flex-shrink-0 mt-0.5" />
+          <FileText className="w-4 h-4 text-[#A85F00] dark:text-[#FBAE05] flex-shrink-0 mt-0.5" />
           <div>
             <div className="text-xs font-medium text-gray-900 dark:text-white">Auto-Dokumentation</div>
             <div className="text-xs text-zinc-500">Reports & Analysen</div>
@@ -108,7 +108,7 @@ export const AIComplianceCard: React.FC = () => {
         </div>
 
         <div className="flex items-start gap-2">
-          <TrendingUp className="w-4 h-4 text-[#25bac8] flex-shrink-0 mt-0.5" />
+          <TrendingUp className="w-4 h-4 text-[#A85F00] dark:text-[#FBAE05] flex-shrink-0 mt-0.5" />
           <div>
             <div className="text-xs font-medium text-gray-900 dark:text-white">Monitoring</div>
             <div className="text-xs text-zinc-500">Scans & Alerts</div>
@@ -123,7 +123,7 @@ export const AIComplianceCard: React.FC = () => {
 
       <button
         onClick={() => router.push('/ai-compliance/upgrade')}
-        className="w-full bg-[#25bac8] hover:bg-[#45d6e2] text-zinc-950 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all text-sm"
+        className="w-full bg-[#F59A08] hover:bg-[#FBAE05] text-zinc-950 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all text-sm"
       >
         <Sparkles className="w-4 h-4" />
         Add-on jetzt aktivieren
@@ -132,7 +132,7 @@ export const AIComplianceCard: React.FC = () => {
       <div className="mt-3 text-center">
         <button
           onClick={() => router.push('/ai-compliance')}
-          className="text-sm text-[#25bac8] hover:text-[#45d6e2] font-medium underline"
+          className="text-sm text-[#A85F00] dark:text-[#FBAE05] hover:text-[#7E4700] dark:hover:text-[#FCC95E] font-medium underline"
         >
           Mehr über AI Compliance erfahren →
         </button>

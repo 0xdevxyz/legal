@@ -302,8 +302,8 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
         {/* Die Farbverlaeufe brauchen den Beschnitt, damit sie an den runden
             Ecken enden — der Inhalt darueber nicht. */}
         <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
-          <div className="absolute inset-0 bg-gradient-to-br from-[#25bac8]/10 via-transparent to-[#25bac8]/5 opacity-70"></div>
-          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-[#25bac8]/[0.04] to-transparent"></div>
+          <div className="absolute inset-0 bg-gradient-to-br from-[#F59A08]/10 via-transparent to-[#F59A08]/5 opacity-70"></div>
+          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-[#F59A08]/[0.04] to-transparent"></div>
         </div>
 
         <div className="relative grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-8 lg:gap-10 items-start">
@@ -389,7 +389,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                 )}
                 <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 w-full">
                 <div className="flex-1 min-w-[16rem] relative group">
-                  <Globe className="absolute left-5 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-600 dark:text-zinc-400 group-focus-within:text-[#25bac8] transition-colors" />
+                  <Globe className="absolute left-5 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-600 dark:text-zinc-400 group-focus-within:text-[#A85F00] transition-colors" />
                   <label htmlFor="website-url-input" className="sr-only">Website-URL eingeben</label>
                   <input
                     type="text"
@@ -403,7 +403,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                     onKeyPress={(e) => e.key === 'Enter' && handleAnalyze()}
                     placeholder="ihre-domain.de eingeben"
                     aria-label="Website-URL zur Compliance-Analyse eingeben"
-                    className="w-full pl-14 pr-5 py-4 bg-white dark:bg-zinc-900/50 backdrop-blur-sm border-2 border-gray-200 dark:border-zinc-700/50 rounded-2xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#25bac8]/50 focus:border-[#25bac8]/50 text-lg transition-all shadow-sm dark:shadow-none"
+                    className="w-full pl-14 pr-5 py-4 bg-white dark:bg-zinc-900/50 backdrop-blur-sm border-2 border-gray-200 dark:border-zinc-700/50 rounded-2xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#F59A08]/50 focus:border-[#F59A08]/50 text-lg transition-all shadow-sm dark:shadow-none"
                     disabled={isAnalyzing}
                   />
                 </div>
@@ -411,7 +411,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
                   size="lg"
                   onClick={() => handleAnalyze()}
                   disabled={isAnalyzing || !url.trim()}
-                  className="bg-[#25bac8] hover:bg-[#45d6e2] text-zinc-950 font-bold px-8 py-6 text-lg shadow-lg shadow-[#25bac8]/25 hover:shadow-xl hover:shadow-[#25bac8]/30 transition-all rounded-2xl disabled:opacity-40"
+                  className="bg-[#F59A08] hover:bg-[#FBAE05] text-zinc-950 font-bold px-8 py-6 text-lg shadow-lg shadow-[#F59A08]/25 hover:shadow-xl hover:shadow-[#F59A08]/30 transition-all rounded-2xl disabled:opacity-40"
                 >
                   {isAnalyzing ? (
                     <>
@@ -537,16 +537,16 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
           <div className="flex items-start justify-center lg:pt-2">
             <div className="relative w-56 h-56 lg:w-72 lg:h-72" aria-hidden="true">
               {/* lime glow */}
-              <div className="absolute inset-0 rounded-full blur-3xl" style={{ background: 'rgba(37,186,200,0.14)' }} />
+              <div className="absolute inset-0 rounded-full blur-3xl" style={{ background: 'rgba(245,154,8,0.14)' }} />
               {/* core gradient orb */}
               <div
                 className="absolute inset-6 rounded-full"
-                style={{ background: 'radial-gradient(circle at 35% 30%, rgba(37,186,200,0.45), rgba(37,186,200,0.05) 58%, transparent 72%)' }}
+                style={{ background: 'radial-gradient(circle at 35% 30%, rgba(245,154,8,0.45), rgba(245,154,8,0.05) 58%, transparent 72%)' }}
               />
               {/* concentric rings */}
-              <div className="absolute inset-2 rounded-full border border-[#25bac8]/25 animate-pulse" />
-              <div className="absolute inset-12 rounded-full border border-[#25bac8]/15 animate-pulse" style={{ animationDelay: '0.2s' }} />
-              <div className="absolute inset-20 rounded-full border border-[#25bac8]/10 animate-pulse" style={{ animationDelay: '0.4s' }} />
+              <div className="absolute inset-2 rounded-full border border-[#F59A08]/25 animate-pulse" />
+              <div className="absolute inset-12 rounded-full border border-[#F59A08]/15 animate-pulse" style={{ animationDelay: '0.2s' }} />
+              <div className="absolute inset-20 rounded-full border border-[#F59A08]/10 animate-pulse" style={{ animationDelay: '0.4s' }} />
               {/* Website-Vorschau: der echte Screenshot der analysierten Site.
                   Der Deko-Haken bleibt nur als Fallback, solange kein Bild da
                   ist — eine Vorschau der EIGENEN Seite sagt "wir haben deine
@@ -560,7 +560,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-10 pt-8 border-t border-white/5">
           <div className="flex items-center gap-4 p-4 rounded-2xl glass-card hover:glass-strong transition-all group">
             <div className="p-3.5 rounded-xl group-hover:scale-110 transition-transform" style={{ background: 'var(--lime-dim)' }}>
-              <TrendingUp className="w-6 h-6 text-[#25bac8]" />
+              <TrendingUp className="w-6 h-6 text-[#A85F00] dark:text-[#FBAE05]" />
             </div>
             <div>
               <h4 className="text-gray-900 dark:text-white font-semibold text-sm">KI-gestützt</h4>
@@ -569,7 +569,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
           </div>
           <div className="flex items-center gap-4 p-4 rounded-2xl glass-card hover:glass-strong transition-all group">
             <div className="p-3.5 rounded-xl group-hover:scale-110 transition-transform" style={{ background: 'var(--lime-dim)' }}>
-              <Globe className="w-6 h-6 text-[#25bac8]" />
+              <Globe className="w-6 h-6 text-[#A85F00] dark:text-[#FBAE05]" />
             </div>
             <div>
               <h4 className="text-gray-900 dark:text-white font-semibold text-sm">Vier Säulen geprüft</h4>
@@ -578,7 +578,7 @@ export const DomainHeroSection: React.FC<DomainHeroSectionProps> = ({
           </div>
           <div className="flex items-center gap-4 p-4 rounded-2xl glass-card hover:glass-strong transition-all group">
             <div className="p-3.5 rounded-xl group-hover:scale-110 transition-transform" style={{ background: 'var(--lime-dim)' }}>
-              <Bot className="w-6 h-6 text-[#25bac8]" />
+              <Bot className="w-6 h-6 text-[#A85F00] dark:text-[#FBAE05]" />
             </div>
             <div>
               <h4 className="text-gray-900 dark:text-white font-semibold text-sm">Risiko-Radar</h4>

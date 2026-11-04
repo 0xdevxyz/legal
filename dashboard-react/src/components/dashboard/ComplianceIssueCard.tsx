@@ -476,10 +476,10 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
           DSA-/KI-/Drittland-Hinweise) einen konkreten Lösungsweg zeigt, statt nur
           die Problembeschreibung. */}
       {issue.recommendation && (
-        <div className="bg-white rounded-lg p-4 border border-[#25bac8]/40 mb-4">
+        <div className="bg-white rounded-lg p-4 border border-[#F59A08]/40 mb-4">
           <div className="flex items-start gap-3">
-            <div className="p-2 bg-[#25bac8]/15 rounded-lg flex-shrink-0">
-              <Sparkles className="w-5 h-5 text-[#1a8a95]" />
+            <div className="p-2 bg-[#F59A08]/15 rounded-lg flex-shrink-0">
+              <Sparkles className="w-5 h-5 text-[#7E4700]" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
@@ -566,7 +566,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                 <button
                   onClick={speichereAltText}
                   disabled={!altTextValue.trim() || altTextSaved || altTextSaving}
-                  className="flex items-center gap-1.5 px-4 py-1.5 bg-[#25bac8] hover:bg-[#45d6e2] disabled:bg-gray-300 text-zinc-950 text-sm font-bold rounded-lg transition-colors"
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-[#F59A08] hover:bg-[#FBAE05] disabled:bg-gray-300 text-zinc-950 text-sm font-bold rounded-lg transition-colors"
                 >
                   {altTextSaving
                     ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -678,7 +678,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                   </ul>
                   <button
                     onClick={() => router.push('/cookie-compliance')}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#25bac8] text-zinc-950 font-bold rounded-lg hover:bg-[#45d6e2] transition-all shadow-lg shadow-[#25bac8]/25"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#F59A08] text-zinc-950 font-bold rounded-lg hover:bg-[#FBAE05] transition-all shadow-lg shadow-[#F59A08]/25"
                   >
                     <Cookie className="w-5 h-5" />
                     Cookie-Compliance einrichten
@@ -721,7 +721,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                   </ol>
                   <button
                     onClick={() => router.push('/accessibility/worklist')}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-[#25bac8] text-zinc-950 font-bold rounded-lg hover:bg-[#45d6e2] transition-all text-sm"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-[#F59A08] text-zinc-950 font-bold rounded-lg hover:bg-[#FBAE05] transition-all text-sm"
                   >
                     <Eye className="w-4 h-4" />
                     Zu Fixes &amp; Freigaben
@@ -802,7 +802,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                   </ol>
                   <button
                     onClick={() => setShowAIPreview(true)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-[#25bac8] text-zinc-950 font-bold rounded-lg hover:bg-[#45d6e2] transition-all text-sm"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-[#F59A08] text-zinc-950 font-bold rounded-lg hover:bg-[#FBAE05] transition-all text-sm"
                   >
                     <Sparkles className="w-4 h-4" />
                     KI-Fix starten
@@ -860,7 +860,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                         window.dispatchEvent(new CustomEvent('complyo:open-wizard'));
                       }
                     }}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-[#25bac8] text-zinc-950 font-bold rounded-lg hover:bg-[#45d6e2] transition-all text-sm"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-[#F59A08] text-zinc-950 font-bold rounded-lg hover:bg-[#FBAE05] transition-all text-sm"
                   >
                     <ArrowRight className="w-4 h-4" />
                     Im Schritt-für-Schritt-Assistenten öffnen
@@ -987,7 +987,7 @@ export const ComplianceIssueCard: React.FC<ComplianceIssueCardProps> = ({
                 Unser Team setzt diesen Fix professionell für Sie um.
               </p>
             </div>
-            <button className="bg-[#25bac8] hover:bg-[#45d6e2] text-zinc-950 px-6 py-2 rounded-lg font-bold whitespace-nowrap">
+            <button className="bg-[#F59A08] hover:bg-[#FBAE05] text-zinc-950 px-6 py-2 rounded-lg font-bold whitespace-nowrap">
               Service buchen
             </button>
           </div>

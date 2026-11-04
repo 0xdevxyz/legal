@@ -95,7 +95,7 @@ export default function EarlyAccessKampagne({
     <main id="inhalt" tabIndex={-1} className="font-sans antialiased bg-white">
 
       {/* ---------------------------------------------------------------- */}
-      <section className="relative pt-28 pb-14 overflow-hidden">
+      <section className="relative pt-28 pb-14 overflow-hidden bg-[radial-gradient(ellipse_70%_60%_at_85%_0%,#FFF1D2_0%,rgba(255,241,210,0)_70%),linear-gradient(180deg,#FFFCF5_0%,#FFFFFF_100%)]">
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
           {bestaetigt === true && (
@@ -140,7 +140,7 @@ export default function EarlyAccessKampagne({
           </div>
 
           <h1 className="font-heading text-4xl sm:text-5xl font-extrabold leading-[1.1] mb-5">
-            <span className="text-gray-500">Seit Juni 2025 gilt das BFSG.</span>{' '}
+            <span className="text-akzent-600">Seit Juni 2025 gilt das BFSG.</span>{' '}
             <span className="text-gray-900">Complyo findet die Lücken auf deiner Website – und schließt sie.</span>
           </h1>
 
@@ -154,7 +154,7 @@ export default function EarlyAccessKampagne({
             Die ersten {PLAETZE} zahlen {PREIS_EARLY} statt {PREIS_REGULAER} im Monat – das ganze erste Jahr.
           </p>
 
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+          <div className="bg-white rounded-2xl border border-akzent-100 shadow-[0_10px_40px_-12px_rgba(245,154,8,0.28)] p-6">
             <WartelistenFormular kampagne={kampagne} id="anmeldung" />
           </div>
           <p className="text-sm text-gray-600 mt-4">
@@ -174,7 +174,42 @@ export default function EarlyAccessKampagne({
       </section>
 
       {/* ---------------------------------------------------------------- */}
-      <section className="py-16 bg-gray-50">
+      {/* Foto-Band: dasselbe Motiv und dieselben drei Aussagen wie auf den
+          Anmeldeseiten, damit Landing, Registrierung und Konto zusammengehoeren.
+          Das Foto liegt lokal unter /login, nichts kommt von Fremdservern. */}
+      <section className="px-4 sm:px-6 lg:px-8 pb-6" aria-labelledby="band-titel">
+        <div className="relative max-w-7xl mx-auto overflow-hidden rounded-[28px] min-h-[380px] flex items-end bg-[#1a0f06]">
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: "url('/login/plate.jpg')" }}
+            aria-hidden="true"
+          />
+          <div
+            className="absolute inset-0 bg-gradient-to-t from-[rgba(20,10,0,0.78)] via-[rgba(20,10,0,0.25)] to-transparent"
+            aria-hidden="true"
+          />
+          <div className="relative p-8 sm:p-12 lg:p-14 w-full grid gap-8 lg:grid-cols-[1.2fr_1fr] items-end">
+            <h2 id="band-titel" className="font-heading text-4xl sm:text-5xl lg:text-6xl font-semibold leading-[1.08] text-white">
+              Prüfen. Beheben.<br />Nachweisen.
+            </h2>
+            <div>
+              <p className="text-white/90 text-lg leading-relaxed mb-5">
+                Complyo misst, was deine Website heute tatsächlich lädt, und zeigt, was sich davon beheben lässt.
+              </p>
+              <a
+                href="#anmeldung"
+                className="inline-flex items-center gap-2 bg-akzent-400 hover:bg-akzent-300 text-[#161515] font-semibold px-6 py-3.5 rounded-xl transition-colors"
+              >
+                Platz sichern
+                <ArrowDown className="w-4 h-4" aria-hidden="true" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      <section className="py-16 bg-akzent-50/60">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="font-heading text-3xl font-extrabold text-gray-900 mb-3">
             Vier Bereiche, ein Scan
@@ -186,9 +221,9 @@ export default function EarlyAccessKampagne({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {SAEULEN.map(({ icon: Icon, titel, text }) => (
-              <div key={titel} className="bg-white rounded-2xl border border-gray-200 p-6">
-                <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-gray-100 mb-3">
-                  <Icon className="w-5 h-5 text-gray-900" aria-hidden="true" />
+              <div key={titel} className="bg-white rounded-2xl border border-akzent-100 p-6 shadow-[0_6px_24px_-14px_rgba(245,154,8,0.35)]">
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-akzent-100 mb-3">
+                  <Icon className="w-5 h-5 text-akzent-700" aria-hidden="true" />
                 </div>
                 <h3 className="font-bold text-gray-900 mb-1.5">{titel}</h3>
                 <p className="text-sm text-gray-600 leading-relaxed">{text}</p>
@@ -201,10 +236,10 @@ export default function EarlyAccessKampagne({
       {/* ---------------------------------------------------------------- */}
       <section className="py-16">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="rounded-2xl border border-gray-200 bg-white p-8">
-            <div className="inline-flex items-center gap-2 bg-gray-100 rounded-full px-3 py-1 mb-4">
-              <Gauge className="w-4 h-4 text-gray-700" aria-hidden="true" />
-              <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+          <div className="rounded-2xl border border-akzent-200 bg-white p-8">
+            <div className="inline-flex items-center gap-2 bg-akzent-100 rounded-full px-3 py-1 mb-4">
+              <Gauge className="w-4 h-4 text-akzent-700" aria-hidden="true" />
+              <span className="text-xs font-semibold text-akzent-800 uppercase tracking-wide">
                 Nachgemessen, nicht behauptet
               </span>
             </div>
@@ -254,10 +289,10 @@ export default function EarlyAccessKampagne({
       </section>
 
       {/* ---------------------------------------------------------------- */}
-      <section className="py-16 bg-gray-50">
+      <section className="py-16 bg-akzent-50/60">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 mb-4">
-            <ArrowDown className="w-5 h-5 text-gray-900" aria-hidden="true" />
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-akzent-400 mb-4">
+            <ArrowDown className="w-5 h-5 text-[#161515]" aria-hidden="true" />
           </div>
           <h2 className="font-heading text-3xl font-extrabold text-gray-900 mb-3">
             Platz sichern, {PREIS_EARLY} statt {PREIS_REGULAER}
@@ -265,7 +300,7 @@ export default function EarlyAccessKampagne({
           <p className="text-gray-600 mb-8 leading-relaxed">
             Eine E-Mail-Adresse, ein Bestätigungsklick. Keine Zahlungsdaten, keine Bestellung.
           </p>
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 text-left">
+          <div className="bg-white rounded-2xl border border-akzent-100 shadow-[0_10px_40px_-12px_rgba(245,154,8,0.28)] p-6 text-left">
             <WartelistenFormular kampagne={kampagne} id="anmeldung-unten" />
           </div>
           <p className="text-xs text-gray-500 mt-6">

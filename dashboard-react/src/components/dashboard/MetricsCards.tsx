@@ -99,8 +99,8 @@ export const MetricsCards: React.FC = () => {
       sublabel: scoreTrend.text,
       sublabelType: scoreTrend.type,
       icon: TrendingUp,
-      accent: '#25bac8',
-      accentBg: 'rgba(37,186,200,0.12)',
+      accent: '#F59A08',
+      accentBg: 'rgba(245,154,8,0.12)',
     },
     {
       title: 'Websites',
@@ -109,8 +109,8 @@ export const MetricsCards: React.FC = () => {
       sublabel: websiteLimitReached ? 'Limit erreicht' : `${websitesMax - metrics.websites} verfügbar`,
       sublabelType: websiteLimitReached ? 'negative' as const : 'neutral' as const,
       icon: Globe,
-      accent: '#25bac8',
-      accentBg: 'rgba(37,186,200,0.12)',
+      accent: '#F59A08',
+      accentBg: 'rgba(245,154,8,0.12)',
     },
     {
       title: 'KI-Optimierungen',
@@ -119,8 +119,8 @@ export const MetricsCards: React.FC = () => {
       sublabel: aiFixesUnlimited ? 'Unbegrenzt' : (aiLimitReached ? 'Upgrade für mehr' : `${aiFixesMax - aiFixesUsed} verfügbar`),
       sublabelType: aiFixesUnlimited ? 'positive' as const : (aiLimitReached ? 'negative' as const : 'positive' as const),
       icon: Sparkles,
-      accent: '#25bac8',
-      accentBg: 'rgba(37,186,200,0.12)',
+      accent: '#F59A08',
+      accentBg: 'rgba(245,154,8,0.12)',
       onSublabelClick: aiLimitReached ? () => router.push('/subscription') : undefined,
     },
     {

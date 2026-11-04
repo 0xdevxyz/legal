@@ -5,17 +5,17 @@
 
 :root {
   /* Brand Colors
-     Akzent aus dem Logo (#00FFF7). --primary traegt weisse Schrift und ist
-     deshalb die dunkle Stufe des Farbtons (4,80:1 auf Weiss); die reine
-     Logofarbe steht als --primary-light und ist nur fuer Flaechen ohne
-     Text gedacht. */
-  --primary: #00807b;
-  --primary-dark: #00706c;
-  --primary-light: #00fff7;
+     Gold der Anmeldeseiten (#F59A08). --primary traegt weisse Schrift und ist
+     deshalb die dunkle Stufe (#A85F00, 4,8:1 auf Weiss); das reine Gold steht
+     als --primary-light und ist nur fuer Flaechen mit dunkler Schrift oder
+     ohne Text gedacht. */
+  --primary: #a85f00;
+  --primary-dark: #7e4700;
+  --primary-light: #f59a08;
   
-  --secondary: #8b5cf6;
-  --secondary-dark: #7c3aed;
-  --secondary-light: #a78bfa;
+  --secondary: #161515;
+  --secondary-dark: #000000;
+  --secondary-light: #5f636b;
   
   /* Semantic Colors */
   --success: #10b981;
@@ -30,9 +30,9 @@
   --danger-dark: #dc2626;
   --danger-light: #f87171;
   
-  --info: #06b6d4;
-  --info-dark: #0891b2;
-  --info-light: #22d3ee;
+  --info: #a85f00;
+  --info-dark: #7e4700;
+  --info-light: #fbae05;
   
   /* Neutral Colors */
   --dark: #1f2937;
@@ -76,8 +76,8 @@
   --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   
   /* Typography */
-  --font-sans: var(--font-dm-sans), 'DM Sans', system-ui, sans-serif;
-  --font-heading: var(--font-instrument-sans), 'Instrument Sans', system-ui, sans-serif;
+  --font-sans: var(--font-dm-sans), 'Red Hat Display', system-ui, sans-serif;
+  --font-heading: var(--font-dm-sans), 'Red Hat Display', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Courier New', monospace;
   
   --font-size-xs: 0.75rem;

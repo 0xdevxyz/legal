@@ -194,7 +194,7 @@ export const ComplianceFlowWidget: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <span className="status-led" style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}60` }} />
-                  <ChevronRight className="w-3 h-3 transition-colors group-hover:text-[#25bac8]" style={{ color: chevronColor }} />
+                  <ChevronRight className="w-3 h-3 transition-colors group-hover:text-[#A85F00]" style={{ color: chevronColor }} />
                 </div>
               </button>
             );

@@ -1,18 +1,16 @@
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
-import { DM_Sans, Instrument_Sans } from 'next/font/google'
+import localFont from 'next/font/local'
 import Script from 'next/script'
 import Seitengeruest from '@/components/Seitengeruest'
 
-const dmSans = DM_Sans({
-  subsets: ['latin'],
+// Red Hat Display wie auf den Anmeldeseiten, lokal ausgeliefert: kein Abruf bei
+// Google, nichts Fremdes in der CSP. Eine Variable traegt Fliesstext und
+// Ueberschriften; die Gewichte kommen aus der Variablen-Schrift (300 bis 900).
+const redHat = localFont({
+  src: './fonts/RedHatDisplay-latin.woff2',
+  weight: '300 900',
   variable: '--font-dm-sans',
-  display: 'swap',
-})
-
-const instrumentSans = Instrument_Sans({
-  subsets: ['latin'],
-  variable: '--font-instrument-sans',
   display: 'swap',
 })
 
@@ -54,7 +52,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="de" className={`scroll-smooth light ${dmSans.variable} ${instrumentSans.variable}`}>
+    <html lang="de" className={`scroll-smooth light ${redHat.variable}`}>
       <head>
         <link rel="icon" type="image/png" href="/favicon-dark.png" media="(prefers-color-scheme: dark)" />
         <link rel="icon" type="image/png" href="/favicon-light.png" media="(prefers-color-scheme: light)" />
@@ -62,7 +60,7 @@ export default function RootLayout({
         <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
         <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
       </head>
-      <body className={`${dmSans.className} antialiased`}>
+      <body className={`${redHat.className} antialiased`}>
         {/* Erster fokussierbarer Punkt der Seite: ohne ihn muss sich jeder
             Tastaturnutzer auf jeder Seite durch die gesamte Navigation
             arbeiten (WCAG 2.4.1). Sichtbar nur bei Fokus. */}

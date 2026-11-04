@@ -498,7 +498,7 @@ export const WebsiteAnalysis: React.FC = () => {
     <div className="space-y-6">
       {/* ✅ PROMINENTER WEBSITE-BANNER - IMMER SICHTBAR */}
       {currentWebsite && (
-        <div className="glass-strong rounded-2xl p-6 border-2 border-[#25bac8]/30 mb-6">
+        <div className="glass-strong rounded-2xl p-6 border-2 border-[#F59A08]/30 mb-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-4 flex-1">
               <div className="p-3 rounded-xl" style={{ background: 'var(--lime-dim)' }}>
@@ -744,7 +744,7 @@ export const WebsiteAnalysis: React.FC = () => {
                           const off = isUnverified ? 0 : circ - (pct / 100) * circ;
                           const ringColor = isUnverified
                             ? '#71717a' // zinc-500
-                            : pillar.score >= 80 ? '#25bac8' : pillar.score >= 60 ? '#eab308' : '#ef4444';
+                            : pillar.score >= 80 ? '#F59A08' : pillar.score >= 60 ? '#eab308' : '#ef4444';
                           return (
                             <div className="relative w-[68px] h-[68px] flex-shrink-0">
                               <svg className="w-full h-full -rotate-90" viewBox="0 0 68 68">

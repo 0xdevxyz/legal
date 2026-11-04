@@ -191,7 +191,7 @@ export default function DeepCookieScannerPage() {
             eine andere Frage — WELCHE Dienste im Banner stehen muessen — und
             braucht dafuer einen echten Browser mit Scroll und Wartezeit
             (~3 Minuten). Deshalb laeuft er auf Abruf und nicht bei jedem Scan mit. */}
-        <div className="mb-6 rounded-xl border border-[#25bac8]/30 bg-[#25bac8]/5 p-4">
+        <div className="mb-6 rounded-xl border border-[#F59A08]/30 bg-[#F59A08]/5 p-4">
           <p className="text-sm dark:text-zinc-300 text-gray-700 leading-relaxed">
             <strong className="dark:text-white text-gray-900">Wofür ist das da?</strong> Der normale
             Compliance-Scan prüft, <em>ob</em> Ihre Seite vor dem Setzen von Cookies fragt.
@@ -205,7 +205,7 @@ export default function DeepCookieScannerPage() {
           </p>
           <Link
             href="/cookie-compliance"
-            className="inline-flex items-center gap-1.5 mt-3 text-sm font-semibold text-[#25bac8] hover:underline"
+            className="inline-flex items-center gap-1.5 mt-3 text-sm font-semibold text-[#A85F00] dark:text-[#FBAE05] hover:underline"
           >
             Zum Cookie-Banner
             <Plus className="w-3.5 h-3.5 rotate-90" />

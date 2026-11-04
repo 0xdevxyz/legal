@@ -244,7 +244,7 @@ export const CookieComplianceWidget: React.FC = () => {
               <div className="flex flex-col gap-2">
                 <Button
                   onClick={handleOpenSettings}
-                  className="w-full gap-2 bg-[#25bac8] hover:bg-[#45d6e2] text-zinc-950"
+                  className="w-full gap-2 bg-[#F59A08] hover:bg-[#FBAE05] text-zinc-950"
                 >
                   <Settings className="w-4 h-4" />
                   Banner konfigurieren

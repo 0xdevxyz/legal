@@ -1,5 +1,24 @@
 import type { Config } from "tailwindcss";
 
+// Gold der Anmeldeseiten (auth-neu.css), seit 04.11.2026 die Hausfarbe des
+// Dashboards. Die bisherigen Blau-, Violett- und Tuerkis-Toene werden auf diese
+// Skala gelegt, damit ~900 Klassen ohne Einzelumbau umziehen. Kontrast: 600 =
+// #A85F00 traegt weisse Schrift (4,8:1) und ist als Schrift auf Weiss lesbar;
+// 400/500 sind Flaechen mit dunkler Schrift (#161515, ueber 8:1).
+const gold = {
+  50: "#FFF9EC",
+  100: "#FEF0D0",
+  200: "#FDDFA0",
+  300: "#FCC95E",
+  400: "#FBAE05",
+  500: "#F59A08",
+  600: "#A85F00",
+  700: "#8F5000",
+  800: "#704000",
+  900: "#5A3300",
+  950: "#3A2100",
+};
+
 const config: Config = {
   darkMode: 'class',
   content: [
@@ -50,13 +69,21 @@ const config: Config = {
           "4": "hsl(var(--chart-4))",
           "5": "hsl(var(--chart-5))",
         },
+        blue: gold,
+        indigo: gold,
+        sky: gold,
+        cyan: gold,
+        teal: gold,
+        purple: gold,
+        violet: gold,
+        fuchsia: gold,
         complyo: {
-          blue: "#0ea5e9",
-          purple: "#a855f7",
-          indigo: "#6366f1",
+          blue: "#F59A08",
+          purple: "#A85F00",
+          indigo: "#8F5000",
           dark: "#0c0a09",
           slate: "#18181b",
-          accent: "#14b8a6",
+          accent: "#F59A08",
           muted: "#27272a",
           border: "#3f3f46"
         }
@@ -76,8 +103,8 @@ const config: Config = {
       },
       boxShadow: {
         'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.18)',
-        'glow-blue': '0 0 40px rgba(14, 165, 233, 0.3)',
-        'glow-purple': '0 0 40px rgba(168, 85, 247, 0.3)',
+        'glow-blue': '0 0 40px rgba(245, 154, 8, 0.3)',
+        'glow-purple': '0 0 40px rgba(168, 95, 0, 0.3)',
         'inner-glow': 'inset 0 1px 2px 0 rgba(255, 255, 255, 0.05)',
       },
       animation: {
@@ -109,10 +136,10 @@ const config: Config = {
         },
         pulseGlow: {
           "0%, 100%": {
-            boxShadow: "0 0 20px rgba(14, 165, 233, 0.2), 0 0 40px rgba(168, 85, 247, 0.2)"
+            boxShadow: "0 0 20px rgba(245, 154, 8, 0.2), 0 0 40px rgba(168, 95, 0, 0.2)"
           },
           "50%": {
-            boxShadow: "0 0 30px rgba(14, 165, 233, 0.4), 0 0 60px rgba(168, 85, 247, 0.4)"
+            boxShadow: "0 0 30px rgba(245, 154, 8, 0.4), 0 0 60px rgba(168, 95, 0, 0.4)"
           }
         },
         float: {

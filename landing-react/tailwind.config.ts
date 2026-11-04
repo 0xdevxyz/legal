@@ -11,39 +11,35 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ['var(--font-dm-sans)', 'system-ui', 'sans-serif'],
-        heading: ['var(--font-instrument-sans)', 'system-ui', 'sans-serif'],
+        heading: ['var(--font-dm-sans)', 'system-ui', 'sans-serif'],
       },
       colors: {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
-        // Akzentfarbe aus dem complyo-Logo: #00FFF7 (HSL 178 100% 50%),
-        // gemessen am Schild in public/logo-dark.png. Das ist akzent-400 und
-        // die Farbe, die man auf der Seite sieht. Die uebrigen Stufen halten
-        // den Farbton und drehen nur die Helligkeit.
+        // Akzentfarbe seit 04.11.2026: das Gold der Anmeldeseiten (#F59A08 aus
+        // auth-neu.css im Dashboard). Der Name "akzent" bleibt, damit die 21
+        // Dateien, die ihn nutzen, mit EINER Aenderung umziehen.
         //
-        // Sie traegt als FLAECHE, nicht als Schrift. Auf Weiss kommt sie auf
-        // 1,26:1 — als Textfarbe waere sie unlesbar, als Knopf mit weisser
-        // Schrift ebenso. Mit dunkler Schrift darauf sind es 14,06:1, mehr
-        // als das abgeloeste blue-700 je hatte. Also: Knoepfe, Pillen und
-        // Kacheln in akzent-400 mit gray-900 darauf.
-        //
-        // Wo Farbe zwingend Schrift ist (Fliesstext-Links, Fokusrahmen,
-        // Hakenfelder), bleibt es bei den dunklen Stufen desselben Farbtons:
-        // 600 = 4,80:1, 700 = 5,94:1, 800 = 8,43:1, 900 = 12,13:1 auf Weiss.
+        // Regel wie bisher: Gold traegt als FLAECHE mit dunkler Schrift darauf
+        // (akzent-400/500 mit #161515 ueber 8:1). Als SCHRIFT auf Weiss nur die
+        // dunklen Stufen: 600/700 = #A85F00 mit 4,8:1, 800 = 7,6:1, 900 = 11:1.
+        // #F59A08 selbst liegt auf Weiss bei 2,2:1 und ist nie Schrift.
+        // Das Logo bleibt cyan, es ist eine Bildmarke und kein UI-Ton.
         akzent: {
-          50: "#EBFFFE",
-          100: "#CCFFFD",
-          200: "#9CFCF9",
-          300: "#3DFFF9",
-          400: "#00FFF7",
-          500: "#00CCC5",
-          600: "#00807B",
-          700: "#00706C",
-          800: "#005754",
-          900: "#003D3B"
+          50: "#FFF9EC",
+          100: "#FEF0D0",
+          200: "#FDDFA0",
+          300: "#FCC95E",
+          400: "#FBAE05",
+          500: "#F59A08",
+          600: "#A85F00",
+          700: "#A85F00",
+          800: "#7E4700",
+          900: "#5A3300"
         },
+        tinte: "#161515",
         complyo: {
-          akzent: "#00FFF7",
+          akzent: "#F59A08",
           purple: "#8b5cf6",
           dark: "#0f172a",
           slate: "#1e293b"
@@ -65,8 +61,8 @@ const config: Config = {
           "100%": { transform: "translateY(0)", opacity: "1" }
         },
         pulseGlow: {
-          "0%, 100%": { boxShadow: "0 0 20px rgba(0, 255, 247, 0.5)" },
-          "50%": { boxShadow: "0 0 40px rgba(0, 255, 247, 0.8)" }
+          "0%, 100%": { boxShadow: "0 0 20px rgba(245, 154, 8, 0.45)" },
+          "50%": { boxShadow: "0 0 40px rgba(245, 154, 8, 0.7)" }
         },
         float: {
           "0%, 100%": { transform: "translateY(0px)" },

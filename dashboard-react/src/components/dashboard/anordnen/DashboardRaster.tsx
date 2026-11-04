@@ -133,7 +133,7 @@ export const DashboardRaster: React.FC<DashboardRasterProps> = ({ userId, kontex
           Module anordnen
           {!lay.istStandard && (
             <span
-              className="w-1.5 h-1.5 rounded-full bg-[#25bac8]"
+              className="w-1.5 h-1.5 rounded-full bg-[#F59A08]"
               aria-label="eigene Anordnung aktiv"
               role="img"
             />
@@ -393,7 +393,7 @@ const AnordnenLeiste: React.FC<AnordnenLeisteProps> = ({
     <div
       role="region"
       aria-label="Anordnen-Werkzeuge"
-      className="sticky top-2 z-30 rounded-2xl border border-[#25bac8]/40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md shadow-lg shadow-black/5 dark:shadow-black/30"
+      className="sticky top-2 z-30 rounded-2xl border border-[#F59A08]/40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md shadow-lg shadow-black/5 dark:shadow-black/30"
     >
       <div className="px-4 sm:px-5 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -432,7 +432,7 @@ const AnordnenLeiste: React.FC<AnordnenLeisteProps> = ({
           <button
             type="button"
             onClick={onFertig}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold bg-[#25bac8] text-zinc-950 hover:bg-[#45d6e2] transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold bg-[#F59A08] text-zinc-950 hover:bg-[#FBAE05] transition-colors"
           >
             <Check className="w-4 h-4" aria-hidden />
             Fertig
@@ -452,7 +452,7 @@ const AnordnenLeiste: React.FC<AnordnenLeisteProps> = ({
                 key={m.id}
                 type="button"
                 onClick={() => onEinblenden(m.id)}
-                className="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full text-xs font-medium border border-dashed border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 hover:border-[#25bac8] hover:text-[#1597a3] dark:hover:text-[#25bac8] transition-colors"
+                className="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full text-xs font-medium border border-dashed border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 hover:border-[#F59A08] hover:text-[#7E4700] dark:hover:text-[#F59A08] transition-colors"
                 aria-label={`${m.titel} wieder einblenden`}
               >
                 <Plus className="w-3 h-3" aria-hidden />
@@ -496,7 +496,7 @@ const SpaltenZone: React.FC<SpaltenZoneProps> = ({ spalte, ids, children }) => {
           className={cn(
             'flex flex-col gap-3 rounded-2xl p-2 border-2 border-dashed transition-colors min-h-[7rem]',
             isOver
-              ? 'border-[#25bac8] bg-[#25bac8]/5'
+              ? 'border-[#F59A08] bg-[#F59A08]/5'
               : active
                 ? 'border-gray-300 dark:border-zinc-700'
                 : 'border-gray-200/80 dark:border-zinc-800',
@@ -561,7 +561,7 @@ const ModulKachel: React.FC<ModulKachelProps> = ({
       style={style}
       className={cn(
         'rounded-2xl border bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 overflow-hidden',
-        isDragging && 'opacity-40 outline outline-2 outline-dashed outline-[#25bac8] outline-offset-2',
+        isDragging && 'opacity-40 outline outline-2 outline-dashed outline-[#F59A08] outline-offset-2',
       )}
     >
       <div className="anordnen-kachel">
@@ -655,7 +655,7 @@ const KachelKnopf: React.FC<KachelKnopfProps> = ({ label, icon: Icon, onClick, d
 const SchwebeKarte: React.FC<{ modul: DashboardModul }> = ({ modul }) => {
   const Icon = modul.icon;
   return (
-    <div className="w-72 max-w-[80vw] rounded-2xl border border-[#25bac8] bg-white dark:bg-zinc-900 shadow-2xl shadow-black/20 dark:shadow-black/60 px-4 py-3 flex items-center gap-3 -rotate-1 scale-[1.03] cursor-grabbing">
+    <div className="w-72 max-w-[80vw] rounded-2xl border border-[#F59A08] bg-white dark:bg-zinc-900 shadow-2xl shadow-black/20 dark:shadow-black/60 px-4 py-3 flex items-center gap-3 -rotate-1 scale-[1.03] cursor-grabbing">
       <span
         className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center"
         style={{ background: 'var(--lime-dim)', color: 'var(--lime)' }}

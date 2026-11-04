@@ -211,7 +211,7 @@ export const Orientierungsband: React.FC = () => {
           className={`flex flex-wrap items-start gap-4 rounded-xl p-4 border ${
             ruhig
               ? 'bg-emerald-50 dark:bg-emerald-500/5 border-emerald-200 dark:border-emerald-500/25'
-              : 'bg-[#25bac8]/5 border-[#25bac8]/30'
+              : 'bg-[#F59A08]/5 border-[#F59A08]/30'
           }`}
         >
           <div
@@ -231,7 +231,7 @@ export const Orientierungsband: React.FC = () => {
             className={`shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
               ruhig
                 ? 'border border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800'
-                : 'bg-[#25bac8] text-zinc-950 hover:bg-[#45d6e2]'
+                : 'bg-[#F59A08] text-zinc-950 hover:bg-[#FBAE05]'
             }`}
           >
             {schritt.knopf}
@@ -261,7 +261,7 @@ export const Orientierungsband: React.FC = () => {
               ['Überwachen', 'Danach läuft es weiter: neue Rechtslage und Rückschritte auf Ihrer Seite melden sich hier von selbst.'],
             ].map(([titel, text], i) => (
               <li key={titel} className="flex gap-3">
-                <span className="shrink-0 w-6 h-6 rounded-full bg-[#25bac8]/15 text-[#1a8a95] dark:text-[#25bac8] flex items-center justify-center text-xs font-bold">
+                <span className="shrink-0 w-6 h-6 rounded-full bg-[#F59A08]/15 text-[#7E4700] dark:text-[#F59A08] flex items-center justify-center text-xs font-bold">
                   {i + 1}
                 </span>
                 <span>

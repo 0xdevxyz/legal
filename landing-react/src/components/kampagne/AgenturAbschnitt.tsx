@@ -39,7 +39,7 @@ export default function AgenturAbschnitt() {
       className="py-16 bg-white scroll-mt-16"
     >
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="rounded-2xl bg-gray-50 border border-gray-200 text-gray-900 p-8 sm:p-10 grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12 items-center">
+        <div className="rounded-2xl bg-akzent-50 border border-akzent-200 text-gray-900 p-8 sm:p-10 grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12 items-center">
           <div className="lg:col-span-3">
             <div className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 mb-4">
               <Building2 className="w-3.5 h-3.5 text-gray-600" aria-hidden="true" />
