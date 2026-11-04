@@ -207,7 +207,7 @@ export default function ProfilePage() {
               <Button
                 onClick={handleSaveProfile}
                 disabled={isSaving}
-                className="w-full bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950"
+                className="w-full bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)] text-zinc-950"
               >
                 <Save className="w-4 h-4 mr-2" />
                 {isSaving ? 'Speichern...' : 'Profil speichern'}
@@ -320,7 +320,7 @@ export default function ProfilePage() {
               <Button
                 onClick={handleSaveBilling}
                 disabled={isSaving}
-                className="w-full bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950"
+                className="w-full bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)] text-zinc-950"
               >
                 <Save className="w-4 h-4 mr-2" />
                 {isSaving ? 'Speichern...' : 'Rechnungsdaten speichern'}
@@ -379,7 +379,7 @@ export default function ProfilePage() {
               <Button
                 onClick={handleChangePassword}
                 disabled={isSaving}
-                className="w-full bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950"
+                className="w-full bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)] text-zinc-950"
               >
                 <Lock className="w-4 h-4 mr-2" />
                 {isSaving ? 'Ändern...' : 'Passwort ändern'}

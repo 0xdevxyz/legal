@@ -96,7 +96,7 @@ export function AgencyLogoUpload({ onUploaded }: AgencyLogoUploadProps) {
             <button
               onClick={() => inputRef.current?.click()}
               disabled={uploading}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition-colors"
             >
               {uploading
                 ? <Loader2 className="w-4 h-4 animate-spin" />

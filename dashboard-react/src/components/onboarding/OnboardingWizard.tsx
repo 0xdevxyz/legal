@@ -430,7 +430,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
 
             <button
               onClick={handleSkip}
-              className="w-full mt-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-600 transition-colors"
+              className="w-full mt-3 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
             >
               Überspringen – ich kenne Complyo bereits
             </button>

@@ -177,7 +177,7 @@ export default function AddonsPage() {
           </div>
           <button
             onClick={() => router.push('/ai-compliance/upgrade')}
-            className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 rounded-xl font-medium transition-colors"
+            className="text-white flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 rounded-xl font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add-on hinzufügen
@@ -204,7 +204,7 @@ export default function AddonsPage() {
             <p className="dark:text-gray-400 text-gray-600 mb-6">Sie haben noch keine Add-ons aktiviert.</p>
             <button
               onClick={() => router.push('/ai-compliance/upgrade')}
-              className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-xl font-medium transition-colors"
+              className="text-white px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-xl font-medium transition-colors"
             >
               Add-ons entdecken
             </button>

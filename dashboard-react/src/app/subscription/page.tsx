@@ -245,9 +245,9 @@ export default function SubscriptionPage() {
     purple: 'from-purple-500/20 to-purple-600/10 border-purple-500/40',
   };
   const btnMap: Record<string, string> = {
-    blue: 'bg-blue-600 hover:bg-blue-700',
-    orange: 'bg-[var(--lime)] hover:bg-[var(--lime-bright)]',
-    purple: 'bg-purple-600 hover:bg-purple-700',
+    blue: 'text-white bg-blue-600 hover:bg-blue-700',
+    orange: 'text-gray-900 bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)]',
+    purple: 'text-white bg-purple-600 hover:bg-purple-700',
   };
 
   return (
@@ -371,7 +371,7 @@ export default function SubscriptionPage() {
                 {!isTopTier && (
                   <button
                     onClick={() => setShowPlans(s => !s)}
-                    className="flex items-center gap-2 bg-[var(--lime)] hover:bg-[var(--lime-bright)] px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                    className="text-gray-900 flex items-center gap-2 bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)] px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
                   >
                     <Zap className="w-4 h-4" />
                     Plan upgraden
@@ -381,7 +381,7 @@ export default function SubscriptionPage() {
             ) : (
               <button
                 onClick={() => setShowPlans(true)}
-                className="flex items-center gap-2 bg-[var(--lime)] hover:bg-[var(--lime-bright)] px-5 py-2.5 rounded-lg text-sm font-bold transition-colors"
+                className="text-gray-900 flex items-center gap-2 bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)] px-5 py-2.5 rounded-lg text-sm font-bold transition-colors"
               >
                 <Zap className="w-4 h-4" />
                 Plan auswählen & upgraden
@@ -413,7 +413,7 @@ export default function SubscriptionPage() {
                   }`}>
                     {plan.highlight && !isDowngrade && (
                       <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <span className="bg-[var(--lime)] dark:text-white text-gray-900 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                        <span className="bg-[var(--lime-fill)] text-gray-900 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
                           <Star className="w-3 h-3" /> Beliebteste
                         </span>
                       </div>

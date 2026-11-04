@@ -97,7 +97,7 @@ export default function AICompliancePage() {
           
           <button
             onClick={() => router.push('/ai-compliance/systems/new')}
-            className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors font-medium"
+            className="text-white flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors font-medium"
           >
             <Plus className="w-5 h-5" />
             KI-System hinzufügen
@@ -177,7 +177,7 @@ export default function AICompliancePage() {
               </p>
               <button
                 onClick={() => router.push('/ai-compliance/systems/new')}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors font-medium"
+                className="text-white inline-flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors font-medium"
               >
                 <Plus className="w-5 h-5" />
                 Erstes KI-System hinzufügen

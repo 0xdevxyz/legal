@@ -169,7 +169,7 @@ export default function AISystemDetailPage() {
               <button
                 onClick={handleScan}
                 disabled={scanning}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50"
+                className="text-white flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50"
               >
                 <RefreshCw className={`w-5 h-5 ${scanning ? 'animate-spin' : ''}`} />
                 {scanning ? 'Scannt...' : 'Neu scannen'}
@@ -346,7 +346,7 @@ export default function AISystemDetailPage() {
                 <button
                   onClick={handleScan}
                   disabled={scanning}
-                  className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
+                  className="text-white px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
                 >
                   {scanning ? 'Scannt...' : 'Ersten Scan starten'}
                 </button>
@@ -462,7 +462,7 @@ export default function AISystemDetailPage() {
                               <button
                                 onClick={() => handleDownloadDoc(doc.id, 'pdf', doc.title)}
                                 disabled={downloading === doc.id}
-                                className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-sm transition-colors disabled:opacity-50"
+                                className="text-white flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-sm transition-colors disabled:opacity-50"
                               >
                                 {downloading === doc.id ? (
                                   <Loader2 className="w-4 h-4 animate-spin" />

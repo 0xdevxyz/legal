@@ -341,7 +341,7 @@ export default function CookieCompliancePage() {
             <Button
               onClick={handleUnlockCookie}
               disabled={checkoutLoading}
-              className="bg-[var(--lime)] hover:bg-[var(--lime-bright)] dark:text-white text-gray-900 font-semibold gap-2"
+              className="bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)] text-gray-900 font-semibold gap-2"
             >
               <CreditCard className="w-4 h-4" />
               {checkoutLoading ? 'Wird gestartet…' : 'Jetzt freischalten'}
@@ -602,7 +602,7 @@ export default function CookieCompliancePage() {
                 </div>
                 <Button
                   onClick={() => setActiveTab('services')}
-                  className="bg-[var(--lime)] hover:bg-[var(--lime-bright)] shadow-lg shadow-teal-500/30 transition-all hover:scale-105 flex-shrink-0"
+                  className="text-gray-900 bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)] shadow-lg shadow-teal-500/30 transition-all hover:scale-105 flex-shrink-0"
                 >
                   Jetzt einrichten
                 </Button>
@@ -663,21 +663,21 @@ export default function CookieCompliancePage() {
               <TabsList className="hidden sm:grid w-full grid-cols-7 dark:bg-zinc-900/50 bg-white/70 p-1 h-auto">
                 <TabsTrigger
                   value="design"
-                  className="gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-white transition-all py-3"
+                  className="gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-gray-900 transition-all py-3"
                 >
                   <Settings className="w-4 h-4 flex-shrink-0" />
                   <span>Design</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="services"
-                  className="gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-white transition-all py-3"
+                  className="gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-gray-900 transition-all py-3"
                 >
                   <Eye className="w-4 h-4 flex-shrink-0" />
                   <span>Services</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="advanced"
-                  className="relative gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-white transition-all py-3"
+                  className="relative gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-gray-900 transition-all py-3"
                 >
                   <Zap className="w-4 h-4 flex-shrink-0" />
                   <span>Erweitert</span>
@@ -685,28 +685,28 @@ export default function CookieCompliancePage() {
                 </TabsTrigger>
                 <TabsTrigger
                   value="integration"
-                  className="gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-white transition-all py-3"
+                  className="gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-gray-900 transition-all py-3"
                 >
                   <Code className="w-4 h-4 flex-shrink-0" />
                   <span>Integration</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="statistics"
-                  className="gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-white transition-all py-3"
+                  className="gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-gray-900 transition-all py-3"
                 >
                   <BarChart3 className="w-4 h-4 flex-shrink-0" />
                   <span>Statistiken</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="monitoring"
-                  className="relative gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-white transition-all py-3"
+                  className="relative gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-gray-900 transition-all py-3"
                 >
                   <Radio className="w-4 h-4 flex-shrink-0" />
                   <span>Überwachung</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="abtests"
-                  className="relative gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-white transition-all py-3"
+                  className="relative gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-gray-900 transition-all py-3"
                 >
                   <FlaskConical className="w-4 h-4 flex-shrink-0" />
                   <span>A/B-Tests</span>

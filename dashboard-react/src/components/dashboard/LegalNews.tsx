@@ -535,7 +535,7 @@ export const LegalNews: React.FC = () => {
                 const buttonColorMap: Record<string, string> = {
                   'red': 'bg-red-600 hover:bg-red-700 border-red-500',
                   'orange': 'bg-orange-600 hover:bg-orange-700 border-orange-500',
-                  'blue': 'bg-blue-600 hover:bg-blue-700 border-blue-500',
+                  'blue': 'text-white bg-blue-600 hover:bg-blue-700 border-blue-500',
                   'gray': 'bg-gray-600 hover:bg-gray-700 border-gray-500',
                   'green': 'bg-green-600 hover:bg-green-700 border-green-500'
                 };
@@ -891,7 +891,7 @@ export const LegalNews: React.FC = () => {
                                 className={`text-xs px-3 py-1 rounded ${
                                   action.button_color === 'red' ? 'bg-red-600 hover:bg-red-700' :
                                   action.button_color === 'orange' ? 'bg-orange-600 hover:bg-orange-700' :
-                                  action.button_color === 'blue' ? 'bg-blue-600 hover:bg-blue-700' :
+                                  action.button_color === 'blue' ? 'text-white bg-blue-600 hover:bg-blue-700' :
                                   'bg-gray-600 hover:bg-gray-700'
                                 } text-white transition`}
                               >

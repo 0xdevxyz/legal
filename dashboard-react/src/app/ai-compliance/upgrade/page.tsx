@@ -144,7 +144,7 @@ export default function UpgradePage() {
               <button
                 onClick={() => handleSubscribe('comploai_guard')}
                 disabled={hasComploAI || subscribing}
-                className="w-full px-6 py-4 bg-purple-600 hover:bg-purple-700 rounded-xl font-bold text-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="text-white w-full px-6 py-4 bg-purple-600 hover:bg-purple-700 rounded-xl font-bold text-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {hasComploAI ? (
                   'Bereits aktiviert'
@@ -235,7 +235,7 @@ export default function UpgradePage() {
                   <button
                     onClick={() => handlePurchase(key)}
                     disabled={purchasing === key}
-                    className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="text-white w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {purchasing === key ? 'Wird geladen...' : 'Anfragen'}
                   </button>

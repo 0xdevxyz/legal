@@ -119,7 +119,7 @@ export default function KnowledgePage() {
           />
           <button
             type="submit"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-md text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-md text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition"
           >
             Suchen
           </button>

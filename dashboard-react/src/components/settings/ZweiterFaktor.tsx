@@ -224,7 +224,7 @@ export default function ZweiterFaktor({
                         <Button
                             onClick={einrichtenStarten}
                             disabled={laeuft}
-                            className="bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950 gap-2"
+                            className="bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)] text-zinc-950 gap-2"
                         >
                             {laeuft ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
                             Einrichten
@@ -268,7 +268,7 @@ export default function ZweiterFaktor({
                             <Button
                                 onClick={bestaetigen}
                                 disabled={laeuft || code.length < 6}
-                                className="bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950 gap-2"
+                                className="bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)] text-zinc-950 gap-2"
                             >
                                 {laeuft ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
                                 Aktivieren
@@ -300,7 +300,7 @@ export default function ZweiterFaktor({
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-                            <Button onClick={codesHerunterladen} className="bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950 gap-2">
+                            <Button onClick={codesHerunterladen} className="bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)] text-zinc-950 gap-2">
                                 <Download className="w-4 h-4" /> Herunterladen
                             </Button>
                             <Button variant="ghost" onClick={codesKopieren} className="gap-2">

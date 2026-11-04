@@ -208,7 +208,7 @@ export default function AgenturBarrierefreiheit() {
           <button
             onClick={sammelfreigabe}
             disabled={laeuft !== null}
-            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 text-sm font-semibold disabled:opacity-40"
+            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-sm font-semibold disabled:opacity-40"
           >
             {laeuft === 'sammel'
               ? <Loader2 className="w-4 h-4 animate-spin" />

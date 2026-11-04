@@ -211,7 +211,7 @@ export const FixResultModal: React.FC<FixResultModalProps> = ({ isOpen, onClose,
                 <ol className="space-y-3">
                   {fixResult.guide_steps.map((step: string, index: number) => (
                     <li key={index} className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-blue-500 text-gray-900 flex items-center justify-center font-bold flex-shrink-0">
                         {index + 1}
                       </div>
                       <p className="text-gray-700 dark:text-gray-300 pt-1">{step}</p>

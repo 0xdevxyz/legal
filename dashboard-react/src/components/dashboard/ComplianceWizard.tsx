@@ -365,7 +365,7 @@ export const ComplianceWizard: React.FC<ComplianceWizardProps> = ({
               
               <button
                 onClick={handleNext}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
               >
                 {currentStepIndex === steps.length - 1 ? 'Abschließen' : 'Weiter'}
                 <ChevronRight className="w-5 h-5" />

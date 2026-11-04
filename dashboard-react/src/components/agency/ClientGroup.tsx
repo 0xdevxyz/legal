@@ -67,7 +67,7 @@ export function ClientGroup({ client }: ClientGroupProps) {
           <button
             onClick={handleDownload}
             disabled={downloading}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition-colors"
             aria-label={`PDF herunterladen fuer ${client.client_name}`}
           >
             {downloading

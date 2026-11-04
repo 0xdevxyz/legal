@@ -727,6 +727,8 @@
   --topbar-height: 64px;
   /* ORION accent — PANOART cyan-teal brand accent */
   --lime: #F59A08;
+  --lime-fill: #F59A08;
+  --lime-fill-hover: #FBAE05;
   --lime-bright: #FBAE05;
   --lime-dim: rgba(245,154,8,0.12);
   --gauge-red: #ef4444;
@@ -743,7 +745,9 @@
 }
 
 .light {
-  --lime: #A85F00;
+  --lime: #9A5600;
+  --lime-fill: #F59A08;
+  --lime-fill-hover: #FBAE05;
   --lime-bright: #F59A08;
   --lime-dim: rgba(245,154,8,0.14);
   --sidebar-bg: #ffffff;

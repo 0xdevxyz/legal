@@ -260,7 +260,7 @@ function ProjectsCard() {
           <button
             onClick={handleAdd}
             disabled={saving || atLimit || !newUrl.trim()}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors duration-200 whitespace-nowrap"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors duration-200 whitespace-nowrap"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             Projekt anlegen
@@ -321,7 +321,7 @@ function ProjectsCard() {
               <button
                 onClick={() => startCheckout('agency2')}
                 disabled={checkoutPlan !== null}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition-colors disabled:opacity-60"
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-colors disabled:opacity-60"
               >
                 {checkoutPlan === 'agency2' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
                 +25 Websites
@@ -369,7 +369,7 @@ function ProjectsCard() {
                 )}
                 <button
                   onClick={() => handleOptimize(site)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors shrink-0"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors shrink-0"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   Ranken &amp; optimieren
@@ -501,7 +501,7 @@ export default function AgencyPage() {
           <button
             onClick={handleActivateAgency}
             disabled={checkoutLoading}
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white font-semibold rounded-lg transition-colors duration-200 whitespace-nowrap flex-shrink-0"
+            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold rounded-lg transition-colors duration-200 whitespace-nowrap flex-shrink-0"
           >
             <CreditCard className="w-4 h-4" />
             {checkoutLoading ? 'Wird gestartet…' : 'Agency Plan aktivieren'}

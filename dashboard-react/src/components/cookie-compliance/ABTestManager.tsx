@@ -182,7 +182,7 @@ export default function ABTestManager({ siteId, config }: Props) {
         <Button
           onClick={() => setFormularOffen((o) => !o)}
           disabled={!siteId}
-          className="gap-2 bg-teal-500 hover:bg-teal-600 text-white"
+          className="gap-2 bg-teal-500 hover:bg-teal-400 text-gray-900"
         >
           <Plus className="w-4 h-4" />
           {formularOffen ? 'Abbrechen' : 'Neuer Test'}
@@ -284,7 +284,7 @@ export default function ABTestManager({ siteId, config }: Props) {
 
             <Button
               onClick={anlegen} disabled={aktion === -1}
-              className="gap-2 bg-teal-500 hover:bg-teal-600 text-white"
+              className="gap-2 bg-teal-500 hover:bg-teal-400 text-gray-900"
             >
               {aktion === -1 ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               Test anlegen

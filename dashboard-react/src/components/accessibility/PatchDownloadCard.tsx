@@ -225,7 +225,7 @@ export const PatchDownloadCard: React.FC<PatchDownloadCardProps> = ({
           <Button
             onClick={handleGeneratePatches}
             disabled={isGenerating}
-            className="w-full bg-blue-600 hover:bg-blue-700"
+            className="text-white w-full bg-blue-600 hover:bg-blue-700"
             size="lg"
           >
             {isGenerating ? (

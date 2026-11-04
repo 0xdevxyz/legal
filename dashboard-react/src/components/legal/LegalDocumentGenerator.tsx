@@ -398,7 +398,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
           <React.Fragment key={idx}>
             <div className={`flex flex-col items-center ${step > idx ? 'text-emerald-400' : step === idx + 1 ? 'text-blue-400' : 'dark:text-zinc-600 text-gray-600'}`}>
               <div className={`flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm ${
-                step > idx + 1 ? 'bg-emerald-500 text-white' : step === idx + 1 ? 'bg-blue-500 text-white' : 'dark:bg-zinc-700 bg-gray-100 text-zinc-400'
+                step > idx + 1 ? 'bg-emerald-500 text-gray-900' : step === idx + 1 ? 'bg-blue-500 text-gray-900' : 'dark:bg-zinc-700 bg-gray-100 text-zinc-400'
               }`}>
                 {step > idx + 1 ? <CheckCircle className="w-5 h-5" /> : idx + 1}
               </div>
@@ -480,7 +480,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
               <Button onClick={onBack} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800">
                 <ArrowLeft className="w-4 h-4" /> Zurück
               </Button>
-              <Button onClick={() => setStep(2)} className="gap-2 bg-blue-600 hover:bg-blue-700">
+              <Button onClick={() => setStep(2)} className="text-white gap-2 bg-blue-600 hover:bg-blue-700">
                 Weiter <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
@@ -543,7 +543,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
               <Button onClick={() => setStep(1)} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800">
                 <ArrowLeft className="w-4 h-4" /> Zurück
               </Button>
-              <Button onClick={() => setStep(3)} disabled={!isStepValid()} className="gap-2 bg-blue-600 hover:bg-blue-700">
+              <Button onClick={() => setStep(3)} disabled={!isStepValid()} className="text-white gap-2 bg-blue-600 hover:bg-blue-700">
                 Weiter <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
@@ -721,7 +721,7 @@ export const LegalDocumentGenerator: React.FC<LegalDocumentGeneratorProps> = ({
               <Button onClick={() => setStep(2)} variant="outline" className="gap-2 dark:border-zinc-700 border-gray-200 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800">
                 <ArrowLeft className="w-4 h-4" /> Zurück
               </Button>
-              <Button onClick={() => setStep(4)} disabled={!isStepValid()} className="gap-2 bg-blue-600 hover:bg-blue-700">
+              <Button onClick={() => setStep(4)} disabled={!isStepValid()} className="text-white gap-2 bg-blue-600 hover:bg-blue-700">
                 Weiter <ArrowRight className="w-4 h-4" />
               </Button>
             </div>

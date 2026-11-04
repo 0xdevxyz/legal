@@ -145,7 +145,7 @@ export const PullRequestCard: React.FC<{
           <button
             onClick={erstellePR}
             disabled={running || approvedCount === 0 || !repoId}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white px-4 py-2.5 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitPullRequest className="w-4 h-4" />}
             {running ? 'Erstelle Pull Request …' : `${approvedCount} freigegebene Fixes als PR vorschlagen`}

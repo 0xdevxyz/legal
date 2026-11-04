@@ -142,7 +142,7 @@ export function SiteSwitcher() {
                   <button
                     onClick={handleAdd}
                     disabled={saving || !newUrl.trim()}
-                    className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white transition-colors"
                   >
                     {saving ? <Loader2 size={12} className="animate-spin" /> : null}
                     Hinzufügen

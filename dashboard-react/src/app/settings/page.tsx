@@ -330,7 +330,7 @@ export default function SettingsPage() {
                   <Button
                     onClick={handleSaveProfile}
                     disabled={saving}
-                    className="bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950 gap-2"
+                    className="bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)] text-zinc-950 gap-2"
                   >
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     Profil speichern
@@ -369,7 +369,7 @@ export default function SettingsPage() {
                   <Button
                     onClick={handleSaveNotifications}
                     disabled={saving}
-                    className="bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950 gap-2"
+                    className="bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)] text-zinc-950 gap-2"
                   >
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     Einstellungen speichern
@@ -436,7 +436,7 @@ export default function SettingsPage() {
                   <Button
                     onClick={handleChangePassword}
                     disabled={saving || !passwords.current || !passwords.next}
-                    className="bg-[var(--lime)] hover:bg-[var(--lime-bright)] text-zinc-950 gap-2"
+                    className="bg-[var(--lime-fill)] hover:bg-[var(--lime-fill-hover)] text-zinc-950 gap-2"
                   >
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
                     Passwort ändern
